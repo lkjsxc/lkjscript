@@ -33,8 +33,9 @@ loop, checked addition, and complete handling of every `Target` and `Mode` alter
 
 `score` initially ends at an `i64` typed placeholder. The driver:
 
-1. discovers the machine-contract manifest, the current task-relevant sections, and the compact
-   unchanged response for a known fingerprint;
+1. discovers the machine-contract manifest, 12 operational endpoint roots with complete
+   JSON-envelope, error, ID, and limit definitions, and the compact unchanged response for a known
+   fingerprint;
 2. saves and queries the incomplete revision;
 3. obtains bounded repair context containing the expected type, required visible values, and legal
    addition constructor;

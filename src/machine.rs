@@ -1,30 +1,28 @@
 //! Strict, bounded JSON transport projection and runtime machine contract description.
 
+pub use crate::machine_contract::*;
+
 use crate::ids::RequestId;
 use crate::protocol::{PROTOCOL_VERSION, Request, RequestCode, Response, ResponseCode};
 use crate::query::{
     MAX_BATCH_ITEMS, MAX_BATCH_QUERIES, MAX_CONTEXT_ITEMS, MAX_PAGE_ITEMS, QueryCode,
 };
-use crate::schema::{
-    BlockArgumentRole, LiteralField, NodeKind, OperandArity, OperandUse, OperationCode,
-    RegionArity, RegionRole, SemanticType, TypeRule,
-};
+use crate::schema::{NodeKind, OperationCode, SemanticType};
 use crate::transaction::{MAX_RETURNED_BINDINGS, TransactionOpCode};
-use serde::de::{self, Visitor};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
 use std::io::{self, Write};
-use std::str::FromStr;
 
-pub const JSON_ENVELOPE_VERSION: u16 = 4;
+pub const JSON_ENVELOPE_VERSION: u16 = 5;
 pub const MAX_JSON_INPUT_BYTES: usize = 8 * 1024 * 1024;
 pub const MAX_JSON_OUTPUT_BYTES: usize = 32 * 1024 * 1024;
-pub const MACHINE_SCHEMA_IDENTITY: &str = "lkjscript-machine-schema-v4";
-pub const MAX_SCHEMA_SECTIONS: usize = SchemaSection::ALL.len();
-const MACHINE_SCHEMA_DIGEST_DOMAIN: &str = "lkjscript.machine-schema.digest.v1";
+pub const MACHINE_SCHEMA_IDENTITY: &str = "lkjscript-machine-schema-v5";
+const MACHINE_SCHEMA_DIGEST_DOMAIN: &str = "lkjscript.machine-schema.digest.v2";
+const TRANSACTION_FINGERPRINT_DOMAIN: &str = "lkjscript.apply-transaction.fingerprint.v5";
 const MAX_BOUNDARY_ERROR_MESSAGE_BYTES: usize = 1024;
 const BOUNDARY_ERROR_FALLBACK: &[u8] =
-    b"{\"version\":4,\"error\":{\"kind\":\"output\",\"message\":\"cannot encode boundary error\"}}";
+    b"{\"version\":5,\"error\":{\"kind\":\"output\",\"message\":\"cannot encode boundary error\"}}";
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -58,6 +56,14 @@ pub struct BoundaryError {
     pub message: String,
 }
 
+// The typed response remains direct; boxing only one transport arm would add allocation to every RPC.
+#[allow(clippy::large_enum_variant)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DaemonResponseEnvelope {
+    Response(ResponseEnvelope),
+    BoundaryError(BoundaryErrorEnvelope),
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BoundaryErrorKind {
@@ -68,7 +74,7 @@ pub enum BoundaryErrorKind {
     Usage,
 }
 impl BoundaryErrorKind {
-    const fn machine_name(self) -> &'static str {
+    pub(crate) const fn machine_name(self) -> &'static str {
         match self {
             Self::InvalidJson => "invalid_json",
             Self::InputTooLarge => "input_too_large",
@@ -101,6 +107,16 @@ impl fmt::Display for MachineError {
 }
 
 impl std::error::Error for MachineError {}
+
+pub fn encode_request(request_id: RequestId, request: &Request) -> Result<Vec<u8>, MachineError> {
+    require_nonzero_request_id(request_id)?;
+    let envelope = RequestEnvelope {
+        version: JSON_ENVELOPE_VERSION,
+        request_id,
+        request: request.clone(),
+    };
+    encode_with_limit(&envelope, false, MAX_JSON_INPUT_BYTES)
+}
 
 pub fn decode_request(bytes: &[u8]) -> Result<RequestEnvelope, MachineError> {
     if bytes.len() > MAX_JSON_INPUT_BYTES {
@@ -165,6 +181,81 @@ pub fn decode_request(bytes: &[u8]) -> Result<RequestEnvelope, MachineError> {
     Ok(envelope)
 }
 
+pub fn decode_response(bytes: &[u8]) -> Result<ResponseEnvelope, MachineError> {
+    let envelope: ResponseEnvelope = decode_response_json(bytes)?;
+    require_response_version(envelope.version)?;
+    Ok(envelope)
+}
+
+pub fn decode_daemon_response(
+    bytes: &[u8],
+    expected_request_id: RequestId,
+) -> Result<DaemonResponseEnvelope, MachineError> {
+    require_nonzero_request_id(expected_request_id)?;
+    #[allow(clippy::large_enum_variant)]
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum WireEnvelope {
+        Response(ResponseEnvelope),
+        BoundaryError(BoundaryErrorEnvelope),
+    }
+
+    match decode_response_json::<WireEnvelope>(bytes)? {
+        WireEnvelope::Response(envelope) => {
+            require_response_version(envelope.version)?;
+            if envelope.request_id != expected_request_id {
+                return Err(MachineError::new(
+                    BoundaryErrorKind::InvalidJson,
+                    "response request identity does not match request",
+                ));
+            }
+            Ok(DaemonResponseEnvelope::Response(envelope))
+        }
+        WireEnvelope::BoundaryError(envelope) => {
+            require_response_version(envelope.version)?;
+            if envelope
+                .request_id
+                .is_some_and(|request_id| request_id != expected_request_id)
+            {
+                return Err(MachineError::new(
+                    BoundaryErrorKind::InvalidJson,
+                    "boundary error request identity does not match request",
+                ));
+            }
+            Ok(DaemonResponseEnvelope::BoundaryError(envelope))
+        }
+    }
+}
+
+fn decode_response_json<T>(bytes: &[u8]) -> Result<T, MachineError>
+where
+    T: for<'de> Deserialize<'de>,
+{
+    if bytes.len() > MAX_JSON_OUTPUT_BYTES {
+        return Err(MachineError::new(
+            BoundaryErrorKind::InputTooLarge,
+            "JSON response exceeds output byte policy",
+        ));
+    }
+    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
+    let envelope = T::deserialize(&mut deserializer)
+        .map_err(|error| MachineError::new(BoundaryErrorKind::InvalidJson, error.to_string()))?;
+    deserializer
+        .end()
+        .map_err(|error| MachineError::new(BoundaryErrorKind::InvalidJson, error.to_string()))?;
+    Ok(envelope)
+}
+
+fn require_response_version(version: u16) -> Result<(), MachineError> {
+    if version != JSON_ENVELOPE_VERSION {
+        return Err(MachineError::new(
+            BoundaryErrorKind::InvalidJson,
+            "JSON envelope version is unsupported",
+        ));
+    }
+    Ok(())
+}
+
 pub fn request_id_hint(bytes: &[u8]) -> Option<RequestId> {
     if bytes.len() > MAX_JSON_INPUT_BYTES {
         return None;
@@ -189,6 +280,7 @@ pub fn encode_response(
     response: &Response,
     pretty: bool,
 ) -> Result<Vec<u8>, MachineError> {
+    require_nonzero_request_id(request_id)?;
     #[derive(Serialize)]
     struct BorrowedResponseEnvelope<'a> {
         version: u16,
@@ -203,6 +295,16 @@ pub fn encode_response(
         },
         pretty,
     )
+}
+
+fn require_nonzero_request_id(request_id: RequestId) -> Result<(), MachineError> {
+    if request_id.get() == 0 {
+        return Err(MachineError::new(
+            BoundaryErrorKind::InvalidJson,
+            "request ID zero is reserved",
+        ));
+    }
+    Ok(())
 }
 
 pub fn encode_schema(
@@ -238,6 +340,20 @@ fn bounded_message(message: &str, maximum_bytes: usize) -> String {
         end -= 1;
     }
     message[..end].to_owned()
+}
+
+pub(crate) fn transaction_fingerprint(
+    request: &crate::transaction::ApplyTransactionRequest,
+) -> crate::Result<[u8; 32]> {
+    let bytes = serde_json::to_vec(request).map_err(|error| {
+        crate::LkError::new(
+            crate::ErrorCode::ProtocolMalformed,
+            format!("cannot encode transaction fingerprint input: {error}"),
+        )
+    })?;
+    let mut hasher = blake3::Hasher::new_derive_key(TRANSACTION_FINGERPRINT_DOMAIN);
+    hasher.update(&bytes);
+    Ok(*hasher.finalize().as_bytes())
 }
 
 fn encode_bounded<T: Serialize>(value: &T, pretty: bool) -> Result<Vec<u8>, MachineError> {
@@ -298,935 +414,6 @@ impl Write for LimitWriter {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct MachineSchemaDigest([u8; 32]);
-
-impl MachineSchemaDigest {
-    pub const BYTE_LEN: usize = 32;
-
-    pub const fn from_bytes(bytes: [u8; Self::BYTE_LEN]) -> Self {
-        Self(bytes)
-    }
-
-    pub const fn as_bytes(self) -> [u8; Self::BYTE_LEN] {
-        self.0
-    }
-}
-
-impl fmt::Display for MachineSchemaDigest {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        const HEX: &[u8; 16] = b"0123456789abcdef";
-        let mut output = [0_u8; 64];
-        for (index, byte) in self.0.iter().copied().enumerate() {
-            output[index * 2] = HEX[usize::from(byte >> 4)];
-            output[index * 2 + 1] = HEX[usize::from(byte & 0x0f)];
-        }
-        formatter.write_str(std::str::from_utf8(&output).map_err(|_| fmt::Error)?)
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MachineSchemaDigestParseError;
-
-impl fmt::Display for MachineSchemaDigestParseError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .write_str("machine schema digest must be exactly 64 lowercase hexadecimal characters")
-    }
-}
-
-impl std::error::Error for MachineSchemaDigestParseError {}
-
-impl FromStr for MachineSchemaDigest {
-    type Err = MachineSchemaDigestParseError;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        if value.len() != 64 {
-            return Err(MachineSchemaDigestParseError);
-        }
-        let mut bytes = [0_u8; 32];
-        for (index, pair) in value.as_bytes().chunks_exact(2).enumerate() {
-            let digit = |value: u8| match value {
-                b'0'..=b'9' => Some(value - b'0'),
-                b'a'..=b'f' => Some(value - b'a' + 10),
-                _ => None,
-            };
-            let high = digit(pair[0]).ok_or(MachineSchemaDigestParseError)?;
-            let low = digit(pair[1]).ok_or(MachineSchemaDigestParseError)?;
-            bytes[index] = (high << 4) | low;
-        }
-        Ok(Self(bytes))
-    }
-}
-
-impl Serialize for MachineSchemaDigest {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(&self.to_string())
-    }
-}
-
-impl<'de> Deserialize<'de> for MachineSchemaDigest {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct DigestVisitor;
-        impl Visitor<'_> for DigestVisitor {
-            type Value = MachineSchemaDigest;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                formatter.write_str("a canonical lowercase machine schema digest")
-            }
-
-            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-            where
-                E: de::Error,
-            {
-                value.parse().map_err(E::custom)
-            }
-        }
-        deserializer.deserialize_str(DigestVisitor)
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SchemaSection {
-    IdentityAndEnvelopes,
-    SemanticTypesAndNodes,
-    NominalDeclarations,
-    TransactionsAndExpressions,
-    QueriesAndRepair,
-    RuntimeAndRun,
-    ErrorsAndLimits,
-}
-
-impl SchemaSection {
-    pub const ALL: [Self; 7] = [
-        Self::IdentityAndEnvelopes,
-        Self::SemanticTypesAndNodes,
-        Self::NominalDeclarations,
-        Self::TransactionsAndExpressions,
-        Self::QueriesAndRepair,
-        Self::RuntimeAndRun,
-        Self::ErrorsAndLimits,
-    ];
-
-    pub const fn stable_tag(self) -> u8 {
-        match self {
-            Self::IdentityAndEnvelopes => 1,
-            Self::SemanticTypesAndNodes => 2,
-            Self::NominalDeclarations => 3,
-            Self::TransactionsAndExpressions => 4,
-            Self::QueriesAndRepair => 5,
-            Self::RuntimeAndRun => 6,
-            Self::ErrorsAndLimits => 7,
-        }
-    }
-
-    pub const fn from_stable_tag(tag: u8) -> Option<Self> {
-        match tag {
-            1 => Some(Self::IdentityAndEnvelopes),
-            2 => Some(Self::SemanticTypesAndNodes),
-            3 => Some(Self::NominalDeclarations),
-            4 => Some(Self::TransactionsAndExpressions),
-            5 => Some(Self::QueriesAndRepair),
-            6 => Some(Self::RuntimeAndRun),
-            7 => Some(Self::ErrorsAndLimits),
-            _ => None,
-        }
-    }
-
-    pub const fn machine_name(self) -> &'static str {
-        match self {
-            Self::IdentityAndEnvelopes => "identity_and_envelopes",
-            Self::SemanticTypesAndNodes => "semantic_types_and_nodes",
-            Self::NominalDeclarations => "nominal_declarations",
-            Self::TransactionsAndExpressions => "transactions_and_expressions",
-            Self::QueriesAndRepair => "queries_and_repair",
-            Self::RuntimeAndRun => "runtime_and_run",
-            Self::ErrorsAndLimits => "errors_and_limits",
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(
-    tag = "kind",
-    content = "data",
-    rename_all = "snake_case",
-    deny_unknown_fields
-)]
-pub enum SchemaProjection {
-    Manifest,
-    Sections { sections: Vec<SchemaSection> },
-    Full,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct DescribeSchemaRequest {
-    pub projection: SchemaProjection,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub known_digest: Option<MachineSchemaDigest>,
-}
-
-impl DescribeSchemaRequest {
-    pub fn manifest() -> Self {
-        Self {
-            projection: SchemaProjection::Manifest,
-            known_digest: None,
-        }
-    }
-
-    pub fn validate(&self) -> Result<(), &'static str> {
-        if let SchemaProjection::Sections { sections } = &self.projection {
-            if sections.is_empty() {
-                return Err("schema section list must not be empty");
-            }
-            if sections.len() > MAX_SCHEMA_SECTIONS {
-                return Err("schema section count exceeds policy");
-            }
-            let mut canonical = sections.clone();
-            canonical.sort_unstable();
-            if canonical.windows(2).any(|pair| pair[0] == pair[1]) {
-                return Err("schema section list contains a duplicate");
-            }
-        }
-        Ok(())
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(
-    tag = "kind",
-    content = "data",
-    rename_all = "snake_case",
-    deny_unknown_fields
-)]
-pub enum DescribeSchemaResult {
-    Unchanged {
-        digest: MachineSchemaDigest,
-    },
-    Manifest(SchemaManifest),
-    Sections(SchemaSections),
-    Full {
-        digest: MachineSchemaDigest,
-        description: Box<SchemaDescription>,
-    },
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct SchemaManifest {
-    pub schema_identity: String,
-    pub digest: MachineSchemaDigest,
-    pub binary_protocol_version: u16,
-    pub json_envelope_version: u16,
-    pub artifact_format_version: u16,
-    pub artifact_magic_hex: String,
-    pub semantic_schema_identity: String,
-    pub sections: Vec<CodeDescription>,
-    pub maximum_sections_per_request: u8,
-    pub full_available: bool,
-    pub maximum_frame_bytes: u64,
-    pub maximum_json_output_bytes: u64,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct SchemaSections {
-    pub digest: MachineSchemaDigest,
-    pub sections: Vec<SchemaSectionPayload>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(
-    tag = "kind",
-    content = "data",
-    rename_all = "snake_case",
-    deny_unknown_fields
-)]
-pub enum SchemaSectionPayload {
-    IdentityAndEnvelopes(Box<IdentityAndEnvelopesSection>),
-    SemanticTypesAndNodes(Box<SemanticTypesAndNodesSection>),
-    NominalDeclarations(Box<NominalDeclarationsDescription>),
-    TransactionsAndExpressions(Box<TransactionsAndExpressionsSection>),
-    QueriesAndRepair(Box<QueriesAndRepairSection>),
-    RuntimeAndRun(Box<RunDescription>),
-    ErrorsAndLimits(Box<ErrorsAndLimitsSection>),
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct SchemaDescription {
-    pub machine_schema_identity: String,
-    pub binary_protocol_version: u16,
-    pub json_envelope_version: u16,
-    pub artifact_format_version: u16,
-    pub artifact_magic_hex: String,
-    pub semantic_schema_identity: String,
-    pub schema_discovery: SchemaDiscoveryDescription,
-    pub scalar_types: Vec<MachineScalarDescription>,
-    pub semantic_types: Vec<CodeDescription>,
-    pub node_kinds: Vec<CodeDescription>,
-    pub name_contract: NameContractDescription,
-    pub operations: Vec<OperationDescription>,
-    pub semantic_records: Vec<NamedPayloadDescription>,
-    pub semantic_variants: Vec<NamedVariantDescription>,
-    pub transaction_operations: Vec<CodeDescription>,
-    pub transaction_operation_payloads: Vec<VariantPayloadDescription>,
-    pub transaction_records: Vec<NamedPayloadDescription>,
-    pub transaction_variants: Vec<NamedVariantDescription>,
-    pub structured_authoring: StructuredAuthoringDescription,
-    pub run: RunDescription,
-    pub queries: Vec<CodeDescription>,
-    pub query_payloads: Vec<VariantPayloadDescription>,
-    pub query_result_payloads: Vec<VariantPayloadDescription>,
-    pub query_records: Vec<NamedPayloadDescription>,
-    pub query_variants: Vec<NamedVariantDescription>,
-    pub query_member_payloads: Vec<VariantPayloadDescription>,
-    pub query_cursor_payloads: Vec<VariantPayloadDescription>,
-    pub errors: Vec<CodeDescription>,
-    pub error_payload: PayloadShapeDescription,
-    pub error_records: Vec<NamedPayloadDescription>,
-    pub error_variants: Vec<NamedVariantDescription>,
-    pub requests: Vec<CodeDescription>,
-    pub request_payloads: Vec<VariantPayloadDescription>,
-    pub responses: Vec<CodeDescription>,
-    pub response_payloads: Vec<VariantPayloadDescription>,
-    pub identity_variants: Vec<NamedVariantDescription>,
-    pub envelopes: Vec<NamedPayloadDescription>,
-    pub boundary_error_kinds: Vec<String>,
-    pub limits: BoundaryLimits,
-    pub id_formats: IdFormats,
-    pub nominal_declarations: NominalDeclarationsDescription,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct SchemaDiscoveryDescription {
-    pub digest_format: String,
-    pub digest_domain: String,
-    pub request: PayloadShapeDescription,
-    pub records: Vec<NamedPayloadDescription>,
-    pub variants: Vec<NamedVariantDescription>,
-    pub projection_payloads: Vec<VariantPayloadDescription>,
-    pub result_payloads: Vec<VariantPayloadDescription>,
-    pub sections: Vec<CodeDescription>,
-    pub section_payloads: Vec<VariantPayloadDescription>,
-    pub maximum_sections_per_request: u8,
-    pub full_available: bool,
-    pub known_digest_match_precedes_projection: bool,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct NominalDeclarationsDescription {
-    pub declaration_kinds: Vec<NodeKind>,
-    pub member_kinds: Vec<NodeKind>,
-    pub shape_invariants: Vec<String>,
-    pub layout_invariants: Vec<String>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct IdentityAndEnvelopesSection {
-    pub machine_schema_identity: String,
-    pub binary_protocol_version: u16,
-    pub json_envelope_version: u16,
-    pub artifact_format_version: u16,
-    pub artifact_magic_hex: String,
-    pub semantic_schema_identity: String,
-    pub schema_discovery: SchemaDiscoveryDescription,
-    pub scalar_types: Vec<MachineScalarDescription>,
-    pub requests: Vec<CodeDescription>,
-    pub request_payloads: Vec<VariantPayloadDescription>,
-    pub responses: Vec<CodeDescription>,
-    pub response_payloads: Vec<VariantPayloadDescription>,
-    pub identity_variants: Vec<NamedVariantDescription>,
-    pub envelopes: Vec<NamedPayloadDescription>,
-    pub id_formats: IdFormats,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct SemanticTypesAndNodesSection {
-    pub semantic_types: Vec<CodeDescription>,
-    pub node_kinds: Vec<CodeDescription>,
-    pub name_contract: NameContractDescription,
-    pub operations: Vec<OperationDescription>,
-    pub records: Vec<NamedPayloadDescription>,
-    pub variants: Vec<NamedVariantDescription>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct TransactionsAndExpressionsSection {
-    pub transaction_operations: Vec<CodeDescription>,
-    pub transaction_operation_payloads: Vec<VariantPayloadDescription>,
-    pub records: Vec<NamedPayloadDescription>,
-    pub variants: Vec<NamedVariantDescription>,
-    pub structured_authoring: StructuredAuthoringDescription,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct QueriesAndRepairSection {
-    pub queries: Vec<CodeDescription>,
-    pub query_payloads: Vec<VariantPayloadDescription>,
-    pub query_result_payloads: Vec<VariantPayloadDescription>,
-    pub query_records: Vec<NamedPayloadDescription>,
-    pub query_variants: Vec<NamedVariantDescription>,
-    pub query_member_payloads: Vec<VariantPayloadDescription>,
-    pub query_cursor_payloads: Vec<VariantPayloadDescription>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct ErrorsAndLimitsSection {
-    pub errors: Vec<CodeDescription>,
-    pub error_payload: PayloadShapeDescription,
-    pub records: Vec<NamedPayloadDescription>,
-    pub variants: Vec<NamedVariantDescription>,
-    pub boundary_error_kinds: Vec<String>,
-    pub limits: BoundaryLimits,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct CodeDescription {
-    pub name: String,
-    pub tag: u8,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct NameContractDescription {
-    pub named_node_kinds: Vec<NodeKind>,
-    pub minimum_utf8_bytes: u64,
-    pub maximum_utf8_bytes: u64,
-    pub sibling_uniqueness_groups: Vec<NameUniquenessGroupDescription>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct NameUniquenessGroupDescription {
-    pub name: String,
-    pub owner_kind: NodeKind,
-    pub member_kinds: Vec<NodeKind>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum JsonScalarKind {
-    Boolean,
-    Number,
-    String,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(
-    tag = "kind",
-    content = "data",
-    rename_all = "snake_case",
-    deny_unknown_fields
-)]
-pub enum MachineScalarDomain {
-    Boolean,
-    Utf8String,
-    SignedInteger {
-        minimum: i64,
-        maximum: i64,
-    },
-    UnsignedInteger {
-        minimum: u64,
-        maximum: u64,
-    },
-    LowercaseHex {
-        encoded_bytes: u8,
-    },
-    NodeId {
-        workspace_bytes: u8,
-        minimum_serial: u64,
-        maximum_serial: u64,
-    },
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct MachineScalarDescription {
-    pub name: String,
-    pub json_kind: JsonScalarKind,
-    pub domain: MachineScalarDomain,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PayloadShapeKind {
-    Unit,
-    Newtype,
-    Record,
-}
-impl PayloadShapeKind {
-    pub const fn stable_tag(self) -> u8 {
-        match self {
-            Self::Unit => 1,
-            Self::Newtype => 2,
-            Self::Record => 3,
-        }
-    }
-    pub const fn from_stable_tag(tag: u8) -> Option<Self> {
-        match tag {
-            1 => Some(Self::Unit),
-            2 => Some(Self::Newtype),
-            3 => Some(Self::Record),
-            _ => None,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct MachineFieldDescription {
-    pub name: String,
-    pub type_expression: String,
-    pub required: bool,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct PayloadShapeDescription {
-    pub shape: PayloadShapeKind,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub newtype: Option<String>,
-    pub fields: Vec<MachineFieldDescription>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct VariantPayloadDescription {
-    pub name: String,
-    pub tag: u8,
-    pub payload: PayloadShapeDescription,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct NamedPayloadDescription {
-    pub name: String,
-    pub payload: PayloadShapeDescription,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct NamedVariantDescription {
-    pub name: String,
-    pub tagging: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tag_field: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub content_field: Option<String>,
-    pub variants: Vec<VariantPayloadDescription>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RunFieldType {
-    Workspace,
-    Revision,
-    Node,
-    RuntimeValueList,
-    RunPolicy,
-    U64,
-    U32,
-}
-impl RunFieldType {
-    pub const fn stable_tag(self) -> u8 {
-        match self {
-            Self::Workspace => 1,
-            Self::Revision => 2,
-            Self::Node => 3,
-            Self::RuntimeValueList => 4,
-            Self::RunPolicy => 5,
-            Self::U64 => 6,
-            Self::U32 => 7,
-        }
-    }
-    pub const fn from_stable_tag(tag: u8) -> Option<Self> {
-        match tag {
-            1 => Some(Self::Workspace),
-            2 => Some(Self::Revision),
-            3 => Some(Self::Node),
-            4 => Some(Self::RuntimeValueList),
-            5 => Some(Self::RunPolicy),
-            6 => Some(Self::U64),
-            7 => Some(Self::U32),
-            _ => None,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct RunFieldDescription {
-    pub name: String,
-    pub field_type: RunFieldType,
-    pub required: bool,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct RunDescription {
-    pub fields: Vec<RunFieldDescription>,
-    pub policy_fields: Vec<RunFieldDescription>,
-    pub runtime_values: Vec<RuntimeValueDescription>,
-    pub records: Vec<NamedPayloadDescription>,
-    pub variants: Vec<NamedVariantDescription>,
-    pub limit_scope: Vec<String>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RuntimeValuePayload {
-    None,
-    Bool,
-    I64,
-    Product,
-    Sum,
-}
-impl RuntimeValuePayload {
-    pub const fn stable_tag(self) -> u8 {
-        match self {
-            Self::None => 1,
-            Self::Bool => 2,
-            Self::I64 => 3,
-            Self::Product => 4,
-            Self::Sum => 5,
-        }
-    }
-    pub const fn from_stable_tag(tag: u8) -> Option<Self> {
-        match tag {
-            1 => Some(Self::None),
-            2 => Some(Self::Bool),
-            3 => Some(Self::I64),
-            4 => Some(Self::Product),
-            5 => Some(Self::Sum),
-            _ => None,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct RuntimeValueDescription {
-    pub name: String,
-    pub tag: u8,
-    pub payload: RuntimeValuePayload,
-    pub fields: Vec<MachineFieldDescription>,
-    pub invariants: Vec<String>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct StructuredAuthoringDescription {
-    pub draft_field_types: Vec<DraftFieldTypeDescription>,
-    pub records: Vec<DraftRecordDescription>,
-    pub expression_variants: Vec<DraftVariantDescription>,
-    pub operation_variants: Vec<DraftVariantDescription>,
-    pub value_variants: Vec<DraftVariantDescription>,
-    pub type_variants: Vec<DraftVariantDescription>,
-    pub expression_tagging: String,
-    pub operation_tagging: String,
-    pub value_tagging: String,
-    pub type_tagging: String,
-    pub allocation_order: String,
-    pub explicit_handles_are_selectable: bool,
-    pub implicit_handles_are_selectable: bool,
-    pub implicit_node_kinds: Vec<NodeKind>,
-    pub maximum_request_depth: u32,
-    pub maximum_request_items: u64,
-    pub counted_item_categories: Vec<String>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum DraftFieldType {
-    LocalHandle,
-    NodeTarget,
-    NodeId,
-    String,
-    SemanticType,
-    I64,
-    U8,
-    Value,
-    ValueList,
-    ExpressionKind,
-    ExpressionList,
-    ParameterList,
-    FunctionBody,
-    YieldingBody,
-    Bool,
-    Expression,
-    TypeDraft,
-    ProductFieldList,
-    SumVariantList,
-    ProductFieldValueList,
-    MatchArmList,
-    OperationMatchArmList,
-}
-impl DraftFieldType {
-    pub const ALL: [Self; 22] = [
-        Self::LocalHandle,
-        Self::NodeTarget,
-        Self::NodeId,
-        Self::String,
-        Self::SemanticType,
-        Self::I64,
-        Self::U8,
-        Self::Value,
-        Self::ValueList,
-        Self::ExpressionKind,
-        Self::ExpressionList,
-        Self::ParameterList,
-        Self::FunctionBody,
-        Self::YieldingBody,
-        Self::Bool,
-        Self::Expression,
-        Self::TypeDraft,
-        Self::ProductFieldList,
-        Self::SumVariantList,
-        Self::ProductFieldValueList,
-        Self::MatchArmList,
-        Self::OperationMatchArmList,
-    ];
-
-    pub const fn stable_tag(self) -> u8 {
-        match self {
-            Self::LocalHandle => 1,
-            Self::NodeTarget => 2,
-            Self::NodeId => 3,
-            Self::String => 4,
-            Self::SemanticType => 5,
-            Self::I64 => 6,
-            Self::U8 => 7,
-            Self::Value => 8,
-            Self::ValueList => 9,
-            Self::ExpressionKind => 10,
-            Self::ExpressionList => 11,
-            Self::ParameterList => 12,
-            Self::FunctionBody => 13,
-            Self::YieldingBody => 14,
-            Self::Bool => 15,
-            Self::Expression => 16,
-            Self::TypeDraft => 17,
-            Self::ProductFieldList => 18,
-            Self::SumVariantList => 19,
-            Self::ProductFieldValueList => 20,
-            Self::MatchArmList => 21,
-            Self::OperationMatchArmList => 22,
-        }
-    }
-    pub const fn from_stable_tag(tag: u8) -> Option<Self> {
-        match tag {
-            1 => Some(Self::LocalHandle),
-            2 => Some(Self::NodeTarget),
-            3 => Some(Self::NodeId),
-            4 => Some(Self::String),
-            5 => Some(Self::SemanticType),
-            6 => Some(Self::I64),
-            7 => Some(Self::U8),
-            8 => Some(Self::Value),
-            9 => Some(Self::ValueList),
-            10 => Some(Self::ExpressionKind),
-            11 => Some(Self::ExpressionList),
-            12 => Some(Self::ParameterList),
-            13 => Some(Self::FunctionBody),
-            14 => Some(Self::YieldingBody),
-            15 => Some(Self::Bool),
-            16 => Some(Self::Expression),
-            17 => Some(Self::TypeDraft),
-            18 => Some(Self::ProductFieldList),
-            19 => Some(Self::SumVariantList),
-            20 => Some(Self::ProductFieldValueList),
-            21 => Some(Self::MatchArmList),
-            22 => Some(Self::OperationMatchArmList),
-            _ => None,
-        }
-    }
-
-    pub const fn machine_name(self) -> &'static str {
-        match self {
-            Self::LocalHandle => "local_handle",
-            Self::NodeTarget => "node_target",
-            Self::NodeId => "node_id",
-            Self::String => "string",
-            Self::SemanticType => "semantic_type",
-            Self::I64 => "i64",
-            Self::U8 => "u8",
-            Self::Value => "value",
-            Self::ValueList => "value_list",
-            Self::ExpressionKind => "expression_kind",
-            Self::ExpressionList => "expression_list",
-            Self::ParameterList => "parameter_list",
-            Self::FunctionBody => "function_body",
-            Self::YieldingBody => "yielding_body",
-            Self::Bool => "bool",
-            Self::Expression => "expression",
-            Self::TypeDraft => "type_draft",
-            Self::ProductFieldList => "product_field_list",
-            Self::SumVariantList => "sum_variant_list",
-            Self::ProductFieldValueList => "product_field_value_list",
-            Self::MatchArmList => "match_arm_list",
-            Self::OperationMatchArmList => "operation_match_arm_list",
-        }
-    }
-
-    pub const fn type_expression(self) -> &'static str {
-        match self {
-            Self::LocalHandle => "local_handle",
-            Self::NodeTarget => "node_target",
-            Self::NodeId => "node_id",
-            Self::String => "string",
-            Self::SemanticType => "semantic_type",
-            Self::I64 => "i64",
-            Self::U8 => "u8",
-            Self::Value => "value_draft",
-            Self::ValueList => "list<value_draft>",
-            Self::ExpressionKind => "expression_kind_draft",
-            Self::ExpressionList => "list<expression>",
-            Self::ParameterList => "list<function_parameter>",
-            Self::FunctionBody => "function_body",
-            Self::YieldingBody => "yielding_body",
-            Self::Bool => "bool",
-            Self::Expression => "expression",
-            Self::TypeDraft => "type_draft",
-            Self::ProductFieldList => "list<product_field>",
-            Self::SumVariantList => "list<sum_variant>",
-            Self::ProductFieldValueList => "list<product_field_value>",
-            Self::MatchArmList => "list<match_arm>",
-            Self::OperationMatchArmList => "list<operation_match_arm>",
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct DraftFieldTypeDescription {
-    pub tag: u8,
-    pub name: String,
-    pub type_expression: String,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct DraftFieldDescription {
-    pub name: String,
-    pub field_type: DraftFieldType,
-    pub required: bool,
-    pub nullable: bool,
-    pub declares_handle: bool,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct DraftRecordDescription {
-    pub name: String,
-    pub fields: Vec<DraftFieldDescription>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct DraftVariantDescription {
-    pub name: String,
-    pub tag: u8,
-    pub shape: PayloadShapeKind,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub newtype: Option<DraftFieldType>,
-    pub fields: Vec<DraftFieldDescription>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct OperationDescription {
-    pub name: String,
-    pub tag: u8,
-    pub operand_arity: OperandArity,
-    pub operands: Vec<OperandDescription>,
-    pub results: Vec<TypeRule>,
-    pub literal_fields: Vec<LiteralField>,
-    pub region_arity: RegionArity,
-    pub regions: Vec<RegionDescription>,
-    pub complete: bool,
-    pub terminator: bool,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct RegionDescription {
-    pub role: RegionRole,
-    pub block_arguments: Vec<BlockArgumentDescription>,
-    pub terminator: OperationCode,
-    pub yield_type: TypeRule,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct BlockArgumentDescription {
-    pub role: BlockArgumentRole,
-    pub ty: TypeRule,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct OperandDescription {
-    pub ty: TypeRule,
-    pub use_mode: OperandUse,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct BoundaryLimits {
-    pub maximum_frame_bytes: u64,
-    pub maximum_frame_items: u64,
-    pub maximum_artifact_bytes: u64,
-    pub maximum_artifact_name_bytes: u64,
-    pub maximum_json_input_bytes: u64,
-    pub maximum_json_output_bytes: u64,
-    pub maximum_page_items: u32,
-    pub maximum_batch_queries: u32,
-    pub maximum_batch_items: u32,
-    pub maximum_context_items_per_category: u32,
-    pub maximum_returned_bindings: u32,
-    pub maximum_run_arguments: u32,
-    pub maximum_run_fuel: u64,
-    pub maximum_run_frames: u32,
-    pub maximum_run_live_cells: u64,
-    pub maximum_runtime_value_depth: u32,
-    pub maximum_runtime_value_items: u64,
-    pub maximum_runtime_value_bytes: u64,
-    pub maximum_error_related_ids: u32,
-    pub maximum_persistence_head_bytes: u64,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct IdFormats {
-    pub workspace: String,
-    pub idempotency_key: String,
-    pub node: String,
-    pub snapshot_hash: String,
-    pub change_digest: String,
-    pub revision: String,
-    pub request_id: String,
-    pub query_id: String,
-    pub local_handle: String,
-    pub machine_schema_digest: String,
-}
-
 fn scalar_types() -> Vec<MachineScalarDescription> {
     let boolean = |name: &str| MachineScalarDescription {
         name: name.into(),
@@ -1278,7 +465,15 @@ fn scalar_types() -> Vec<MachineScalarDescription> {
         unsigned("revision", 0, u64::MAX),
         unsigned("request_id", 1, u64::MAX),
         unsigned("query_id", 0, u64::MAX),
-        unsigned("local_handle", 0, u32::MAX.into()),
+        MachineScalarDescription {
+            name: "draft_symbol".into(),
+            json_kind: JsonScalarKind::String,
+            domain: MachineScalarDomain::CanonicalIdentifier {
+                grammar: "[a-z][a-z0-9_]*".into(),
+                minimum_utf8_bytes: 1,
+                maximum_utf8_bytes: crate::ids::MAX_DRAFT_SYMBOL_BYTES as u64,
+            },
+        },
     ]
 }
 
@@ -1317,14 +512,9 @@ fn record_payload(fields: &[(&str, &str, bool)]) -> PayloadShapeDescription {
             .collect(),
     }
 }
-fn variant_payload(
-    name: &str,
-    tag: u8,
-    payload: PayloadShapeDescription,
-) -> VariantPayloadDescription {
+fn variant_payload(name: &str, payload: PayloadShapeDescription) -> VariantPayloadDescription {
     VariantPayloadDescription {
         name: name.into(),
-        tag,
         payload,
     }
 }
@@ -1363,7 +553,7 @@ fn unit_variants(
         content_field: None,
         variants: values
             .into_iter()
-            .map(|(variant, tag)| variant_payload(variant, tag, unit_payload()))
+            .map(|(variant, _)| variant_payload(variant, unit_payload()))
             .collect(),
     }
 }
@@ -1379,14 +569,14 @@ fn draft_field(
     name: &str,
     field_type: DraftFieldType,
     required: bool,
-    declares_handle: bool,
+    declares_symbol: bool,
 ) -> DraftFieldDescription {
     DraftFieldDescription {
         name: name.to_owned(),
         field_type,
         required,
         nullable: !required,
-        declares_handle,
+        declares_symbol,
     }
 }
 
@@ -1396,7 +586,7 @@ fn structured_records() -> Vec<DraftRecordDescription> {
         DraftRecordDescription {
             name: "create_product_type".into(),
             fields: vec![
-                draft_field("handle", T::LocalHandle, true, true),
+                draft_field("symbol", T::DraftSymbol, true, true),
                 draft_field("module", T::NodeTarget, true, false),
                 draft_field("name", T::String, true, false),
                 draft_field("fields", T::ProductFieldList, true, false),
@@ -1405,7 +595,7 @@ fn structured_records() -> Vec<DraftRecordDescription> {
         DraftRecordDescription {
             name: "product_field".into(),
             fields: vec![
-                draft_field("handle", T::LocalHandle, true, true),
+                draft_field("symbol", T::DraftSymbol, true, true),
                 draft_field("name", T::String, true, false),
                 draft_field("ty", T::TypeDraft, true, false),
             ],
@@ -1413,7 +603,7 @@ fn structured_records() -> Vec<DraftRecordDescription> {
         DraftRecordDescription {
             name: "create_sum_type".into(),
             fields: vec![
-                draft_field("handle", T::LocalHandle, true, true),
+                draft_field("symbol", T::DraftSymbol, true, true),
                 draft_field("module", T::NodeTarget, true, false),
                 draft_field("name", T::String, true, false),
                 draft_field("variants", T::SumVariantList, true, false),
@@ -1422,7 +612,7 @@ fn structured_records() -> Vec<DraftRecordDescription> {
         DraftRecordDescription {
             name: "sum_variant".into(),
             fields: vec![
-                draft_field("handle", T::LocalHandle, true, true),
+                draft_field("symbol", T::DraftSymbol, true, true),
                 draft_field("name", T::String, true, false),
                 draft_field("payload", T::TypeDraft, false, false),
             ],
@@ -1430,7 +620,7 @@ fn structured_records() -> Vec<DraftRecordDescription> {
         DraftRecordDescription {
             name: "create_function".into(),
             fields: vec![
-                draft_field("handle", T::LocalHandle, true, true),
+                draft_field("symbol", T::DraftSymbol, true, true),
                 draft_field("module", T::NodeTarget, true, false),
                 draft_field("name", T::String, true, false),
                 draft_field("parameters", T::ParameterList, true, false),
@@ -1441,7 +631,7 @@ fn structured_records() -> Vec<DraftRecordDescription> {
         DraftRecordDescription {
             name: "function_parameter".into(),
             fields: vec![
-                draft_field("handle", T::LocalHandle, true, true),
+                draft_field("symbol", T::DraftSymbol, true, true),
                 draft_field("name", T::String, true, false),
                 draft_field("ty", T::TypeDraft, true, false),
             ],
@@ -1478,21 +668,21 @@ fn structured_records() -> Vec<DraftRecordDescription> {
             name: "match_arm".into(),
             fields: vec![
                 draft_field("variant", T::NodeTarget, true, false),
-                draft_field("payload_handle", T::LocalHandle, false, true),
+                draft_field("payload_symbol", T::DraftSymbol, false, true),
                 draft_field("body", T::YieldingBody, true, false),
             ],
         },
         DraftRecordDescription {
             name: "expression".into(),
             fields: vec![
-                draft_field("handle", T::LocalHandle, true, true),
+                draft_field("symbol", T::DraftSymbol, false, true),
                 draft_field("operation", T::ExpressionKind, true, false),
             ],
         },
         DraftRecordDescription {
             name: "define_function_body".into(),
             fields: vec![
-                draft_field("function", T::NodeTarget, true, false),
+                draft_field("function", T::NodeId, true, false),
                 draft_field("body", T::FunctionBody, true, false),
             ],
         },
@@ -1554,8 +744,8 @@ fn expression_variant(code: crate::transaction::ExpressionDraftCode) -> DraftVar
                 draft_field("step", T::I64, true, false),
                 draft_field("initial", T::Value, true, false),
                 draft_field("carried", T::TypeDraft, true, false),
-                draft_field("index_handle", T::LocalHandle, true, true),
-                draft_field("carried_handle", T::LocalHandle, true, true),
+                draft_field("index_symbol", T::DraftSymbol, true, true),
+                draft_field("carried_symbol", T::DraftSymbol, true, true),
                 draft_field("body", T::YieldingBody, true, false),
             ],
         ),
@@ -1595,7 +785,6 @@ fn expression_variant(code: crate::transaction::ExpressionDraftCode) -> DraftVar
     };
     DraftVariantDescription {
         name: code.machine_name().into(),
-        tag: code.stable_tag(),
         shape,
         newtype,
         fields,
@@ -1693,7 +882,6 @@ fn operation_variant(code: OperationCode) -> DraftVariantDescription {
     };
     DraftVariantDescription {
         name: code.machine_name().into(),
-        tag: code.stable_tag(),
         shape,
         newtype,
         fields,
@@ -1705,28 +893,24 @@ fn type_variants() -> Vec<DraftVariantDescription> {
     vec![
         DraftVariantDescription {
             name: "unit".into(),
-            tag: 1,
             shape: PayloadShapeKind::Unit,
             newtype: None,
             fields: Vec::new(),
         },
         DraftVariantDescription {
             name: "bool".into(),
-            tag: 2,
             shape: PayloadShapeKind::Unit,
             newtype: None,
             fields: Vec::new(),
         },
         DraftVariantDescription {
             name: "i64".into(),
-            tag: 3,
             shape: PayloadShapeKind::Unit,
             newtype: None,
             fields: Vec::new(),
         },
         DraftVariantDescription {
             name: "nominal".into(),
-            tag: 4,
             shape: PayloadShapeKind::Newtype,
             newtype: Some(T::NodeTarget),
             fields: Vec::new(),
@@ -1752,7 +936,6 @@ fn value_variant(code: crate::transaction::ValueDraftCode) -> DraftVariantDescri
     };
     DraftVariantDescription {
         name: code.machine_name().into(),
-        tag: code.stable_tag(),
         shape,
         newtype,
         fields,
@@ -1777,20 +960,19 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
         external_variant(
             "semantic_type",
             vec![
-                variant_payload("unit", 1, unit_payload()),
-                variant_payload("bool", 2, unit_payload()),
-                variant_payload("i64", 3, unit_payload()),
-                variant_payload("nominal", 4, newtype_payload("node_id")),
+                variant_payload("unit", unit_payload()),
+                variant_payload("bool", unit_payload()),
+                variant_payload("i64", unit_payload()),
+                variant_payload("nominal", newtype_payload("node_id")),
             ],
         ),
         named_variant(
             "value_ref",
             vec![
-                variant_payload("function_parameter", 1, newtype_payload("node_id")),
-                variant_payload("block_argument", 2, newtype_payload("node_id")),
+                variant_payload("function_parameter", newtype_payload("node_id")),
+                variant_payload("block_argument", newtype_payload("node_id")),
                 variant_payload(
                     "operation_result",
-                    3,
                     record_payload(&[("operation", "node_id", true), ("output", "u8", true)]),
                 ),
             ],
@@ -1798,31 +980,28 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
         external_variant(
             "region_role",
             vec![
-                variant_payload("if_then", 1, unit_payload()),
-                variant_payload("if_else", 2, unit_payload()),
-                variant_payload("for_body", 3, unit_payload()),
-                variant_payload("match_arm", 4, newtype_payload("node_id")),
+                variant_payload("if_then", unit_payload()),
+                variant_payload("if_else", unit_payload()),
+                variant_payload("for_body", unit_payload()),
+                variant_payload("match_arm", newtype_payload("node_id")),
             ],
         ),
         named_variant(
             "operation_kind",
             vec![
-                variant_payload("const_unit", 6, unit_payload()),
-                variant_payload("const_i64", 1, newtype_payload("i64")),
-                variant_payload("const_bool", 2, newtype_payload("bool")),
+                variant_payload("const_unit", unit_payload()),
+                variant_payload("const_i64", newtype_payload("i64")),
+                variant_payload("const_bool", newtype_payload("bool")),
                 variant_payload(
                     "add_i64",
-                    3,
                     record_payload(&[("lhs", "value_ref", true), ("rhs", "value_ref", true)]),
                 ),
                 variant_payload(
                     "lt_i64",
-                    7,
                     record_payload(&[("lhs", "value_ref", true), ("rhs", "value_ref", true)]),
                 ),
                 variant_payload(
                     "call",
-                    8,
                     record_payload(&[
                         ("function", "node_id", true),
                         ("arguments", "list<value_ref>", true),
@@ -1830,12 +1009,10 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
                 ),
                 variant_payload(
                     "hole",
-                    4,
                     record_payload(&[("expected", "semantic_type", true)]),
                 ),
                 variant_payload(
                     "if",
-                    9,
                     record_payload(&[
                         ("condition", "value_ref", true),
                         ("result", "semantic_type", true),
@@ -1845,7 +1022,6 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
                 ),
                 variant_payload(
                     "for_i64",
-                    10,
                     record_payload(&[
                         ("start", "value_ref", true),
                         ("end_exclusive", "value_ref", true),
@@ -1855,11 +1031,10 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
                         ("body_region", "node_id", true),
                     ]),
                 ),
-                variant_payload("return", 5, record_payload(&[("value", "value_ref", true)])),
-                variant_payload("yield", 11, record_payload(&[("value", "value_ref", true)])),
+                variant_payload("return", record_payload(&[("value", "value_ref", true)])),
+                variant_payload("yield", record_payload(&[("value", "value_ref", true)])),
                 variant_payload(
                     "construct_product",
-                    12,
                     record_payload(&[
                         ("product", "node_id", true),
                         ("fields", "list<canonical_product_field_value>", true),
@@ -1867,12 +1042,10 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
                 ),
                 variant_payload(
                     "project_field",
-                    13,
                     record_payload(&[("value", "value_ref", true), ("field", "node_id", true)]),
                 ),
                 variant_payload(
                     "construct_variant",
-                    14,
                     record_payload(&[
                         ("variant", "node_id", true),
                         ("payload", "value_ref", false),
@@ -1880,7 +1053,6 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
                 ),
                 variant_payload(
                     "match_sum",
-                    15,
                     record_payload(&[
                         ("scrutinee", "value_ref", true),
                         ("result", "semantic_type", true),
@@ -1894,12 +1066,10 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
             vec![
                 variant_payload(
                     "workspace_root",
-                    1,
                     record_payload(&[("packages", "list<node_id>", true)]),
                 ),
                 variant_payload(
                     "package",
-                    2,
                     record_payload(&[
                         ("owner", "node_id", true),
                         ("name", "string", true),
@@ -1909,7 +1079,6 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
                 ),
                 variant_payload(
                     "module",
-                    3,
                     record_payload(&[
                         ("owner", "node_id", true),
                         ("name", "string", true),
@@ -1919,7 +1088,6 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
                 ),
                 variant_payload(
                     "product_type",
-                    10,
                     record_payload(&[
                         ("owner", "node_id", true),
                         ("name", "string", true),
@@ -1928,7 +1096,6 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
                 ),
                 variant_payload(
                     "product_field",
-                    11,
                     record_payload(&[
                         ("owner", "node_id", true),
                         ("ordinal", "u32", true),
@@ -1938,7 +1105,6 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
                 ),
                 variant_payload(
                     "sum_type",
-                    12,
                     record_payload(&[
                         ("owner", "node_id", true),
                         ("name", "string", true),
@@ -1947,7 +1113,6 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
                 ),
                 variant_payload(
                     "sum_variant",
-                    13,
                     record_payload(&[
                         ("owner", "node_id", true),
                         ("ordinal", "u32", true),
@@ -1957,7 +1122,6 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
                 ),
                 variant_payload(
                     "function",
-                    4,
                     record_payload(&[
                         ("owner", "node_id", true),
                         ("name", "string", true),
@@ -1968,7 +1132,6 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
                 ),
                 variant_payload(
                     "parameter",
-                    5,
                     record_payload(&[
                         ("owner", "node_id", true),
                         ("ordinal", "u32", true),
@@ -1978,7 +1141,6 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
                 ),
                 variant_payload(
                     "region",
-                    6,
                     record_payload(&[
                         ("owner", "node_id", true),
                         ("blocks", "list<node_id>", true),
@@ -1986,7 +1148,6 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
                 ),
                 variant_payload(
                     "block",
-                    7,
                     record_payload(&[
                         ("owner", "node_id", true),
                         ("arguments", "list<node_id>", true),
@@ -1996,7 +1157,6 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
                 ),
                 variant_payload(
                     "block_argument",
-                    9,
                     record_payload(&[
                         ("owner", "node_id", true),
                         ("ordinal", "u32", true),
@@ -2005,7 +1165,6 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
                 ),
                 variant_payload(
                     "operation",
-                    8,
                     record_payload(&[
                         ("owner", "node_id", true),
                         ("operation", "operation_kind", true),
@@ -2037,7 +1196,7 @@ fn transaction_records() -> Vec<NamedPayloadDescription> {
         ),
         named_record(
             "transaction_response_spec",
-            &[("return_handles", "list<local_handle>", true)],
+            &[("return_symbols", "list<draft_symbol>", true)],
         ),
         named_record(
             "transaction_receipt",
@@ -2050,7 +1209,7 @@ fn transaction_records() -> Vec<NamedPayloadDescription> {
                 ("created_count", "u64", true),
                 (
                     "returned_bindings",
-                    "list<tuple<local_handle,node_id>>",
+                    "list<tuple<draft_symbol,node_id>>",
                     true,
                 ),
                 ("change_count", "u64", true),
@@ -2076,8 +1235,8 @@ fn transaction_variants() -> Vec<NamedVariantDescription> {
         named_variant(
             "node_target",
             vec![
-                variant_payload("existing", 1, newtype_payload("node_id")),
-                variant_payload("local", 2, newtype_payload("local_handle")),
+                variant_payload("existing", newtype_payload("node_id")),
+                variant_payload("draft", newtype_payload("draft_symbol")),
             ],
         ),
         unit_variants("transaction_mode", [("commit", 1), ("validate_only", 2)]),
@@ -2124,11 +1283,11 @@ fn run_variants() -> Vec<NamedVariantDescription> {
     vec![named_variant(
         "runtime_value",
         vec![
-            variant_payload("unit", 1, unit_payload()),
-            variant_payload("bool", 2, newtype_payload("bool")),
-            variant_payload("i64", 3, newtype_payload("i64")),
-            variant_payload("product", 4, newtype_payload("runtime_product_data")),
-            variant_payload("sum", 5, newtype_payload("runtime_sum_data")),
+            variant_payload("unit", unit_payload()),
+            variant_payload("bool", newtype_payload("bool")),
+            variant_payload("i64", newtype_payload("i64")),
+            variant_payload("product", newtype_payload("runtime_product_data")),
+            variant_payload("sum", newtype_payload("runtime_sum_data")),
         ],
     )]
 }
@@ -2186,7 +1345,7 @@ fn request_payload(code: RequestCode) -> VariantPayloadDescription {
             ("policy", "run_policy", true),
         ]),
     };
-    variant_payload(code.machine_name(), code.stable_tag(), payload)
+    variant_payload(code.machine_name(), payload)
 }
 
 fn response_payload(code: ResponseCode) -> VariantPayloadDescription {
@@ -2199,33 +1358,33 @@ fn response_payload(code: ResponseCode) -> VariantPayloadDescription {
         ResponseCode::Error => newtype_payload("error"),
         ResponseCode::DescribeSchema => newtype_payload("describe_schema_result"),
     };
-    variant_payload(code.machine_name(), code.stable_tag(), payload)
+    variant_payload(code.machine_name(), payload)
 }
 
 fn transaction_payload(code: TransactionOpCode) -> VariantPayloadDescription {
     let payload = match code {
         TransactionOpCode::CreatePackage => {
-            record_payload(&[("handle", "local_handle", true), ("name", "string", true)])
+            record_payload(&[("symbol", "draft_symbol", true), ("name", "string", true)])
         }
         TransactionOpCode::CreateModule => record_payload(&[
-            ("handle", "local_handle", true),
+            ("symbol", "draft_symbol", true),
             ("package", "node_target", true),
             ("name", "string", true),
         ]),
         TransactionOpCode::CreateProductType => record_payload(&[
-            ("handle", "local_handle", true),
+            ("symbol", "draft_symbol", true),
             ("module", "node_target", true),
             ("name", "string", true),
             ("fields", "list<product_field>", true),
         ]),
         TransactionOpCode::CreateSumType => record_payload(&[
-            ("handle", "local_handle", true),
+            ("symbol", "draft_symbol", true),
             ("module", "node_target", true),
             ("name", "string", true),
             ("variants", "list<sum_variant>", true),
         ]),
         TransactionOpCode::CreateFunction => record_payload(&[
-            ("handle", "local_handle", true),
+            ("symbol", "draft_symbol", true),
             ("module", "node_target", true),
             ("name", "string", true),
             ("parameters", "list<function_parameter>", true),
@@ -2233,7 +1392,7 @@ fn transaction_payload(code: TransactionOpCode) -> VariantPayloadDescription {
             ("body", "function_body", false),
         ]),
         TransactionOpCode::DefineFunctionBody => record_payload(&[
-            ("function", "node_target", true),
+            ("function", "node_id", true),
             ("body", "function_body", true),
         ]),
         TransactionOpCode::InsertExpression => record_payload(&[
@@ -2263,7 +1422,7 @@ fn transaction_payload(code: TransactionOpCode) -> VariantPayloadDescription {
             ("replacement", "operation_draft", true),
         ]),
     };
-    variant_payload(code.machine_name(), code.stable_tag(), payload)
+    variant_payload(code.machine_name(), payload)
 }
 
 fn query_payload(code: QueryCode) -> VariantPayloadDescription {
@@ -2310,7 +1469,7 @@ fn query_payload(code: QueryCode) -> VariantPayloadDescription {
             ("page", "page_request", true),
         ]),
     };
-    variant_payload(code.machine_name(), code.stable_tag(), payload)
+    variant_payload(code.machine_name(), payload)
 }
 
 fn query_result_payload(code: QueryCode) -> VariantPayloadDescription {
@@ -2329,7 +1488,7 @@ fn query_result_payload(code: QueryCode) -> VariantPayloadDescription {
         QueryCode::RepairContext => "repair_context",
         QueryCode::NominalType => "nominal_type_result",
     };
-    variant_payload(code.machine_name(), code.stable_tag(), newtype_payload(ty))
+    variant_payload(code.machine_name(), newtype_payload(ty))
 }
 
 fn query_records() -> Vec<NamedPayloadDescription> {
@@ -2646,17 +1805,16 @@ fn query_variants() -> Vec<NamedVariantDescription> {
         named_variant(
             "query_outcome",
             vec![
-                variant_payload("success", 1, newtype_payload("query_result")),
-                variant_payload("error", 2, newtype_payload("error")),
+                variant_payload("success", newtype_payload("query_result")),
+                variant_payload("error", newtype_payload("error")),
             ],
         ),
         named_variant(
             "repair_target",
             vec![
-                variant_payload("hole", 1, newtype_payload("node_id")),
+                variant_payload("hole", newtype_payload("node_id")),
                 variant_payload(
                     "operand",
-                    2,
                     record_payload(&[("operation", "node_id", true), ("index", "u64", true)]),
                 ),
             ],
@@ -2705,9 +1863,9 @@ fn query_variants() -> Vec<NamedVariantDescription> {
         named_variant(
             "literal_value",
             vec![
-                variant_payload("i64", 1, newtype_payload("i64")),
-                variant_payload("bool", 2, newtype_payload("bool")),
-                variant_payload("expected_type", 3, newtype_payload("semantic_type")),
+                variant_payload("i64", newtype_payload("i64")),
+                variant_payload("bool", newtype_payload("bool")),
+                variant_payload("expected_type", newtype_payload("semantic_type")),
             ],
         ),
         named_variant(
@@ -2715,12 +1873,10 @@ fn query_variants() -> Vec<NamedVariantDescription> {
             vec![
                 variant_payload(
                     "value_operand",
-                    1,
                     record_payload(&[("index", "u64", true), ("value", "value_ref", true)]),
                 ),
                 variant_payload(
                     "definition",
-                    2,
                     record_payload(&[
                         ("slot", "definition_slot", true),
                         ("target", "node_id", true),
@@ -2731,24 +1887,22 @@ fn query_variants() -> Vec<NamedVariantDescription> {
         named_variant(
             "scalar_value",
             vec![
-                variant_payload("i64", 1, newtype_payload("i64")),
-                variant_payload("bool", 2, newtype_payload("bool")),
-                variant_payload("type", 3, newtype_payload("semantic_type")),
+                variant_payload("i64", newtype_payload("i64")),
+                variant_payload("bool", newtype_payload("bool")),
+                variant_payload("type", newtype_payload("semantic_type")),
             ],
         ),
         named_variant(
             "change_kind",
             vec![
-                variant_payload("created", 1, record_payload(&[("kind", "node_kind", true)])),
-                variant_payload("deleted", 2, record_payload(&[("kind", "node_kind", true)])),
+                variant_payload("created", record_payload(&[("kind", "node_kind", true)])),
+                variant_payload("deleted", record_payload(&[("kind", "node_kind", true)])),
                 variant_payload(
                     "renamed",
-                    3,
                     record_payload(&[("before", "string", true), ("after", "string", true)]),
                 ),
                 variant_payload(
                     "scalar_attribute_changed",
-                    4,
                     record_payload(&[
                         ("before", "scalar_value", true),
                         ("after", "scalar_value", true),
@@ -2756,12 +1910,10 @@ fn query_variants() -> Vec<NamedVariantDescription> {
                 ),
                 variant_payload(
                     "containment_changed",
-                    5,
                     record_payload(&[("before_count", "u64", true), ("after_count", "u64", true)]),
                 ),
                 variant_payload(
                     "operand_changed",
-                    6,
                     record_payload(&[
                         ("index", "u64", true),
                         ("before", "value_ref", false),
@@ -2770,22 +1922,18 @@ fn query_variants() -> Vec<NamedVariantDescription> {
                 ),
                 variant_payload(
                     "definition_changed",
-                    7,
                     record_payload(&[("before", "node_id", true), ("after", "node_id", true)]),
                 ),
                 variant_payload(
                     "entry_function_changed",
-                    8,
                     record_payload(&[("before", "node_id", false), ("after", "node_id", false)]),
                 ),
                 variant_payload(
                     "completeness_changed",
-                    9,
                     record_payload(&[("complete", "bool", true)]),
                 ),
                 variant_payload(
                     "operation_refined",
-                    10,
                     record_payload(&[
                         ("before", "operation_code", true),
                         ("after", "operation_code", true),
@@ -2793,7 +1941,7 @@ fn query_variants() -> Vec<NamedVariantDescription> {
                         ("replacement", "operation_kind", true),
                     ]),
                 ),
-                variant_payload("allocated_and_tombstoned", 11, unit_payload()),
+                variant_payload("allocated_and_tombstoned", unit_payload()),
             ],
         ),
     ]
@@ -2803,7 +1951,6 @@ fn query_member_payloads() -> Vec<VariantPayloadDescription> {
     vec![
         variant_payload(
             "product_field",
-            1,
             record_payload(&[
                 ("field", "node_id", true),
                 ("name", "string", true),
@@ -2815,7 +1962,6 @@ fn query_member_payloads() -> Vec<VariantPayloadDescription> {
         ),
         variant_payload(
             "sum_variant",
-            2,
             record_payload(&[
                 ("variant", "node_id", true),
                 ("name", "string", true),
@@ -2840,35 +1986,29 @@ fn query_cursor_payloads() -> Vec<VariantPayloadDescription> {
         record_payload(&fields)
     };
     vec![
-        variant_payload("blockers", 1, common(&[("next", "u64", true)])),
+        variant_payload("blockers", common(&[("next", "u64", true)])),
         variant_payload(
             "owner_chain",
-            2,
             common(&[("node", "node_id", true), ("next", "u64", true)]),
         ),
         variant_payload(
             "body",
-            3,
             common(&[("block", "node_id", true), ("next", "u64", true)]),
         ),
         variant_payload(
             "incoming_uses",
-            4,
             common(&[("value", "value_ref", true), ("next", "u64", true)]),
         ),
         variant_payload(
             "definition_references",
-            5,
             common(&[("target", "node_id", true), ("next", "u64", true)]),
         ),
         variant_payload(
             "dependencies",
-            6,
             common(&[("node", "node_id", true), ("next", "u64", true)]),
         ),
         variant_payload(
             "visible_values",
-            7,
             common(&[
                 ("purpose", "visible_cursor_purpose", true),
                 ("target", "repair_target", true),
@@ -2879,7 +2019,6 @@ fn query_cursor_payloads() -> Vec<VariantPayloadDescription> {
         ),
         variant_payload(
             "legal_constructors",
-            8,
             common(&[
                 ("target", "repair_target", true),
                 ("expected", "semantic_type", true),
@@ -2888,7 +2027,6 @@ fn query_cursor_payloads() -> Vec<VariantPayloadDescription> {
         ),
         variant_payload(
             "diff",
-            9,
             record_payload(&[
                 ("workspace", "workspace_id", true),
                 ("from", "revision", true),
@@ -2898,7 +2036,6 @@ fn query_cursor_payloads() -> Vec<VariantPayloadDescription> {
         ),
         variant_payload(
             "nominal_type",
-            10,
             common(&[("declaration", "node_id", true), ("next", "u64", true)]),
         ),
     ]
@@ -2910,7 +2047,8 @@ fn error_payload() -> PayloadShapeDescription {
         ("workspace", "workspace_id", false),
         ("revision", "revision", false),
         ("operation_index", "u32", false),
-        ("local_handle", "local_handle", false),
+        ("draft_symbol", "draft_symbol", false),
+        ("draft_path", "string", false),
         ("target", "node_id", false),
         ("expected_kind", "node_kind", false),
         ("actual_kind", "node_kind", false),
@@ -2977,7 +2115,6 @@ fn schema_discovery_records() -> Vec<NamedPayloadDescription> {
             "variant_payload_description",
             &[
                 ("name", "string", true),
-                ("tag", "u8", true),
                 ("payload", "payload_shape_description", true),
             ],
         ),
@@ -2998,14 +2135,10 @@ fn schema_discovery_records() -> Vec<NamedPayloadDescription> {
                 ("variants", "list<variant_payload_description>", true),
             ],
         ),
-        record(
-            "code_description",
-            &[("name", "string", true), ("tag", "u8", true)],
-        ),
+        record("code_description", &[("name", "string", true)]),
         record(
             "draft_field_type_description",
             &[
-                ("tag", "u8", true),
                 ("name", "string", true),
                 ("type_expression", "string", true),
             ],
@@ -3017,7 +2150,7 @@ fn schema_discovery_records() -> Vec<NamedPayloadDescription> {
                 ("field_type", "draft_field_type", true),
                 ("required", "bool", true),
                 ("nullable", "bool", true),
-                ("declares_handle", "bool", true),
+                ("declares_symbol", "bool", true),
             ],
         ),
         record(
@@ -3031,7 +2164,6 @@ fn schema_discovery_records() -> Vec<NamedPayloadDescription> {
             "draft_variant_description",
             &[
                 ("name", "string", true),
-                ("tag", "u8", true),
                 ("shape", "payload_shape_kind", true),
                 ("newtype", "draft_field_type", false),
                 ("fields", "list<draft_field_description>", true),
@@ -3063,8 +2195,8 @@ fn schema_discovery_records() -> Vec<NamedPayloadDescription> {
                 ("value_tagging", "string", true),
                 ("type_tagging", "string", true),
                 ("allocation_order", "string", true),
-                ("explicit_handles_are_selectable", "bool", true),
-                ("implicit_handles_are_selectable", "bool", true),
+                ("explicit_symbols_are_selectable", "bool", true),
+                ("implicit_symbols_are_selectable", "bool", true),
                 ("implicit_node_kinds", "list<node_kind>", true),
                 ("maximum_request_depth", "u32", true),
                 ("maximum_request_items", "u64", true),
@@ -3095,7 +2227,6 @@ fn schema_discovery_records() -> Vec<NamedPayloadDescription> {
             "operation_description",
             &[
                 ("name", "string", true),
-                ("tag", "u8", true),
                 ("operand_arity", "operand_arity", true),
                 ("operands", "list<operand_description>", true),
                 ("results", "list<type_rule>", true),
@@ -3118,7 +2249,6 @@ fn schema_discovery_records() -> Vec<NamedPayloadDescription> {
             "runtime_value_description",
             &[
                 ("name", "string", true),
-                ("tag", "u8", true),
                 ("payload", "runtime_value_payload", true),
                 ("fields", "list<machine_field_description>", true),
                 ("invariants", "list<string>", true),
@@ -3149,22 +2279,18 @@ fn schema_discovery_records() -> Vec<NamedPayloadDescription> {
                     true,
                 ),
                 ("result_payloads", "list<variant_payload_description>", true),
-                ("sections", "list<code_description>", true),
-                (
-                    "section_payloads",
-                    "list<variant_payload_description>",
-                    true,
-                ),
-                ("maximum_sections_per_request", "u8", true),
+                ("roots", "list<string>", true),
+                ("type_constructors", "list<string>", true),
+                ("maximum_roots_per_request", "u8", true),
                 ("full_available", "bool", true),
-                ("known_digest_match_precedes_projection", "bool", true),
+                ("known_digest_match_follows_root_validation", "bool", true),
             ],
         ),
         record(
             "schema_description",
             &[
                 ("machine_schema_identity", "string", true),
-                ("binary_protocol_version", "u16", true),
+                ("protocol_version", "u16", true),
                 ("json_envelope_version", "u16", true),
                 ("artifact_format_version", "u16", true),
                 ("artifact_magic_hex", "string", true),
@@ -3238,7 +2364,7 @@ fn schema_discovery_records() -> Vec<NamedPayloadDescription> {
                 ("envelopes", "list<named_payload_description>", true),
                 ("boundary_error_kinds", "list<string>", true),
                 ("limits", "boundary_limits", true),
-                ("id_formats", "id_formats", true),
+                ("id_formats", "id_formats_description", true),
                 (
                     "nominal_declarations",
                     "nominal_declarations_description",
@@ -3278,8 +2404,8 @@ fn schema_discovery_records() -> Vec<NamedPayloadDescription> {
         record(
             "boundary_limits",
             &[
-                ("maximum_frame_bytes", "u64", true),
-                ("maximum_frame_items", "u64", true),
+                ("maximum_request_frame_bytes", "u64", true),
+                ("maximum_response_frame_bytes", "u64", true),
                 ("maximum_artifact_bytes", "u64", true),
                 ("maximum_artifact_name_bytes", "u64", true),
                 ("maximum_json_input_bytes", "u64", true),
@@ -3297,11 +2423,12 @@ fn schema_discovery_records() -> Vec<NamedPayloadDescription> {
                 ("maximum_runtime_value_items", "u64", true),
                 ("maximum_runtime_value_bytes", "u64", true),
                 ("maximum_error_related_ids", "u32", true),
+                ("maximum_boundary_error_message_bytes", "u64", true),
                 ("maximum_persistence_head_bytes", "u64", true),
             ],
         ),
         record(
-            "id_formats",
+            "id_formats_description",
             &[
                 ("workspace", "string", true),
                 ("idempotency_key", "string", true),
@@ -3311,7 +2438,7 @@ fn schema_discovery_records() -> Vec<NamedPayloadDescription> {
                 ("revision", "string", true),
                 ("request_id", "string", true),
                 ("query_id", "string", true),
-                ("local_handle", "string", true),
+                ("draft_symbol", "string", true),
                 ("machine_schema_digest", "string", true),
             ],
         ),
@@ -3329,135 +2456,106 @@ fn schema_discovery_records() -> Vec<NamedPayloadDescription> {
             &[
                 ("schema_identity", "string", true),
                 ("digest", "machine_schema_digest", true),
-                ("binary_protocol_version", "u16", true),
+                ("protocol_version", "u16", true),
                 ("json_envelope_version", "u16", true),
                 ("artifact_format_version", "u16", true),
                 ("artifact_magic_hex", "string", true),
                 ("semantic_schema_identity", "string", true),
-                ("sections", "list<code_description>", true),
-                ("maximum_sections_per_request", "u8", true),
+                ("roots", "list<string>", true),
+                ("type_constructors", "list<string>", true),
+                ("maximum_roots_per_request", "u8", true),
                 ("full_available", "bool", true),
-                ("maximum_frame_bytes", "u64", true),
+                ("maximum_request_frame_bytes", "u64", true),
+                ("maximum_response_frame_bytes", "u64", true),
                 ("maximum_json_output_bytes", "u64", true),
             ],
         ),
         record(
-            "schema_sections",
+            "schema_definitions",
             &[
                 ("digest", "machine_schema_digest", true),
-                ("sections", "list<schema_section_payload>", true),
+                ("roots", "list<schema_root>", true),
+                ("type_constructors", "list<string>", true),
+                ("definitions", "list<schema_definition>", true),
             ],
         ),
         record(
-            "identity_and_envelopes_section",
+            "schema_definition",
             &[
-                ("machine_schema_identity", "string", true),
-                ("binary_protocol_version", "u16", true),
+                ("name", "string", true),
+                ("dependencies", "list<string>", true),
+                ("body", "schema_definition_body", true),
+            ],
+        ),
+        record(
+            "draft_variant_family_description",
+            &[
+                ("name", "string", true),
+                ("tagging", "string", true),
+                ("variants", "list<draft_variant_description>", true),
+            ],
+        ),
+        record(
+            "endpoint_description",
+            &[
+                ("name", "string", true),
+                ("family", "string", true),
+                ("template", "string", true),
+                (
+                    "bindings",
+                    "list<endpoint_variant_binding_description>",
+                    true,
+                ),
+                ("protocol_version", "u16", true),
                 ("json_envelope_version", "u16", true),
-                ("artifact_format_version", "u16", true),
-                ("artifact_magic_hex", "string", true),
-                ("semantic_schema_identity", "string", true),
-                ("schema_discovery", "schema_discovery_description", true),
-                ("scalar_types", "list<machine_scalar_description>", true),
-                ("requests", "list<code_description>", true),
-                (
-                    "request_payloads",
-                    "list<variant_payload_description>",
-                    true,
-                ),
-                ("responses", "list<code_description>", true),
-                (
-                    "response_payloads",
-                    "list<variant_payload_description>",
-                    true,
-                ),
-                ("identity_variants", "list<named_variant_description>", true),
-                ("envelopes", "list<named_payload_description>", true),
-                ("id_formats", "id_formats", true),
+                ("boundary_error_envelope", "string", true),
+                ("typed_error", "string", true),
+                ("id_formats", "string", true),
+                ("limits", "string", true),
             ],
         ),
         record(
-            "semantic_types_and_nodes_section",
+            "endpoint_variant_binding_description",
             &[
-                ("semantic_types", "list<code_description>", true),
-                ("node_kinds", "list<code_description>", true),
-                ("name_contract", "name_contract_description", true),
-                ("operations", "list<operation_description>", true),
+                ("parameter", "string", true),
+                ("variant", "variant_payload_description", true),
+            ],
+        ),
+        record(
+            "endpoint_protocol_template_description",
+            &[
+                ("name", "string", true),
+                (
+                    "parameters",
+                    "list<endpoint_template_parameter_description>",
+                    true,
+                ),
                 ("records", "list<named_payload_description>", true),
                 ("variants", "list<named_variant_description>", true),
             ],
         ),
         record(
-            "nominal_declarations_section",
+            "endpoint_template_parameter_description",
             &[
-                ("declaration_kinds", "list<node_kind>", true),
-                ("member_kinds", "list<node_kind>", true),
-                ("shape_invariants", "list<string>", true),
-                ("layout_invariants", "list<string>", true),
+                ("name", "string", true),
+                ("target_variant", "string", true),
+                ("semantics", "string", true),
             ],
         ),
         record(
-            "transactions_and_expressions_section",
-            &[
-                ("transaction_operations", "list<code_description>", true),
-                (
-                    "transaction_operation_payloads",
-                    "list<variant_payload_description>",
-                    true,
-                ),
-                ("records", "list<named_payload_description>", true),
-                ("variants", "list<named_variant_description>", true),
-                (
-                    "structured_authoring",
-                    "structured_authoring_description",
-                    true,
-                ),
-            ],
+            "code_family_description",
+            &[("name", "string", true), ("members", "list<string>", true)],
         ),
         record(
-            "queries_and_repair_section",
+            "structured_authoring_policy_description",
             &[
-                ("queries", "list<code_description>", true),
-                ("query_payloads", "list<variant_payload_description>", true),
-                (
-                    "query_result_payloads",
-                    "list<variant_payload_description>",
-                    true,
-                ),
-                ("query_records", "list<named_payload_description>", true),
-                ("query_variants", "list<named_variant_description>", true),
-                (
-                    "query_member_payloads",
-                    "list<variant_payload_description>",
-                    true,
-                ),
-                (
-                    "query_cursor_payloads",
-                    "list<variant_payload_description>",
-                    true,
-                ),
-            ],
-        ),
-        record(
-            "runtime_and_run_section",
-            &[
-                ("fields", "list<run_field_description>", true),
-                ("policy_fields", "list<run_field_description>", true),
-                ("runtime_values", "list<runtime_value_description>", true),
-                ("records", "list<named_payload_description>", true),
-                ("variants", "list<named_variant_description>", true),
-                ("limit_scope", "list<string>", true),
-            ],
-        ),
-        record(
-            "errors_and_limits_section",
-            &[
-                ("errors", "list<code_description>", true),
-                ("error_payload", "payload_shape_description", true),
-                ("records", "list<named_payload_description>", true),
-                ("variants", "list<named_variant_description>", true),
-                ("boundary_error_kinds", "list<string>", true),
-                ("limits", "boundary_limits", true),
+                ("allocation_order", "string", true),
+                ("explicit_symbols_are_selectable", "bool", true),
+                ("implicit_symbols_are_selectable", "bool", true),
+                ("implicit_node_kinds", "list<node_kind>", true),
+                ("maximum_request_depth", "u32", true),
+                ("maximum_request_items", "u64", true),
+                ("counted_item_categories", "list<string>", true),
             ],
         ),
     ]
@@ -3466,12 +2564,50 @@ fn schema_discovery_records() -> Vec<NamedPayloadDescription> {
 fn schema_discovery_variants(
     projection_payloads: &[VariantPayloadDescription],
     result_payloads: &[VariantPayloadDescription],
-    section_payloads: &[VariantPayloadDescription],
 ) -> Vec<NamedVariantDescription> {
     vec![
         named_variant("schema_projection", projection_payloads.to_vec()),
         named_variant("describe_schema_result", result_payloads.to_vec()),
-        named_variant("schema_section_payload", section_payloads.to_vec()),
+        unit_variants(
+            "schema_root",
+            SchemaRoot::ALL
+                .into_iter()
+                .map(|root| (root.machine_name(), 0)),
+        ),
+        named_variant(
+            "schema_definition_body",
+            vec![
+                variant_payload("scalar", newtype_payload("machine_scalar_description")),
+                variant_payload("record", newtype_payload("named_payload_description")),
+                variant_payload("variant", newtype_payload("named_variant_description")),
+                variant_payload("draft_record", newtype_payload("draft_record_description")),
+                variant_payload(
+                    "draft_variant",
+                    newtype_payload("draft_variant_family_description"),
+                ),
+                variant_payload("endpoint", newtype_payload("endpoint_description")),
+                variant_payload(
+                    "endpoint_template",
+                    newtype_payload("endpoint_protocol_template_description"),
+                ),
+                variant_payload("codes", newtype_payload("code_family_description")),
+                variant_payload("operations", newtype_payload("list<operation_description>")),
+                variant_payload(
+                    "structured_authoring",
+                    newtype_payload("structured_authoring_policy_description"),
+                ),
+                variant_payload(
+                    "name_contract",
+                    newtype_payload("name_contract_description"),
+                ),
+                variant_payload(
+                    "nominal_declarations",
+                    newtype_payload("nominal_declarations_description"),
+                ),
+                variant_payload("id_formats", newtype_payload("id_formats_description")),
+                variant_payload("limits", newtype_payload("boundary_limits")),
+            ],
+        ),
         unit_variants(
             "payload_shape_kind",
             [("unit", 1), ("newtype", 2), ("record", 3)],
@@ -3483,30 +2619,34 @@ fn schema_discovery_variants(
         named_variant(
             "machine_scalar_domain",
             vec![
-                variant_payload("boolean", 1, unit_payload()),
-                variant_payload("utf8_string", 2, unit_payload()),
+                variant_payload("boolean", unit_payload()),
+                variant_payload("utf8_string", unit_payload()),
                 variant_payload(
                     "signed_integer",
-                    3,
                     record_payload(&[("minimum", "i64", true), ("maximum", "i64", true)]),
                 ),
                 variant_payload(
                     "unsigned_integer",
-                    4,
                     record_payload(&[("minimum", "u64", true), ("maximum", "u64", true)]),
                 ),
                 variant_payload(
                     "lowercase_hex",
-                    5,
                     record_payload(&[("encoded_bytes", "u8", true)]),
                 ),
                 variant_payload(
                     "node_id",
-                    6,
                     record_payload(&[
                         ("workspace_bytes", "u8", true),
                         ("minimum_serial", "u64", true),
                         ("maximum_serial", "u64", true),
+                    ]),
+                ),
+                variant_payload(
+                    "canonical_identifier",
+                    record_payload(&[
+                        ("grammar", "string", true),
+                        ("minimum_utf8_bytes", "u64", true),
+                        ("maximum_utf8_bytes", "u64", true),
                     ]),
                 ),
             ],
@@ -3537,24 +2677,23 @@ fn schema_discovery_variants(
             "draft_field_type",
             DraftFieldType::ALL
                 .into_iter()
-                .map(|field_type| (field_type.machine_name(), field_type.stable_tag())),
+                .map(|field_type| (field_type.machine_name(), 0)),
         ),
         named_variant(
             "operand_arity",
             vec![
-                variant_payload("fixed", 1, newtype_payload("u8")),
-                variant_payload("call_target_parameters", 2, unit_payload()),
-                variant_payload("product_fields", 3, unit_payload()),
-                variant_payload("variant_payload", 4, unit_payload()),
+                variant_payload("fixed", newtype_payload("u8")),
+                variant_payload("call_target_parameters", unit_payload()),
+                variant_payload("product_fields", unit_payload()),
+                variant_payload("variant_payload", unit_payload()),
             ],
         ),
         named_variant(
             "region_arity",
             vec![
-                variant_payload("fixed", 1, newtype_payload("u8")),
+                variant_payload("fixed", newtype_payload("u8")),
                 variant_payload(
                     "match_variants",
-                    2,
                     record_payload(&[
                         ("payload_type", "type_rule", true),
                         ("terminator", "operation_code", true),
@@ -3582,68 +2721,58 @@ fn schema_discovery_variants(
         named_variant(
             "type_rule",
             vec![
-                variant_payload("fixed", 1, newtype_payload("semantic_type")),
-                variant_payload("payload_expected", 2, unit_payload()),
-                variant_payload("owner_function_result", 3, unit_payload()),
-                variant_payload("payload_result", 4, unit_payload()),
-                variant_payload("payload_carried", 5, unit_payload()),
-                variant_payload("call_target_parameter", 6, unit_payload()),
-                variant_payload("call_target_result", 7, unit_payload()),
-                variant_payload("owning_region_yield", 8, unit_payload()),
-                variant_payload("product_field_type", 9, unit_payload()),
-                variant_payload("product_declaration_result", 10, unit_payload()),
-                variant_payload("projection_owner", 11, unit_payload()),
-                variant_payload("projected_field_result", 12, unit_payload()),
-                variant_payload("variant_payload", 13, unit_payload()),
-                variant_payload("variant_owner_result", 14, unit_payload()),
-                variant_payload("match_scrutinee", 15, unit_payload()),
-                variant_payload("match_result", 16, unit_payload()),
+                variant_payload("fixed", newtype_payload("semantic_type")),
+                variant_payload("payload_expected", unit_payload()),
+                variant_payload("owner_function_result", unit_payload()),
+                variant_payload("payload_result", unit_payload()),
+                variant_payload("payload_carried", unit_payload()),
+                variant_payload("call_target_parameter", unit_payload()),
+                variant_payload("call_target_result", unit_payload()),
+                variant_payload("owning_region_yield", unit_payload()),
+                variant_payload("product_field_type", unit_payload()),
+                variant_payload("product_declaration_result", unit_payload()),
+                variant_payload("projection_owner", unit_payload()),
+                variant_payload("projected_field_result", unit_payload()),
+                variant_payload("variant_payload", unit_payload()),
+                variant_payload("variant_owner_result", unit_payload()),
+                variant_payload("match_scrutinee", unit_payload()),
+                variant_payload("match_result", unit_payload()),
             ],
         ),
     ]
 }
 
-fn schema_discovery_description() -> SchemaDiscoveryDescription {
-    let sections = SchemaSection::ALL
+fn schema_type_constructors() -> Vec<String> {
+    ["list<T>", "optional<T>", "tuple<T,...>", "page<T>"]
         .into_iter()
-        .map(|section| described(section.machine_name(), section.stable_tag()))
-        .collect::<Vec<_>>();
+        .map(str::to_owned)
+        .collect()
+}
+
+fn schema_discovery_description() -> SchemaDiscoveryDescription {
     let projection_payloads = vec![
-        variant_payload("manifest", 1, unit_payload()),
+        variant_payload("manifest", unit_payload()),
         variant_payload(
-            "sections",
-            2,
-            record_payload(&[("sections", "list<schema_section>", true)]),
+            "roots",
+            record_payload(&[("roots", "list<schema_root>", true)]),
         ),
-        variant_payload("full", 3, unit_payload()),
+        variant_payload("full", unit_payload()),
     ];
     let result_payloads = vec![
         variant_payload(
             "unchanged",
-            1,
             record_payload(&[("digest", "machine_schema_digest", true)]),
         ),
-        variant_payload("manifest", 2, newtype_payload("schema_manifest")),
-        variant_payload("sections", 3, newtype_payload("schema_sections")),
+        variant_payload("manifest", newtype_payload("schema_manifest")),
+        variant_payload("roots", newtype_payload("schema_definitions")),
         variant_payload(
             "full",
-            4,
             record_payload(&[
                 ("digest", "machine_schema_digest", true),
                 ("description", "schema_description", true),
             ]),
         ),
     ];
-    let section_payloads = sections
-        .iter()
-        .map(|section| {
-            variant_payload(
-                &section.name,
-                section.tag,
-                newtype_payload(&format!("{}_section", section.name)),
-            )
-        })
-        .collect::<Vec<_>>();
     SchemaDiscoveryDescription {
         digest_format: "64 lowercase hexadecimal characters encoding 32 bytes".into(),
         digest_domain: MACHINE_SCHEMA_DIGEST_DOMAIN.into(),
@@ -3652,18 +2781,17 @@ fn schema_discovery_description() -> SchemaDiscoveryDescription {
             ("known_digest", "machine_schema_digest", false),
         ]),
         records: schema_discovery_records(),
-        variants: schema_discovery_variants(
-            &projection_payloads,
-            &result_payloads,
-            &section_payloads,
-        ),
+        variants: schema_discovery_variants(&projection_payloads, &result_payloads),
         projection_payloads,
         result_payloads,
-        section_payloads,
-        sections,
-        maximum_sections_per_request: MAX_SCHEMA_SECTIONS as u8,
+        roots: SchemaRoot::ALL
+            .into_iter()
+            .map(|root| root.machine_name().to_owned())
+            .collect(),
+        type_constructors: schema_type_constructors(),
+        maximum_roots_per_request: MAX_SCHEMA_ROOTS as u8,
         full_available: true,
-        known_digest_match_precedes_projection: true,
+        known_digest_match_follows_root_validation: true,
     }
 }
 
@@ -3696,7 +2824,7 @@ fn name_contract_description() -> NameContractDescription {
 pub fn schema_description() -> SchemaDescription {
     SchemaDescription {
         machine_schema_identity: MACHINE_SCHEMA_IDENTITY.into(),
-        binary_protocol_version: PROTOCOL_VERSION,
+        protocol_version: PROTOCOL_VERSION,
         json_envelope_version: JSON_ENVELOPE_VERSION,
         artifact_format_version: crate::artifact::FORMAT_VERSION.0,
         artifact_magic_hex: crate::artifact::MAGIC
@@ -3708,12 +2836,12 @@ pub fn schema_description() -> SchemaDescription {
         scalar_types: scalar_types(),
         semantic_types: SemanticType::PRIMITIVES
             .into_iter()
-            .map(|code| described(code.machine_name(), code.stable_tag()))
-            .chain(std::iter::once(described("nominal", 4)))
+            .map(|code| described(code.machine_name()))
+            .chain(std::iter::once(described("nominal")))
             .collect(),
         node_kinds: NodeKind::ALL
             .into_iter()
-            .map(|code| described(code.machine_name(), code.stable_tag()))
+            .map(|code| described(code.machine_name()))
             .collect(),
         name_contract: name_contract_description(),
         operations: OperationCode::ALL
@@ -3722,7 +2850,6 @@ pub fn schema_description() -> SchemaDescription {
                 let descriptor = code.descriptor();
                 OperationDescription {
                     name: descriptor.machine_name.to_owned(),
-                    tag: descriptor.stable_tag,
                     operand_arity: descriptor.operand_arity,
                     operands: descriptor
                         .operands
@@ -3761,7 +2888,7 @@ pub fn schema_description() -> SchemaDescription {
         semantic_variants: semantic_variants(),
         transaction_operations: TransactionOpCode::ALL
             .into_iter()
-            .map(|code| described(code.machine_name(), code.stable_tag()))
+            .map(|code| described(code.machine_name()))
             .collect(),
         transaction_operation_payloads: TransactionOpCode::ALL
             .into_iter()
@@ -3773,7 +2900,6 @@ pub fn schema_description() -> SchemaDescription {
             draft_field_types: DraftFieldType::ALL
                 .into_iter()
                 .map(|field_type| DraftFieldTypeDescription {
-                    tag: field_type.stable_tag(),
                     name: field_type.machine_name().into(),
                     type_expression: field_type.type_expression().into(),
                 })
@@ -3797,8 +2923,8 @@ pub fn schema_description() -> SchemaDescription {
             value_tagging: "adjacently_tagged(kind,data)".into(),
             type_tagging: "externally_tagged; unit variants are strings and nominal is an object keyed by nominal".into(),
             allocation_order: "depth_first_preorder_canonical_nodes".to_owned(),
-            explicit_handles_are_selectable: true,
-            implicit_handles_are_selectable: false,
+            explicit_symbols_are_selectable: true,
+            implicit_symbols_are_selectable: false,
             implicit_node_kinds: vec![
                 NodeKind::Region,
                 NodeKind::Block,
@@ -3850,7 +2976,6 @@ pub fn schema_description() -> SchemaDescription {
                 .into_iter()
                 .map(|code| RuntimeValueDescription {
                     name: code.machine_name().into(),
-                    tag: code.stable_tag(),
                     payload: match code {
                         crate::interpret::RuntimeValueCode::Unit => RuntimeValuePayload::None,
                         crate::interpret::RuntimeValueCode::Bool => RuntimeValuePayload::Bool,
@@ -3891,7 +3016,7 @@ pub fn schema_description() -> SchemaDescription {
         },
         queries: QueryCode::ALL
             .into_iter()
-            .map(|code| described(code.machine_name(), code.stable_tag()))
+            .map(|code| described(code.machine_name()))
             .collect(),
         query_payloads: QueryCode::ALL.into_iter().map(query_payload).collect(),
         query_result_payloads: QueryCode::ALL
@@ -3904,19 +3029,19 @@ pub fn schema_description() -> SchemaDescription {
         query_cursor_payloads: query_cursor_payloads(),
         errors: crate::ErrorCode::ALL
             .into_iter()
-            .map(|code| described(code.machine_name(), code.stable_tag()))
+            .map(|code| described(code.machine_name()))
             .collect(),
         error_payload: error_payload(),
         error_records: error_records(),
         error_variants: error_variants(),
         requests: RequestCode::ALL
             .into_iter()
-            .map(|code| described(code.machine_name(), code.stable_tag()))
+            .map(|code| described(code.machine_name()))
             .collect(),
         request_payloads: RequestCode::ALL.into_iter().map(request_payload).collect(),
         responses: ResponseCode::ALL
             .into_iter()
-            .map(|code| described(code.machine_name(), code.stable_tag()))
+            .map(|code| described(code.machine_name()))
             .collect(),
         response_payloads: ResponseCode::ALL
             .into_iter()
@@ -3935,8 +3060,8 @@ pub fn schema_description() -> SchemaDescription {
         .map(|kind| kind.machine_name().into())
         .collect(),
         limits: BoundaryLimits {
-            maximum_frame_bytes: crate::protocol::MAXIMUM_FRAME_BYTES as u64,
-            maximum_frame_items: crate::protocol::MAXIMUM_FRAME_ITEMS as u64,
+            maximum_request_frame_bytes: MAX_JSON_INPUT_BYTES as u64,
+            maximum_response_frame_bytes: MAX_JSON_OUTPUT_BYTES as u64,
             maximum_artifact_bytes: crate::artifact::MAXIMUM_ARTIFACT_BYTES as u64,
             maximum_artifact_name_bytes: crate::artifact::MAXIMUM_ARTIFACT_NAME_BYTES as u64,
             maximum_json_input_bytes: MAX_JSON_INPUT_BYTES as u64,
@@ -3954,6 +3079,7 @@ pub fn schema_description() -> SchemaDescription {
             maximum_runtime_value_items: crate::interpret::MAX_RUNTIME_VALUE_ITEMS as u64,
             maximum_runtime_value_bytes: crate::interpret::MAX_RUNTIME_VALUE_BYTES as u64,
             maximum_error_related_ids: crate::error::MAX_ERROR_RELATED_IDS as u32,
+            maximum_boundary_error_message_bytes: MAX_BOUNDARY_ERROR_MESSAGE_BYTES as u64,
             maximum_persistence_head_bytes: crate::persistence::MAXIMUM_HEAD_BYTES as u64,
         },
         id_formats: IdFormats {
@@ -3965,7 +3091,7 @@ pub fn schema_description() -> SchemaDescription {
             revision: "JSON unsigned 64-bit integer".to_owned(),
             request_id: "JSON nonzero unsigned 64-bit integer".to_owned(),
             query_id: "JSON unsigned 64-bit integer".to_owned(),
-            local_handle: "JSON unsigned 32-bit integer".to_owned(),
+            draft_symbol: "1 to 64 ASCII bytes matching [a-z][a-z0-9_]*".to_owned(),
             machine_schema_digest: "64 lowercase hexadecimal characters".to_owned(),
         },
         nominal_declarations: NominalDeclarationsDescription {
@@ -3991,20 +3117,26 @@ fn canonicalize_schema(mut schema: SchemaDescription) -> SchemaDescription {
     schema
         .scalar_types
         .sort_by(|left, right| left.name.cmp(&right.name));
-    schema.semantic_types.sort_by_key(|item| item.tag);
-    schema.node_kinds.sort_by_key(|item| item.tag);
+    schema
+        .semantic_types
+        .sort_by(|left, right| left.name.cmp(&right.name));
+    schema
+        .node_kinds
+        .sort_by(|left, right| left.name.cmp(&right.name));
     schema
         .name_contract
         .named_node_kinds
-        .sort_by_key(|item| item.stable_tag());
+        .sort_by_key(|item| item.machine_name());
     schema
         .name_contract
         .sibling_uniqueness_groups
         .sort_by(|left, right| left.name.cmp(&right.name));
     for group in &mut schema.name_contract.sibling_uniqueness_groups {
-        group.member_kinds.sort_by_key(|item| item.stable_tag());
+        group.member_kinds.sort_by_key(|item| item.machine_name());
     }
-    schema.operations.sort_by_key(|item| item.tag);
+    schema
+        .operations
+        .sort_by(|left, right| left.name.cmp(&right.name));
     schema
         .semantic_records
         .sort_by(|left, right| left.name.cmp(&right.name));
@@ -4012,12 +3144,16 @@ fn canonicalize_schema(mut schema: SchemaDescription) -> SchemaDescription {
         .semantic_variants
         .sort_by(|left, right| left.name.cmp(&right.name));
     for variant in &mut schema.semantic_variants {
-        variant.variants.sort_by_key(|item| item.tag);
+        variant
+            .variants
+            .sort_by(|left, right| left.name.cmp(&right.name));
     }
-    schema.transaction_operations.sort_by_key(|item| item.tag);
+    schema
+        .transaction_operations
+        .sort_by(|left, right| left.name.cmp(&right.name));
     schema
         .transaction_operation_payloads
-        .sort_by_key(|item| item.tag);
+        .sort_by(|left, right| left.name.cmp(&right.name));
     schema
         .transaction_records
         .sort_by(|left, right| left.name.cmp(&right.name));
@@ -4025,12 +3161,14 @@ fn canonicalize_schema(mut schema: SchemaDescription) -> SchemaDescription {
         .transaction_variants
         .sort_by(|left, right| left.name.cmp(&right.name));
     for variant in &mut schema.transaction_variants {
-        variant.variants.sort_by_key(|item| item.tag);
+        variant
+            .variants
+            .sort_by(|left, right| left.name.cmp(&right.name));
     }
     schema
         .structured_authoring
         .draft_field_types
-        .sort_by_key(|item| item.tag);
+        .sort_by(|left, right| left.name.cmp(&right.name));
     schema
         .structured_authoring
         .records
@@ -4038,25 +3176,28 @@ fn canonicalize_schema(mut schema: SchemaDescription) -> SchemaDescription {
     schema
         .structured_authoring
         .expression_variants
-        .sort_by_key(|item| item.tag);
+        .sort_by(|left, right| left.name.cmp(&right.name));
     schema
         .structured_authoring
         .operation_variants
-        .sort_by_key(|item| item.tag);
+        .sort_by(|left, right| left.name.cmp(&right.name));
     schema
         .structured_authoring
         .value_variants
-        .sort_by_key(|item| item.tag);
+        .sort_by(|left, right| left.name.cmp(&right.name));
     schema
         .structured_authoring
         .type_variants
-        .sort_by_key(|item| item.tag);
+        .sort_by(|left, right| left.name.cmp(&right.name));
     schema
         .structured_authoring
         .implicit_node_kinds
-        .sort_by_key(|item| item.stable_tag());
+        .sort_by_key(|item| item.machine_name());
     schema.structured_authoring.counted_item_categories.sort();
-    schema.run.runtime_values.sort_by_key(|item| item.tag);
+    schema
+        .run
+        .runtime_values
+        .sort_by(|left, right| left.name.cmp(&right.name));
     schema
         .run
         .records
@@ -4066,11 +3207,19 @@ fn canonicalize_schema(mut schema: SchemaDescription) -> SchemaDescription {
         .variants
         .sort_by(|left, right| left.name.cmp(&right.name));
     for variant in &mut schema.run.variants {
-        variant.variants.sort_by_key(|item| item.tag);
+        variant
+            .variants
+            .sort_by(|left, right| left.name.cmp(&right.name));
     }
-    schema.queries.sort_by_key(|item| item.tag);
-    schema.query_payloads.sort_by_key(|item| item.tag);
-    schema.query_result_payloads.sort_by_key(|item| item.tag);
+    schema
+        .queries
+        .sort_by(|left, right| left.name.cmp(&right.name));
+    schema
+        .query_payloads
+        .sort_by(|left, right| left.name.cmp(&right.name));
+    schema
+        .query_result_payloads
+        .sort_by(|left, right| left.name.cmp(&right.name));
     schema
         .query_records
         .sort_by(|left, right| left.name.cmp(&right.name));
@@ -4078,11 +3227,19 @@ fn canonicalize_schema(mut schema: SchemaDescription) -> SchemaDescription {
         .query_variants
         .sort_by(|left, right| left.name.cmp(&right.name));
     for variant in &mut schema.query_variants {
-        variant.variants.sort_by_key(|item| item.tag);
+        variant
+            .variants
+            .sort_by(|left, right| left.name.cmp(&right.name));
     }
-    schema.query_member_payloads.sort_by_key(|item| item.tag);
-    schema.query_cursor_payloads.sort_by_key(|item| item.tag);
-    schema.errors.sort_by_key(|item| item.tag);
+    schema
+        .query_member_payloads
+        .sort_by(|left, right| left.name.cmp(&right.name));
+    schema
+        .query_cursor_payloads
+        .sort_by(|left, right| left.name.cmp(&right.name));
+    schema
+        .errors
+        .sort_by(|left, right| left.name.cmp(&right.name));
     schema
         .error_records
         .sort_by(|left, right| left.name.cmp(&right.name));
@@ -4090,17 +3247,29 @@ fn canonicalize_schema(mut schema: SchemaDescription) -> SchemaDescription {
         .error_variants
         .sort_by(|left, right| left.name.cmp(&right.name));
     for variant in &mut schema.error_variants {
-        variant.variants.sort_by_key(|item| item.tag);
+        variant
+            .variants
+            .sort_by(|left, right| left.name.cmp(&right.name));
     }
-    schema.requests.sort_by_key(|item| item.tag);
-    schema.request_payloads.sort_by_key(|item| item.tag);
-    schema.responses.sort_by_key(|item| item.tag);
-    schema.response_payloads.sort_by_key(|item| item.tag);
+    schema
+        .requests
+        .sort_by(|left, right| left.name.cmp(&right.name));
+    schema
+        .request_payloads
+        .sort_by(|left, right| left.name.cmp(&right.name));
+    schema
+        .responses
+        .sort_by(|left, right| left.name.cmp(&right.name));
+    schema
+        .response_payloads
+        .sort_by(|left, right| left.name.cmp(&right.name));
     schema
         .identity_variants
         .sort_by(|left, right| left.name.cmp(&right.name));
     for variant in &mut schema.identity_variants {
-        variant.variants.sort_by_key(|item| item.tag);
+        variant
+            .variants
+            .sort_by(|left, right| left.name.cmp(&right.name));
     }
     schema
         .envelopes
@@ -4115,32 +3284,28 @@ fn canonicalize_schema(mut schema: SchemaDescription) -> SchemaDescription {
         .variants
         .sort_by(|left, right| left.name.cmp(&right.name));
     for variant in &mut schema.schema_discovery.variants {
-        variant.variants.sort_by_key(|item| item.tag);
+        variant
+            .variants
+            .sort_by(|left, right| left.name.cmp(&right.name));
     }
     schema
         .schema_discovery
         .projection_payloads
-        .sort_by_key(|item| item.tag);
+        .sort_by(|left, right| left.name.cmp(&right.name));
     schema
         .schema_discovery
         .result_payloads
-        .sort_by_key(|item| item.tag);
-    schema
-        .schema_discovery
-        .sections
-        .sort_by_key(|item| item.tag);
-    schema
-        .schema_discovery
-        .section_payloads
-        .sort_by_key(|item| item.tag);
+        .sort_by(|left, right| left.name.cmp(&right.name));
+    schema.schema_discovery.roots.sort();
+    schema.schema_discovery.type_constructors.sort();
     schema
         .nominal_declarations
         .declaration_kinds
-        .sort_by_key(|item| item.stable_tag());
+        .sort_by_key(|item| item.machine_name());
     schema
         .nominal_declarations
         .member_kinds
-        .sort_by_key(|item| item.stable_tag());
+        .sort_by_key(|item| item.machine_name());
     schema
 }
 
@@ -4148,7 +3313,18 @@ pub fn machine_schema_digest(
     description: &SchemaDescription,
 ) -> crate::Result<MachineSchemaDigest> {
     let canonical = canonicalize_schema(description.clone());
-    let bytes = crate::protocol::canonical_schema_facts_bytes(&canonical)?;
+    let catalogue = schema_definition_catalogue(&canonical).map_err(|error| {
+        crate::LkError::new(
+            crate::ErrorCode::ProtocolMalformed,
+            format!("cannot derive machine schema digest catalogue: {error}"),
+        )
+    })?;
+    let bytes = serde_json::to_vec(&(canonical, catalogue)).map_err(|error| {
+        crate::LkError::new(
+            crate::ErrorCode::ProtocolMalformed,
+            format!("cannot encode machine schema digest input: {error}"),
+        )
+    })?;
     let mut hasher = blake3::Hasher::new_derive_key(MACHINE_SCHEMA_DIGEST_DOMAIN);
     hasher.update(&bytes);
     Ok(MachineSchemaDigest::from_bytes(
@@ -4163,6 +3339,11 @@ pub fn active_machine_schema_digest() -> crate::Result<MachineSchemaDigest> {
 pub fn describe_schema(request: &DescribeSchemaRequest) -> Result<DescribeSchemaResult, String> {
     request.validate().map_err(str::to_owned)?;
     let description = schema_description();
+    let catalogue = schema_definition_catalogue(&description)?;
+    let projected = match &request.projection {
+        SchemaProjection::Roots { roots } => Some(project_schema_roots(&catalogue, roots)?),
+        SchemaProjection::Manifest | SchemaProjection::Full => None,
+    };
     let digest = machine_schema_digest(&description).map_err(|error| error.to_string())?;
     if request.known_digest == Some(digest) {
         return Ok(DescribeSchemaResult::Unchanged { digest });
@@ -4172,15 +3353,15 @@ pub fn describe_schema(request: &DescribeSchemaRequest) -> Result<DescribeSchema
             &description,
             digest,
         ))),
-        SchemaProjection::Sections { sections } => {
-            let mut sections = sections.clone();
-            sections.sort_unstable();
-            Ok(DescribeSchemaResult::Sections(SchemaSections {
+        SchemaProjection::Roots { .. } => {
+            let Some((roots, definitions)) = projected else {
+                return Err("schema root projection was not preflighted".to_owned());
+            };
+            Ok(DescribeSchemaResult::Roots(SchemaDefinitions {
                 digest,
-                sections: sections
-                    .into_iter()
-                    .map(|section| section_payload(&description, section))
-                    .collect(),
+                roots,
+                type_constructors: schema_type_constructors(),
+                definitions,
             }))
         }
         SchemaProjection::Full => Ok(DescribeSchemaResult::Full {
@@ -4194,170 +3375,754 @@ fn schema_manifest(description: &SchemaDescription, digest: MachineSchemaDigest)
     SchemaManifest {
         schema_identity: description.machine_schema_identity.clone(),
         digest,
-        binary_protocol_version: description.binary_protocol_version,
+        protocol_version: description.protocol_version,
         json_envelope_version: description.json_envelope_version,
         artifact_format_version: description.artifact_format_version,
         artifact_magic_hex: description.artifact_magic_hex.clone(),
         semantic_schema_identity: description.semantic_schema_identity.clone(),
-        sections: SchemaSection::ALL
+        roots: SchemaRoot::ALL
             .into_iter()
-            .map(|section| described(section.machine_name(), section.stable_tag()))
+            .map(|root| root.machine_name().to_owned())
             .collect(),
-        maximum_sections_per_request: MAX_SCHEMA_SECTIONS as u8,
+        type_constructors: schema_type_constructors(),
+        maximum_roots_per_request: MAX_SCHEMA_ROOTS as u8,
         full_available: true,
-        maximum_frame_bytes: description.limits.maximum_frame_bytes,
+        maximum_request_frame_bytes: description.limits.maximum_request_frame_bytes,
+        maximum_response_frame_bytes: description.limits.maximum_response_frame_bytes,
         maximum_json_output_bytes: description.limits.maximum_json_output_bytes,
     }
 }
 
-fn section_payload(
-    description: &SchemaDescription,
-    section: SchemaSection,
-) -> SchemaSectionPayload {
-    match section {
-        SchemaSection::IdentityAndEnvelopes => {
-            SchemaSectionPayload::IdentityAndEnvelopes(Box::new(IdentityAndEnvelopesSection {
-                machine_schema_identity: description.machine_schema_identity.clone(),
-                binary_protocol_version: description.binary_protocol_version,
-                json_envelope_version: description.json_envelope_version,
-                artifact_format_version: description.artifact_format_version,
-                artifact_magic_hex: description.artifact_magic_hex.clone(),
-                semantic_schema_identity: description.semantic_schema_identity.clone(),
-                schema_discovery: description.schema_discovery.clone(),
-                scalar_types: description.scalar_types.clone(),
-                requests: description.requests.clone(),
-                request_payloads: description.request_payloads.clone(),
-                responses: description.responses.clone(),
-                response_payloads: description.response_payloads.clone(),
-                identity_variants: description.identity_variants.clone(),
-                envelopes: description.envelopes.clone(),
-                id_formats: description.id_formats.clone(),
-            }))
+fn project_schema_roots(
+    catalogue: &BTreeMap<String, SchemaDefinition>,
+    roots: &[SchemaRoot],
+) -> Result<(Vec<SchemaRoot>, Vec<SchemaDefinition>), String> {
+    let mut canonical_roots = roots.to_vec();
+    canonical_roots.sort_unstable();
+    let mut pending = VecDeque::new();
+    for root in &canonical_roots {
+        pending.push_back(root.machine_name().to_owned());
+    }
+    let mut selected = BTreeSet::new();
+    while let Some(name) = pending.pop_front() {
+        if !selected.insert(name.clone()) {
+            continue;
         }
-        SchemaSection::SemanticTypesAndNodes => {
-            SchemaSectionPayload::SemanticTypesAndNodes(Box::new(SemanticTypesAndNodesSection {
-                semantic_types: description.semantic_types.clone(),
-                node_kinds: description.node_kinds.clone(),
-                name_contract: description.name_contract.clone(),
-                operations: description.operations.clone(),
-                records: description.semantic_records.clone(),
-                variants: description.semantic_variants.clone(),
-            }))
-        }
-        SchemaSection::NominalDeclarations => SchemaSectionPayload::NominalDeclarations(Box::new(
-            description.nominal_declarations.clone(),
-        )),
-        SchemaSection::TransactionsAndExpressions => {
-            SchemaSectionPayload::TransactionsAndExpressions(Box::new(
-                TransactionsAndExpressionsSection {
-                    transaction_operations: description.transaction_operations.clone(),
-                    transaction_operation_payloads: description
-                        .transaction_operation_payloads
-                        .clone(),
-                    records: description.transaction_records.clone(),
-                    variants: description.transaction_variants.clone(),
-                    structured_authoring: description.structured_authoring.clone(),
-                },
-            ))
-        }
-        SchemaSection::QueriesAndRepair => {
-            SchemaSectionPayload::QueriesAndRepair(Box::new(QueriesAndRepairSection {
-                queries: description.queries.clone(),
-                query_payloads: description.query_payloads.clone(),
-                query_result_payloads: description.query_result_payloads.clone(),
-                query_records: description.query_records.clone(),
-                query_variants: description.query_variants.clone(),
-                query_member_payloads: description.query_member_payloads.clone(),
-                query_cursor_payloads: description.query_cursor_payloads.clone(),
-            }))
-        }
-        SchemaSection::RuntimeAndRun => {
-            SchemaSectionPayload::RuntimeAndRun(Box::new(description.run.clone()))
-        }
-        SchemaSection::ErrorsAndLimits => {
-            SchemaSectionPayload::ErrorsAndLimits(Box::new(ErrorsAndLimitsSection {
-                errors: description.errors.clone(),
-                error_payload: description.error_payload.clone(),
-                records: description.error_records.clone(),
-                variants: description.error_variants.clone(),
-                boundary_error_kinds: description.boundary_error_kinds.clone(),
-                limits: description.limits.clone(),
-            }))
+        let definition = catalogue
+            .get(&name)
+            .ok_or_else(|| format!("unknown schema root or dependency: {name}"))?;
+        for dependency in &definition.dependencies {
+            if !selected.contains(dependency) {
+                pending.push_back(dependency.clone());
+            }
         }
     }
-}
-
-pub fn all_schema_sections(description: &SchemaDescription) -> Vec<SchemaSectionPayload> {
-    SchemaSection::ALL
+    let definitions = selected
         .into_iter()
-        .map(|section| section_payload(description, section))
-        .collect()
+        .map(|name| {
+            catalogue
+                .get(&name)
+                .cloned()
+                .ok_or_else(|| format!("missing selected schema definition: {name}"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok((canonical_roots, definitions))
 }
 
-pub fn reconstruct_schema_from_sections(
-    sections: &[SchemaSectionPayload],
-) -> Option<SchemaDescription> {
-    let [
-        SchemaSectionPayload::IdentityAndEnvelopes(identity),
-        SchemaSectionPayload::SemanticTypesAndNodes(semantic),
-        SchemaSectionPayload::NominalDeclarations(nominal),
-        SchemaSectionPayload::TransactionsAndExpressions(transactions),
-        SchemaSectionPayload::QueriesAndRepair(queries),
-        SchemaSectionPayload::RuntimeAndRun(run),
-        SchemaSectionPayload::ErrorsAndLimits(errors),
-    ] = sections
-    else {
-        return None;
-    };
-    Some(SchemaDescription {
-        machine_schema_identity: identity.machine_schema_identity.clone(),
-        binary_protocol_version: identity.binary_protocol_version,
-        json_envelope_version: identity.json_envelope_version,
-        artifact_format_version: identity.artifact_format_version,
-        artifact_magic_hex: identity.artifact_magic_hex.clone(),
-        semantic_schema_identity: identity.semantic_schema_identity.clone(),
-        schema_discovery: identity.schema_discovery.clone(),
-        scalar_types: identity.scalar_types.clone(),
-        semantic_types: semantic.semantic_types.clone(),
-        node_kinds: semantic.node_kinds.clone(),
-        name_contract: semantic.name_contract.clone(),
-        operations: semantic.operations.clone(),
-        semantic_records: semantic.records.clone(),
-        semantic_variants: semantic.variants.clone(),
-        transaction_operations: transactions.transaction_operations.clone(),
-        transaction_operation_payloads: transactions.transaction_operation_payloads.clone(),
-        transaction_records: transactions.records.clone(),
-        transaction_variants: transactions.variants.clone(),
-        structured_authoring: transactions.structured_authoring.clone(),
-        run: run.as_ref().clone(),
-        queries: queries.queries.clone(),
-        query_payloads: queries.query_payloads.clone(),
-        query_result_payloads: queries.query_result_payloads.clone(),
-        query_records: queries.query_records.clone(),
-        query_variants: queries.query_variants.clone(),
-        query_member_payloads: queries.query_member_payloads.clone(),
-        query_cursor_payloads: queries.query_cursor_payloads.clone(),
-        errors: errors.errors.clone(),
-        error_payload: errors.error_payload.clone(),
-        error_records: errors.records.clone(),
-        error_variants: errors.variants.clone(),
-        requests: identity.requests.clone(),
-        request_payloads: identity.request_payloads.clone(),
-        responses: identity.responses.clone(),
-        response_payloads: identity.response_payloads.clone(),
-        identity_variants: identity.identity_variants.clone(),
-        envelopes: identity.envelopes.clone(),
-        boundary_error_kinds: errors.boundary_error_kinds.clone(),
-        limits: errors.limits.clone(),
-        id_formats: identity.id_formats.clone(),
-        nominal_declarations: nominal.as_ref().clone(),
+fn lookup_named_record<'a>(
+    records: &'a [NamedPayloadDescription],
+    name: &str,
+) -> Result<&'a NamedPayloadDescription, String> {
+    records
+        .iter()
+        .find(|record| record.name == name)
+        .ok_or_else(|| format!("missing executable record descriptor: {name}"))
+}
+
+fn named_variant_family<'a>(
+    variants: &'a [NamedVariantDescription],
+    name: &str,
+) -> Result<&'a NamedVariantDescription, String> {
+    variants
+        .iter()
+        .find(|variant| variant.name == name)
+        .ok_or_else(|| format!("missing executable variant descriptor: {name}"))
+}
+
+fn variant_payload_by_name(
+    variants: &[VariantPayloadDescription],
+    name: &str,
+) -> Result<VariantPayloadDescription, String> {
+    variants
+        .iter()
+        .find(|variant| variant.name == name)
+        .cloned()
+        .ok_or_else(|| format!("missing executable variant payload: {name}"))
+}
+
+fn projected_variant_family(
+    variants: &[NamedVariantDescription],
+    name: &str,
+    retained_variants: &[&str],
+) -> Result<NamedVariantDescription, String> {
+    let source = named_variant_family(variants, name)?;
+    let mut selected = Vec::with_capacity(retained_variants.len());
+    for retained in retained_variants {
+        selected.push(
+            source
+                .variants
+                .iter()
+                .find(|variant| variant.name == *retained)
+                .cloned()
+                .ok_or_else(|| format!("missing executable {name} variant: {retained}"))?,
+        );
+    }
+    Ok(NamedVariantDescription {
+        name: source.name.clone(),
+        tagging: source.tagging.clone(),
+        tag_field: source.tag_field.clone(),
+        content_field: source.content_field.clone(),
+        variants: selected,
     })
 }
 
-fn described(name: &str, tag: u8) -> CodeDescription {
+fn endpoint_protocol_templates(
+    description: &SchemaDescription,
+) -> Result<Vec<EndpointProtocolTemplateDescription>, String> {
+    let records = |sources: &[(&[NamedPayloadDescription], &str)]| {
+        sources
+            .iter()
+            .map(|(records, name)| lookup_named_record(records, name).cloned())
+            .collect::<Result<Vec<_>, _>>()
+    };
+    let parameter =
+        |name: &str, target_variant: &str, semantics: &str| EndpointTemplateParameterDescription {
+            name: name.to_owned(),
+            target_variant: target_variant.to_owned(),
+            semantics: semantics.to_owned(),
+        };
+
+    let control = EndpointProtocolTemplateDescription {
+        name: "control_endpoint_protocol".to_owned(),
+        parameters: vec![
+            parameter(
+                "request_variant",
+                "request",
+                "the endpoint binding supplies exactly one top-level request variant and its leaf payload",
+            ),
+            parameter(
+                "success_response_variant",
+                "response",
+                "the endpoint binding supplies exactly one successful top-level response variant and its leaf payload",
+            ),
+        ],
+        records: records(&[
+            (&description.envelopes, "request_envelope"),
+            (&description.envelopes, "response_envelope"),
+        ])?,
+        variants: vec![
+            projected_variant_family(&description.identity_variants, "request", &[])?,
+            projected_variant_family(
+                &description.identity_variants,
+                "response",
+                &[ResponseCode::Error.machine_name()],
+            )?,
+        ],
+    };
+    let query = EndpointProtocolTemplateDescription {
+        name: "query_endpoint_protocol".to_owned(),
+        parameters: vec![
+            parameter(
+                "query_variant",
+                "query",
+                "the endpoint binding supplies exactly one selected inner query variant and its leaf payload",
+            ),
+            parameter(
+                "query_result_variant",
+                "query_result",
+                "the endpoint binding supplies the matching inner success-result variant and its leaf payload",
+            ),
+        ],
+        records: records(&[
+            (&description.envelopes, "request_envelope"),
+            (&description.envelopes, "response_envelope"),
+            (&description.query_records, "query_batch_request"),
+            (&description.query_records, "query_item"),
+            (&description.query_records, "query_batch_result"),
+            (&description.query_records, "query_item_result"),
+        ])?,
+        variants: vec![
+            projected_variant_family(
+                &description.identity_variants,
+                "request",
+                &[RequestCode::QueryBatch.machine_name()],
+            )?,
+            projected_variant_family(
+                &description.identity_variants,
+                "response",
+                &[
+                    ResponseCode::QueryBatchResult.machine_name(),
+                    ResponseCode::Error.machine_name(),
+                ],
+            )?,
+            projected_variant_family(&description.query_variants, "query", &[])?,
+            projected_variant_family(&description.query_variants, "query_result", &[])?,
+            projected_variant_family(
+                &description.query_variants,
+                "query_outcome",
+                &["success", "error"],
+            )?,
+        ],
+    };
+    Ok(vec![control, query])
+}
+
+fn endpoint_definition(
+    description: &SchemaDescription,
+    endpoint_name: &str,
+    family: &str,
+    template: &str,
+    bindings: Vec<EndpointVariantBindingDescription>,
+) -> (String, SchemaDefinitionBody) {
+    (
+        endpoint_name.to_owned(),
+        SchemaDefinitionBody::Endpoint(EndpointDescription {
+            name: endpoint_name.to_owned(),
+            family: family.to_owned(),
+            template: template.to_owned(),
+            bindings,
+            protocol_version: description.protocol_version,
+            json_envelope_version: description.json_envelope_version,
+            boundary_error_envelope: "boundary_error_envelope".to_owned(),
+            typed_error: "error".to_owned(),
+            id_formats: "id_formats".to_owned(),
+            limits: "limits".to_owned(),
+        }),
+    )
+}
+
+fn endpoint_binding(
+    parameter: &str,
+    variant: VariantPayloadDescription,
+) -> EndpointVariantBindingDescription {
+    EndpointVariantBindingDescription {
+        parameter: parameter.to_owned(),
+        variant,
+    }
+}
+
+fn schema_definition_catalogue(
+    description: &SchemaDescription,
+) -> Result<BTreeMap<String, SchemaDefinition>, String> {
+    let mut bodies = BTreeMap::<String, SchemaDefinitionBody>::new();
+    let mut insert = |name: String, body: SchemaDefinitionBody| -> Result<(), String> {
+        if bodies.insert(name.clone(), body).is_some() {
+            return Err(format!("duplicate machine schema definition: {name}"));
+        }
+        Ok(())
+    };
+
+    for scalar in &description.scalar_types {
+        insert(
+            scalar.name.clone(),
+            SchemaDefinitionBody::Scalar(scalar.clone()),
+        )?;
+    }
+    for record in description
+        .semantic_records
+        .iter()
+        .chain(description.transaction_records.iter())
+        .chain(description.query_records.iter())
+        .chain(description.run.records.iter())
+        .chain(description.error_records.iter())
+        .chain(description.envelopes.iter())
+        .chain(description.schema_discovery.records.iter())
+    {
+        insert(
+            record.name.clone(),
+            SchemaDefinitionBody::Record(record.clone()),
+        )?;
+    }
+    insert(
+        "describe_schema_request".to_owned(),
+        SchemaDefinitionBody::Record(NamedPayloadDescription {
+            name: "describe_schema_request".to_owned(),
+            payload: description.schema_discovery.request.clone(),
+        }),
+    )?;
+    insert(
+        "error".to_owned(),
+        SchemaDefinitionBody::Record(NamedPayloadDescription {
+            name: "error".to_owned(),
+            payload: description.error_payload.clone(),
+        }),
+    )?;
+    for variant in description
+        .semantic_variants
+        .iter()
+        .chain(description.transaction_variants.iter())
+        .chain(description.query_variants.iter())
+        .chain(description.run.variants.iter())
+        .chain(description.error_variants.iter())
+        .chain(description.identity_variants.iter())
+        .chain(description.schema_discovery.variants.iter())
+    {
+        insert(
+            variant.name.clone(),
+            SchemaDefinitionBody::Variant(variant.clone()),
+        )?;
+    }
+    for template in endpoint_protocol_templates(description)? {
+        insert(
+            template.name.clone(),
+            SchemaDefinitionBody::EndpointTemplate(template),
+        )?;
+    }
+    for (request_code, response_code) in [
+        (RequestCode::CreateWorkspace, ResponseCode::WorkspaceCreated),
+        (
+            RequestCode::ApplyTransaction,
+            ResponseCode::TransactionReceipt,
+        ),
+        (RequestCode::Run, ResponseCode::Run),
+        (RequestCode::Shutdown, ResponseCode::Acknowledged),
+        (RequestCode::DescribeSchema, ResponseCode::DescribeSchema),
+    ] {
+        let (name, body) = endpoint_definition(
+            description,
+            request_code.machine_name(),
+            "control",
+            "control_endpoint_protocol",
+            vec![
+                endpoint_binding(
+                    "request_variant",
+                    variant_payload_by_name(
+                        &description.request_payloads,
+                        request_code.machine_name(),
+                    )?,
+                ),
+                endpoint_binding(
+                    "success_response_variant",
+                    variant_payload_by_name(
+                        &description.response_payloads,
+                        response_code.machine_name(),
+                    )?,
+                ),
+            ],
+        );
+        insert(name, body)?;
+    }
+    for query_code in QueryCode::ALL {
+        let endpoint_name = format!("query_{}", query_code.machine_name());
+        let (name, body) = endpoint_definition(
+            description,
+            &endpoint_name,
+            "query",
+            "query_endpoint_protocol",
+            vec![
+                endpoint_binding(
+                    "query_variant",
+                    variant_payload_by_name(
+                        &description.query_payloads,
+                        query_code.machine_name(),
+                    )?,
+                ),
+                endpoint_binding(
+                    "query_result_variant",
+                    variant_payload_by_name(
+                        &description.query_result_payloads,
+                        query_code.machine_name(),
+                    )?,
+                ),
+            ],
+        );
+        insert(name, body)?;
+    }
+    for record in &description.structured_authoring.records {
+        insert(
+            record.name.clone(),
+            SchemaDefinitionBody::DraftRecord(record.clone()),
+        )?;
+    }
+    for family in [
+        DraftVariantFamilyDescription {
+            name: "expression_kind_draft".to_owned(),
+            tagging: description.structured_authoring.expression_tagging.clone(),
+            variants: description.structured_authoring.expression_variants.clone(),
+        },
+        DraftVariantFamilyDescription {
+            name: "operation_draft".to_owned(),
+            tagging: description.structured_authoring.operation_tagging.clone(),
+            variants: description.structured_authoring.operation_variants.clone(),
+        },
+        DraftVariantFamilyDescription {
+            name: "value_draft".to_owned(),
+            tagging: description.structured_authoring.value_tagging.clone(),
+            variants: description.structured_authoring.value_variants.clone(),
+        },
+        DraftVariantFamilyDescription {
+            name: "type_draft".to_owned(),
+            tagging: description.structured_authoring.type_tagging.clone(),
+            variants: description.structured_authoring.type_variants.clone(),
+        },
+    ] {
+        insert(
+            family.name.clone(),
+            SchemaDefinitionBody::DraftVariant(family),
+        )?;
+    }
+
+    let code_family = |name: &str, codes: &[CodeDescription]| CodeFamilyDescription {
+        name: name.to_owned(),
+        members: codes.iter().map(|code| code.name.clone()).collect(),
+    };
+    for family in [
+        code_family("node_kind", &description.node_kinds),
+        CodeFamilyDescription {
+            name: "operation_code".to_owned(),
+            members: description
+                .operations
+                .iter()
+                .map(|operation| operation.name.clone())
+                .collect(),
+        },
+        code_family(
+            "transaction_operation_code",
+            &description.transaction_operations,
+        ),
+        code_family("error_code", &description.errors),
+    ] {
+        insert(family.name.clone(), SchemaDefinitionBody::Codes(family))?;
+    }
+    insert(
+        "operations".to_owned(),
+        SchemaDefinitionBody::Operations(description.operations.clone()),
+    )?;
+    insert(
+        "structured_authoring".to_owned(),
+        SchemaDefinitionBody::StructuredAuthoring(StructuredAuthoringPolicyDescription {
+            allocation_order: description.structured_authoring.allocation_order.clone(),
+            explicit_symbols_are_selectable: description
+                .structured_authoring
+                .explicit_symbols_are_selectable,
+            implicit_symbols_are_selectable: description
+                .structured_authoring
+                .implicit_symbols_are_selectable,
+            implicit_node_kinds: description.structured_authoring.implicit_node_kinds.clone(),
+            maximum_request_depth: description.structured_authoring.maximum_request_depth,
+            maximum_request_items: description.structured_authoring.maximum_request_items,
+            counted_item_categories: description
+                .structured_authoring
+                .counted_item_categories
+                .clone(),
+        }),
+    )?;
+    insert(
+        "name_contract".to_owned(),
+        SchemaDefinitionBody::NameContract(description.name_contract.clone()),
+    )?;
+    insert(
+        "nominal_declarations".to_owned(),
+        SchemaDefinitionBody::NominalDeclarations(description.nominal_declarations.clone()),
+    )?;
+    insert(
+        "id_formats".to_owned(),
+        SchemaDefinitionBody::IdFormats(description.id_formats.clone()),
+    )?;
+    insert(
+        "limits".to_owned(),
+        SchemaDefinitionBody::Limits(description.limits.clone()),
+    )?;
+
+    for (name, body) in &bodies {
+        let SchemaDefinitionBody::Endpoint(endpoint) = body else {
+            continue;
+        };
+        let Some(SchemaDefinitionBody::EndpointTemplate(template)) = bodies.get(&endpoint.template)
+        else {
+            return Err(format!(
+                "endpoint {name} references unknown template {}",
+                endpoint.template
+            ));
+        };
+        let expected = template
+            .parameters
+            .iter()
+            .map(|parameter| parameter.name.as_str())
+            .collect::<BTreeSet<_>>();
+        let actual = endpoint
+            .bindings
+            .iter()
+            .map(|binding| binding.parameter.as_str())
+            .collect::<BTreeSet<_>>();
+        if actual.len() != endpoint.bindings.len() || actual != expected {
+            return Err(format!(
+                "endpoint {name} must bind every template parameter exactly once"
+            ));
+        }
+    }
+
+    let names = bodies.keys().cloned().collect::<BTreeSet<_>>();
+    let mut catalogue = BTreeMap::new();
+    for (name, body) in bodies {
+        let dependencies = definition_dependencies(&body)?;
+        for dependency in &dependencies {
+            if !names.contains(dependency) {
+                return Err(format!(
+                    "machine schema definition {name} references unknown definition {dependency}"
+                ));
+            }
+        }
+        catalogue.insert(
+            name.clone(),
+            SchemaDefinition {
+                name,
+                dependencies: dependencies.into_iter().collect(),
+                body,
+            },
+        );
+    }
+    for root in SchemaRoot::ALL {
+        if !catalogue.contains_key(root.machine_name()) {
+            return Err(format!(
+                "machine schema root {} has no definition",
+                root.machine_name()
+            ));
+        }
+    }
+    Ok(catalogue)
+}
+
+fn definition_dependencies(body: &SchemaDefinitionBody) -> Result<BTreeSet<String>, String> {
+    let mut dependencies = BTreeSet::new();
+    match body {
+        SchemaDefinitionBody::Scalar(_)
+        | SchemaDefinitionBody::Codes(_)
+        | SchemaDefinitionBody::IdFormats(_)
+        | SchemaDefinitionBody::Limits(_) => {}
+        SchemaDefinitionBody::Record(record) => {
+            payload_dependencies(&record.payload, &mut dependencies)?;
+        }
+        SchemaDefinitionBody::Variant(variant) => {
+            for payload in &variant.variants {
+                payload_dependencies(&payload.payload, &mut dependencies)?;
+            }
+        }
+        SchemaDefinitionBody::DraftRecord(record) => {
+            for field in &record.fields {
+                dependencies.extend(type_expression_dependencies(
+                    field.field_type.type_expression(),
+                )?);
+            }
+        }
+        SchemaDefinitionBody::Endpoint(endpoint) => {
+            dependencies.extend(
+                [
+                    &endpoint.template,
+                    &endpoint.boundary_error_envelope,
+                    &endpoint.typed_error,
+                    &endpoint.id_formats,
+                    &endpoint.limits,
+                ]
+                .into_iter()
+                .cloned(),
+            );
+            for binding in &endpoint.bindings {
+                payload_dependencies(&binding.variant.payload, &mut dependencies)?;
+            }
+        }
+        SchemaDefinitionBody::EndpointTemplate(template) => {
+            let mut local_names = BTreeSet::new();
+            for name in template
+                .records
+                .iter()
+                .map(|record| &record.name)
+                .chain(template.variants.iter().map(|variant| &variant.name))
+            {
+                if !local_names.insert(name.clone()) {
+                    return Err(format!(
+                        "duplicate endpoint template local definition: {name}"
+                    ));
+                }
+            }
+            let mut parameter_names = BTreeSet::new();
+            for parameter in &template.parameters {
+                if !parameter_names.insert(parameter.name.clone()) {
+                    return Err(format!(
+                        "duplicate endpoint template parameter: {}",
+                        parameter.name
+                    ));
+                }
+                if !template
+                    .variants
+                    .iter()
+                    .any(|variant| variant.name == parameter.target_variant)
+                {
+                    return Err(format!(
+                        "endpoint template parameter {} targets unknown local variant {}",
+                        parameter.name, parameter.target_variant
+                    ));
+                }
+            }
+            for record in &template.records {
+                payload_dependencies(&record.payload, &mut dependencies)?;
+            }
+            for variant in &template.variants {
+                for payload in &variant.variants {
+                    payload_dependencies(&payload.payload, &mut dependencies)?;
+                }
+            }
+            dependencies.retain(|dependency| !local_names.contains(dependency));
+        }
+        SchemaDefinitionBody::DraftVariant(family) => {
+            for variant in &family.variants {
+                if let Some(field_type) = variant.newtype {
+                    dependencies
+                        .extend(type_expression_dependencies(field_type.type_expression())?);
+                }
+                for field in &variant.fields {
+                    dependencies.extend(type_expression_dependencies(
+                        field.field_type.type_expression(),
+                    )?);
+                }
+            }
+            dependencies.insert("structured_authoring".to_owned());
+        }
+        SchemaDefinitionBody::Operations(_) => {
+            dependencies.extend(
+                [
+                    "operation_code",
+                    "operand_arity",
+                    "operand_use",
+                    "literal_field",
+                    "region_arity",
+                    "region_role",
+                    "block_argument_role",
+                    "type_rule",
+                ]
+                .into_iter()
+                .map(str::to_owned),
+            );
+        }
+        SchemaDefinitionBody::StructuredAuthoring(_) => {
+            dependencies.insert("node_kind".to_owned());
+        }
+        SchemaDefinitionBody::NameContract(_) | SchemaDefinitionBody::NominalDeclarations(_) => {
+            dependencies.insert("node_kind".to_owned());
+        }
+    }
+    Ok(dependencies)
+}
+
+fn payload_dependencies(
+    payload: &PayloadShapeDescription,
+    dependencies: &mut BTreeSet<String>,
+) -> Result<(), String> {
+    if let Some(newtype) = &payload.newtype {
+        dependencies.extend(type_expression_dependencies(newtype)?);
+    }
+    for field in &payload.fields {
+        dependencies.extend(type_expression_dependencies(&field.type_expression)?);
+    }
+    Ok(())
+}
+
+fn type_expression_dependencies(expression: &str) -> Result<BTreeSet<String>, String> {
+    #[derive(Clone, Copy)]
+    struct Frame {
+        constructor: &'static str,
+        items: usize,
+    }
+    fn constructor(name: &str) -> Option<&'static str> {
+        match name {
+            "list" => Some("list"),
+            "optional" => Some("optional"),
+            "tuple" => Some("tuple"),
+            "page" => Some("page"),
+            _ => None,
+        }
+    }
+
+    let bytes = expression.as_bytes();
+    if bytes.is_empty() || !bytes.is_ascii() {
+        return Err(format!("invalid machine type expression: {expression}"));
+    }
+    let mut dependencies = BTreeSet::new();
+    let mut stack = Vec::<Frame>::new();
+    let mut index = 0;
+    let mut expect_type = true;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if byte.is_ascii_lowercase() {
+            if !expect_type {
+                return Err(format!("invalid machine type expression: {expression}"));
+            }
+            let start = index;
+            index += 1;
+            while index < bytes.len()
+                && (bytes[index].is_ascii_lowercase()
+                    || bytes[index].is_ascii_digit()
+                    || bytes[index] == b'_')
+            {
+                index += 1;
+            }
+            let name = &expression[start..index];
+            if let Some(constructor) = constructor(name) {
+                if index >= bytes.len() || bytes[index] != b'<' {
+                    return Err(format!("invalid machine type expression: {expression}"));
+                }
+                if constructor == "page" {
+                    dependencies.insert("page".to_owned());
+                }
+                stack.push(Frame {
+                    constructor,
+                    items: 0,
+                });
+                index += 1;
+                expect_type = true;
+            } else {
+                if name != "type_parameter" {
+                    dependencies.insert(name.to_owned());
+                }
+                expect_type = false;
+            }
+            continue;
+        }
+        match byte {
+            b',' if !expect_type && !stack.is_empty() => {
+                let Some(frame) = stack.last_mut() else {
+                    return Err(format!("invalid machine type expression: {expression}"));
+                };
+                frame.items += 1;
+                if frame.constructor != "tuple" {
+                    return Err(format!("invalid machine type expression: {expression}"));
+                }
+                expect_type = true;
+                index += 1;
+            }
+            b'>' if !expect_type && !stack.is_empty() => {
+                let Some(mut frame) = stack.pop() else {
+                    return Err(format!("invalid machine type expression: {expression}"));
+                };
+                frame.items += 1;
+                if frame.constructor != "tuple" && frame.items != 1 {
+                    return Err(format!("invalid machine type expression: {expression}"));
+                }
+                expect_type = false;
+                index += 1;
+            }
+            _ => return Err(format!("invalid machine type expression: {expression}")),
+        }
+    }
+    if expect_type || !stack.is_empty() {
+        return Err(format!("invalid machine type expression: {expression}"));
+    }
+    Ok(dependencies)
+}
+
+fn described(name: &str) -> CodeDescription {
     CodeDescription {
         name: name.to_owned(),
-        tag,
     }
 }
 
@@ -4365,14 +4130,19 @@ fn described(name: &str, tag: u8) -> CodeDescription {
 mod tests {
     use super::*;
     use crate::query::{
-        ContextBudget, PageRequest, Query, QueryBatchRequest, QueryItem, VisibleCursorPurpose,
+        ContextBudget, PageRequest, Query, QueryBatchRequest, QueryBatchResult, QueryItem,
+        QueryItemResult, QueryOutcome, QueryResult, VisibleCursorPurpose, WorkspaceSummary,
+    };
+    use crate::schema::{
+        BlockArgumentRole, LiteralField, OperandArity, OperandUse, RegionArity, RegionRole,
+        TypeRule,
     };
     use crate::transaction::{
         ExpressionDraft, ExpressionKindDraft, Transaction, TransactionMode, TransactionOp,
         TransactionReceipt, TransactionResponseSpec, YieldingBodyDraft,
     };
     use crate::{
-        ApplyTransactionRequest, ErrorCode, LocalHandle, NodeId, NodeTarget, QueryId, Revision,
+        ApplyTransactionRequest, DraftSymbol, ErrorCode, NodeId, NodeTarget, QueryId, Revision,
         ValueDraft, WorkspaceId,
     };
 
@@ -4400,9 +4170,9 @@ mod tests {
         assert_eq!(decode_request(&bytes).expect("decode"), request);
         let text = String::from_utf8(bytes).expect("UTF-8");
         for invalid in [
-            text.replacen("\"version\":4", "\"version\":3", 1),
+            text.replacen("\"version\":5", "\"version\":4", 1),
             text.replacen("\"request_id\":1", "\"request_id\":0", 1),
-            text.replacen("{\"version\":4", "{\"unknown\":0,\"version\":4", 1),
+            text.replacen("{\"version\":5", "{\"unknown\":0,\"version\":5", 1),
             format!("{text} {{}}"),
             text.replacen(
                 &workspace.to_string(),
@@ -4655,7 +4425,7 @@ mod tests {
             "node_target",
             &[
                 NodeTarget::Existing(node),
-                NodeTarget::Local(LocalHandle::new(1)),
+                NodeTarget::Draft(DraftSymbol::generated(1)),
             ],
         );
         assert_family_samples(
@@ -4821,8 +4591,8 @@ mod tests {
             "schema_projection",
             &[
                 SchemaProjection::Manifest,
-                SchemaProjection::Sections {
-                    sections: vec![SchemaSection::IdentityAndEnvelopes],
+                SchemaProjection::Roots {
+                    roots: vec![SchemaRoot::Request],
                 },
                 SchemaProjection::Full,
             ],
@@ -4833,9 +4603,17 @@ mod tests {
             &[
                 DescribeSchemaResult::Unchanged { digest },
                 DescribeSchemaResult::Manifest(schema_manifest(&schema, digest)),
-                DescribeSchemaResult::Sections(SchemaSections {
+                DescribeSchemaResult::Roots(SchemaDefinitions {
                     digest,
-                    sections: vec![],
+                    roots: vec![SchemaRoot::Limits],
+                    type_constructors: schema_type_constructors(),
+                    definitions: vec![
+                        schema_definition_catalogue(&schema)
+                            .expect("catalogue")
+                            .get("limits")
+                            .expect("limits")
+                            .clone(),
+                    ],
                 }),
                 DescribeSchemaResult::Full {
                     digest,
@@ -4843,11 +4621,26 @@ mod tests {
                 },
             ],
         );
-        assert_family_samples(
-            &schema,
-            "schema_section_payload",
-            &all_schema_sections(&schema),
-        );
+        assert_family_samples(&schema, "schema_root", &SchemaRoot::ALL);
+        let catalogue = schema_definition_catalogue(&schema).expect("catalogue");
+        let definition_bodies = [
+            "bool",
+            "transaction",
+            "node",
+            "expression",
+            "expression_kind_draft",
+            "query_node",
+            "query_endpoint_protocol",
+            "node_kind",
+            "operations",
+            "structured_authoring",
+            "name_contract",
+            "nominal_declarations",
+            "id_formats",
+            "limits",
+        ]
+        .map(|name| catalogue.get(name).expect("definition body").body.clone());
+        assert_family_samples(&schema, "schema_definition_body", &definition_bodies);
         assert_family_samples(
             &schema,
             "payload_shape_kind",
@@ -4885,6 +4678,11 @@ mod tests {
                     workspace_bytes: 16,
                     minimum_serial: 1,
                     maximum_serial: u64::MAX,
+                },
+                MachineScalarDomain::CanonicalIdentifier {
+                    grammar: "[a-z][a-z0-9_]*".into(),
+                    minimum_utf8_bytes: 1,
+                    maximum_utf8_bytes: crate::ids::MAX_DRAFT_SYMBOL_BYTES as u64,
                 },
             ],
         );
@@ -4990,25 +4788,25 @@ mod tests {
                 TypeRule::MatchResult,
             ],
         );
-        for section in SchemaSection::ALL {
+        for root in SchemaRoot::ALL {
             validate_exact_type_expression(
                 &schema,
-                "schema_section",
-                &serde_json::to_value(section).expect("section JSON"),
+                "schema_root",
+                &serde_json::to_value(root).expect("root JSON"),
                 None,
             )
-            .expect("schema section contract");
+            .expect("schema root contract");
         }
     }
 
     #[test]
-    fn schema_json_is_strict_and_rejects_invalid_section_contracts() {
+    fn schema_json_is_strict_and_rejects_invalid_root_contracts() {
         let envelope = RequestEnvelope {
             version: JSON_ENVELOPE_VERSION,
             request_id: RequestId::new(2),
             request: Request::DescribeSchema(DescribeSchemaRequest {
-                projection: SchemaProjection::Sections {
-                    sections: vec![SchemaSection::RuntimeAndRun],
+                projection: SchemaProjection::Roots {
+                    roots: vec![SchemaRoot::RuntimeValue],
                 },
                 known_digest: None,
             }),
@@ -5019,15 +4817,15 @@ mod tests {
             envelope
         );
         for invalid in [
-            valid.replace("runtime_and_run", "unknown_section"),
+            valid.replace("runtime_value", "unknown_root"),
             valid.replace(
-                "\"runtime_and_run\"",
-                "\"runtime_and_run\",\"runtime_and_run\"",
+                "\"runtime_value\"",
+                "\"runtime_value\",\"runtime_value\"",
             ),
-            valid.replace("[\"runtime_and_run\"]", "[]"),
+            valid.replace("[\"runtime_value\"]", "[]"),
             valid.replace(
-                "[\"runtime_and_run\"]",
-                "[\"runtime_and_run\",\"runtime_and_run\",\"runtime_and_run\",\"runtime_and_run\",\"runtime_and_run\",\"runtime_and_run\",\"runtime_and_run\",\"runtime_and_run\"]",
+                "[\"runtime_value\"]",
+                "[\"runtime_value\",\"request\",\"response\",\"apply_transaction_request\",\"transaction_receipt\",\"transaction_operation\",\"expression_kind_draft\",\"operation_draft\",\"value_draft\",\"type_draft\",\"query\",\"query_result\",\"error\",\"node\",\"operations\",\"nominal_declarations\",\"id_formats\",\"limits\",\"describe_schema_request\",\"describe_schema_result\",\"runtime_value\"]",
             ),
         ] {
             assert!(decode_request(invalid.as_bytes()).is_err(), "{invalid}");
@@ -5043,6 +4841,25 @@ mod tests {
         })
         .expect("known digest JSON");
         let known = String::from_utf8(known).expect("UTF-8");
+        let known_roots = serde_json::to_string(&RequestEnvelope {
+            version: JSON_ENVELOPE_VERSION,
+            request_id: RequestId::new(4),
+            request: Request::DescribeSchema(DescribeSchemaRequest {
+                projection: SchemaProjection::Roots {
+                    roots: vec![SchemaRoot::RuntimeValue],
+                },
+                known_digest: Some(digest.parse().expect("digest parse")),
+            }),
+        })
+        .expect("known root JSON");
+        assert!(
+            decode_request(
+                known_roots
+                    .replace("runtime_value", "unknown_root")
+                    .as_bytes()
+            )
+            .is_err()
+        );
         let uppercase = known.replace(&digest, &digest.to_uppercase());
         assert!(decode_request(uppercase.as_bytes()).is_err());
         let null_digest = known.replace(&format!("\"{digest}\""), "null");
@@ -5204,17 +5021,17 @@ mod tests {
     fn advertised_structured_depth_is_accepted_by_strict_json_and_above_rejects_semantically() {
         let workspace = WorkspaceId::from_bytes([0xce; 16]);
         let block = NodeId::new(workspace, 2).expect("block");
-        let local = NodeTarget::Local;
+        let local = NodeTarget::Draft;
         let nested = |levels: usize| {
             let mut expression = ExpressionDraft {
-                handle: LocalHandle::new(1),
+                symbol: Some(DraftSymbol::generated(1)),
                 operation: ExpressionKindDraft::ConstI64(1),
             };
             for level in 0..levels {
-                let inner = expression.handle;
-                let else_handle = LocalHandle::new(100 + level as u32);
+                let inner = expression.symbol;
+                let else_handle = DraftSymbol::generated(100 + level as u32);
                 expression = ExpressionDraft {
-                    handle: LocalHandle::new(1000 + level as u32),
+                    symbol: Some(DraftSymbol::generated(1000 + level as u32)),
                     operation: ExpressionKindDraft::If {
                         condition: ValueDraft::FunctionParameter(NodeTarget::Existing(
                             NodeId::new(workspace, 3).expect("parameter"),
@@ -5223,13 +5040,13 @@ mod tests {
                         then_body: YieldingBodyDraft {
                             operations: vec![expression],
                             yield_value: ValueDraft::OperationResult {
-                                operation: local(inner),
+                                operation: local(inner.expect("bound expression")),
                                 output: 0,
                             },
                         },
                         else_body: YieldingBodyDraft {
                             operations: vec![ExpressionDraft {
-                                handle: else_handle,
+                                symbol: Some(else_handle),
                                 operation: ExpressionKindDraft::ConstI64(0),
                             }],
                             yield_value: ValueDraft::OperationResult {
@@ -5316,7 +5133,8 @@ mod tests {
             vec![
                 ("sum_variant", "payload", true),
                 ("create_function", "body", true),
-                ("match_arm", "payload_handle", true),
+                ("match_arm", "payload_symbol", true),
+                ("expression", "symbol", true),
                 ("insert_expression", "before", true),
                 ("construct_variant", "payload", true),
                 ("construct_variant", "payload", true),
@@ -5324,14 +5142,14 @@ mod tests {
         );
         let workspace = WorkspaceId::from_bytes([0x71; 16]);
         let node = NodeId::new(workspace, 7).expect("node");
-        let handle = LocalHandle::new(1);
+        let symbol = DraftSymbol::generated(1);
         let body = crate::transaction::FunctionBodyDraft {
             operations: vec![],
             return_value: ValueDraft::FunctionParameter(NodeTarget::Existing(node)),
         };
 
         let create_function = TransactionOp::CreateFunction {
-            handle,
+            symbol,
             module: NodeTarget::Existing(node),
             name: "f".into(),
             parameters: vec![],
@@ -5349,7 +5167,7 @@ mod tests {
             block: node,
             before: Some(node),
             expression: ExpressionDraft {
-                handle,
+                symbol: Some(symbol),
                 operation: ExpressionKindDraft::ConstI64(1),
             },
         };
@@ -5361,7 +5179,7 @@ mod tests {
         );
 
         let sum_variant = crate::transaction::SumVariantDraft {
-            handle,
+            symbol,
             name: "some".into(),
             payload: Some(crate::TypeDraft::I64),
         };
@@ -5373,7 +5191,7 @@ mod tests {
         );
         let match_arm = crate::transaction::MatchArmDraft {
             variant: NodeTarget::Existing(node),
-            payload_handle: Some(handle),
+            payload_symbol: Some(symbol),
             body: crate::transaction::YieldingBodyDraft {
                 operations: vec![],
                 yield_value: ValueDraft::FunctionParameter(NodeTarget::Existing(node)),
@@ -5493,7 +5311,7 @@ mod tests {
             hash: crate::SnapshotHash::from_bytes([2; 32]),
             published: true,
             created_count: 1,
-            returned_bindings: vec![(handle, node)],
+            returned_bindings: vec![(symbol, node)],
             change_count: 1,
             change_digest: crate::ChangeDigest::from_bytes([3; 32]),
             complete_before: false,
@@ -5580,25 +5398,25 @@ mod tests {
             return_value: value,
         };
         let expression = ExpressionDraft {
-            handle: LocalHandle::new(20),
+            symbol: Some(DraftSymbol::generated(20)),
             operation: ExpressionKindDraft::ConstI64(1),
         };
         let transaction_samples = vec![
             TransactionOp::CreatePackage {
-                handle: LocalHandle::new(1),
+                symbol: DraftSymbol::generated(1),
                 name: "p".into(),
             },
             TransactionOp::CreateModule {
-                handle: LocalHandle::new(2),
+                symbol: DraftSymbol::generated(2),
                 package: target,
                 name: "m".into(),
             },
             TransactionOp::CreateFunction {
-                handle: LocalHandle::new(3),
+                symbol: DraftSymbol::generated(3),
                 module: target,
                 name: "f".into(),
                 parameters: vec![FunctionParameterDraft {
-                    handle: LocalHandle::new(4),
+                    symbol: DraftSymbol::generated(4),
                     name: "x".into(),
                     ty: TypeDraft::I64,
                 }],
@@ -5606,7 +5424,7 @@ mod tests {
                 body: Some(function_body.clone()),
             },
             TransactionOp::DefineFunctionBody {
-                function: target,
+                function: node,
                 body: function_body.clone(),
             },
             TransactionOp::InsertExpression {
@@ -5637,21 +5455,21 @@ mod tests {
                 replacement: OperationDraft::ConstI64(1),
             },
             TransactionOp::CreateProductType {
-                handle: LocalHandle::new(5),
+                symbol: DraftSymbol::generated(5),
                 module: target,
                 name: "pair".into(),
                 fields: vec![ProductFieldDraft {
-                    handle: LocalHandle::new(6),
+                    symbol: DraftSymbol::generated(6),
                     name: "value".into(),
                     ty: TypeDraft::I64,
                 }],
             },
             TransactionOp::CreateSumType {
-                handle: LocalHandle::new(7),
+                symbol: DraftSymbol::generated(7),
                 module: target,
                 name: "maybe".into(),
                 variants: vec![SumVariantDraft {
-                    handle: LocalHandle::new(8),
+                    symbol: DraftSymbol::generated(8),
                     name: "some".into(),
                     payload: Some(TypeDraft::I64),
                 }],
@@ -5664,7 +5482,6 @@ mod tests {
                 sample,
                 &schema.transaction_operation_payloads,
                 code.machine_name(),
-                code.stable_tag(),
             );
         }
 
@@ -5730,7 +5547,6 @@ mod tests {
                 sample,
                 &schema.query_payloads,
                 code.machine_name(),
-                code.stable_tag(),
             );
         }
 
@@ -5900,7 +5716,6 @@ mod tests {
                 sample,
                 &schema.query_member_payloads,
                 &description.name,
-                description.tag,
             );
         }
         let repair = RepairContext {
@@ -5984,7 +5799,6 @@ mod tests {
                 sample,
                 &schema.query_result_payloads,
                 code.machine_name(),
-                code.stable_tag(),
             );
         }
 
@@ -6059,7 +5873,6 @@ mod tests {
                 sample,
                 &schema.query_cursor_payloads,
                 &description.name,
-                description.tag,
             );
         }
 
@@ -6094,8 +5907,8 @@ mod tests {
                 step: 1,
                 initial: value,
                 carried: TypeDraft::I64,
-                index_handle: LocalHandle::new(30),
-                carried_handle: LocalHandle::new(31),
+                index_symbol: DraftSymbol::generated(30),
+                carried_symbol: DraftSymbol::generated(31),
                 body: yielding.clone(),
             },
             ExpressionKindDraft::ConstructProduct {
@@ -6118,7 +5931,7 @@ mod tests {
                 result: TypeDraft::I64,
                 arms: vec![MatchArmDraft {
                     variant: target,
-                    payload_handle: Some(LocalHandle::new(32)),
+                    payload_symbol: Some(DraftSymbol::generated(32)),
                     body: yielding.clone(),
                 }],
             },
@@ -6130,7 +5943,6 @@ mod tests {
                 &schema,
                 &schema.structured_authoring.expression_variants,
                 code.machine_name(),
-                code.stable_tag(),
             );
         }
 
@@ -6201,7 +6013,6 @@ mod tests {
                 &schema,
                 &schema.structured_authoring.operation_variants,
                 code.machine_name(),
-                code.stable_tag(),
             );
         }
 
@@ -6221,10 +6032,8 @@ mod tests {
                 &schema,
                 &schema.structured_authoring.value_variants,
                 code.machine_name(),
-                code.stable_tag(),
             );
         }
-
         let runtime_samples = vec![
             RuntimeValue::Unit,
             RuntimeValue::Bool(true),
@@ -6258,13 +6067,7 @@ mod tests {
         {
             assert_eq!(sample.code(), code);
             assert_eq!(advertised.name, code.machine_name());
-            assert_eq!(advertised.tag, code.stable_tag());
-            assert_machine_variant_serde_contract(
-                sample,
-                runtime_variants,
-                code.machine_name(),
-                code.stable_tag(),
-            );
+            assert_machine_variant_serde_contract(sample, runtime_variants, code.machine_name());
         }
 
         let type_samples = [
@@ -6277,12 +6080,10 @@ mod tests {
             type_samples.len(),
             schema.structured_authoring.type_variants.len()
         );
-        for (index, (sample, description)) in type_samples
+        for (sample, description) in type_samples
             .iter()
             .zip(&schema.structured_authoring.type_variants)
-            .enumerate()
         {
-            assert_eq!(description.tag, u8::try_from(index + 1).expect("type tag"));
             assert_type_draft_serde_contract(*sample, &schema, description);
         }
 
@@ -6301,11 +6102,11 @@ mod tests {
         structured_record_count += check_draft_record!(
             "create_product_type",
             TransactionOp::CreateProductType {
-                handle: LocalHandle::new(5),
+                symbol: DraftSymbol::generated(5),
                 module: target,
                 name: "pair".into(),
                 fields: vec![ProductFieldDraft {
-                    handle: LocalHandle::new(6),
+                    symbol: DraftSymbol::generated(6),
                     name: "value".into(),
                     ty: TypeDraft::I64
                 }]
@@ -6316,7 +6117,7 @@ mod tests {
         structured_record_count += check_draft_record!(
             "product_field",
             ProductFieldDraft {
-                handle: LocalHandle::new(6),
+                symbol: DraftSymbol::generated(6),
                 name: "value".into(),
                 ty: TypeDraft::I64
             },
@@ -6326,11 +6127,11 @@ mod tests {
         structured_record_count += check_draft_record!(
             "create_sum_type",
             TransactionOp::CreateSumType {
-                handle: LocalHandle::new(7),
+                symbol: DraftSymbol::generated(7),
                 module: target,
                 name: "maybe".into(),
                 variants: vec![SumVariantDraft {
-                    handle: LocalHandle::new(8),
+                    symbol: DraftSymbol::generated(8),
                     name: "some".into(),
                     payload: Some(TypeDraft::I64)
                 }]
@@ -6341,7 +6142,7 @@ mod tests {
         structured_record_count += check_draft_record!(
             "sum_variant",
             SumVariantDraft {
-                handle: LocalHandle::new(8),
+                symbol: DraftSymbol::generated(8),
                 name: "some".into(),
                 payload: Some(TypeDraft::I64)
             },
@@ -6351,11 +6152,11 @@ mod tests {
         structured_record_count += check_draft_record!(
             "create_function",
             TransactionOp::CreateFunction {
-                handle: LocalHandle::new(3),
+                symbol: DraftSymbol::generated(3),
                 module: target,
                 name: "f".into(),
                 parameters: vec![FunctionParameterDraft {
-                    handle: LocalHandle::new(4),
+                    symbol: DraftSymbol::generated(4),
                     name: "x".into(),
                     ty: TypeDraft::I64
                 }],
@@ -6368,7 +6169,7 @@ mod tests {
         structured_record_count += check_draft_record!(
             "function_parameter",
             FunctionParameterDraft {
-                handle: LocalHandle::new(4),
+                symbol: DraftSymbol::generated(4),
                 name: "x".into(),
                 ty: TypeDraft::I64
             },
@@ -6405,7 +6206,7 @@ mod tests {
             "match_arm",
             MatchArmDraft {
                 variant: target,
-                payload_handle: Some(LocalHandle::new(32)),
+                payload_symbol: Some(DraftSymbol::generated(32)),
                 body: yielding.clone()
             },
             MatchArmDraft,
@@ -6416,7 +6217,7 @@ mod tests {
         structured_record_count += check_draft_record!(
             "define_function_body",
             TransactionOp::DefineFunctionBody {
-                function: target,
+                function: node,
                 body: function_body.clone()
             },
             TransactionOp,
@@ -6445,7 +6246,7 @@ mod tests {
             operations: transaction_samples,
         };
         let response_spec = TransactionResponseSpec {
-            return_handles: vec![LocalHandle::new(1)],
+            return_symbols: vec![DraftSymbol::generated(1)],
         };
         let apply = ApplyTransactionRequest {
             transaction: transaction.clone(),
@@ -6475,7 +6276,7 @@ mod tests {
             hash: crate::SnapshotHash::from_bytes([4; 32]),
             published: true,
             created_count: 1,
-            returned_bindings: vec![(LocalHandle::new(1), node)],
+            returned_bindings: vec![(DraftSymbol::generated(1), node)],
             change_count: 1,
             change_digest: crate::ChangeDigest::from_bytes([5; 32]),
             complete_before: false,
@@ -6638,7 +6439,6 @@ mod tests {
                 sample,
                 &schema.request_payloads,
                 code.machine_name(),
-                code.stable_tag(),
             );
         }
         let response_samples = [
@@ -6661,7 +6461,6 @@ mod tests {
                 sample,
                 &schema.response_payloads,
                 code.machine_name(),
-                code.stable_tag(),
             );
         }
         let envelope_count = check_named_records!(
@@ -6682,9 +6481,14 @@ mod tests {
             DescribeSchemaResult::Manifest(value) => value,
             _ => unreachable!(),
         };
-        let sections = SchemaSections {
+        let catalogue = schema_definition_catalogue(&schema).expect("catalogue");
+        let (roots, definitions) =
+            project_schema_roots(&catalogue, &[SchemaRoot::Limits]).expect("roots");
+        let projected = SchemaDefinitions {
             digest,
-            sections: all_schema_sections(&schema),
+            roots,
+            type_constructors: schema_type_constructors(),
+            definitions,
         };
         macro_rules! check {
             ($name:literal, $sample:expr) => {{
@@ -6768,38 +6572,73 @@ mod tests {
             schema.name_contract.sibling_uniqueness_groups[0].clone()
         );
         count += check!("boundary_limits", schema.limits.clone());
-        count += check!("id_formats", schema.id_formats.clone());
+        count += check!("id_formats_description", schema.id_formats.clone());
         count += check!(
             "nominal_declarations_description",
             schema.nominal_declarations.clone()
         );
         count += check!("schema_manifest", manifest);
-        count += check!("schema_sections", sections.clone());
-        for section in &sections.sections {
-            match section {
-                SchemaSectionPayload::IdentityAndEnvelopes(value) => {
-                    count += check!("identity_and_envelopes_section", value.clone())
-                }
-                SchemaSectionPayload::SemanticTypesAndNodes(value) => {
-                    count += check!("semantic_types_and_nodes_section", value.clone())
-                }
-                SchemaSectionPayload::NominalDeclarations(value) => {
-                    count += check!("nominal_declarations_section", value.clone())
-                }
-                SchemaSectionPayload::TransactionsAndExpressions(value) => {
-                    count += check!("transactions_and_expressions_section", value.clone())
-                }
-                SchemaSectionPayload::QueriesAndRepair(value) => {
-                    count += check!("queries_and_repair_section", value.clone())
-                }
-                SchemaSectionPayload::RuntimeAndRun(value) => {
-                    count += check!("runtime_and_run_section", value.clone())
-                }
-                SchemaSectionPayload::ErrorsAndLimits(value) => {
-                    count += check!("errors_and_limits_section", value.clone())
-                }
+        count += check!("schema_definitions", projected.clone());
+        count += check!("schema_definition", projected.definitions[0].clone());
+        count += check!(
+            "draft_variant_family_description",
+            match catalogue
+                .get("expression_kind_draft")
+                .expect("expression draft")
+                .body
+                .clone()
+            {
+                SchemaDefinitionBody::DraftVariant(value) => value,
+                _ => panic!("draft variant body"),
             }
-        }
+        );
+        let endpoint = match catalogue
+            .get("query_node")
+            .expect("query node")
+            .body
+            .clone()
+        {
+            SchemaDefinitionBody::Endpoint(value) => value,
+            _ => panic!("endpoint body"),
+        };
+        count += check!("endpoint_description", endpoint.clone());
+        count += check!(
+            "endpoint_variant_binding_description",
+            endpoint.bindings[0].clone()
+        );
+        let template = match catalogue
+            .get("query_endpoint_protocol")
+            .expect("query endpoint template")
+            .body
+            .clone()
+        {
+            SchemaDefinitionBody::EndpointTemplate(value) => value,
+            _ => panic!("endpoint template body"),
+        };
+        count += check!("endpoint_protocol_template_description", template.clone());
+        count += check!(
+            "endpoint_template_parameter_description",
+            template.parameters[0].clone()
+        );
+        count += check!(
+            "code_family_description",
+            match catalogue.get("node_kind").expect("node kind").body.clone() {
+                SchemaDefinitionBody::Codes(value) => value,
+                _ => panic!("code family body"),
+            }
+        );
+        count += check!(
+            "structured_authoring_policy_description",
+            match catalogue
+                .get("structured_authoring")
+                .expect("structured authoring")
+                .body
+                .clone()
+            {
+                SchemaDefinitionBody::StructuredAuthoring(value) => value,
+                _ => panic!("structured authoring body"),
+            }
+        );
         assert_eq!(count, schema.schema_discovery.records.len());
     }
 
@@ -6830,7 +6669,6 @@ mod tests {
         sample: &T,
         variants: &[VariantPayloadDescription],
         name: &str,
-        tag: u8,
     ) where
         T: serde::de::DeserializeOwned + Serialize,
     {
@@ -6839,7 +6677,6 @@ mod tests {
             .iter()
             .find(|variant| variant.name == name)
             .unwrap_or_else(|| panic!("missing variant {name}"));
-        assert_eq!(description.tag, tag, "{name} stable tag");
         let value = serde_json::to_value(sample)
             .unwrap_or_else(|error| panic!("{name} serialize: {error}"));
         assert_eq!(
@@ -6890,7 +6727,6 @@ mod tests {
         schema: &SchemaDescription,
         variants: &[DraftVariantDescription],
         name: &str,
-        tag: u8,
     ) where
         T: serde::de::DeserializeOwned + Serialize,
     {
@@ -6898,7 +6734,6 @@ mod tests {
             .iter()
             .find(|variant| variant.name == name)
             .unwrap_or_else(|| panic!("missing draft variant {name}"));
-        assert_eq!(description.tag, tag, "{name} stable tag");
         let value = serde_json::to_value(sample).expect("draft serialize");
         assert_eq!(
             value.get("kind").and_then(serde_json::Value::as_str),
@@ -7196,18 +7031,13 @@ mod tests {
                 other => panic!("unknown family tagging {other}"),
             }
             .unwrap_or_else(|| panic!("cannot extract {family_name} sample name from {value}"));
-            let description = family
+            let _description = family
                 .variants
                 .iter()
                 .find(|variant| variant.name == name)
                 .unwrap_or_else(|| panic!("missing {family_name} descriptor {name}"));
             if family.tagging == "adjacently_tagged" {
-                assert_machine_variant_serde_contract(
-                    sample,
-                    &family.variants,
-                    name,
-                    description.tag,
-                );
+                assert_machine_variant_serde_contract(sample, &family.variants, name);
             } else {
                 serde_json::from_value::<T>(value.clone())
                     .unwrap_or_else(|error| panic!("{family_name} {name} decode: {error}"));
@@ -7409,6 +7239,19 @@ mod tests {
                 .as_str()
                 .map(|_| ())
                 .ok_or_else(|| "expected UTF-8 string".into()),
+            MachineScalarDomain::CanonicalIdentifier {
+                grammar: _,
+                minimum_utf8_bytes,
+                maximum_utf8_bytes,
+            } => {
+                let text = value.as_str().ok_or_else(|| "expected string".to_owned())?;
+                let length = u64::try_from(text.len())
+                    .map_err(|_| "identifier length overflow".to_owned())?;
+                if length < *minimum_utf8_bytes || length > *maximum_utf8_bytes {
+                    return Err("canonical identifier length is outside policy".to_owned());
+                }
+                DraftSymbol::parse(text).map(|_| ()).map_err(str::to_owned)
+            }
             MachineScalarDomain::SignedInteger { minimum, maximum } => {
                 let number = value
                     .as_i64()
@@ -7783,176 +7626,576 @@ mod tests {
                 .iter()
                 .map(|code| code.name.as_str())
                 .collect(),
-            "schema_section" => schema
-                .schema_discovery
-                .sections
-                .iter()
-                .map(|code| code.name.as_str())
-                .collect(),
             _ => return None,
         };
         Some(codes)
     }
 
     #[test]
-    fn every_schema_type_expression_resolves_exactly_once() {
-        use std::collections::BTreeMap;
-
+    fn production_schema_catalogue_is_unique_closed_and_strict() {
         let schema = schema_description();
-        let mut definitions = BTreeMap::<String, usize>::new();
-        let mut expressions = Vec::<String>::new();
-        for description in &schema.schema_discovery.records {
-            register_record(&mut definitions, &mut expressions, description);
-        }
-        for description in &schema.semantic_records {
-            register_record(&mut definitions, &mut expressions, description);
-        }
-        for description in &schema.transaction_records {
-            register_record(&mut definitions, &mut expressions, description);
-        }
-        for description in &schema.structured_authoring.records {
-            register_name(&mut definitions, &description.name);
-        }
-        for description in &schema.run.records {
-            register_record(&mut definitions, &mut expressions, description);
-        }
-        for description in &schema.query_records {
-            register_record(&mut definitions, &mut expressions, description);
-        }
-        for description in &schema.error_records {
-            register_record(&mut definitions, &mut expressions, description);
-        }
-        for description in &schema.envelopes {
-            register_record(&mut definitions, &mut expressions, description);
-        }
-        register_name(&mut definitions, "describe_schema_request");
-        collect_shape_expressions(&schema.schema_discovery.request, &mut expressions);
-        register_name(&mut definitions, "error");
-        collect_shape_expressions(&schema.error_payload, &mut expressions);
-
-        for description in schema
-            .schema_discovery
-            .variants
-            .iter()
-            .chain(&schema.identity_variants)
-            .chain(&schema.semantic_variants)
-            .chain(&schema.transaction_variants)
-            .chain(&schema.run.variants)
-            .chain(&schema.query_variants)
-            .chain(&schema.error_variants)
-        {
-            register_name(&mut definitions, &description.name);
-            for variant in &description.variants {
-                collect_shape_expressions(&variant.payload, &mut expressions);
-            }
-        }
-        for (name, variants) in [
-            (
-                "expression_kind_draft",
-                &schema.structured_authoring.expression_variants,
-            ),
-            (
-                "operation_draft",
-                &schema.structured_authoring.operation_variants,
-            ),
-            ("value_draft", &schema.structured_authoring.value_variants),
-            ("type_draft", &schema.structured_authoring.type_variants),
-        ] {
-            register_name(&mut definitions, name);
-            for variant in variants {
-                if let Some(newtype) = variant.newtype {
-                    expressions.push(
-                        draft_field_type_description(&schema, newtype)
-                            .type_expression
-                            .clone(),
-                    );
-                }
-                expressions.extend(variant.fields.iter().map(|field| {
-                    draft_field_type_description(&schema, field.field_type)
-                        .type_expression
-                        .clone()
-                }));
-            }
-        }
-        for description in &schema.structured_authoring.records {
-            expressions.extend(description.fields.iter().map(|field| {
-                draft_field_type_description(&schema, field.field_type)
-                    .type_expression
-                    .clone()
-            }));
-        }
-        for value in &schema.run.runtime_values {
-            expressions.extend(
-                value
-                    .fields
-                    .iter()
-                    .map(|field| field.type_expression.clone()),
+        let catalogue = schema_definition_catalogue(&schema).expect("closed catalogue");
+        assert!(catalogue.len() > 100);
+        for (name, definition) in &catalogue {
+            assert_eq!(name, &definition.name);
+            assert!(
+                definition
+                    .dependencies
+                    .windows(2)
+                    .all(|pair| pair[0] < pair[1])
             );
-        }
-
-        for scalar in &schema.scalar_types {
-            register_name(&mut definitions, &scalar.name);
-        }
-        register_name(&mut definitions, "type_parameter");
-        for code in [
-            "node_kind",
-            "operation_code",
-            "transaction_operation_code",
-            "error_code",
-            "schema_section",
-        ] {
-            register_name(&mut definitions, code);
-        }
-
-        for expression in expressions {
-            for name in type_expression_names(&expression) {
-                let count = definitions.get(name).copied().unwrap_or_default();
-                assert_eq!(
-                    count, 1,
-                    "type expression `{expression}` references `{name}` {count} times"
+            for dependency in &definition.dependencies {
+                assert!(
+                    catalogue.contains_key(dependency),
+                    "{name} has missing dependency {dependency}"
                 );
             }
         }
-        assert!(definitions.values().all(|count| *count == 1));
-    }
-
-    fn register_name(definitions: &mut std::collections::BTreeMap<String, usize>, name: &str) {
-        *definitions.entry(name.to_owned()).or_default() += 1;
-    }
-
-    fn register_record(
-        definitions: &mut std::collections::BTreeMap<String, usize>,
-        expressions: &mut Vec<String>,
-        description: &NamedPayloadDescription,
-    ) {
-        *definitions.entry(description.name.clone()).or_default() += 1;
-        collect_shape_expressions(&description.payload, expressions);
-    }
-
-    fn collect_shape_expressions(shape: &PayloadShapeDescription, output: &mut Vec<String>) {
-        if let Some(newtype) = &shape.newtype {
-            output.push(newtype.clone());
-        }
-        for field in &shape.fields {
-            assert_eq!(
-                field.type_expression.starts_with("optional<")
-                    && field.type_expression.ends_with('>'),
-                !field.required,
-                "{}.{} must advertise requiredness and nullability exactly",
-                field.name,
-                field.type_expression
+        for invalid in [
+            "",
+            "list",
+            "list<>",
+            "list<i64,bool>",
+            "tuple<>",
+            "tuple<i64,>",
+            "page<i64",
+            "optional<i64>>",
+            "I64",
+            "i64 i64",
+        ] {
+            assert!(
+                type_expression_dependencies(invalid).is_err(),
+                "accepted malformed type expression {invalid}"
             );
-            output.push(field.type_expression.clone());
         }
     }
 
-    fn type_expression_names(expression: &str) -> Vec<&str> {
-        expression
-            .split(|character: char| !(character.is_ascii_alphanumeric() || character == '_'))
-            .filter(|name| {
-                !name.is_empty() && !matches!(*name, "list" | "tuple" | "page" | "optional")
+    fn projected_record<'a>(
+        definitions: &'a [SchemaDefinition],
+        name: &str,
+    ) -> &'a NamedPayloadDescription {
+        match &definitions
+            .iter()
+            .find(|definition| definition.name == name)
+            .unwrap_or_else(|| panic!("missing projected record {name}"))
+            .body
+        {
+            SchemaDefinitionBody::Record(record) => record,
+            _ => panic!("projected definition {name} is not a record"),
+        }
+    }
+
+    fn projected_template<'a>(
+        definitions: &'a [SchemaDefinition],
+        name: &str,
+    ) -> &'a EndpointProtocolTemplateDescription {
+        match &definitions
+            .iter()
+            .find(|definition| definition.name == name)
+            .unwrap_or_else(|| panic!("missing projected endpoint template {name}"))
+            .body
+        {
+            SchemaDefinitionBody::EndpointTemplate(template) => template,
+            _ => panic!("projected definition {name} is not an endpoint template"),
+        }
+    }
+
+    fn template_record<'a>(
+        template: &'a EndpointProtocolTemplateDescription,
+        name: &str,
+    ) -> &'a NamedPayloadDescription {
+        template
+            .records
+            .iter()
+            .find(|record| record.name == name)
+            .unwrap_or_else(|| panic!("missing template record {name}"))
+    }
+
+    fn template_variant<'a>(
+        template: &'a EndpointProtocolTemplateDescription,
+        name: &str,
+    ) -> &'a NamedVariantDescription {
+        template
+            .variants
+            .iter()
+            .find(|variant| variant.name == name)
+            .unwrap_or_else(|| panic!("missing template variant {name}"))
+    }
+
+    fn endpoint_binding_variant<'a>(
+        endpoint: &'a EndpointDescription,
+        parameter: &str,
+    ) -> &'a VariantPayloadDescription {
+        &endpoint
+            .bindings
+            .iter()
+            .find(|binding| binding.parameter == parameter)
+            .unwrap_or_else(|| panic!("missing endpoint binding {parameter}"))
+            .variant
+    }
+
+    fn assert_json_object_fields(value: &serde_json::Value, payload: &PayloadShapeDescription) {
+        let object = value.as_object().expect("advertised record JSON object");
+        let actual = object.keys().map(String::as_str).collect::<BTreeSet<_>>();
+        let expected = payload
+            .fields
+            .iter()
+            .map(|field| field.name.as_str())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn endpoint_roots_are_wire_complete_and_match_real_envelopes() {
+        let workspace = WorkspaceId::from_bytes([0x31; 16]);
+        let root = NodeId::new(workspace, 1).expect("root ID");
+        let summary = WorkspaceSummary {
+            workspace,
+            revision: Revision::INITIAL,
+            hash: crate::SnapshotHash::from_bytes([0x42; 32]),
+            root,
+            node_count: 1,
+            complete: true,
+            blocker_count: 0,
+            entry_count: 0,
+        };
+
+        for (request_code, response_code) in [
+            (RequestCode::CreateWorkspace, ResponseCode::WorkspaceCreated),
+            (
+                RequestCode::ApplyTransaction,
+                ResponseCode::TransactionReceipt,
+            ),
+            (RequestCode::Run, ResponseCode::Run),
+            (RequestCode::Shutdown, ResponseCode::Acknowledged),
+            (RequestCode::DescribeSchema, ResponseCode::DescribeSchema),
+        ] {
+            let endpoint_name = request_code.machine_name();
+            let root = SchemaRoot::ALL
+                .into_iter()
+                .find(|root| root.machine_name() == endpoint_name)
+                .expect("control endpoint root");
+            let DescribeSchemaResult::Roots(projected) = describe_schema(&DescribeSchemaRequest {
+                projection: SchemaProjection::Roots { roots: vec![root] },
+                known_digest: None,
             })
-            .collect()
+            .expect("control endpoint projection") else {
+                panic!("control endpoint roots result")
+            };
+            let endpoint = match &projected
+                .definitions
+                .iter()
+                .find(|definition| definition.name == endpoint_name)
+                .expect("control endpoint definition")
+                .body
+            {
+                SchemaDefinitionBody::Endpoint(endpoint) => endpoint,
+                _ => panic!("control root is not an endpoint"),
+            };
+            assert_eq!(endpoint.template, "control_endpoint_protocol");
+            assert_eq!(
+                endpoint_binding_variant(endpoint, "request_variant").name,
+                request_code.machine_name()
+            );
+            assert_eq!(
+                endpoint_binding_variant(endpoint, "success_response_variant").name,
+                response_code.machine_name()
+            );
+            let template = projected_template(&projected.definitions, &endpoint.template);
+            assert_eq!(
+                template
+                    .parameters
+                    .iter()
+                    .map(|parameter| (parameter.name.as_str(), parameter.target_variant.as_str()))
+                    .collect::<Vec<_>>(),
+                vec![
+                    ("request_variant", "request"),
+                    ("success_response_variant", "response")
+                ]
+            );
+            assert!(template_variant(template, "request").variants.is_empty());
+            assert_eq!(
+                template_variant(template, "response")
+                    .variants
+                    .iter()
+                    .map(|variant| variant.name.as_str())
+                    .collect::<Vec<_>>(),
+                vec![ResponseCode::Error.machine_name()]
+            );
+            assert_eq!(endpoint.protocol_version, PROTOCOL_VERSION);
+            assert_eq!(endpoint.json_envelope_version, JSON_ENVELOPE_VERSION);
+            let names = projected
+                .definitions
+                .iter()
+                .map(|definition| definition.name.as_str())
+                .collect::<BTreeSet<_>>();
+            for dependency in [
+                endpoint.template.as_str(),
+                endpoint.boundary_error_envelope.as_str(),
+                endpoint.typed_error.as_str(),
+                endpoint.id_formats.as_str(),
+                endpoint.limits.as_str(),
+                "boundary_error",
+                "boundary_error_kind",
+            ] {
+                assert!(
+                    names.contains(dependency),
+                    "missing control wire fact {dependency}"
+                );
+            }
+        }
+
+        for code in QueryCode::ALL {
+            let endpoint_name = format!("query_{}", code.machine_name());
+            let root = SchemaRoot::ALL
+                .into_iter()
+                .find(|root| root.machine_name() == endpoint_name)
+                .expect("query endpoint root");
+            let DescribeSchemaResult::Roots(projected) = describe_schema(&DescribeSchemaRequest {
+                projection: SchemaProjection::Roots { roots: vec![root] },
+                known_digest: None,
+            })
+            .expect("query endpoint projection") else {
+                panic!("query endpoint roots result")
+            };
+            let names = projected
+                .definitions
+                .iter()
+                .map(|definition| definition.name.as_str())
+                .collect::<BTreeSet<_>>();
+            let endpoint_definition = projected
+                .definitions
+                .iter()
+                .find(|definition| definition.name == endpoint_name)
+                .expect("endpoint definition");
+            let endpoint = match &endpoint_definition.body {
+                SchemaDefinitionBody::Endpoint(endpoint) => endpoint,
+                _ => panic!("root is not an endpoint"),
+            };
+            assert_eq!(endpoint.template, "query_endpoint_protocol");
+            assert_eq!(endpoint.protocol_version, PROTOCOL_VERSION);
+            assert_eq!(endpoint.json_envelope_version, JSON_ENVELOPE_VERSION);
+            assert_eq!(endpoint.id_formats, "id_formats");
+            assert_eq!(endpoint.limits, "limits");
+            assert_eq!(endpoint.typed_error, "error");
+            assert_eq!(
+                endpoint_binding_variant(endpoint, "query_variant").name,
+                code.machine_name()
+            );
+            assert_eq!(
+                endpoint_binding_variant(endpoint, "query_result_variant").name,
+                code.machine_name()
+            );
+            let template = projected_template(&projected.definitions, &endpoint.template);
+            assert_eq!(
+                template
+                    .parameters
+                    .iter()
+                    .map(|parameter| (parameter.name.as_str(), parameter.target_variant.as_str()))
+                    .collect::<Vec<_>>(),
+                vec![
+                    ("query_variant", "query"),
+                    ("query_result_variant", "query_result")
+                ]
+            );
+            assert_eq!(
+                template_variant(template, "request")
+                    .variants
+                    .iter()
+                    .map(|variant| variant.name.as_str())
+                    .collect::<Vec<_>>(),
+                vec![RequestCode::QueryBatch.machine_name()]
+            );
+            assert_eq!(
+                template_variant(template, "response")
+                    .variants
+                    .iter()
+                    .map(|variant| variant.name.as_str())
+                    .collect::<Vec<_>>(),
+                vec![
+                    ResponseCode::QueryBatchResult.machine_name(),
+                    ResponseCode::Error.machine_name()
+                ]
+            );
+            assert!(template_variant(template, "query").variants.is_empty());
+            assert!(
+                template_variant(template, "query_result")
+                    .variants
+                    .is_empty()
+            );
+            assert_eq!(
+                template_variant(template, "query_outcome")
+                    .variants
+                    .iter()
+                    .map(|variant| variant.name.as_str())
+                    .collect::<Vec<_>>(),
+                vec!["success", "error"]
+            );
+            assert_eq!(
+                template_record(template, "query_batch_request")
+                    .payload
+                    .fields[2]
+                    .type_expression,
+                "list<query_item>"
+            );
+            assert_eq!(
+                template_record(template, "query_item").payload.fields[1].type_expression,
+                "query"
+            );
+            assert_eq!(
+                template_record(template, "query_batch_result")
+                    .payload
+                    .fields[2]
+                    .type_expression,
+                "list<query_item_result>"
+            );
+            assert_eq!(
+                template_record(template, "query_item_result")
+                    .payload
+                    .fields[1]
+                    .type_expression,
+                "query_outcome"
+            );
+            for shared in [
+                "boundary_error_envelope",
+                "boundary_error",
+                "boundary_error_kind",
+                "error",
+                "error_code",
+                "id_formats",
+                "limits",
+                "workspace_id",
+                "request_id",
+                "query_id",
+                "revision",
+            ] {
+                assert!(names.contains(shared), "missing shared wire fact {shared}");
+            }
+        }
+
+        let DescribeSchemaResult::Roots(projected) = describe_schema(&DescribeSchemaRequest {
+            projection: SchemaProjection::Roots {
+                roots: vec![SchemaRoot::QueryWorkspaceSummary],
+            },
+            known_digest: None,
+        })
+        .expect("workspace summary endpoint") else {
+            panic!("workspace endpoint roots result")
+        };
+        let template = projected_template(&projected.definitions, "query_endpoint_protocol");
+        let request = RequestEnvelope {
+            version: JSON_ENVELOPE_VERSION,
+            request_id: RequestId::new(7),
+            request: Request::QueryBatch(QueryBatchRequest {
+                workspace,
+                revision: Revision::INITIAL,
+                queries: vec![QueryItem {
+                    id: QueryId::new(9),
+                    query: Query::WorkspaceSummary,
+                }],
+            }),
+        };
+        let request_json = serde_json::to_value(&request).expect("request envelope JSON");
+        assert_json_object_fields(
+            &request_json,
+            &template_record(template, "request_envelope").payload,
+        );
+        assert_eq!(
+            request_json
+                .pointer("/request/kind")
+                .and_then(serde_json::Value::as_str),
+            Some(RequestCode::QueryBatch.machine_name())
+        );
+        assert_json_object_fields(
+            request_json
+                .pointer("/request/data")
+                .expect("request batch JSON"),
+            &template_record(template, "query_batch_request").payload,
+        );
+        assert_json_object_fields(
+            request_json
+                .pointer("/request/data/queries/0")
+                .expect("request item JSON"),
+            &template_record(template, "query_item").payload,
+        );
+        assert_eq!(
+            request_json
+                .pointer("/request/data/queries/0/query/kind")
+                .and_then(serde_json::Value::as_str),
+            Some(QueryCode::WorkspaceSummary.machine_name())
+        );
+
+        let response = ResponseEnvelope {
+            version: JSON_ENVELOPE_VERSION,
+            request_id: RequestId::new(7),
+            response: Response::QueryBatchResult(QueryBatchResult {
+                workspace,
+                revision: Revision::INITIAL,
+                results: vec![
+                    QueryItemResult {
+                        id: QueryId::new(9),
+                        outcome: QueryOutcome::Success(Box::new(QueryResult::WorkspaceSummary(
+                            summary,
+                        ))),
+                    },
+                    QueryItemResult {
+                        id: QueryId::new(10),
+                        outcome: QueryOutcome::Error(crate::LkError::new(
+                            ErrorCode::InvalidQuery,
+                            "bad query",
+                        )),
+                    },
+                ],
+            }),
+        };
+        let response_json = serde_json::to_value(&response).expect("response envelope JSON");
+        assert_json_object_fields(
+            &response_json,
+            &template_record(template, "response_envelope").payload,
+        );
+        assert_eq!(
+            response_json
+                .pointer("/response/kind")
+                .and_then(serde_json::Value::as_str),
+            Some(ResponseCode::QueryBatchResult.machine_name())
+        );
+        assert_json_object_fields(
+            response_json
+                .pointer("/response/data")
+                .expect("response batch JSON"),
+            &template_record(template, "query_batch_result").payload,
+        );
+        assert_json_object_fields(
+            response_json
+                .pointer("/response/data/results/0")
+                .expect("response item JSON"),
+            &template_record(template, "query_item_result").payload,
+        );
+        assert_eq!(
+            response_json
+                .pointer("/response/data/results/0/outcome/kind")
+                .and_then(serde_json::Value::as_str),
+            Some("success")
+        );
+        assert_eq!(
+            response_json
+                .pointer("/response/data/results/0/outcome/data/kind")
+                .and_then(serde_json::Value::as_str),
+            Some(QueryCode::WorkspaceSummary.machine_name())
+        );
+        assert_eq!(
+            response_json
+                .pointer("/response/data/results/1/outcome/kind")
+                .and_then(serde_json::Value::as_str),
+            Some("error")
+        );
+
+        let typed_error = ResponseEnvelope {
+            version: JSON_ENVELOPE_VERSION,
+            request_id: RequestId::new(7),
+            response: Response::Error(crate::LkError::new(ErrorCode::InvalidQuery, "bad batch")),
+        };
+        assert_eq!(
+            serde_json::to_value(typed_error)
+                .expect("typed error JSON")
+                .pointer("/response/kind")
+                .and_then(serde_json::Value::as_str),
+            Some(ResponseCode::Error.machine_name())
+        );
+        let boundary = BoundaryErrorEnvelope {
+            version: JSON_ENVELOPE_VERSION,
+            request_id: Some(RequestId::new(7)),
+            error: BoundaryError {
+                kind: BoundaryErrorKind::InvalidJson,
+                message: "bad JSON".to_owned(),
+            },
+        };
+        let boundary_json = serde_json::to_value(boundary).expect("boundary error JSON");
+        assert_json_object_fields(
+            &boundary_json,
+            &projected_record(&projected.definitions, "boundary_error_envelope").payload,
+        );
+        assert_eq!(
+            boundary_json
+                .pointer("/error/kind")
+                .and_then(serde_json::Value::as_str),
+            Some(BoundaryErrorKind::InvalidJson.machine_name())
+        );
+    }
+
+    #[test]
+    fn endpoint_template_parameters_are_explicit_and_locally_closed() {
+        let schema = schema_description();
+        let templates = endpoint_protocol_templates(&schema).expect("endpoint templates");
+        assert_eq!(templates.len(), 2);
+        for template in templates {
+            let local_names = template
+                .records
+                .iter()
+                .map(|record| record.name.as_str())
+                .chain(
+                    template
+                        .variants
+                        .iter()
+                        .map(|variant| variant.name.as_str()),
+                )
+                .collect::<BTreeSet<_>>();
+            let dependencies =
+                definition_dependencies(&SchemaDefinitionBody::EndpointTemplate(template.clone()))
+                    .expect("template dependencies");
+            assert!(
+                dependencies
+                    .iter()
+                    .all(|dependency| !local_names.contains(dependency.as_str()))
+            );
+            assert!(template.parameters.iter().all(|parameter| {
+                template
+                    .variants
+                    .iter()
+                    .any(|variant| variant.name == parameter.target_variant)
+                    && !parameter.semantics.is_empty()
+            }));
+
+            let mut invalid = template;
+            invalid.parameters[0].target_variant = "unresolved_context".to_owned();
+            assert!(
+                definition_dependencies(&SchemaDefinitionBody::EndpointTemplate(invalid)).is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn root_projection_is_transitively_closed_unique_and_canonical() {
+        let schema = schema_description();
+        let catalogue = schema_definition_catalogue(&schema).expect("catalogue");
+        let (left_roots, left) = project_schema_roots(
+            &catalogue,
+            &[SchemaRoot::QueryNode, SchemaRoot::ApplyTransaction],
+        )
+        .expect("left projection");
+        let (right_roots, right) = project_schema_roots(
+            &catalogue,
+            &[SchemaRoot::ApplyTransaction, SchemaRoot::QueryNode],
+        )
+        .expect("right projection");
+        assert_eq!(left_roots, right_roots);
+        assert_eq!(left, right);
+        assert!(left.windows(2).all(|pair| pair[0].name < pair[1].name));
+        let names = left
+            .iter()
+            .map(|definition| definition.name.as_str())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(names.len(), left.len());
+        for definition in &left {
+            for dependency in &definition.dependencies {
+                assert!(names.contains(dependency.as_str()));
+            }
+        }
+        assert!(names.contains("apply_transaction_request"));
+        assert!(names.contains("control_endpoint_protocol"));
+        assert!(names.contains("query_endpoint_protocol"));
+        assert!(names.contains("query_node"));
+        assert!(names.contains("boundary_error_envelope"));
     }
 
     fn draft_field_type_description(
@@ -7963,7 +8206,7 @@ mod tests {
             .structured_authoring
             .draft_field_types
             .iter()
-            .filter(|description| description.tag == field_type.stable_tag())
+            .filter(|description| description.name == field_type.machine_name())
             .collect::<Vec<_>>();
         assert_eq!(matches.len(), 1, "exact draft field type mapping");
         let description = matches[0];
@@ -8023,15 +8266,15 @@ mod tests {
             schema.limits.maximum_artifact_name_bytes,
             crate::artifact::MAXIMUM_ARTIFACT_NAME_BYTES as u64
         );
-        let sections = all_schema_sections(&schema);
-        let SchemaSectionPayload::SemanticTypesAndNodes(semantic) = &sections[1] else {
-            panic!("semantic types and nodes section")
-        };
-        assert_eq!(semantic.name_contract, schema.name_contract);
-        let SchemaSectionPayload::ErrorsAndLimits(errors) = &sections[6] else {
-            panic!("errors and limits section")
-        };
-        assert_eq!(errors.limits, schema.limits);
+        let catalogue = schema_definition_catalogue(&schema).expect("catalogue");
+        assert!(matches!(
+            &catalogue.get("name_contract").expect("name contract").body,
+            SchemaDefinitionBody::NameContract(value) if value == &schema.name_contract
+        ));
+        assert!(matches!(
+            &catalogue.get("limits").expect("limits").body,
+            SchemaDefinitionBody::Limits(value) if value == &schema.limits
+        ));
     }
 
     #[test]
@@ -8081,10 +8324,11 @@ mod tests {
             &[
                 ("schema_projection", 3),
                 ("describe_schema_result", 4),
-                ("schema_section_payload", SchemaSection::ALL.len()),
+                ("schema_root", SchemaRoot::ALL.len()),
+                ("schema_definition_body", 14),
                 ("payload_shape_kind", 3),
                 ("json_scalar_kind", 3),
-                ("machine_scalar_domain", 6),
+                ("machine_scalar_domain", 7),
                 ("run_field_type", 7),
                 ("runtime_value_payload", 5),
                 ("draft_field_type", DraftFieldType::ALL.len()),
@@ -8121,17 +8365,12 @@ mod tests {
                 .iter()
                 .map(|description| (
                     description.name.as_str(),
-                    description.tag,
                     description.type_expression.as_str(),
                 ))
                 .collect::<Vec<_>>(),
             DraftFieldType::ALL
                 .into_iter()
-                .map(|field_type| (
-                    field_type.machine_name(),
-                    field_type.stable_tag(),
-                    field_type.type_expression(),
-                ))
+                .map(|field_type| (field_type.machine_name(), field_type.type_expression(),))
                 .collect::<Vec<_>>()
         );
         for field in first
@@ -8176,12 +8415,11 @@ mod tests {
         );
         assert_codes(
             &first.transaction_operations,
-            TransactionOpCode::ALL.map(|code| (code.machine_name(), code.stable_tag())),
+            TransactionOpCode::ALL.map(|code| (code.machine_name(), 0)),
         );
         assert_variants(
             &first.structured_authoring.expression_variants,
-            crate::transaction::ExpressionDraftCode::ALL
-                .map(|code| (code.machine_name(), code.stable_tag())),
+            crate::transaction::ExpressionDraftCode::ALL.map(|code| (code.machine_name(), 0)),
         );
         assert_variants(
             &first.structured_authoring.operation_variants,
@@ -8189,20 +8427,19 @@ mod tests {
         );
         assert_variants(
             &first.structured_authoring.value_variants,
-            crate::transaction::ValueDraftCode::ALL
-                .map(|code| (code.machine_name(), code.stable_tag())),
+            crate::transaction::ValueDraftCode::ALL.map(|code| (code.machine_name(), 0)),
         );
         assert_variant_payloads(
             &first.transaction_operation_payloads,
-            TransactionOpCode::ALL.map(|code| (code.machine_name(), code.stable_tag())),
+            TransactionOpCode::ALL.map(|code| (code.machine_name(), 0)),
         );
         assert_variant_payloads(
             &first.query_payloads,
-            QueryCode::ALL.map(|code| (code.machine_name(), code.stable_tag())),
+            QueryCode::ALL.map(|code| (code.machine_name(), 0)),
         );
         assert_variant_payloads(
             &first.query_result_payloads,
-            QueryCode::ALL.map(|code| (code.machine_name(), code.stable_tag())),
+            QueryCode::ALL.map(|code| (code.machine_name(), 0)),
         );
         assert_eq!(first.query_member_payloads.len(), 2);
         assert_eq!(first.query_cursor_payloads.len(), 10);
@@ -8214,15 +8451,18 @@ mod tests {
         );
         assert_variant_payloads(
             &first.request_payloads,
-            RequestCode::ALL.map(|code| (code.machine_name(), code.stable_tag())),
+            RequestCode::ALL.map(|code| (code.machine_name(), 0)),
         );
         assert_variant_payloads(
             &first.response_payloads,
-            ResponseCode::ALL.map(|code| (code.machine_name(), code.stable_tag())),
+            ResponseCode::ALL.map(|code| (code.machine_name(), 0)),
         );
-        assert_codes(
-            &first.schema_discovery.sections,
-            SchemaSection::ALL.map(|section| (section.machine_name(), section.stable_tag())),
+        assert_eq!(
+            first.schema_discovery.roots,
+            SchemaRoot::ALL
+                .into_iter()
+                .map(|root| root.machine_name().to_owned())
+                .collect::<Vec<_>>()
         );
         assert_eq!(
             first
@@ -8234,16 +8474,9 @@ mod tests {
                 .len(),
             first.schema_discovery.records.len()
         );
-        for section in SchemaSection::ALL {
-            let record_name = format!("{}_section", section.machine_name());
-            assert!(
-                first
-                    .schema_discovery
-                    .records
-                    .iter()
-                    .any(|record| record.name == record_name),
-                "missing {record_name}"
-            );
+        let catalogue = schema_definition_catalogue(&first).expect("catalogue");
+        for root in SchemaRoot::ALL {
+            assert!(catalogue.contains_key(root.machine_name()));
         }
         for variant in ["const_bool", "const_i64"] {
             let described = first
@@ -8290,14 +8523,14 @@ mod tests {
         assert!(
             for_fields
                 .iter()
-                .any(|field| field.name == "index_handle" && field.declares_handle)
+                .any(|field| field.name == "index_symbol" && field.declares_symbol)
         );
         assert!(
             for_fields
                 .iter()
-                .any(|field| field.name == "carried_handle" && field.declares_handle)
+                .any(|field| field.name == "carried_symbol" && field.declares_symbol)
         );
-        assert!(!first.structured_authoring.implicit_handles_are_selectable);
+        assert!(!first.structured_authoring.implicit_symbols_are_selectable);
         assert_eq!(
             first
                 .run
@@ -8330,14 +8563,14 @@ mod tests {
                 .run
                 .runtime_values
                 .iter()
-                .map(|value| (value.name.as_str(), value.tag, value.payload))
+                .map(|value| (value.name.as_str(), value.payload))
                 .collect::<Vec<_>>(),
             vec![
-                ("unit", 1, RuntimeValuePayload::None),
-                ("bool", 2, RuntimeValuePayload::Bool),
-                ("i64", 3, RuntimeValuePayload::I64),
-                ("product", 4, RuntimeValuePayload::Product),
-                ("sum", 5, RuntimeValuePayload::Sum),
+                ("unit", RuntimeValuePayload::None),
+                ("bool", RuntimeValuePayload::Bool),
+                ("i64", RuntimeValuePayload::I64),
+                ("product", RuntimeValuePayload::Product),
+                ("sum", RuntimeValuePayload::Sum),
             ]
         );
         let product_runtime = first
@@ -8411,19 +8644,19 @@ mod tests {
         assert!(match_operation.regions.is_empty());
         assert_codes(
             &first.queries,
-            QueryCode::ALL.map(|code| (code.machine_name(), code.stable_tag())),
+            QueryCode::ALL.map(|code| (code.machine_name(), 0)),
         );
         assert_codes(
             &first.errors,
-            ErrorCode::ALL.map(|code| (code.machine_name(), code.stable_tag())),
+            ErrorCode::ALL.map(|code| (code.machine_name(), 0)),
         );
         assert_codes(
             &first.requests,
-            RequestCode::ALL.map(|code| (code.machine_name(), code.stable_tag())),
+            RequestCode::ALL.map(|code| (code.machine_name(), 0)),
         );
         assert_codes(
             &first.responses,
-            ResponseCode::ALL.map(|code| (code.machine_name(), code.stable_tag())),
+            ResponseCode::ALL.map(|code| (code.machine_name(), 0)),
         );
         for code in SemanticType::ALL {
             assert_eq!(
@@ -8444,8 +8677,12 @@ mod tests {
             );
         }
         assert_eq!(
-            first.limits.maximum_frame_items,
-            crate::protocol::MAXIMUM_FRAME_ITEMS as u64
+            first.limits.maximum_request_frame_bytes,
+            MAX_JSON_INPUT_BYTES as u64
+        );
+        assert_eq!(
+            first.limits.maximum_response_frame_bytes,
+            MAX_JSON_OUTPUT_BYTES as u64
         );
         assert_eq!(
             first.limits.maximum_run_live_cells,
@@ -8454,6 +8691,10 @@ mod tests {
         assert_eq!(
             first.limits.maximum_error_related_ids,
             crate::error::MAX_ERROR_RELATED_IDS as u32
+        );
+        assert_eq!(
+            first.limits.maximum_boundary_error_message_bytes,
+            MAX_BOUNDARY_ERROR_MESSAGE_BYTES as u64
         );
         let request = DescribeSchemaRequest {
             projection: SchemaProjection::Full,
@@ -8563,8 +8804,7 @@ mod tests {
             .for_each(|variant| variant.variants.reverse());
         reordered.schema_discovery.projection_payloads.reverse();
         reordered.schema_discovery.result_payloads.reverse();
-        reordered.schema_discovery.sections.reverse();
-        reordered.schema_discovery.section_payloads.reverse();
+        reordered.schema_discovery.roots.reverse();
         reordered.nominal_declarations.declaration_kinds.reverse();
         reordered.nominal_declarations.member_kinds.reverse();
         assert_eq!(
@@ -8593,15 +8833,15 @@ mod tests {
             .find(|family| family.name == "definition_slot")
             .and_then(|family| family.variants.first_mut())
             .expect("definition slot variant")
-            .tag = 99;
+            .name = "changed_definition_slot".to_owned();
         assert_ne!(
             machine_schema_digest(&changed_definition_slot).expect("enum family digest"),
             digest
         );
-        let mut changed_tag = schema.clone();
-        changed_tag.requests[0].tag = changed_tag.requests[0].tag.saturating_add(1);
+        let mut changed_request = schema.clone();
+        changed_request.requests[0].name = "changed_request".to_owned();
         assert_ne!(
-            machine_schema_digest(&changed_tag).expect("tag digest"),
+            machine_schema_digest(&changed_request).expect("request digest"),
             digest
         );
         let mut changed_field = schema.clone();
@@ -8700,7 +8940,7 @@ mod tests {
             digest
         );
         for mutate in [
-            |limits: &mut BoundaryLimits| limits.maximum_frame_items += 1,
+            |limits: &mut BoundaryLimits| limits.maximum_response_frame_bytes += 1,
             |limits: &mut BoundaryLimits| limits.maximum_artifact_bytes += 1,
             |limits: &mut BoundaryLimits| limits.maximum_artifact_name_bytes += 1,
         ] {
@@ -8724,13 +8964,8 @@ mod tests {
     }
 
     #[test]
-    fn sections_reconstruct_full_and_known_digest_short_circuits_every_projection() {
+    fn roots_and_known_digest_share_one_complete_digest() {
         let schema = schema_description();
-        let sections = all_schema_sections(&schema);
-        assert_eq!(
-            reconstruct_schema_from_sections(&sections),
-            Some(schema.clone())
-        );
         let digest = machine_schema_digest(&schema).expect("digest");
         assert!(matches!(
             describe_schema(&DescribeSchemaRequest {
@@ -8742,8 +8977,8 @@ mod tests {
         ));
         for projection in [
             SchemaProjection::Manifest,
-            SchemaProjection::Sections {
-                sections: vec![SchemaSection::ErrorsAndLimits],
+            SchemaProjection::Roots {
+                roots: vec![SchemaRoot::Error, SchemaRoot::Limits],
             },
             SchemaProjection::Full,
         ] {
@@ -8759,14 +8994,15 @@ mod tests {
     }
 
     #[test]
-    fn section_requests_validate_and_project_in_canonical_order() {
-        for sections in [
+    fn root_requests_validate_and_project_in_canonical_order() {
+        for roots in [
             vec![],
-            vec![SchemaSection::RuntimeAndRun, SchemaSection::RuntimeAndRun],
+            vec![SchemaRoot::RuntimeValue, SchemaRoot::RuntimeValue],
+            SchemaRoot::ALL[..MAX_SCHEMA_ROOTS + 1].to_vec(),
         ] {
             assert!(
                 DescribeSchemaRequest {
-                    projection: SchemaProjection::Sections { sections },
+                    projection: SchemaProjection::Roots { roots },
                     known_digest: None,
                 }
                 .validate()
@@ -8774,25 +9010,35 @@ mod tests {
             );
         }
         let result = describe_schema(&DescribeSchemaRequest {
-            projection: SchemaProjection::Sections {
-                sections: vec![
-                    SchemaSection::ErrorsAndLimits,
-                    SchemaSection::IdentityAndEnvelopes,
-                ],
+            projection: SchemaProjection::Roots {
+                roots: vec![SchemaRoot::Limits, SchemaRoot::Error],
             },
             known_digest: None,
         })
-        .expect("sections");
-        let DescribeSchemaResult::Sections(result) = result else {
-            panic!("sections projection")
+        .expect("roots");
+        let DescribeSchemaResult::Roots(result) = result else {
+            panic!("roots projection")
         };
-        assert!(matches!(
-            result.sections.as_slice(),
-            [
-                SchemaSectionPayload::IdentityAndEnvelopes(_),
-                SchemaSectionPayload::ErrorsAndLimits(_)
-            ]
-        ));
+        assert_eq!(result.roots, vec![SchemaRoot::Error, SchemaRoot::Limits]);
+        assert!(
+            result
+                .definitions
+                .windows(2)
+                .all(|pair| pair[0].name < pair[1].name)
+        );
+        let names = result
+            .definitions
+            .iter()
+            .map(|definition| definition.name.as_str())
+            .collect::<BTreeSet<_>>();
+        for definition in &result.definitions {
+            assert!(
+                definition
+                    .dependencies
+                    .iter()
+                    .all(|dependency| names.contains(dependency.as_str()))
+            );
+        }
     }
 
     #[test]
@@ -8801,16 +9047,22 @@ mod tests {
         let cases = [
             ("manifest", DescribeSchemaRequest::manifest()),
             (
-                "selected_nominal_construction_sections",
+                "selected_agent_task_roots",
                 DescribeSchemaRequest {
-                    projection: SchemaProjection::Sections {
-                        sections: vec![
-                            SchemaSection::SemanticTypesAndNodes,
-                            SchemaSection::NominalDeclarations,
-                            SchemaSection::TransactionsAndExpressions,
-                            SchemaSection::QueriesAndRepair,
-                            SchemaSection::RuntimeAndRun,
-                            SchemaSection::ErrorsAndLimits,
+                    projection: SchemaProjection::Roots {
+                        roots: vec![
+                            SchemaRoot::CreateWorkspace,
+                            SchemaRoot::ApplyTransaction,
+                            SchemaRoot::QueryWorkspaceSummary,
+                            SchemaRoot::QueryNode,
+                            SchemaRoot::QueryBlockers,
+                            SchemaRoot::QueryBody,
+                            SchemaRoot::QueryIncomingUses,
+                            SchemaRoot::QueryRepairContext,
+                            SchemaRoot::QuerySemanticDiff,
+                            SchemaRoot::QueryNominalType,
+                            SchemaRoot::Run,
+                            SchemaRoot::Shutdown,
                         ],
                     },
                     known_digest: None,
@@ -8834,25 +9086,40 @@ mod tests {
         let mut sizes = Vec::new();
         for (name, request) in cases {
             let result = describe_schema(&request).expect("projection");
+            let definition_count = match &result {
+                DescribeSchemaResult::Roots(result) => Some(result.definitions.len()),
+                _ => None,
+            };
             let json = serde_json::to_vec(&result).expect("projection JSON");
-            let binary = crate::protocol::encoded_response_size(
+            let ipc_frame = encode_response(
                 RequestId::new(1),
                 &Response::DescribeSchema(Box::new(result)),
+                false,
             )
-            .expect("projection binary");
+            .expect("projection IPC JSON")
+            .len()
+                + u32::BITS as usize / 8;
             eprintln!(
-                "schema_projection_bytes name={name} json={} binary={binary}",
+                "schema_projection_bytes name={name} definitions={definition_count:?} json={} ipc_frame={ipc_frame}",
                 json.len()
             );
-            sizes.push((name, json.len(), binary));
+            sizes.push((name, definition_count, json.len(), ipc_frame));
         }
         assert!(
             sizes
                 .iter()
-                .all(|(_, json, binary)| *json > 0 && *binary > 0)
+                .all(|(_, _, json, ipc_frame)| *json > 0 && *ipc_frame > 0)
         );
-        assert!(sizes[0].1 < sizes[2].1);
-        assert!(sizes[3].1 < sizes[0].1);
+        assert_eq!(
+            sizes,
+            vec![
+                ("manifest", None, 1_241, 1_319),
+                ("selected_agent_task_roots", Some(111), 80_629, 80_707),
+                ("full", None, 124_430, 124_508),
+                ("unchanged", None, 105, 183),
+            ]
+        );
+        assert!(sizes[1].2 < 86_009);
     }
 
     fn assert_variant_payloads<const N: usize>(
@@ -8863,9 +9130,12 @@ mod tests {
         assert_eq!(
             actual
                 .iter()
-                .map(|variant| (variant.name.as_str(), variant.tag))
+                .map(|variant| variant.name.as_str())
                 .collect::<Vec<_>>(),
             expected
+                .into_iter()
+                .map(|(name, _)| name)
+                .collect::<Vec<_>>()
         );
     }
 
@@ -8877,9 +9147,12 @@ mod tests {
         assert_eq!(
             actual
                 .iter()
-                .map(|variant| (variant.name.as_str(), variant.tag))
+                .map(|variant| variant.name.as_str())
                 .collect::<Vec<_>>(),
             expected
+                .into_iter()
+                .map(|(name, _)| name)
+                .collect::<Vec<_>>()
         );
     }
 
@@ -8906,17 +9179,20 @@ mod tests {
 
     fn assert_codes<const N: usize>(actual: &[CodeDescription], expected: [(&'static str, u8); N]) {
         assert_eq!(actual.len(), N);
-        let actual: Vec<_> = actual
+        let actual = actual
             .iter()
-            .map(|code| (code.name.as_str(), code.tag))
-            .collect();
-        assert_eq!(actual, expected);
-        let mut names = std::collections::BTreeSet::new();
-        let mut tags = std::collections::BTreeSet::new();
-        assert!(
-            actual
-                .iter()
-                .all(|(name, tag)| names.insert(*name) && tags.insert(*tag))
+            .map(|code| code.name.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            actual,
+            expected
+                .into_iter()
+                .map(|(name, _)| name)
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            actual.iter().copied().collect::<BTreeSet<_>>().len(),
+            actual.len()
         );
     }
 }

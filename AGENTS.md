@@ -2,158 +2,48 @@
 
 This file governs the entire `lkjsxc/lkjscript` repository.
 
-A deeper `AGENTS.md` may narrow local procedure, but it must not weaken repository-wide requirements for semantic authority, identity, atomicity, durability, determinism, memory safety, capability safety, strict boundaries, verification, evidence, documentation truth, or architectural restraint.
+A deeper `AGENTS.md` may narrow local procedure.
+It may not weaken repository-wide requirements for semantic authority, identity, atomicity, durability, determinism, memory safety, capability safety, strict boundaries, verification, evidence, documentation truth, or architectural restraint.
 
 Use English for maintained code, tests, diagnostics, protocol fields, machine output, documentation, benchmark labels, generated descriptions, commit messages, and handoffs.
 
-Preserve unrelated work. Never reset, clean, overwrite, stage, commit, or force-push work that you did not create.
-
+Preserve unrelated work.
+Never reset, clean, overwrite, stage, commit, or force-push work that you did not create.
 Do not change remote state unless the active user task explicitly requests it.
 
 ## Mission
 
 Build `lkjscript` as a programming system designed primarily for autonomous coding agents.
 
-Humans remain first-class users at the level of intent, explanation, governance, review, operation, and product ownership. Humans are not expected to hand-author the authoritative program representation.
+Humans remain first-class users at the level of intent, explanation, governance, review, operation, and product ownership.
+Humans are not expected to hand-author the authoritative program representation.
 
-Explain the product in plain technical language:
+Use this plain explanation before specialized terminology:
 
-> An agent edits a typed, versioned program model through a local service. The service validates each proposed change, saves immutable revisions, and compiles and runs selected revisions.
+> An agent edits a typed, versioned program model through a local service. The service validates proposed changes, saves immutable revisions, and compiles and runs selected revisions.
 
-The formal name of the authoritative model is the **Semantic Program Graph** (`SPG`). Use that term where precision matters; do not require a new reader to understand graph or compiler jargon before understanding the product.
+The formal name of the authoritative model is the **Semantic Program Graph** (`SPG`).
 
-Source files are not required program authority. A future textual, visual, or imported representation may be a view, import format, or typed proposal, but it must resolve into the same authoritative model and must not become a second source of truth.
+“Graph” describes semantic entities, identity, containment, ordering, and references.
+It does not prescribe pointer-based storage, a graph database, or a specific in-memory layout.
 
-The system must remain memory-safe, deterministic at observable boundaries, failure-atomic for durable changes, strict toward untrusted input, and capable of world-class long-term runtime performance.
+Text, diagrams, generated source, and imported syntax may become useful views or proposal formats.
+They must resolve into the same authoritative semantic model.
+They must not become a second source of truth.
 
-Agent interaction cost is a first-class performance dimension. Measure it without weakening correctness.
+The system must remain memory-safe, deterministic at observable boundaries, failure-atomic for durable publication, strict toward untrusted input, and capable of world-class long-term runtime performance.
 
-## Product Vocabulary
-
-Use plain meaning first and formal terminology second.
-
-Prefer in human-facing material:
-
-- “programming system built for coding agents” before “AI-primary” or “agent-native”;
-- “typed, versioned program model” before “Semantic Program Graph”;
-- “authoritative stored form” or “source of truth” before “canonical authority”;
-- “local background service (`lkjscriptd`)” before “daemon”;
-- “named record type” before “nominal product”;
-- “variant type with a fixed set of alternatives” before “closed sum”;
-- “handles every variant” before “exhaustive match”;
-- “typed placeholder” before “hole”;
-- “fill a placeholder without changing its stable identity” before “identity-preserving refinement”;
-- “saved immutable revision” before “retained snapshot”;
-- “explicit permission value or handle” before “capability”;
-- “resource-owning or move-only value” before “ownership-bearing value.”
-
-Do not use `source-free` as the primary product label. State the positive invariant:
-
-> Program meaning is stored in a typed semantic model. Text may be an optional view or input, but it is not a second authoritative representation.
-
-Formal terms remain appropriate in specifications, executable descriptors, protocol contracts, compiler code, and focused technical discussion. Do not rename stable machine tags or internal symbols solely for cosmetic prose.
-
-Do not use “graph” as a physical-storage mandate. The SPG defines semantic entities, relations, identity, and accepted state. Maps, vectors, dense tables, indexes, databases, or other measured structures may implement that meaning.
-
-Reserve `exact` for real identity, equality, cardinality, byte, ordering, or type contracts. Define overloaded terms such as `closed`, `authority`, `projection`, `identity`, `ownership`, and `safe` on first use in human-facing text.
-
-## Product Surfaces
-
-- `README.md` is the human-first product introduction.
-- `docs/spec/` owns accepted normative semantics.
-- `docs/architecture.md` owns current component responsibility, data ownership, trusted computing base, and trust boundaries.
-- `docs/status.md` owns implemented capability and exact limitations.
-- `docs/performance.md` owns measurements, regressions, comparisons, and reversal conditions.
-- `docs/roadmap.md` owns ordered evidence gates.
-- The generic machine interface and runtime-generated contract are the primary agent-facing surfaces.
-- This file governs repository work.
-- `prompts/` contains campaign execution artifacts.
-
-Do not collapse these roles. Do not turn README into a test preamble, protocol dump, architecture memo, glossary wall, or agent operating contract. Do not turn specifications into status, status into roadmap, performance into marketing, or prompts into permanent semantic authority.
-
-Add another maintained document only when no existing fact owner can hold the information clearly.
-
-## Operating Posture
-
-The current semantic-model service is a verified baseline, not an untouchable monument.
-
-Backward compatibility is not a product requirement unless the active user explicitly requires it. Use incompatible-change freedom to keep one coherent architecture, not to create churn.
-
-Do not preserve an old API, artifact, protocol, command, schema, test, abstraction, example, term, or document merely because it exists. Do not perform a total rewrite merely because compatibility is unimportant.
-
-Replace a subsystem when the replacement is dependency-closed, materially clearer or more capable, and verified against the enduring invariants.
-
-When replacing a boundary:
-
-- replace active reader and writer together;
-- use a new unambiguous version, schema identity, tag set, or magic where needed;
-- delete displaced readers, writers, adapters, fixtures, tests, tags, and claims;
-- update the owning specification and current status in the same verified milestone;
-- retain no legacy mode, edition split, compatibility namespace, dual path, hidden fallback, or silent migration unless explicitly requested.
-
-Git history is the archive for superseded implementation. Newer active user instructions and newer verified repository state take precedence over older prompts and assumptions.
-
-Revisit a standing policy when evidence shows that a bootstrap choice was incorrectly promoted into a permanent law.
-
-## Enduring Invariants
-
-Unless explicitly replaced by the active user:
-
-1. One authoritative mutable program model exists per workspace.
-2. Published revisions are immutable.
-3. One logical service authority is the only live writer of durable workspace state.
-4. Text, JSON, diagrams, debug views, schema output, and structured drafts are transport, presentation, import, or proposal forms, never coequal program authority.
-5. Every persisted semantic entity, attribute, ownership slot, child slot, and direct reference belongs to a closed typed schema.
-6. Arbitrary property bags, arbitrary string-labelled semantic edges, and unknown semantic forms are forbidden in authoritative state.
-7. Every mutation is a typed transaction or a closed typed proposal deterministically expanded into one transaction.
-8. A successful commit publishes exactly one revision; rejection and validate-only publish nothing and consume no persistent identities.
-9. Stable identity is independent of names, source positions, hashes, compiler indexes, artifact offsets, and addresses.
-10. Persistent semantic identities are never reused.
-11. Names are lookup and presentation metadata, not identity.
-12. Derived facts never become a second mutable source of truth.
-13. Only a complete selected-entry reachable definition set may enter executable lowering.
-14. The compiler consumes an immutable revision directly.
-15. One semantic execution route exists; later tiers accelerate it rather than define competing languages.
-16. AI output is untrusted input; deterministic validators decide acceptance.
-17. Host access requires explicit typed authority.
-18. Accepted language semantics cannot express unchecked memory access.
-19. User-controlled depth must not consume unbounded native stack.
-20. Observable order is explicit and deterministic.
-21. Large results are bounded, streamed, or paginated.
-22. Durable state is acknowledged only after the documented publication contract.
-23. Corrupt, ambiguous, unsupported, or partially published durable state rejects rather than being guessed into validity.
-24. Human-facing claims remain no stronger than implemented and reproduced evidence.
-25. Compactness never weakens typing, validation, identity, or error precision.
-26. Performance optimization preserves a simple correctness oracle.
-27. Representative applications discover missing capabilities; they do not justify speculative platforms.
-
-These invariants outrank the current module layout, protocol version, artifact format, process topology, data structure, memory-management technique, and implementation language.
-
-## Invariant, Baseline, or Open Choice
-
-Classify material architecture claims as one of:
-
-- enduring invariant;
-- accepted semantic contract;
-- current verified baseline;
-- operational policy;
-- evidence-gated choice;
-- historical fact.
-
-Current baselines include stable Rust, one package, Linux x86-64, synchronous local IPC, immutable full-revision artifacts, full snapshot cloning, full recomputation, scan-based queries, one verified Core IR, an explicit-frame interpreter, flat cells for current values, and no source parser, heap, effects, native backend, or request concurrency.
-
-A baseline is not an eternal prohibition.
-
-Evidence-gated choices include text or visual frontends, physical storage, indexes, caches, journals, databases, pruning, async handling, process isolation, native backends, package infrastructure, cross-platform support, self-hosting, and memory-management strategy.
-
-Do not select or forbid one of these merely to make the architecture sound complete. Record the current consumer, evidence, safety obligations, and reversal condition when selecting one.
+Agent interaction cost is a first-class engineering dimension.
+Measure it without weakening correctness.
 
 ## Authority Order
 
-1. Active user task.
-2. Root `AGENTS.md`.
-3. Active campaign prompt.
-4. Accepted files under `docs/spec/`.
+Use this order when active artifacts disagree:
+
+1. The active user task.
+2. This root `AGENTS.md`.
+3. The active campaign prompt.
+4. Accepted normative files under `docs/spec/`.
 5. Executable contracts and focused invariant tests.
 6. Machine descriptions derived from executable contracts.
 7. `docs/status.md`.
@@ -163,21 +53,133 @@ Do not select or forbid one of these merely to make the architecture sound compl
 11. `README.md`.
 12. Comments, examples, old prompts, old commits, issues, discussions, and historical documents.
 
-A prompt controls campaign sequence but does not silently redefine accepted semantics. When a campaign changes semantics, update the owning specification in the same milestone. When active artifacts disagree, repair the fact owner rather than adding a third authority.
+A campaign prompt controls sequence and scope.
+It does not silently redefine accepted semantics.
+When a campaign changes semantics, update the owning specification in the same verified milestone.
+
+Newer active instructions and newer verified repository state outrank older prompts and assumptions.
 
 ## Fact Ownership
 
-- Program model, identity, history, transactions, artifacts: `docs/spec/semantic-graph.md` and executable contracts.
-- Language types, operations, control, effects, ownership, execution: `docs/spec/language.md` and operation contracts.
-- Daemon, framing, JSON, cursors, machine description: `docs/spec/protocol.md` and protocol/projection types.
-- Components, trusted computing base, trust boundaries: `docs/architecture.md`.
-- Implemented reality: `docs/status.md`.
-- Measurements: `docs/performance.md`.
-- Future gates: `docs/roadmap.md`.
-- Human explanation: `README.md`.
-- Repository procedure: this file.
+Keep one owner for each maintained fact:
 
-Do not maintain duplicate status catalogues, glossaries, version registries, roadmaps, or architecture inventories. Generated machine descriptions derive from executable contracts; do not commit a hand-maintained schema copy.
+- `docs/spec/semantic-graph.md`: authoritative model, identity, revisions, transactions, history, and artifacts.
+- `docs/spec/language.md`: types, operations, control, effects, ownership, and execution semantics.
+- `docs/spec/protocol.md`: local service transport, machine requests, responses, schema discovery, framing, and cursors.
+- `docs/architecture.md`: component responsibility, trusted computing base, and trust boundaries.
+- `docs/status.md`: exactly what the current checkout implements and does not implement.
+- `docs/performance.md`: measurements, comparisons, regressions, and reversal conditions.
+- `docs/roadmap.md`: ordered evidence gates.
+- `README.md`: human-first product explanation and runnable entry points.
+- This file: repository-wide operating policy.
+- `prompts/`: campaign execution artifacts, not permanent semantic authority.
+
+Do not maintain duplicate status catalogues, glossaries, version registries, roadmaps, schema copies, or architecture inventories.
+
+Generated machine descriptions must derive from executable contracts.
+Do not commit a hand-maintained duplicate schema.
+
+## Enduring Invariants
+
+The following requirements outrank the current module layout, protocol version, artifact format, process topology, storage engine, runtime representation, memory-management technique, and implementation language.
+
+1. Program meaning has one authoritative typed semantic model.
+2. Published revisions are immutable.
+3. Durable publication has one unambiguous logical commit authority per durable namespace.
+4. Current single-head and single-writer mechanics are baselines, not eternal bans on branches, multiple clients, or isolated workers.
+5. Any future branch, merge, replica, or worker design must preserve explicit parentage, deterministic conflict semantics, and freedom from split-brain authority.
+6. Text, JSON, diagrams, generated source, structured drafts, caches, indexes, Core IR, and machine code are views, proposals, or derived state, never coequal program authority.
+7. Every persisted semantic entity, attribute, ownership slot, child slot, and direct reference belongs to a closed typed schema.
+8. Arbitrary property bags, arbitrary string-labelled semantic edges, and unknown semantic forms are forbidden in authoritative state.
+9. Every mutation is a typed transaction or a closed typed proposal deterministically expanded into one transaction.
+10. A successful commit publishes exactly one accepted revision.
+11. Rejection and validate-only publish nothing and consume no persistent identities.
+12. Stable identity is independent of names, source positions, hashes, compiler indexes, artifact offsets, memory addresses, and physical storage keys.
+13. Persistent semantic identities are never reused within their defined identity domain.
+14. Names are lookup and presentation metadata, not identity.
+15. Identity-preserving change exists only where an accepted continuity rule defines it.
+16. Derived facts never become a second mutable source of truth.
+17. Only a complete selected-entry reachable definition set may enter executable lowering.
+18. The compiler consumes an immutable revision directly.
+19. One semantic execution route defines behavior.
+20. Later interpreters, JITs, AOT backends, or native workers accelerate that route rather than define competing languages.
+21. AI output is untrusted input.
+22. Deterministic validators decide acceptance.
+23. Host access requires explicit typed authority.
+24. Accepted language semantics cannot express unchecked memory access.
+25. User-controlled depth must not consume unbounded native stack.
+26. Observable order is explicit and deterministic.
+27. Potentially large results are bounded, streamed, or paginated.
+28. Durable state is acknowledged only after the documented publication contract.
+29. Corrupt, ambiguous, unsupported, or partially published durable state rejects rather than being guessed into validity.
+30. Human-facing claims remain no stronger than implemented and reproduced evidence.
+31. Compactness never weakens typing, validation, identity, authorization, or error precision.
+32. Performance optimization preserves a simple correctness oracle.
+33. Representative applications discover missing capabilities.
+34. Representative applications do not justify speculative platforms.
+35. Backward compatibility is not a product requirement unless the active user explicitly requires it.
+36. Incompatible-change freedom is used to maintain one coherent path, not to create churn or parallel legacy paths.
+
+## Invariant, Contract, Baseline, or Open Choice
+
+Classify material claims as one of:
+
+- enduring invariant;
+- accepted semantic contract;
+- current verified baseline;
+- operational resource policy;
+- evidence-gated choice;
+- historical fact.
+
+Do not promote a bootstrap absence into an eternal prohibition.
+
+Current verified baselines may include stable Rust, one package, Linux x86-64, local IPC, immutable full-revision artifacts, full snapshot cloning, full recomputation, scan-based queries, one Core IR, an explicit-frame interpreter, flat cells, and no effects or managed heap.
+
+These are not permanent architecture mandates.
+
+Evidence-gated choices include:
+
+- text and visual frontends;
+- physical storage layout;
+- journals, databases, and chunk stores;
+- indexes and caches;
+- history pruning and compaction;
+- concurrent requests;
+- multiple branch heads;
+- process isolation;
+- package infrastructure;
+- cross-platform support;
+- self-hosting;
+- managed heaps;
+- reference counting;
+- affine resources;
+- regions;
+- tracing collection;
+- stable handles;
+- native backends;
+- JIT or AOT compilation.
+
+Select or reject an evidence-gated choice only after naming its consumer, safety obligations, correctness oracle, measured benefit, implementation cost, and reversal condition.
+
+## Operating Posture
+
+The current semantic-model service is a verified baseline, not an untouchable monument.
+
+Do not restore displaced source-oriented authority.
+
+Do not perform a total rewrite merely because compatibility is unimportant.
+
+Replace a subsystem when the replacement is dependency-closed, materially clearer or more capable, and verified against the enduring invariants.
+
+When replacing an active boundary:
+
+- replace every active reader and writer together;
+- use a new unambiguous version, schema identity, tag set, or magic when old bytes would be ambiguous;
+- delete displaced readers, writers, adapters, fixtures, tests, tags, and claims;
+- update the owning specification and current status in the same milestone;
+- retain no legacy mode, edition split, compatibility namespace, dual path, hidden fallback, or silent migration unless explicitly requested.
+
+Git history is the archive for superseded implementation.
 
 ## Source-Independent Authority
 
@@ -185,152 +187,358 @@ The invariant is source independence, not hostility toward text.
 
 An agent must be able to construct, inspect, revise, validate, compile, execute, package, and debug without preserving or round-tripping source files.
 
-A future frontend may import text, render explanatory source, provide a human editing or diff view, attach documentation metadata, or exchange code with another ecosystem. It may not bypass validation, allocate persistent identities independently, own mutable semantic state, persist a parallel AST as coequal authority, make formatting or source position identity, or require render-and-reparse for normal agent editing.
+A future frontend may:
 
-Do not promise that lkjscript will never have source syntax. Promise that source syntax will not become a second authoritative program.
+- import text;
+- render explanatory source;
+- provide a human review or diff view;
+- attach documentation metadata;
+- exchange code with another ecosystem;
+- generate a compact proposal.
 
-## Semantic Model
+It may not:
+
+- bypass validation;
+- allocate persistent identities independently;
+- own mutable semantic state;
+- persist a parallel AST as coequal authority;
+- make formatting or source position identity;
+- require render-and-reparse for normal semantic editing.
+
+Do not promise that lkjscript will never have syntax.
+Promise that syntax will not become a second authoritative program.
+
+## Semantic Model and Identity
 
 The SPG is a closed typed semantic model, not a generic property graph.
 
-Each semantic kind has explicit attributes, owner rules, ordered child slots, reference slots, operands, results, cardinality, completeness, continuity, deletion, and lowering obligations.
+Each semantic kind has explicit:
 
-Unknown schema elements reject. Do not preserve unknown fields for hypothetical forward compatibility. Evolve through explicit version replacement.
+- attributes;
+- owner rules;
+- ordered child slots;
+- direct reference slots;
+- operands and results;
+- cardinality;
+- completeness;
+- continuity;
+- deletion behavior;
+- lowering obligations.
 
-One code-owned contract should provide facts to validators, codecs, queries, machine descriptions, history checks, and lowering where practical. Do not introduce runtime registration for a closed vocabulary or a general graph framework when a direct type or static descriptor is sufficient.
+Unknown schema elements reject.
+Do not preserve unknown semantic fields for hypothetical forward compatibility.
+Evolve through explicit direct replacement.
+
+Use one code-owned contract to provide facts to validators, codecs, queries, machine descriptions, history checks, and lowering where practical.
+
+Do not introduce runtime registration for a closed vocabulary.
+Do not introduce a general graph framework when direct types and static descriptors are sufficient.
 
 Physical traversal order is not observable unless the semantic contract defines it.
 
-## Identity, History, and Incompleteness
+A workspace owns a persistent semantic identity domain.
+Allocation is monotonic under the current contract.
+Rejected and validate-only proposals leave the published frontier unchanged.
+Deleted identities are never reassigned.
 
-A workspace owns one persistent semantic identity domain. Allocation is monotonic. Rejected and validate-only proposals leave the published frontier unchanged. Deleted identities are never reassigned.
+Rename preserves identity.
+Replacement creates new identity unless an accepted continuity rule says otherwise.
+Do not generalize one valid refinement into unrestricted semantic morphing.
 
-Rename preserves identity. A compatible edit preserves identity only when an accepted continuity rule defines it. Replacement creates new identity unless a specific refinement or movement rule says otherwise. Do not generalize one valid transition into unrestricted morphing.
+Hashes identify bytes and cache inputs.
+Dense compiler and runtime indexes remain private.
 
-Structured authoring assigns staged identities in a deterministic documented order. Draft-local handles never become persistent identity. Hashes identify bytes and derived cache inputs, not mutable semantic entities. Dense compiler and runtime indexes remain private.
+Full retention of every artifact and physical tombstone is a current persistence strategy.
+Future pruning or compaction requires:
 
-Identity non-reuse and unambiguous retained history are enduring. Full retention of every artifact and physical tombstone is a current persistence strategy. Future pruning or compaction requires an explicit retention contract, reproducible current state, non-reuse proof, exact failure behavior, and a direct cutover.
+- an explicit retention contract;
+- reproducible current state;
+- non-reuse proof;
+- exact historical-query behavior;
+- exact failure behavior;
+- one direct cutover.
 
-Incomplete programs are valid semantic states. Use typed placeholders or exact missing-definition states. A placeholder remains queryable and blocks execution only when reachable from the selected entry.
+Incomplete programs are valid semantic states.
+Use typed placeholders or exact missing-definition states.
+An incomplete definition blocks execution only when reachable from the selected entry.
 
-When refinement promises identity preservation, preserve the target ID, owner, body position, output identity, and existing uses as specified. Final validation still checks scope, visibility, dominance, type, effect, ownership, region role, and result index.
+Repair context is deterministic typed data.
+Models remain outside the correctness authority path.
 
-Repair context is deterministic typed data. It may include target contract, owner chain, body context, visible values and definitions, incoming uses, legal constructors, blockers, and resource or permission facts. The service derives correctness-critical facts; models remain outside the authority path.
+## Transactions and Structured Proposals
 
-## Transactions and Structured Authoring
+Every mutation names:
 
-Every mutation names one workspace, one exact base revision, commit or validate-only mode, an optional idempotency key where supported, an ordered closed batch, and a bounded response selection.
+- one workspace;
+- one exact base revision or accepted parent relation;
+- commit or validate-only mode;
+- an optional idempotency key where supported;
+- an ordered closed proposal;
+- a bounded response selection.
 
-A successful commit logically validates the envelope, resolves staged identities, expands structured proposals, applies ordered edits, validates the final model and history, derives deterministic change facts, constructs and preflights a bounded response, preflights durable bytes, durably publishes revision and head, publishes memory state, and returns the preflighted receipt.
+A successful commit logically:
 
-A rejected transaction changes none of these states. Do not partially publish, consume IDs on rejection, or guess repairs. Return structured rejection facts. Validate-only follows the same preparation and preflight route, then publishes nothing.
+1. validates the envelope;
+2. resolves draft-local references;
+3. expands structured proposals;
+4. applies ordered edits;
+5. validates the final model and history;
+6. derives deterministic change facts;
+7. constructs and preflights a bounded response;
+8. preflights durable bytes;
+9. durably publishes the accepted revision and authoritative head metadata;
+10. publishes in-memory state;
+11. returns the preflighted receipt.
 
-A structured authoring payload may remove repeated canonical scaffolding. It is a closed typed proposal, not source code, a persisted AST, or a second authority. The service expands it into the same semantic entities as fine-grained operations; final validation remains authoritative.
+A rejected transaction changes none of those states.
 
-Test expansion order, allocation, returned bindings, rollback, nesting, and rejection. Do not keep two equally preferred creation paths. Retain fine-grained edits only for real maintenance workflows such as rename, insertion, deletion, operand replacement, body replacement, and placeholder refinement.
+A structured authoring payload may remove repeated canonical scaffolding.
+It is a closed typed proposal.
+It is not persisted as a second program representation.
+Final semantic validation remains authoritative.
 
-Do not add a macro language, template engine, rewrite language, or parser for one convenience case.
+Prefer one semantically meaningful proposal over repeated transport-level setup operations.
 
-## Receipts, Diffs, and Queries
+Retain fine-grained edits for real maintenance workflows such as rename, insertion, deletion, operand replacement, body replacement, and typed placeholder refinement.
 
-The default mutation receipt is compact and bounded. It may contain workspace, revisions, snapshot hash, publication status, total created count, selected bindings, change count and fingerprint, and bounded completeness facts.
+Do not add a macro language, rewrite language, parser, or template engine for one convenience case.
 
-Do not return every allocation or a full diff by default. Derive full diffs from saved revisions. Diff and query order is deterministic. Large results are paginated or streamed. Cursors bind workspace, revision, target, purpose, and position strongly enough to prevent cross-use.
+## Agent-Facing Interface
 
-Queries are pure over immutable revisions unless they explicitly compare revisions. Correct full recomputation remains the oracle until a measured optimized path exists.
+The external coding agent is the primary program author.
 
-A cache or reverse index requires measured repeated cost, exact invalidation, differential tests, memory accounting, durability classification, and a deletion condition.
+The public machine interface is a product surface, not an incidental serialization detail.
 
-Compact results are default; exact expansion is explicit. Independent reads may share one revision-bound batch. Do not combine reads and mutation into an ambiguous atomic request.
+It should provide:
+
+- a closed executable contract;
+- stable names and IDs;
+- compact discovery;
+- exact on-demand expansion;
+- revision-bound read batches;
+- semantically meaningful structured proposals;
+- selected returned bindings;
+- compact receipts;
+- deterministic typed errors;
+- legal constructors;
+- visible values and definitions;
+- bounded repair context;
+- paginated diffs;
+- exact run values;
+- digest-based unchanged responses where useful.
+
+A low-level node-by-node API is not agent-friendly merely because it uses typed JSON.
+
+Do not require agents to author private compiler indexes, CFG predecessor lists, phi nodes, block layout, artifact offsets, checksums, publication records, cache keys, or durability metadata.
+
+Prefer standard, inspectable control-plane representations until measurements justify custom transport.
+
+One logical request and response type vocabulary should serve the CLI, local service, tests, and machine description.
+
+A custom binary control protocol is not an enduring goal.
+Retain or introduce one only when measured latency, throughput, memory, or isolation needs outweigh duplicate codecs, schema surface, test burden, and agent search cost.
+
+Do not invent a compact syntax from intuition.
+
+Evaluate interface changes with controlled agent tasks and deterministic success oracles.
+
+Measure:
+
+- policy and documentation bytes;
+- machine-contract bytes;
+- request and response bytes;
+- provider-reported tokens when available;
+- tool calls;
+- round trips;
+- process launches;
+- failed proposals;
+- repeated discovery;
+- repository searches;
+- files opened;
+- context reconstruction;
+- selected bindings;
+- elapsed task time;
+- implementation size;
+- build and verification cost.
+
+Bytes are not tokens.
+Tokens are not correctness.
+Do not claim API-cost savings without provider telemetry or a clearly labelled proxy.
+
+Do not reduce cost by weakening validation, skipping rejection tests, hiding limitations, or avoiding final verification.
+
+## Protocol and Untrusted Boundaries
+
+Treat CLI input, IPC frames, structured proposals, artifacts, head metadata, cursors, runtime values, imports, packages, caches, native images, permission handles, and FFI values as untrusted or potentially corrupt.
+
+Every boundary defines:
+
+- version or schema identity;
+- framing;
+- length and count checks;
+- numeric domains;
+- canonical IDs;
+- unknown-form policy;
+- trailing-data policy;
+- allocation and depth policy;
+- error correlation;
+- output bounds;
+- timeout or cancellation behavior;
+- failure behavior.
+
+Unknown forms reject.
+
+Use closed DTOs or direct closed types.
+Do not deserialize semantic requests into arbitrary property bags.
+
+Machine stdout contains one structured response.
+Human diagnostics belong on stderr or in a presentation layer.
+
+Protocol replacement is direct when compatibility is not required.
+Do not retain old success readers.
+
+Persistent formats require unambiguous magic or schema identity, explicit version, canonical order, checked counts, strict trailing policy, bounded decoding, no Rust-layout dependency, no pointers, no private compiler IDs, and deterministic content identity.
+
+A commit is acknowledged only after the documented crash contract.
+If outcome becomes unknowable, stop the writer rather than continue with ambiguous authority.
 
 ## Memory Safety
 
-Memory safety is an enduring product requirement. Do not reduce it to one implementation technique.
+Memory safety is an enduring product requirement.
+Do not reduce it to one implementation technique.
 
-Valid language and runtime use must prevent use-after-free, double free, invalid pointer dereference, out-of-bounds access, uninitialized reads, type confusion, data races, invalid aliasing assumptions, use-after-move, and duplicated ownership or double close of exclusive resources when such resources exist.
+Valid language and runtime use must prevent:
 
-Malformed requests, artifacts, runtime values, future packages, caches, or native images may reject. They must not corrupt durable state, violate memory safety, allocate without checked bounds, consume unbounded native stack, or continue after authority becomes ambiguous.
+- use-after-free;
+- double free;
+- invalid pointer dereference;
+- out-of-bounds access;
+- uninitialized reads;
+- type confusion;
+- data races;
+- invalid aliasing assumptions;
+- use-after-move;
+- duplicated ownership;
+- double close of exclusive resources.
 
-Keep the strongest practical package-wide prohibition on local unsafe Rust. The current `unsafe_code = "forbid"` policy is intentional and must not be weakened as collateral.
+Malformed requests, artifacts, runtime values, packages, caches, and native images may reject.
+They must not corrupt durable state, violate memory safety, allocate without checked bounds, consume unbounded native stack, or continue after authority becomes ambiguous.
 
-If a future high-value boundary genuinely requires unsafe code:
+Keep package-wide `unsafe_code = "forbid"`.
 
-1. prove that a safe implementation or mature safe dependency is inadequate;
-2. isolate it in the narrowest dedicated module, crate, process, or generated boundary;
+Do not weaken it in ordinary campaigns.
+
+A future high-value unsafe boundary requires explicit active-task authorization and must:
+
+1. prove safe implementation or a mature safe dependency is inadequate;
+2. isolate unsafe code in the narrowest dedicated crate, process, generated boundary, or module;
 3. document the complete safety invariant;
-4. minimize the callable surface;
+4. minimize its callable surface;
 5. validate before entry;
-6. add success, rejection, lifetime, aliasing, overflow, and concurrency tests as applicable;
+6. test success, rejection, lifetime, aliasing, overflow, and concurrency behavior as applicable;
 7. use Miri, sanitizers, fuzzing, differential checks, or platform tools where applicable and available;
 8. record trusted assumptions and environment limits;
-9. keep safe code as the public default;
-10. obtain explicit active-task authorization.
+9. keep safe code as the public default.
 
-Do not claim that “written in Rust” is a proof. The trusted computing base includes the compiler, standard library, operating system, dependencies, generated code, and future foreign or native boundaries. Record material changes in architecture documentation.
+“Written in Rust” is not a proof.
 
-Audit dependencies for current consumer, unsafe or native surface, build scripts, platform behavior, and maintenance. Do not add a dependency merely to avoid a small safe helper, and do not casually reimplement mature cryptography or platform primitives.
+The trusted computing base includes the compiler, standard library, build tooling, operating system, dependencies, generated code, native code, and foreign boundaries.
 
-## Memory Management
+Audit each dependency for:
+
+- current consumer;
+- unsafe and native surface;
+- build scripts;
+- transitive cost;
+- platform behavior;
+- maintenance;
+- security history;
+- license;
+- replacement cost.
+
+Do not casually reimplement mature cryptography or platform primitives.
+Do not add a dependency merely to avoid a small safe helper.
+
+## Memory Management and Resource Ownership
 
 Do not prescribe one universal memory-management mechanism before real workloads require it.
 
-Keep ordinary immutable values simple and unboxed where practical. When sharing, mutation, cycles, external resources, large objects, concurrency, or foreign interoperation become real requirements, compare inline values, moves, affine resources, regions, reference counting, tracing collection, stable handles, copy-on-write, explicit managed objects, and hybrids.
+Keep ordinary immutable values simple and unboxed where practical.
 
-Evaluate memory safety, deterministic cleanup, cycles, sharing, mutable identity, concurrency, pause tails, throughput, peak memory, fragmentation, compiler and runtime complexity, agent burden, diagnostics, FFI, optimization, cancellation, and failure behavior.
+When sharing, mutation, cycles, external resources, large objects, concurrency, or foreign interoperation become real requirements, compare:
 
-Do not reject tracing collection as ideology. Do not adopt it by default for one prototype. Do not force borrow proofs for ordinary immutable values when the compiler can derive or avoid them. Do not hide exclusive external-resource cleanup behind nondeterministic finalization.
+- inline values;
+- moves;
+- affine resources;
+- regions;
+- reference counting;
+- tracing collection;
+- stable handles;
+- copy-on-write;
+- explicit managed objects;
+- hybrids.
 
-Choose semantics by data class when that is smaller and safer than one universal rule. The current flat-cell interpreter is a verified implementation of current value semantics, not the final heap model.
+Evaluate:
 
-## Resource, Capability, and Effect Safety
+- memory safety;
+- deterministic cleanup;
+- cycles;
+- sharing;
+- mutable identity;
+- concurrency;
+- pause tails;
+- throughput;
+- peak memory;
+- fragmentation;
+- compiler complexity;
+- runtime complexity;
+- agent burden;
+- diagnostics;
+- FFI;
+- optimization;
+- cancellation;
+- failure behavior.
 
-Memory safety and resource exhaustion are different. A memory-safe program may request too much memory, fuel, time, output, storage, or recursion. Represent exhaustion as a structured result and check budgets before allocation, copy, publication, or irreversible action where practical.
+Do not reject tracing collection as ideology.
+Do not adopt it by default for one prototype.
+Do not force borrow proofs for ordinary immutable values when the compiler can derive or avoid them.
+Do not hide exclusive external-resource cleanup behind nondeterministic finalization.
 
-Name the boundary protected by each limit. Do not describe operational policy as language meaning. Every implementation is finite; expose limits honestly, avoid arbitrary small ceilings, and prefer pagination, streaming, chunking, staged transactions, and explicit policy.
+Choose semantics by data class when that is smaller and safer than one universal rule.
 
-Pure semantics precede host effects. When effects are introduced, each host operation owns its operands, results, effect class, required permission, resource ownership, cancellation, blocking, failure, accounting, replay semantics, and isolation requirement.
+The current flat-cell runtime is a verified implementation baseline, not the final heap model.
 
-Do not grant filesystem, network, process, terminal, database, clock, entropy, device, environment, or foreign-memory access implicitly. Resource ownership and permission are distinct: specify each.
+Memory safety, resource exhaustion, resource ownership, deterministic cleanup, aliasing, concurrency safety, and permission security are separate contracts.
 
-Do not claim sandboxing that is not implemented. Prefer a supervised worker when native, foreign, or effectful execution cannot be contained safely in the service address space.
+## Effects, Capabilities, and Isolation
 
-## Protocol, Persistence, and Untrusted Boundaries
+Pure semantics precede host effects.
 
-Treat CLI input, binary IPC, structured proposals, artifacts, head metadata, cursors, runtime values, and future imports, packages, caches, native images, capability handles, and FFI values as untrusted or potentially corrupt.
+When an effect is introduced, define:
 
-Every boundary has an explicit version or schema identity, length and count checks, numeric domains, canonical IDs, unknown-form policy, trailing-data policy, allocation and depth policy, error correlation, output bound, and failure behavior.
+- operands;
+- result;
+- effect class;
+- required permission;
+- resource ownership;
+- cleanup;
+- cancellation;
+- blocking behavior;
+- failure domain;
+- accounting;
+- replay semantics;
+- isolation requirement.
 
-Unknown forms reject. Do not deserialize semantic requests into arbitrary property bags. Use closed DTOs or direct closed types with exhaustive conversion.
+Do not grant filesystem, network, process, terminal, database, clock, entropy, device, environment, or foreign-memory access implicitly.
 
-Machine stdout contains one structured response. Human diagnostics belong on stderr or a presentation layer. Protocol replacement is direct when compatibility is not required; do not retain old success readers.
+Resource ownership and permission are distinct.
+Specify both.
 
-Each saved revision is immutable. Durable head metadata identifies the authoritative revision and bounded publication metadata; never store a full graph dump, full diff, request body, or unbounded allocation map there.
+Do not claim sandboxing that is not implemented.
 
-Persistent formats require unambiguous magic or schema identity, explicit version, canonical order, fixed endianness where binary, checked counts, corruption detection, deterministic content identity, strict trailing policy, bounded decoding, no Rust-layout dependency, no pointers, no private compiler IDs, and no mutable cache truth.
+Prefer a supervised worker when native, foreign, or effectful execution cannot be contained safely in the service address space.
 
-A commit is acknowledged only after the documented crash contract. Failure injection covers publication. If outcome becomes unknowable, stop the writer rather than continue with ambiguous authority.
-
-Full artifact rewrite and full history remain acceptable baselines until measured pressure justifies a journal, chunk store, database, compaction, or pruning.
-
-## Agent-Facing Interface and Cost
-
-The external coding agent is the primary program author. The machine interface should minimize semantic guesswork, repeated discovery, and transport scaffolding.
-
-Provide a closed machine contract derived from executable definitions, stable names and IDs, compact discovery, explicit expansion, revision-bound read batches, structured authoring, selected bindings, compact receipts, deterministic typed errors, legal constructors, visible values and definitions, repair context, paginated diffs, exact run values, and fingerprint-based unchanged responses where useful.
-
-A low-level node-by-node API is not agent-friendly merely because it uses typed JSON. Prefer one semantically meaningful proposal over repeated setup operations when deterministic expansion and final validation remain authoritative.
-
-Do not require an agent to author private compiler indexes, CFG predecessor lists, phi nodes, block layout, artifact offsets, checksums, publication records, cache keys, or durability metadata.
-
-Do not invent a compact syntax from intuition. Compare ambiguity, parser complexity, discoverability, bytes, provider-reported tokens when available, tool calls, failed proposals, diagnostics, implementation size, and evolution cost.
-
-Measure agent cost through policy and documentation bytes, machine-contract bytes, request and response bytes, round trips, CLI launches, failed proposals, repeated discovery, repository searches, files opened, context reconstruction, selected bindings, full scans, build and verification latency, elapsed task time, and provider-reported tokens and cost when genuinely available.
-
-Bytes are not tokens. Tokens are not correctness. Do not claim token or API-cost savings from byte counts. When telemetry is unavailable, report direct evidence without extrapolation.
-
-Reduce cost through plain terminology, a non-repetitive root policy, exact fact ownership, runtime contract discovery, fingerprint reuse, task-scoped projection when measured, selected bindings, batch reads, bounded context, deterministic errors, stable IDs, focused checks, and compact handoffs.
-
-Do not reduce cost by weakening validation, skipping rejection tests, hiding limitations, or avoiding final verification.
+Do not silently retry effectful execution in another engine after effects begin.
 
 ## Compiler and Runtime
 
@@ -340,89 +548,281 @@ The semantic route is:
 immutable program revision
     -> completeness and semantic validation
     -> deterministic reachable definitions
-    -> compact private Core IR
-    -> independent Core IR verification
+    -> private executable IR
+    -> independent IR verification
     -> interpreter or later acceleration tier
 ```
 
-Core IR is derived state and is not persisted as semantic authority. Dense IDs and locality-oriented layouts remain private. Lowering is deterministic at observable boundaries. Verify executable IR before execution.
+Executable IR is derived state.
+It is not persisted as program authority.
 
-The interpreter remains the complete semantic oracle during bootstrap. A future native tier is differential-tested against it. Agents author structured semantics, not CFG mechanics. Optimization failure cannot redefine validity.
+Dense IDs and locality-oriented layouts remain private.
 
-An acceleration tier may decline before execution and fall back to the same verified route. Do not silently restart effectful execution in another engine after effects begin.
+The interpreter remains the complete semantic oracle during bootstrap.
 
-Runtime traps, domain failure, permission denial, and resource exhaustion are distinct structured outcomes. Calls, recursion, branches, loops, aggregate traversal, decoding, and user-scalable control must not recurse through the Rust stack according to user depth.
+A future native tier is differential-tested against the oracle.
 
-Use explicit frames, work stacks, queues, or iterative algorithms. Use static layouts where semantics permit. Avoid universal boxing and unaccounted large-value copying without measured need. Keep move, copy, drop, layout, and capability rules explicit before optimization.
+Agents author structured semantics, not CFG mechanics.
 
-A budget failure must not mutate program revisions or corrupt service state. A dropped response must not make committed authority ambiguous.
+Optimization failure cannot redefine validity.
+
+Runtime traps, domain failure, permission denial, cancellation, and resource exhaustion are distinct structured outcomes.
+
+Calls, recursion, branches, loops, aggregate traversal, decoding, validation, and user-scalable control must not recurse through the Rust stack according to user depth.
+
+Use explicit frames, work stacks, queues, or iterative algorithms.
+
+Avoid universal boxing and unaccounted large-value copying without measured need.
+
+Keep copy, move, drop, layout, ownership, and permission rules explicit before optimization.
 
 ## Determinism
 
-Deterministic observable facts include acceptance or rejection, persistent ID allocation, structured expansion, diff order, change fingerprints, query order, repair-context selection, artifact bytes, snapshot identity, reachable-definition order, Core IR lowering, interpreter result, public collection order, and diagnostic target selection.
+Deterministic observable facts include:
 
-Internal scheduling, hash placement, allocator addresses, process IDs, and filesystem enumeration may vary when not observable semantics.
+- acceptance or rejection;
+- persistent identity allocation;
+- structured expansion;
+- parent revision selection;
+- diff order;
+- change fingerprints;
+- query order;
+- repair-context selection;
+- artifact bytes;
+- snapshot identity;
+- reachable-definition order;
+- executable lowering;
+- interpreter result;
+- public collection order;
+- diagnostic target selection.
 
-Use semantic order where already defined; otherwise use ordered collections or explicit sorting at public boundaries. Test insertion-order variation where practical. Do not pay unnecessary global sorting cost for facts already in semantic order.
+Internal scheduling, hash placement, allocator addresses, process IDs, and filesystem enumeration may vary when they are not observable semantics.
+
+Use semantic order where defined.
+Otherwise sort or use ordered collections at public boundaries.
+
+Test insertion-order variation where practical.
+
+Do not pay unnecessary global sorting cost for facts already in semantic order.
+
+## Persistence, Branching, and Concurrency
+
+Full artifact rewrite, full history, full snapshot cloning, one head, one request per connection, and synchronous handling are current baselines.
+
+They are not enduring requirements.
+
+A journal, chunk store, database, compaction scheme, branch graph, merge operation, concurrent read service, parallel compiler, or worker pool requires a named workload and explicit invariants.
+
+Any future branch or merge design must define:
+
+- revision parentage;
+- identity domains;
+- allocation behavior;
+- conflict detection;
+- semantic merge rules;
+- deterministic ordering;
+- publication atomicity;
+- retained-history behavior;
+- query semantics;
+- garbage-collection or pruning behavior;
+- failure recovery.
+
+Any future concurrency design must define:
+
+- authority serialization;
+- snapshot isolation;
+- cancellation;
+- backpressure;
+- resource accounting;
+- deterministic externally observable behavior;
+- safe shutdown;
+- failure containment.
+
+Do not add async or concurrency because it sounds modern.
+Do not forbid it because the bootstrap is synchronous.
 
 ## Performance Evidence
 
-Long-term runtime performance is a first-class objective. Ambition is not a current claim.
+Long-term runtime performance is a first-class objective.
+Ambition is not a current claim.
 
-Measure representative end-to-end workloads before replacing a baseline. Relevant observations include clean and incremental build, verification, dependencies and target size, binaries, service start and restart, workspace creation, transaction preparation and commit, queries, machine-contract discovery, structured expansion, reachable-definition construction, Core IR lowering and verification, interpreter throughput, runtime memory, artifact growth, and native tiers when introduced.
+Measure representative end-to-end workloads before replacing a baseline.
 
-Record commit, dirty state, hardware, OS, toolchain, build mode, workload, input, output oracle, warmup, samples, statistic, tails, memory when available, and environment limits.
+Record:
 
-Label a single observation and a microbenchmark honestly. Do not calculate regression ratios between unequal workloads as equal-work comparisons.
+- starting commit and dirty state;
+- hardware;
+- operating system;
+- toolchain;
+- build mode;
+- workload;
+- input;
+- output oracle;
+- warmup;
+- sample count;
+- statistic;
+- tails;
+- memory when available;
+- environment limits.
 
-Keep a simple correctness implementation or differential oracle when optimizing. An index, cache, journal, database, async runtime, native backend, allocator, or memory manager needs a named consumer, before/after evidence, and a reversal condition.
+Relevant observations include:
+
+- clean and incremental build;
+- verification;
+- dependencies and target size;
+- binaries;
+- service start and restart;
+- workspace creation;
+- transaction preparation and commit;
+- queries;
+- machine-contract discovery;
+- structured expansion;
+- reachable-definition construction;
+- IR lowering and verification;
+- interpreter throughput;
+- runtime memory;
+- artifact growth;
+- agent interaction cost;
+- native tiers when introduced.
+
+Label single observations and microbenchmarks honestly.
+
+Do not calculate regression ratios between unequal workloads as if they were equal-work comparisons.
+
+An index, cache, journal, database, async runtime, native backend, allocator, memory manager, or custom protocol needs a named consumer, before-and-after evidence, a preserved oracle, and a reversal condition.
 
 ## Application-Driven Development
 
-Use representative applications to expose missing semantics and interface friction. A retained application must exercise the real service, public machine interface, persistence, compiler, verifier, and runtime.
+Use representative applications to expose missing semantics and interface friction.
 
-Do not satisfy acceptance only through private Rust constructors. Choose an application whose needs belong to the current gate, and do not add a web framework, GUI framework, package manager, database layer, scheduler, or broad standard library to support one example.
+A retained application must exercise the real service, public machine interface, persistence, compiler, verifier, and runtime.
+
+Do not satisfy acceptance only through private Rust constructors.
 
 When an application reveals a blocker:
 
 1. prove it through the public path;
-2. classify it as semantic, interface, diagnostic, performance, or documentation friction;
+2. classify it as semantic, interface, diagnostic, performance, documentation, safety, or operational friction;
 3. select the smallest dependency-closed repair;
 4. reject speculative collateral features;
 5. rerun the application and baselines;
 6. record cost and remaining limitations.
 
-Prefer one honest broad example plus focused tests over many disconnected demonstrations. Retain older examples when they remain useful focused oracles. Rename or replace an example when its public name materially obstructs understanding.
+Prefer one broad honest example plus focused tests over many disconnected demonstrations.
 
 ## Architecture Restraint
 
-Before adding a durable concept, identify its data class, owner, validator, producer, consumer, removed invalid state, removed repeated work, identity domain, serialization need, process-boundary need, safety obligation, agent cost, and deletion evidence.
+Before adding a durable concept, identify:
 
-Prefer deletion, an existing closed type, a direct struct or enum, a local helper, a static descriptor, a sorted vector or explicit work stack, one narrow measured index, one narrow measured cache, a process for a real boundary, and only then a general framework.
+- its data class;
+- owner;
+- validator;
+- producer;
+- consumer;
+- removed invalid state;
+- removed repeated work;
+- identity domain;
+- serialization need;
+- process-boundary need;
+- safety obligation;
+- agent cost;
+- deletion evidence.
 
-Multiple consumers are strong evidence for abstraction, but one high-risk safety boundary may justify a focused abstraction when it centralizes a critical invariant.
+Prefer, in order:
 
-Do not add without evidence a generic property graph, open dialect registry, plugin semantic schema, general constraint solver, visitor framework for one traversal, serializer for same-build private values, database, async runtime, scheduler, cache, reverse index, custom JIT, formal proof framework, second program or IR authority, hypothetical abstraction, or documentation machinery.
+1. deletion;
+2. an existing closed type;
+3. a direct struct or enum;
+4. a local helper;
+5. a static descriptor;
+6. a sorted vector or explicit work stack;
+7. one narrow measured index or cache;
+8. a process for a real isolation boundary;
+9. a general framework only after repeated concrete use.
+
+Do not add without evidence:
+
+- a generic property graph;
+- an open semantic dialect registry;
+- plugin-defined authoritative node kinds;
+- a general constraint solver;
+- a visitor framework for one traversal;
+- a serializer for same-build private values;
+- a database;
+- an async runtime;
+- a scheduler;
+- a cache;
+- a reverse index;
+- a custom JIT;
+- a formal-proof framework;
+- a second program or IR authority;
+- a hypothetical abstraction;
+- documentation machinery.
+
+Multiple consumers are strong evidence for abstraction.
+One high-risk safety boundary may justify a focused abstraction when it centralizes a critical invariant.
 
 ## Dependencies and Repository Shape
 
-Every dependency has a named current consumer. Consider transitive count, clean build cost, binary size, maintenance, security history, unsafe code, build scripts, native code, platform effect, features, license, and replacement cost.
+Every dependency has a named current consumer.
 
-Use exact resolved versions through `Cargo.lock`. Do not change unrelated dependencies. Do not add a parser generator, async runtime, database, compiler backend, tokenizer, schema framework, benchmark framework, or security tool as collateral.
+Use exact resolved versions through `Cargo.lock`.
 
-Use one package until a boundary earns a split through unsafe or FFI isolation, an independently useful stable API, target isolation, a process protocol, measured compile-time isolation, or material dependency isolation.
+Do not change unrelated dependencies.
 
-Split modules by semantic ownership, not arbitrary size rules. Large coherent files are acceptable; large files mixing fact owners are not. Repository comprehensibility is measured by search cost, ownership clarity, change locality, and agent task evidence.
+Use one package until a boundary earns a split through:
 
-Delete superseded code in the same milestone. Do not leave `old`, `legacy`, `compat`, disabled duplicate paths, commented-out replacements, or versioned namespaces without an explicit compatibility requirement.
+- unsafe or FFI isolation;
+- an independently useful stable API;
+- target isolation;
+- a process protocol;
+- measured compile-time isolation;
+- material dependency isolation.
+
+Split modules by semantic ownership and change locality, not arbitrary line quotas.
+
+Large coherent files are acceptable.
+Large files mixing transport, schema description, conversion, validation, and tests are not.
+
+Measure repository comprehensibility through:
+
+- search cost;
+- ownership clarity;
+- number of files opened for one task;
+- duplicated contract facts;
+- change locality;
+- controlled agent-task evidence.
+
+Delete superseded code in the same milestone.
+
+Do not leave `old`, `legacy`, `compat`, disabled duplicate paths, commented-out replacements, or versioned namespaces without an explicit compatibility requirement.
 
 ## Documentation
 
-Keep the maintained documentation set small and role-specific. Use links instead of copying catalogues.
+Keep the maintained documentation set small and role-specific.
 
-Write plain language before formal terminology. Keep material limitations visible. Do not call explanatory pseudocode actual syntax. Do not imply that a source frontend, sandbox, public network service, native backend, package ecosystem, heap, effect system, or production platform exists when it does not.
+Write plain language before formal terminology.
 
-When the public path changes, update README, owning specifications, architecture, status, performance evidence, roadmap, examples, and generated descriptions as applicable in the same milestone.
+Prefer:
+
+- “programming system built for coding agents” before “AI-primary” or “agent-native”;
+- “typed, versioned program model” before “Semantic Program Graph”;
+- “source of truth” before “canonical authority”;
+- “local background service” before “daemon” in introductory material;
+- “named record type” before “nominal product”;
+- “variant type with a fixed set of alternatives” before “closed sum”;
+- “typed placeholder” before “hole”;
+- “saved immutable revision” before “retained snapshot”;
+- “explicit permission value or handle” before “capability”;
+- “resource-owning or move-only value” before “ownership-bearing value.”
+
+Do not use `source-free` as the primary product label.
+
+Do not imply that a source frontend, sandbox, public network service, native backend, package ecosystem, heap, effect system, or production platform exists when it does not.
+
+Do not present explanatory pseudocode as actual syntax.
+
+When the public path changes, update the README, owning specifications, architecture, status, performance evidence, roadmap, examples, and generated descriptions as applicable in the same milestone.
 
 Documentation review is product acceptance.
 
@@ -430,11 +830,56 @@ Documentation review is product acceptance.
 
 Test success, rejection, rollback, restart, corruption, ordering, and boundary behavior as applicable.
 
-Important categories include schema coverage and rejection; strict JSON and binary decoding; containment, scope, visibility, type, operation, region, and named-data contracts; placeholder refinement; stable identity and non-reuse; allocator rollback; deterministic structured expansion; stale revisions; idempotency; bounded receipts; selected bindings; response preflight; diffs, queries, cursors, and repair context; artifact determinism and corruption; durable failure atomicity; restart and writer exclusion; direct compilation; Core IR verification; explicit-frame runtime; resource exhaustion; memory-safe malformed-input handling; generated sequences; deterministic boundary mutation; and representative applications.
+Important categories include:
 
-Use generated or model-based sequences where many operation orders share an invariant. Retain failing seeds or minimized corpora. Use real binaries for the principal end-to-end path. Do not claim an unrun command.
+- closed schema coverage;
+- strict transport decoding;
+- artifact decoding;
+- containment;
+- scope;
+- visibility;
+- type contracts;
+- operation contracts;
+- region contracts;
+- named-data contracts;
+- placeholder refinement;
+- stable identity;
+- identity non-reuse;
+- allocation rollback;
+- deterministic structured expansion;
+- stale revisions;
+- idempotency;
+- bounded receipts;
+- selected bindings;
+- response preflight;
+- diffs;
+- queries;
+- cursors;
+- repair context;
+- artifact determinism;
+- durable failure atomicity;
+- restart;
+- writer exclusion;
+- direct compilation;
+- IR verification;
+- explicit-frame runtime;
+- resource exhaustion;
+- malformed-input memory safety;
+- generated sequences;
+- deterministic boundary mutation;
+- representative applications;
+- controlled coding-agent tasks.
 
-Run focused checks during development and the full boundary once after coherence:
+Use generated or model-based sequences where many operation orders share an invariant.
+
+Retain failing seeds or minimized corpora.
+
+Use real binaries for the principal end-to-end path.
+
+Do not claim an unrun command.
+
+Run focused checks during development.
+Run the full boundary once after the change is coherent:
 
 ```bash
 cargo fmt --all -- --check
@@ -444,9 +889,16 @@ cargo build --workspace --release --locked
 git diff --check
 ```
 
-Run real service/client integration when protocol, persistence, query, compiler, runtime, CLI, structured authoring, examples, or runnable README paths change. Run retained malformed-boundary mutation evidence when a trust boundary changes. Run memory-safety tools when applicable and available.
+Run real service/client integration when protocol, persistence, query, compiler, runtime, CLI, structured authoring, examples, or runnable README paths change.
 
-Distinguish environment limitations from product failures. Record exact failed commands and relevant output. Do not repeatedly run the complete expensive boundary after each small edit.
+Run retained malformed-boundary mutation evidence when a trust boundary changes.
+
+Run memory-safety tools when applicable and available.
+
+Distinguish environment limitations from product failures.
+Record exact failed commands and relevant output.
+
+Do not repeatedly run the complete expensive boundary after each small edit.
 
 ## Workflow
 
@@ -462,43 +914,93 @@ Distinguish environment limitations from product failures. Record exact failed c
 8. State one dependency-closed acceptance gate.
 9. Record the baseline needed to evaluate it.
 
+Do not read old prompts unless the active task requires historical reconstruction.
+
 ### Decide
 
-Identify the user-visible operation, fact owner, producers and consumers, identity effects, success and rejection behavior, durability, memory and resource safety, response bounds, trust boundary, compatibility cutover, representative evidence, non-goals, and stop condition.
+Identify:
 
-Resolve internal choices through semantics, focused prototypes, tests, and measurements. Do not ask the user to choose details that the active contract and evidence can decide.
+- the user-visible operation;
+- the fact owner;
+- producers and consumers;
+- identity effects;
+- success and rejection behavior;
+- durability;
+- memory and resource safety;
+- authorization;
+- response bounds;
+- trust boundary;
+- compatibility cutover;
+- representative evidence;
+- non-goals;
+- stop condition.
+
+Resolve internal choices through semantics, focused prototypes, tests, and measurements.
+
+Do not ask the user to choose details that the active contract and evidence can decide.
 
 ### Implement
 
 1. Change the authoritative type or contract.
 2. Change every active producer and consumer.
 3. Delete displaced code and tests.
-4. Add success, rejection, rollback, restart, corruption, and boundary evidence as applicable.
-5. Run focused checks.
-6. Update fact-owning documentation.
-7. Run representative application evidence.
-8. Run the full verification boundary once.
-9. Inspect final diff and worktree.
+4. Add success and rejection evidence.
+5. Add rollback, restart, corruption, and boundary evidence where applicable.
+6. Run focused checks.
+7. Update fact-owning documentation.
+8. Run representative application evidence.
+9. Run controlled agent evidence when the interface changes.
+10. Run the full verification boundary once.
+11. Inspect the final diff and worktree.
 
 ### End a Turn
 
 End at a buildable, testable, dependency-closed boundary.
 
-Do not leave two authorities, two active protocol or artifact versions, two preferred authoring paths, two semantic execution routes, half-migrated requests, disabled legacy code, undocumented durable changes, unpreflighted commits, README claims ahead of implementation, memory-safety claims ahead of evidence, or prompt-only planning when implementation was requested and achievable.
+Do not leave:
 
-A handoff names exact paths, symbols, commands, failures, unresolved evidence, and the next gate. Keep it compact enough to avoid repository rediscovery.
+- two authorities;
+- two active protocol or artifact versions;
+- two preferred authoring paths;
+- two semantic execution routes;
+- half-migrated requests;
+- disabled legacy code;
+- undocumented durable changes;
+- unpreflighted commits;
+- README claims ahead of implementation;
+- memory-safety claims ahead of evidence;
+- prompt-only planning when implementation was requested and achievable.
+
+A handoff names exact paths, symbols, commands, failures, unresolved evidence, and the next gate.
+
+Keep the handoff compact enough to avoid repository rediscovery.
 
 ## Multi-Agent and Git
 
 The lead agent owns architecture, semantic integration, documentation truth, and final verification.
 
-Use subagents for bounded independent questions or disjoint implementation areas. Give one exact question, paths, evidence, non-goals, stop condition, and compact output. Do not let subagents create independent schema, identity, persistence, compiler, runtime, or README authority.
+Use subagents for bounded independent questions, controlled black-box trials, or disjoint implementation areas.
+
+Give each subagent:
+
+- one exact question;
+- allowed paths and commands;
+- evidence requirements;
+- non-goals;
+- stop condition;
+- compact output format.
+
+Do not let subagents create independent schema, identity, persistence, compiler, runtime, or README authority.
 
 Inspect and integrate results against the actual checkout.
 
-Never use `git reset --hard`, `git clean -fd`, or force push. Incompatible-change permission does not authorize destruction of unrelated work.
+Never use `git reset --hard`, `git clean -fd`, or force push.
 
-Prefer one cohesive commit per verified milestone when commits are requested or permitted. Do not create empty planning commits or change remote state without explicit instruction.
+Prefer one cohesive local commit per verified milestone when commits are requested or permitted.
+
+Do not create empty planning commits.
+
+Do not change remote state without explicit instruction.
 
 ## Stop Conditions
 
@@ -512,9 +1014,11 @@ Stop, narrow, or reverse if:
 - names, hashes, offsets, or addresses become mutable identity;
 - generic identity-preserving morphing appears without exact semantics;
 - default responses or graph-wide queries become unbounded;
-- memory safety is weakened or unsafe code spreads;
+- memory safety is weakened;
+- unsafe code spreads;
 - implicit host authority appears;
 - a compatibility bridge remains without a requirement;
+- custom transport survives without measured value;
 - a cache, index, database, async runtime, native tier, memory manager, or process split appears without measured need;
 - a general framework has no demonstrated state-space reduction;
 - terminology becomes more impressive but less understandable;
@@ -529,38 +1033,28 @@ The usual correction is to delete, narrow, return typed facts, use one closed ty
 
 ## Completion Report
 
-```text
-Starting commit:
-Ending commit:
-Milestone:
-Human-facing outcome:
-Agent-facing outcome:
-Authoritative model:
-Terminology changes:
-Compatibility breaks:
-Identity and history:
-Transactions and receipts:
-Queries and repair:
-Protocol and machine contract:
-Artifacts and persistence:
-Memory safety:
-Resource safety:
-Capabilities and effects:
-Compiler and Core IR:
-Runtime:
-Representative application:
-Agent-cost evidence:
-Performance evidence:
-Focused tests:
-Generated, fuzz, or mutation evidence:
-Full verification:
-Environment limitations:
-README and examples:
-Specifications, architecture, status, performance, and roadmap:
-Deleted code:
-Remaining gaps:
-Next evidence gate:
-Worktree state:
-```
+Report:
 
-Report observable decisions and evidence. Do not report hidden chain-of-thought.
+- starting and ending commit;
+- milestone;
+- user-visible outcome;
+- agent-visible outcome;
+- authoritative model changes;
+- compatibility breaks;
+- identity and history effects;
+- protocol and machine-contract effects;
+- memory and resource safety;
+- compiler and runtime effects;
+- representative application evidence;
+- controlled agent evidence;
+- performance and cost evidence;
+- focused and full verification;
+- environment limitations;
+- documentation changes;
+- deleted code;
+- remaining gaps;
+- next evidence gate;
+- final worktree state.
+
+Report observable decisions and evidence.
+Do not report hidden chain-of-thought.

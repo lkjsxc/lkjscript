@@ -125,21 +125,6 @@ impl VisibleCursorPurpose {
         Self::LegalConstructors,
         Self::RepairContext,
     ];
-    pub const fn stable_tag(self) -> u8 {
-        match self {
-            Self::VisibleValues => 1,
-            Self::LegalConstructors => 2,
-            Self::RepairContext => 3,
-        }
-    }
-    pub const fn from_stable_tag(tag: u8) -> Option<Self> {
-        match tag {
-            1 => Some(Self::VisibleValues),
-            2 => Some(Self::LegalConstructors),
-            3 => Some(Self::RepairContext),
-            _ => None,
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
@@ -554,23 +539,6 @@ impl QueryCode {
         Self::RepairContext,
         Self::NominalType,
     ];
-    pub const fn stable_tag(self) -> u8 {
-        match self {
-            Self::WorkspaceSummary => 1,
-            Self::Node => 2,
-            Self::Blockers => 3,
-            Self::OwnerChain => 4,
-            Self::Body => 5,
-            Self::IncomingUses => 6,
-            Self::DefinitionReferences => 7,
-            Self::Dependencies => 8,
-            Self::VisibleValues => 9,
-            Self::LegalConstructors => 10,
-            Self::SemanticDiff => 11,
-            Self::RepairContext => 12,
-            Self::NominalType => 13,
-        }
-    }
     pub const fn machine_name(self) -> &'static str {
         match self {
             Self::WorkspaceSummary => "workspace_summary",
@@ -586,24 +554,6 @@ impl QueryCode {
             Self::SemanticDiff => "semantic_diff",
             Self::RepairContext => "repair_context",
             Self::NominalType => "nominal_type",
-        }
-    }
-    pub const fn from_stable_tag(tag: u8) -> Option<Self> {
-        match tag {
-            1 => Some(Self::WorkspaceSummary),
-            2 => Some(Self::Node),
-            3 => Some(Self::Blockers),
-            4 => Some(Self::OwnerChain),
-            5 => Some(Self::Body),
-            6 => Some(Self::IncomingUses),
-            7 => Some(Self::DefinitionReferences),
-            8 => Some(Self::Dependencies),
-            9 => Some(Self::VisibleValues),
-            10 => Some(Self::LegalConstructors),
-            11 => Some(Self::SemanticDiff),
-            12 => Some(Self::RepairContext),
-            13 => Some(Self::NominalType),
-            _ => None,
         }
     }
 }
@@ -724,6 +674,8 @@ pub enum QueryResult {
     RepairContext(Box<RepairContext>),
     NominalType(NominalTypeResult),
 }
+// Errors retain their direct public DTO shape; query batches are independently bounded.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(
     tag = "kind",
@@ -2862,7 +2814,7 @@ fn blockers_for_node(snapshot: &Snapshot, id: NodeId) -> Vec<CompletenessBlocker
 mod tests {
     use super::*;
     use crate::graph::Workspace;
-    use crate::ids::{LocalHandle, WorkspaceId};
+    use crate::ids::{DraftSymbol, WorkspaceId};
     use crate::schema::{OperationDraft, TypeDraft, ValueDraft};
     use crate::transaction::{
         ApplyTransactionRequest, ExpressionDraft, ExpressionKindDraft, FunctionBodyDraft,
@@ -2873,7 +2825,7 @@ mod tests {
     fn fixture() -> (Workspace, Vec<NodeId>) {
         let id = WorkspaceId::from_bytes([0x66; 16]);
         let mut workspace = Workspace::new(id).expect("workspace");
-        let local = |v| NodeTarget::Local(LocalHandle::new(v));
+        let local = |v| NodeTarget::Draft(DraftSymbol::generated(v));
         let value = |v| ValueDraft::OperationResult {
             operation: local(v),
             output: 0,
@@ -2885,16 +2837,16 @@ mod tests {
             mode: TransactionMode::Commit,
             operations: vec![
                 TransactionOp::CreatePackage {
-                    handle: LocalHandle::new(1),
+                    symbol: DraftSymbol::generated(1),
                     name: "app".into(),
                 },
                 TransactionOp::CreateModule {
-                    handle: LocalHandle::new(2),
+                    symbol: DraftSymbol::generated(2),
                     package: local(1),
                     name: "root".into(),
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(3),
+                    symbol: DraftSymbol::generated(3),
                     module: local(2),
                     name: "main".into(),
                     parameters: Vec::new(),
@@ -2902,19 +2854,19 @@ mod tests {
                     body: Some(FunctionBodyDraft {
                         operations: vec![
                             ExpressionDraft {
-                                handle: LocalHandle::new(6),
+                                symbol: Some(DraftSymbol::generated(6)),
                                 operation: ExpressionKindDraft::ConstI64(40),
                             },
                             ExpressionDraft {
-                                handle: LocalHandle::new(7),
+                                symbol: Some(DraftSymbol::generated(7)),
                                 operation: ExpressionKindDraft::ConstI64(2),
                             },
                             ExpressionDraft {
-                                handle: LocalHandle::new(8),
+                                symbol: Some(DraftSymbol::generated(8)),
                                 operation: ExpressionKindDraft::ConstBool(true),
                             },
                             ExpressionDraft {
-                                handle: LocalHandle::new(9),
+                                symbol: Some(DraftSymbol::generated(9)),
                                 operation: ExpressionKindDraft::Hole {
                                     expected: SemanticType::I64.into(),
                                 },
@@ -2932,19 +2884,21 @@ mod tests {
         let request = ApplyTransactionRequest {
             transaction: tx,
             response: TransactionResponseSpec {
-                return_handles: [1, 2, 3, 6, 7, 8, 9]
+                return_symbols: [1, 2, 3, 6, 7, 8, 9]
                     .into_iter()
-                    .map(LocalHandle::new)
+                    .map(DraftSymbol::generated)
                     .collect(),
             },
         };
         let prepared = workspace.prepare_transaction(&request).expect("prepare");
-        let binding = |handle| {
+        let binding = |symbol| {
             prepared
                 .receipt
                 .returned_bindings
                 .iter()
-                .find_map(|(candidate, id)| (*candidate == LocalHandle::new(handle)).then_some(*id))
+                .find_map(|(candidate, id)| {
+                    (*candidate == DraftSymbol::generated(symbol)).then_some(*id)
+                })
                 .expect("binding")
         };
         let function = binding(3);
@@ -3524,7 +3478,7 @@ mod tests {
             mode: TransactionMode::Commit,
             operations: (0..70_u32)
                 .map(|index| TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(100 + index),
+                    symbol: DraftSymbol::generated(100 + index),
                     module: NodeTarget::Existing(module),
                     name: format!("callee-{index:02}"),
                     parameters: Vec::new(),
@@ -3587,9 +3541,9 @@ mod tests {
     fn structured_repair_context_exposes_region_and_loop_argument_roles() {
         let workspace_id = WorkspaceId::from_bytes([0x68; 16]);
         let workspace = Workspace::new(workspace_id).expect("workspace");
-        let local = |handle| NodeTarget::Local(LocalHandle::new(handle));
-        let result = |handle| ValueDraft::OperationResult {
-            operation: local(handle),
+        let local = |symbol| NodeTarget::Draft(DraftSymbol::generated(symbol));
+        let result = |symbol| ValueDraft::OperationResult {
+            operation: local(symbol),
             output: 0,
         };
         let request = ApplyTransactionRequest {
@@ -3600,16 +3554,16 @@ mod tests {
                 mode: TransactionMode::Commit,
                 operations: vec![
                     TransactionOp::CreatePackage {
-                        handle: LocalHandle::new(1),
+                        symbol: DraftSymbol::generated(1),
                         name: "app".into(),
                     },
                     TransactionOp::CreateModule {
-                        handle: LocalHandle::new(2),
+                        symbol: DraftSymbol::generated(2),
                         package: local(1),
                         name: "root".into(),
                     },
                     TransactionOp::CreateFunction {
-                        handle: LocalHandle::new(3),
+                        symbol: DraftSymbol::generated(3),
                         module: local(2),
                         name: "main".into(),
                         parameters: Vec::new(),
@@ -3617,36 +3571,38 @@ mod tests {
                         body: Some(FunctionBodyDraft {
                             operations: vec![
                                 ExpressionDraft {
-                                    handle: LocalHandle::new(6),
+                                    symbol: Some(DraftSymbol::generated(6)),
                                     operation: ExpressionKindDraft::ConstI64(0),
                                 },
                                 ExpressionDraft {
-                                    handle: LocalHandle::new(7),
+                                    symbol: Some(DraftSymbol::generated(7)),
                                     operation: ExpressionKindDraft::ConstI64(10),
                                 },
                                 ExpressionDraft {
-                                    handle: LocalHandle::new(8),
+                                    symbol: Some(DraftSymbol::generated(8)),
                                     operation: ExpressionKindDraft::ConstBool(true),
                                 },
                                 ExpressionDraft {
-                                    handle: LocalHandle::new(9),
+                                    symbol: Some(DraftSymbol::generated(9)),
                                     operation: ExpressionKindDraft::ForI64 {
                                         start: result(6),
                                         end_exclusive: result(7),
                                         step: 1,
                                         initial: result(6),
                                         carried: SemanticType::I64.into(),
-                                        index_handle: LocalHandle::new(10),
-                                        carried_handle: LocalHandle::new(11),
+                                        index_symbol: DraftSymbol::generated(10),
+                                        carried_symbol: DraftSymbol::generated(11),
                                         body: YieldingBodyDraft {
                                             operations: vec![ExpressionDraft {
-                                                handle: LocalHandle::new(12),
+                                                symbol: Some(DraftSymbol::generated(12)),
                                                 operation: ExpressionKindDraft::If {
                                                     condition: result(8),
                                                     result: SemanticType::I64.into(),
                                                     then_body: YieldingBodyDraft {
                                                         operations: vec![ExpressionDraft {
-                                                            handle: LocalHandle::new(13),
+                                                            symbol: Some(DraftSymbol::generated(
+                                                                13,
+                                                            )),
                                                             operation: ExpressionKindDraft::Hole {
                                                                 expected: SemanticType::I64.into(),
                                                             },
@@ -3655,7 +3611,9 @@ mod tests {
                                                     },
                                                     else_body: YieldingBodyDraft {
                                                         operations: vec![ExpressionDraft {
-                                                            handle: LocalHandle::new(14),
+                                                            symbol: Some(DraftSymbol::generated(
+                                                                14,
+                                                            )),
                                                             operation:
                                                                 ExpressionKindDraft::ConstI64(0),
                                                         }],
@@ -3678,21 +3636,23 @@ mod tests {
                 ],
             },
             response: TransactionResponseSpec {
-                return_handles: [3, 9, 10, 11, 12, 13, 14]
+                return_symbols: [3, 9, 10, 11, 12, 13, 14]
                     .into_iter()
-                    .map(LocalHandle::new)
+                    .map(DraftSymbol::generated)
                     .collect(),
             },
         };
         let prepared = workspace
             .prepare_transaction(&request)
             .expect("structured query fixture");
-        let binding = |handle| {
+        let binding = |symbol| {
             prepared
                 .receipt
                 .returned_bindings
                 .iter()
-                .find_map(|(candidate, id)| (*candidate == LocalHandle::new(handle)).then_some(*id))
+                .find_map(|(candidate, id)| {
+                    (*candidate == DraftSymbol::generated(symbol)).then_some(*id)
+                })
                 .expect("binding")
         };
         let context = repair_context(
@@ -3766,18 +3726,18 @@ mod tests {
     fn thousands_of_incoming_uses_are_paged_deterministically_without_body_rescans() {
         let workspace_id = WorkspaceId::from_bytes([0x67; 16]);
         let mut workspace = Workspace::new(workspace_id).expect("workspace");
-        let local = |value| NodeTarget::Local(LocalHandle::new(value));
+        let local = |value| NodeTarget::Draft(DraftSymbol::generated(value));
         let value = ValueDraft::OperationResult {
             operation: local(6),
             output: 0,
         };
         let mut body_operations = vec![ExpressionDraft {
-            handle: LocalHandle::new(6),
+            symbol: Some(DraftSymbol::generated(6)),
             operation: ExpressionKindDraft::ConstI64(1),
         }];
-        for handle in 100..2100 {
+        for symbol in 100..2100 {
             body_operations.push(ExpressionDraft {
-                handle: LocalHandle::new(handle),
+                symbol: Some(DraftSymbol::generated(symbol)),
                 operation: ExpressionKindDraft::AddI64 {
                     lhs: value,
                     rhs: value,
@@ -3786,16 +3746,16 @@ mod tests {
         }
         let operations = vec![
             TransactionOp::CreatePackage {
-                handle: LocalHandle::new(1),
+                symbol: DraftSymbol::generated(1),
                 name: "app".into(),
             },
             TransactionOp::CreateModule {
-                handle: LocalHandle::new(2),
+                symbol: DraftSymbol::generated(2),
                 package: local(1),
                 name: "root".into(),
             },
             TransactionOp::CreateFunction {
-                handle: LocalHandle::new(3),
+                symbol: DraftSymbol::generated(3),
                 module: local(2),
                 name: "main".into(),
                 parameters: Vec::new(),
@@ -3819,7 +3779,7 @@ mod tests {
                 operations,
             },
             response: TransactionResponseSpec {
-                return_handles: vec![LocalHandle::new(6)],
+                return_symbols: vec![DraftSymbol::generated(6)],
             },
         };
         let prepared = workspace
@@ -4299,7 +4259,7 @@ mod tests {
                 block: body_block,
                 before: Some(body_hole),
                 expression: ExpressionDraft {
-                    handle: LocalHandle::new(10_000 + index),
+                    symbol: Some(DraftSymbol::generated(10_000 + index)),
                     operation: ExpressionKindDraft::ConstI64(i64::from(index)),
                 },
             })
@@ -4336,7 +4296,7 @@ mod tests {
         let unrelated_hole = unrelated_ids[8];
         let unrelated_operations = (0..3_000_u32)
             .map(|index| TransactionOp::CreatePackage {
-                handle: LocalHandle::new(20_000 + index),
+                symbol: DraftSymbol::generated(20_000 + index),
                 name: format!("unrelated-{index:04}"),
             })
             .collect();
@@ -4413,38 +4373,38 @@ mod tests {
     fn nominal_query_names_unrepresentable_member_facts_and_binds_cursor() {
         let id = WorkspaceId::from_bytes([0xb4; 16]);
         let workspace = Workspace::new(id).expect("workspace");
-        let local = |value| NodeTarget::Local(LocalHandle::new(value));
+        let local = |value| NodeTarget::Draft(DraftSymbol::generated(value));
         let mut operations = vec![
             TransactionOp::CreatePackage {
-                handle: LocalHandle::new(1),
+                symbol: DraftSymbol::generated(1),
                 name: "p".into(),
             },
             TransactionOp::CreateModule {
-                handle: LocalHandle::new(2),
+                symbol: DraftSymbol::generated(2),
                 package: local(1),
                 name: "m".into(),
             },
         ];
         let mut previous = None;
         for index in 0..70_u32 {
-            let declaration = LocalHandle::new(10 + index * 3);
-            let first = LocalHandle::new(11 + index * 3);
-            let second = LocalHandle::new(12 + index * 3);
+            let declaration = DraftSymbol::generated(10 + index * 3);
+            let first = DraftSymbol::generated(11 + index * 3);
+            let second = DraftSymbol::generated(12 + index * 3);
             let ty = previous.map_or(TypeDraft::I64, |prior| {
-                TypeDraft::Nominal(NodeTarget::Local(prior))
+                TypeDraft::Nominal(NodeTarget::Draft(prior))
             });
             operations.push(TransactionOp::CreateProductType {
-                handle: declaration,
+                symbol: declaration,
                 module: local(2),
                 name: format!("Level{index}"),
                 fields: vec![
                     ProductFieldDraft {
-                        handle: first,
+                        symbol: first,
                         name: "left".into(),
                         ty,
                     },
                     ProductFieldDraft {
-                        handle: second,
+                        symbol: second,
                         name: "right".into(),
                         ty,
                     },

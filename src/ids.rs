@@ -148,23 +148,139 @@ impl<'de> Deserialize<'de> for NodeId {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
-#[serde(transparent)]
-pub struct LocalHandle(u32);
+pub const MAX_DRAFT_SYMBOL_BYTES: usize = 64;
+const MAX_UNVALIDATED_DRAFT_SYMBOL_BYTES: usize = MAX_DRAFT_SYMBOL_BYTES + 1;
 
-impl LocalHandle {
-    pub const fn new(value: u32) -> Self {
-        Self(value)
+/// A transaction-local proposal label. It is never persisted as semantic identity.
+#[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct DraftSymbol {
+    bytes: [u8; MAX_UNVALIDATED_DRAFT_SYMBOL_BYTES],
+    len: u8,
+}
+
+impl DraftSymbol {
+    #[allow(clippy::expect_used)]
+    pub fn new(value: &str) -> Self {
+        Self::parse(value).expect("invalid draft symbol")
     }
 
-    pub const fn get(self) -> u32 {
-        self.0
+    pub fn parse(value: &str) -> Result<Self, &'static str> {
+        let symbol = Self::unvalidated(value)?;
+        symbol.validate()?;
+        Ok(symbol)
+    }
+
+    pub fn validate(self) -> Result<(), &'static str> {
+        let bytes = self.public_bytes().ok_or("private draft symbol")?;
+        if bytes.is_empty() {
+            return Err("draft symbol must not be empty");
+        }
+        if bytes.len() > MAX_DRAFT_SYMBOL_BYTES {
+            return Err("draft symbol exceeds byte policy");
+        }
+        if !bytes[0].is_ascii_lowercase()
+            || !bytes[1..]
+                .iter()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'_')
+        {
+            return Err("draft symbol must match [a-z][a-z0-9_]*");
+        }
+        Ok(())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn generated(value: u32) -> Self {
+        Self::new(&format!("s{value}"))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn generated_number(self) -> u32 {
+        self.to_string()
+            .strip_prefix('s')
+            .and_then(|value| value.parse().ok())
+            .expect("generated test draft symbol")
+    }
+
+    pub(crate) fn synthetic(value: u32) -> Self {
+        let mut bytes = [0_u8; MAX_UNVALIDATED_DRAFT_SYMBOL_BYTES];
+        bytes[0] = 0xff;
+        bytes[1..5].copy_from_slice(&value.to_le_bytes());
+        Self { bytes, len: 5 }
+    }
+
+    pub(crate) fn is_synthetic(self) -> bool {
+        self.bytes[0] == 0xff
+    }
+
+    fn public_bytes(&self) -> Option<&[u8]> {
+        (!self.is_synthetic()).then_some(&self.bytes[..usize::from(self.len)])
+    }
+
+    fn unvalidated(value: &str) -> Result<Self, &'static str> {
+        if value.len() > MAX_UNVALIDATED_DRAFT_SYMBOL_BYTES {
+            return Err("draft symbol exceeds boundary representation");
+        }
+        let mut bytes = [0_u8; MAX_UNVALIDATED_DRAFT_SYMBOL_BYTES];
+        bytes[..value.len()].copy_from_slice(value.as_bytes());
+        Ok(Self {
+            bytes,
+            len: u8::try_from(value.len()).map_err(|_| "draft symbol length overflow")?,
+        })
     }
 }
 
-impl fmt::Display for LocalHandle {
+impl fmt::Debug for DraftSymbol {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "@{}", self.0)
+        fmt::Display::fmt(self, formatter)
+    }
+}
+
+impl fmt::Display for DraftSymbol {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self
+            .public_bytes()
+            .and_then(|bytes| std::str::from_utf8(bytes).ok())
+        {
+            Some(value) => formatter.write_str(value),
+            None => formatter.write_str("<private-draft>"),
+        }
+    }
+}
+
+impl Serialize for DraftSymbol {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let bytes = self
+            .public_bytes()
+            .ok_or_else(|| serde::ser::Error::custom("private draft symbol cannot serialize"))?;
+        let value = std::str::from_utf8(bytes).map_err(serde::ser::Error::custom)?;
+        serializer.serialize_str(value)
+    }
+}
+
+impl<'de> Deserialize<'de> for DraftSymbol {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct DraftSymbolVisitor;
+        impl Visitor<'_> for DraftSymbolVisitor {
+            type Value = DraftSymbol;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("a transaction-local draft symbol string")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                DraftSymbol::unvalidated(value).map_err(E::custom)
+            }
+        }
+        deserializer.deserialize_str(DraftSymbolVisitor)
     }
 }
 

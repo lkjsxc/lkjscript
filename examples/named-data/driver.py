@@ -16,10 +16,14 @@ daemon = None
 state = None
 
 
+def draft_symbol(number):
+    return f"draft_{number}"
+
+
 def rpc(request):
     global request_id
     request_id += 1
-    envelope = {"version": 4, "request_id": request_id, "request": request}
+    envelope = {"version": 5, "request_id": request_id, "request": request}
     completed = subprocess.run(
         [str(CLI), "--state", str(state), "rpc"],
         input=json.dumps(envelope, separators=(",", ":")).encode(),
@@ -48,8 +52,8 @@ def expect_error(response, code):
     return error
 
 
-def local(handle):
-    return {"kind": "local", "data": handle}
+def local(symbol):
+    return {"kind": "draft", "data": draft_symbol(symbol) if isinstance(symbol, int) else symbol}
 
 
 def existing(node):
@@ -60,37 +64,44 @@ def nominal(target):
     return {"nominal": target}
 
 
-def result(handle):
-    return {"kind": "operation_result", "data": {"operation": local(handle), "output": 0}}
+def result(symbol):
+    return {"kind": "operation_result", "data": {"operation": local(symbol), "output": 0}}
 
 
-def parameter(handle):
-    return {"kind": "function_parameter", "data": local(handle)}
+def parameter(symbol):
+    return {"kind": "function_parameter", "data": local(symbol)}
 
 
-def payload(handle):
-    return {"kind": "block_argument", "data": local(handle)}
+def payload(symbol):
+    return {"kind": "block_argument", "data": local(symbol)}
 
 
-def expression(handle, kind, data=None):
+def expression(symbol, kind, data=None):
     operation = {"kind": kind}
     if data is not None:
         operation["data"] = data
-    return {"handle": handle, "operation": operation}
+    return {"symbol": draft_symbol(symbol), "operation": operation}
 
 
 def yielding(operations, value):
     return {"operations": operations, "yield_value": value}
 
 
-def function(handle, name, parameters, result_type, operations, return_value):
+def function(symbol, name, parameters, result_type, operations, return_value):
+    direct_parameters = [
+        {
+            **parameter_value,
+            "symbol": draft_symbol(parameter_value["symbol"]),
+        }
+        for parameter_value in parameters
+    ]
     return {
         "kind": "create_function",
         "data": {
-            "handle": handle,
+            "symbol": draft_symbol(symbol),
             "module": local(2),
             "name": name,
-            "parameters": parameters,
+            "parameters": direct_parameters,
             "result": result_type,
             "body": {"operations": operations, "return_value": return_value},
         },
@@ -101,10 +112,10 @@ def field(field_handle, value):
     return {"field": local(field_handle), "value": value}
 
 
-def arm(variant, body, payload_handle=None):
+def arm(variant, body, payload_symbol=None):
     value = {"variant": local(variant), "body": body}
-    if payload_handle is not None:
-        value["payload_handle"] = payload_handle
+    if payload_symbol is not None:
+        value["payload_symbol"] = draft_symbol(payload_symbol)
     return value
 
 
@@ -189,7 +200,7 @@ def application_operations():
     evaluate = function(
         10,
         "evaluate",
-        [{"handle": 11, "name": "input", "ty": nominal(local(6))}],
+        [{"symbol": 11, "name": "input", "ty": nominal(local(6))}],
         "i64",
         [expression(12, "match_sum", {
             "scrutinee": parameter(11),
@@ -225,7 +236,7 @@ def application_operations():
         result(35),
     )
     disabled = function(
-        40, "evaluate_disabled", [{"handle": 41, "name": "value", "ty": "i64"}], "i64",
+        40, "evaluate_disabled", [{"symbol": 41, "name": "value", "ty": "i64"}], "i64",
         [
             expression(42, "const_bool", False),
             expression(43, "construct_product", {
@@ -245,7 +256,7 @@ def application_operations():
         result(52),
     )
     override = function(
-        55, "evaluate_override", [{"handle": 56, "name": "value", "ty": "i64"}], "i64",
+        55, "evaluate_override", [{"symbol": 56, "name": "value", "ty": "i64"}], "i64",
         [
             expression(57, "construct_variant", {"variant": local(9), "payload": parameter(56)}),
             expression(58, "call", {"function": local(10), "arguments": [result(57)]}),
@@ -254,7 +265,7 @@ def application_operations():
     )
     make_reading = function(
         60, "make_reading",
-        [{"handle": 61, "name": "value", "ty": "i64"}, {"handle": 62, "name": "valid", "ty": "bool"}],
+        [{"symbol": 61, "name": "value", "ty": "i64"}, {"symbol": 62, "name": "valid", "ty": "bool"}],
         nominal(local(3)),
         [expression(63, "construct_product", {
             "product": local(3), "fields": [field(5, parameter(62)), field(4, parameter(61))],
@@ -262,7 +273,7 @@ def application_operations():
         result(63),
     )
     lazy_probe = function(
-        70, "lazy_match_probe", [{"handle": 71, "name": "input", "ty": nominal(local(6))}], "i64",
+        70, "lazy_match_probe", [{"symbol": 71, "name": "input", "ty": nominal(local(6))}], "i64",
         [expression(72, "match_sum", {
             "scrutinee": parameter(71), "result": "i64", "arms": [
                 arm(7, yielding([expression(74, "const_i64", 0)], result(74)), 73),
@@ -277,20 +288,20 @@ def application_operations():
         result(72),
     )
     return [
-        {"kind": "create_package", "data": {"handle": 1, "name": "reading-app"}},
-        {"kind": "create_module", "data": {"handle": 2, "package": local(1), "name": "root"}},
+        {"kind": "create_package", "data": {"symbol": draft_symbol(1), "name": "reading-app"}},
+        {"kind": "create_module", "data": {"symbol": draft_symbol(2), "package": local(1), "name": "root"}},
         evaluate, main_function, disabled, missing, override, make_reading, lazy_probe,
         {"kind": "create_product_type", "data": {
-            "handle": 3, "module": local(2), "name": "Reading", "fields": [
-                {"handle": 4, "name": "value", "ty": "i64"},
-                {"handle": 5, "name": "valid", "ty": "bool"},
+            "symbol": draft_symbol(3), "module": local(2), "name": "Reading", "fields": [
+                {"symbol": draft_symbol(4), "name": "value", "ty": "i64"},
+                {"symbol": draft_symbol(5), "name": "valid", "ty": "bool"},
             ],
         }},
         {"kind": "create_sum_type", "data": {
-            "handle": 6, "module": local(2), "name": "Input", "variants": [
-                {"handle": 7, "name": "sample", "payload": nominal(local(3))},
-                {"handle": 8, "name": "missing"},
-                {"handle": 9, "name": "override", "payload": "i64"},
+            "symbol": draft_symbol(6), "module": local(2), "name": "Input", "variants": [
+                {"symbol": draft_symbol(7), "name": "sample", "payload": nominal(local(3))},
+                {"symbol": draft_symbol(8), "name": "missing"},
+                {"symbol": draft_symbol(9), "name": "override", "payload": "i64"},
             ],
         }},
         {"kind": "set_entry_function", "data": {"package": local(1), "function": local(30)}},
@@ -343,15 +354,19 @@ def main():
             "projection": {"kind": "manifest"},
         }}), "describe_schema"), "manifest")
         digest = manifest["digest"]
-        sections = [
-            "semantic_types_and_nodes", "nominal_declarations", "transactions_and_expressions",
-            "queries_and_repair", "runtime_and_run", "errors_and_limits",
+        roots = [
+            "create_workspace", "apply_transaction", "query_workspace_summary",
+            "query_node", "query_blockers", "query_body", "query_incoming_uses",
+            "query_repair_context", "query_semantic_diff", "query_nominal_type", "run",
+            "shutdown",
         ]
-        section_result = expect(expect(rpc({"kind": "describe_schema", "data": {
-            "projection": {"kind": "sections", "data": {"sections": sections}},
-        }}), "describe_schema"), "sections")
-        if section_result["digest"] != digest or len(section_result["sections"]) != 6:
-            raise RuntimeError("six-section schema projection mismatch")
+        root_result = expect(expect(rpc({"kind": "describe_schema", "data": {
+            "projection": {"kind": "roots", "data": {"roots": roots}},
+        }}), "describe_schema"), "roots")
+        if root_result["digest"] != digest or len(root_result["roots"]) != len(roots):
+            raise RuntimeError("task-root schema projection mismatch")
+        if len(root_result["definitions"]) <= len(roots):
+            raise RuntimeError("task-root dependency closure is incomplete")
         unchanged = expect(expect(rpc({"kind": "describe_schema", "data": {
             "projection": {"kind": "full"}, "known_digest": digest,
         }}), "describe_schema"), "unchanged")
@@ -367,9 +382,9 @@ def main():
                 "idempotency_key": "81818181818181818181818181818181",
                 "operations": application_operations(),
             },
-            "response": {"return_handles": handles},
+            "response": {"return_symbols": [draft_symbol(symbol) for symbol in handles]},
         }}), "transaction_receipt")
-        ids = {handle: node for handle, node in receipt["returned_bindings"]}
+        ids = {int(symbol.removeprefix("draft_")): node for symbol, node in receipt["returned_bindings"]}
         if set(ids) != set(handles) or receipt["created_count"] != 97 or receipt["complete_after"]:
             raise RuntimeError("unexpected nominal structured receipt")
 
@@ -405,7 +420,7 @@ def main():
                         }},
                     }}],
                 },
-                "response": {"return_handles": []},
+                "response": {"return_symbols": []},
             }}
 
         expect_error(rpc(refinement(False)), "type_mismatch")
@@ -437,7 +452,12 @@ def main():
         run_oracles(workspace, ids)
         stop_daemon()
         print(json.dumps({
-            "schema": {"manifest": True, "sections": len(sections), "unchanged": True},
+            "schema": {
+                "manifest": True,
+                "roots": len(roots),
+                "definitions": len(root_result["definitions"]),
+                "unchanged": True,
+            },
             "revisions": [1, 2],
             "repair": "operation_refined",
             "oracles": "scalar, nominal input/output, lazy and selected overflow passed",

@@ -15,11 +15,13 @@ pub mod graph;
 pub mod ids;
 pub mod interpret;
 pub mod machine;
+mod machine_contract;
 mod persistence;
 pub mod protocol;
 pub mod query;
 pub mod schema;
 pub mod transaction;
+pub mod transport;
 pub mod type_layout;
 mod validate;
 
@@ -28,15 +30,14 @@ mod campaign_tests;
 
 pub use error::{ErrorCode, LkError, Result};
 pub use ids::{
-    ChangeDigest, IdempotencyKey, LocalHandle, NodeId, QueryId, RequestId, Revision, SnapshotHash,
+    ChangeDigest, DraftSymbol, IdempotencyKey, NodeId, QueryId, RequestId, Revision, SnapshotHash,
     WorkspaceId,
 };
 pub use interpret::{RunPolicy, RuntimeFieldValue, RuntimeValue};
 pub use machine::{
-    DescribeSchemaRequest, DescribeSchemaResult, MachineSchemaDigest, SchemaProjection,
-    SchemaSection,
+    DescribeSchemaRequest, DescribeSchemaResult, MachineSchemaDigest, SchemaProjection, SchemaRoot,
 };
-pub use protocol::{Client, Request, RequestCode, Response, ResponseCode};
+pub use protocol::{Request, RequestCode, Response, ResponseCode};
 pub use schema::{
     BlockArgumentDescriptor, BlockArgumentRole, DirectReference, LiteralField, MatchArm,
     MatchArmOperationDraft, Node, NodeKind, OperandArity, OperandDescriptor, OperandUse,
@@ -51,3 +52,4 @@ pub use transaction::{
     Transaction, TransactionMode, TransactionOp, TransactionOpCode, TransactionReceipt,
     TransactionResponseSpec, YieldingBodyDraft,
 };
+pub use transport::Client;

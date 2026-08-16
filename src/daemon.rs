@@ -2,8 +2,9 @@ use crate::error::{ErrorCode, LkError, Result};
 use crate::ids::{RequestId, WorkspaceId};
 use crate::interpret;
 use crate::persistence::{self, DurableWorkspace};
-use crate::protocol::{self, Request, Response};
+use crate::protocol::{Request, Response};
 use crate::query;
+use crate::{machine, transport};
 use fs2::FileExt;
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
@@ -30,49 +31,47 @@ pub fn run_foreground(state_directory: &Path) -> Result<()> {
     loop {
         let (stream, _) = listener.accept()?;
         let mut stream = DeadlineStream::new(stream, CONNECTION_TIMEOUT);
-        match protocol::read_request_correlated(&mut stream) {
-            Ok(Some((request_id, Ok(request)))) => {
-                let shutdown = matches!(request, Request::Shutdown);
-                let (response, fatal_error) = match daemon.handle(request) {
-                    Ok(response) => (response, None),
-                    Err(error) if error.code == ErrorCode::CommitOutcomeUnknown => {
-                        (Response::Error(error.clone()), Some(error))
-                    }
-                    Err(error) => (Response::Error(error), None),
-                };
-                let response_written =
-                    match protocol::write_response(&mut stream, request_id, &response) {
-                        Ok(()) => true,
-                        Err(error) if error.code == ErrorCode::PolicyExceeded => {
-                            protocol::write_response(
-                                &mut stream,
-                                request_id,
-                                &Response::Error(LkError::new(
-                                    ErrorCode::PolicyExceeded,
-                                    format!("response could not satisfy IPC policy: {error}"),
-                                )),
-                            )
-                            .is_ok()
+        match transport::read_request_body(&mut stream) {
+            Ok(Some(body)) => match machine::decode_request(&body) {
+                Ok(envelope) => {
+                    let request_id = envelope.request_id;
+                    let shutdown = matches!(envelope.request, Request::Shutdown);
+                    let (handled, fatal_error) = match daemon.symbol(request_id, envelope.request) {
+                        Ok(handled) => (handled, None),
+                        Err(error) if error.code == ErrorCode::CommitOutcomeUnknown => {
+                            let handled = encode_error_handled(request_id, error.clone())?;
+                            (handled, Some(error))
                         }
-                        Err(_) => false,
+                        Err(error) => (encode_error_handled(request_id, error)?, None),
                     };
-                if let Some(error) = fatal_error {
-                    return Err(error);
+                    let response_written =
+                        transport::write_response_body(&mut stream, &handled.bytes).is_ok();
+                    if let Some(error) = fatal_error {
+                        return Err(error);
+                    }
+                    if shutdown
+                        && response_written
+                        && matches!(handled.response, Response::Acknowledged)
+                    {
+                        break;
+                    }
                 }
-                if shutdown && response_written && matches!(response, Response::Acknowledged) {
-                    break;
+                Err(error) => {
+                    let request_id = machine::request_id_hint(&body);
+                    let boundary =
+                        machine::encode_boundary_error(request_id, error.kind, error.to_string());
+                    let _ = transport::write_response_body(&mut stream, &boundary);
                 }
-            }
-            Ok(Some((request_id, Err(error)))) => {
-                let _ = protocol::write_response(&mut stream, request_id, &Response::Error(error));
-            }
+            },
             Ok(None) => {}
             Err(error) => {
-                let _ = protocol::write_response(
-                    &mut stream,
-                    RequestId::new(0),
-                    &Response::Error(error),
-                );
+                let kind = if error.code == ErrorCode::PolicyExceeded {
+                    machine::BoundaryErrorKind::InputTooLarge
+                } else {
+                    machine::BoundaryErrorKind::Transport
+                };
+                let boundary = machine::encode_boundary_error(None, kind, error.to_string());
+                let _ = transport::write_response_body(&mut stream, &boundary);
             }
         }
     }
@@ -126,6 +125,33 @@ impl Write for DeadlineStream {
     }
 }
 
+struct HandledResponse {
+    response: Response,
+    bytes: Vec<u8>,
+}
+
+fn encode_handled(request_id: RequestId, response: Response) -> Result<HandledResponse> {
+    let bytes = machine::encode_response(request_id, &response, false).map_err(|error| {
+        LkError::new(
+            ErrorCode::PolicyExceeded,
+            format!("response could not satisfy JSON boundary policy: {error}"),
+        )
+    })?;
+    Ok(HandledResponse { response, bytes })
+}
+
+fn encode_error_handled(request_id: RequestId, error: LkError) -> Result<HandledResponse> {
+    encode_handled(request_id, Response::Error(error)).or_else(|_| {
+        encode_handled(
+            request_id,
+            Response::Error(LkError::new(
+                ErrorCode::PolicyExceeded,
+                "response could not satisfy JSON boundary policy",
+            )),
+        )
+    })
+}
+
 struct Daemon {
     state_directory: PathBuf,
     workspaces: BTreeMap<WorkspaceId, DurableWorkspace>,
@@ -144,8 +170,8 @@ impl Daemon {
         })
     }
 
-    fn handle(&mut self, request: Request) -> Result<Response> {
-        match request {
+    fn symbol(&mut self, request_id: RequestId, request: Request) -> Result<HandledResponse> {
+        let response = match request {
             Request::CreateWorkspace => {
                 let id = loop {
                     let candidate = WorkspaceId::generate().map_err(|error| {
@@ -158,16 +184,25 @@ impl Daemon {
                         break candidate;
                     }
                 };
-                let workspace = DurableWorkspace::create(&self.state_directory, id)?;
-                let summary = query::workspace_summary(workspace.head()?);
+                let (workspace, handled) =
+                    DurableWorkspace::create_preflighted(&self.state_directory, id, |snapshot| {
+                        encode_handled(
+                            request_id,
+                            Response::WorkspaceCreated(query::workspace_summary(snapshot)),
+                        )
+                    })?;
                 self.workspaces.insert(id, workspace);
-                Ok(Response::WorkspaceCreated(summary))
+                return Ok(handled);
             }
             Request::ApplyTransaction(request) => {
-                let fingerprint = protocol::transaction_fingerprint(&request)?;
+                let fingerprint = machine::transaction_fingerprint(&request)?;
                 let workspace = self.workspace_mut(request.transaction.workspace)?;
-                let receipt = workspace.apply(&request, fingerprint)?;
-                Ok(Response::TransactionReceipt(receipt))
+                let (receipt, bytes) =
+                    workspace.apply_with_response(&request, fingerprint, request_id)?;
+                return Ok(HandledResponse {
+                    response: Response::TransactionReceipt(receipt),
+                    bytes,
+                });
             }
             Request::QueryBatch(batch) => {
                 query::validate_batch(&batch)?;
@@ -195,11 +230,7 @@ impl Daemon {
                     revision: batch.revision,
                     results,
                 };
-                protocol::encoded_response_size(
-                    RequestId::new(0),
-                    &Response::QueryBatchResult(result.clone()),
-                )?;
-                Ok(Response::QueryBatchResult(result))
+                Response::QueryBatchResult(result)
             }
             Request::Run {
                 workspace,
@@ -209,21 +240,18 @@ impl Daemon {
                 policy,
             } => {
                 let snapshot = self.workspace(workspace)?.snapshot(revision)?;
-                Ok(Response::Run(interpret::compile_and_run(
+                Response::Run(interpret::compile_and_run(
                     snapshot, entry, &arguments, policy,
-                )?))
+                )?)
             }
-            Request::Shutdown => Ok(Response::Acknowledged),
+            Request::Shutdown => Response::Acknowledged,
             Request::DescribeSchema(request) => {
                 let result = crate::machine::describe_schema(&request)
                     .map_err(|message| LkError::new(ErrorCode::ProtocolMalformed, message))?;
-                protocol::encoded_response_size(
-                    RequestId::new(0),
-                    &Response::DescribeSchema(Box::new(result.clone())),
-                )?;
-                Ok(Response::DescribeSchema(Box::new(result)))
+                Response::DescribeSchema(Box::new(result))
             }
-        }
+        };
+        encode_handled(request_id, response)
     }
 
     fn workspace(&self, id: WorkspaceId) -> Result<&DurableWorkspace> {
@@ -311,7 +339,7 @@ impl Drop for DaemonGuard {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::{LocalHandle, QueryId, RequestId, Revision};
+    use crate::ids::{DraftSymbol, QueryId, RequestId, Revision};
     use crate::query::{PageRequest, Query, QueryBatchRequest, QueryItem};
     use crate::transaction::{
         ApplyTransactionRequest, NodeTarget, Transaction, TransactionMode, TransactionOp,
@@ -324,12 +352,13 @@ mod tests {
         let temporary = tempfile::tempdir().expect("temporary state directory");
         persistence::ensure_state_directory(temporary.path()).expect("state directory");
         let daemon = Daemon::open(temporary.path()).expect("daemon");
+        let body = machine::encode_request(RequestId::new(1), &Request::CreateWorkspace)
+            .expect("request JSON");
         let mut bytes = Vec::new();
-        protocol::write_request(&mut bytes, RequestId::new(1), &Request::CreateWorkspace)
-            .expect("request frame");
+        transport::write_request_body(&mut bytes, &body).expect("request frame");
         bytes.push(0xff);
         assert_eq!(
-            protocol::read_request(&mut bytes.as_slice())
+            transport::read_request_body(&mut bytes.as_slice())
                 .expect_err("trailing connection byte")
                 .code,
             ErrorCode::ProtocolMalformed
@@ -338,20 +367,39 @@ mod tests {
     }
 
     #[test]
-    fn oversized_diff_read_fails_preflight_without_mutation() {
+    fn workspace_creation_response_preflight_precedes_publication() {
         let temporary = tempfile::tempdir().expect("temporary state directory");
         persistence::ensure_state_directory(temporary.path()).expect("state directory");
         let mut daemon = Daemon::open(temporary.path()).expect("daemon");
-        let Response::WorkspaceCreated(initial) =
-            daemon.handle(Request::CreateWorkspace).expect("create")
+        let Err(error) = daemon.symbol(RequestId::new(0), Request::CreateWorkspace) else {
+            panic!("invalid response correlation must fail before creation");
+        };
+        assert_eq!(error.code, ErrorCode::PolicyExceeded);
+        assert!(daemon.workspaces.is_empty());
+        assert!(
+            persistence::list_workspace_ids(temporary.path())
+                .expect("workspace listing")
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn response_between_request_and_response_bounds_is_accepted_without_mutation() {
+        let temporary = tempfile::tempdir().expect("temporary state directory");
+        persistence::ensure_state_directory(temporary.path()).expect("state directory");
+        let mut daemon = Daemon::open(temporary.path()).expect("daemon");
+        let Response::WorkspaceCreated(initial) = daemon
+            .symbol(RequestId::new(1), Request::CreateWorkspace)
+            .expect("create")
+            .response
         else {
             panic!("create response")
         };
         let workspace = initial.workspace;
         let create_operations = (1..=9)
-            .map(|handle| TransactionOp::CreatePackage {
-                handle: LocalHandle::new(handle),
-                name: format!("p{handle}"),
+            .map(|symbol| TransactionOp::CreatePackage {
+                symbol: DraftSymbol::generated(symbol),
+                name: format!("p{symbol}"),
             })
             .collect();
         let create = ApplyTransactionRequest {
@@ -363,12 +411,13 @@ mod tests {
                 operations: create_operations,
             },
             response: TransactionResponseSpec {
-                return_handles: (1..=9).map(LocalHandle::new).collect(),
+                return_symbols: (1..=9).map(DraftSymbol::generated).collect(),
             },
         };
         let Response::TransactionReceipt(created) = daemon
-            .handle(Request::ApplyTransaction(create))
+            .symbol(RequestId::new(2), Request::ApplyTransaction(create))
             .expect("create packages")
+            .response
         else {
             panic!("create response")
         };
@@ -392,7 +441,7 @@ mod tests {
             response: TransactionResponseSpec::default(),
         };
         daemon
-            .handle(Request::ApplyTransaction(rename))
+            .symbol(RequestId::new(3), Request::ApplyTransaction(rename))
             .expect("publish large renames");
         let head_path = persistence::workspace_directory(temporary.path(), workspace).join("HEAD");
         let head_before = fs::read(&head_path).expect("head before query");
@@ -416,13 +465,11 @@ mod tests {
                 },
             }],
         });
-        assert_eq!(
-            daemon
-                .handle(query)
-                .expect_err("oversized read must reject")
-                .code,
-            ErrorCode::PolicyExceeded
-        );
+        let handled = daemon
+            .symbol(RequestId::new(4), query)
+            .expect("response under 32 MiB must be accepted");
+        assert!(handled.bytes.len() > transport::MAXIMUM_REQUEST_FRAME_BYTES);
+        assert!(handled.bytes.len() <= transport::MAXIMUM_RESPONSE_FRAME_BYTES);
         assert_eq!(fs::read(&head_path).expect("head after query"), head_before);
         let head = daemon
             .workspace(workspace)

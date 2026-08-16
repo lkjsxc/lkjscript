@@ -59,25 +59,6 @@ pub(crate) enum RuntimeValueCode {
 }
 impl RuntimeValueCode {
     pub const ALL: [Self; 5] = [Self::Unit, Self::Bool, Self::I64, Self::Product, Self::Sum];
-    pub const fn stable_tag(self) -> u8 {
-        match self {
-            Self::Unit => 1,
-            Self::Bool => 2,
-            Self::I64 => 3,
-            Self::Product => 4,
-            Self::Sum => 5,
-        }
-    }
-    pub const fn from_stable_tag(tag: u8) -> Option<Self> {
-        match tag {
-            1 => Some(Self::Unit),
-            2 => Some(Self::Bool),
-            3 => Some(Self::I64),
-            4 => Some(Self::Product),
-            5 => Some(Self::Sum),
-            _ => None,
-        }
-    }
     pub const fn machine_name(self) -> &'static str {
         match self {
             Self::Unit => "unit",
@@ -89,6 +70,7 @@ impl RuntimeValueCode {
     }
 }
 impl RuntimeValue {
+    #[cfg(test)]
     pub(crate) const fn code(&self) -> RuntimeValueCode {
         match self {
             Self::Unit => RuntimeValueCode::Unit,

@@ -19,7 +19,7 @@ Persistent named records, variants with fixed alternatives, stable members, atom
 declarations, acyclic by-value layouts, exact construction/projection, complete lazy variant handling,
 named query/repair context, and exact public named Run values work through the same durable service
 and executable route. The focused Reading/Input example remains a public-path oracle. Digest-aware
-manifest/section/full/unchanged machine-contract discovery derives from one executable authority.
+manifest/root-closure/full/unchanged machine-contract discovery derives from one executable authority.
 
 ## Complete: broader application, plain product model, and safety contract
 
@@ -39,35 +39,58 @@ Rust prohibition, the trusted computing base, resource limits, stack safety, res
 cleanup, aliasing, concurrency, and permission security. The current flat-cell runtime remains a
 verified baseline; no universal future memory-management strategy was selected.
 
-The complete job workflow measures every generic-CLI request, JSON and binary bytes, round trips,
+The complete job workflow measures every generic-CLI request, framed JSON bytes, round trips,
 selected bindings, rejected proposals, artifact growth, startup/restart, compile/interpreter
 observations, and active repository instruction/document size. Exact observations belong to
 [`docs/performance.md`](performance.md). No token claim is inferred from bytes.
 
-## Current decision: retain machine-contract sections
+## Complete: controlled proposal-ergonomics correction
 
-The job task still obtains six existing task-relevant sections. A new task-scoped projection was
-investigated but not selected. Transitive named-definition closure would require descriptor dependency
-machinery; narrower feature groups or exact variant selection would add a second discovery vocabulary
-and broad protocol/test cutover while the job workflow uses most request, transaction, expression,
-query, runtime, error, and limit families. The known-fingerprint path already makes repeat discovery
-compact; exact bytes remain in performance evidence.
+A sealed broad creation task exposed numeric transaction-handle and one-use expression scaffolding as
+the material failure source. Protocol-v5 now uses bounded canonical `DraftSymbol` strings directly
+and keeps proposal labels outside semantic identity. The retained job-policy example sends direct
+canonical symbols; exact interaction bytes and the absence of a byte-saving claim are recorded in performance
+evidence. A focused inline-expression prototype was removed because it had not yet closed validation
+and iterative-flattening obligations; inline single-use values remain a measured follow-up rather
+than a partial second request shape.
 
-Keep the current manifest, seven sections, explicit full result, and unchanged result until a real
-agent task demonstrates repeated over-fetch and a self-contained derived projection removes at least
-a material share without creating parallel schema truth. No prototype code remains.
+The broad machine-contract sections have been directly replaced by bounded exact roots and an
+iterative transitive definition closure. The closure is derived from the executable descriptor graph,
+not a public AST or a second schema. Independent review rejected initially smaller leaf/query roots
+because they omitted operational wire wrappers. A second duplicated-wrapper correction was also
+rejected because its task projection exceeded explicit full. Endpoint roots now bind one shared
+control template or one shared query template plus exact leaf variants, errors, IDs, and limits. The
+retained operationally complete projection is smaller than explicit full and the old six-section
+baseline; correctness was not traded for the 60-percent planning target.
 
-## Next gate: controlled coding-agent task evidence
+## Complete: controlled coding-agent replay
 
-Run a controlled authorized coding agent against the current public machine interface and the
-job-policy task (or an equally broad current-semantics change). Capture the exact task boundary,
-contract discovery, tool calls, proposals, retries, success oracle, elapsed time, and provider-reported
-tokens/cost only when genuinely available. Compare failure and repeated-discovery evidence, not model
-marketing. Use the result to choose the smallest interface correction, if any.
+A fresh isolated coding agent repeated the sealed release-channel task using production protocol-v5
+binaries, only four allowed orientation documents, public schema discovery, and no implementation,
+test, example, prompt, specification, history, or prior-trial payload. It published exactly three
+revisions and passed 43/43 deterministic assertions for declarations, rejected and valid repair,
+allocation rollback, identity continuity, exact decisions, lazy low-fuel selection, rename history,
+and restart. The initial symbolic creation succeeded on its first attempt; one later query guessed an
+invalid shorthand for a value reference, received strict `invalid_json`, and was corrected from the
+contract. Provider token and cost telemetry was not exposed.
 
-A task-scoped machine-contract projection, smaller structured authoring payload, or more focused
-repair context is eligible only when this evidence identifies it as material. Do not add model
-orchestration to the service.
+The active task contract was operationally complete but only 6.0 percent smaller than the historical
+compact six-section projection. The agent-authored initial request was larger and used four more
+symbols because it selected an allowed helper. The retained exact-graph replay holds symbol count
+constant and is also larger in JSON bytes than the numeric-handle baseline. Fewer total requests and
+no unintended initial-creation rejection are real benefits; the 60-percent contract and 40-percent
+proposal planning targets were not met.
+
+## Next gate: dependency-closed single-use expressions
+
+The release-channel evidence confirms that symbolic labels remove a numeric category failure but do
+not remove one-use expression scaffolding. Evaluate one closed inline value-position expression form
+only if it has one iterative normalization algorithm, exact depth/item/allocation accounting,
+deterministic canonical-equivalence tests, precise error paths, forward-reference behavior, and
+commit/validate-only/rejection rollback proof. It must directly replace redundant expression labels
+without becoming a persisted AST, macro language, template engine, or second preferred authoring
+path. Reverse it if request complexity, error quality, or validator duplication outweighs measured
+identifier and byte savings. Do not add another contract-projection vocabulary.
 
 ## Later evidence gates
 

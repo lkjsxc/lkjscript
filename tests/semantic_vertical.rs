@@ -6,10 +6,10 @@ use lkjscript::query::{
     RepairTarget, VisibleCursorPurpose,
 };
 use lkjscript::{
-    ApplyTransactionRequest, Client, ErrorCode, ExpressionDraft, ExpressionKindDraft,
-    FunctionBodyDraft, FunctionParameterDraft, IdempotencyKey, LocalHandle, NodeId, NodeTarget,
-    OperationDraft, ProductFieldDraft, QueryId, Request, RequestId, Response, Revision,
-    RuntimeFieldValue, RuntimeValue, SemanticType, Transaction, TransactionMode, TransactionOp,
+    ApplyTransactionRequest, Client, DraftSymbol, ErrorCode, ExpressionDraft, ExpressionKindDraft,
+    FunctionBodyDraft, FunctionParameterDraft, IdempotencyKey, NodeId, NodeTarget, OperationDraft,
+    ProductFieldDraft, QueryId, Request, RequestId, Response, Revision, RuntimeFieldValue,
+    RuntimeValue, SemanticType, Transaction, TransactionMode, TransactionOp,
     TransactionResponseSpec, TypeDraft, ValueDraft, WorkspaceId, YieldingBodyDraft,
 };
 use std::fs;
@@ -87,7 +87,7 @@ fn real_daemon_generic_client_accepts_and_returns_canonical_nominal_value() {
         panic!("workspace response")
     };
     let workspace = created.workspace;
-    let local = |value| NodeTarget::Local(LocalHandle::new(value));
+    let local = |value| NodeTarget::Draft(DraftSymbol::new(&format!("s{value}")));
     let request = ApplyTransactionRequest {
         transaction: Transaction {
             workspace,
@@ -96,37 +96,37 @@ fn real_daemon_generic_client_accepts_and_returns_canonical_nominal_value() {
             mode: TransactionMode::Commit,
             operations: vec![
                 TransactionOp::CreatePackage {
-                    handle: LocalHandle::new(1),
+                    symbol: DraftSymbol::new("s1"),
                     name: "app".into(),
                 },
                 TransactionOp::CreateModule {
-                    handle: LocalHandle::new(2),
+                    symbol: DraftSymbol::new("s2"),
                     package: local(1),
                     name: "root".into(),
                 },
                 TransactionOp::CreateProductType {
-                    handle: LocalHandle::new(3),
+                    symbol: DraftSymbol::new("s3"),
                     module: local(2),
                     name: "Reading".into(),
                     fields: vec![
                         ProductFieldDraft {
-                            handle: LocalHandle::new(4),
+                            symbol: DraftSymbol::new("s4"),
                             name: "value".into(),
                             ty: TypeDraft::I64,
                         },
                         ProductFieldDraft {
-                            handle: LocalHandle::new(5),
+                            symbol: DraftSymbol::new("s5"),
                             name: "valid".into(),
                             ty: TypeDraft::Bool,
                         },
                     ],
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(6),
+                    symbol: DraftSymbol::new("s6"),
                     module: local(2),
                     name: "identity".into(),
                     parameters: vec![FunctionParameterDraft {
-                        handle: LocalHandle::new(7),
+                        symbol: DraftSymbol::new("s7"),
                         name: "reading".into(),
                         ty: TypeDraft::Nominal(local(3)),
                     }],
@@ -143,11 +143,11 @@ fn real_daemon_generic_client_accepts_and_returns_canonical_nominal_value() {
             ],
         },
         response: TransactionResponseSpec {
-            return_handles: vec![
-                LocalHandle::new(3),
-                LocalHandle::new(4),
-                LocalHandle::new(5),
-                LocalHandle::new(6),
+            return_symbols: vec![
+                DraftSymbol::new("s3"),
+                DraftSymbol::new("s4"),
+                DraftSymbol::new("s5"),
+                DraftSymbol::new("s6"),
             ],
         },
     };
@@ -157,11 +157,13 @@ fn real_daemon_generic_client_accepts_and_returns_canonical_nominal_value() {
     else {
         panic!("transaction response")
     };
-    let id = |handle: u32| {
+    let id = |symbol: u32| {
         receipt
             .returned_bindings
             .iter()
-            .find_map(|(candidate, node)| (candidate.get() == handle).then_some(*node))
+            .find_map(|(candidate, node)| {
+                (candidate == &DraftSymbol::new(&format!("s{symbol}"))).then_some(*node)
+            })
             .expect("binding")
     };
     let input = RuntimeValue::Product {
@@ -384,17 +386,19 @@ fn product_path_performance_baseline() {
 fn bootstrap_agent_request_cost_is_bounded_and_reproducible() {
     let workspace = WorkspaceId::from_bytes([0x21; 16]);
     let transaction = bootstrap_transaction(workspace, false);
-    let transaction_bytes = lkjscript::protocol::encoded_request_size(
+    let transaction_bytes = lkjscript::machine::encode_request(
         RequestId::new(1),
         &Request::ApplyTransaction(apply(transaction.clone())),
     )
-    .expect("encode bootstrap request");
-    let summary_bytes = lkjscript::protocol::encoded_request_size(
+    .expect("encode bootstrap request")
+    .len();
+    let summary_bytes = lkjscript::machine::encode_request(
         RequestId::new(2),
         &query_request(workspace, Revision::new(1), Query::WorkspaceSummary),
     )
-    .expect("encode summary request");
-    let node_bytes = lkjscript::protocol::encoded_request_size(
+    .expect("encode summary request")
+    .len();
+    let node_bytes = lkjscript::machine::encode_request(
         RequestId::new(3),
         &query_request(
             workspace,
@@ -405,8 +409,9 @@ fn bootstrap_agent_request_cost_is_bounded_and_reproducible() {
             },
         ),
     )
-    .expect("encode node request");
-    let run_bytes = lkjscript::protocol::encoded_request_size(
+    .expect("encode node request")
+    .len();
+    let run_bytes = lkjscript::machine::encode_request(
         RequestId::new(4),
         &Request::Run {
             workspace,
@@ -419,7 +424,8 @@ fn bootstrap_agent_request_cost_is_bounded_and_reproducible() {
             },
         },
     )
-    .expect("encode run request");
+    .expect("encode run request")
+    .len();
     assert_eq!(transaction.operations.len(), 4);
     assert!(transaction_bytes < 4096);
     println!(
@@ -496,7 +502,7 @@ fn operand_repair_context_rejects_wrong_type_and_publishes_typed_repair() {
                     block,
                     before: Some(add),
                     expression: ExpressionDraft {
-                        handle: LocalHandle::new(100),
+                        symbol: Some(DraftSymbol::new("s100")),
                         operation: ExpressionKindDraft::ConstBool(true),
                     },
                 }],
@@ -956,12 +962,12 @@ fn real_daemon_executes_repaired_structured_program_across_restart() {
         panic!("create response")
     };
     let workspace = initial.workspace;
-    let local = |handle| NodeTarget::Local(LocalHandle::new(handle));
-    let result = |handle| ValueDraft::OperationResult {
-        operation: local(handle),
+    let local = |symbol| NodeTarget::Draft(DraftSymbol::new(&format!("s{symbol}")));
+    let result = |symbol| ValueDraft::OperationResult {
+        operation: local(symbol),
         output: 0,
     };
-    let parameter = |handle| ValueDraft::FunctionParameter(local(handle));
+    let parameter = |symbol| ValueDraft::FunctionParameter(local(symbol));
     let transaction = Transaction {
         workspace,
         base_revision: Revision::INITIAL,
@@ -969,20 +975,20 @@ fn real_daemon_executes_repaired_structured_program_across_restart() {
         mode: TransactionMode::Commit,
         operations: vec![
             TransactionOp::CreatePackage {
-                handle: LocalHandle::new(1),
+                symbol: DraftSymbol::new("s1"),
                 name: "app".into(),
             },
             TransactionOp::CreateModule {
-                handle: LocalHandle::new(2),
+                symbol: DraftSymbol::new("s2"),
                 package: local(1),
                 name: "root".into(),
             },
             TransactionOp::CreateFunction {
-                handle: LocalHandle::new(10),
+                symbol: DraftSymbol::new("s10"),
                 module: local(2),
                 name: "range_sum".into(),
                 parameters: vec![FunctionParameterDraft {
-                    handle: LocalHandle::new(11),
+                    symbol: DraftSymbol::new("s11"),
                     name: "end".into(),
                     ty: SemanticType::I64.into(),
                 }],
@@ -990,22 +996,22 @@ fn real_daemon_executes_repaired_structured_program_across_restart() {
                 body: Some(FunctionBodyDraft {
                     operations: vec![
                         ExpressionDraft {
-                            handle: LocalHandle::new(12),
+                            symbol: Some(DraftSymbol::new("s12")),
                             operation: ExpressionKindDraft::ConstI64(0),
                         },
                         ExpressionDraft {
-                            handle: LocalHandle::new(13),
+                            symbol: Some(DraftSymbol::new("s13")),
                             operation: ExpressionKindDraft::ForI64 {
                                 start: result(12),
                                 end_exclusive: parameter(11),
                                 step: 1,
                                 initial: result(12),
                                 carried: SemanticType::I64.into(),
-                                index_handle: LocalHandle::new(14),
-                                carried_handle: LocalHandle::new(15),
+                                index_symbol: DraftSymbol::new("s14"),
+                                carried_symbol: DraftSymbol::new("s15"),
                                 body: YieldingBodyDraft {
                                     operations: vec![ExpressionDraft {
-                                        handle: LocalHandle::new(16),
+                                        symbol: Some(DraftSymbol::new("s16")),
                                         operation: ExpressionKindDraft::Hole {
                                             expected: SemanticType::I64.into(),
                                         },
@@ -1019,11 +1025,11 @@ fn real_daemon_executes_repaired_structured_program_across_restart() {
                 }),
             },
             TransactionOp::CreateFunction {
-                handle: LocalHandle::new(20),
+                symbol: DraftSymbol::new("s20"),
                 module: local(2),
                 name: "normalize_and_sum".into(),
                 parameters: vec![FunctionParameterDraft {
-                    handle: LocalHandle::new(21),
+                    symbol: DraftSymbol::new("s21"),
                     name: "n".into(),
                     ty: SemanticType::I64.into(),
                 }],
@@ -1031,18 +1037,18 @@ fn real_daemon_executes_repaired_structured_program_across_restart() {
                 body: Some(FunctionBodyDraft {
                     operations: vec![
                         ExpressionDraft {
-                            handle: LocalHandle::new(22),
+                            symbol: Some(DraftSymbol::new("s22")),
                             operation: ExpressionKindDraft::ConstI64(0),
                         },
                         ExpressionDraft {
-                            handle: LocalHandle::new(23),
+                            symbol: Some(DraftSymbol::new("s23")),
                             operation: ExpressionKindDraft::LtI64 {
                                 lhs: parameter(21),
                                 rhs: result(22),
                             },
                         },
                         ExpressionDraft {
-                            handle: LocalHandle::new(24),
+                            symbol: Some(DraftSymbol::new("s24")),
                             operation: ExpressionKindDraft::If {
                                 condition: result(23),
                                 result: SemanticType::I64.into(),
@@ -1052,7 +1058,7 @@ fn real_daemon_executes_repaired_structured_program_across_restart() {
                                 },
                                 else_body: YieldingBodyDraft {
                                     operations: vec![ExpressionDraft {
-                                        handle: LocalHandle::new(25),
+                                        symbol: Some(DraftSymbol::new("s25")),
                                         operation: ExpressionKindDraft::Call {
                                             function: local(10),
                                             arguments: vec![parameter(21)],
@@ -1067,7 +1073,7 @@ fn real_daemon_executes_repaired_structured_program_across_restart() {
                 }),
             },
             TransactionOp::CreateFunction {
-                handle: LocalHandle::new(30),
+                symbol: DraftSymbol::new("s30"),
                 module: local(2),
                 name: "main".into(),
                 parameters: vec![],
@@ -1075,11 +1081,11 @@ fn real_daemon_executes_repaired_structured_program_across_restart() {
                 body: Some(FunctionBodyDraft {
                     operations: vec![
                         ExpressionDraft {
-                            handle: LocalHandle::new(31),
+                            symbol: Some(DraftSymbol::new("s31")),
                             operation: ExpressionKindDraft::ConstI64(101),
                         },
                         ExpressionDraft {
-                            handle: LocalHandle::new(32),
+                            symbol: Some(DraftSymbol::new("s32")),
                             operation: ExpressionKindDraft::Call {
                                 function: local(10),
                                 arguments: vec![result(31)],
@@ -1333,13 +1339,13 @@ fn real_daemon_executes_repaired_structured_program_across_restart() {
 }
 
 fn bootstrap_transaction(workspace: WorkspaceId, hole: bool) -> Transaction {
-    let package = LocalHandle::new(1);
-    let module = LocalHandle::new(2);
-    let function = LocalHandle::new(3);
-    let forty = LocalHandle::new(6);
-    let two_or_hole = LocalHandle::new(7);
-    let add = LocalHandle::new(8);
-    let local = NodeTarget::Local;
+    let package = DraftSymbol::new("s1");
+    let module = DraftSymbol::new("s2");
+    let function = DraftSymbol::new("s3");
+    let forty = DraftSymbol::new("s6");
+    let two_or_hole = DraftSymbol::new("s7");
+    let add = DraftSymbol::new("s8");
+    let local = NodeTarget::Draft;
     let result = |operation| ValueDraft::OperationResult {
         operation: local(operation),
         output: 0,
@@ -1355,16 +1361,16 @@ fn bootstrap_transaction(workspace: WorkspaceId, hole: bool) -> Transaction {
         mode: TransactionMode::Commit,
         operations: vec![
             TransactionOp::CreatePackage {
-                handle: package,
+                symbol: package,
                 name: "app".to_owned(),
             },
             TransactionOp::CreateModule {
-                handle: module,
+                symbol: module,
                 package: local(package),
                 name: "root".to_owned(),
             },
             TransactionOp::CreateFunction {
-                handle: function,
+                symbol: function,
                 module: local(module),
                 name: "main".to_owned(),
                 parameters: Vec::new(),
@@ -1372,11 +1378,11 @@ fn bootstrap_transaction(workspace: WorkspaceId, hole: bool) -> Transaction {
                 body: Some(FunctionBodyDraft {
                     operations: vec![
                         ExpressionDraft {
-                            handle: forty,
+                            symbol: Some(forty),
                             operation: ExpressionKindDraft::ConstI64(40),
                         },
                         ExpressionDraft {
-                            handle: two_or_hole,
+                            symbol: Some(two_or_hole),
                             operation: if hole {
                                 ExpressionKindDraft::Hole {
                                     expected: SemanticType::I64.into(),
@@ -1386,7 +1392,7 @@ fn bootstrap_transaction(workspace: WorkspaceId, hole: bool) -> Transaction {
                             },
                         },
                         ExpressionDraft {
-                            handle: add,
+                            symbol: Some(add),
                             operation: ExpressionKindDraft::AddI64 {
                                 lhs: result(forty),
                                 rhs: result(two_or_hole),
@@ -1405,17 +1411,17 @@ fn bootstrap_transaction(workspace: WorkspaceId, hole: bool) -> Transaction {
 }
 
 fn apply(transaction: Transaction) -> ApplyTransactionRequest {
-    let mut return_handles = Vec::new();
+    let mut return_symbols = Vec::new();
     let mut expressions = Vec::new();
     for operation in &transaction.operations {
-        if let Some(handle) = operation.created_handle() {
-            return_handles.push(handle);
+        if let Some(symbol) = operation.created_symbol() {
+            return_symbols.push(symbol);
         }
         match operation {
             TransactionOp::CreateFunction {
                 parameters, body, ..
             } => {
-                return_handles.extend(parameters.iter().map(|parameter| parameter.handle));
+                return_symbols.extend(parameters.iter().map(|parameter| parameter.symbol));
                 if let Some(body) = body {
                     expressions.extend(body.operations.iter());
                 }
@@ -1428,7 +1434,7 @@ fn apply(transaction: Transaction) -> ApplyTransactionRequest {
         }
     }
     while let Some(expression) = expressions.pop() {
-        return_handles.push(expression.handle);
+        return_symbols.push(expression.symbol.expect("bound expression"));
         match &expression.operation {
             ExpressionKindDraft::If {
                 then_body,
@@ -1439,32 +1445,34 @@ fn apply(transaction: Transaction) -> ApplyTransactionRequest {
                 expressions.extend(else_body.operations.iter());
             }
             ExpressionKindDraft::ForI64 {
-                index_handle,
-                carried_handle,
+                index_symbol,
+                carried_symbol,
                 body,
                 ..
             } => {
-                return_handles.push(*index_handle);
-                return_handles.push(*carried_handle);
+                return_symbols.push(*index_symbol);
+                return_symbols.push(*carried_symbol);
                 expressions.extend(body.operations.iter());
             }
             _ => {}
         }
     }
-    return_handles.sort();
-    return_handles.dedup();
+    return_symbols.sort();
+    return_symbols.dedup();
     ApplyTransactionRequest {
         transaction,
-        response: TransactionResponseSpec { return_handles },
+        response: TransactionResponseSpec { return_symbols },
     }
 }
 
-fn allocation(result: &lkjscript::TransactionReceipt, handle: u32) -> NodeId {
+fn allocation(result: &lkjscript::TransactionReceipt, symbol: u32) -> NodeId {
     result
         .returned_bindings
         .iter()
-        .find_map(|(candidate, node)| (candidate.get() == handle).then_some(*node))
-        .expect("allocation handle exists")
+        .find_map(|(candidate, node)| {
+            (candidate == &DraftSymbol::new(&format!("s{symbol}"))).then_some(*node)
+        })
+        .expect("allocation symbol exists")
 }
 
 fn query_request(workspace: WorkspaceId, revision: Revision, query: Query) -> Request {

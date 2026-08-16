@@ -2,7 +2,7 @@ use crate::diff;
 use crate::error::{ErrorCode, LkError, Result};
 use crate::graph::{Snapshot, Workspace, require_kind};
 use crate::ids::{
-    ChangeDigest, IdempotencyKey, LocalHandle, NodeId, Revision, SnapshotHash, WorkspaceId,
+    ChangeDigest, DraftSymbol, IdempotencyKey, NodeId, Revision, SnapshotHash, WorkspaceId,
 };
 use crate::query;
 use crate::schema::{
@@ -22,7 +22,7 @@ use std::sync::Arc;
 )]
 pub enum NodeTarget {
     Existing(NodeId),
-    Local(LocalHandle),
+    Draft(DraftSymbol),
 }
 
 pub const MAX_RETURNED_BINDINGS: usize = 64;
@@ -48,7 +48,7 @@ pub struct Transaction {
 #[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct TransactionResponseSpec {
-    pub return_handles: Vec<LocalHandle>,
+    pub return_symbols: Vec<DraftSymbol>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
@@ -91,41 +91,6 @@ impl TransactionOpCode {
         Self::CreateProductType,
         Self::CreateSumType,
     ];
-    pub const fn stable_tag(self) -> u8 {
-        match self {
-            Self::CreatePackage => 1,
-            Self::CreateModule => 2,
-            Self::CreateFunction => 3,
-            Self::DefineFunctionBody => 4,
-            Self::InsertExpression => 5,
-            Self::SetEntryFunction => 6,
-            Self::RenameNode => 7,
-            Self::ReplaceOperation => 8,
-            Self::ReplaceOperand => 9,
-            Self::DeleteOwnedSubtree => 10,
-            Self::RefineHole => 11,
-            Self::CreateProductType => 12,
-            Self::CreateSumType => 13,
-        }
-    }
-    pub const fn from_stable_tag(tag: u8) -> Option<Self> {
-        match tag {
-            1 => Some(Self::CreatePackage),
-            2 => Some(Self::CreateModule),
-            3 => Some(Self::CreateFunction),
-            4 => Some(Self::DefineFunctionBody),
-            5 => Some(Self::InsertExpression),
-            6 => Some(Self::SetEntryFunction),
-            7 => Some(Self::RenameNode),
-            8 => Some(Self::ReplaceOperation),
-            9 => Some(Self::ReplaceOperand),
-            10 => Some(Self::DeleteOwnedSubtree),
-            11 => Some(Self::RefineHole),
-            12 => Some(Self::CreateProductType),
-            13 => Some(Self::CreateSumType),
-            _ => None,
-        }
-    }
     pub const fn machine_name(self) -> &'static str {
         match self {
             Self::CreatePackage => "create_package",
@@ -180,23 +145,6 @@ impl ExpressionDraftCode {
         Self::ConstructVariant,
         Self::MatchSum,
     ];
-    pub const fn stable_tag(self) -> u8 {
-        match self {
-            Self::ConstUnit => 1,
-            Self::ConstBool => 2,
-            Self::ConstI64 => 3,
-            Self::AddI64 => 4,
-            Self::LtI64 => 5,
-            Self::Call => 6,
-            Self::Hole => 7,
-            Self::If => 8,
-            Self::ForI64 => 9,
-            Self::ConstructProduct => 10,
-            Self::ProjectField => 11,
-            Self::ConstructVariant => 12,
-            Self::MatchSum => 13,
-        }
-    }
     pub const fn machine_name(self) -> &'static str {
         match self {
             Self::ConstUnit => "const_unit",
@@ -228,21 +176,6 @@ impl ValueDraftCode {
         Self::OperationResult,
         Self::BlockArgument,
     ];
-    pub const fn stable_tag(self) -> u8 {
-        match self {
-            Self::FunctionParameter => 1,
-            Self::OperationResult => 2,
-            Self::BlockArgument => 3,
-        }
-    }
-    pub const fn from_stable_tag(tag: u8) -> Option<Self> {
-        match tag {
-            1 => Some(Self::FunctionParameter),
-            2 => Some(Self::OperationResult),
-            3 => Some(Self::BlockArgument),
-            _ => None,
-        }
-    }
     pub const fn machine_name(self) -> &'static str {
         match self {
             Self::FunctionParameter => "function_parameter",
@@ -253,7 +186,7 @@ impl ValueDraftCode {
 }
 
 impl ValueDraft {
-    pub const fn code(self) -> ValueDraftCode {
+    pub const fn code(&self) -> ValueDraftCode {
         match self {
             Self::FunctionParameter(_) => ValueDraftCode::FunctionParameter,
             Self::OperationResult { .. } => ValueDraftCode::OperationResult,
@@ -265,7 +198,7 @@ impl ValueDraft {
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct FunctionParameterDraft {
-    pub handle: LocalHandle,
+    pub symbol: DraftSymbol,
     pub name: String,
     pub ty: TypeDraft,
 }
@@ -273,7 +206,7 @@ pub struct FunctionParameterDraft {
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProductFieldDraft {
-    pub handle: LocalHandle,
+    pub symbol: DraftSymbol,
     pub name: String,
     pub ty: TypeDraft,
 }
@@ -281,7 +214,7 @@ pub struct ProductFieldDraft {
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SumVariantDraft {
-    pub handle: LocalHandle,
+    pub symbol: DraftSymbol,
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub payload: Option<TypeDraft>,
@@ -306,14 +239,15 @@ pub struct YieldingBodyDraft {
 pub struct MatchArmDraft {
     pub variant: NodeTarget,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub payload_handle: Option<LocalHandle>,
+    pub payload_symbol: Option<DraftSymbol>,
     pub body: YieldingBodyDraft,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ExpressionDraft {
-    pub handle: LocalHandle,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub symbol: Option<DraftSymbol>,
     pub operation: ExpressionKindDraft,
 }
 
@@ -355,8 +289,8 @@ pub enum ExpressionKindDraft {
         step: i64,
         initial: ValueDraft,
         carried: TypeDraft,
-        index_handle: LocalHandle,
-        carried_handle: LocalHandle,
+        index_symbol: DraftSymbol,
+        carried_symbol: DraftSymbol,
         body: YieldingBodyDraft,
     },
     ConstructProduct {
@@ -379,6 +313,9 @@ pub enum ExpressionKindDraft {
     },
 }
 
+// This is the one bounded public DTO authority; boxing selected variants would complicate direct
+// typed construction without changing wire bytes.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(
     tag = "kind",
@@ -388,28 +325,28 @@ pub enum ExpressionKindDraft {
 )]
 pub enum TransactionOp {
     CreatePackage {
-        handle: LocalHandle,
+        symbol: DraftSymbol,
         name: String,
     },
     CreateModule {
-        handle: LocalHandle,
+        symbol: DraftSymbol,
         package: NodeTarget,
         name: String,
     },
     CreateProductType {
-        handle: LocalHandle,
+        symbol: DraftSymbol,
         module: NodeTarget,
         name: String,
         fields: Vec<ProductFieldDraft>,
     },
     CreateSumType {
-        handle: LocalHandle,
+        symbol: DraftSymbol,
         module: NodeTarget,
         name: String,
         variants: Vec<SumVariantDraft>,
     },
     CreateFunction {
-        handle: LocalHandle,
+        symbol: DraftSymbol,
         module: NodeTarget,
         name: String,
         parameters: Vec<FunctionParameterDraft>,
@@ -417,7 +354,7 @@ pub enum TransactionOp {
         body: Option<FunctionBodyDraft>,
     },
     DefineFunctionBody {
-        function: NodeTarget,
+        function: NodeId,
         body: FunctionBodyDraft,
     },
     InsertExpression {
@@ -469,14 +406,14 @@ impl TransactionOp {
             Self::DeleteOwnedSubtree { .. } => TransactionOpCode::DeleteOwnedSubtree,
         }
     }
-    pub const fn created_handle(&self) -> Option<LocalHandle> {
+    pub const fn created_symbol(&self) -> Option<DraftSymbol> {
         match self {
-            Self::CreatePackage { handle, .. }
-            | Self::CreateModule { handle, .. }
-            | Self::CreateProductType { handle, .. }
-            | Self::CreateSumType { handle, .. }
-            | Self::CreateFunction { handle, .. } => Some(*handle),
-            Self::InsertExpression { expression, .. } => Some(expression.handle),
+            Self::CreatePackage { symbol, .. }
+            | Self::CreateModule { symbol, .. }
+            | Self::CreateProductType { symbol, .. }
+            | Self::CreateSumType { symbol, .. }
+            | Self::CreateFunction { symbol, .. } => Some(*symbol),
+            Self::InsertExpression { expression, .. } => expression.symbol,
             _ => None,
         }
     }
@@ -485,68 +422,68 @@ impl TransactionOp {
 #[derive(Clone, Debug)]
 enum CanonicalEdit {
     CreatePackage {
-        handle: LocalHandle,
+        symbol: DraftSymbol,
         name: String,
     },
     CreateModule {
-        handle: LocalHandle,
+        symbol: DraftSymbol,
         package: NodeTarget,
         name: String,
     },
     CreateProductType {
-        handle: LocalHandle,
+        symbol: DraftSymbol,
         module: NodeTarget,
         name: String,
     },
     CreateProductField {
-        handle: LocalHandle,
+        symbol: DraftSymbol,
         product: NodeTarget,
         name: String,
         ty: TypeDraft,
     },
     CreateSumType {
-        handle: LocalHandle,
+        symbol: DraftSymbol,
         module: NodeTarget,
         name: String,
     },
     CreateSumVariant {
-        handle: LocalHandle,
+        symbol: DraftSymbol,
         sum: NodeTarget,
         name: String,
         payload: Option<TypeDraft>,
     },
     CreateFunction {
-        handle: LocalHandle,
+        symbol: DraftSymbol,
         module: NodeTarget,
         name: String,
         result: TypeDraft,
     },
     CreateParameter {
-        handle: LocalHandle,
+        symbol: DraftSymbol,
         function: NodeTarget,
         name: String,
         ty: TypeDraft,
     },
     CreateRegion {
-        handle: LocalHandle,
+        symbol: DraftSymbol,
         owner: NodeTarget,
     },
     CreateBlock {
-        handle: LocalHandle,
+        symbol: DraftSymbol,
         region: NodeTarget,
     },
     CreateBlockArgument {
-        handle: LocalHandle,
+        symbol: DraftSymbol,
         block: NodeTarget,
         ty: TypeDraft,
     },
     CreateMatchPayloadArgument {
-        handle: LocalHandle,
+        symbol: DraftSymbol,
         block: NodeTarget,
         variant: NodeTarget,
     },
     CreateOperation {
-        handle: LocalHandle,
+        symbol: DraftSymbol,
         block: NodeTarget,
         before: Option<NodeTarget>,
         operation: OperationDraft,
@@ -590,7 +527,7 @@ pub struct TransactionReceipt {
     pub hash: SnapshotHash,
     pub published: bool,
     pub created_count: u64,
-    pub returned_bindings: Vec<(LocalHandle, NodeId)>,
+    pub returned_bindings: Vec<(DraftSymbol, NodeId)>,
     pub change_count: u64,
     pub change_digest: ChangeDigest,
     pub complete_before: bool,
@@ -608,7 +545,7 @@ pub(crate) struct PreparedTransaction {
 struct ExpandedTransaction {
     edits: Vec<CanonicalEdit>,
     edit_sources: Vec<usize>,
-    explicit_handles: BTreeSet<LocalHandle>,
+    explicit_symbols: BTreeSet<DraftSymbol>,
     nominal_catalogue: StagedNominalCatalogue,
 }
 
@@ -652,7 +589,7 @@ impl StagedNominalCatalogue {
                                 }
                                 _ => None,
                             },
-                            NodeTarget::Local(_) => None,
+                            NodeTarget::Draft(_) => None,
                         };
                         catalogue.variants.insert(*member, (declaration, payload));
                     }
@@ -663,11 +600,11 @@ impl StagedNominalCatalogue {
         }
         for operation in operations {
             match operation {
-                TransactionOp::CreateProductType { handle, fields, .. } => {
-                    let declaration = NodeTarget::Local(*handle);
+                TransactionOp::CreateProductType { symbol, fields, .. } => {
+                    let declaration = NodeTarget::Draft(*symbol);
                     let members = fields
                         .iter()
-                        .map(|field| NodeTarget::Local(field.handle))
+                        .map(|field| NodeTarget::Draft(field.symbol))
                         .collect::<Vec<_>>();
                     for member in &members {
                         catalogue.field_owners.insert(*member, declaration);
@@ -675,12 +612,12 @@ impl StagedNominalCatalogue {
                     catalogue.products.insert(declaration, members);
                 }
                 TransactionOp::CreateSumType {
-                    handle, variants, ..
+                    symbol, variants, ..
                 } => {
-                    let declaration = NodeTarget::Local(*handle);
+                    let declaration = NodeTarget::Draft(*symbol);
                     let members = variants
                         .iter()
-                        .map(|variant| NodeTarget::Local(variant.handle))
+                        .map(|variant| NodeTarget::Draft(variant.symbol))
                         .collect::<Vec<_>>();
                     for (member, variant) in members.iter().zip(variants) {
                         catalogue
@@ -737,10 +674,10 @@ impl StagedNominalCatalogue {
                 )
                 .at_operation(source));
             }
-            if payload.is_some() != arm.payload_handle.is_some() {
+            if payload.is_some() != arm.payload_symbol.is_some() {
                 return Err(LkError::new(
                     ErrorCode::InvalidOperand,
-                    "match payload handle presence does not match the variant payload",
+                    "match payload symbol presence does not match the variant payload",
                 )
                 .at_operation(source));
             }
@@ -786,15 +723,15 @@ enum ExpandEvent {
     },
     YieldingBody {
         owner: NodeTarget,
-        region: LocalHandle,
-        arguments: Vec<(LocalHandle, TypeDraft)>,
+        region: DraftSymbol,
+        arguments: Vec<(DraftSymbol, TypeDraft)>,
         body: YieldingBodyDraft,
     },
     MatchArmBody {
         owner: NodeTarget,
-        region: LocalHandle,
+        region: DraftSymbol,
         variant: NodeTarget,
-        payload_handle: Option<LocalHandle>,
+        payload_symbol: Option<DraftSymbol>,
         body: YieldingBodyDraft,
     },
     Expression {
@@ -808,69 +745,69 @@ fn expand_transaction(
     base: &Snapshot,
     operations: &[TransactionOp],
 ) -> Result<ExpandedTransaction> {
-    let explicit_handles = scan_explicit_handles(operations)?;
+    let explicit_symbols = scan_explicit_symbols(operations)?;
     let nominal_catalogue = StagedNominalCatalogue::build(base, operations);
-    let mut synthetic = SyntheticHandles::new(&explicit_handles);
+    let mut synthetic = SyntheticSymbols::new(&explicit_symbols);
     let mut events = Vec::new();
     for (source, operation) in operations.iter().enumerate().rev() {
         match operation {
-            TransactionOp::CreatePackage { handle, name } => {
+            TransactionOp::CreatePackage { symbol, name } => {
                 events.push(ExpandEvent::Edit(CanonicalEdit::CreatePackage {
-                    handle: *handle,
+                    symbol: *symbol,
                     name: name.clone(),
                 }))
             }
             TransactionOp::CreateModule {
-                handle,
+                symbol,
                 package,
                 name,
             } => events.push(ExpandEvent::Edit(CanonicalEdit::CreateModule {
-                handle: *handle,
+                symbol: *symbol,
                 package: *package,
                 name: name.clone(),
             })),
             TransactionOp::CreateProductType {
-                handle,
+                symbol,
                 module,
                 name,
                 fields,
             } => {
                 for field in fields.iter().rev() {
                     events.push(ExpandEvent::Edit(CanonicalEdit::CreateProductField {
-                        handle: field.handle,
-                        product: NodeTarget::Local(*handle),
+                        symbol: field.symbol,
+                        product: NodeTarget::Draft(*symbol),
                         name: field.name.clone(),
                         ty: field.ty,
                     }));
                 }
                 events.push(ExpandEvent::Edit(CanonicalEdit::CreateProductType {
-                    handle: *handle,
+                    symbol: *symbol,
                     module: *module,
                     name: name.clone(),
                 }));
             }
             TransactionOp::CreateSumType {
-                handle,
+                symbol,
                 module,
                 name,
                 variants,
             } => {
                 for variant in variants.iter().rev() {
                     events.push(ExpandEvent::Edit(CanonicalEdit::CreateSumVariant {
-                        handle: variant.handle,
-                        sum: NodeTarget::Local(*handle),
+                        symbol: variant.symbol,
+                        sum: NodeTarget::Draft(*symbol),
                         name: variant.name.clone(),
                         payload: variant.payload,
                     }));
                 }
                 events.push(ExpandEvent::Edit(CanonicalEdit::CreateSumType {
-                    handle: *handle,
+                    symbol: *symbol,
                     module: *module,
                     name: name.clone(),
                 }));
             }
             TransactionOp::CreateFunction {
-                handle,
+                symbol,
                 module,
                 name,
                 parameters,
@@ -879,20 +816,20 @@ fn expand_transaction(
             } => {
                 if let Some(body) = body {
                     events.push(ExpandEvent::FunctionBody {
-                        function: NodeTarget::Local(*handle),
+                        function: NodeTarget::Draft(*symbol),
                         body: body.clone(),
                     });
                 }
                 for parameter in parameters.iter().rev() {
                     events.push(ExpandEvent::Edit(CanonicalEdit::CreateParameter {
-                        handle: parameter.handle,
-                        function: NodeTarget::Local(*handle),
+                        symbol: parameter.symbol,
+                        function: NodeTarget::Draft(*symbol),
                         name: parameter.name.clone(),
                         ty: parameter.ty,
                     }));
                 }
                 events.push(ExpandEvent::Edit(CanonicalEdit::CreateFunction {
-                    handle: *handle,
+                    symbol: *symbol,
                     module: *module,
                     name: name.clone(),
                     result: *result,
@@ -900,7 +837,7 @@ fn expand_transaction(
             }
             TransactionOp::DefineFunctionBody { function, body } => {
                 events.push(ExpandEvent::FunctionBody {
-                    function: *function,
+                    function: NodeTarget::Existing(*function),
                     body: body.clone(),
                 })
             }
@@ -995,20 +932,20 @@ fn expand_transaction(
                 let block = synthetic.next(current_source)?;
                 let terminator = synthetic.next(current_source)?;
                 edits.push(CanonicalEdit::CreateRegion {
-                    handle: region,
+                    symbol: region,
                     owner: function,
                 });
                 edits.push(CanonicalEdit::CreateBlock {
-                    handle: block,
-                    region: NodeTarget::Local(region),
+                    symbol: block,
+                    region: NodeTarget::Draft(region),
                 });
                 events.push(ExpandEvent::Edit(CanonicalEdit::SetFunctionBody {
                     function,
-                    region: NodeTarget::Local(region),
+                    region: NodeTarget::Draft(region),
                 }));
                 events.push(ExpandEvent::Edit(CanonicalEdit::CreateOperation {
-                    handle: terminator,
-                    block: NodeTarget::Local(block),
+                    symbol: terminator,
+                    block: NodeTarget::Draft(block),
                     before: None,
                     operation: OperationDraft::Return {
                         value: body.return_value,
@@ -1016,7 +953,7 @@ fn expand_transaction(
                 }));
                 for expression in body.operations.into_iter().rev() {
                     events.push(ExpandEvent::Expression {
-                        block: NodeTarget::Local(block),
+                        block: NodeTarget::Draft(block),
                         before: None,
                         expression,
                     });
@@ -1030,24 +967,24 @@ fn expand_transaction(
             } => {
                 let block = synthetic.next(current_source)?;
                 edits.push(CanonicalEdit::CreateRegion {
-                    handle: region,
+                    symbol: region,
                     owner,
                 });
                 edits.push(CanonicalEdit::CreateBlock {
-                    handle: block,
-                    region: NodeTarget::Local(region),
+                    symbol: block,
+                    region: NodeTarget::Draft(region),
                 });
-                for (handle, ty) in arguments {
+                for (symbol, ty) in arguments {
                     edits.push(CanonicalEdit::CreateBlockArgument {
-                        handle,
-                        block: NodeTarget::Local(block),
+                        symbol,
+                        block: NodeTarget::Draft(block),
                         ty,
                     });
                 }
                 let terminator = synthetic.next(current_source)?;
                 events.push(ExpandEvent::Edit(CanonicalEdit::CreateOperation {
-                    handle: terminator,
-                    block: NodeTarget::Local(block),
+                    symbol: terminator,
+                    block: NodeTarget::Draft(block),
                     before: None,
                     operation: OperationDraft::Yield {
                         value: body.yield_value,
@@ -1055,7 +992,7 @@ fn expand_transaction(
                 }));
                 for expression in body.operations.into_iter().rev() {
                     events.push(ExpandEvent::Expression {
-                        block: NodeTarget::Local(block),
+                        block: NodeTarget::Draft(block),
                         before: None,
                         expression,
                     });
@@ -1065,29 +1002,29 @@ fn expand_transaction(
                 owner,
                 region,
                 variant,
-                payload_handle,
+                payload_symbol,
                 body,
             } => {
                 let block = synthetic.next(current_source)?;
                 edits.push(CanonicalEdit::CreateRegion {
-                    handle: region,
+                    symbol: region,
                     owner,
                 });
                 edits.push(CanonicalEdit::CreateBlock {
-                    handle: block,
-                    region: NodeTarget::Local(region),
+                    symbol: block,
+                    region: NodeTarget::Draft(region),
                 });
-                if let Some(handle) = payload_handle {
+                if let Some(symbol) = payload_symbol {
                     edits.push(CanonicalEdit::CreateMatchPayloadArgument {
-                        handle,
-                        block: NodeTarget::Local(block),
+                        symbol,
+                        block: NodeTarget::Draft(block),
                         variant,
                     });
                 }
                 let terminator = synthetic.next(current_source)?;
                 events.push(ExpandEvent::Edit(CanonicalEdit::CreateOperation {
-                    handle: terminator,
-                    block: NodeTarget::Local(block),
+                    symbol: terminator,
+                    block: NodeTarget::Draft(block),
                     before: None,
                     operation: OperationDraft::Yield {
                         value: body.yield_value,
@@ -1095,7 +1032,7 @@ fn expand_transaction(
                 }));
                 for expression in body.operations.into_iter().rev() {
                     events.push(ExpandEvent::Expression {
-                        block: NodeTarget::Local(block),
+                        block: NodeTarget::Draft(block),
                         before: None,
                         expression,
                     });
@@ -1105,189 +1042,196 @@ fn expand_transaction(
                 block,
                 before,
                 expression,
-            } => match expression.operation {
-                ExpressionKindDraft::ConstUnit => edits.push(CanonicalEdit::CreateOperation {
-                    handle: expression.handle,
-                    block,
-                    before,
-                    operation: OperationDraft::ConstUnit,
-                }),
-                ExpressionKindDraft::ConstBool(value) => {
-                    edits.push(CanonicalEdit::CreateOperation {
-                        handle: expression.handle,
+            } => {
+                let expression_symbol =
+                    expression.symbol.unwrap_or(synthetic.next(current_source)?);
+                match expression.operation {
+                    ExpressionKindDraft::ConstUnit => edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
                         block,
                         before,
-                        operation: OperationDraft::ConstBool(value),
-                    })
-                }
-                ExpressionKindDraft::ConstI64(value) => {
-                    edits.push(CanonicalEdit::CreateOperation {
-                        handle: expression.handle,
-                        block,
-                        before,
-                        operation: OperationDraft::ConstI64(value),
-                    })
-                }
-                ExpressionKindDraft::AddI64 { lhs, rhs } => {
-                    edits.push(CanonicalEdit::CreateOperation {
-                        handle: expression.handle,
-                        block,
-                        before,
-                        operation: OperationDraft::AddI64 { lhs, rhs },
-                    })
-                }
-                ExpressionKindDraft::LtI64 { lhs, rhs } => {
-                    edits.push(CanonicalEdit::CreateOperation {
-                        handle: expression.handle,
-                        block,
-                        before,
-                        operation: OperationDraft::LtI64 { lhs, rhs },
-                    })
-                }
-                ExpressionKindDraft::Call {
-                    function,
-                    arguments,
-                } => edits.push(CanonicalEdit::CreateOperation {
-                    handle: expression.handle,
-                    block,
-                    before,
-                    operation: OperationDraft::Call {
+                        operation: OperationDraft::ConstUnit,
+                    }),
+                    ExpressionKindDraft::ConstBool(value) => {
+                        edits.push(CanonicalEdit::CreateOperation {
+                            symbol: expression_symbol,
+                            block,
+                            before,
+                            operation: OperationDraft::ConstBool(value),
+                        })
+                    }
+                    ExpressionKindDraft::ConstI64(value) => {
+                        edits.push(CanonicalEdit::CreateOperation {
+                            symbol: expression_symbol,
+                            block,
+                            before,
+                            operation: OperationDraft::ConstI64(value),
+                        })
+                    }
+                    ExpressionKindDraft::AddI64 { lhs, rhs } => {
+                        edits.push(CanonicalEdit::CreateOperation {
+                            symbol: expression_symbol,
+                            block,
+                            before,
+                            operation: OperationDraft::AddI64 { lhs, rhs },
+                        })
+                    }
+                    ExpressionKindDraft::LtI64 { lhs, rhs } => {
+                        edits.push(CanonicalEdit::CreateOperation {
+                            symbol: expression_symbol,
+                            block,
+                            before,
+                            operation: OperationDraft::LtI64 { lhs, rhs },
+                        })
+                    }
+                    ExpressionKindDraft::Call {
                         function,
                         arguments,
-                    },
-                }),
-                ExpressionKindDraft::Hole { expected } => {
-                    edits.push(CanonicalEdit::CreateOperation {
-                        handle: expression.handle,
+                    } => edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
                         block,
                         before,
-                        operation: OperationDraft::Hole { expected },
-                    })
-                }
-                ExpressionKindDraft::If {
-                    condition,
-                    result,
-                    then_body,
-                    else_body,
-                } => {
-                    let then_region = synthetic.next(current_source)?;
-                    let else_region = synthetic.next(current_source)?;
-                    edits.push(CanonicalEdit::CreateOperation {
-                        handle: expression.handle,
-                        block,
-                        before,
-                        operation: OperationDraft::If {
-                            condition,
-                            result,
-                            then_region: NodeTarget::Local(then_region),
-                            else_region: NodeTarget::Local(else_region),
+                        operation: OperationDraft::Call {
+                            function,
+                            arguments,
                         },
-                    });
-                    events.push(ExpandEvent::YieldingBody {
-                        owner: NodeTarget::Local(expression.handle),
-                        region: else_region,
-                        arguments: Vec::new(),
-                        body: else_body,
-                    });
-                    events.push(ExpandEvent::YieldingBody {
-                        owner: NodeTarget::Local(expression.handle),
-                        region: then_region,
-                        arguments: Vec::new(),
-                        body: then_body,
-                    });
-                }
-                ExpressionKindDraft::ForI64 {
-                    start,
-                    end_exclusive,
-                    step,
-                    initial,
-                    carried,
-                    index_handle,
-                    carried_handle,
-                    body,
-                } => {
-                    let body_region = synthetic.next(current_source)?;
-                    edits.push(CanonicalEdit::CreateOperation {
-                        handle: expression.handle,
-                        block,
-                        before,
-                        operation: OperationDraft::ForI64 {
-                            start,
-                            end_exclusive,
-                            step,
-                            initial,
-                            carried,
-                            body_region: NodeTarget::Local(body_region),
-                        },
-                    });
-                    events.push(ExpandEvent::YieldingBody {
-                        owner: NodeTarget::Local(expression.handle),
-                        region: body_region,
-                        arguments: vec![(index_handle, TypeDraft::I64), (carried_handle, carried)],
+                    }),
+                    ExpressionKindDraft::Hole { expected } => {
+                        edits.push(CanonicalEdit::CreateOperation {
+                            symbol: expression_symbol,
+                            block,
+                            before,
+                            operation: OperationDraft::Hole { expected },
+                        })
+                    }
+                    ExpressionKindDraft::If {
+                        condition,
+                        result,
+                        then_body,
+                        else_body,
+                    } => {
+                        let then_region = synthetic.next(current_source)?;
+                        let else_region = synthetic.next(current_source)?;
+                        edits.push(CanonicalEdit::CreateOperation {
+                            symbol: expression_symbol,
+                            block,
+                            before,
+                            operation: OperationDraft::If {
+                                condition,
+                                result,
+                                then_region: NodeTarget::Draft(then_region),
+                                else_region: NodeTarget::Draft(else_region),
+                            },
+                        });
+                        events.push(ExpandEvent::YieldingBody {
+                            owner: NodeTarget::Draft(expression_symbol),
+                            region: else_region,
+                            arguments: Vec::new(),
+                            body: else_body,
+                        });
+                        events.push(ExpandEvent::YieldingBody {
+                            owner: NodeTarget::Draft(expression_symbol),
+                            region: then_region,
+                            arguments: Vec::new(),
+                            body: then_body,
+                        });
+                    }
+                    ExpressionKindDraft::ForI64 {
+                        start,
+                        end_exclusive,
+                        step,
+                        initial,
+                        carried,
+                        index_symbol,
+                        carried_symbol,
                         body,
-                    });
-                }
-                ExpressionKindDraft::ConstructProduct { product, fields } => {
-                    edits.push(CanonicalEdit::CreateOperation {
-                        handle: expression.handle,
-                        block,
-                        before,
-                        operation: OperationDraft::ConstructProduct { product, fields },
-                    })
-                }
-                ExpressionKindDraft::ProjectField { value, field } => {
-                    edits.push(CanonicalEdit::CreateOperation {
-                        handle: expression.handle,
-                        block,
-                        before,
-                        operation: OperationDraft::ProjectField { value, field },
-                    })
-                }
-                ExpressionKindDraft::ConstructVariant { variant, payload } => {
-                    edits.push(CanonicalEdit::CreateOperation {
-                        handle: expression.handle,
-                        block,
-                        before,
-                        operation: OperationDraft::ConstructVariant { variant, payload },
-                    })
-                }
-                ExpressionKindDraft::MatchSum {
-                    scrutinee,
-                    result,
-                    arms,
-                } => {
-                    let arms = nominal_catalogue.normalize_match_arms(arms, current_source)?;
-                    let mut canonical_arms = Vec::with_capacity(arms.len());
-                    let mut arm_events = Vec::with_capacity(arms.len());
-                    for arm in arms {
-                        let region = synthetic.next(current_source)?;
-                        canonical_arms.push(MatchArmOperationDraft {
-                            variant: arm.variant,
-                            region: NodeTarget::Local(region),
+                    } => {
+                        let body_region = synthetic.next(current_source)?;
+                        edits.push(CanonicalEdit::CreateOperation {
+                            symbol: expression_symbol,
+                            block,
+                            before,
+                            operation: OperationDraft::ForI64 {
+                                start,
+                                end_exclusive,
+                                step,
+                                initial,
+                                carried,
+                                body_region: NodeTarget::Draft(body_region),
+                            },
                         });
-                        arm_events.push(ExpandEvent::MatchArmBody {
-                            owner: NodeTarget::Local(expression.handle),
-                            region,
-                            variant: arm.variant,
-                            payload_handle: arm.payload_handle,
-                            body: arm.body,
+                        events.push(ExpandEvent::YieldingBody {
+                            owner: NodeTarget::Draft(expression_symbol),
+                            region: body_region,
+                            arguments: vec![
+                                (index_symbol, TypeDraft::I64),
+                                (carried_symbol, carried),
+                            ],
+                            body,
                         });
                     }
-                    edits.push(CanonicalEdit::CreateOperation {
-                        handle: expression.handle,
-                        block,
-                        before,
-                        operation: OperationDraft::MatchSum {
-                            scrutinee,
-                            result,
-                            arms: canonical_arms,
-                        },
-                    });
-                    for event in arm_events.into_iter().rev() {
-                        events.push(event);
+                    ExpressionKindDraft::ConstructProduct { product, fields } => {
+                        edits.push(CanonicalEdit::CreateOperation {
+                            symbol: expression_symbol,
+                            block,
+                            before,
+                            operation: OperationDraft::ConstructProduct { product, fields },
+                        })
+                    }
+                    ExpressionKindDraft::ProjectField { value, field } => {
+                        edits.push(CanonicalEdit::CreateOperation {
+                            symbol: expression_symbol,
+                            block,
+                            before,
+                            operation: OperationDraft::ProjectField { value, field },
+                        })
+                    }
+                    ExpressionKindDraft::ConstructVariant { variant, payload } => {
+                        edits.push(CanonicalEdit::CreateOperation {
+                            symbol: expression_symbol,
+                            block,
+                            before,
+                            operation: OperationDraft::ConstructVariant { variant, payload },
+                        })
+                    }
+                    ExpressionKindDraft::MatchSum {
+                        scrutinee,
+                        result,
+                        arms,
+                    } => {
+                        let arms = nominal_catalogue.normalize_match_arms(arms, current_source)?;
+                        let mut canonical_arms = Vec::with_capacity(arms.len());
+                        let mut arm_events = Vec::with_capacity(arms.len());
+                        for arm in arms {
+                            let region = synthetic.next(current_source)?;
+                            canonical_arms.push(MatchArmOperationDraft {
+                                variant: arm.variant,
+                                region: NodeTarget::Draft(region),
+                            });
+                            arm_events.push(ExpandEvent::MatchArmBody {
+                                owner: NodeTarget::Draft(expression_symbol),
+                                region,
+                                variant: arm.variant,
+                                payload_symbol: arm.payload_symbol,
+                                body: arm.body,
+                            });
+                        }
+                        edits.push(CanonicalEdit::CreateOperation {
+                            symbol: expression_symbol,
+                            block,
+                            before,
+                            operation: OperationDraft::MatchSum {
+                                scrutinee,
+                                result,
+                                arms: canonical_arms,
+                            },
+                        });
+                        for event in arm_events.into_iter().rev() {
+                            events.push(event);
+                        }
                     }
                 }
-            },
+            }
         }
         edit_sources.resize(edits.len(), current_source);
     }
@@ -1295,47 +1239,44 @@ fn expand_transaction(
     Ok(ExpandedTransaction {
         edits,
         edit_sources,
-        explicit_handles,
+        explicit_symbols,
         nominal_catalogue,
     })
 }
 
-struct SyntheticHandles {
-    used: BTreeSet<LocalHandle>,
+struct SyntheticSymbols {
+    used: BTreeSet<DraftSymbol>,
     next: u32,
 }
-impl SyntheticHandles {
-    fn new(explicit: &BTreeSet<LocalHandle>) -> Self {
+impl SyntheticSymbols {
+    fn new(explicit: &BTreeSet<DraftSymbol>) -> Self {
         Self {
             used: explicit.clone(),
             next: u32::MAX,
         }
     }
-    fn next(&mut self, source: usize) -> Result<LocalHandle> {
-        while self.next != 0 && self.used.contains(&LocalHandle::new(self.next)) {
-            self.next -= 1;
-        }
+    fn next(&mut self, source: usize) -> Result<DraftSymbol> {
         if self.next == 0 {
             return Err(LkError::new(
                 ErrorCode::PolicyExceeded,
-                "private structured handle space exhausted",
+                "private structured symbol space exhausted",
             )
             .at_operation(source));
         }
-        let handle = LocalHandle::new(self.next);
-        self.used.insert(handle);
+        let symbol = DraftSymbol::synthetic(self.next);
+        self.used.insert(symbol);
         self.next -= 1;
-        Ok(handle)
+        Ok(symbol)
     }
 }
 
 #[cfg(test)]
 pub(crate) fn validate_structured_request(operations: &[TransactionOp]) -> Result<()> {
-    scan_explicit_handles(operations).map(|_| ())
+    scan_explicit_symbols(operations).map(|_| ())
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum LocalHandleKind {
+enum DraftSymbolKind {
     Package,
     Module,
     ProductType,
@@ -1350,7 +1291,7 @@ enum LocalHandleKind {
 }
 
 #[derive(Clone, Copy)]
-enum LocalReferenceKind {
+enum DraftReferenceKind {
     Any,
     NominalType,
     Package,
@@ -1365,29 +1306,29 @@ enum LocalReferenceKind {
     Operation,
 }
 
-impl LocalReferenceKind {
-    fn accepts(self, actual: LocalHandleKind) -> bool {
+impl DraftReferenceKind {
+    fn accepts(self, actual: DraftSymbolKind) -> bool {
         match self {
             Self::Any => true,
             Self::NominalType => matches!(
                 actual,
-                LocalHandleKind::ProductType | LocalHandleKind::SumType
+                DraftSymbolKind::ProductType | DraftSymbolKind::SumType
             ),
-            Self::Package => actual == LocalHandleKind::Package,
-            Self::Module => actual == LocalHandleKind::Module,
-            Self::ProductType => actual == LocalHandleKind::ProductType,
-            Self::ProductField => actual == LocalHandleKind::ProductField,
-            Self::SumVariant => actual == LocalHandleKind::SumVariant,
-            Self::Function => actual == LocalHandleKind::Function,
-            Self::Parameter => actual == LocalHandleKind::Parameter,
-            Self::Region => actual == LocalHandleKind::Region,
-            Self::BlockArgument => actual == LocalHandleKind::BlockArgument,
-            Self::Operation => actual == LocalHandleKind::Operation,
+            Self::Package => actual == DraftSymbolKind::Package,
+            Self::Module => actual == DraftSymbolKind::Module,
+            Self::ProductType => actual == DraftSymbolKind::ProductType,
+            Self::ProductField => actual == DraftSymbolKind::ProductField,
+            Self::SumVariant => actual == DraftSymbolKind::SumVariant,
+            Self::Function => actual == DraftSymbolKind::Function,
+            Self::Parameter => actual == DraftSymbolKind::Parameter,
+            Self::Region => actual == DraftSymbolKind::Region,
+            Self::BlockArgument => actual == DraftSymbolKind::BlockArgument,
+            Self::Operation => actual == DraftSymbolKind::Operation,
         }
     }
 }
 
-fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalHandle>> {
+fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftSymbol>> {
     enum Scan<'a> {
         Expression(&'a ExpressionDraft, usize, usize),
         Body(&'a [ExpressionDraft], ValueDraft, usize, usize),
@@ -1413,67 +1354,65 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
         }
     }
     fn declare(
-        handles: &mut BTreeSet<LocalHandle>,
-        kinds: &mut BTreeMap<LocalHandle, LocalHandleKind>,
-        handle: LocalHandle,
-        kind: LocalHandleKind,
+        symbols: &mut BTreeSet<DraftSymbol>,
+        kinds: &mut BTreeMap<DraftSymbol, DraftSymbolKind>,
+        symbol: DraftSymbol,
+        kind: DraftSymbolKind,
         source: usize,
     ) -> Result<()> {
-        if handle.get() == 0 {
-            return Err(
-                LkError::new(ErrorCode::InvalidHandle, "local handle zero is reserved")
-                    .at_operation(source)
-                    .for_handle(handle),
-            );
+        if let Err(message) = symbol.validate() {
+            return Err(LkError::new(ErrorCode::InvalidDraftSymbol, message)
+                .at_operation(source)
+                .for_symbol(symbol));
         }
-        if !handles.insert(handle) {
+        if !symbols.insert(symbol) {
             return Err(LkError::new(
-                ErrorCode::DuplicateHandle,
-                "transaction-local handle is declared more than once",
+                ErrorCode::DuplicateDraftSymbol,
+                "transaction-local symbol is declared more than once",
             )
             .at_operation(source)
-            .for_handle(handle));
+            .for_symbol(symbol));
         }
-        kinds.insert(handle, kind);
+        kinds.insert(symbol, kind);
         Ok(())
     }
     fn reference(
         target: NodeTarget,
-        expected: LocalReferenceKind,
+        expected: DraftReferenceKind,
         source: usize,
-        references: &mut Vec<(LocalHandle, LocalReferenceKind, usize)>,
+        references: &mut Vec<(DraftSymbol, DraftReferenceKind, usize)>,
     ) {
-        if let NodeTarget::Local(handle) = target {
-            references.push((handle, expected, source));
+        if let NodeTarget::Draft(symbol) = target {
+            references.push((symbol, expected, source));
         }
     }
     fn type_reference(
         ty: TypeDraft,
         source: usize,
-        references: &mut Vec<(LocalHandle, LocalReferenceKind, usize)>,
+        references: &mut Vec<(DraftSymbol, DraftReferenceKind, usize)>,
     ) {
         if let TypeDraft::Nominal(target) = ty {
-            reference(target, LocalReferenceKind::NominalType, source, references);
+            reference(target, DraftReferenceKind::NominalType, source, references);
         }
     }
     fn value_reference(
         value: ValueDraft,
         source: usize,
-        references: &mut Vec<(LocalHandle, LocalReferenceKind, usize)>,
+        references: &mut Vec<(DraftSymbol, DraftReferenceKind, usize)>,
     ) -> Result<()> {
-        validate_draft_value(value, source)?;
+        validate_draft_value(&value, source)?;
         match value {
             ValueDraft::FunctionParameter(target) => {
-                reference(target, LocalReferenceKind::Parameter, source, references)
+                reference(target, DraftReferenceKind::Parameter, source, references)
             }
             ValueDraft::BlockArgument(target) => reference(
                 target,
-                LocalReferenceKind::BlockArgument,
+                DraftReferenceKind::BlockArgument,
                 source,
                 references,
             ),
             ValueDraft::OperationResult { operation, .. } => {
-                reference(operation, LocalReferenceKind::Operation, source, references)
+                reference(operation, DraftReferenceKind::Operation, source, references)
             }
         }
         Ok(())
@@ -1482,7 +1421,7 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
         operation: &OperationDraft,
         source: usize,
         budget: &mut DraftBudget,
-        references: &mut Vec<(LocalHandle, LocalReferenceKind, usize)>,
+        references: &mut Vec<(DraftSymbol, DraftReferenceKind, usize)>,
     ) -> Result<()> {
         match operation {
             OperationDraft::ConstUnit
@@ -1496,7 +1435,7 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
                 function,
                 arguments,
             } => {
-                reference(*function, LocalReferenceKind::Function, source, references);
+                reference(*function, DraftReferenceKind::Function, source, references);
                 budget.add(arguments.len(), source)?;
                 for value in arguments {
                     value_reference(*value, source, references)?;
@@ -1511,8 +1450,8 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
             } => {
                 value_reference(*condition, source, references)?;
                 type_reference(*result, source, references);
-                reference(*then_region, LocalReferenceKind::Region, source, references);
-                reference(*else_region, LocalReferenceKind::Region, source, references);
+                reference(*then_region, DraftReferenceKind::Region, source, references);
+                reference(*else_region, DraftReferenceKind::Region, source, references);
             }
             OperationDraft::ForI64 {
                 start,
@@ -1526,7 +1465,7 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
                 value_reference(*end_exclusive, source, references)?;
                 value_reference(*initial, source, references)?;
                 type_reference(*carried, source, references);
-                reference(*body_region, LocalReferenceKind::Region, source, references);
+                reference(*body_region, DraftReferenceKind::Region, source, references);
             }
             OperationDraft::Return { value } | OperationDraft::Yield { value } => {
                 value_reference(*value, source, references)?;
@@ -1534,7 +1473,7 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
             OperationDraft::ConstructProduct { product, fields } => {
                 reference(
                     *product,
-                    LocalReferenceKind::ProductType,
+                    DraftReferenceKind::ProductType,
                     source,
                     references,
                 );
@@ -1542,7 +1481,7 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
                 for field in fields {
                     reference(
                         field.field,
-                        LocalReferenceKind::ProductField,
+                        DraftReferenceKind::ProductField,
                         source,
                         references,
                     );
@@ -1551,10 +1490,10 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
             }
             OperationDraft::ProjectField { value, field } => {
                 value_reference(*value, source, references)?;
-                reference(*field, LocalReferenceKind::ProductField, source, references);
+                reference(*field, DraftReferenceKind::ProductField, source, references);
             }
             OperationDraft::ConstructVariant { variant, payload } => {
-                reference(*variant, LocalReferenceKind::SumVariant, source, references);
+                reference(*variant, DraftReferenceKind::SumVariant, source, references);
                 if let Some(value) = payload {
                     value_reference(*value, source, references)?;
                 }
@@ -1570,104 +1509,104 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
                 for arm in arms {
                     reference(
                         arm.variant,
-                        LocalReferenceKind::SumVariant,
+                        DraftReferenceKind::SumVariant,
                         source,
                         references,
                     );
-                    reference(arm.region, LocalReferenceKind::Any, source, references);
+                    reference(arm.region, DraftReferenceKind::Any, source, references);
                 }
             }
         }
         Ok(())
     }
 
-    let mut handles = BTreeSet::new();
+    let mut symbols = BTreeSet::new();
     let mut kinds = BTreeMap::new();
-    let mut references = Vec::<(LocalHandle, LocalReferenceKind, usize)>::new();
+    let mut references = Vec::<(DraftSymbol, DraftReferenceKind, usize)>::new();
     let mut stack = Vec::new();
     let mut budget = DraftBudget(0);
     for (source, operation) in operations.iter().enumerate() {
         budget.add(1, source)?;
         match operation {
-            TransactionOp::CreatePackage { handle, .. } => declare(
-                &mut handles,
+            TransactionOp::CreatePackage { symbol, .. } => declare(
+                &mut symbols,
                 &mut kinds,
-                *handle,
-                LocalHandleKind::Package,
+                *symbol,
+                DraftSymbolKind::Package,
                 source,
             )?,
             TransactionOp::CreateModule {
-                handle, package, ..
+                symbol, package, ..
             } => {
                 declare(
-                    &mut handles,
+                    &mut symbols,
                     &mut kinds,
-                    *handle,
-                    LocalHandleKind::Module,
+                    *symbol,
+                    DraftSymbolKind::Module,
                     source,
                 )?;
                 reference(
                     *package,
-                    LocalReferenceKind::Package,
+                    DraftReferenceKind::Package,
                     source,
                     &mut references,
                 );
             }
             TransactionOp::CreateProductType {
-                handle,
+                symbol,
                 module,
                 fields,
                 ..
             } => {
                 declare(
-                    &mut handles,
+                    &mut symbols,
                     &mut kinds,
-                    *handle,
-                    LocalHandleKind::ProductType,
+                    *symbol,
+                    DraftSymbolKind::ProductType,
                     source,
                 )?;
-                reference(*module, LocalReferenceKind::Module, source, &mut references);
+                reference(*module, DraftReferenceKind::Module, source, &mut references);
                 budget.add(fields.len(), source)?;
                 for field in fields {
                     declare(
-                        &mut handles,
+                        &mut symbols,
                         &mut kinds,
-                        field.handle,
-                        LocalHandleKind::ProductField,
+                        field.symbol,
+                        DraftSymbolKind::ProductField,
                         source,
                     )?;
                     type_reference(field.ty, source, &mut references);
                 }
             }
             TransactionOp::CreateSumType {
-                handle,
+                symbol,
                 module,
                 variants,
                 ..
             } => {
                 declare(
-                    &mut handles,
+                    &mut symbols,
                     &mut kinds,
-                    *handle,
-                    LocalHandleKind::SumType,
+                    *symbol,
+                    DraftSymbolKind::SumType,
                     source,
                 )?;
-                reference(*module, LocalReferenceKind::Module, source, &mut references);
+                reference(*module, DraftReferenceKind::Module, source, &mut references);
                 if variants.is_empty() {
                     return Err(LkError::new(
                         ErrorCode::InvalidOperand,
                         "sum declarations require at least one variant",
                     )
                     .at_operation(source)
-                    .for_handle(*handle));
+                    .for_symbol(*symbol));
                 }
                 budget.add(variants.len(), source)?;
                 for variant in variants {
                     declare(
-                        &mut handles,
+                        &mut symbols,
                         &mut kinds,
-                        variant.handle,
-                        LocalHandleKind::SumVariant,
+                        variant.symbol,
+                        DraftSymbolKind::SumVariant,
                         source,
                     )?;
                     if let Some(payload) = variant.payload {
@@ -1676,7 +1615,7 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
                 }
             }
             TransactionOp::CreateFunction {
-                handle,
+                symbol,
                 module,
                 parameters,
                 result,
@@ -1684,21 +1623,21 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
                 ..
             } => {
                 declare(
-                    &mut handles,
+                    &mut symbols,
                     &mut kinds,
-                    *handle,
-                    LocalHandleKind::Function,
+                    *symbol,
+                    DraftSymbolKind::Function,
                     source,
                 )?;
-                reference(*module, LocalReferenceKind::Module, source, &mut references);
+                reference(*module, DraftReferenceKind::Module, source, &mut references);
                 type_reference(*result, source, &mut references);
                 budget.add(parameters.len(), source)?;
                 for parameter in parameters {
                     declare(
-                        &mut handles,
+                        &mut symbols,
                         &mut kinds,
-                        parameter.handle,
-                        LocalHandleKind::Parameter,
+                        parameter.symbol,
+                        DraftSymbolKind::Parameter,
                         source,
                     )?;
                     type_reference(parameter.ty, source, &mut references);
@@ -1708,13 +1647,7 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
                     stack.push(Scan::Body(&body.operations, body.return_value, 0, source));
                 }
             }
-            TransactionOp::DefineFunctionBody { function, body } => {
-                reference(
-                    *function,
-                    LocalReferenceKind::Function,
-                    source,
-                    &mut references,
-                );
+            TransactionOp::DefineFunctionBody { body, .. } => {
                 budget.add(1, source)?;
                 stack.push(Scan::Body(&body.operations, body.return_value, 0, source));
             }
@@ -1724,19 +1657,19 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
             TransactionOp::SetEntryFunction { package, function } => {
                 reference(
                     *package,
-                    LocalReferenceKind::Package,
+                    DraftReferenceKind::Package,
                     source,
                     &mut references,
                 );
                 reference(
                     *function,
-                    LocalReferenceKind::Function,
+                    DraftReferenceKind::Function,
                     source,
                     &mut references,
                 );
             }
             TransactionOp::RenameNode { node, .. } => {
-                reference(*node, LocalReferenceKind::Any, source, &mut references)
+                reference(*node, DraftReferenceKind::Any, source, &mut references)
             }
             TransactionOp::ReplaceOperation {
                 operation,
@@ -1744,7 +1677,7 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
             } => {
                 reference(
                     *operation,
-                    LocalReferenceKind::Operation,
+                    DraftReferenceKind::Operation,
                     source,
                     &mut references,
                 );
@@ -1758,7 +1691,7 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
             } => {
                 reference(
                     *operation,
-                    LocalReferenceKind::Operation,
+                    DraftReferenceKind::Operation,
                     source,
                     &mut references,
                 );
@@ -1767,7 +1700,7 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
             TransactionOp::RefineHole { hole, replacement } => {
                 reference(
                     *hole,
-                    LocalReferenceKind::Operation,
+                    DraftReferenceKind::Operation,
                     source,
                     &mut references,
                 );
@@ -1777,7 +1710,7 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
                 operation_references(replacement, source, &mut budget, &mut references)?;
             }
             TransactionOp::DeleteOwnedSubtree { root } => {
-                reference(*root, LocalReferenceKind::Any, source, &mut references)
+                reference(*root, DraftReferenceKind::Any, source, &mut references)
             }
         }
     }
@@ -1798,13 +1731,15 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
             }
             Scan::Expression(expression, depth, source) => {
                 budget.add(1, source)?;
-                declare(
-                    &mut handles,
-                    &mut kinds,
-                    expression.handle,
-                    LocalHandleKind::Operation,
-                    source,
-                )?;
+                if let Some(symbol) = expression.symbol {
+                    declare(
+                        &mut symbols,
+                        &mut kinds,
+                        symbol,
+                        DraftSymbolKind::Operation,
+                        source,
+                    )?;
+                }
                 match &expression.operation {
                     ExpressionKindDraft::ConstUnit
                     | ExpressionKindDraft::ConstBool(_)
@@ -1820,7 +1755,7 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
                     } => {
                         reference(
                             *function,
-                            LocalReferenceKind::Function,
+                            DraftReferenceKind::Function,
                             source,
                             &mut references,
                         );
@@ -1859,8 +1794,8 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
                         end_exclusive,
                         initial,
                         carried,
-                        index_handle,
-                        carried_handle,
+                        index_symbol,
+                        carried_symbol,
                         body,
                         ..
                     } => {
@@ -1869,17 +1804,17 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
                         value_reference(*initial, source, &mut references)?;
                         type_reference(*carried, source, &mut references);
                         declare(
-                            &mut handles,
+                            &mut symbols,
                             &mut kinds,
-                            *index_handle,
-                            LocalHandleKind::BlockArgument,
+                            *index_symbol,
+                            DraftSymbolKind::BlockArgument,
                             source,
                         )?;
                         declare(
-                            &mut handles,
+                            &mut symbols,
                             &mut kinds,
-                            *carried_handle,
-                            LocalHandleKind::BlockArgument,
+                            *carried_symbol,
+                            DraftSymbolKind::BlockArgument,
                             source,
                         )?;
                         budget.add(1, source)?;
@@ -1893,7 +1828,7 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
                     ExpressionKindDraft::ConstructProduct { product, fields } => {
                         reference(
                             *product,
-                            LocalReferenceKind::ProductType,
+                            DraftReferenceKind::ProductType,
                             source,
                             &mut references,
                         );
@@ -1901,7 +1836,7 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
                         for field in fields {
                             reference(
                                 field.field,
-                                LocalReferenceKind::ProductField,
+                                DraftReferenceKind::ProductField,
                                 source,
                                 &mut references,
                             );
@@ -1912,7 +1847,7 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
                         value_reference(*value, source, &mut references)?;
                         reference(
                             *field,
-                            LocalReferenceKind::ProductField,
+                            DraftReferenceKind::ProductField,
                             source,
                             &mut references,
                         );
@@ -1920,7 +1855,7 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
                     ExpressionKindDraft::ConstructVariant { variant, payload } => {
                         reference(
                             *variant,
-                            LocalReferenceKind::SumVariant,
+                            DraftReferenceKind::SumVariant,
                             source,
                             &mut references,
                         );
@@ -1939,16 +1874,16 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
                         for arm in arms.iter().rev() {
                             reference(
                                 arm.variant,
-                                LocalReferenceKind::SumVariant,
+                                DraftReferenceKind::SumVariant,
                                 source,
                                 &mut references,
                             );
-                            if let Some(handle) = arm.payload_handle {
+                            if let Some(symbol) = arm.payload_symbol {
                                 declare(
-                                    &mut handles,
+                                    &mut symbols,
                                     &mut kinds,
-                                    handle,
-                                    LocalHandleKind::BlockArgument,
+                                    symbol,
+                                    DraftSymbolKind::BlockArgument,
                                     source,
                                 )?;
                             }
@@ -1965,14 +1900,14 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
             }
         }
     }
-    for (handle, expected, source) in references {
-        let Some(actual) = kinds.get(&handle).copied() else {
+    for (symbol, expected, source) in references {
+        let Some(actual) = kinds.get(&symbol).copied() else {
             return Err(LkError::new(
-                ErrorCode::InvalidHandle,
-                "structured draft references an undeclared local handle",
+                ErrorCode::InvalidDraftSymbol,
+                "structured draft references an undeclared local symbol",
             )
             .at_operation(source)
-            .for_handle(handle));
+            .for_symbol(symbol));
         };
         if !expected.accepts(actual) {
             return Err(LkError::new(
@@ -1980,23 +1915,23 @@ fn scan_explicit_handles(operations: &[TransactionOp]) -> Result<BTreeSet<LocalH
                 "transaction-local reference has the wrong declared category",
             )
             .at_operation(source)
-            .for_handle(handle));
+            .for_symbol(symbol));
         }
     }
-    Ok(handles)
+    Ok(symbols)
 }
 
-fn validate_draft_value(value: ValueDraft, source: usize) -> Result<()> {
+fn validate_draft_value(value: &ValueDraft, source: usize) -> Result<()> {
     if let ValueDraft::OperationResult { operation, output } = value
-        && output != 0
+        && *output != 0
     {
         let mut error = LkError::new(
             ErrorCode::InvalidOperand,
             "structured operation result output must be zero for the closed single-result schema",
         )
         .at_operation(source);
-        if let NodeTarget::Local(handle) = operation {
-            error = error.for_handle(handle);
+        if let NodeTarget::Draft(symbol) = operation {
+            error = error.for_symbol(*symbol);
         }
         return Err(error);
     }
@@ -2044,13 +1979,13 @@ impl Workspace {
         }
         let base = self.snapshot(transaction.base_revision)?;
         let expanded = expand_transaction(base, &transaction.operations)?;
-        let (allocations, next_serial) = allocate_handles(
+        let (allocations, next_serial) = allocate_symbols(
             base,
             &expanded.edits,
             &expanded.edit_sources,
-            &expanded.explicit_handles,
+            &expanded.explicit_symbols,
         )?;
-        validate_response_spec(&request.response, &allocations, &expanded.explicit_handles)?;
+        validate_response_spec(&request.response, &allocations, &expanded.explicit_symbols)?;
         let mut nodes = base.nodes.clone();
         let mut tombstones = base.tombstones.clone();
         let mut provenance = BTreeMap::new();
@@ -2102,13 +2037,16 @@ impl Workspace {
                     let source = error_source_from_provenance(&error, &provenance)
                         .unwrap_or_else(|| transaction.operations.len().saturating_sub(1));
                     error = error.at_operation(source);
-                    if error.local_handle.is_none() {
-                        error.local_handle = error_handle_from_provenance(
+                    if error.draft_symbol.is_none() {
+                        error.draft_symbol = error_symbol_from_provenance(
                             &error,
                             &provenance,
                             &allocations,
-                            &expanded.explicit_handles,
+                            &expanded.explicit_symbols,
                         );
+                        if error.draft_symbol.is_none() {
+                            error = error.at_draft_path(format!("operations[{source}]"));
+                        }
                     }
                 }
                 return Err(error);
@@ -2120,13 +2058,16 @@ impl Workspace {
                 let source = error_source_from_provenance(&error, &provenance)
                     .unwrap_or_else(|| transaction.operations.len().saturating_sub(1));
                 error = error.at_operation(source);
-                if error.local_handle.is_none() {
-                    error.local_handle = error_handle_from_provenance(
+                if error.draft_symbol.is_none() {
+                    error.draft_symbol = error_symbol_from_provenance(
                         &error,
                         &provenance,
                         &allocations,
-                        &expanded.explicit_handles,
+                        &expanded.explicit_symbols,
                     );
+                    if error.draft_symbol.is_none() {
+                        error = error.at_draft_path(format!("operations[{source}]"));
+                    }
                 }
             }
             return Err(error);
@@ -2136,9 +2077,9 @@ impl Workspace {
         let blockers_after = query::workspace_blockers(&candidate);
         let returned_bindings = request
             .response
-            .return_handles
+            .return_symbols
             .iter()
-            .map(|handle| allocated(&allocations, *handle).map(|node| (*handle, node)))
+            .map(|symbol| allocated(&allocations, *symbol).map(|node| (*symbol, node)))
             .collect::<Result<Vec<_>>>()?;
         let receipt = TransactionReceipt {
             workspace: self.id(),
@@ -2186,26 +2127,26 @@ struct NodeProvenance {
 fn record_edit_provenance(
     edit: &CanonicalEdit,
     source: usize,
-    allocations: &BTreeMap<LocalHandle, NodeId>,
+    allocations: &BTreeMap<DraftSymbol, NodeId>,
     provenance: &mut BTreeMap<NodeId, NodeProvenance>,
 ) -> Result<()> {
     let (target, offending_use) = match edit {
-        CanonicalEdit::CreateOperation { handle, .. } => {
-            (Some(allocated(allocations, *handle)?), true)
+        CanonicalEdit::CreateOperation { symbol, .. } => {
+            (Some(allocated(allocations, *symbol)?), true)
         }
-        CanonicalEdit::CreatePackage { handle, .. }
-        | CanonicalEdit::CreateModule { handle, .. }
-        | CanonicalEdit::CreateProductType { handle, .. }
-        | CanonicalEdit::CreateProductField { handle, .. }
-        | CanonicalEdit::CreateSumType { handle, .. }
-        | CanonicalEdit::CreateSumVariant { handle, .. }
-        | CanonicalEdit::CreateFunction { handle, .. }
-        | CanonicalEdit::CreateParameter { handle, .. }
-        | CanonicalEdit::CreateRegion { handle, .. }
-        | CanonicalEdit::CreateBlock { handle, .. }
-        | CanonicalEdit::CreateBlockArgument { handle, .. }
-        | CanonicalEdit::CreateMatchPayloadArgument { handle, .. } => {
-            (Some(allocated(allocations, *handle)?), false)
+        CanonicalEdit::CreatePackage { symbol, .. }
+        | CanonicalEdit::CreateModule { symbol, .. }
+        | CanonicalEdit::CreateProductType { symbol, .. }
+        | CanonicalEdit::CreateProductField { symbol, .. }
+        | CanonicalEdit::CreateSumType { symbol, .. }
+        | CanonicalEdit::CreateSumVariant { symbol, .. }
+        | CanonicalEdit::CreateFunction { symbol, .. }
+        | CanonicalEdit::CreateParameter { symbol, .. }
+        | CanonicalEdit::CreateRegion { symbol, .. }
+        | CanonicalEdit::CreateBlock { symbol, .. }
+        | CanonicalEdit::CreateBlockArgument { symbol, .. }
+        | CanonicalEdit::CreateMatchPayloadArgument { symbol, .. } => {
+            (Some(allocated(allocations, *symbol)?), false)
         }
         CanonicalEdit::ReplaceOperation { operation, .. }
         | CanonicalEdit::ReplaceOperand { operation, .. } => {
@@ -2241,11 +2182,11 @@ fn record_edit_provenance(
 
 fn resolve_for_provenance(
     target: NodeTarget,
-    allocations: &BTreeMap<LocalHandle, NodeId>,
+    allocations: &BTreeMap<DraftSymbol, NodeId>,
 ) -> Result<NodeId> {
     match target {
         NodeTarget::Existing(node) => Ok(node),
-        NodeTarget::Local(handle) => allocated(allocations, handle),
+        NodeTarget::Draft(symbol) => allocated(allocations, symbol),
     }
 }
 
@@ -2290,46 +2231,45 @@ fn error_source_from_provenance(
     preferred_error_provenance(error, provenance).map(|(_, fact)| fact.source)
 }
 
-fn error_handle_from_provenance(
+fn error_symbol_from_provenance(
     error: &LkError,
     provenance: &BTreeMap<NodeId, NodeProvenance>,
-    allocations: &BTreeMap<LocalHandle, NodeId>,
-    explicit_handles: &BTreeSet<LocalHandle>,
-) -> Option<LocalHandle> {
+    allocations: &BTreeMap<DraftSymbol, NodeId>,
+    explicit_symbols: &BTreeSet<DraftSymbol>,
+) -> Option<DraftSymbol> {
     let (node, _) = preferred_error_provenance(error, provenance)?;
-    allocations.iter().find_map(|(handle, allocated)| {
-        (*allocated == node && explicit_handles.contains(handle)).then_some(*handle)
+    allocations.iter().find_map(|(symbol, allocated)| {
+        (*allocated == node && explicit_symbols.contains(symbol)).then_some(*symbol)
     })
 }
 
 fn validate_response_spec(
     response: &TransactionResponseSpec,
-    allocations: &BTreeMap<LocalHandle, NodeId>,
-    explicit_handles: &BTreeSet<LocalHandle>,
+    allocations: &BTreeMap<DraftSymbol, NodeId>,
+    explicit_symbols: &BTreeSet<DraftSymbol>,
 ) -> Result<()> {
-    if response.return_handles.len() > MAX_RETURNED_BINDINGS {
+    if response.return_symbols.len() > MAX_RETURNED_BINDINGS {
         return Err(LkError::new(
             ErrorCode::PolicyExceeded,
-            "selected return handles exceed transaction response policy",
+            "selected return symbols exceed transaction response policy",
         ));
     }
-    let mut previous = None;
-    for handle in &response.return_handles {
-        if previous.is_some_and(|prior| *handle <= prior) {
+    let mut selected = BTreeSet::new();
+    for symbol in &response.return_symbols {
+        if !selected.insert(*symbol) {
             return Err(LkError::new(
-                ErrorCode::InvalidHandle,
-                "selected return handles must be unique and strictly increasing",
+                ErrorCode::InvalidDraftSymbol,
+                "selected return symbols must be unique",
             )
-            .for_handle(*handle));
+            .for_symbol(*symbol));
         }
-        if !explicit_handles.contains(handle) || !allocations.contains_key(handle) {
+        if !explicit_symbols.contains(symbol) || !allocations.contains_key(symbol) {
             return Err(LkError::new(
-                ErrorCode::InvalidHandle,
-                "selected return handle is not declared by this transaction",
+                ErrorCode::InvalidDraftSymbol,
+                "selected return symbol is not declared by this transaction",
             )
-            .for_handle(*handle));
+            .for_symbol(*symbol));
         }
-        previous = Some(*handle);
     }
     Ok(())
 }
@@ -2338,36 +2278,36 @@ fn allocation_error(
     code: ErrorCode,
     message: impl Into<String>,
     source: usize,
-    handle: LocalHandle,
-    explicit_handles: &BTreeSet<LocalHandle>,
+    symbol: DraftSymbol,
+    explicit_symbols: &BTreeSet<DraftSymbol>,
 ) -> LkError {
     let error = LkError::new(code, message).at_operation(source);
-    if explicit_handles.contains(&handle) {
-        error.for_handle(handle)
+    if explicit_symbols.contains(&symbol) {
+        error.for_symbol(symbol)
     } else {
-        error
+        error.at_draft_path(format!("operations[{source}]"))
     }
 }
 
-fn allocate_handles(
+fn allocate_symbols(
     base: &Snapshot,
     operations: &[CanonicalEdit],
     edit_sources: &[usize],
-    explicit_handles: &BTreeSet<LocalHandle>,
-) -> Result<(BTreeMap<LocalHandle, NodeId>, u64)> {
+    explicit_symbols: &BTreeSet<DraftSymbol>,
+) -> Result<(BTreeMap<DraftSymbol, NodeId>, u64)> {
     let mut allocations = BTreeMap::new();
     let mut next = base.next_serial;
     for (operation, source) in operations.iter().zip(edit_sources) {
-        let Some(handle) = canonical_created_handle(operation) else {
+        let Some(symbol) = canonical_created_symbol(operation) else {
             continue;
         };
-        if allocations.contains_key(&handle) {
+        if allocations.contains_key(&symbol) {
             return Err(allocation_error(
-                ErrorCode::DuplicateHandle,
-                "transaction-local handle is declared more than once",
+                ErrorCode::DuplicateDraftSymbol,
+                "transaction-local symbol is declared more than once",
                 *source,
-                handle,
-                explicit_handles,
+                symbol,
+                explicit_symbols,
             ));
         }
         let id = NodeId::new(base.workspace(), next).map_err(|error| {
@@ -2375,8 +2315,8 @@ fn allocate_handles(
                 ErrorCode::PolicyExceeded,
                 format!("node identity allocation failed: {error}"),
                 *source,
-                handle,
-                explicit_handles,
+                symbol,
+                explicit_symbols,
             )
         })?;
         next = next.checked_add(1).ok_or_else(|| {
@@ -2384,30 +2324,30 @@ fn allocate_handles(
                 ErrorCode::PolicyExceeded,
                 "node identity serial is exhausted",
                 *source,
-                handle,
-                explicit_handles,
+                symbol,
+                explicit_symbols,
             )
         })?;
-        allocations.insert(handle, id);
+        allocations.insert(symbol, id);
     }
     Ok((allocations, next))
 }
 
-fn canonical_created_handle(operation: &CanonicalEdit) -> Option<LocalHandle> {
+fn canonical_created_symbol(operation: &CanonicalEdit) -> Option<DraftSymbol> {
     match operation {
-        CanonicalEdit::CreatePackage { handle, .. }
-        | CanonicalEdit::CreateModule { handle, .. }
-        | CanonicalEdit::CreateProductType { handle, .. }
-        | CanonicalEdit::CreateProductField { handle, .. }
-        | CanonicalEdit::CreateSumType { handle, .. }
-        | CanonicalEdit::CreateSumVariant { handle, .. }
-        | CanonicalEdit::CreateFunction { handle, .. }
-        | CanonicalEdit::CreateParameter { handle, .. }
-        | CanonicalEdit::CreateRegion { handle, .. }
-        | CanonicalEdit::CreateBlock { handle, .. }
-        | CanonicalEdit::CreateBlockArgument { handle, .. }
-        | CanonicalEdit::CreateMatchPayloadArgument { handle, .. }
-        | CanonicalEdit::CreateOperation { handle, .. } => Some(*handle),
+        CanonicalEdit::CreatePackage { symbol, .. }
+        | CanonicalEdit::CreateModule { symbol, .. }
+        | CanonicalEdit::CreateProductType { symbol, .. }
+        | CanonicalEdit::CreateProductField { symbol, .. }
+        | CanonicalEdit::CreateSumType { symbol, .. }
+        | CanonicalEdit::CreateSumVariant { symbol, .. }
+        | CanonicalEdit::CreateFunction { symbol, .. }
+        | CanonicalEdit::CreateParameter { symbol, .. }
+        | CanonicalEdit::CreateRegion { symbol, .. }
+        | CanonicalEdit::CreateBlock { symbol, .. }
+        | CanonicalEdit::CreateBlockArgument { symbol, .. }
+        | CanonicalEdit::CreateMatchPayloadArgument { symbol, .. }
+        | CanonicalEdit::CreateOperation { symbol, .. } => Some(*symbol),
         _ => None,
     }
 }
@@ -2416,13 +2356,13 @@ fn apply_operation(
     base: &Snapshot,
     nodes: &mut BTreeMap<NodeId, Node>,
     tombstones: &mut BTreeSet<u64>,
-    allocations: &BTreeMap<LocalHandle, NodeId>,
+    allocations: &BTreeMap<DraftSymbol, NodeId>,
     nominal_catalogue: &StagedNominalCatalogue,
     operation: &CanonicalEdit,
 ) -> Result<()> {
     match operation {
-        CanonicalEdit::CreatePackage { handle, name } => {
-            let id = allocated(allocations, *handle)?;
+        CanonicalEdit::CreatePackage { symbol, name } => {
+            let id = allocated(allocations, *symbol)?;
             insert_new(
                 nodes,
                 id,
@@ -2440,11 +2380,11 @@ fn apply_operation(
             packages.push(id);
         }
         CanonicalEdit::CreateModule {
-            handle,
+            symbol,
             package,
             name,
         } => {
-            let id = allocated(allocations, *handle)?;
+            let id = allocated(allocations, *symbol)?;
             let package = resolve(*package, allocations, base.workspace())?;
             require_kind(nodes, package, NodeKind::Package)?;
             insert_new(
@@ -2465,11 +2405,11 @@ fn apply_operation(
             modules.push(id);
         }
         CanonicalEdit::CreateProductType {
-            handle,
+            symbol,
             module,
             name,
         } => {
-            let id = allocated(allocations, *handle)?;
+            let id = allocated(allocations, *symbol)?;
             let module = resolve(*module, allocations, base.workspace())?;
             require_kind(nodes, module, NodeKind::Module)?;
             insert_new(
@@ -2488,12 +2428,12 @@ fn apply_operation(
             types.push(id);
         }
         CanonicalEdit::CreateProductField {
-            handle,
+            symbol,
             product,
             name,
             ty,
         } => {
-            let id = allocated(allocations, *handle)?;
+            let id = allocated(allocations, *symbol)?;
             let product = resolve(*product, allocations, base.workspace())?;
             let ordinal = match require_kind(nodes, product, NodeKind::ProductType)? {
                 Node::ProductType { fields, .. } => u32::try_from(fields.len()).map_err(|_| {
@@ -2524,11 +2464,11 @@ fn apply_operation(
             fields.push(id);
         }
         CanonicalEdit::CreateSumType {
-            handle,
+            symbol,
             module,
             name,
         } => {
-            let id = allocated(allocations, *handle)?;
+            let id = allocated(allocations, *symbol)?;
             let module = resolve(*module, allocations, base.workspace())?;
             require_kind(nodes, module, NodeKind::Module)?;
             insert_new(
@@ -2547,12 +2487,12 @@ fn apply_operation(
             types.push(id);
         }
         CanonicalEdit::CreateSumVariant {
-            handle,
+            symbol,
             sum,
             name,
             payload,
         } => {
-            let id = allocated(allocations, *handle)?;
+            let id = allocated(allocations, *symbol)?;
             let sum = resolve(*sum, allocations, base.workspace())?;
             let ordinal = match require_kind(nodes, sum, NodeKind::SumType)? {
                 Node::SumType { variants, .. } => u32::try_from(variants.len()).map_err(|_| {
@@ -2584,12 +2524,12 @@ fn apply_operation(
             variants.push(id);
         }
         CanonicalEdit::CreateFunction {
-            handle,
+            symbol,
             module,
             name,
             result,
         } => {
-            let id = allocated(allocations, *handle)?;
+            let id = allocated(allocations, *symbol)?;
             let module = resolve(*module, allocations, base.workspace())?;
             require_kind(nodes, module, NodeKind::Module)?;
             insert_new(
@@ -2610,12 +2550,12 @@ fn apply_operation(
             functions.push(id);
         }
         CanonicalEdit::CreateParameter {
-            handle,
+            symbol,
             function,
             name,
             ty,
         } => {
-            let id = allocated(allocations, *handle)?;
+            let id = allocated(allocations, *symbol)?;
             let function = resolve(*function, allocations, base.workspace())?;
             let ordinal = match require_kind(nodes, function, NodeKind::Function)? {
                 Node::Function { parameters, .. } => {
@@ -2646,8 +2586,8 @@ fn apply_operation(
             };
             parameters.push(id);
         }
-        CanonicalEdit::CreateRegion { handle, owner } => {
-            let id = allocated(allocations, *handle)?;
+        CanonicalEdit::CreateRegion { symbol, owner } => {
+            let id = allocated(allocations, *symbol)?;
             let owner = resolve(*owner, allocations, base.workspace())?;
             match require_kind(
                 nodes,
@@ -2676,8 +2616,8 @@ fn apply_operation(
                 },
             )?;
         }
-        CanonicalEdit::CreateBlock { handle, region } => {
-            let id = allocated(allocations, *handle)?;
+        CanonicalEdit::CreateBlock { symbol, region } => {
+            let id = allocated(allocations, *symbol)?;
             let region = resolve(*region, allocations, base.workspace())?;
             require_kind(nodes, region, NodeKind::Region)?;
             insert_new(
@@ -2696,8 +2636,8 @@ fn apply_operation(
             };
             blocks.push(id);
         }
-        CanonicalEdit::CreateBlockArgument { handle, block, ty } => {
-            let id = allocated(allocations, *handle)?;
+        CanonicalEdit::CreateBlockArgument { symbol, block, ty } => {
+            let id = allocated(allocations, *symbol)?;
             let block = resolve(*block, allocations, base.workspace())?;
             let ordinal = match require_kind(nodes, block, NodeKind::Block)? {
                 Node::Block { arguments, .. } => u32::try_from(arguments.len()).map_err(|_| {
@@ -2725,11 +2665,11 @@ fn apply_operation(
             arguments.push(id);
         }
         CanonicalEdit::CreateMatchPayloadArgument {
-            handle,
+            symbol,
             block,
             variant,
         } => {
-            let id = allocated(allocations, *handle)?;
+            let id = allocated(allocations, *symbol)?;
             let block = resolve(*block, allocations, base.workspace())?;
             let variant_target = *variant;
             let variant = resolve(variant_target, allocations, base.workspace())?;
@@ -2740,7 +2680,7 @@ fn apply_operation(
                 .ok_or_else(|| {
                     LkError::new(
                         ErrorCode::InvalidOperand,
-                        "nullary match arm cannot declare a payload handle",
+                        "nullary match arm cannot declare a payload symbol",
                     )
                     .for_node(variant)
                 })?;
@@ -2771,12 +2711,12 @@ fn apply_operation(
             arguments.push(id);
         }
         CanonicalEdit::CreateOperation {
-            handle,
+            symbol,
             block,
             before,
             operation,
         } => {
-            let id = allocated(allocations, *handle)?;
+            let id = allocated(allocations, *symbol)?;
             let block = resolve(*block, allocations, base.workspace())?;
             require_kind(nodes, block, NodeKind::Block)?;
             let operation =
@@ -3016,7 +2956,7 @@ fn apply_operation(
 
 fn resolve_operation(
     operation: &OperationDraft,
-    allocations: &BTreeMap<LocalHandle, NodeId>,
+    allocations: &BTreeMap<DraftSymbol, NodeId>,
     workspace: WorkspaceId,
     nominal_catalogue: &StagedNominalCatalogue,
 ) -> Result<OperationKind> {
@@ -3039,7 +2979,7 @@ fn resolve_operation(
             function: resolve(*function, allocations, workspace)?,
             arguments: arguments
                 .iter()
-                .copied()
+                .cloned()
                 .map(|value| resolve_value(value, allocations, workspace))
                 .collect::<Result<Vec<_>>>()?,
         },
@@ -3148,7 +3088,7 @@ fn resolve_operation(
         },
         OperationDraft::ConstructVariant { variant, payload } => OperationKind::ConstructVariant {
             variant: resolve(*variant, allocations, workspace)?,
-            payload: payload
+            payload: (*payload)
                 .map(|value| resolve_value(value, allocations, workspace))
                 .transpose()?,
         },
@@ -3177,7 +3117,7 @@ fn resolve_operation(
 
 fn resolve_type_draft(
     ty: TypeDraft,
-    allocations: &BTreeMap<LocalHandle, NodeId>,
+    allocations: &BTreeMap<DraftSymbol, NodeId>,
     workspace: WorkspaceId,
 ) -> Result<SemanticType> {
     Ok(match ty {
@@ -3192,7 +3132,7 @@ fn resolve_type_draft(
 
 fn resolve_value(
     value: ValueDraft,
-    allocations: &BTreeMap<LocalHandle, NodeId>,
+    allocations: &BTreeMap<DraftSymbol, NodeId>,
     workspace: WorkspaceId,
 ) -> Result<ValueRef> {
     Ok(match value {
@@ -3241,7 +3181,7 @@ fn operation_result_types_in_nodes(
 
 fn resolve(
     target: NodeTarget,
-    allocations: &BTreeMap<LocalHandle, NodeId>,
+    allocations: &BTreeMap<DraftSymbol, NodeId>,
     workspace: WorkspaceId,
 ) -> Result<NodeId> {
     match target {
@@ -3256,30 +3196,30 @@ fn resolve(
             }
             Ok(id)
         }
-        NodeTarget::Local(handle) => allocations.get(&handle).copied().ok_or_else(|| {
+        NodeTarget::Draft(symbol) => allocations.get(&symbol).copied().ok_or_else(|| {
             LkError::new(
-                ErrorCode::InvalidHandle,
-                "transaction references an undeclared local handle",
+                ErrorCode::InvalidDraftSymbol,
+                "transaction references an undeclared local symbol",
             )
-            .for_handle(handle)
+            .for_symbol(symbol)
         }),
     }
 }
 
-fn allocated(allocations: &BTreeMap<LocalHandle, NodeId>, handle: LocalHandle) -> Result<NodeId> {
-    allocations.get(&handle).copied().ok_or_else(|| {
+fn allocated(allocations: &BTreeMap<DraftSymbol, NodeId>, symbol: DraftSymbol) -> Result<NodeId> {
+    allocations.get(&symbol).copied().ok_or_else(|| {
         LkError::new(
-            ErrorCode::InvalidHandle,
+            ErrorCode::InvalidDraftSymbol,
             "create operation has no staged node allocation",
         )
-        .for_handle(handle)
+        .for_symbol(symbol)
     })
 }
 
 fn insert_new(nodes: &mut BTreeMap<NodeId, Node>, id: NodeId, node: Node) -> Result<()> {
     if nodes.insert(id, node).is_some() {
         return Err(LkError::new(
-            ErrorCode::InvalidHandle,
+            ErrorCode::InvalidDraftSymbol,
             "staged node identity already exists",
         )
         .for_node(id));
@@ -3443,15 +3383,15 @@ mod tests {
     use crate::artifact;
 
     fn request(transaction: &Transaction) -> ApplyTransactionRequest {
-        let mut return_handles: Vec<LocalHandle> = scan_explicit_handles(&transaction.operations)
-            .expect("valid test handles")
+        let mut return_symbols: Vec<DraftSymbol> = scan_explicit_symbols(&transaction.operations)
+            .expect("valid test symbols")
             .into_iter()
             .collect();
-        return_handles.sort();
-        return_handles.truncate(MAX_RETURNED_BINDINGS);
+        return_symbols.sort();
+        return_symbols.truncate(MAX_RETURNED_BINDINGS);
         ApplyTransactionRequest {
             transaction: transaction.clone(),
-            response: TransactionResponseSpec { return_handles },
+            response: TransactionResponseSpec { return_symbols },
         }
     }
 
@@ -3472,30 +3412,30 @@ mod tests {
             mode: TransactionMode::Commit,
             operations: vec![
                 TransactionOp::CreatePackage {
-                    handle: LocalHandle::new(1),
+                    symbol: DraftSymbol::generated(1),
                     name: "package".to_owned(),
                 },
                 TransactionOp::CreateModule {
-                    handle: LocalHandle::new(2),
-                    package: NodeTarget::Local(LocalHandle::new(1)),
+                    symbol: DraftSymbol::generated(2),
+                    package: NodeTarget::Draft(DraftSymbol::generated(1)),
                     name: "module".to_owned(),
                 },
             ],
         }
     }
 
-    fn local_handle(value: u32) -> NodeTarget {
-        NodeTarget::Local(LocalHandle::new(value))
+    fn draft_symbol(value: u32) -> NodeTarget {
+        NodeTarget::Draft(DraftSymbol::generated(value))
     }
     fn draft_result(value: u32) -> ValueDraft {
         ValueDraft::OperationResult {
-            operation: local_handle(value),
+            operation: draft_symbol(value),
             output: 0,
         }
     }
-    fn draft_expression(handle: u32, operation: ExpressionKindDraft) -> ExpressionDraft {
+    fn draft_expression(symbol: u32, operation: ExpressionKindDraft) -> ExpressionDraft {
         ExpressionDraft {
-            handle: LocalHandle::new(handle),
+            symbol: Some(DraftSymbol::generated(symbol)),
             operation,
         }
     }
@@ -3505,12 +3445,12 @@ mod tests {
     ) -> ApplyTransactionRequest {
         let mut all = vec![
             TransactionOp::CreatePackage {
-                handle: LocalHandle::new(1),
+                symbol: DraftSymbol::generated(1),
                 name: "package".into(),
             },
             TransactionOp::CreateModule {
-                handle: LocalHandle::new(2),
-                package: local_handle(1),
+                symbol: DraftSymbol::generated(2),
+                package: draft_symbol(1),
                 name: "module".into(),
             },
         ];
@@ -3534,8 +3474,8 @@ mod tests {
         let request = structured_semantic_request(
             id,
             vec![TransactionOp::CreateFunction {
-                handle: LocalHandle::new(3),
-                module: local_handle(2),
+                symbol: DraftSymbol::generated(3),
+                module: draft_symbol(2),
                 name: "negative".into(),
                 parameters: Vec::new(),
                 result: SemanticType::I64.into(),
@@ -3551,11 +3491,11 @@ mod tests {
                                 step: -1,
                                 initial: draft_result(4),
                                 carried: SemanticType::I64.into(),
-                                index_handle: LocalHandle::new(7),
-                                carried_handle: LocalHandle::new(8),
+                                index_symbol: DraftSymbol::generated(7),
+                                carried_symbol: DraftSymbol::generated(8),
                                 body: YieldingBodyDraft {
                                     operations: Vec::new(),
-                                    yield_value: ValueDraft::BlockArgument(local_handle(8)),
+                                    yield_value: ValueDraft::BlockArgument(draft_symbol(8)),
                                 },
                             },
                         ),
@@ -3578,8 +3518,8 @@ mod tests {
         let request = structured_semantic_request(
             id,
             vec![TransactionOp::CreateFunction {
-                handle: LocalHandle::new(3),
-                module: local_handle(2),
+                symbol: DraftSymbol::generated(3),
+                module: draft_symbol(2),
                 name: "sibling".into(),
                 parameters: Vec::new(),
                 result: SemanticType::I64.into(),
@@ -3623,8 +3563,8 @@ mod tests {
         let request = structured_semantic_request(
             id,
             vec![TransactionOp::CreateFunction {
-                handle: LocalHandle::new(3),
-                module: local_handle(2),
+                symbol: DraftSymbol::generated(3),
+                module: draft_symbol(2),
                 name: "escape".into(),
                 parameters: Vec::new(),
                 result: SemanticType::I64.into(),
@@ -3679,8 +3619,8 @@ mod tests {
             id,
             vec![
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(3),
-                    module: local_handle(2),
+                    symbol: DraftSymbol::generated(3),
+                    module: draft_symbol(2),
                     name: "producer".into(),
                     parameters: Vec::new(),
                     result: SemanticType::I64.into(),
@@ -3690,8 +3630,8 @@ mod tests {
                     }),
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(5),
-                    module: local_handle(2),
+                    symbol: DraftSymbol::generated(5),
+                    module: draft_symbol(2),
                     name: "consumer".into(),
                     parameters: Vec::new(),
                     result: SemanticType::I64.into(),
@@ -3721,22 +3661,22 @@ mod tests {
                 mode: TransactionMode::Commit,
                 operations: vec![
                     TransactionOp::CreatePackage {
-                        handle: LocalHandle::new(1),
+                        symbol: DraftSymbol::generated(1),
                         name: "package".into(),
                     },
                     TransactionOp::CreateModule {
-                        handle: LocalHandle::new(2),
-                        package: local_handle(1),
+                        symbol: DraftSymbol::generated(2),
+                        package: draft_symbol(1),
                         name: "left".into(),
                     },
                     TransactionOp::CreateModule {
-                        handle: LocalHandle::new(3),
-                        package: local_handle(1),
+                        symbol: DraftSymbol::generated(3),
+                        package: draft_symbol(1),
                         name: "right".into(),
                     },
                     TransactionOp::CreateFunction {
-                        handle: LocalHandle::new(4),
-                        module: local_handle(2),
+                        symbol: DraftSymbol::generated(4),
+                        module: draft_symbol(2),
                         name: "callee".into(),
                         parameters: Vec::new(),
                         result: SemanticType::I64.into(),
@@ -3746,8 +3686,8 @@ mod tests {
                         }),
                     },
                     TransactionOp::CreateFunction {
-                        handle: LocalHandle::new(6),
-                        module: local_handle(3),
+                        symbol: DraftSymbol::generated(6),
+                        module: draft_symbol(3),
                         name: "caller".into(),
                         parameters: Vec::new(),
                         result: SemanticType::I64.into(),
@@ -3755,7 +3695,7 @@ mod tests {
                             operations: vec![draft_expression(
                                 7,
                                 ExpressionKindDraft::Call {
-                                    function: local_handle(4),
+                                    function: draft_symbol(4),
                                     arguments: Vec::new(),
                                 },
                             )],
@@ -3763,8 +3703,8 @@ mod tests {
                         }),
                     },
                     TransactionOp::SetEntryFunction {
-                        package: local_handle(1),
-                        function: local_handle(6),
+                        package: draft_symbol(1),
+                        function: draft_symbol(6),
                     },
                 ],
             },
@@ -3791,7 +3731,7 @@ mod tests {
             mode: TransactionMode::Commit,
             operations: vec![
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(3),
+                    symbol: DraftSymbol::generated(3),
                     module: NodeTarget::Existing(module),
                     name: "duplicate".to_owned(),
                     parameters: Vec::new(),
@@ -3799,7 +3739,7 @@ mod tests {
                     body: None,
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(4),
+                    symbol: DraftSymbol::generated(4),
                     module: NodeTarget::Existing(module),
                     name: "duplicate".to_owned(),
                     parameters: Vec::new(),
@@ -3821,7 +3761,7 @@ mod tests {
             idempotency_key: None,
             mode: TransactionMode::ValidateOnly,
             operations: vec![TransactionOp::CreateFunction {
-                handle: LocalHandle::new(5),
+                symbol: DraftSymbol::generated(5),
                 module: NodeTarget::Existing(module),
                 name: "function".to_owned(),
                 parameters: Vec::new(),
@@ -3855,7 +3795,7 @@ mod tests {
             idempotency_key: None,
             mode: TransactionMode::Commit,
             operations: vec![TransactionOp::CreateFunction {
-                handle: LocalHandle::new(3),
+                symbol: DraftSymbol::generated(3),
                 module: NodeTarget::Existing(module),
                 name: "function".to_owned(),
                 parameters: Vec::new(),
@@ -3894,7 +3834,7 @@ mod tests {
             idempotency_key: None,
             mode: TransactionMode::Commit,
             operations: vec![TransactionOp::CreateFunction {
-                handle: LocalHandle::new(4),
+                symbol: DraftSymbol::generated(4),
                 module: NodeTarget::Existing(module),
                 name: "replacement".to_owned(),
                 parameters: Vec::new(),
@@ -3910,43 +3850,43 @@ mod tests {
     fn large_user_controlled_subtree_deletion_uses_an_explicit_work_stack() {
         let id = WorkspaceId::from_bytes([15; 16]);
         let mut workspace = Workspace::new(id).expect("workspace");
-        let package = LocalHandle::new(1);
-        let module = LocalHandle::new(2);
-        let function = LocalHandle::new(3);
-        let first_value = LocalHandle::new(6);
+        let package = DraftSymbol::generated(1);
+        let module = DraftSymbol::generated(2);
+        let function = DraftSymbol::generated(3);
+        let first_value = DraftSymbol::generated(6);
         let body_operations = (0..10_000_u32)
             .map(|offset| ExpressionDraft {
-                handle: LocalHandle::new(6 + offset),
+                symbol: Some(DraftSymbol::generated(6 + offset)),
                 operation: ExpressionKindDraft::ConstI64(i64::from(offset)),
             })
             .collect();
         let operations = vec![
             TransactionOp::CreatePackage {
-                handle: package,
+                symbol: package,
                 name: "package".to_owned(),
             },
             TransactionOp::CreateModule {
-                handle: module,
-                package: NodeTarget::Local(package),
+                symbol: module,
+                package: NodeTarget::Draft(package),
                 name: "module".to_owned(),
             },
             TransactionOp::CreateFunction {
-                handle: function,
-                module: NodeTarget::Local(module),
+                symbol: function,
+                module: NodeTarget::Draft(module),
                 name: "main".to_owned(),
                 parameters: Vec::new(),
                 result: SemanticType::I64.into(),
                 body: Some(FunctionBodyDraft {
                     operations: body_operations,
                     return_value: ValueDraft::OperationResult {
-                        operation: NodeTarget::Local(first_value),
+                        operation: NodeTarget::Draft(first_value),
                         output: 0,
                     },
                 }),
             },
             TransactionOp::SetEntryFunction {
-                package: NodeTarget::Local(package),
-                function: NodeTarget::Local(function),
+                package: NodeTarget::Draft(package),
+                function: NodeTarget::Draft(function),
             },
         ];
         let create = Transaction {
@@ -3980,9 +3920,9 @@ mod tests {
     }
 
     fn incomplete_program(id: WorkspaceId) -> Transaction {
-        let local = NodeTarget::Local;
-        let value = |handle| ValueDraft::OperationResult {
-            operation: local(handle),
+        let local = NodeTarget::Draft;
+        let value = |symbol| ValueDraft::OperationResult {
+            operation: local(symbol),
             output: 0,
         };
         Transaction {
@@ -3992,51 +3932,51 @@ mod tests {
             mode: TransactionMode::Commit,
             operations: vec![
                 TransactionOp::CreatePackage {
-                    handle: LocalHandle::new(1),
+                    symbol: DraftSymbol::generated(1),
                     name: "app".to_owned(),
                 },
                 TransactionOp::CreateModule {
-                    handle: LocalHandle::new(2),
-                    package: local(LocalHandle::new(1)),
+                    symbol: DraftSymbol::generated(2),
+                    package: local(DraftSymbol::generated(1)),
                     name: "root".to_owned(),
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(3),
-                    module: local(LocalHandle::new(2)),
+                    symbol: DraftSymbol::generated(3),
+                    module: local(DraftSymbol::generated(2)),
                     name: "main".to_owned(),
                     parameters: Vec::new(),
                     result: SemanticType::I64.into(),
                     body: Some(FunctionBodyDraft {
                         operations: vec![
                             ExpressionDraft {
-                                handle: LocalHandle::new(6),
+                                symbol: Some(DraftSymbol::generated(6)),
                                 operation: ExpressionKindDraft::ConstI64(40),
                             },
                             ExpressionDraft {
-                                handle: LocalHandle::new(7),
+                                symbol: Some(DraftSymbol::generated(7)),
                                 operation: ExpressionKindDraft::ConstI64(2),
                             },
                             ExpressionDraft {
-                                handle: LocalHandle::new(8),
+                                symbol: Some(DraftSymbol::generated(8)),
                                 operation: ExpressionKindDraft::ConstBool(true),
                             },
                             ExpressionDraft {
-                                handle: LocalHandle::new(9),
+                                symbol: Some(DraftSymbol::generated(9)),
                                 operation: ExpressionKindDraft::Hole {
                                     expected: SemanticType::I64.into(),
                                 },
                             },
                             ExpressionDraft {
-                                handle: LocalHandle::new(10),
+                                symbol: Some(DraftSymbol::generated(10)),
                                 operation: ExpressionKindDraft::ConstI64(99),
                             },
                         ],
-                        return_value: value(LocalHandle::new(9)),
+                        return_value: value(DraftSymbol::generated(9)),
                     }),
                 },
                 TransactionOp::SetEntryFunction {
-                    package: local(LocalHandle::new(1)),
-                    function: local(LocalHandle::new(3)),
+                    package: local(DraftSymbol::generated(1)),
+                    function: local(DraftSymbol::generated(3)),
                 },
             ],
         }
@@ -4049,11 +3989,11 @@ mod tests {
         }
     }
 
-    fn binding(receipt: &TransactionReceipt, handle: u32) -> NodeId {
+    fn binding(receipt: &TransactionReceipt, symbol: u32) -> NodeId {
         receipt
             .returned_bindings
             .iter()
-            .find_map(|(candidate, node)| (candidate.get() == handle).then_some(*node))
+            .find_map(|(candidate, node)| (candidate.generated_number() == symbol).then_some(*node))
             .expect("selected binding")
     }
 
@@ -4065,7 +4005,7 @@ mod tests {
         let selected = ApplyTransactionRequest {
             transaction: transaction.clone(),
             response: TransactionResponseSpec {
-                return_handles: vec![LocalHandle::new(2)],
+                return_symbols: vec![DraftSymbol::generated(2)],
             },
         };
         let prepared = workspace
@@ -4073,34 +4013,38 @@ mod tests {
             .expect("selected receipt");
         assert_eq!(prepared.receipt.created_count, 2);
         assert_eq!(prepared.receipt.returned_bindings.len(), 1);
-        assert_eq!(prepared.receipt.returned_bindings[0].0, LocalHandle::new(2));
+        assert_eq!(
+            prepared.receipt.returned_bindings[0].0,
+            DraftSymbol::generated(2)
+        );
 
-        for return_handles in [
-            vec![LocalHandle::new(1), LocalHandle::new(1)],
-            vec![LocalHandle::new(2), LocalHandle::new(1)],
-            vec![LocalHandle::new(3)],
+        for return_symbols in [
+            vec![DraftSymbol::generated(1), DraftSymbol::generated(1)],
+            vec![DraftSymbol::generated(3)],
         ] {
             let invalid = ApplyTransactionRequest {
                 transaction: transaction.clone(),
-                response: TransactionResponseSpec { return_handles },
+                response: TransactionResponseSpec { return_symbols },
             };
             assert_eq!(
                 workspace
                     .prepare_transaction(&invalid)
                     .expect_err("invalid response projection")
                     .code,
-                ErrorCode::InvalidHandle
+                ErrorCode::InvalidDraftSymbol
             );
         }
 
         let mut too_many = Vec::new();
         for value in 0..=MAX_RETURNED_BINDINGS {
-            too_many.push(LocalHandle::new(u32::try_from(value).expect("handle")));
+            too_many.push(DraftSymbol::generated(
+                u32::try_from(value).expect("symbol"),
+            ));
         }
         let invalid = ApplyTransactionRequest {
             transaction: transaction.clone(),
             response: TransactionResponseSpec {
-                return_handles: too_many,
+                return_symbols: too_many,
             },
         };
         assert_eq!(
@@ -4180,51 +4124,51 @@ mod tests {
                 mode: TransactionMode::Commit,
                 operations: vec![
                     TransactionOp::CreatePackage {
-                        handle: LocalHandle::new(1),
+                        symbol: DraftSymbol::generated(1),
                         name: "p".into(),
                     },
                     TransactionOp::CreateModule {
-                        handle: LocalHandle::new(2),
-                        package: local_handle(1),
+                        symbol: DraftSymbol::generated(2),
+                        package: draft_symbol(1),
                         name: "m".into(),
                     },
                     TransactionOp::CreateProductType {
-                        handle: LocalHandle::new(3),
-                        module: local_handle(2),
+                        symbol: DraftSymbol::generated(3),
+                        module: draft_symbol(2),
                         name: "Pair".into(),
                         fields: vec![
                             ProductFieldDraft {
-                                handle: LocalHandle::new(4),
+                                symbol: DraftSymbol::generated(4),
                                 name: "left".into(),
                                 ty: TypeDraft::I64,
                             },
                             ProductFieldDraft {
-                                handle: LocalHandle::new(5),
+                                symbol: DraftSymbol::generated(5),
                                 name: "right".into(),
                                 ty: TypeDraft::I64,
                             },
                         ],
                     },
                     TransactionOp::CreateSumType {
-                        handle: LocalHandle::new(6),
-                        module: local_handle(2),
+                        symbol: DraftSymbol::generated(6),
+                        module: draft_symbol(2),
                         name: "Choice".into(),
                         variants: vec![
                             SumVariantDraft {
-                                handle: LocalHandle::new(7),
+                                symbol: DraftSymbol::generated(7),
                                 name: "First".into(),
                                 payload: None,
                             },
                             SumVariantDraft {
-                                handle: LocalHandle::new(8),
+                                symbol: DraftSymbol::generated(8),
                                 name: "Second".into(),
                                 payload: None,
                             },
                         ],
                     },
                     TransactionOp::CreateFunction {
-                        handle: LocalHandle::new(9),
-                        module: local_handle(2),
+                        symbol: DraftSymbol::generated(9),
+                        module: draft_symbol(2),
                         name: "main".into(),
                         parameters: Vec::new(),
                         result: TypeDraft::I64,
@@ -4234,14 +4178,14 @@ mod tests {
                                 draft_expression(
                                     11,
                                     ExpressionKindDraft::ConstructProduct {
-                                        product: local_handle(3),
+                                        product: draft_symbol(3),
                                         fields: vec![
                                             ProductFieldValueDraft {
-                                                field: local_handle(4),
+                                                field: draft_symbol(4),
                                                 value: draft_result(10),
                                             },
                                             ProductFieldValueDraft {
-                                                field: local_handle(5),
+                                                field: draft_symbol(5),
                                                 value: draft_result(10),
                                             },
                                         ],
@@ -4251,13 +4195,13 @@ mod tests {
                                     12,
                                     ExpressionKindDraft::ProjectField {
                                         value: draft_result(11),
-                                        field: local_handle(4),
+                                        field: draft_symbol(4),
                                     },
                                 ),
                                 draft_expression(
                                     13,
                                     ExpressionKindDraft::ConstructVariant {
-                                        variant: local_handle(7),
+                                        variant: draft_symbol(7),
                                         payload: None,
                                     },
                                 ),
@@ -4452,11 +4396,11 @@ mod tests {
             mode: TransactionMode::Commit,
             operations: vec![
                 TransactionOp::CreatePackage {
-                    handle: LocalHandle::new(1),
+                    symbol: DraftSymbol::generated(1),
                     name: "temporary".to_owned(),
                 },
                 TransactionOp::DeleteOwnedSubtree {
-                    root: NodeTarget::Local(LocalHandle::new(1)),
+                    root: NodeTarget::Draft(DraftSymbol::generated(1)),
                 },
             ],
         };
@@ -4581,7 +4525,7 @@ mod tests {
             mode: TransactionMode::Commit,
             operations: vec![
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(12),
+                    symbol: DraftSymbol::generated(12),
                     module: NodeTarget::Existing(module),
                     name: "callee".into(),
                     parameters: Vec::new(),
@@ -4591,7 +4535,7 @@ mod tests {
                 TransactionOp::RefineHole {
                     hole: NodeTarget::Existing(hole),
                     replacement: OperationDraft::Call {
-                        function: NodeTarget::Local(LocalHandle::new(12)),
+                        function: NodeTarget::Draft(DraftSymbol::generated(12)),
                         arguments: vec![],
                     },
                 },
@@ -4631,12 +4575,12 @@ mod tests {
     fn structured_expansion_is_depth_first_predictive_and_supports_forward_calls() {
         let id = WorkspaceId::from_bytes([0x7a; 16]);
         let workspace = Workspace::new(id).expect("workspace");
-        let local = |handle| NodeTarget::Local(LocalHandle::new(handle));
-        let result = |handle| ValueDraft::OperationResult {
-            operation: local(handle),
+        let local = |symbol| NodeTarget::Draft(DraftSymbol::generated(symbol));
+        let result = |symbol| ValueDraft::OperationResult {
+            operation: local(symbol),
             output: 0,
         };
-        let block_argument = |handle| ValueDraft::BlockArgument(local(handle));
+        let block_argument = |symbol| ValueDraft::BlockArgument(local(symbol));
         let transaction = Transaction {
             workspace: id,
             base_revision: Revision::INITIAL,
@@ -4644,16 +4588,16 @@ mod tests {
             mode: TransactionMode::ValidateOnly,
             operations: vec![
                 TransactionOp::CreatePackage {
-                    handle: LocalHandle::new(1),
+                    symbol: DraftSymbol::generated(1),
                     name: "app".into(),
                 },
                 TransactionOp::CreateModule {
-                    handle: LocalHandle::new(2),
+                    symbol: DraftSymbol::generated(2),
                     package: local(1),
                     name: "root".into(),
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(5),
+                    symbol: DraftSymbol::generated(5),
                     module: local(2),
                     name: "main".into(),
                     parameters: Vec::new(),
@@ -4661,33 +4605,33 @@ mod tests {
                     body: Some(FunctionBodyDraft {
                         operations: vec![
                             ExpressionDraft {
-                                handle: LocalHandle::new(6),
+                                symbol: Some(DraftSymbol::generated(6)),
                                 operation: ExpressionKindDraft::ConstI64(0),
                             },
                             ExpressionDraft {
-                                handle: LocalHandle::new(7),
+                                symbol: Some(DraftSymbol::generated(7)),
                                 operation: ExpressionKindDraft::ConstI64(10),
                             },
                             ExpressionDraft {
-                                handle: LocalHandle::new(8),
+                                symbol: Some(DraftSymbol::generated(8)),
                                 operation: ExpressionKindDraft::LtI64 {
                                     lhs: result(6),
                                     rhs: result(7),
                                 },
                             },
                             ExpressionDraft {
-                                handle: LocalHandle::new(9),
+                                symbol: Some(DraftSymbol::generated(9)),
                                 operation: ExpressionKindDraft::ForI64 {
                                     start: result(6),
                                     end_exclusive: result(7),
                                     step: 1,
                                     initial: result(6),
                                     carried: SemanticType::I64.into(),
-                                    index_handle: LocalHandle::new(10),
-                                    carried_handle: LocalHandle::new(11),
+                                    index_symbol: DraftSymbol::generated(10),
+                                    carried_symbol: DraftSymbol::generated(11),
                                     body: YieldingBodyDraft {
                                         operations: vec![ExpressionDraft {
-                                            handle: LocalHandle::new(12),
+                                            symbol: Some(DraftSymbol::generated(12)),
                                             operation: ExpressionKindDraft::AddI64 {
                                                 lhs: block_argument(11),
                                                 rhs: block_argument(10),
@@ -4698,13 +4642,13 @@ mod tests {
                                 },
                             },
                             ExpressionDraft {
-                                handle: LocalHandle::new(13),
+                                symbol: Some(DraftSymbol::generated(13)),
                                 operation: ExpressionKindDraft::If {
                                     condition: result(8),
                                     result: SemanticType::I64.into(),
                                     then_body: YieldingBodyDraft {
                                         operations: vec![ExpressionDraft {
-                                            handle: LocalHandle::new(14),
+                                            symbol: Some(DraftSymbol::generated(14)),
                                             operation: ExpressionKindDraft::Call {
                                                 function: local(20),
                                                 arguments: vec![result(9)],
@@ -4714,7 +4658,7 @@ mod tests {
                                     },
                                     else_body: YieldingBodyDraft {
                                         operations: vec![ExpressionDraft {
-                                            handle: LocalHandle::new(15),
+                                            symbol: Some(DraftSymbol::generated(15)),
                                             operation: ExpressionKindDraft::ConstI64(0),
                                         }],
                                         yield_value: result(15),
@@ -4726,11 +4670,11 @@ mod tests {
                     }),
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(20),
+                    symbol: DraftSymbol::generated(20),
                     module: local(2),
                     name: "later".into(),
                     parameters: vec![FunctionParameterDraft {
-                        handle: LocalHandle::new(21),
+                        symbol: DraftSymbol::generated(21),
                         name: "value".into(),
                         ty: SemanticType::I64.into(),
                     }],
@@ -4747,9 +4691,9 @@ mod tests {
             ],
         };
         let response = TransactionResponseSpec {
-            return_handles: [1, 2, 5, 6, 9, 10, 11, 12, 13, 14, 15, 20, 21]
+            return_symbols: [1, 2, 5, 6, 9, 10, 11, 12, 13, 14, 15, 20, 21]
                 .into_iter()
-                .map(LocalHandle::new)
+                .map(DraftSymbol::generated)
                 .collect(),
         };
         let predicted = workspace
@@ -4788,7 +4732,7 @@ mod tests {
     }
 
     #[test]
-    fn structured_handles_reject_zero_duplicates_undeclared_and_private_selection_atomically() {
+    fn structured_symbols_reject_zero_duplicates_undeclared_and_private_selection_atomically() {
         let id = WorkspaceId::from_bytes([0x7b; 16]);
         let workspace = Workspace::new(id).expect("workspace");
         let base_transaction = |expression: ExpressionDraft| Transaction {
@@ -4798,24 +4742,24 @@ mod tests {
             mode: TransactionMode::Commit,
             operations: vec![
                 TransactionOp::CreatePackage {
-                    handle: LocalHandle::new(1),
+                    symbol: DraftSymbol::generated(1),
                     name: "app".into(),
                 },
                 TransactionOp::CreateModule {
-                    handle: LocalHandle::new(2),
-                    package: NodeTarget::Local(LocalHandle::new(1)),
+                    symbol: DraftSymbol::generated(2),
+                    package: NodeTarget::Draft(DraftSymbol::generated(1)),
                     name: "root".into(),
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(3),
-                    module: NodeTarget::Local(LocalHandle::new(2)),
+                    symbol: DraftSymbol::generated(3),
+                    module: NodeTarget::Draft(DraftSymbol::generated(2)),
                     name: "main".into(),
                     parameters: Vec::new(),
                     result: SemanticType::I64.into(),
                     body: Some(FunctionBodyDraft {
                         operations: vec![expression],
                         return_value: ValueDraft::OperationResult {
-                            operation: NodeTarget::Local(LocalHandle::new(4)),
+                            operation: NodeTarget::Draft(DraftSymbol::generated(4)),
                             output: 0,
                         },
                     }),
@@ -4826,35 +4770,50 @@ mod tests {
             transaction,
             response: TransactionResponseSpec::default(),
         };
+        let invalid = serde_json::from_str::<DraftSymbol>("\"\"").expect("raw invalid symbol");
         let zero = base_transaction(ExpressionDraft {
-            handle: LocalHandle::new(0),
+            symbol: Some(invalid),
             operation: ExpressionKindDraft::ConstI64(1),
         });
         let error = workspace
             .prepare_transaction(&unchecked(zero))
             .expect_err("zero");
-        assert_eq!(error.code, ErrorCode::InvalidHandle);
+        assert_eq!(error.code, ErrorCode::InvalidDraftSymbol);
         assert_eq!(error.operation_index, Some(2));
-        assert_eq!(error.local_handle, Some(LocalHandle::new(0)));
+        assert_eq!(error.draft_symbol, Some(invalid));
+        for raw in ["Bad", &"x".repeat(crate::ids::MAX_DRAFT_SYMBOL_BYTES + 1)] {
+            let encoded = serde_json::to_string(raw).expect("invalid symbol JSON");
+            let invalid = serde_json::from_str::<DraftSymbol>(&encoded)
+                .expect("raw invalid symbol remains typed for semantic diagnostics");
+            let error = workspace
+                .prepare_transaction(&unchecked(base_transaction(ExpressionDraft {
+                    symbol: Some(invalid),
+                    operation: ExpressionKindDraft::ConstI64(1),
+                })))
+                .expect_err("invalid symbol");
+            assert_eq!(error.code, ErrorCode::InvalidDraftSymbol);
+            assert_eq!(error.operation_index, Some(2));
+            assert_eq!(error.draft_symbol, Some(invalid));
+        }
         let duplicate = base_transaction(ExpressionDraft {
-            handle: LocalHandle::new(3),
+            symbol: Some(DraftSymbol::generated(3)),
             operation: ExpressionKindDraft::ConstI64(1),
         });
         let error = workspace
             .prepare_transaction(&unchecked(duplicate))
             .expect_err("duplicate");
-        assert_eq!(error.code, ErrorCode::DuplicateHandle);
+        assert_eq!(error.code, ErrorCode::DuplicateDraftSymbol);
         assert_eq!(error.operation_index, Some(2));
-        assert_eq!(error.local_handle, Some(LocalHandle::new(3)));
+        assert_eq!(error.draft_symbol, Some(DraftSymbol::generated(3)));
         let undeclared = base_transaction(ExpressionDraft {
-            handle: LocalHandle::new(4),
+            symbol: Some(DraftSymbol::generated(4)),
             operation: ExpressionKindDraft::AddI64 {
                 lhs: ValueDraft::OperationResult {
-                    operation: NodeTarget::Local(LocalHandle::new(99)),
+                    operation: NodeTarget::Draft(DraftSymbol::generated(99)),
                     output: 0,
                 },
                 rhs: ValueDraft::OperationResult {
-                    operation: NodeTarget::Local(LocalHandle::new(4)),
+                    operation: NodeTarget::Draft(DraftSymbol::generated(4)),
                     output: 0,
                 },
             },
@@ -4862,17 +4821,17 @@ mod tests {
         let error = workspace
             .prepare_transaction(&unchecked(undeclared))
             .expect_err("undeclared");
-        assert_eq!(error.code, ErrorCode::InvalidHandle);
+        assert_eq!(error.code, ErrorCode::InvalidDraftSymbol);
         assert_eq!(error.operation_index, Some(2));
-        assert_eq!(error.local_handle, Some(LocalHandle::new(99)));
+        assert_eq!(error.draft_symbol, Some(DraftSymbol::generated(99)));
         let valid = base_transaction(ExpressionDraft {
-            handle: LocalHandle::new(4),
+            symbol: Some(DraftSymbol::generated(4)),
             operation: ExpressionKindDraft::ConstI64(1),
         });
         let private = ApplyTransactionRequest {
             transaction: valid,
             response: TransactionResponseSpec {
-                return_handles: vec![LocalHandle::new(u32::MAX)],
+                return_symbols: vec![DraftSymbol::generated(u32::MAX)],
             },
         };
         assert_eq!(
@@ -4880,43 +4839,43 @@ mod tests {
                 .prepare_transaction(&private)
                 .expect_err("private binding")
                 .code,
-            ErrorCode::InvalidHandle
+            ErrorCode::InvalidDraftSymbol
         );
         assert_eq!(workspace.head().expect("head").next_serial(), 2);
     }
 
     #[test]
-    fn canonical_allocation_errors_remap_to_public_source_and_explicit_handle() {
+    fn canonical_allocation_errors_remap_to_public_source_and_explicit_symbol() {
         let id = WorkspaceId::from_bytes([0x7a; 16]);
         let workspace = Workspace::new(id).expect("workspace");
-        let handle = LocalHandle::new(77);
+        let symbol = DraftSymbol::generated(77);
         let edits = vec![
             CanonicalEdit::CreatePackage {
-                handle,
+                symbol,
                 name: "first".into(),
             },
             CanonicalEdit::CreatePackage {
-                handle,
+                symbol,
                 name: "duplicate".into(),
             },
         ];
-        let error = allocate_handles(
+        let error = allocate_symbols(
             workspace.head().expect("head"),
             &edits,
             &[3, 8],
-            &BTreeSet::from([handle]),
+            &BTreeSet::from([symbol]),
         )
         .expect_err("duplicate canonical allocation");
-        assert_eq!(error.code, ErrorCode::DuplicateHandle);
+        assert_eq!(error.code, ErrorCode::DuplicateDraftSymbol);
         assert_eq!(error.operation_index, Some(8));
-        assert_eq!(error.local_handle, Some(handle));
+        assert_eq!(error.draft_symbol, Some(symbol));
     }
 
     #[test]
     fn insert_expression_rejects_staged_block_and_anchor_with_public_source_atomically() {
         let id = WorkspaceId::from_bytes([0x7e; 16]);
         let workspace = Workspace::new(id).expect("workspace");
-        let local = |handle| NodeTarget::Local(LocalHandle::new(handle));
+        let local = |symbol| NodeTarget::Draft(DraftSymbol::generated(symbol));
         let staged_block = NodeId::new(id, 6).expect("predicted staged block");
         let transaction = Transaction {
             workspace: id,
@@ -4925,23 +4884,23 @@ mod tests {
             mode: TransactionMode::Commit,
             operations: vec![
                 TransactionOp::CreatePackage {
-                    handle: LocalHandle::new(1),
+                    symbol: DraftSymbol::generated(1),
                     name: "app".into(),
                 },
                 TransactionOp::CreateModule {
-                    handle: LocalHandle::new(2),
+                    symbol: DraftSymbol::generated(2),
                     package: local(1),
                     name: "root".into(),
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(3),
+                    symbol: DraftSymbol::generated(3),
                     module: local(2),
                     name: "main".into(),
                     parameters: Vec::new(),
                     result: SemanticType::I64.into(),
                     body: Some(FunctionBodyDraft {
                         operations: vec![ExpressionDraft {
-                            handle: LocalHandle::new(4),
+                            symbol: Some(DraftSymbol::generated(4)),
                             operation: ExpressionKindDraft::ConstI64(1),
                         }],
                         return_value: ValueDraft::OperationResult {
@@ -4954,7 +4913,7 @@ mod tests {
                     block: staged_block,
                     before: None,
                     expression: ExpressionDraft {
-                        handle: LocalHandle::new(5),
+                        symbol: Some(DraftSymbol::generated(5)),
                         operation: ExpressionKindDraft::ConstI64(2),
                     },
                 },
@@ -4990,7 +4949,7 @@ mod tests {
                     block,
                     before: Some(hole),
                     expression: ExpressionDraft {
-                        handle: LocalHandle::new(100),
+                        symbol: Some(DraftSymbol::generated(100)),
                         operation: ExpressionKindDraft::ConstI64(1),
                     },
                 },
@@ -4998,7 +4957,7 @@ mod tests {
                     block,
                     before: Some(predicted_anchor),
                     expression: ExpressionDraft {
-                        handle: LocalHandle::new(101),
+                        symbol: Some(DraftSymbol::generated(101)),
                         operation: ExpressionKindDraft::ConstI64(2),
                     },
                 },
@@ -5020,7 +4979,7 @@ mod tests {
     fn preallocation_scan_maps_wrong_local_call_target_to_public_operation() {
         let id = WorkspaceId::from_bytes([0x80; 16]);
         let workspace = Workspace::new(id).expect("workspace");
-        let local = |handle| NodeTarget::Local(LocalHandle::new(handle));
+        let local = |symbol| NodeTarget::Draft(DraftSymbol::generated(symbol));
         let transaction = Transaction {
             workspace: id,
             base_revision: Revision::INITIAL,
@@ -5028,23 +4987,23 @@ mod tests {
             mode: TransactionMode::Commit,
             operations: vec![
                 TransactionOp::CreatePackage {
-                    handle: LocalHandle::new(1),
+                    symbol: DraftSymbol::generated(1),
                     name: "app".into(),
                 },
                 TransactionOp::CreateModule {
-                    handle: LocalHandle::new(2),
+                    symbol: DraftSymbol::generated(2),
                     package: local(1),
                     name: "root".into(),
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(3),
+                    symbol: DraftSymbol::generated(3),
                     module: local(2),
                     name: "bad".into(),
                     parameters: Vec::new(),
                     result: SemanticType::I64.into(),
                     body: Some(FunctionBodyDraft {
                         operations: vec![ExpressionDraft {
-                            handle: LocalHandle::new(4),
+                            symbol: Some(DraftSymbol::generated(4)),
                             operation: ExpressionKindDraft::Call {
                                 function: local(1),
                                 arguments: Vec::new(),
@@ -5057,7 +5016,7 @@ mod tests {
                     }),
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(5),
+                    symbol: DraftSymbol::generated(5),
                     module: local(2),
                     name: "later".into(),
                     parameters: Vec::new(),
@@ -5074,7 +5033,7 @@ mod tests {
             .expect_err("bad call target");
         assert_eq!(error.code, ErrorCode::WrongKind);
         assert_eq!(error.operation_index, Some(2));
-        assert_eq!(error.local_handle, Some(LocalHandle::new(1)));
+        assert_eq!(error.draft_symbol, Some(DraftSymbol::generated(1)));
         assert_eq!(workspace.head().expect("head").next_serial(), 2);
     }
 
@@ -5090,7 +5049,7 @@ mod tests {
                 name: "x".into(),
             })
             .collect::<Vec<_>>();
-        let error = scan_explicit_handles(&top_level).expect_err("top-level item policy");
+        let error = scan_explicit_symbols(&top_level).expect_err("top-level item policy");
         assert_eq!(error.code, ErrorCode::PolicyExceeded);
         assert_eq!(
             error.operation_index,
@@ -5107,14 +5066,14 @@ mod tests {
             block,
             before: None,
             expression: ExpressionDraft {
-                handle: LocalHandle::new(40_000),
+                symbol: Some(DraftSymbol::generated(40_000)),
                 operation: ExpressionKindDraft::Call {
                     function: existing,
                     arguments: vec![ValueDraft::FunctionParameter(existing); 3],
                 },
             },
         });
-        let error = scan_explicit_handles(&mixed).expect_err("mixed item policy");
+        let error = scan_explicit_symbols(&mixed).expect_err("mixed item policy");
         assert_eq!(error.code, ErrorCode::PolicyExceeded);
         assert_eq!(
             error.operation_index,
@@ -5122,14 +5081,14 @@ mod tests {
         );
 
         let mut expression = ExpressionDraft {
-            handle: LocalHandle::new(1),
+            symbol: Some(DraftSymbol::generated(1)),
             operation: ExpressionKindDraft::ConstI64(1),
         };
         for depth in 0..=MAX_STRUCTURED_DRAFT_DEPTH {
-            let inner_handle = expression.handle;
-            let else_handle = LocalHandle::new(10_000 + depth as u32);
+            let inner_symbol = expression.symbol;
+            let else_symbol = DraftSymbol::generated(10_000 + depth as u32);
             expression = ExpressionDraft {
-                handle: LocalHandle::new(20_000 + depth as u32),
+                symbol: Some(DraftSymbol::generated(20_000 + depth as u32)),
                 operation: ExpressionKindDraft::If {
                     condition: ValueDraft::OperationResult {
                         operation: existing,
@@ -5139,17 +5098,17 @@ mod tests {
                     then_body: YieldingBodyDraft {
                         operations: vec![expression],
                         yield_value: ValueDraft::OperationResult {
-                            operation: NodeTarget::Local(inner_handle),
+                            operation: NodeTarget::Draft(inner_symbol.expect("bound expression")),
                             output: 0,
                         },
                     },
                     else_body: YieldingBodyDraft {
                         operations: vec![ExpressionDraft {
-                            handle: else_handle,
+                            symbol: Some(else_symbol),
                             operation: ExpressionKindDraft::ConstI64(0),
                         }],
                         yield_value: ValueDraft::OperationResult {
-                            operation: NodeTarget::Local(else_handle),
+                            operation: NodeTarget::Draft(else_symbol),
                             output: 0,
                         },
                     },
@@ -5162,7 +5121,7 @@ mod tests {
             expression,
         }];
         assert_eq!(
-            scan_explicit_handles(&too_deep)
+            scan_explicit_symbols(&too_deep)
                 .expect_err("depth policy")
                 .code,
             ErrorCode::PolicyExceeded
@@ -5172,7 +5131,7 @@ mod tests {
             block,
             before: None,
             expression: ExpressionDraft {
-                handle: LocalHandle::new(1),
+                symbol: Some(DraftSymbol::generated(1)),
                 operation: ExpressionKindDraft::Call {
                     function: existing,
                     arguments: vec![
@@ -5183,7 +5142,7 @@ mod tests {
             },
         }];
         assert_eq!(
-            scan_explicit_handles(&oversized)
+            scan_explicit_symbols(&oversized)
                 .expect_err("item policy")
                 .code,
             ErrorCode::PolicyExceeded
@@ -5239,7 +5198,7 @@ mod tests {
             block,
             before: None,
             expression: ExpressionDraft {
-                handle: LocalHandle::new(1),
+                symbol: Some(DraftSymbol::generated(1)),
                 operation: ExpressionKindDraft::AddI64 {
                     lhs: ValueDraft::OperationResult {
                         operation: existing,
@@ -5253,7 +5212,7 @@ mod tests {
             },
         }];
         assert_eq!(
-            scan_explicit_handles(&invalid_output)
+            scan_explicit_symbols(&invalid_output)
                 .expect_err("output index")
                 .code,
             ErrorCode::InvalidOperand
@@ -5264,17 +5223,17 @@ mod tests {
     fn mutual_function_bodies_resolve_local_calls_in_one_transaction() {
         let id = WorkspaceId::from_bytes([0x7c; 16]);
         let mut workspace = Workspace::new(id).expect("workspace");
-        let local = |handle| NodeTarget::Local(LocalHandle::new(handle));
-        let call_body = |handle, target| FunctionBodyDraft {
+        let local = |symbol| NodeTarget::Draft(DraftSymbol::generated(symbol));
+        let call_body = |symbol, target| FunctionBodyDraft {
             operations: vec![ExpressionDraft {
-                handle: LocalHandle::new(handle),
+                symbol: Some(DraftSymbol::generated(symbol)),
                 operation: ExpressionKindDraft::Call {
                     function: local(target),
                     arguments: Vec::new(),
                 },
             }],
             return_value: ValueDraft::OperationResult {
-                operation: local(handle),
+                operation: local(symbol),
                 output: 0,
             },
         };
@@ -5285,16 +5244,16 @@ mod tests {
             mode: TransactionMode::Commit,
             operations: vec![
                 TransactionOp::CreatePackage {
-                    handle: LocalHandle::new(1),
+                    symbol: DraftSymbol::generated(1),
                     name: "app".into(),
                 },
                 TransactionOp::CreateModule {
-                    handle: LocalHandle::new(2),
+                    symbol: DraftSymbol::generated(2),
                     package: local(1),
                     name: "root".into(),
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(3),
+                    symbol: DraftSymbol::generated(3),
                     module: local(2),
                     name: "a".into(),
                     parameters: Vec::new(),
@@ -5302,7 +5261,7 @@ mod tests {
                     body: Some(call_body(5, 4)),
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(4),
+                    symbol: DraftSymbol::generated(4),
                     module: local(2),
                     name: "b".into(),
                     parameters: Vec::new(),
@@ -5316,7 +5275,7 @@ mod tests {
         let function_b = binding(&receipt, 4);
         assert_eq!(function_a.serial(), 4);
         assert_eq!(function_b.serial(), 9);
-        for (call_handle, expected_target) in [(5, function_b), (6, function_a)] {
+        for (call_symbol, expected_target) in [(5, function_b), (6, function_a)] {
             let Node::Operation {
                 operation:
                     OperationKind::Call {
@@ -5327,7 +5286,7 @@ mod tests {
             } = workspace
                 .head()
                 .expect("head")
-                .node(binding(&receipt, call_handle))
+                .node(binding(&receipt, call_symbol))
                 .expect("call")
             else {
                 panic!("call operation")
@@ -5345,7 +5304,7 @@ mod tests {
         let forty = binding(&created, 6);
         let hole = binding(&created, 9);
         let block = prepared_operation_owner(workspace.head().expect("head"), hole);
-        let support = LocalHandle::new(100);
+        let support = DraftSymbol::generated(100);
         let transaction = Transaction {
             workspace: id,
             base_revision: Revision::new(1),
@@ -5356,7 +5315,7 @@ mod tests {
                     block,
                     before: Some(hole),
                     expression: ExpressionDraft {
-                        handle: support,
+                        symbol: Some(support),
                         operation: ExpressionKindDraft::ConstI64(2),
                     },
                 },
@@ -5368,7 +5327,7 @@ mod tests {
                             output: 0,
                         },
                         rhs: ValueDraft::OperationResult {
-                            operation: NodeTarget::Local(support),
+                            operation: NodeTarget::Draft(support),
                             output: 0,
                         },
                     },
@@ -5379,7 +5338,7 @@ mod tests {
             .prepare_transaction(&ApplyTransactionRequest {
                 transaction,
                 response: TransactionResponseSpec {
-                    return_handles: vec![support],
+                    return_symbols: vec![support],
                 },
             })
             .expect("atomic support and refinement");
@@ -5506,63 +5465,63 @@ mod tests {
                 mode: TransactionMode::ValidateOnly,
                 operations: vec![
                     TransactionOp::CreatePackage {
-                        handle: LocalHandle::new(1),
+                        symbol: DraftSymbol::generated(1),
                         name: "p".into(),
                     },
                     TransactionOp::CreateModule {
-                        handle: LocalHandle::new(2),
-                        package: local_handle(1),
+                        symbol: DraftSymbol::generated(2),
+                        package: draft_symbol(1),
                         name: "m".into(),
                     },
                     TransactionOp::CreateProductType {
-                        handle: LocalHandle::new(3),
-                        module: local_handle(2),
+                        symbol: DraftSymbol::generated(3),
+                        module: draft_symbol(2),
                         name: "Reading".into(),
                         fields: vec![
                             ProductFieldDraft {
-                                handle: LocalHandle::new(4),
+                                symbol: DraftSymbol::generated(4),
                                 name: "valid".into(),
                                 ty: TypeDraft::Bool,
                             },
                             ProductFieldDraft {
-                                handle: LocalHandle::new(5),
+                                symbol: DraftSymbol::generated(5),
                                 name: "value".into(),
                                 ty: TypeDraft::I64,
                             },
                         ],
                     },
                     TransactionOp::CreateSumType {
-                        handle: LocalHandle::new(6),
-                        module: local_handle(2),
+                        symbol: DraftSymbol::generated(6),
+                        module: draft_symbol(2),
                         name: "Input".into(),
                         variants: vec![
                             SumVariantDraft {
-                                handle: LocalHandle::new(7),
+                                symbol: DraftSymbol::generated(7),
                                 name: "missing".into(),
                                 payload: None,
                             },
                             SumVariantDraft {
-                                handle: LocalHandle::new(8),
+                                symbol: DraftSymbol::generated(8),
                                 name: "sample".into(),
-                                payload: Some(TypeDraft::Nominal(local_handle(3))),
+                                payload: Some(TypeDraft::Nominal(draft_symbol(3))),
                             },
                         ],
                     },
                     TransactionOp::CreateFunction {
-                        handle: LocalHandle::new(9),
-                        module: local_handle(2),
+                        symbol: DraftSymbol::generated(9),
+                        module: draft_symbol(2),
                         name: "pending".into(),
                         parameters: vec![FunctionParameterDraft {
-                            handle: LocalHandle::new(10),
+                            symbol: DraftSymbol::generated(10),
                             name: "input".into(),
-                            ty: TypeDraft::Nominal(local_handle(6)),
+                            ty: TypeDraft::Nominal(draft_symbol(6)),
                         }],
-                        result: TypeDraft::Nominal(local_handle(3)),
+                        result: TypeDraft::Nominal(draft_symbol(3)),
                         body: Some(FunctionBodyDraft {
                             operations: vec![draft_expression(
                                 11,
                                 ExpressionKindDraft::Hole {
-                                    expected: TypeDraft::Nominal(local_handle(3)),
+                                    expected: TypeDraft::Nominal(draft_symbol(3)),
                                 },
                             )],
                             return_value: draft_result(11),
@@ -5571,15 +5530,15 @@ mod tests {
                 ],
             },
             response: TransactionResponseSpec {
-                return_handles: vec![
-                    LocalHandle::new(3),
-                    LocalHandle::new(4),
-                    LocalHandle::new(5),
-                    LocalHandle::new(6),
-                    LocalHandle::new(7),
-                    LocalHandle::new(8),
-                    LocalHandle::new(9),
-                    LocalHandle::new(11),
+                return_symbols: vec![
+                    DraftSymbol::generated(3),
+                    DraftSymbol::generated(4),
+                    DraftSymbol::generated(5),
+                    DraftSymbol::generated(6),
+                    DraftSymbol::generated(7),
+                    DraftSymbol::generated(8),
+                    DraftSymbol::generated(9),
+                    DraftSymbol::generated(11),
                 ],
             },
         };
@@ -5638,23 +5597,23 @@ mod tests {
             id,
             vec![
                 TransactionOp::CreateProductType {
-                    handle: LocalHandle::new(3),
-                    module: local_handle(2),
+                    symbol: DraftSymbol::generated(3),
+                    module: draft_symbol(2),
                     name: "A".into(),
                     fields: vec![ProductFieldDraft {
-                        handle: LocalHandle::new(4),
+                        symbol: DraftSymbol::generated(4),
                         name: "b".into(),
-                        ty: TypeDraft::Nominal(local_handle(5)),
+                        ty: TypeDraft::Nominal(draft_symbol(5)),
                     }],
                 },
                 TransactionOp::CreateProductType {
-                    handle: LocalHandle::new(5),
-                    module: local_handle(2),
+                    symbol: DraftSymbol::generated(5),
+                    module: draft_symbol(2),
                     name: "B".into(),
                     fields: vec![ProductFieldDraft {
-                        handle: LocalHandle::new(6),
+                        symbol: DraftSymbol::generated(6),
                         name: "a".into(),
-                        ty: TypeDraft::Nominal(local_handle(3)),
+                        ty: TypeDraft::Nominal(draft_symbol(3)),
                     }],
                 },
             ],
@@ -5666,17 +5625,17 @@ mod tests {
         let duplicate = structured_semantic_request(
             id,
             vec![TransactionOp::CreateProductType {
-                handle: LocalHandle::new(3),
-                module: local_handle(2),
+                symbol: DraftSymbol::generated(3),
+                module: draft_symbol(2),
                 name: "D".into(),
                 fields: vec![
                     ProductFieldDraft {
-                        handle: LocalHandle::new(4),
+                        symbol: DraftSymbol::generated(4),
                         name: "same".into(),
                         ty: TypeDraft::I64,
                     },
                     ProductFieldDraft {
-                        handle: LocalHandle::new(5),
+                        symbol: DraftSymbol::generated(5),
                         name: "same".into(),
                         ty: TypeDraft::Bool,
                     },
@@ -5699,42 +5658,42 @@ mod tests {
         let mut workspace = Workspace::new(id).expect("workspace");
         let operations = vec![
             TransactionOp::CreateProductType {
-                handle: LocalHandle::new(3),
-                module: local_handle(2),
+                symbol: DraftSymbol::generated(3),
+                module: draft_symbol(2),
                 name: "Pair".into(),
                 fields: vec![
                     ProductFieldDraft {
-                        handle: LocalHandle::new(4),
+                        symbol: DraftSymbol::generated(4),
                         name: "left".into(),
                         ty: TypeDraft::I64,
                     },
                     ProductFieldDraft {
-                        handle: LocalHandle::new(5),
+                        symbol: DraftSymbol::generated(5),
                         name: "right".into(),
                         ty: TypeDraft::I64,
                     },
                 ],
             },
             TransactionOp::CreateSumType {
-                handle: LocalHandle::new(6),
-                module: local_handle(2),
+                symbol: DraftSymbol::generated(6),
+                module: draft_symbol(2),
                 name: "Maybe".into(),
                 variants: vec![
                     SumVariantDraft {
-                        handle: LocalHandle::new(7),
+                        symbol: DraftSymbol::generated(7),
                         name: "none".into(),
                         payload: None,
                     },
                     SumVariantDraft {
-                        handle: LocalHandle::new(8),
+                        symbol: DraftSymbol::generated(8),
                         name: "some".into(),
                         payload: Some(TypeDraft::I64),
                     },
                 ],
             },
             TransactionOp::CreateFunction {
-                handle: LocalHandle::new(9),
-                module: local_handle(2),
+                symbol: DraftSymbol::generated(9),
+                module: draft_symbol(2),
                 name: "main".into(),
                 parameters: Vec::new(),
                 result: TypeDraft::I64,
@@ -5745,14 +5704,14 @@ mod tests {
                         draft_expression(
                             22,
                             ExpressionKindDraft::ConstructProduct {
-                                product: local_handle(3),
+                                product: draft_symbol(3),
                                 fields: vec![
                                     ProductFieldValueDraft {
-                                        field: local_handle(5),
+                                        field: draft_symbol(5),
                                         value: draft_result(21),
                                     },
                                     ProductFieldValueDraft {
-                                        field: local_handle(4),
+                                        field: draft_symbol(4),
                                         value: draft_result(20),
                                     },
                                 ],
@@ -5762,13 +5721,13 @@ mod tests {
                             23,
                             ExpressionKindDraft::ProjectField {
                                 value: draft_result(22),
-                                field: local_handle(4),
+                                field: draft_symbol(4),
                             },
                         ),
                         draft_expression(
                             24,
                             ExpressionKindDraft::ConstructVariant {
-                                variant: local_handle(8),
+                                variant: draft_symbol(8),
                                 payload: Some(draft_result(23)),
                             },
                         ),
@@ -5779,18 +5738,18 @@ mod tests {
                                 result: TypeDraft::I64,
                                 arms: vec![
                                     MatchArmDraft {
-                                        variant: local_handle(8),
-                                        payload_handle: Some(LocalHandle::new(30)),
+                                        variant: draft_symbol(8),
+                                        payload_symbol: Some(DraftSymbol::generated(30)),
                                         body: YieldingBodyDraft {
                                             operations: Vec::new(),
-                                            yield_value: ValueDraft::BlockArgument(local_handle(
+                                            yield_value: ValueDraft::BlockArgument(draft_symbol(
                                                 30,
                                             )),
                                         },
                                     },
                                     MatchArmDraft {
-                                        variant: local_handle(7),
-                                        payload_handle: None,
+                                        variant: draft_symbol(7),
+                                        payload_symbol: None,
                                         body: YieldingBodyDraft {
                                             operations: vec![draft_expression(
                                                 31,
@@ -5810,7 +5769,7 @@ mod tests {
         let request = structured_semantic_request(id, operations);
         let mutate_expression =
             |request: &mut ApplyTransactionRequest,
-             handle: u32,
+             symbol: u32,
              mutate: &mut dyn FnMut(&mut ExpressionKindDraft)| {
                 let TransactionOp::CreateFunction {
                     body: Some(body), ..
@@ -5821,7 +5780,7 @@ mod tests {
                 let expression = body
                     .operations
                     .iter_mut()
-                    .find(|expression| expression.handle == LocalHandle::new(handle))
+                    .find(|expression| expression.symbol == Some(DraftSymbol::generated(symbol)))
                     .expect("expression");
                 mutate(&mut expression.operation);
             };
@@ -5883,14 +5842,14 @@ mod tests {
             let ExpressionKindDraft::MatchSum { arms, .. } = operation else {
                 panic!("match")
             };
-            arms[0].payload_handle = None;
+            arms[0].payload_symbol = None;
         });
         assert_eq!(
             workspace
                 .prepare_transaction(&invalid)
                 .expect_err("missing payload binding")
                 .code,
-            ErrorCode::InvalidHandle
+            ErrorCode::InvalidDraftSymbol
         );
         assert_eq!(workspace.head().expect("head").next_serial(), 2);
         let prepared = workspace
@@ -5981,28 +5940,28 @@ mod tests {
             id,
             vec![
                 TransactionOp::CreateProductType {
-                    handle: LocalHandle::new(3),
-                    module: local_handle(2),
+                    symbol: DraftSymbol::generated(3),
+                    module: draft_symbol(2),
                     name: "Pair".into(),
                     fields: vec![
                         ProductFieldDraft {
-                            handle: LocalHandle::new(4),
+                            symbol: DraftSymbol::generated(4),
                             name: "left".into(),
                             ty: TypeDraft::I64,
                         },
                         ProductFieldDraft {
-                            handle: LocalHandle::new(5),
+                            symbol: DraftSymbol::generated(5),
                             name: "right".into(),
                             ty: TypeDraft::I64,
                         },
                     ],
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(6),
-                    module: local_handle(2),
+                    symbol: DraftSymbol::generated(6),
+                    module: draft_symbol(2),
                     name: "make".into(),
                     parameters: Vec::new(),
-                    result: TypeDraft::Nominal(local_handle(3)),
+                    result: TypeDraft::Nominal(draft_symbol(3)),
                     body: Some(FunctionBodyDraft {
                         operations: vec![
                             draft_expression(20, ExpressionKindDraft::ConstI64(1)),
@@ -6010,7 +5969,7 @@ mod tests {
                             draft_expression(
                                 22,
                                 ExpressionKindDraft::Hole {
-                                    expected: TypeDraft::Nominal(local_handle(3)),
+                                    expected: TypeDraft::Nominal(draft_symbol(3)),
                                 },
                             ),
                         ],
@@ -6218,28 +6177,28 @@ mod tests {
             id,
             vec![
                 TransactionOp::CreateProductType {
-                    handle: LocalHandle::new(3),
-                    module: local_handle(2),
+                    symbol: DraftSymbol::generated(3),
+                    module: draft_symbol(2),
                     name: "Reading".into(),
                     fields: vec![ProductFieldDraft {
-                        handle: LocalHandle::new(4),
+                        symbol: DraftSymbol::generated(4),
                         name: "value".into(),
                         ty: TypeDraft::I64,
                     }],
                 },
                 TransactionOp::CreateSumType {
-                    handle: LocalHandle::new(5),
-                    module: local_handle(2),
+                    symbol: DraftSymbol::generated(5),
+                    module: draft_symbol(2),
                     name: "Input".into(),
                     variants: vec![SumVariantDraft {
-                        handle: LocalHandle::new(6),
+                        symbol: DraftSymbol::generated(6),
                         name: "sample".into(),
-                        payload: Some(TypeDraft::Nominal(local_handle(3))),
+                        payload: Some(TypeDraft::Nominal(draft_symbol(3))),
                     }],
                 },
             ],
         );
-        transaction.response.return_handles = vec![LocalHandle::new(3)];
+        transaction.response.return_symbols = vec![DraftSymbol::generated(3)];
         let prepared = workspace
             .prepare_transaction(&transaction)
             .expect("declarations");
@@ -6247,7 +6206,7 @@ mod tests {
             .receipt
             .returned_bindings
             .iter()
-            .find(|(handle, _)| *handle == LocalHandle::new(3))
+            .find(|(symbol, _)| *symbol == DraftSymbol::generated(3))
             .expect("reading binding")
             .1;
         workspace.publish(prepared.snapshot).expect("publish");
@@ -6324,20 +6283,20 @@ mod tests {
 
     #[test]
     fn preallocation_scan_covers_top_level_types_values_and_maintenance_targets() {
-        let local = |value| NodeTarget::Local(LocalHandle::new(value));
+        let local = |value| NodeTarget::Draft(DraftSymbol::generated(value));
         let cases = vec![
             vec![TransactionOp::CreateModule {
-                handle: LocalHandle::new(1),
+                symbol: DraftSymbol::generated(1),
                 package: local(99),
                 name: "m".into(),
             }],
             vec![
                 TransactionOp::CreatePackage {
-                    handle: LocalHandle::new(1),
+                    symbol: DraftSymbol::generated(1),
                     name: "p".into(),
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(2),
+                    symbol: DraftSymbol::generated(2),
                     module: local(99),
                     name: "f".into(),
                     parameters: Vec::new(),
@@ -6363,22 +6322,22 @@ mod tests {
                 validate_structured_request(&operations)
                     .expect_err("undeclared scan path")
                     .code,
-                ErrorCode::InvalidHandle
+                ErrorCode::InvalidDraftSymbol
             );
         }
 
         let wrong_kind = vec![
             TransactionOp::CreatePackage {
-                handle: LocalHandle::new(1),
+                symbol: DraftSymbol::generated(1),
                 name: "p".into(),
             },
             TransactionOp::CreateModule {
-                handle: LocalHandle::new(2),
+                symbol: DraftSymbol::generated(2),
                 package: local(1),
                 name: "m".into(),
             },
             TransactionOp::CreateFunction {
-                handle: LocalHandle::new(3),
+                symbol: DraftSymbol::generated(3),
                 module: local(2),
                 name: "f".into(),
                 parameters: Vec::new(),
@@ -6397,7 +6356,7 @@ mod tests {
         ];
         let error = validate_structured_request(&wrong_kind).expect_err("wrong local category");
         assert_eq!(error.code, ErrorCode::WrongKind);
-        assert_eq!(error.local_handle, Some(LocalHandle::new(1)));
+        assert_eq!(error.draft_symbol, Some(DraftSymbol::generated(1)));
     }
 
     #[test]
@@ -6405,17 +6364,17 @@ mod tests {
         let prefix = || {
             vec![
                 TransactionOp::CreatePackage {
-                    handle: LocalHandle::new(1),
+                    symbol: DraftSymbol::generated(1),
                     name: "p".into(),
                 },
                 TransactionOp::CreateModule {
-                    handle: LocalHandle::new(2),
-                    package: local_handle(1),
+                    symbol: DraftSymbol::generated(2),
+                    package: draft_symbol(1),
                     name: "m".into(),
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(3),
-                    module: local_handle(2),
+                    symbol: DraftSymbol::generated(3),
+                    module: draft_symbol(2),
                     name: "f".into(),
                     parameters: Vec::new(),
                     result: TypeDraft::I64,
@@ -6429,33 +6388,33 @@ mod tests {
         let value = draft_result(4);
         let mut if_target = prefix();
         if_target.push(TransactionOp::ReplaceOperation {
-            operation: local_handle(4),
+            operation: draft_symbol(4),
             replacement: OperationDraft::If {
                 condition: value,
                 result: TypeDraft::I64,
-                then_region: local_handle(3),
-                else_region: local_handle(3),
+                then_region: draft_symbol(3),
+                else_region: draft_symbol(3),
             },
         });
         let mut for_target = prefix();
         for_target.push(TransactionOp::ReplaceOperation {
-            operation: local_handle(4),
+            operation: draft_symbol(4),
             replacement: OperationDraft::ForI64 {
                 start: value,
                 end_exclusive: value,
                 step: 1,
                 initial: value,
                 carried: TypeDraft::I64,
-                body_region: local_handle(3),
+                body_region: draft_symbol(3),
             },
         });
 
         for operations in [if_target, for_target] {
-            let error = scan_explicit_handles(&operations)
+            let error = scan_explicit_symbols(&operations)
                 .expect_err("non-region target must reject during the preallocation scan");
             assert_eq!(error.code, ErrorCode::WrongKind);
             assert_eq!(error.operation_index, Some(3));
-            assert_eq!(error.local_handle, Some(LocalHandle::new(3)));
+            assert_eq!(error.draft_symbol, Some(DraftSymbol::generated(3)));
         }
     }
 
@@ -6464,19 +6423,19 @@ mod tests {
         let id = WorkspaceId::from_bytes([0xa4; 16]);
         let make = |permuted: bool| {
             let none = MatchArmDraft {
-                variant: local_handle(11),
-                payload_handle: None,
+                variant: draft_symbol(11),
+                payload_symbol: None,
                 body: YieldingBodyDraft {
                     operations: vec![draft_expression(30, ExpressionKindDraft::ConstI64(0))],
                     yield_value: draft_result(30),
                 },
             };
             let some = MatchArmDraft {
-                variant: local_handle(12),
-                payload_handle: Some(LocalHandle::new(31)),
+                variant: draft_symbol(12),
+                payload_symbol: Some(DraftSymbol::generated(31)),
                 body: YieldingBodyDraft {
                     operations: Vec::new(),
-                    yield_value: ValueDraft::BlockArgument(local_handle(31)),
+                    yield_value: ValueDraft::BlockArgument(draft_symbol(31)),
                 },
             };
             let arms = if permuted {
@@ -6492,17 +6451,17 @@ mod tests {
                     mode: TransactionMode::ValidateOnly,
                     operations: vec![
                         TransactionOp::CreatePackage {
-                            handle: LocalHandle::new(1),
+                            symbol: DraftSymbol::generated(1),
                             name: "p".into(),
                         },
                         TransactionOp::CreateModule {
-                            handle: LocalHandle::new(2),
-                            package: local_handle(1),
+                            symbol: DraftSymbol::generated(2),
+                            package: draft_symbol(1),
                             name: "m".into(),
                         },
                         TransactionOp::CreateFunction {
-                            handle: LocalHandle::new(3),
-                            module: local_handle(2),
+                            symbol: DraftSymbol::generated(3),
+                            module: draft_symbol(2),
                             name: "forward".into(),
                             parameters: Vec::new(),
                             result: TypeDraft::I64,
@@ -6512,14 +6471,14 @@ mod tests {
                                     draft_expression(
                                         21,
                                         ExpressionKindDraft::ConstructProduct {
-                                            product: local_handle(4),
+                                            product: draft_symbol(4),
                                             fields: vec![
                                                 ProductFieldValueDraft {
-                                                    field: local_handle(6),
+                                                    field: draft_symbol(6),
                                                     value: draft_result(20),
                                                 },
                                                 ProductFieldValueDraft {
-                                                    field: local_handle(5),
+                                                    field: draft_symbol(5),
                                                     value: draft_result(20),
                                                 },
                                             ],
@@ -6529,13 +6488,13 @@ mod tests {
                                         22,
                                         ExpressionKindDraft::ProjectField {
                                             value: draft_result(21),
-                                            field: local_handle(5),
+                                            field: draft_symbol(5),
                                         },
                                     ),
                                     draft_expression(
                                         23,
                                         ExpressionKindDraft::ConstructVariant {
-                                            variant: local_handle(12),
+                                            variant: draft_symbol(12),
                                             payload: Some(draft_result(22)),
                                         },
                                     ),
@@ -6552,34 +6511,34 @@ mod tests {
                             }),
                         },
                         TransactionOp::CreateProductType {
-                            handle: LocalHandle::new(4),
-                            module: local_handle(2),
+                            symbol: DraftSymbol::generated(4),
+                            module: draft_symbol(2),
                             name: "Pair".into(),
                             fields: vec![
                                 ProductFieldDraft {
-                                    handle: LocalHandle::new(5),
+                                    symbol: DraftSymbol::generated(5),
                                     name: "left".into(),
                                     ty: TypeDraft::I64,
                                 },
                                 ProductFieldDraft {
-                                    handle: LocalHandle::new(6),
+                                    symbol: DraftSymbol::generated(6),
                                     name: "right".into(),
                                     ty: TypeDraft::I64,
                                 },
                             ],
                         },
                         TransactionOp::CreateSumType {
-                            handle: LocalHandle::new(10),
-                            module: local_handle(2),
+                            symbol: DraftSymbol::generated(10),
+                            module: draft_symbol(2),
                             name: "Maybe".into(),
                             variants: vec![
                                 SumVariantDraft {
-                                    handle: LocalHandle::new(11),
+                                    symbol: DraftSymbol::generated(11),
                                     name: "none".into(),
                                     payload: None,
                                 },
                                 SumVariantDraft {
-                                    handle: LocalHandle::new(12),
+                                    symbol: DraftSymbol::generated(12),
                                     name: "some".into(),
                                     payload: Some(TypeDraft::I64),
                                 },
@@ -6602,19 +6561,115 @@ mod tests {
     }
 
     #[test]
+    fn draft_symbol_spelling_does_not_change_allocation_graph_or_execution() {
+        let id = WorkspaceId::from_bytes([0xd1; 16]);
+        let request = |names: [&str; 6]| {
+            let symbols = names.map(DraftSymbol::new);
+            let [package, module, function, one, two, sum] = symbols;
+            ApplyTransactionRequest {
+                transaction: Transaction {
+                    workspace: id,
+                    base_revision: Revision::INITIAL,
+                    idempotency_key: None,
+                    mode: TransactionMode::ValidateOnly,
+                    operations: vec![
+                        TransactionOp::CreatePackage {
+                            symbol: package,
+                            name: "package".into(),
+                        },
+                        TransactionOp::CreateModule {
+                            symbol: module,
+                            package: NodeTarget::Draft(package),
+                            name: "module".into(),
+                        },
+                        TransactionOp::CreateFunction {
+                            symbol: function,
+                            module: NodeTarget::Draft(module),
+                            name: "main".into(),
+                            parameters: Vec::new(),
+                            result: TypeDraft::I64,
+                            body: Some(FunctionBodyDraft {
+                                operations: vec![
+                                    ExpressionDraft {
+                                        symbol: Some(one),
+                                        operation: ExpressionKindDraft::ConstI64(1),
+                                    },
+                                    ExpressionDraft {
+                                        symbol: Some(two),
+                                        operation: ExpressionKindDraft::ConstI64(2),
+                                    },
+                                    ExpressionDraft {
+                                        symbol: Some(sum),
+                                        operation: ExpressionKindDraft::AddI64 {
+                                            lhs: ValueDraft::OperationResult {
+                                                operation: NodeTarget::Draft(one),
+                                                output: 0,
+                                            },
+                                            rhs: ValueDraft::OperationResult {
+                                                operation: NodeTarget::Draft(two),
+                                                output: 0,
+                                            },
+                                        },
+                                    },
+                                ],
+                                return_value: ValueDraft::OperationResult {
+                                    operation: NodeTarget::Draft(sum),
+                                    output: 0,
+                                },
+                            }),
+                        },
+                        TransactionOp::SetEntryFunction {
+                            package: NodeTarget::Draft(package),
+                            function: NodeTarget::Draft(function),
+                        },
+                    ],
+                },
+                response: TransactionResponseSpec {
+                    return_symbols: vec![function],
+                },
+            }
+        };
+        let first = Workspace::new(id)
+            .expect("first workspace")
+            .prepare_transaction(&request(["package", "module", "main", "one", "two", "sum"]))
+            .expect("first proposal");
+        let renamed = Workspace::new(id)
+            .expect("renamed workspace")
+            .prepare_transaction(&request(["p", "m", "entry", "a", "b", "answer"]))
+            .expect("renamed proposal");
+        assert_eq!(first.snapshot.nodes, renamed.snapshot.nodes);
+        assert_eq!(first.snapshot.hash(), renamed.snapshot.hash());
+        let entry = first.receipt.returned_bindings[0].1;
+        assert_eq!(entry, renamed.receipt.returned_bindings[0].1);
+        for prepared in [&first, &renamed] {
+            let run = crate::interpret::compile_and_run(
+                &prepared.snapshot,
+                entry,
+                &[],
+                crate::interpret::RunPolicy {
+                    fuel: 100,
+                    maximum_frames: 16,
+                },
+            )
+            .expect("canonical execution");
+            assert_eq!(run.value, crate::interpret::RuntimeValue::I64(3));
+        }
+    }
+
+    #[test]
     fn product_second_operand_is_copy_and_oversized_constructor_requirements_are_bounded() {
         let id = WorkspaceId::from_bytes([0xa5; 16]);
         let workspace = Workspace::new(id).expect("workspace");
         let fields = (0..65)
             .map(|index| ProductFieldDraft {
-                handle: LocalHandle::new(100 + index),
+                symbol: DraftSymbol::generated(100 + index),
                 name: format!("field_{index}"),
                 ty: TypeDraft::I64,
             })
             .collect::<Vec<_>>();
         let parameters = (0..65)
             .map(|index| FunctionParameterDraft {
-                handle: LocalHandle::new(300 + index),
+                symbol: DraftSymbol::generated(300 + index),
                 name: format!("parameter_{index}"),
                 ty: TypeDraft::I64,
             })
@@ -6623,30 +6678,30 @@ mod tests {
             id,
             vec![
                 TransactionOp::CreateProductType {
-                    handle: LocalHandle::new(3),
-                    module: local_handle(2),
+                    symbol: DraftSymbol::generated(3),
+                    module: draft_symbol(2),
                     name: "Wide".into(),
                     fields,
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(4),
-                    module: local_handle(2),
+                    symbol: DraftSymbol::generated(4),
+                    module: draft_symbol(2),
                     name: "wide_call".into(),
                     parameters,
-                    result: TypeDraft::Nominal(local_handle(3)),
+                    result: TypeDraft::Nominal(draft_symbol(3)),
                     body: None,
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(5),
-                    module: local_handle(2),
+                    symbol: DraftSymbol::generated(5),
+                    module: draft_symbol(2),
                     name: "repair".into(),
                     parameters: Vec::new(),
-                    result: TypeDraft::Nominal(local_handle(3)),
+                    result: TypeDraft::Nominal(draft_symbol(3)),
                     body: Some(FunctionBodyDraft {
                         operations: vec![draft_expression(
                             6,
                             ExpressionKindDraft::Hole {
-                                expected: TypeDraft::Nominal(local_handle(3)),
+                                expected: TypeDraft::Nominal(draft_symbol(3)),
                             },
                         )],
                         return_value: draft_result(6),

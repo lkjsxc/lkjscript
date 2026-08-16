@@ -3,6 +3,165 @@
 No performance leadership claim is made. These are bootstrap baselines whose purpose is to expose
 costs before optimization.
 
+## Protocol-v5 control-plane cutover
+
+Source size was measured from the dirty working tree based on
+`8d08f507d474b335512ea5afdba6be186e3b8517`. Current-file measurement used filesystem traversal,
+not `git ls-files`, so it includes the untracked active sources `src/machine_contract.rs`,
+`src/transport.rs`, and `tests/transport_json.rs`. The exact method was:
+
+```sh
+find src tests -type f -name '*.rs' -print0 | sort -z | xargs -0 wc -c
+find src tests examples -type f \( -name '*.rs' -o -name '*.py' \) -print0 | sort -z | xargs -0 wc -c
+git ls-tree -r --name-only HEAD -- src tests examples
+# Each matching base path was measured with: git cat-file -s "HEAD:$path"
+wc -c src/machine.rs src/machine_contract.rs src/protocol.rs src/transport.rs \
+  src/codec.rs src/daemon.rs src/bin/lkjscript.rs
+```
+
+At the final documentation checkpoint, Rust source under `src/` and `tests/` had changed from
+1,952,124 B at the base to 1,811,205 B including untracked active files, a reduction of 140,919 B
+(7.2 percent). Rust and Python source under `src/`, `tests/`, and `examples/` changed from 2,013,995 B
+to 1,904,442 B, a reduction of 109,553 B (5.4 percent) after adding the retained release-channel
+replay. The named machine/control boundary changed from 602,276 B (`machine.rs`, `protocol.rs`,
+`codec.rs`, `daemon.rs`, and the CLI at the base) to 434,493 B for those consumers plus the split
+`machine_contract.rs` and new `transport.rs`, a reduction of 167,783 B (27.9 percent). These are
+source-byte counts, not token, latency, memory, or runtime-performance claims.
+
+Protocol/JSON and machine-schema identity are version 5. Durable artifacts remain format 3 under
+`lkjscript-spg003`; the direct non-compatible publication-record cutover is `LKJHEAD4`. Focused tests
+cover strict framed JSON, exact response correlation, dropped keyed-response replay, response
+preflight before workspace or revision publication, restart/failure publication behavior, and
+explicit `LKJHEAD3` rejection. Release-path interaction observations are recorded below.
+
+## Semantic-proposal ergonomics milestone
+
+The sealed black-box creation attempt that motivated this direct replacement was 19,567 compact
+JSON bytes, declared 111 numeric handles, selected 38 bindings, and first failed on a string supplied
+to the numeric local-handle field before a wrong-category retry. Of 60 expression results, 57 had one
+use and 56 were both one-use and unselected. These are retained task observations, not model-quality
+or token claims.
+
+A reproduced debug-binary run of the migrated public job-policy driver emitted one 21,227-byte compact
+creation envelope with 110 direct deterministic `DraftSymbol` labels and 32 selected bindings.
+The driver deliberately keeps its broad flat expression listing. A focused inline-expression
+prototype was not retained because validation and iterative flattening were not yet dependency-closed;
+inline single-use values remain a measured gap. Symbol strings repeat at reference sites, so this
+broad flat request is 1,660 bytes larger than the unequal sealed request and no byte-saving claim is
+made. The verified benefit is removal of numeric-label/category authoring failures and support for
+private omitted expression bindings. The run still created 188 nodes and produced byte-identical format-3 artifact
+sizes (8,354 B, 8,373 B, and 8,379 B). After the endpoint-root correction, its final keyed symbolic
+`LKJHEAD4` was 1,580 B, below the 16 KiB policy. Artifact format and semantic byte grammar were
+unchanged.
+
+A fresh debug-binary endpoint-root replay completed 44 agent RPCs plus two lifecycle shutdowns with
+all job-policy oracles passing. The final shared-template replay observed 60,883 compact JSON request
+bytes, 161,325 JSON stdout bytes, and 165,896,833 ns summed CLI/service wall time. The task discovery
+response accounted for the intentional increase from complete endpoint wire definitions. This is one debug observation, not a
+latency distribution or release-performance baseline.
+
+## Controlled release-channel before and after evidence
+
+Both isolated trials used the same release-channel task, the same machine, production release
+binaries, fresh state, the same four allowed orientation files, and no private implementation or
+existing example payload. The before transcript was sealed before implementation. The after trial
+used a fresh model context and passed 43/43 machine assertions. Evidence is retained under
+`/tmp/lkjscript-20260816-baseline/agent-trial/` and
+`/tmp/lkjscript-20260816-after/agent-trial/`. These are single controlled observations, not a model
+benchmark or performance distribution.
+
+The root policy stayed byte-identical at 37,461 B. The four-file trial orientation set (policy,
+README, status, and roadmap) grew from 62,664 B to 68,596 B. The broader policy, README, status,
+roadmap, three specifications, architecture, and performance set grew from 159,442 B to 181,015 B.
+This is documentation cost, not provider-token cost. Both trial agents opened the same four allowed
+files and reported zero repository searches; neither opened specifications or implementation.
+
+The direct compact contract comparison is:
+
+| Projection | Protocol v4 before | Protocol v5 after | Change |
+| --- | ---: | ---: | ---: |
+| manifest result | 739 B | 1,241 B | +502 B (+67.9%) |
+| task result | 86,009 B / six broad sections | 80,831 B / 12 agent-selected endpoint roots, 111 definitions | -5,178 B (-6.0%) |
+| explicit full result | 126,888 B | 124,430 B | -2,458 B (-1.9%) |
+| matching-digest unchanged result | 105 B | 105 B | no change |
+
+The after agent did not need full or unchanged. Its actual compact downloads were the 1,241-byte
+manifest and 80,831-byte task result. The before agent requested pretty output and downloaded 1,067
+and 327,388 bytes, so the apparent 75.3-percent task-download reduction mixes formatting and is not
+the equal compact comparison. The retained examples' fixed 12-root selection is 80,629 bytes. The
+60-percent task-contract planning target was not met; exact envelopes, query batch/outcome layers,
+typed and boundary errors, IDs, and limits were not omitted to manufacture a reduction.
+
+Initial construction shows the remaining proposal cost:
+
+| Accepted creation | Compact request | Explicit local labels | Selected bindings | Created nodes |
+| --- | ---: | ---: | ---: | ---: |
+| sealed numeric-handle before trial | 19,567 B | 111 | 38 | 216 |
+| retained exact-graph symbolic replay | 22,247 B | 111 | 38 | 216 |
+| isolated after agent | 23,582 B | 115 | 38 | 205 |
+
+The retained replay is a direct symbolic transformation of the corrected accepted before proposal;
+it preserves 17 operations, graph allocation count, revision artifact sizes of 9,387 B, 9,411 B, and
+9,403 B, and all semantic oracles. It isolates a 2,680-byte (13.7-percent) JSON increase from repeated
+symbol strings with no identifier-count reduction. The after agent selected the allowed additional
+`score_client` helper, adding four expression drafts and making graph-size and creation-byte
+comparison unequal. All 64 of its expression drafts needed explicit labels because inline
+value-position expressions are not implemented. The 40-percent proposal planning target was not met.
+
+The observed agent workflows were:
+
+| Observation | Before | After | Change |
+| --- | ---: | ---: | ---: |
+| public commands | 42 | 36 | -6 |
+| `lkjscript` launches | 38 | 33 | -5 |
+| generic RPC attempts | 34 | 29 | -5 |
+| compact RPC request bytes | 90,808 B | 47,501 B | -43,307 B (-47.7%) |
+| compact RPC response bytes | 38,232 B | 30,299 B | -7,933 B (-20.7%) |
+| unintended initial-creation rejections | 2 | 0 | -2 |
+| required invalid-repair rejections | 1 | 1 | no change |
+| malformed RPC JSON shapes | 1 | 1 | no change |
+| elapsed task boundary | 567.696 s | 715.678 s | +147.982 s (+26.1%) |
+
+The before harness labelled all 34 RPC attempts as connections/round trips even though its local
+`invalid_json` attempt could not connect. The after evidence distinguishes 29 attempts, 28 real
+connections, and one local rejection; a precise real-connection delta is therefore unavailable.
+The request-byte reduction is largely the absence of two repeated broad creation attempts. The after
+creation was accepted on its first attempt and had no unintended semantic rejection. A later
+`incoming_uses` query guessed `{node,output}` instead of the described tagged `value_ref`, received a
+precise local `invalid_json`, and succeeded after one correction. The after task took longer despite
+fewer public interactions; no speed improvement is claimed. Neither isolated task exposed provider
+token, retry-cost, or price telemetry, so no token or cost comparison is made.
+
+A separate deterministic production release replay of the exact retained graph used 29 authoring
+requests with 45,824 request bytes and 33,299 response bytes, plus four separately reported discovery
+requests and two typed lifecycle requests. It passed creation, allocation rollback, repair identity,
+all seven decisions, low-fuel laziness, rename, history, restart, and execution oracles. This replay
+is the retained regression oracle; because it invokes no model, it is not substituted for the after
+agent observation.
+
+The fresh production build used by the after trial took 79.191 s in a new target directory. Its
+client was 4,973,416 B and daemon 3,736,872 B, compared with the before fresh build's 56.818 s,
+3,779,472 B client, and 2,245,680 B daemon. These one-build increases are retained control-plane cost,
+not equal-work runtime regressions; maximum RSS is unavailable because `/usr/bin/time` is absent.
+
+The first final-boundary attempt stopped at Clippy because the workspace-response-preflight review fix
+left two production methods used only by unit tests. Applying `cfg(test)` to those helpers removed the
+dead production surface. The complete boundary was then rerun from its start and passed:
+
+- formatting check: 0.294 s;
+- all-target/all-feature Clippy with warnings denied: 3.000 s;
+- fresh all-target/all-feature test: 18.999 s, 165 passed and nine ignored in a 630,453 KiB target;
+- fresh optimized release build: 81.095 s in a 57,272 KiB target;
+- final release binaries: 4,973,416 B client and 3,737,640 B daemon;
+- diff check: passed.
+
+The final production job-policy, named-data, and release-channel drivers all passed through the real
+CLI/service path in 0.134 s, 0.119 s, and 0.151 s respectively. The deterministic seed-1 malformed
+artifact/framed-JSON/JSON boundary smoke passed all 10,000 cases; test execution was 0.03 s, while its
+fresh release-test compilation made the command wall observation 137.161 s. `cargo miri --version`
+failed because Miri is unavailable for the installed stable toolchain; no nightly or unsafe exception
+was added. These are single build and workflow observations, not latency distributions.
+
 ## Plain-language and job-policy campaign
 
 ### Environment and method
@@ -25,9 +184,10 @@ cargo test --release --test job_policy_json \
   --ignored --nocapture --test-threads=1
 ```
 
-It invokes `examples/job-policy/driver.py`, which starts the real service and launches the strict
-generic CLI once per request. Compact JSON request bytes exclude a newline; JSON stdout bytes include
-the production newline. Binary columns use the production framed request/response codecs. Wall time
+This is retained historical protocol-v4 evidence. It invokes `examples/job-policy/driver.py`, which
+starts the real service and launches the strict generic CLI once per request. Compact JSON request
+bytes exclude a newline; JSON stdout bytes include the production newline. The binary columns used
+the then-production framed request/response codecs and do not describe the active protocol-v5 path. Wall time
 uses `time.monotonic_ns` around each CLI process and includes local IPC and service work. Typed
 shutdowns are lifecycle operations and excluded from the 44 agent-workflow totals. The retained test
 prints every row as one machine-readable `JOB_POLICY_AGENT_COST` record.
@@ -105,20 +265,34 @@ workflow's unequal-work sums, not distributions or runtime speed comparisons.
 
 ### Machine-contract investigation
 
-Program meaning, protocol, and executable descriptors did not change, so the active digest remains
-`983614734f16b5d2095279fb5e958814e839caaa7aa25a5a6963cfca44795e2d`, protocol/JSON remain version 4,
-and artifact format 3 / `lkjscript-spg003` / `LKJHEAD3` remain unchanged. The direct compact-result
+At that retained protocol-v4 measurement point, program meaning, protocol, and executable
+descriptors had not changed, so the digest was
+`983614734f16b5d2095279fb5e958814e839caaa7aa25a5a6963cfca44795e2d`, protocol/JSON were version 4,
+and artifact format 3 / `lkjscript-spg003` / `LKJHEAD3` were unchanged. The direct compact-result
 projection measurements remain 739 B manifest, 86,009 B for the six selected task sections, 126,888
 B full, and 105 B unchanged (all without the local CLI newline).
 
-The six-section response is material, but no public replacement was selected. A transitive
-named-definition closure would first require dependency metadata across the executable descriptor.
-Narrower feature groups or exact variant selection would add a second discovery vocabulary and a
-protocol/CLI/test cutover while this application uses workspace lifecycle, declarations,
-transactions, every current expression family except scalar unit, queries/repair/diff, named runtime
-values, errors, and limits. The known-fingerprint response already removes repeat detail discovery.
-There is no dead prototype. Revisit when controlled agent tasks prove repeated over-fetch and a
-self-contained derived projection can remove material bytes with less contract surface than it adds.
+The six-section response was material and the controlled baseline justified direct replacement.
+The active v5 contract now uses exact roots plus iterative transitive definition closure. The first
+root cutover observation was 1,029 B manifest, 66,957 B for 13 leaf/task roots and 96 definitions,
+121,868 B full, and 105 B unchanged, but independent review proved that the leaf/query roots omitted
+operational envelope, batch, and error layers. Those numbers are retained only as the rejected
+under-specified observation.
+
+The first operational correction cloned every wrapper per endpoint. It was exact but architecturally
+rejected: 12 roots returned 254 definitions and 149,720 compact bytes, larger than its 123,145-byte
+full description. Those figures are retained only as the rejected duplicated-wrapper observation.
+
+The direct compact replacement projects one shared control template and one shared query template
+from the executable broad descriptors. Endpoint bindings carry only exact selected leaf variants and
+shared error/ID/limit references. The focused debug serialization test recorded 1,241 B manifest,
+80,629 B for the retained examples' 12 endpoint roots and 111 unique closed definitions, 124,430 B
+full, and 105 B unchanged, all excluding the CLI newline. Encoded response sizes were 1,319 B,
+80,707 B, 124,508 B, and 183 B respectively. The active task result is 43,801 B smaller than full and
+5,380 B (6.3 percent) smaller than the historical 86,009-byte six-section result. The 60-percent
+reduction remains an unmet planning target, not a reason to omit wire facts. The observed active
+digest was `dcd4e6473f0b746b0ab7b27b50a1408226eb50cb79105f13d6062239371fa13f`.
+Bytes are not provider tokens.
 
 ### Repository instruction and documentation cost
 
@@ -192,8 +366,10 @@ commit `99d7ca5bbdac6bcf90fdd64721c13df1342ef67a` on `main`: `devbox`, Linux
 7.0.0-29-generic x86-64, AMD Ryzen 9 9955HX (32 logical CPUs visible), 32 GiB memory,
 `rustc 1.96.0 (ac68faa20 2026-05-25)`, and Cargo 1.96.0. The cgroup memory ceiling was
 34,359,738,368 B, CPU quota was unlimited, shell stack limit was 8 MiB, and virtual memory was
-unlimited. Runtime and schema harnesses used optimized release binaries. The machine schema has seven sections and canonical digest
-`983614734f16b5d2095279fb5e958814e839caaa7aa25a5a6963cfca44795e2d`.
+unlimited. Runtime and schema harnesses used optimized release binaries. At that historical point the
+machine schema had seven sections and canonical digest
+`983614734f16b5d2095279fb5e958814e839caaa7aa25a5a6963cfca44795e2d`; the active contract now uses
+roots and has a different digest.
 `/usr/bin/time` is unavailable, so maximum RSS is unmeasured. No model was invoked; bytes are not
 model tokens or API cost, and no token or performance-leadership claim is made.
 
@@ -202,43 +378,40 @@ model tokens or API cost, and no token or performance-leadership claim is made.
 The retained byte harness is:
 
 ```sh
-cargo test --release --lib machine::tests::schema_projection_byte_measurements_are_retained \
+cargo test --lib machine::tests::schema_projection_byte_measurements_are_retained \
   --locked -- --nocapture
 ```
 
-It serializes compact result JSON without a newline and the production framed binary
-`Response::DescribeSchema` with request ID 1. The six-section projection requests
-`semantic_types_and_nodes`, `nominal_declarations`, `transactions_and_expressions`,
-`queries_and_repair`, `runtime_and_run`, and `errors_and_limits` together.
+It serializes compact result JSON without a newline and the production framed-JSON
+`Response::DescribeSchema` with request ID 1. Historical section rows below remain labelled; the
+active task projection requests 12 operational endpoint roots and returns their closed named definitions.
 
-| Projection | Compact result JSON | Framed binary response | Local / daemon round trips |
+| Projection | Compact result JSON | Framed response | Local / daemon round trips |
 | --- | ---: | ---: | ---: |
-| old audited full (prior schema authority; unequal workload) | 21,516 B stdout | 9,166 B | 0 / 1 |
-| current manifest | 739 B | 736 B | 0 / 1 |
-| current six nominal sections | 86,009 B | 86,006 B | 0 / 1 |
-| current full | 126,888 B | 96,083 B | 0 / 1 |
-| current known-digest unchanged | 105 B | 48 B | 0 / 1 |
+| old audited full (prior schema authority; unequal workload) | 21,516 B stdout | 9,166 B binary | 0 / 1 |
+| historical section-era manifest | 739 B | 736 B binary | 0 / 1 |
+| historical six nominal sections | 86,009 B | 86,006 B binary | 0 / 1 |
+| historical section-era full | 126,888 B | 96,083 B binary | 0 / 1 |
+| historical section-era unchanged | 105 B | 48 B binary | 0 / 1 |
+| rejected under-specified root manifest | 1,029 B | 1,107 B framed JSON | 0 / 1 |
+| rejected 13 leaf/task roots / 96 definitions | 66,957 B | 67,035 B framed JSON | 0 / 1 |
+| rejected duplicated 12 endpoints / 254 definitions | 149,720 B | 149,798 B framed JSON | 0 / 1 |
+| active endpoint root manifest | 1,241 B | 1,319 B framed JSON | 0 / 1 |
+| active 12 endpoint roots / 111 definitions | 80,629 B | 80,707 B framed JSON | 0 / 1 |
+| active full | 124,430 B | 124,508 B framed JSON | 0 / 1 |
+| active unchanged | 105 B | 183 B framed JSON | 0 / 1 |
 
-The old row is retained only as a separately labelled historical observation and is not an equal-schema
-regression comparison. `lkjscript schema` computes locally; daemon `DescribeSchema` returns the same
-projection in one request/response. The current nominal interaction harness below measures enveloped
-manifest/six-section/unchanged requests and responses through the daemon.
+Historical rows are retained only as labelled observations and are not equal-schema or equal-transport
+regression comparisons. `lkjscript schema` computes locally; daemon `DescribeSchema` returns the same
+projection in one request/response. The current endpoint bytes come from the focused debug test above;
+no release endpoint timing distribution was run.
 
-After one warm-up per command, Python `time.monotonic_ns` measured 31 new release CLI processes per
-projection. Percentiles use nearest rank; stdout includes the CLI newline.
+The following displaced section-era timing retained one warm-up per command and 31 new release CLI
+processes per projection. Python `time.monotonic_ns` included each CLI launch; percentiles use nearest
+rank and stdout included the CLI newline. The removed section CLI is historical and is not an active
+runnable command.
 
-```sh
-target/release/lkjscript schema
-target/release/lkjscript schema \
-  --section semantic_types_and_nodes --section nominal_declarations \
-  --section transactions_and_expressions --section queries_and_repair \
-  --section runtime_and_run --section errors_and_limits
-target/release/lkjscript schema --full
-target/release/lkjscript schema --full --known-digest \
-  983614734f16b5d2095279fb5e958814e839caaa7aa25a5a6963cfca44795e2d
-```
-
-| Local projection | Stdout | Samples | Median | p95 |
+| Historical section-era local projection | Stdout | Samples | Median | p95 |
 | --- | ---: | ---: | ---: | ---: |
 | manifest | 740 B | 31 | 882,409 ns | 1,142,849 ns |
 | six nominal sections | 86,010 B | 31 | 1,173,126 ns | 1,342,766 ns |
@@ -745,7 +918,7 @@ coverage and one typed authority.
 
 ### Durability, mutation, and remaining baselines
 
-Compact default receipts are preflighted independently of full diff size, and `LKJHEAD3` remains under
+Compact default receipts are preflighted independently of full diff size, and `LKJHEAD4` remains under
 16 KiB even at maximum 64 selected bindings (the focused test asserts it is under 4 KiB). A
 moderate 200-create transaction proves receipt size remains selected-projection bounded. Persistence
 still clones the full snapshot, materializes the full semantic diff during preparation, and rewrites

@@ -1,4 +1,4 @@
-use crate::ids::{LocalHandle, NodeId, Revision, WorkspaceId};
+use crate::ids::{DraftSymbol, NodeId, Revision, WorkspaceId};
 use crate::schema::{NodeKind, SemanticType};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -8,6 +8,7 @@ pub type Result<T> = std::result::Result<T, LkError>;
 /// Maximum semantic identities carried inline by any diagnostic. Exact larger detail belongs in
 /// revision-bound paginated queries.
 pub const MAX_ERROR_RELATED_IDS: usize = 64;
+pub const MAX_DRAFT_PATH_BYTES: usize = 256;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -17,11 +18,11 @@ pub enum ErrorCode {
     CompileIncomplete,
     CoreIrInvalid,
     DeleteBlocked,
-    DuplicateHandle,
+    DuplicateDraftSymbol,
     DuplicateName,
     IdempotencyConflict,
     InvalidContainment,
-    InvalidHandle,
+    InvalidDraftSymbol,
     InvalidOperand,
     InvalidCursor,
     InvalidQuery,
@@ -53,11 +54,11 @@ impl ErrorCode {
         Self::CompileIncomplete,
         Self::CoreIrInvalid,
         Self::DeleteBlocked,
-        Self::DuplicateHandle,
+        Self::DuplicateDraftSymbol,
         Self::DuplicateName,
         Self::IdempotencyConflict,
         Self::InvalidContainment,
-        Self::InvalidHandle,
+        Self::InvalidDraftSymbol,
         Self::InvalidOperand,
         Self::Io,
         Self::NodeNotFound,
@@ -83,50 +84,6 @@ impl ErrorCode {
         Self::ByValueTypeCycle,
         Self::TypeLayoutUnrepresentable,
     ];
-    pub const fn stable_tag(self) -> u8 {
-        match self {
-            Self::ArtifactCorrupt => 1,
-            Self::CompileIncomplete => 2,
-            Self::CoreIrInvalid => 3,
-            Self::DeleteBlocked => 4,
-            Self::DuplicateHandle => 5,
-            Self::DuplicateName => 6,
-            Self::IdempotencyConflict => 7,
-            Self::InvalidContainment => 8,
-            Self::InvalidHandle => 9,
-            Self::InvalidOperand => 10,
-            Self::Io => 11,
-            Self::NodeNotFound => 12,
-            Self::NoChange => 13,
-            Self::OwnerMismatch => 14,
-            Self::PolicyExceeded => 15,
-            Self::ProtocolMalformed => 16,
-            Self::ProtocolVersion => 17,
-            Self::RevisionConflict => 18,
-            Self::RevisionNotFound => 19,
-            Self::RuntimeTrap => 20,
-            Self::TypeMismatch => 21,
-            Self::WorkspaceExists => 22,
-            Self::WorkspaceNotFound => 23,
-            Self::WrongKind => 24,
-            Self::WrongWorkspace => 25,
-            Self::CommitOutcomeUnknown => 26,
-            Self::InvalidCursor => 27,
-            Self::InvalidQuery => 28,
-            Self::RunArgumentMismatch => 29,
-            Self::ExecutionFuelExhausted => 30,
-            Self::ExecutionFrameExhausted => 31,
-            Self::ByValueTypeCycle => 32,
-            Self::TypeLayoutUnrepresentable => 33,
-        }
-    }
-    pub const fn from_stable_tag(tag: u8) -> Option<Self> {
-        if tag >= 1 && tag <= 33 {
-            Some(Self::ALL[(tag - 1) as usize])
-        } else {
-            None
-        }
-    }
     pub const fn machine_name(self) -> &'static str {
         match self {
             Self::ArtifactCorrupt => "artifact_corrupt",
@@ -134,11 +91,11 @@ impl ErrorCode {
             Self::CompileIncomplete => "compile_incomplete",
             Self::CoreIrInvalid => "core_ir_invalid",
             Self::DeleteBlocked => "delete_blocked",
-            Self::DuplicateHandle => "duplicate_handle",
+            Self::DuplicateDraftSymbol => "duplicate_draft_symbol",
             Self::DuplicateName => "duplicate_name",
             Self::IdempotencyConflict => "idempotency_conflict",
             Self::InvalidContainment => "invalid_containment",
-            Self::InvalidHandle => "invalid_handle",
+            Self::InvalidDraftSymbol => "invalid_draft_symbol",
             Self::InvalidOperand => "invalid_operand",
             Self::InvalidCursor => "invalid_cursor",
             Self::InvalidQuery => "invalid_query",
@@ -177,7 +134,9 @@ pub struct LkError {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub operation_index: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub local_handle: Option<LocalHandle>,
+    pub draft_symbol: Option<DraftSymbol>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub draft_path: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target: Option<NodeId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -200,7 +159,8 @@ impl LkError {
             workspace: None,
             revision: None,
             operation_index: None,
-            local_handle: None,
+            draft_symbol: None,
+            draft_path: None,
             target: None,
             expected_kind: None,
             actual_kind: None,
@@ -217,8 +177,15 @@ impl LkError {
         self
     }
 
-    pub fn for_handle(mut self, handle: LocalHandle) -> Self {
-        self.local_handle = Some(handle);
+    pub fn for_symbol(mut self, symbol: DraftSymbol) -> Self {
+        self.draft_symbol = Some(symbol);
+        self
+    }
+
+    pub fn at_draft_path(mut self, path: impl Into<String>) -> Self {
+        let path = path.into();
+        debug_assert!(path.len() <= MAX_DRAFT_PATH_BYTES);
+        self.draft_path = Some(path);
         self
     }
 

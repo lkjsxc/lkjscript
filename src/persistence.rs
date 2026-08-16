@@ -3,8 +3,10 @@ use crate::codec::{Reader, Writer};
 use crate::diff;
 use crate::error::{ErrorCode, LkError, Result};
 use crate::graph::{Snapshot, Workspace};
-use crate::ids::{IdempotencyKey, Revision, SnapshotHash, WorkspaceId};
-use crate::protocol;
+use crate::ids::{
+    ChangeDigest, DraftSymbol, IdempotencyKey, NodeId, Revision, SnapshotHash, WorkspaceId,
+};
+use crate::machine;
 use crate::query;
 use crate::transaction::{ApplyTransactionRequest, TransactionMode, TransactionReceipt};
 use std::collections::{BTreeMap, BTreeSet};
@@ -15,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-const HEAD_MAGIC: [u8; 8] = *b"LKJHEAD3";
+const HEAD_MAGIC: [u8; 8] = *b"LKJHEAD4";
 pub const MAXIMUM_HEAD_BYTES: usize = 16 * 1024;
 static TEMP_SERIAL: AtomicU64 = AtomicU64::new(1);
 
@@ -38,7 +40,16 @@ pub(crate) struct DurableWorkspace {
 }
 
 impl DurableWorkspace {
+    #[cfg(test)]
     pub(crate) fn create(state_directory: &Path, id: WorkspaceId) -> Result<Self> {
+        Self::create_preflighted(state_directory, id, |_| Ok(())).map(|(workspace, ())| workspace)
+    }
+
+    pub(crate) fn create_preflighted<T>(
+        state_directory: &Path,
+        id: WorkspaceId,
+        preflight: impl FnOnce(&Snapshot) -> Result<T>,
+    ) -> Result<(Self, T)> {
         let final_directory = workspace_directory(state_directory, id);
         match fs::symlink_metadata(&final_directory) {
             Ok(_) => {
@@ -52,6 +63,8 @@ impl DurableWorkspace {
             Err(error) => return Err(error.into()),
         }
         let workspaces_directory = state_directory.join("workspaces");
+        let workspace = Workspace::new(id)?;
+        let preflighted = preflight(workspace.head()?)?;
         let serial = TEMP_SERIAL.fetch_add(1, Ordering::Relaxed);
         let staging_directory =
             workspaces_directory.join(format!(".creating-{}-{}-{serial}", id, std::process::id()));
@@ -60,13 +73,6 @@ impl DurableWorkspace {
             let _ = fs::remove_dir_all(&staging_directory);
             return Err(error);
         }
-        let workspace = match Workspace::new(id) {
-            Ok(workspace) => workspace,
-            Err(error) => {
-                let _ = fs::remove_dir_all(&staging_directory);
-                return Err(error);
-            }
-        };
         let mut durable = Self {
             directory: staging_directory.clone(),
             workspace,
@@ -98,7 +104,7 @@ impl DurableWorkspace {
             }
             return Err(error);
         }
-        Ok(durable)
+        Ok((durable, preflighted))
     }
 
     pub(crate) fn open(state_directory: &Path, id: WorkspaceId) -> Result<Self> {
@@ -293,24 +299,42 @@ impl DurableWorkspace {
         self.workspace.snapshot(revision)
     }
 
+    #[cfg(test)]
     pub(crate) fn head(&self) -> Result<&Arc<Snapshot>> {
         self.workspace.head()
     }
 
+    #[cfg(test)]
     pub(crate) fn apply(
         &mut self,
         request: &ApplyTransactionRequest,
         fingerprint: [u8; 32],
     ) -> Result<TransactionReceipt> {
-        self.apply_at_step(request, fingerprint, PublicationStep::None)
+        self.apply_at_step(
+            request,
+            fingerprint,
+            crate::ids::RequestId::new(1),
+            PublicationStep::None,
+        )
+        .map(|(receipt, _)| receipt)
+    }
+
+    pub(crate) fn apply_with_response(
+        &mut self,
+        request: &ApplyTransactionRequest,
+        fingerprint: [u8; 32],
+        request_id: crate::ids::RequestId,
+    ) -> Result<(TransactionReceipt, Vec<u8>)> {
+        self.apply_at_step(request, fingerprint, request_id, PublicationStep::None)
     }
 
     fn apply_at_step(
         &mut self,
         request: &ApplyTransactionRequest,
         fingerprint: [u8; 32],
+        request_id: crate::ids::RequestId,
         fault: PublicationStep,
-    ) -> Result<TransactionReceipt> {
+    ) -> Result<(TransactionReceipt, Vec<u8>)> {
         self.verify_live_head()?;
         let transaction = &request.transaction;
         if transaction.workspace != self.id() {
@@ -335,7 +359,9 @@ impl DurableWorkspace {
             if fingerprint == record.fingerprint
                 && record.receipt.base_revision == transaction.base_revision
             {
-                return Ok(record.receipt.clone());
+                let receipt = record.receipt.clone();
+                let response_bytes = preflight_receipt_response(request_id, &receipt)?;
+                return Ok((receipt, response_bytes));
             }
             return Err(LkError::new(
                 ErrorCode::IdempotencyConflict,
@@ -344,13 +370,10 @@ impl DurableWorkspace {
             .for_workspace(self.id()));
         }
         let prepared = self.workspace.prepare_transaction(request)?;
-        protocol::encoded_response_size(
-            crate::ids::RequestId::new(0),
-            &crate::protocol::Response::TransactionReceipt(prepared.receipt.clone()),
-        )?;
+        let response_bytes = preflight_receipt_response(request_id, &prepared.receipt)?;
         if transaction.mode == TransactionMode::ValidateOnly {
             self.preflight_publication(&prepared.snapshot, self.idempotency.as_ref())?;
-            return Ok(prepared.receipt);
+            return Ok((prepared.receipt, response_bytes));
         }
         let next_idempotency = transaction.idempotency_key.map(|key| IdempotencyRecord {
             key,
@@ -365,7 +388,7 @@ impl DurableWorkspace {
         self.publish_preflighted(&prepared.snapshot, &publication, fault)?;
         self.workspace.publish(prepared.snapshot)?;
         self.idempotency = retained_idempotency;
-        Ok(prepared.receipt)
+        Ok((prepared.receipt, response_bytes))
     }
 
     fn verify_live_head(&self) -> Result<()> {
@@ -566,8 +589,26 @@ impl DurableWorkspace {
         fingerprint: [u8; 32],
         fault: PublicationStep,
     ) -> Result<TransactionReceipt> {
-        self.apply_at_step(request, fingerprint, fault)
+        self.apply_at_step(request, fingerprint, crate::ids::RequestId::new(1), fault)
+            .map(|(receipt, _)| receipt)
     }
+}
+
+fn preflight_receipt_response(
+    request_id: crate::ids::RequestId,
+    receipt: &TransactionReceipt,
+) -> Result<Vec<u8>> {
+    machine::encode_response(
+        request_id,
+        &crate::protocol::Response::TransactionReceipt(receipt.clone()),
+        false,
+    )
+    .map_err(|error| {
+        LkError::new(
+            ErrorCode::PolicyExceeded,
+            format!("transaction response exceeds JSON boundary policy: {error}"),
+        )
+    })
 }
 
 fn validate_idempotency_record(
@@ -647,10 +688,10 @@ fn validate_idempotency_record(
         )
         .for_workspace(workspace));
     }
-    let mut previous_handle = None;
+    let mut selected_symbols = std::collections::BTreeSet::new();
     let mut selected_serials = std::collections::BTreeSet::new();
-    for (handle, node) in &receipt.returned_bindings {
-        if previous_handle.is_some_and(|previous| *handle <= previous)
+    for (symbol, node) in &receipt.returned_bindings {
+        if !selected_symbols.insert(*symbol)
             || !selected_serials.insert(node.serial())
             || node.workspace() != workspace
             || node.serial() < base.next_serial()
@@ -664,7 +705,6 @@ fn validate_idempotency_record(
             .for_workspace(workspace)
             .for_node(*node));
         }
-        previous_handle = Some(*handle);
     }
     Ok(())
 }
@@ -843,6 +883,99 @@ fn read_head_before_publication(
     }
 }
 
+fn put_transaction_receipt(writer: &mut Writer, receipt: &TransactionReceipt) -> Result<()> {
+    if receipt.returned_bindings.len() > crate::transaction::MAX_RETURNED_BINDINGS {
+        return Err(LkError::new(
+            ErrorCode::PolicyExceeded,
+            "transaction receipt bindings exceed response policy",
+        ));
+    }
+    writer.fixed(&receipt.workspace.as_bytes());
+    writer.u64(receipt.base_revision.get());
+    writer.u64(receipt.revision.get());
+    writer.fixed(&receipt.hash.as_bytes());
+    writer.bool(receipt.published);
+    writer.u64(receipt.created_count);
+    writer.u64(u64::try_from(receipt.returned_bindings.len()).map_err(|_| {
+        LkError::new(
+            ErrorCode::PolicyExceeded,
+            "transaction receipt binding count exceeds HEAD4 encoding",
+        )
+    })?);
+    for (symbol, node) in &receipt.returned_bindings {
+        writer.string(&symbol.to_string()).map_err(head_codec)?;
+        writer.fixed(&node.workspace().as_bytes());
+        writer.u64(node.serial());
+    }
+    writer.u64(receipt.change_count);
+    writer.fixed(&receipt.change_digest.as_bytes());
+    writer.bool(receipt.complete_before);
+    writer.bool(receipt.complete_after);
+    writer.u64(receipt.blocker_count_before);
+    writer.u64(receipt.blocker_count_after);
+    Ok(())
+}
+
+fn read_transaction_receipt(reader: &mut Reader<'_>) -> Result<TransactionReceipt> {
+    let mut workspace = [0_u8; WorkspaceId::BYTE_LEN];
+    workspace.copy_from_slice(reader.fixed(WorkspaceId::BYTE_LEN).map_err(head_codec)?);
+    let workspace = WorkspaceId::from_bytes(workspace);
+    let base_revision = Revision::new(reader.u64().map_err(head_codec)?);
+    let revision = Revision::new(reader.u64().map_err(head_codec)?);
+    let mut hash = [0_u8; SnapshotHash::BYTE_LEN];
+    hash.copy_from_slice(reader.fixed(SnapshotHash::BYTE_LEN).map_err(head_codec)?);
+    let published = reader.bool().map_err(head_codec)?;
+    let created_count = reader.u64().map_err(head_codec)?;
+    let count = reader
+        .count(crate::transaction::MAX_RETURNED_BINDINGS)
+        .map_err(head_codec)?;
+    let mut returned_bindings = Vec::with_capacity(count);
+    for _ in 0..count {
+        let symbol_text = reader
+            .string(crate::ids::MAX_DRAFT_SYMBOL_BYTES)
+            .map_err(head_codec)?;
+        let symbol = DraftSymbol::parse(&symbol_text).map_err(|message| {
+            LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                format!("workspace HEAD contains an invalid draft symbol: {message}"),
+            )
+        })?;
+        let mut node_workspace = [0_u8; WorkspaceId::BYTE_LEN];
+        node_workspace.copy_from_slice(reader.fixed(WorkspaceId::BYTE_LEN).map_err(head_codec)?);
+        let serial = reader.u64().map_err(head_codec)?;
+        let node =
+            NodeId::new(WorkspaceId::from_bytes(node_workspace), serial).map_err(|error| {
+                LkError::new(
+                    ErrorCode::ArtifactCorrupt,
+                    format!("workspace HEAD contains an invalid receipt node identity: {error}"),
+                )
+            })?;
+        returned_bindings.push((symbol, node));
+    }
+    let change_count = reader.u64().map_err(head_codec)?;
+    let mut change_digest = [0_u8; ChangeDigest::BYTE_LEN];
+    change_digest.copy_from_slice(reader.fixed(ChangeDigest::BYTE_LEN).map_err(head_codec)?);
+    let complete_before = reader.bool().map_err(head_codec)?;
+    let complete_after = reader.bool().map_err(head_codec)?;
+    let blocker_count_before = reader.u64().map_err(head_codec)?;
+    let blocker_count_after = reader.u64().map_err(head_codec)?;
+    Ok(TransactionReceipt {
+        workspace,
+        base_revision,
+        revision,
+        hash: SnapshotHash::from_bytes(hash),
+        published,
+        created_count,
+        returned_bindings,
+        change_count,
+        change_digest: ChangeDigest::from_bytes(change_digest),
+        complete_before,
+        complete_after,
+        blocker_count_before,
+        blocker_count_after,
+    })
+}
+
 fn encode_head(
     revision: Revision,
     hash: SnapshotHash,
@@ -856,7 +989,7 @@ fn encode_head(
     if let Some(record) = idempotency {
         writer.fixed(&record.key.as_bytes());
         writer.fixed(&record.fingerprint);
-        protocol::put_transaction_receipt(&mut writer, &record.receipt)?;
+        put_transaction_receipt(&mut writer, &record.receipt)?;
     }
     let body = writer.finish();
     let checksum = blake3::hash(&body);
@@ -903,16 +1036,7 @@ fn decode_head(bytes: &[u8]) -> Result<(Revision, SnapshotHash, Option<Idempoten
         key.copy_from_slice(reader.fixed(16).map_err(head_codec)?);
         let mut fingerprint = [0_u8; 32];
         fingerprint.copy_from_slice(reader.fixed(32).map_err(head_codec)?);
-        let receipt = protocol::read_transaction_receipt(&mut reader).map_err(|mut error| {
-            if error.code != ErrorCode::PolicyExceeded {
-                error.code = ErrorCode::ArtifactCorrupt;
-            }
-            error.message = format!(
-                "workspace HEAD idempotency payload is invalid: {}",
-                error.message
-            );
-            error
-        })?;
+        let receipt = read_transaction_receipt(&mut reader)?;
         Some(IdempotencyRecord {
             key: IdempotencyKey::from_bytes(key),
             fingerprint,
@@ -1085,7 +1209,7 @@ fn inject(actual: PublicationStep, expected: PublicationStep) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::LocalHandle;
+    use crate::ids::DraftSymbol;
     use crate::schema::{Node, OperationKind, SemanticType, TypeDraft, ValueDraft};
     use crate::transaction::{
         ExpressionDraft, ExpressionKindDraft, FunctionBodyDraft, MatchArmDraft, NodeTarget,
@@ -1100,22 +1224,22 @@ mod tests {
             idempotency_key: None,
             mode: TransactionMode::Commit,
             operations: vec![TransactionOp::CreatePackage {
-                handle: LocalHandle::new(1),
+                symbol: DraftSymbol::generated(1),
                 name: "package".to_owned(),
             }],
         }
     }
 
     fn request(transaction: &Transaction) -> ApplyTransactionRequest {
-        let mut return_handles: Vec<LocalHandle> = transaction
+        let mut return_symbols: Vec<DraftSymbol> = transaction
             .operations
             .iter()
-            .filter_map(TransactionOp::created_handle)
+            .filter_map(TransactionOp::created_symbol)
             .collect();
-        return_handles.sort();
+        return_symbols.sort();
         ApplyTransactionRequest {
             transaction: transaction.clone(),
-            response: TransactionResponseSpec { return_handles },
+            response: TransactionResponseSpec { return_symbols },
         }
     }
 
@@ -1132,20 +1256,20 @@ mod tests {
             mode: TransactionMode::Commit,
             operations: vec![
                 TransactionOp::CreatePackage {
-                    handle: LocalHandle::new(1),
+                    symbol: DraftSymbol::generated(1),
                     name: "p".into(),
                 },
                 TransactionOp::CreateModule {
-                    handle: LocalHandle::new(2),
-                    package: NodeTarget::Local(LocalHandle::new(1)),
+                    symbol: DraftSymbol::generated(2),
+                    package: NodeTarget::Draft(DraftSymbol::generated(1)),
                     name: "m".into(),
                 },
                 TransactionOp::CreateProductType {
-                    handle: LocalHandle::new(3),
-                    module: NodeTarget::Local(LocalHandle::new(2)),
+                    symbol: DraftSymbol::generated(3),
+                    module: NodeTarget::Draft(DraftSymbol::generated(2)),
                     name: "Reading".into(),
                     fields: vec![ProductFieldDraft {
-                        handle: LocalHandle::new(4),
+                        symbol: DraftSymbol::generated(4),
                         name: "value".into(),
                         ty: TypeDraft::I64,
                     }],
@@ -1180,7 +1304,7 @@ mod tests {
         let temporary = tempfile::tempdir().expect("state");
         ensure_state_directory(temporary.path()).expect("state directory");
         let id = WorkspaceId::from_bytes([0x96; 16]);
-        let local = |value| NodeTarget::Local(LocalHandle::new(value));
+        let local = |value| NodeTarget::Draft(DraftSymbol::generated(value));
         let result = |value| ValueDraft::OperationResult {
             operation: local(value),
             output: 0,
@@ -1193,33 +1317,33 @@ mod tests {
             mode: TransactionMode::Commit,
             operations: vec![
                 TransactionOp::CreatePackage {
-                    handle: LocalHandle::new(1),
+                    symbol: DraftSymbol::generated(1),
                     name: "p".into(),
                 },
                 TransactionOp::CreateModule {
-                    handle: LocalHandle::new(2),
+                    symbol: DraftSymbol::generated(2),
                     package: local(1),
                     name: "m".into(),
                 },
                 TransactionOp::CreateSumType {
-                    handle: LocalHandle::new(3),
+                    symbol: DraftSymbol::generated(3),
                     module: local(2),
                     name: "Maybe".into(),
                     variants: vec![
                         SumVariantDraft {
-                            handle: LocalHandle::new(4),
+                            symbol: DraftSymbol::generated(4),
                             name: "none".into(),
                             payload: None,
                         },
                         SumVariantDraft {
-                            handle: LocalHandle::new(5),
+                            symbol: DraftSymbol::generated(5),
                             name: "some".into(),
                             payload: Some(TypeDraft::I64),
                         },
                     ],
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(6),
+                    symbol: DraftSymbol::generated(6),
                     module: local(2),
                     name: "match_it".into(),
                     parameters: Vec::new(),
@@ -1227,25 +1351,25 @@ mod tests {
                     body: Some(FunctionBodyDraft {
                         operations: vec![
                             ExpressionDraft {
-                                handle: LocalHandle::new(7),
+                                symbol: Some(DraftSymbol::generated(7)),
                                 operation: ExpressionKindDraft::ConstI64(9),
                             },
                             ExpressionDraft {
-                                handle: LocalHandle::new(8),
+                                symbol: Some(DraftSymbol::generated(8)),
                                 operation: ExpressionKindDraft::ConstructVariant {
                                     variant: local(5),
                                     payload: Some(result(7)),
                                 },
                             },
                             ExpressionDraft {
-                                handle: LocalHandle::new(9),
+                                symbol: Some(DraftSymbol::generated(9)),
                                 operation: ExpressionKindDraft::MatchSum {
                                     scrutinee: result(8),
                                     result: TypeDraft::I64,
                                     arms: vec![
                                         MatchArmDraft {
                                             variant: local(5),
-                                            payload_handle: Some(LocalHandle::new(10)),
+                                            payload_symbol: Some(DraftSymbol::generated(10)),
                                             body: YieldingBodyDraft {
                                                 operations: Vec::new(),
                                                 yield_value: ValueDraft::BlockArgument(local(10)),
@@ -1253,10 +1377,10 @@ mod tests {
                                         },
                                         MatchArmDraft {
                                             variant: local(4),
-                                            payload_handle: None,
+                                            payload_symbol: None,
                                             body: YieldingBodyDraft {
                                                 operations: vec![ExpressionDraft {
-                                                    handle: LocalHandle::new(11),
+                                                    symbol: Some(DraftSymbol::generated(11)),
                                                     operation: ExpressionKindDraft::ConstI64(0),
                                                 }],
                                                 yield_value: result(11),
@@ -1436,31 +1560,30 @@ mod tests {
             mode: TransactionMode::Commit,
             operations: vec![
                 TransactionOp::CreatePackage {
-                    handle: LocalHandle::new(1),
+                    symbol: DraftSymbol::generated(1),
                     name: "package".to_owned(),
                 },
                 TransactionOp::CreateModule {
-                    handle: LocalHandle::new(2),
-                    package: NodeTarget::Local(LocalHandle::new(1)),
+                    symbol: DraftSymbol::generated(2),
+                    package: NodeTarget::Draft(DraftSymbol::generated(1)),
                     name: "module".to_owned(),
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(3),
-                    module: NodeTarget::Local(LocalHandle::new(2)),
+                    symbol: DraftSymbol::generated(3),
+                    module: NodeTarget::Draft(DraftSymbol::generated(2)),
                     name: "function".to_owned(),
                     parameters: Vec::new(),
                     result: SemanticType::I64.into(),
                     body: None,
                 },
                 TransactionOp::SetEntryFunction {
-                    package: NodeTarget::Local(LocalHandle::new(1)),
-                    function: NodeTarget::Local(LocalHandle::new(3)),
+                    package: NodeTarget::Draft(DraftSymbol::generated(1)),
+                    function: NodeTarget::Draft(DraftSymbol::generated(3)),
                 },
             ],
         };
         let accepted_request = request(&transaction);
-        let fingerprint =
-            protocol::transaction_fingerprint(&accepted_request).expect("fingerprint");
+        let fingerprint = machine::transaction_fingerprint(&accepted_request).expect("fingerprint");
         workspace
             .apply(&accepted_request, fingerprint)
             .expect("selected entry commit");
@@ -1574,8 +1697,13 @@ mod tests {
         let workspace = WorkspaceId::from_bytes([0x17; 16]);
         let returned_bindings = (0..crate::transaction::MAX_RETURNED_BINDINGS)
             .map(|index| {
+                let prefix = format!("symbol_{index}_");
+                let symbol = format!(
+                    "{prefix}{}",
+                    "x".repeat(crate::ids::MAX_DRAFT_SYMBOL_BYTES - prefix.len())
+                );
                 (
-                    LocalHandle::new(u32::try_from(index).expect("handle")),
+                    DraftSymbol::new(&symbol),
                     crate::ids::NodeId::new(workspace, u64::try_from(index).expect("serial") + 2)
                         .expect("node"),
                 )
@@ -1607,7 +1735,6 @@ mod tests {
         )
         .expect("maximum compact HEAD");
         assert!(bytes.len() < MAXIMUM_HEAD_BYTES);
-        assert!(bytes.len() < 4096);
         let (_, _, decoded) = decode_head(&bytes).expect("decode compact HEAD");
         assert_eq!(decoded.expect("idempotency").receipt, record.receipt);
     }
@@ -1655,7 +1782,7 @@ mod tests {
         let mut keyed = create_package(replay_id);
         keyed.idempotency_key = Some(IdempotencyKey::from_bytes([0x31; 16]));
         let keyed_request = request(&keyed);
-        let fingerprint = protocol::transaction_fingerprint(&keyed_request).expect("fingerprint");
+        let fingerprint = machine::transaction_fingerprint(&keyed_request).expect("fingerprint");
         replay
             .apply(&keyed_request, fingerprint)
             .expect("keyed commit");
@@ -1678,7 +1805,7 @@ mod tests {
         first.idempotency_key = Some(IdempotencyKey::from_bytes([0x32; 16]));
         let first_request = request(&first);
         let first_fingerprint =
-            protocol::transaction_fingerprint(&first_request).expect("fingerprint");
+            machine::transaction_fingerprint(&first_request).expect("fingerprint");
         conflict
             .apply(&first_request, first_fingerprint)
             .expect("keyed commit");
@@ -1700,7 +1827,7 @@ mod tests {
             name: "different".into(),
         };
         let different_fingerprint =
-            protocol::transaction_fingerprint(&different).expect("fingerprint");
+            machine::transaction_fingerprint(&different).expect("fingerprint");
         assert_eq!(
             conflict
                 .apply(&different, different_fingerprint)
@@ -1739,17 +1866,17 @@ mod tests {
     }
 
     #[test]
-    fn head3_unkeyed_grammar_remains_fixed_and_deterministic() {
+    fn head4_unkeyed_grammar_remains_fixed_and_deterministic() {
         let revision = Revision::new(7);
         let hash = SnapshotHash::from_bytes([0xa5; SnapshotHash::BYTE_LEN]);
-        let first = encode_head(revision, hash, None).expect("HEAD3 encode");
+        let first = encode_head(revision, hash, None).expect("HEAD4 encode");
         assert_eq!(
             first,
-            encode_head(revision, hash, None).expect("deterministic HEAD3")
+            encode_head(revision, hash, None).expect("deterministic HEAD4")
         );
 
         let mut expected_body = Vec::new();
-        expected_body.extend_from_slice(b"LKJHEAD3");
+        expected_body.extend_from_slice(b"LKJHEAD4");
         expected_body.extend_from_slice(&7_u64.to_le_bytes());
         expected_body.extend_from_slice(&[0xa5; SnapshotHash::BYTE_LEN]);
         expected_body.push(0);
@@ -1760,20 +1887,58 @@ mod tests {
             blake3::hash(&expected_body).as_bytes()
         );
         let (decoded_revision, decoded_hash, decoded_record) =
-            decode_head(&first).expect("HEAD3 decode");
+            decode_head(&first).expect("HEAD4 decode");
         assert_eq!((decoded_revision, decoded_hash), (revision, hash));
         assert!(decoded_record.is_none());
     }
 
     #[test]
-    fn head_version_two_magic_is_rejected_without_compatibility_reader() {
+    fn exact_commit_response_preflight_uses_real_id_and_fails_before_publication() {
+        let temporary = tempfile::tempdir().expect("temporary directory");
+        ensure_state_directory(temporary.path()).expect("state directory");
+        let id = WorkspaceId::from_bytes([0x67; 16]);
+        let mut workspace = DurableWorkspace::create(temporary.path(), id).expect("workspace");
+        let request = request(&create_package(id));
+        let fingerprint = machine::transaction_fingerprint(&request).expect("fingerprint");
+        let head_path = workspace_directory(temporary.path(), id).join("HEAD");
+        let head_before = fs::read(&head_path).expect("HEAD before preflight");
+
+        assert_eq!(
+            workspace
+                .apply_with_response(&request, fingerprint, crate::ids::RequestId::new(0))
+                .expect_err("zero request ID must fail exact response preflight")
+                .code,
+            ErrorCode::PolicyExceeded
+        );
+        assert_eq!(
+            fs::read(&head_path).expect("HEAD after preflight"),
+            head_before
+        );
+        assert_eq!(
+            workspace.head().expect("in-memory head").revision(),
+            Revision::INITIAL
+        );
+
+        let (receipt, bytes) = workspace
+            .apply_with_response(&request, fingerprint, crate::ids::RequestId::new(91))
+            .expect("commit with exact response preflight");
+        let envelope = machine::decode_response(&bytes).expect("preflighted response JSON");
+        assert_eq!(envelope.request_id, crate::ids::RequestId::new(91));
+        assert_eq!(
+            envelope.response,
+            crate::protocol::Response::TransactionReceipt(receipt)
+        );
+    }
+
+    #[test]
+    fn head_version_three_magic_is_rejected_without_compatibility_reader() {
         let temporary = tempfile::tempdir().expect("temporary directory");
         ensure_state_directory(temporary.path()).expect("state directory");
         let id = WorkspaceId::from_bytes([0x18; 16]);
         DurableWorkspace::create(temporary.path(), id).expect("workspace");
         let head_path = workspace_directory(temporary.path(), id).join("HEAD");
         let mut bytes = fs::read(&head_path).expect("head bytes");
-        bytes[..8].copy_from_slice(b"LKJHEAD2");
+        bytes[..8].copy_from_slice(b"LKJHEAD3");
         let body_length = bytes.len() - SnapshotHash::BYTE_LEN;
         let checksum = blake3::hash(&bytes[..body_length]);
         bytes[body_length..].copy_from_slice(checksum.as_bytes());
@@ -1781,7 +1946,7 @@ mod tests {
         assert_eq!(
             DurableWorkspace::open(temporary.path(), id)
                 .err()
-                .expect("HEAD2 must reject")
+                .expect("HEAD3 must reject")
                 .code,
             ErrorCode::ArtifactCorrupt
         );
@@ -1796,14 +1961,14 @@ mod tests {
         let mut transaction = create_package(id);
         transaction.idempotency_key = Some(IdempotencyKey::from_bytes([0x91; 16]));
         let request = request(&transaction);
-        let fingerprint = protocol::transaction_fingerprint(&request).expect("fingerprint");
+        let fingerprint = machine::transaction_fingerprint(&request).expect("fingerprint");
         let accepted = workspace
             .apply(&request, fingerprint)
             .expect("keyed transaction");
         let mut conflicting = request.clone();
         conflicting.transaction.base_revision = Revision::new(999);
         let conflicting_fingerprint =
-            protocol::transaction_fingerprint(&conflicting).expect("conflicting fingerprint");
+            machine::transaction_fingerprint(&conflicting).expect("conflicting fingerprint");
         assert_eq!(
             workspace
                 .apply(&conflicting, conflicting_fingerprint)
@@ -1899,14 +2064,14 @@ mod tests {
             idempotency_key: None,
             mode: TransactionMode::ValidateOnly,
             operations: vec![TransactionOp::CreatePackage {
-                handle: LocalHandle::new(1),
+                symbol: DraftSymbol::generated(1),
                 name: "x".repeat(artifact::DecodePolicy::default().maximum_name_bytes + 1),
             }],
         };
         for mode in [TransactionMode::ValidateOnly, TransactionMode::Commit] {
             transaction.mode = mode;
             let request = request(&transaction);
-            let fingerprint = protocol::transaction_fingerprint(&request).expect("fingerprint");
+            let fingerprint = machine::transaction_fingerprint(&request).expect("fingerprint");
             assert_eq!(
                 workspace
                     .apply(&request, fingerprint)
@@ -1925,7 +2090,7 @@ mod tests {
     }
 
     #[test]
-    fn keyed_head3_publication_faults_preserve_prior_replay_and_allocator() {
+    fn keyed_head4_publication_faults_preserve_prior_replay_and_allocator() {
         let temporary = tempfile::tempdir().expect("temporary state directory");
         ensure_state_directory(temporary.path()).expect("state directory");
         let id = WorkspaceId::from_bytes([5; 16]);
@@ -1946,7 +2111,7 @@ mod tests {
             prior_transaction.idempotency_key = Some(IdempotencyKey::from_bytes([0x51; 16]));
             let prior_request = request(&prior_transaction);
             let prior_fingerprint =
-                protocol::transaction_fingerprint(&prior_request).expect("prior fingerprint");
+                machine::transaction_fingerprint(&prior_request).expect("prior fingerprint");
             let prior_receipt = workspace
                 .apply(&prior_request, prior_fingerprint)
                 .expect("prior keyed commit");
@@ -1960,17 +2125,17 @@ mod tests {
                     idempotency_key: Some(IdempotencyKey::from_bytes([0x52; 16])),
                     mode: TransactionMode::Commit,
                     operations: vec![TransactionOp::CreateModule {
-                        handle: LocalHandle::new(2),
+                        symbol: DraftSymbol::generated(2),
                         package: crate::transaction::NodeTarget::Existing(package),
                         name: "module".to_owned(),
                     }],
                 },
                 response: TransactionResponseSpec {
-                    return_handles: vec![LocalHandle::new(2)],
+                    return_symbols: vec![DraftSymbol::generated(2)],
                 },
             };
             let candidate_fingerprint =
-                protocol::transaction_fingerprint(&candidate).expect("candidate fingerprint");
+                machine::transaction_fingerprint(&candidate).expect("candidate fingerprint");
             let error = workspace
                 .apply_with_fault(&candidate, candidate_fingerprint, fault)
                 .expect_err("fault must reject publication");

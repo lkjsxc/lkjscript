@@ -4,21 +4,20 @@ use lkjscript::daemon;
 use lkjscript::diff::ChangeKind;
 use lkjscript::machine::{
     BoundaryErrorEnvelope, BoundaryErrorKind, DescribeSchemaRequest, DescribeSchemaResult,
-    JSON_ENVELOPE_VERSION, RequestEnvelope, ResponseEnvelope, SchemaProjection, SchemaSection,
-    SchemaSectionPayload,
+    JSON_ENVELOPE_VERSION, RequestEnvelope, ResponseEnvelope, SchemaProjection, SchemaRoot,
 };
 use lkjscript::query::{
     CompletenessBlocker, ContextBudget, Page, PageCursor, PageRequest, Query, QueryBatchRequest,
     QueryItem, QueryOutcome, QueryResult, RepairContext, RepairTarget,
 };
 use lkjscript::{
-    ApplyTransactionRequest, BlockArgumentRole, ChangeDigest, ErrorCode, ExpressionDraft,
-    ExpressionKindDraft, FunctionBodyDraft, FunctionParameterDraft, IdempotencyKey, LocalHandle,
-    MatchArmDraft, NodeId, NodeKind, NodeTarget, OperationCode, OperationDraft, OperationKind,
-    ProductFieldDraft, ProductFieldValueDraft, QueryId, RegionRole, Request, RequestId, Response,
-    Revision, RuntimeFieldValue, RuntimeValue, SemanticType, SumVariantDraft, Transaction,
-    TransactionMode, TransactionOp, TransactionReceipt, TransactionResponseSpec, TypeDraft,
-    ValueDraft, ValueRef, WorkspaceId, YieldingBodyDraft,
+    ApplyTransactionRequest, BlockArgumentRole, ChangeDigest, DraftSymbol, ErrorCode,
+    ExpressionDraft, ExpressionKindDraft, FunctionBodyDraft, FunctionParameterDraft,
+    IdempotencyKey, MatchArmDraft, NodeId, NodeKind, NodeTarget, OperationCode, OperationDraft,
+    OperationKind, ProductFieldDraft, ProductFieldValueDraft, QueryId, RegionRole, Request,
+    RequestId, Response, Revision, RuntimeFieldValue, RuntimeValue, SemanticType, SumVariantDraft,
+    Transaction, TransactionMode, TransactionOp, TransactionReceipt, TransactionResponseSpec,
+    TypeDraft, ValueDraft, ValueRef, WorkspaceId, YieldingBodyDraft,
 };
 use serde::Deserialize;
 use std::collections::BTreeSet;
@@ -79,7 +78,7 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
 
     let transport = invoke_raw(
         state,
-        br#"{"version":4,"request_id":1,"request":{"kind":"create_workspace"}}"#,
+        br#"{"version":5,"request_id":1,"request":{"kind":"create_workspace"}}"#,
     );
     assert_eq!(transport.status.code(), Some(3));
     assert_one_json(&transport.stdout);
@@ -91,7 +90,7 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
     let daemon = JsonDaemon::start(state);
     let raw_create = invoke_raw(
         state,
-        br#"{"version":4,"request_id":2,"request":{"kind":"create_workspace"}}"#,
+        br#"{"version":5,"request_id":2,"request":{"kind":"create_workspace"}}"#,
     );
     assert!(raw_create.status.success());
     assert!(raw_create.stderr.is_empty());
@@ -387,7 +386,7 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
                     block,
                     before: Some(hole),
                     expression: ExpressionDraft {
-                        handle: LocalHandle::new(100),
+                        symbol: Some(DraftSymbol::new("s100")),
                         operation: ExpressionKindDraft::ConstI64(7),
                     },
                 },
@@ -401,7 +400,7 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
             ],
         },
         response: TransactionResponseSpec {
-            return_handles: vec![LocalHandle::new(100)],
+            return_symbols: vec![DraftSymbol::new("s100")],
         },
     };
     let invalid = rpc(state, 6, Request::ApplyTransaction(invalid_refinement));
@@ -644,7 +643,10 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
     all_bindings.returned_bindings = (0..200_u64)
         .map(|offset| {
             (
-                LocalHandle::new(100 + u32::try_from(offset).expect("bulk handle")),
+                DraftSymbol::new(&format!(
+                    "s{}",
+                    100 + u32::try_from(offset).expect("bulk symbol")
+                )),
                 NodeId::new(workspace, predicted_frontier.serial() + offset)
                     .expect("bulk predicted node"),
             )
@@ -674,40 +676,37 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
     let local_schema = local_schema();
     assert_eq!(*daemon_schema, local_schema);
 
-    let section_request = DescribeSchemaRequest {
-        projection: SchemaProjection::Sections {
-            sections: vec![
-                SchemaSection::QueriesAndRepair,
-                SchemaSection::TransactionsAndExpressions,
-            ],
+    let root_request = DescribeSchemaRequest {
+        projection: SchemaProjection::Roots {
+            roots: vec![SchemaRoot::Query, SchemaRoot::TransactionOperation],
         },
         known_digest: None,
     };
-    let Response::DescribeSchema(daemon_sections) =
-        rpc(state, 38, Request::DescribeSchema(section_request)).response
+    let Response::DescribeSchema(daemon_roots) =
+        rpc(state, 38, Request::DescribeSchema(root_request)).response
     else {
-        panic!("daemon schema sections")
+        panic!("daemon schema roots")
     };
-    let local_sections = Command::new(env!("CARGO_BIN_EXE_lkjscript"))
+    let local_roots = Command::new(env!("CARGO_BIN_EXE_lkjscript"))
         .args([
             "schema",
-            "--section",
-            "queries_and_repair",
-            "--section",
-            "transactions_and_expressions",
+            "--root",
+            "query",
+            "--root",
+            "transaction_operation",
         ])
         .output()
-        .expect("local schema sections");
-    assert!(local_sections.status.success());
+        .expect("local schema roots");
+    assert!(local_roots.status.success());
     assert_eq!(
-        *daemon_sections,
-        serde_json::from_slice(&local_sections.stdout).expect("local section JSON")
+        *daemon_roots,
+        serde_json::from_slice(&local_roots.stdout).expect("local root JSON")
     );
     assert_eq!(module.workspace(), workspace);
 
     let zero_request_id = invoke_raw(
         state,
-        br#"{"version":4,"request_id":0,"request":{"kind":"shutdown"}}"#,
+        br#"{"version":5,"request_id":0,"request":{"kind":"shutdown"}}"#,
     );
     assert_eq!(zero_request_id.status.code(), Some(2));
     let zero_request_id: BoundaryErrorEnvelope =
@@ -717,7 +716,7 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
 
     let malformed = invoke_raw(
         state,
-        br#"{"version":4,"request_id":99,"request":{"kind":"shutdown","unknown":true}}"#,
+        br#"{"version":5,"request_id":99,"request":{"kind":"shutdown","unknown":true}}"#,
     );
     assert_eq!(malformed.status.code(), Some(2));
     assert_one_json(&malformed.stdout);
@@ -735,9 +734,9 @@ fn incomplete_fixture(
     mode: TransactionMode,
     idempotency_key: Option<IdempotencyKey>,
 ) -> ApplyTransactionRequest {
-    let local = NodeTarget::Local;
-    let result = |handle| ValueDraft::OperationResult {
-        operation: local(handle),
+    let local = NodeTarget::Draft;
+    let result = |symbol| ValueDraft::OperationResult {
+        operation: local(symbol),
         output: 0,
     };
     ApplyTransactionRequest {
@@ -748,54 +747,54 @@ fn incomplete_fixture(
             mode,
             operations: vec![
                 TransactionOp::CreatePackage {
-                    handle: LocalHandle::new(1),
+                    symbol: DraftSymbol::new("s1"),
                     name: "app".to_owned(),
                 },
                 TransactionOp::CreateModule {
-                    handle: LocalHandle::new(2),
-                    package: local(LocalHandle::new(1)),
+                    symbol: DraftSymbol::new("s2"),
+                    package: local(DraftSymbol::new("s1")),
                     name: "root".to_owned(),
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(3),
-                    module: local(LocalHandle::new(2)),
+                    symbol: DraftSymbol::new("s3"),
+                    module: local(DraftSymbol::new("s2")),
                     name: "main".to_owned(),
                     parameters: Vec::new(),
                     result: SemanticType::I64.into(),
                     body: Some(FunctionBodyDraft {
                         operations: vec![
                             ExpressionDraft {
-                                handle: LocalHandle::new(6),
+                                symbol: Some(DraftSymbol::new("s6")),
                                 operation: ExpressionKindDraft::ConstI64(40),
                             },
                             ExpressionDraft {
-                                handle: LocalHandle::new(7),
+                                symbol: Some(DraftSymbol::new("s7")),
                                 operation: ExpressionKindDraft::ConstI64(2),
                             },
                             ExpressionDraft {
-                                handle: LocalHandle::new(8),
+                                symbol: Some(DraftSymbol::new("s8")),
                                 operation: ExpressionKindDraft::ConstBool(true),
                             },
                             ExpressionDraft {
-                                handle: LocalHandle::new(9),
+                                symbol: Some(DraftSymbol::new("s9")),
                                 operation: ExpressionKindDraft::Hole {
                                     expected: SemanticType::I64.into(),
                                 },
                             },
                         ],
-                        return_value: result(LocalHandle::new(9)),
+                        return_value: result(DraftSymbol::new("s9")),
                     }),
                 },
                 TransactionOp::SetEntryFunction {
-                    package: local(LocalHandle::new(1)),
-                    function: local(LocalHandle::new(3)),
+                    package: local(DraftSymbol::new("s1")),
+                    function: local(DraftSymbol::new("s3")),
                 },
             ],
         },
         response: TransactionResponseSpec {
-            return_handles: [2, 3, 6, 7, 8, 9]
+            return_symbols: [2, 3, 6, 7, 8, 9]
                 .into_iter()
-                .map(LocalHandle::new)
+                .map(|value| DraftSymbol::new(&format!("s{value}")))
                 .collect(),
         },
     }
@@ -839,13 +838,13 @@ fn support_creation(
                 block,
                 before: Some(before),
                 expression: ExpressionDraft {
-                    handle: LocalHandle::new(100),
+                    symbol: Some(DraftSymbol::new("s100")),
                     operation: ExpressionKindDraft::ConstI64(7),
                 },
             }],
         },
         response: TransactionResponseSpec {
-            return_handles: vec![LocalHandle::new(100)],
+            return_symbols: vec![DraftSymbol::new("s100")],
         },
     }
 }
@@ -862,14 +861,14 @@ fn bulk_constants(workspace: WorkspaceId, block: NodeId, count: u32) -> ApplyTra
                     block,
                     before: None,
                     expression: ExpressionDraft {
-                        handle: LocalHandle::new(100 + index),
+                        symbol: Some(DraftSymbol::new(&format!("s{}", 100 + index))),
                         operation: ExpressionKindDraft::ConstI64(i64::from(index)),
                     },
                 })
                 .collect(),
         },
         response: TransactionResponseSpec {
-            return_handles: vec![LocalHandle::new(100)],
+            return_symbols: vec![DraftSymbol::new("s100")],
         },
     }
 }
@@ -1119,11 +1118,13 @@ fn receipt(envelope: ResponseEnvelope) -> TransactionReceipt {
     receipt
 }
 
-fn binding(receipt: &TransactionReceipt, handle: u32) -> NodeId {
+fn binding(receipt: &TransactionReceipt, symbol: u32) -> NodeId {
     receipt
         .returned_bindings
         .iter()
-        .find_map(|(candidate, node)| (candidate.get() == handle).then_some(*node))
+        .find_map(|(candidate, node)| {
+            (*candidate == DraftSymbol::new(&format!("s{symbol}"))).then_some(*node)
+        })
         .expect("selected binding")
 }
 
@@ -1133,8 +1134,8 @@ struct RpcMeasurement {
     elapsed_ns: u128,
     json_request_bytes: usize,
     json_stdout_bytes: usize,
-    binary_request_bytes: usize,
-    binary_response_bytes: usize,
+    ipc_request_frame_bytes: usize,
+    ipc_response_frame_bytes: usize,
 }
 
 fn measured_rpc(
@@ -1150,8 +1151,7 @@ fn measured_rpc(
         request: request.clone(),
     })
     .expect("encode measured request");
-    let binary_request_bytes = lkjscript::protocol::encoded_request_size(request_id, &request)
-        .expect("binary request size");
+    let ipc_request_frame_bytes = input.len() + u32::BITS as usize / 8;
     let started = Instant::now();
     let output = invoke_raw(state, &input);
     let elapsed_ns = started.elapsed().as_nanos();
@@ -1160,27 +1160,29 @@ fn measured_rpc(
     let response: ResponseEnvelope =
         serde_json::from_slice(&output.stdout).expect("measured response JSON");
     assert_eq!(response.request_id, request_id);
-    let binary_response_bytes =
-        lkjscript::protocol::encoded_response_size(request_id, &response.response)
-            .expect("binary response size");
+    let ipc_response_frame_bytes =
+        lkjscript::machine::encode_response(request_id, &response.response, false)
+            .expect("IPC response JSON")
+            .len()
+            + u32::BITS as usize / 8;
     let measurement = RpcMeasurement {
         name,
         elapsed_ns,
         json_request_bytes: input.len(),
         json_stdout_bytes: output.stdout.len(),
-        binary_request_bytes,
-        binary_response_bytes,
+        ipc_request_frame_bytes,
+        ipc_response_frame_bytes,
     };
     (response, measurement)
 }
 
 fn structured_creation(workspace: WorkspaceId) -> ApplyTransactionRequest {
-    let local = |handle| NodeTarget::Local(LocalHandle::new(handle));
-    let result = |handle| ValueDraft::OperationResult {
-        operation: local(handle),
+    let local = |symbol| NodeTarget::Draft(DraftSymbol::new(&format!("s{symbol}")));
+    let result = |symbol| ValueDraft::OperationResult {
+        operation: local(symbol),
         output: 0,
     };
-    let parameter = |handle| ValueDraft::FunctionParameter(local(handle));
+    let parameter = |symbol| ValueDraft::FunctionParameter(local(symbol));
     ApplyTransactionRequest {
         transaction: Transaction {
             workspace,
@@ -1189,20 +1191,20 @@ fn structured_creation(workspace: WorkspaceId) -> ApplyTransactionRequest {
             mode: TransactionMode::Commit,
             operations: vec![
                 TransactionOp::CreatePackage {
-                    handle: LocalHandle::new(1),
+                    symbol: DraftSymbol::new("s1"),
                     name: "app".into(),
                 },
                 TransactionOp::CreateModule {
-                    handle: LocalHandle::new(2),
+                    symbol: DraftSymbol::new("s2"),
                     package: local(1),
                     name: "structured".into(),
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(10),
+                    symbol: DraftSymbol::new("s10"),
                     module: local(2),
                     name: "range_sum".into(),
                     parameters: vec![FunctionParameterDraft {
-                        handle: LocalHandle::new(11),
+                        symbol: DraftSymbol::new("s11"),
                         name: "n".into(),
                         ty: SemanticType::I64.into(),
                     }],
@@ -1210,22 +1212,22 @@ fn structured_creation(workspace: WorkspaceId) -> ApplyTransactionRequest {
                     body: Some(FunctionBodyDraft {
                         operations: vec![
                             ExpressionDraft {
-                                handle: LocalHandle::new(12),
+                                symbol: Some(DraftSymbol::new("s12")),
                                 operation: ExpressionKindDraft::ConstI64(0),
                             },
                             ExpressionDraft {
-                                handle: LocalHandle::new(13),
+                                symbol: Some(DraftSymbol::new("s13")),
                                 operation: ExpressionKindDraft::ForI64 {
                                     start: result(12),
                                     end_exclusive: parameter(11),
                                     step: 1,
                                     initial: result(12),
                                     carried: SemanticType::I64.into(),
-                                    index_handle: LocalHandle::new(14),
-                                    carried_handle: LocalHandle::new(15),
+                                    index_symbol: DraftSymbol::new("s14"),
+                                    carried_symbol: DraftSymbol::new("s15"),
                                     body: YieldingBodyDraft {
                                         operations: vec![ExpressionDraft {
-                                            handle: LocalHandle::new(16),
+                                            symbol: Some(DraftSymbol::new("s16")),
                                             operation: ExpressionKindDraft::Hole {
                                                 expected: SemanticType::I64.into(),
                                             },
@@ -1239,11 +1241,11 @@ fn structured_creation(workspace: WorkspaceId) -> ApplyTransactionRequest {
                     }),
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(20),
+                    symbol: DraftSymbol::new("s20"),
                     module: local(2),
                     name: "normalize_and_sum".into(),
                     parameters: vec![FunctionParameterDraft {
-                        handle: LocalHandle::new(21),
+                        symbol: DraftSymbol::new("s21"),
                         name: "n".into(),
                         ty: SemanticType::I64.into(),
                     }],
@@ -1251,18 +1253,18 @@ fn structured_creation(workspace: WorkspaceId) -> ApplyTransactionRequest {
                     body: Some(FunctionBodyDraft {
                         operations: vec![
                             ExpressionDraft {
-                                handle: LocalHandle::new(22),
+                                symbol: Some(DraftSymbol::new("s22")),
                                 operation: ExpressionKindDraft::ConstI64(0),
                             },
                             ExpressionDraft {
-                                handle: LocalHandle::new(23),
+                                symbol: Some(DraftSymbol::new("s23")),
                                 operation: ExpressionKindDraft::LtI64 {
                                     lhs: parameter(21),
                                     rhs: result(22),
                                 },
                             },
                             ExpressionDraft {
-                                handle: LocalHandle::new(24),
+                                symbol: Some(DraftSymbol::new("s24")),
                                 operation: ExpressionKindDraft::If {
                                     condition: result(23),
                                     result: SemanticType::I64.into(),
@@ -1272,7 +1274,7 @@ fn structured_creation(workspace: WorkspaceId) -> ApplyTransactionRequest {
                                     },
                                     else_body: YieldingBodyDraft {
                                         operations: vec![ExpressionDraft {
-                                            handle: LocalHandle::new(25),
+                                            symbol: Some(DraftSymbol::new("s25")),
                                             operation: ExpressionKindDraft::Call {
                                                 function: local(10),
                                                 arguments: vec![parameter(21)],
@@ -1287,7 +1289,7 @@ fn structured_creation(workspace: WorkspaceId) -> ApplyTransactionRequest {
                     }),
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(30),
+                    symbol: DraftSymbol::new("s30"),
                     module: local(2),
                     name: "main".into(),
                     parameters: vec![],
@@ -1295,11 +1297,11 @@ fn structured_creation(workspace: WorkspaceId) -> ApplyTransactionRequest {
                     body: Some(FunctionBodyDraft {
                         operations: vec![
                             ExpressionDraft {
-                                handle: LocalHandle::new(31),
+                                symbol: Some(DraftSymbol::new("s31")),
                                 operation: ExpressionKindDraft::ConstI64(101),
                             },
                             ExpressionDraft {
-                                handle: LocalHandle::new(32),
+                                symbol: Some(DraftSymbol::new("s32")),
                                 operation: ExpressionKindDraft::Call {
                                     function: local(20),
                                     arguments: vec![result(31)],
@@ -1316,11 +1318,11 @@ fn structured_creation(workspace: WorkspaceId) -> ApplyTransactionRequest {
             ],
         },
         response: TransactionResponseSpec {
-            return_handles: vec![
-                LocalHandle::new(10),
-                LocalHandle::new(16),
-                LocalHandle::new(20),
-                LocalHandle::new(30),
+            return_symbols: vec![
+                DraftSymbol::new("s10"),
+                DraftSymbol::new("s16"),
+                DraftSymbol::new("s20"),
+                DraftSymbol::new("s30"),
             ],
         },
     }
@@ -1596,7 +1598,7 @@ fn structured_agent_interaction_cost_measurement() {
     let workspace = initial.workspace;
     let creation_request = structured_creation(workspace);
     let transaction_items = creation_request.transaction.operations.len();
-    let requested_bindings = creation_request.response.return_handles.len();
+    let requested_bindings = creation_request.response.return_symbols.len();
     let (creation_response, creation_metric) = measured_rpc(
         state,
         602,
@@ -1789,8 +1791,8 @@ fn structured_agent_interaction_cost_measurement() {
             "repaired_artifact_bytes": repaired_artifact_bytes,
             "json_request_bytes": all_metrics.iter().map(|metric| metric.json_request_bytes).sum::<usize>(),
             "json_stdout_bytes": all_metrics.iter().map(|metric| metric.json_stdout_bytes).sum::<usize>(),
-            "binary_request_bytes": all_metrics.iter().map(|metric| metric.binary_request_bytes).sum::<usize>(),
-            "binary_response_bytes": all_metrics.iter().map(|metric| metric.binary_response_bytes).sum::<usize>(),
+            "ipc_request_frame_bytes": all_metrics.iter().map(|metric| metric.ipc_request_frame_bytes).sum::<usize>(),
+            "ipc_response_frame_bytes": all_metrics.iter().map(|metric| metric.ipc_response_frame_bytes).sum::<usize>(),
             "cli_wall_ns": all_metrics.iter().map(|metric| metric.elapsed_ns).sum::<u128>(),
             "per_request": all_metrics.iter().map(|metric| metric_json(metric)).collect::<Vec<_>>(),
             "oracles": [5050, 0, 55],
@@ -1979,7 +1981,7 @@ fn structured_product_path_performance_measurement() {
         Response::WorkspaceCreated(summary) => summary.workspace,
         _ => panic!("recursion workspace"),
     };
-    let local = |handle| NodeTarget::Local(LocalHandle::new(handle));
+    let local = |symbol| NodeTarget::Draft(DraftSymbol::new(&format!("s{symbol}")));
     let parameter = ValueDraft::FunctionParameter(local(4));
     let recursion_creation = ApplyTransactionRequest {
         transaction: Transaction {
@@ -1989,38 +1991,38 @@ fn structured_product_path_performance_measurement() {
             mode: TransactionMode::Commit,
             operations: vec![
                 TransactionOp::CreatePackage {
-                    handle: LocalHandle::new(1),
+                    symbol: DraftSymbol::new("s1"),
                     name: "recursion".into(),
                 },
                 TransactionOp::CreateModule {
-                    handle: LocalHandle::new(2),
+                    symbol: DraftSymbol::new("s2"),
                     package: local(1),
                     name: "root".into(),
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(3),
+                    symbol: DraftSymbol::new("s3"),
                     module: local(2),
                     name: "once".into(),
                     parameters: vec![FunctionParameterDraft {
-                        handle: LocalHandle::new(4),
+                        symbol: DraftSymbol::new("s4"),
                         name: "again".into(),
                         ty: SemanticType::Bool.into(),
                     }],
                     result: SemanticType::I64.into(),
                     body: Some(FunctionBodyDraft {
                         operations: vec![ExpressionDraft {
-                            handle: LocalHandle::new(5),
+                            symbol: Some(DraftSymbol::new("s5")),
                             operation: ExpressionKindDraft::If {
                                 condition: parameter,
                                 result: SemanticType::I64.into(),
                                 then_body: YieldingBodyDraft {
                                     operations: vec![
                                         ExpressionDraft {
-                                            handle: LocalHandle::new(6),
+                                            symbol: Some(DraftSymbol::new("s6")),
                                             operation: ExpressionKindDraft::ConstBool(false),
                                         },
                                         ExpressionDraft {
-                                            handle: LocalHandle::new(7),
+                                            symbol: Some(DraftSymbol::new("s7")),
                                             operation: ExpressionKindDraft::Call {
                                                 function: local(3),
                                                 arguments: vec![ValueDraft::OperationResult {
@@ -2037,7 +2039,7 @@ fn structured_product_path_performance_measurement() {
                                 },
                                 else_body: YieldingBodyDraft {
                                     operations: vec![ExpressionDraft {
-                                        handle: LocalHandle::new(8),
+                                        symbol: Some(DraftSymbol::new("s8")),
                                         operation: ExpressionKindDraft::ConstI64(1),
                                     }],
                                     yield_value: ValueDraft::OperationResult {
@@ -2060,7 +2062,7 @@ fn structured_product_path_performance_measurement() {
             ],
         },
         response: TransactionResponseSpec {
-            return_handles: vec![LocalHandle::new(3)],
+            return_symbols: vec![DraftSymbol::new("s3")],
         },
     };
     let recursion_receipt = receipt(rpc(
@@ -2285,10 +2287,14 @@ fn agent_repair_cost_measurement() {
     let total_elapsed_ns: u128 = workflow.iter().map(|item| item.elapsed_ns).sum();
     let total_json_request_bytes: usize = workflow.iter().map(|item| item.json_request_bytes).sum();
     let total_json_stdout_bytes: usize = workflow.iter().map(|item| item.json_stdout_bytes).sum();
-    let total_binary_request_bytes: usize =
-        workflow.iter().map(|item| item.binary_request_bytes).sum();
-    let total_binary_response_bytes: usize =
-        workflow.iter().map(|item| item.binary_response_bytes).sum();
+    let total_ipc_request_frame_bytes: usize = workflow
+        .iter()
+        .map(|item| item.ipc_request_frame_bytes)
+        .sum();
+    let total_ipc_response_frame_bytes: usize = workflow
+        .iter()
+        .map(|item| item.ipc_response_frame_bytes)
+        .sum();
     let largest_json_response_bytes = workflow
         .iter()
         .map(|item| item.json_stdout_bytes)
@@ -2302,8 +2308,8 @@ fn agent_repair_cost_measurement() {
                 "elapsed_ns": item.elapsed_ns,
                 "json_request_bytes": item.json_request_bytes,
                 "json_stdout_bytes": item.json_stdout_bytes,
-                "binary_request_bytes": item.binary_request_bytes,
-                "binary_response_bytes": item.binary_response_bytes,
+                "ipc_request_frame_bytes": item.ipc_request_frame_bytes,
+                "ipc_response_frame_bytes": item.ipc_response_frame_bytes,
             })
         })
         .collect::<Vec<_>>();
@@ -2317,8 +2323,8 @@ fn agent_repair_cost_measurement() {
                 "elapsed_ns": total_elapsed_ns,
                 "json_request_bytes": total_json_request_bytes,
                 "json_stdout_bytes": total_json_stdout_bytes,
-                "binary_request_bytes": total_binary_request_bytes,
-                "binary_response_bytes": total_binary_response_bytes,
+                "ipc_request_frame_bytes": total_ipc_request_frame_bytes,
+                "ipc_response_frame_bytes": total_ipc_response_frame_bytes,
                 "largest_json_response_bytes": largest_json_response_bytes,
                 "per_request": per_request,
                 "result_i64": 42,
@@ -2343,19 +2349,19 @@ fn agent_repair_cost_measurement() {
 }
 
 fn nominal_reading_application(workspace: WorkspaceId) -> ApplyTransactionRequest {
-    let local = |handle| NodeTarget::Local(LocalHandle::new(handle));
-    let result = |handle| ValueDraft::OperationResult {
-        operation: local(handle),
+    let local = |symbol| NodeTarget::Draft(DraftSymbol::new(&format!("s{symbol}")));
+    let result = |symbol| ValueDraft::OperationResult {
+        operation: local(symbol),
         output: 0,
     };
-    let parameter = |handle| ValueDraft::FunctionParameter(local(handle));
-    let payload = |handle| ValueDraft::BlockArgument(local(handle));
-    let expression = |handle, operation| ExpressionDraft {
-        handle: LocalHandle::new(handle),
+    let parameter = |symbol| ValueDraft::FunctionParameter(local(symbol));
+    let payload = |symbol| ValueDraft::BlockArgument(local(symbol));
+    let expression = |symbol, operation| ExpressionDraft {
+        symbol: Some(DraftSymbol::new(&format!("s{symbol}"))),
         operation,
     };
-    let field = |handle, value| ProductFieldValueDraft {
-        field: local(handle),
+    let field = |symbol, value| ProductFieldValueDraft {
+        field: local(symbol),
         value,
     };
     ApplyTransactionRequest {
@@ -2366,21 +2372,21 @@ fn nominal_reading_application(workspace: WorkspaceId) -> ApplyTransactionReques
             mode: TransactionMode::Commit,
             operations: vec![
                 TransactionOp::CreatePackage {
-                    handle: LocalHandle::new(1),
+                    symbol: DraftSymbol::new("s1"),
                     name: "reading-app".into(),
                 },
                 TransactionOp::CreateModule {
-                    handle: LocalHandle::new(2),
+                    symbol: DraftSymbol::new("s2"),
                     package: local(1),
                     name: "root".into(),
                 },
                 // Functions deliberately precede their local nominal declarations and members.
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(10),
+                    symbol: DraftSymbol::new("s10"),
                     module: local(2),
                     name: "evaluate".into(),
                     parameters: vec![FunctionParameterDraft {
-                        handle: LocalHandle::new(11),
+                        symbol: DraftSymbol::new("s11"),
                         name: "input".into(),
                         ty: TypeDraft::Nominal(local(6)),
                     }],
@@ -2394,7 +2400,7 @@ fn nominal_reading_application(workspace: WorkspaceId) -> ApplyTransactionReques
                                 arms: vec![
                                     MatchArmDraft {
                                         variant: local(9),
-                                        payload_handle: Some(LocalHandle::new(19)),
+                                        payload_symbol: Some(DraftSymbol::new("s19")),
                                         body: YieldingBodyDraft {
                                             operations: vec![],
                                             yield_value: payload(19),
@@ -2402,7 +2408,7 @@ fn nominal_reading_application(workspace: WorkspaceId) -> ApplyTransactionReques
                                     },
                                     MatchArmDraft {
                                         variant: local(7),
-                                        payload_handle: Some(LocalHandle::new(13)),
+                                        payload_symbol: Some(DraftSymbol::new("s13")),
                                         body: YieldingBodyDraft {
                                             operations: vec![
                                                 expression(
@@ -2441,7 +2447,7 @@ fn nominal_reading_application(workspace: WorkspaceId) -> ApplyTransactionReques
                                     },
                                     MatchArmDraft {
                                         variant: local(8),
-                                        payload_handle: None,
+                                        payload_symbol: None,
                                         body: YieldingBodyDraft {
                                             operations: vec![expression(
                                                 18,
@@ -2457,7 +2463,7 @@ fn nominal_reading_application(workspace: WorkspaceId) -> ApplyTransactionReques
                     }),
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(30),
+                    symbol: DraftSymbol::new("s30"),
                     module: local(2),
                     name: "main".into(),
                     parameters: vec![],
@@ -2491,11 +2497,11 @@ fn nominal_reading_application(workspace: WorkspaceId) -> ApplyTransactionReques
                     }),
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(40),
+                    symbol: DraftSymbol::new("s40"),
                     module: local(2),
                     name: "evaluate_disabled".into(),
                     parameters: vec![FunctionParameterDraft {
-                        handle: LocalHandle::new(41),
+                        symbol: DraftSymbol::new("s41"),
                         name: "value".into(),
                         ty: TypeDraft::I64,
                     }],
@@ -2529,7 +2535,7 @@ fn nominal_reading_application(workspace: WorkspaceId) -> ApplyTransactionReques
                     }),
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(50),
+                    symbol: DraftSymbol::new("s50"),
                     module: local(2),
                     name: "evaluate_missing".into(),
                     parameters: vec![],
@@ -2555,11 +2561,11 @@ fn nominal_reading_application(workspace: WorkspaceId) -> ApplyTransactionReques
                     }),
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(55),
+                    symbol: DraftSymbol::new("s55"),
                     module: local(2),
                     name: "evaluate_override".into(),
                     parameters: vec![FunctionParameterDraft {
-                        handle: LocalHandle::new(56),
+                        symbol: DraftSymbol::new("s56"),
                         name: "value".into(),
                         ty: TypeDraft::I64,
                     }],
@@ -2585,17 +2591,17 @@ fn nominal_reading_application(workspace: WorkspaceId) -> ApplyTransactionReques
                     }),
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(60),
+                    symbol: DraftSymbol::new("s60"),
                     module: local(2),
                     name: "make_reading".into(),
                     parameters: vec![
                         FunctionParameterDraft {
-                            handle: LocalHandle::new(61),
+                            symbol: DraftSymbol::new("s61"),
                             name: "value".into(),
                             ty: TypeDraft::I64,
                         },
                         FunctionParameterDraft {
-                            handle: LocalHandle::new(62),
+                            symbol: DraftSymbol::new("s62"),
                             name: "valid".into(),
                             ty: TypeDraft::Bool,
                         },
@@ -2613,11 +2619,11 @@ fn nominal_reading_application(workspace: WorkspaceId) -> ApplyTransactionReques
                     }),
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(70),
+                    symbol: DraftSymbol::new("s70"),
                     module: local(2),
                     name: "lazy_match_probe".into(),
                     parameters: vec![FunctionParameterDraft {
-                        handle: LocalHandle::new(71),
+                        symbol: DraftSymbol::new("s71"),
                         name: "input".into(),
                         ty: TypeDraft::Nominal(local(6)),
                     }],
@@ -2631,7 +2637,7 @@ fn nominal_reading_application(workspace: WorkspaceId) -> ApplyTransactionReques
                                 arms: vec![
                                     MatchArmDraft {
                                         variant: local(7),
-                                        payload_handle: Some(LocalHandle::new(73)),
+                                        payload_symbol: Some(DraftSymbol::new("s73")),
                                         body: YieldingBodyDraft {
                                             operations: vec![expression(
                                                 74,
@@ -2642,7 +2648,7 @@ fn nominal_reading_application(workspace: WorkspaceId) -> ApplyTransactionReques
                                     },
                                     MatchArmDraft {
                                         variant: local(8),
-                                        payload_handle: None,
+                                        payload_symbol: None,
                                         body: YieldingBodyDraft {
                                             operations: vec![expression(
                                                 75,
@@ -2653,7 +2659,7 @@ fn nominal_reading_application(workspace: WorkspaceId) -> ApplyTransactionReques
                                     },
                                     MatchArmDraft {
                                         variant: local(9),
-                                        payload_handle: Some(LocalHandle::new(76)),
+                                        payload_symbol: Some(DraftSymbol::new("s76")),
                                         body: YieldingBodyDraft {
                                             operations: vec![
                                                 expression(
@@ -2679,39 +2685,39 @@ fn nominal_reading_application(workspace: WorkspaceId) -> ApplyTransactionReques
                     }),
                 },
                 TransactionOp::CreateProductType {
-                    handle: LocalHandle::new(3),
+                    symbol: DraftSymbol::new("s3"),
                     module: local(2),
                     name: "Reading".into(),
                     fields: vec![
                         ProductFieldDraft {
-                            handle: LocalHandle::new(4),
+                            symbol: DraftSymbol::new("s4"),
                             name: "value".into(),
                             ty: TypeDraft::I64,
                         },
                         ProductFieldDraft {
-                            handle: LocalHandle::new(5),
+                            symbol: DraftSymbol::new("s5"),
                             name: "valid".into(),
                             ty: TypeDraft::Bool,
                         },
                     ],
                 },
                 TransactionOp::CreateSumType {
-                    handle: LocalHandle::new(6),
+                    symbol: DraftSymbol::new("s6"),
                     module: local(2),
                     name: "Input".into(),
                     variants: vec![
                         SumVariantDraft {
-                            handle: LocalHandle::new(7),
+                            symbol: DraftSymbol::new("s7"),
                             name: "sample".into(),
                             payload: Some(TypeDraft::Nominal(local(3))),
                         },
                         SumVariantDraft {
-                            handle: LocalHandle::new(8),
+                            symbol: DraftSymbol::new("s8"),
                             name: "missing".into(),
                             payload: None,
                         },
                         SumVariantDraft {
-                            handle: LocalHandle::new(9),
+                            symbol: DraftSymbol::new("s9"),
                             name: "override".into(),
                             payload: Some(TypeDraft::I64),
                         },
@@ -2724,11 +2730,11 @@ fn nominal_reading_application(workspace: WorkspaceId) -> ApplyTransactionReques
             ],
         },
         response: TransactionResponseSpec {
-            return_handles: [
+            return_symbols: [
                 3, 4, 5, 6, 7, 8, 9, 10, 30, 31, 32, 33, 40, 50, 55, 60, 70, 79,
             ]
             .into_iter()
-            .map(LocalHandle::new)
+            .map(|value| DraftSymbol::new(&format!("s{value}")))
             .collect(),
         },
     }
@@ -2819,40 +2825,45 @@ fn real_json_cli_nominal_reading_repair_application_vertical() {
         panic!("default schema projection must be manifest")
     };
     let digest = manifest.digest;
-    let six_sections = vec![
-        SchemaSection::SemanticTypesAndNodes,
-        SchemaSection::NominalDeclarations,
-        SchemaSection::TransactionsAndExpressions,
-        SchemaSection::QueriesAndRepair,
-        SchemaSection::RuntimeAndRun,
-        SchemaSection::ErrorsAndLimits,
+    let task_roots = vec![
+        SchemaRoot::CreateWorkspace,
+        SchemaRoot::ApplyTransaction,
+        SchemaRoot::QueryWorkspaceSummary,
+        SchemaRoot::QueryNode,
+        SchemaRoot::QueryBlockers,
+        SchemaRoot::QueryBody,
+        SchemaRoot::QueryIncomingUses,
+        SchemaRoot::QueryRepairContext,
+        SchemaRoot::QuerySemanticDiff,
+        SchemaRoot::QueryNominalType,
+        SchemaRoot::Run,
+        SchemaRoot::Shutdown,
     ];
-    let Response::DescribeSchema(sections) = rpc(
+    let Response::DescribeSchema(roots) = rpc(
         state,
         901,
         Request::DescribeSchema(DescribeSchemaRequest {
-            projection: SchemaProjection::Sections {
-                sections: six_sections.clone(),
+            projection: SchemaProjection::Roots {
+                roots: task_roots.clone(),
             },
             known_digest: None,
         }),
     )
     .response
     else {
-        panic!("schema sections")
+        panic!("schema roots")
     };
-    let DescribeSchemaResult::Sections(sections) = *sections else {
-        panic!("section projection")
+    let DescribeSchemaResult::Roots(roots) = *roots else {
+        panic!("root projection")
     };
-    assert_eq!(sections.digest, digest);
-    assert_eq!(sections.sections.len(), six_sections.len());
+    assert_eq!(roots.digest, digest);
+    assert_eq!(roots.roots.len(), task_roots.len());
+    assert!(roots.definitions.len() > roots.roots.len());
     let Response::DescribeSchema(unchanged) = rpc(
         state,
         902,
         Request::DescribeSchema(DescribeSchemaRequest {
-            projection: SchemaProjection::Sections {
-                sections: six_sections,
-            },
+            projection: SchemaProjection::Roots { roots: task_roots },
             known_digest: Some(digest),
         }),
     )
@@ -3024,12 +3035,12 @@ fn real_json_cli_nominal_reading_repair_application_vertical() {
             idempotency_key: None,
             mode: TransactionMode::ValidateOnly,
             operations: vec![TransactionOp::CreatePackage {
-                handle: LocalHandle::new(1),
+                symbol: DraftSymbol::new("s1"),
                 name: "allocator-frontier-probe".into(),
             }],
         },
         response: TransactionResponseSpec {
-            return_handles: vec![LocalHandle::new(1)],
+            return_symbols: vec![DraftSymbol::new("s1")],
         },
     };
     let probe_before = receipt(rpc(
@@ -3042,7 +3053,7 @@ fn real_json_cli_nominal_reading_repair_application_vertical() {
     assert_eq!(probe_before.revision, Revision::new(2));
     assert_eq!(probe_before.created_count, 1);
     assert_eq!(probe_before.returned_bindings.len(), 1);
-    assert_eq!(probe_before.returned_bindings[0].0, LocalHandle::new(1));
+    assert_eq!(probe_before.returned_bindings[0].0, DraftSymbol::new("s1"));
     assert_eq!(
         fs::read(&head_path).expect("HEAD after first allocation probe"),
         head_before_invalid
@@ -3703,54 +3714,51 @@ fn nominal_agent_interaction_cost_measurement() {
         lkjscript::machine::MACHINE_SCHEMA_IDENTITY
     );
     assert_eq!(manifest.json_envelope_version, JSON_ENVELOPE_VERSION);
-    assert_eq!(manifest.sections.len(), SchemaSection::ALL.len());
+    assert_eq!(manifest.roots.len(), SchemaRoot::ALL.len());
     assert!(manifest.full_available);
     let digest = manifest.digest;
-    let requested_sections = vec![
-        SchemaSection::SemanticTypesAndNodes,
-        SchemaSection::NominalDeclarations,
-        SchemaSection::TransactionsAndExpressions,
-        SchemaSection::QueriesAndRepair,
-        SchemaSection::RuntimeAndRun,
-        SchemaSection::ErrorsAndLimits,
+    let requested_roots = vec![
+        SchemaRoot::CreateWorkspace,
+        SchemaRoot::ApplyTransaction,
+        SchemaRoot::QueryWorkspaceSummary,
+        SchemaRoot::QueryNode,
+        SchemaRoot::QueryBlockers,
+        SchemaRoot::QueryBody,
+        SchemaRoot::QueryIncomingUses,
+        SchemaRoot::QueryRepairContext,
+        SchemaRoot::QuerySemanticDiff,
+        SchemaRoot::QueryNominalType,
+        SchemaRoot::Run,
+        SchemaRoot::Shutdown,
     ];
-    let section_request = DescribeSchemaRequest {
-        projection: SchemaProjection::Sections {
-            sections: requested_sections.clone(),
+    let root_request = DescribeSchemaRequest {
+        projection: SchemaProjection::Roots {
+            roots: requested_roots.clone(),
         },
         known_digest: None,
     };
-    let (sections_response, sections_metric) = measured_rpc(
+    let (roots_response, roots_metric) = measured_rpc(
         state,
         1101,
-        "schema_six_sections",
-        Request::DescribeSchema(section_request.clone()),
+        "schema_task_roots",
+        Request::DescribeSchema(root_request.clone()),
     );
-    let Response::DescribeSchema(sections) = sections_response.response else {
-        panic!("six schema sections")
+    let Response::DescribeSchema(roots) = roots_response.response else {
+        panic!("schema roots")
     };
-    let DescribeSchemaResult::Sections(sections) = *sections else {
-        panic!("six schema section projection")
+    let DescribeSchemaResult::Roots(roots) = *roots else {
+        panic!("schema root projection")
     };
-    assert_eq!(sections.digest, digest);
-    assert!(matches!(
-        sections.sections.as_slice(),
-        [
-            SchemaSectionPayload::SemanticTypesAndNodes(_),
-            SchemaSectionPayload::NominalDeclarations(_),
-            SchemaSectionPayload::TransactionsAndExpressions(_),
-            SchemaSectionPayload::QueriesAndRepair(_),
-            SchemaSectionPayload::RuntimeAndRun(_),
-            SchemaSectionPayload::ErrorsAndLimits(_),
-        ]
-    ));
+    assert_eq!(roots.digest, digest);
+    assert_eq!(roots.roots.len(), requested_roots.len());
+    assert!(roots.definitions.len() > roots.roots.len());
     let (unchanged_response, unchanged_metric) = measured_rpc(
         state,
         1102,
         "schema_known_digest",
         Request::DescribeSchema(DescribeSchemaRequest {
             known_digest: Some(digest),
-            ..section_request
+            ..root_request
         }),
     );
     let Response::DescribeSchema(unchanged) = unchanged_response.response else {
@@ -3788,9 +3796,12 @@ fn nominal_agent_interaction_cost_measurement() {
         created
             .returned_bindings
             .iter()
-            .map(|(handle, _)| handle.get())
+            .map(|(symbol, _)| symbol.to_string())
             .collect::<Vec<_>>(),
         expected_handles
+            .into_iter()
+            .map(|value| format!("s{value}"))
+            .collect::<Vec<_>>()
     );
     assert_eq!(
         created
@@ -4042,7 +4053,7 @@ fn nominal_agent_interaction_cost_measurement() {
     assert!(retained_hole.summary.complete);
     let metrics = [
         &manifest_metric,
-        &sections_metric,
+        &roots_metric,
         &unchanged_metric,
         &workspace_metric,
         &creation_metric,
@@ -4078,8 +4089,8 @@ fn nominal_agent_interaction_cost_measurement() {
             "execute_nanoseconds": run_result.execute_nanoseconds,
             "json_request_bytes": metrics.iter().map(|metric| metric.json_request_bytes).sum::<usize>(),
             "json_stdout_bytes": metrics.iter().map(|metric| metric.json_stdout_bytes).sum::<usize>(),
-            "binary_request_bytes": metrics.iter().map(|metric| metric.binary_request_bytes).sum::<usize>(),
-            "binary_response_bytes": metrics.iter().map(|metric| metric.binary_response_bytes).sum::<usize>(),
+            "ipc_request_frame_bytes": metrics.iter().map(|metric| metric.ipc_request_frame_bytes).sum::<usize>(),
+            "ipc_response_frame_bytes": metrics.iter().map(|metric| metric.ipc_response_frame_bytes).sum::<usize>(),
             "cli_and_daemon_wall_ns": metrics.iter().map(|metric| metric.elapsed_ns).sum::<u128>(),
             "per_request": metrics.iter().map(|metric| metric_json(metric)).collect::<Vec<_>>(),
             "type_layout_observed": true,
@@ -4304,8 +4315,8 @@ fn metric_json(item: &RpcMeasurement) -> serde_json::Value {
         "elapsed_ns": item.elapsed_ns,
         "json_request_bytes": item.json_request_bytes,
         "json_stdout_bytes": item.json_stdout_bytes,
-        "binary_request_bytes": item.binary_request_bytes,
-        "binary_response_bytes": item.binary_response_bytes,
+        "ipc_request_frame_bytes": item.ipc_request_frame_bytes,
+        "ipc_response_frame_bytes": item.ipc_response_frame_bytes,
     })
 }
 

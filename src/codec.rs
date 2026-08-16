@@ -2,17 +2,9 @@ use std::fmt;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum TagDomain {
-    Change,
-    Error,
-    Query,
-    Cursor,
     Node,
-    NodeTarget,
     Operation,
-    ProtocolMessage,
-    RuntimeValue,
     SemanticType,
-    TransactionOperation,
     Value,
 }
 
@@ -45,50 +37,20 @@ impl fmt::Display for CodecError {
 
 pub(crate) struct Writer {
     bytes: Vec<u8>,
-    maximum_bytes: Option<usize>,
-    exceeded: bool,
 }
 
 impl Writer {
     pub(crate) fn new() -> Self {
-        Self {
-            bytes: Vec::new(),
-            maximum_bytes: None,
-            exceeded: false,
-        }
+        Self { bytes: Vec::new() }
     }
 
     pub(crate) fn with_capacity(capacity: usize) -> Self {
         Self {
             bytes: Vec::with_capacity(capacity),
-            maximum_bytes: None,
-            exceeded: false,
         }
-    }
-
-    pub(crate) fn with_limit(maximum_bytes: usize) -> Self {
-        Self {
-            bytes: Vec::with_capacity(maximum_bytes.min(4096)),
-            maximum_bytes: Some(maximum_bytes),
-            exceeded: false,
-        }
-    }
-
-    pub(crate) fn exceeded(&self) -> bool {
-        self.exceeded
     }
 
     fn append(&mut self, value: &[u8]) {
-        if self.exceeded {
-            return;
-        }
-        if self
-            .maximum_bytes
-            .is_some_and(|maximum| value.len() > maximum.saturating_sub(self.bytes.len()))
-        {
-            self.exceeded = true;
-            return;
-        }
         self.bytes.extend_from_slice(value);
     }
 

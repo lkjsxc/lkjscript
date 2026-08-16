@@ -2,7 +2,7 @@ use lkjscript::Client;
 use lkjscript::daemon;
 use lkjscript::machine::{
     BoundaryErrorKind, DescribeSchemaRequest, MAX_JSON_INPUT_BYTES, MachineSchemaDigest,
-    SchemaProjection, SchemaSection, decode_request, encode_boundary_error, encode_response,
+    SchemaProjection, SchemaRoot, decode_request, encode_boundary_error, encode_response,
     encode_schema, request_id_hint,
 };
 use std::io::{Read, Write};
@@ -174,17 +174,17 @@ fn parse_command(mut arguments: impl Iterator<Item = String>) -> Result<Command,
 fn parse_schema(mut arguments: impl Iterator<Item = String>) -> Result<Command, String> {
     let mut pretty = false;
     let mut full = false;
-    let mut sections = Vec::new();
+    let mut roots = Vec::new();
     let mut known_digest = None;
     while let Some(argument) = arguments.next() {
         match argument.as_str() {
             "--pretty" if !pretty => pretty = true,
             "--full" if !full => full = true,
-            "--section" => {
+            "--root" => {
                 let name = arguments
                     .next()
-                    .ok_or_else(|| usage("missing schema section name"))?;
-                sections.push(parse_schema_section(&name)?);
+                    .ok_or_else(|| usage("missing schema root name"))?;
+                roots.push(parse_schema_root(&name)?);
             }
             "--known-digest" if known_digest.is_none() => {
                 let value = arguments
@@ -198,15 +198,15 @@ fn parse_schema(mut arguments: impl Iterator<Item = String>) -> Result<Command, 
             _ => return Err(usage("invalid or duplicate schema flag")),
         }
     }
-    if full && !sections.is_empty() {
-        return Err(usage("--full and --section cannot be combined"));
+    if full && !roots.is_empty() {
+        return Err(usage("--full and --root cannot be combined"));
     }
     let projection = if full {
         SchemaProjection::Full
-    } else if sections.is_empty() {
+    } else if roots.is_empty() {
         SchemaProjection::Manifest
     } else {
-        SchemaProjection::Sections { sections }
+        SchemaProjection::Roots { roots }
     };
     let request = DescribeSchemaRequest {
         projection,
@@ -216,11 +216,11 @@ fn parse_schema(mut arguments: impl Iterator<Item = String>) -> Result<Command, 
     Ok(Command::Schema { request, pretty })
 }
 
-fn parse_schema_section(name: &str) -> Result<SchemaSection, String> {
-    SchemaSection::ALL
+fn parse_schema_root(name: &str) -> Result<SchemaRoot, String> {
+    SchemaRoot::ALL
         .into_iter()
-        .find(|section| section.machine_name() == name)
-        .ok_or_else(|| usage("unknown schema section"))
+        .find(|root| root.machine_name() == name)
+        .ok_or_else(|| usage("unknown schema root"))
 }
 
 fn parse_pretty(mut arguments: impl Iterator<Item = String>) -> Result<bool, String> {
@@ -233,6 +233,6 @@ fn parse_pretty(mut arguments: impl Iterator<Item = String>) -> Result<bool, Str
 
 fn usage(reason: &str) -> String {
     format!(
-        "{reason}; usage: lkjscript --state DIRECTORY rpc [--pretty] | lkjscript schema [--section NAME ... | --full] [--known-digest HEX] [--pretty]"
+        "{reason}; usage: lkjscript --state DIRECTORY rpc [--pretty] | lkjscript schema [--root NAME ... | --full] [--known-digest HEX] [--pretty]"
     )
 }

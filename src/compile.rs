@@ -1224,10 +1224,10 @@ mod tests {
         FunctionParameterDraft, MatchArmDraft, NodeTarget, ProductFieldDraft, SumVariantDraft,
         Transaction, TransactionMode, TransactionOp, TransactionResponseSpec, YieldingBodyDraft,
     };
-    use crate::{LocalHandle, Revision, TypeDraft, ValueDraft, WorkspaceId};
+    use crate::{DraftSymbol, Revision, TypeDraft, ValueDraft, WorkspaceId};
 
     fn local(value: u32) -> NodeTarget {
-        NodeTarget::Local(LocalHandle::new(value))
+        NodeTarget::Draft(DraftSymbol::generated(value))
     }
     fn result(value: u32) -> ValueDraft {
         ValueDraft::OperationResult {
@@ -1241,14 +1241,14 @@ mod tests {
     fn argument(value: u32) -> ValueDraft {
         ValueDraft::BlockArgument(local(value))
     }
-    fn expression(handle: u32, operation: ExpressionKindDraft) -> ExpressionDraft {
+    fn expression(symbol: u32, operation: ExpressionKindDraft) -> ExpressionDraft {
         ExpressionDraft {
-            handle: LocalHandle::new(handle),
+            symbol: Some(DraftSymbol::generated(symbol)),
             operation,
         }
     }
     fn function(
-        handle: u32,
+        symbol: u32,
         module: u32,
         name: &str,
         parameters: Vec<(u32, &str, SemanticType)>,
@@ -1256,13 +1256,13 @@ mod tests {
         body: Option<FunctionBodyDraft>,
     ) -> TransactionOp {
         TransactionOp::CreateFunction {
-            handle: LocalHandle::new(handle),
+            symbol: DraftSymbol::generated(symbol),
             module: local(module),
             name: name.into(),
             parameters: parameters
                 .into_iter()
-                .map(|(handle, name, ty)| FunctionParameterDraft {
-                    handle: LocalHandle::new(handle),
+                .map(|(symbol, name, ty)| FunctionParameterDraft {
+                    symbol: DraftSymbol::generated(symbol),
                     name: name.into(),
                     ty: ty.into(),
                 })
@@ -1311,37 +1311,37 @@ mod tests {
                 mode: TransactionMode::Commit,
                 operations: vec![
                     TransactionOp::CreatePackage {
-                        handle: LocalHandle::new(1),
+                        symbol: DraftSymbol::generated(1),
                         name: "app".into(),
                     },
                     TransactionOp::CreateModule {
-                        handle: LocalHandle::new(2),
+                        symbol: DraftSymbol::generated(2),
                         package: local(1),
                         name: "root".into(),
                     },
                     TransactionOp::CreateProductType {
-                        handle: LocalHandle::new(3),
+                        symbol: DraftSymbol::generated(3),
                         module: local(2),
                         name: "Reading".into(),
                         fields: vec![
                             ProductFieldDraft {
-                                handle: LocalHandle::new(4),
+                                symbol: DraftSymbol::generated(4),
                                 name: "value".into(),
                                 ty: TypeDraft::I64,
                             },
                             ProductFieldDraft {
-                                handle: LocalHandle::new(8),
+                                symbol: DraftSymbol::generated(8),
                                 name: "valid".into(),
                                 ty: TypeDraft::Bool,
                             },
                         ],
                     },
                     TransactionOp::CreateFunction {
-                        handle: LocalHandle::new(5),
+                        symbol: DraftSymbol::generated(5),
                         module: local(2),
                         name: "identity".into(),
                         parameters: vec![FunctionParameterDraft {
-                            handle: LocalHandle::new(6),
+                            symbol: DraftSymbol::generated(6),
                             name: "value".into(),
                             ty: TypeDraft::Nominal(local(3)),
                         }],
@@ -1355,23 +1355,25 @@ mod tests {
                 ],
             },
             response: TransactionResponseSpec {
-                return_handles: vec![
-                    LocalHandle::new(3),
-                    LocalHandle::new(4),
-                    LocalHandle::new(5),
-                    LocalHandle::new(8),
+                return_symbols: vec![
+                    DraftSymbol::generated(3),
+                    DraftSymbol::generated(4),
+                    DraftSymbol::generated(5),
+                    DraftSymbol::generated(8),
                 ],
             },
         };
         let prepared = workspace
             .prepare_transaction(&request)
             .expect("complete nominal function");
-        let id = |handle: u32| {
+        let id = |symbol: u32| {
             prepared
                 .receipt
                 .returned_bindings
                 .iter()
-                .find_map(|(candidate, node)| (candidate.get() == handle).then_some(*node))
+                .find_map(|(candidate, node)| {
+                    (candidate.generated_number() == symbol).then_some(*node)
+                })
                 .expect("binding")
         };
         let product = id(3);
@@ -1453,26 +1455,26 @@ mod tests {
                     mode: TransactionMode::Commit,
                     operations: vec![
                         TransactionOp::CreatePackage {
-                            handle: LocalHandle::new(1),
+                            symbol: DraftSymbol::generated(1),
                             name: "app".into(),
                         },
                         TransactionOp::CreateModule {
-                            handle: LocalHandle::new(2),
+                            symbol: DraftSymbol::generated(2),
                             package: local(1),
                             name: "root".into(),
                         },
                         TransactionOp::CreateProductType {
-                            handle: LocalHandle::new(3),
+                            symbol: DraftSymbol::generated(3),
                             module: local(2),
                             name: "Reading".into(),
                             fields: vec![ProductFieldDraft {
-                                handle: LocalHandle::new(4),
+                                symbol: DraftSymbol::generated(4),
                                 name: "value".into(),
                                 ty: TypeDraft::I64,
                             }],
                         },
                         TransactionOp::CreateFunction {
-                            handle: LocalHandle::new(5),
+                            symbol: DraftSymbol::generated(5),
                             module: local(2),
                             name: "main".into(),
                             parameters: Vec::new(),
@@ -1508,20 +1510,22 @@ mod tests {
                     ],
                 },
                 response: TransactionResponseSpec {
-                    return_handles: vec![
-                        LocalHandle::new(3),
-                        LocalHandle::new(5),
-                        LocalHandle::new(7),
+                    return_symbols: vec![
+                        DraftSymbol::generated(3),
+                        DraftSymbol::generated(5),
+                        DraftSymbol::generated(7),
                     ],
                 },
             })
             .expect("complete scalar-signature nominal body");
-        let binding = |handle: u32| {
+        let binding = |symbol: u32| {
             prepared
                 .receipt
                 .returned_bindings
                 .iter()
-                .find_map(|(candidate, node)| (candidate.get() == handle).then_some(*node))
+                .find_map(|(candidate, node)| {
+                    (candidate.generated_number() == symbol).then_some(*node)
+                })
                 .expect("selected binding")
         };
         let program = compile(&prepared.snapshot, binding(5)).expect("aggregate Core lowering");
@@ -1552,47 +1556,47 @@ mod tests {
                     mode: TransactionMode::Commit,
                     operations: vec![
                         TransactionOp::CreatePackage {
-                            handle: LocalHandle::new(1),
+                            symbol: DraftSymbol::generated(1),
                             name: "app".into(),
                         },
                         TransactionOp::CreateModule {
-                            handle: LocalHandle::new(2),
+                            symbol: DraftSymbol::generated(2),
                             package: local(1),
                             name: "root".into(),
                         },
                         TransactionOp::CreateSumType {
-                            handle: LocalHandle::new(3),
+                            symbol: DraftSymbol::generated(3),
                             module: local(2),
                             name: "Maybe".into(),
                             variants: vec![
                                 SumVariantDraft {
-                                    handle: LocalHandle::new(4),
+                                    symbol: DraftSymbol::generated(4),
                                     name: "none".into(),
                                     payload: None,
                                 },
                                 SumVariantDraft {
-                                    handle: LocalHandle::new(5),
+                                    symbol: DraftSymbol::generated(5),
                                     name: "some".into(),
                                     payload: Some(TypeDraft::I64),
                                 },
                             ],
                         },
                         TransactionOp::CreateProductType {
-                            handle: LocalHandle::new(11),
+                            symbol: DraftSymbol::generated(11),
                             module: local(2),
                             name: "Unreachable".into(),
                             fields: vec![ProductFieldDraft {
-                                handle: LocalHandle::new(12),
+                                symbol: DraftSymbol::generated(12),
                                 name: "value".into(),
                                 ty: TypeDraft::Bool,
                             }],
                         },
                         TransactionOp::CreateFunction {
-                            handle: LocalHandle::new(6),
+                            symbol: DraftSymbol::generated(6),
                             module: local(2),
                             name: "unwrap_or_zero".into(),
                             parameters: vec![FunctionParameterDraft {
-                                handle: LocalHandle::new(7),
+                                symbol: DraftSymbol::generated(7),
                                 name: "value".into(),
                                 ty: TypeDraft::Nominal(local(3)),
                             }],
@@ -1606,12 +1610,12 @@ mod tests {
                                         arms: vec![
                                             MatchArmDraft {
                                                 variant: local(5),
-                                                payload_handle: Some(LocalHandle::new(9)),
+                                                payload_symbol: Some(DraftSymbol::generated(9)),
                                                 body: yielding(vec![], argument(9)),
                                             },
                                             MatchArmDraft {
                                                 variant: local(4),
-                                                payload_handle: None,
+                                                payload_symbol: None,
                                                 body: yielding(
                                                     vec![expression(
                                                         10,
@@ -1633,21 +1637,23 @@ mod tests {
                     ],
                 },
                 response: TransactionResponseSpec {
-                    return_handles: vec![
-                        LocalHandle::new(3),
-                        LocalHandle::new(4),
-                        LocalHandle::new(5),
-                        LocalHandle::new(6),
+                    return_symbols: vec![
+                        DraftSymbol::generated(3),
+                        DraftSymbol::generated(4),
+                        DraftSymbol::generated(5),
+                        DraftSymbol::generated(6),
                     ],
                 },
             })
             .expect("nominal match transaction");
-        let id = |handle: u32| {
+        let id = |symbol: u32| {
             prepared
                 .receipt
                 .returned_bindings
                 .iter()
-                .find_map(|(candidate, node)| (candidate.get() == handle).then_some(*node))
+                .find_map(|(candidate, node)| {
+                    (candidate.generated_number() == symbol).then_some(*node)
+                })
                 .expect("binding")
         };
         let program = compile(&prepared.snapshot, id(6)).expect("match Core");
@@ -1724,11 +1730,11 @@ mod tests {
                     mode: TransactionMode::Commit,
                     operations: vec![
                         TransactionOp::CreatePackage {
-                            handle: LocalHandle::new(1),
+                            symbol: DraftSymbol::generated(1),
                             name: "app".into(),
                         },
                         TransactionOp::CreateModule {
-                            handle: LocalHandle::new(2),
+                            symbol: DraftSymbol::generated(2),
                             package: local(1),
                             name: "root".into(),
                         },
@@ -1747,7 +1753,7 @@ mod tests {
                     ],
                 },
                 response: TransactionResponseSpec {
-                    return_handles: vec![LocalHandle::new(3)],
+                    return_symbols: vec![DraftSymbol::generated(3)],
                 },
             })
             .expect("incomplete transaction");
@@ -1810,11 +1816,11 @@ mod tests {
         let workspace = Workspace::new(workspace_id).expect("workspace");
         let mut operations = vec![
             TransactionOp::CreatePackage {
-                handle: LocalHandle::new(1),
+                symbol: DraftSymbol::generated(1),
                 name: "app".into(),
             },
             TransactionOp::CreateModule {
-                handle: LocalHandle::new(2),
+                symbol: DraftSymbol::generated(2),
                 package: local(1),
                 name: "root".into(),
             },
@@ -1839,8 +1845,8 @@ mod tests {
                             step: 1,
                             initial: result(13),
                             carried: SemanticType::I64.into(),
-                            index_handle: LocalHandle::new(15),
-                            carried_handle: LocalHandle::new(16),
+                            index_symbol: DraftSymbol::generated(15),
+                            carried_symbol: DraftSymbol::generated(16),
                             body: yielding(
                                 vec![expression(
                                     17,
@@ -2019,8 +2025,8 @@ mod tests {
                             step: 2,
                             initial: result(71),
                             carried: SemanticType::I64.into(),
-                            index_handle: LocalHandle::new(74),
-                            carried_handle: LocalHandle::new(75),
+                            index_symbol: DraftSymbol::generated(74),
+                            carried_symbol: DraftSymbol::generated(75),
                             body: yielding(
                                 vec![expression(
                                     76,
@@ -2056,8 +2062,8 @@ mod tests {
                             step: 1,
                             initial: result(81),
                             carried: SemanticType::I64.into(),
-                            index_handle: LocalHandle::new(85),
-                            carried_handle: LocalHandle::new(86),
+                            index_symbol: DraftSymbol::generated(85),
+                            carried_symbol: DraftSymbol::generated(86),
                             body: yielding(
                                 vec![
                                     expression(
@@ -2204,8 +2210,8 @@ mod tests {
                             step: 2,
                             initial: result(123),
                             carried: SemanticType::I64.into(),
-                            index_handle: LocalHandle::new(125),
-                            carried_handle: LocalHandle::new(126),
+                            index_symbol: DraftSymbol::generated(125),
+                            carried_symbol: DraftSymbol::generated(126),
                             body: yielding(vec![], argument(126)),
                         },
                     ),
@@ -2256,8 +2262,8 @@ mod tests {
                             step: 1,
                             initial: result(151),
                             carried: SemanticType::I64.into(),
-                            index_handle: LocalHandle::new(155),
-                            carried_handle: LocalHandle::new(156),
+                            index_symbol: DraftSymbol::generated(155),
+                            carried_symbol: DraftSymbol::generated(156),
                             body: yielding(
                                 vec![expression(
                                     157,
@@ -2267,8 +2273,8 @@ mod tests {
                                         step: 1,
                                         initial: argument(156),
                                         carried: SemanticType::I64.into(),
-                                        index_handle: LocalHandle::new(158),
-                                        carried_handle: LocalHandle::new(159),
+                                        index_symbol: DraftSymbol::generated(158),
+                                        carried_symbol: DraftSymbol::generated(159),
                                         body: yielding(
                                             vec![expression(
                                                 160,
@@ -2313,8 +2319,8 @@ mod tests {
                                         step: 1,
                                         initial: result(172),
                                         carried: SemanticType::I64.into(),
-                                        index_handle: LocalHandle::new(176),
-                                        carried_handle: LocalHandle::new(177),
+                                        index_symbol: DraftSymbol::generated(176),
+                                        carried_symbol: DraftSymbol::generated(177),
                                         body: yielding(
                                             vec![expression(
                                                 178,
@@ -2434,8 +2440,8 @@ mod tests {
                             step: 1,
                             initial: result(261),
                             carried: SemanticType::I64.into(),
-                            index_handle: LocalHandle::new(265),
-                            carried_handle: LocalHandle::new(266),
+                            index_symbol: DraftSymbol::generated(265),
+                            carried_symbol: DraftSymbol::generated(266),
                             body: yielding(
                                 vec![expression(
                                     267,
@@ -2497,7 +2503,7 @@ mod tests {
             140, 150, 170, 200, 210, 220, 221, 230, 240, 250, 260,
         ]
         .into_iter()
-        .map(LocalHandle::new)
+        .map(DraftSymbol::generated)
         .collect();
         let prepared = workspace
             .prepare_transaction(&ApplyTransactionRequest {
@@ -2509,7 +2515,7 @@ mod tests {
                     operations,
                 },
                 response: TransactionResponseSpec {
-                    return_handles: handles,
+                    return_symbols: handles,
                 },
             })
             .expect("structured program");
@@ -2517,7 +2523,7 @@ mod tests {
             .receipt
             .returned_bindings
             .iter()
-            .map(|(handle, node)| (handle.get(), *node))
+            .map(|(symbol, node)| (symbol.generated_number(), *node))
             .collect();
         (prepared, ids)
     }
@@ -2526,31 +2532,34 @@ mod tests {
     fn deeply_nested_match_lowering_uses_one_verified_core_route() {
         const DEPTH: u32 = 7;
         fn nested_match(depth: u32) -> ExpressionDraft {
-            let match_handle = LocalHandle::new(100 + depth * 3);
-            let payload_handle = LocalHandle::new(101 + depth * 3);
+            let match_handle = DraftSymbol::generated(100 + depth * 3);
+            let payload_symbol = DraftSymbol::generated(101 + depth * 3);
             let selected = if depth == 1 {
-                let constant = LocalHandle::new(102 + depth * 3);
+                let constant = DraftSymbol::generated(102 + depth * 3);
                 yielding(
-                    vec![expression(constant.get(), ExpressionKindDraft::ConstI64(7))],
-                    result(constant.get()),
+                    vec![expression(
+                        constant.generated_number(),
+                        ExpressionKindDraft::ConstI64(7),
+                    )],
+                    result(constant.generated_number()),
                 )
             } else {
                 yielding(vec![nested_match(depth - 1)], result(100 + (depth - 1) * 3))
             };
             expression(
-                match_handle.get(),
+                match_handle.generated_number(),
                 ExpressionKindDraft::MatchSum {
                     scrutinee: parameter(7),
                     result: TypeDraft::I64,
                     arms: vec![
                         MatchArmDraft {
                             variant: local(5),
-                            payload_handle: Some(payload_handle),
+                            payload_symbol: Some(payload_symbol),
                             body: selected,
                         },
                         MatchArmDraft {
                             variant: local(4),
-                            payload_handle: None,
+                            payload_symbol: None,
                             body: yielding(
                                 vec![expression(10_000 + depth, ExpressionKindDraft::ConstI64(0))],
                                 result(10_000 + depth),
@@ -2572,37 +2581,37 @@ mod tests {
                     mode: TransactionMode::Commit,
                     operations: vec![
                         TransactionOp::CreatePackage {
-                            handle: LocalHandle::new(1),
+                            symbol: DraftSymbol::generated(1),
                             name: "app".into(),
                         },
                         TransactionOp::CreateModule {
-                            handle: LocalHandle::new(2),
+                            symbol: DraftSymbol::generated(2),
                             package: local(1),
                             name: "root".into(),
                         },
                         TransactionOp::CreateSumType {
-                            handle: LocalHandle::new(3),
+                            symbol: DraftSymbol::generated(3),
                             module: local(2),
                             name: "Maybe".into(),
                             variants: vec![
                                 SumVariantDraft {
-                                    handle: LocalHandle::new(4),
+                                    symbol: DraftSymbol::generated(4),
                                     name: "none".into(),
                                     payload: None,
                                 },
                                 SumVariantDraft {
-                                    handle: LocalHandle::new(5),
+                                    symbol: DraftSymbol::generated(5),
                                     name: "some".into(),
                                     payload: Some(TypeDraft::I64),
                                 },
                             ],
                         },
                         TransactionOp::CreateFunction {
-                            handle: LocalHandle::new(6),
+                            symbol: DraftSymbol::generated(6),
                             module: local(2),
                             name: "deep".into(),
                             parameters: vec![FunctionParameterDraft {
-                                handle: LocalHandle::new(7),
+                                symbol: DraftSymbol::generated(7),
                                 name: "value".into(),
                                 ty: TypeDraft::Nominal(local(3)),
                             }],
@@ -2612,20 +2621,22 @@ mod tests {
                     ],
                 },
                 response: TransactionResponseSpec {
-                    return_handles: vec![
-                        LocalHandle::new(3),
-                        LocalHandle::new(5),
-                        LocalHandle::new(6),
+                    return_symbols: vec![
+                        DraftSymbol::generated(3),
+                        DraftSymbol::generated(5),
+                        DraftSymbol::generated(6),
                     ],
                 },
             })
             .expect("deep nested match transaction");
-        let id = |handle: u32| {
+        let id = |symbol: u32| {
             prepared
                 .receipt
                 .returned_bindings
                 .iter()
-                .find_map(|(candidate, node)| (candidate.get() == handle).then_some(*node))
+                .find_map(|(candidate, node)| {
+                    (candidate.generated_number() == symbol).then_some(*node)
+                })
                 .expect("binding")
         };
         let program = compile(&prepared.snapshot, id(6)).expect("deep match lowering");

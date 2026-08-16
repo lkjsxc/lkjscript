@@ -40,8 +40,8 @@ root. Observable graph order is explicit or sorted.
 
 A `WorkspaceId` is 128 bits. A `NodeId` is `(WorkspaceId, nonzero u64 serial)`. Root serial 1 is
 created at revision zero; allocation is monotonic. Names, positions, hashes, compiler indexes, and
-addresses never determine identity. A `LocalHandle` is a u32 transaction-local symbol and never
-enters semantic state.
+addresses never determine identity. A `DraftSymbol` is a transaction-local proposal label matching
+`[a-z][a-z0-9_]*` in 1 through 64 UTF-8 bytes. It never enters semantic state or determines persistent allocation order.
 
 Allocation is staged. A rejected or validate-only request changes no published allocator state.
 Persistent identity non-reuse is the semantic contract: a deleted serial can never identify a later
@@ -80,29 +80,30 @@ An `ApplyTransactionRequest` names workspace, exact base revision,
 `TransactionMode::{Commit, ValidateOnly}`, an optional committed-request idempotency key, an ordered
 closed batch of `TransactionOp` values, and a bounded `TransactionResponseSpec`. Public creation is
 `CreatePackage`, `CreateModule`, atomic `CreateProductType`, atomic `CreateSumType`, structured
-`CreateFunction`, `DefineFunctionBody`, and `InsertExpression`; maintenance sets the entry, renames, replaces a compatible operation or operand,
-refines a regionless hole, or deletes an owned subtree. `InsertExpression` names a block that exists
+`CreateFunction` with an optional body, and `InsertExpression`; maintenance may
+`DefineFunctionBody` only for an existing function Node ID, set the entry, rename, replace a
+compatible operation or operand, refine a regionless hole, or delete an owned subtree.
+`InsertExpression` names a block that exists
 in the base snapshot, allowing deeper structured programs to be assembled across bounded
 transactions without exposing a parallel low-level scaffolding API.
 
-A structured function or expression draft is a typed proposal only. Parameters, expressions,
-holes, loop indexes, and loop-carried values declare explicit local handles. Regions, blocks,
-block arguments, and return/yield terminators are structurally implied canonical nodes. Expansion
-uses an explicit work stack, scans all explicit handles first, rejects zero/duplicate handles and
-request depth/item overflow, and counts every call argument whether it appears in a structured
-expression or fine-grained operation replacement/refinement under the same 65,536-item request
-policy. It assigns collision-free private handles for implied nodes, then allocates all explicit and
-implicit Node IDs in depth-first canonical node order before applying any edit.
-Calls may therefore name later function handles and mutual references. Declaration, field, variant,
-identity-keyed product binding, match-arm, and optional payload handles are scanned iteratively before
-allocation. Product bindings and match arms resolve exact staged identities and normalize into
-canonical declaration order. `TypeDraft` resolves primitive types or existing
-or transaction-local nominal declarations, so fields, payloads, signatures, block arguments, and
-operation type contracts may use forward nominal targets. Final graph validation is unchanged and
-authoritative; the draft, local targets, and private handles are discarded.
+A structured function or expression draft is a typed proposal only. Parameters, optionally bound
+expressions, loop indexes, loop-carried values, and match payloads declare explicit draft symbols.
+Regions, blocks, block arguments, omitted expression bindings, and return/yield terminators are
+private implied nodes. Shared or forward-referenced expression results require an explicit symbol.
+Inline expressions in structured value positions are not part of the current contract.
 
-A client may select at most 64 explicit created handles for the receipt. Private implied handles
-cannot be selected or returned. Duplicate, undeclared, private, or non-created selected handles
+Expansion validates every public symbol and reference before allocation and normalizes labels to
+private keys. Persistent IDs are then
+allocated in depth-first canonical node order, independent of symbol spelling. Duplicate, empty,
+invalid, overlength, unknown, or wrong-category symbols reject with the exact `draft_symbol`; a
+bounded deterministic `draft_path` identifies failures on private implied nodes. Product bindings
+and match arms normalize into declaration order. Calls may name later functions or form mutual
+references, and nominal types may name later declarations. Final graph validation remains unchanged
+and authoritative; proposal labels and private keys are discarded.
+
+A client may select at most 64 explicit created symbols for the receipt. Private implied symbols
+cannot be selected or returned. Duplicate, undeclared, private, or non-created selected symbols
 reject before publication. A node created and deleted in the same accepted transaction
 still contributes to `created_count`, may be selected in the receipt, and ends tombstoned in the
 new snapshot. Deletion is iterative and rejects when a surviving reference points into the
@@ -115,7 +116,7 @@ HEAD, allocator movement, tombstone, or in-memory snapshot. Empty and semantic n
 reject. A successful commit durably publishes exactly one revision before publishing it in memory.
 
 The receipt is deliberately bounded: workspace, base and resulting/predicted revision, snapshot
-hash, publication flag, total created count, only selected handle bindings, exact total change
+hash, publication flag, total created count, only selected symbolic bindings, exact total change
 count and `ChangeDigest`, and before/after completeness facts. The digest is domain-separated and
 binds the workspace, revisions, both canonical snapshot hashes, ordered change count, and exact
 change payloads. The full change list is available only through a revision-bound paginated diff
@@ -137,7 +138,7 @@ A missing function body and an exact typed `Hole` are valid incomplete semantic 
 incoming uses, body slices, visible values, legal constructors, and repair contexts are derived by
 full scans of an immutable revision. For a nested structured hole, repair context exposes enclosing
 region roles and visible block-argument identities, ordinals, roles, and types; a repair therefore
-uses persistent graph identities rather than reconstructing private draft handles. Entry lowering
+uses persistent graph identities rather than reconstructing private draft symbols. Entry lowering
 requires a complete selected-entry dependency closure; holes never lower. Unused incomplete
 definitions do not block an otherwise complete entry.
 
@@ -156,8 +157,11 @@ ceiling. Durable workspace IDs and revision file names must use their one canoni
 Accepted decode followed by encode is byte-identical. Core IR, machine code, caches, profiles,
 receipts, and protocol frames are absent.
 
-`LKJHEAD3` directly replaces the old HEAD format; there is no compatibility reader. It is a checked,
-independently bounded (16 KiB) non-semantic publication record containing head revision/hash and,
-when present, one compact keyed fingerprint/receipt. It never contains a full diff or allocation
-map. Restart decodes every retained artifact, validates adjacent history, and recomputes/validates
+`LKJHEAD4` directly replaces the old HEAD format; there is no compatibility reader. `LKJHEAD3`
+rejects because protocol-v5 canonical JSON changed the persisted idempotency fingerprint meaning. It
+is a checked, independently bounded (16 KiB) non-semantic publication record containing head
+revision/hash and, when present, one compact keyed fingerprint/receipt with exact bounded symbolic
+returned bindings. This final unreleased HEAD4 grammar has no numeric-symbol interpretation and
+stores enough receipt data for exact idempotency replay. It never contains a full diff or allocation map.
+Restart decodes every retained artifact, validates adjacent history, and recomputes/validates
 receipt facts against retained snapshots before accepting HEAD. Corrupt or old HEAD bytes reject.

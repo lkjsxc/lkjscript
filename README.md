@@ -63,11 +63,16 @@ and checks old and current revisions.
 The focused [named-data example](examples/named-data/) demonstrates immutable records, variants with
 a fixed alternative set, complete lazy handling, named runtime input/output, and placeholder repair.
 
+The retained [release-channel replay](examples/release-channel/) preserves the controlled campaign
+task through the same public path. A separate isolated coding-agent trial authored that task without
+opening implementation sources; it is evidence about this interface, not a production-readiness or
+model-quality benchmark.
+
 ## How coding agents interact
 
 `lkjscriptd` is the only live writer of durable workspace state. For RPC commands, the generic
-`lkjscript` CLI accepts one strict version-4 JSON envelope, sends the corresponding closed binary
-request over private local Unix IPC, and writes one typed JSON response. The separate `schema`
+`lkjscript` CLI accepts one strict version-5 JSON envelope, sends the same closed typed JSON request
+in a bounded length frame over private local Unix IPC, and writes one typed JSON response. The separate `schema`
 command derives the machine contract locally from the same executable definitions. JSON is
 transport, not a second program representation.
 
@@ -77,18 +82,19 @@ Begin with the compact machine-contract manifest:
 cargo run --quiet --locked --bin lkjscript -- schema
 ```
 
-Request only relevant contract sections, ask for the full description explicitly, or reuse a known
-machine-contract fingerprint:
+Request exact contract roots with their transitive dependency closure, ask for the full description
+explicitly, or reuse a known machine-contract fingerprint:
 
 ```sh
 cargo run --quiet --locked --bin lkjscript -- schema \
-  --section transactions_and_expressions --section queries_and_repair
+  --root create_workspace --root apply_transaction --root query_repair_context --root run
 cargo run --quiet --locked --bin lkjscript -- schema --full --pretty
 cargo run --quiet --locked --bin lkjscript -- schema --known-digest DIGEST
 ```
 
-The local command and service response derive from the same executable contract. A matching digest
-returns the compact `unchanged` result. Exact request, response, strictness, and limit contracts are
+Endpoint roots include the exact JSON-envelope request, success, typed-error, and boundary-error layers
+plus applicable IDs and limits. The protocol specification separately owns the local frame grammar. The local command and service response derive them from the same
+executable contract. A matching digest returns the compact `unchanged` result. Exact request, response, strictness, and limit contracts are
 owned by the [protocol specification](docs/spec/protocol.md).
 
 ## What is a `.lkjscript` file?
@@ -111,8 +117,9 @@ The current Linux x86-64 implementation provides:
   variant;
 - structured functions, parameters, identity-targeted calls, conditions, counted loops, constants,
   checked integer addition and comparison, typed placeholders, yields, and returns;
-- atomic commit and validate-only transactions, selected returned bindings, compact receipts,
-  identity-preserving placeholder repair, paginated semantic diffs, and bounded repair context;
+- atomic commit and validate-only transactions, bounded transaction-local symbolic labels, selected
+  returned bindings, compact receipts, identity-preserving placeholder repair, paginated semantic
+  diffs, and bounded repair context;
 - direct deterministic lowering from one immutable revision to one private Core IR, independent IR
   verification, and an explicit-frame interpreter;
 - exact public `unit`, `bool`, `i64`, record, and variant values identified by semantic Node IDs;
@@ -151,9 +158,10 @@ From the repository root:
 ```sh
 ./examples/job-policy/run.sh
 ./examples/named-data/run.sh
+./examples/release-channel/run.sh
 ```
 
-Both scripts build production release binaries, create private temporary state, communicate only
+All three scripts build production release binaries, create private temporary state, communicate only
 through the production CLI and service, perform typed shutdown and restart, and remove only state
 they created. They require a current stable Rust toolchain, a POSIX shell, and Python 3.
 

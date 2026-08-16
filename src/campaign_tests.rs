@@ -2,10 +2,10 @@ use crate::artifact;
 use crate::diff;
 use crate::error::ErrorCode;
 use crate::graph::{Snapshot, Workspace};
-use crate::ids::{IdempotencyKey, LocalHandle, NodeId, QueryId, RequestId, Revision, WorkspaceId};
+use crate::ids::{DraftSymbol, IdempotencyKey, NodeId, QueryId, RequestId, Revision, WorkspaceId};
 use crate::machine::{self, RequestEnvelope};
 use crate::persistence::{self, DurableWorkspace};
-use crate::protocol::{self, Request};
+use crate::protocol::Request;
 use crate::query::{
     ContextBudget, PageRequest, Query, QueryBatchRequest, QueryItem, QueryResult, RepairTarget,
     VisibleCursorPurpose,
@@ -16,9 +16,9 @@ use crate::transaction::{
     FunctionParameterDraft, NodeTarget, SumVariantDraft, Transaction, TransactionMode,
     TransactionOp, TransactionReceipt, TransactionResponseSpec, YieldingBodyDraft,
 };
+use crate::transport;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::io::Cursor;
 use std::sync::Arc;
 
 #[derive(Clone, Copy)]
@@ -44,17 +44,17 @@ impl Prng {
     }
 }
 
-fn local(handle: u32) -> NodeTarget {
-    NodeTarget::Local(LocalHandle::new(handle))
+fn local(symbol: u32) -> NodeTarget {
+    NodeTarget::Draft(DraftSymbol::generated(symbol))
 }
 
 fn existing(id: NodeId) -> NodeTarget {
     NodeTarget::Existing(id)
 }
 
-fn local_value(handle: u32) -> ValueDraft {
+fn local_value(symbol: u32) -> ValueDraft {
     ValueDraft::OperationResult {
-        operation: local(handle),
+        operation: local(symbol),
         output: 0,
     }
 }
@@ -70,7 +70,11 @@ fn request(transaction: Transaction, selected: &[u32]) -> ApplyTransactionReques
     ApplyTransactionRequest {
         transaction,
         response: TransactionResponseSpec {
-            return_handles: selected.iter().copied().map(LocalHandle::new).collect(),
+            return_symbols: selected
+                .iter()
+                .copied()
+                .map(DraftSymbol::generated)
+                .collect(),
         },
     }
 }
@@ -85,20 +89,20 @@ fn fixture(workspace: WorkspaceId, seed: u64, mode: TransactionMode) -> ApplyTra
             mode,
             operations: vec![
                 TransactionOp::CreatePackage {
-                    handle: LocalHandle::new(1),
+                    symbol: DraftSymbol::generated(1),
                     name: format!("package-{suffix}"),
                 },
                 TransactionOp::CreateModule {
-                    handle: LocalHandle::new(2),
+                    symbol: DraftSymbol::generated(2),
                     package: local(1),
                     name: "module".to_owned(),
                 },
                 TransactionOp::CreateFunction {
-                    handle: LocalHandle::new(3),
+                    symbol: DraftSymbol::generated(3),
                     module: local(2),
                     name: "main".to_owned(),
                     parameters: vec![FunctionParameterDraft {
-                        handle: LocalHandle::new(4),
+                        symbol: DraftSymbol::generated(4),
                         name: "input".to_owned(),
                         ty: SemanticType::I64.into(),
                     }],
@@ -106,27 +110,27 @@ fn fixture(workspace: WorkspaceId, seed: u64, mode: TransactionMode) -> ApplyTra
                     body: Some(FunctionBodyDraft {
                         operations: vec![
                             ExpressionDraft {
-                                handle: LocalHandle::new(7),
+                                symbol: Some(DraftSymbol::generated(7)),
                                 operation: ExpressionKindDraft::ConstI64(
                                     40 + i64::try_from(seed % 3).expect("small"),
                                 ),
                             },
                             ExpressionDraft {
-                                handle: LocalHandle::new(8),
+                                symbol: Some(DraftSymbol::generated(8)),
                                 operation: ExpressionKindDraft::ConstI64(2),
                             },
                             ExpressionDraft {
-                                handle: LocalHandle::new(9),
+                                symbol: Some(DraftSymbol::generated(9)),
                                 operation: ExpressionKindDraft::ConstBool(true),
                             },
                             ExpressionDraft {
-                                handle: LocalHandle::new(10),
+                                symbol: Some(DraftSymbol::generated(10)),
                                 operation: ExpressionKindDraft::Hole {
                                     expected: SemanticType::I64.into(),
                                 },
                             },
                             ExpressionDraft {
-                                handle: LocalHandle::new(11),
+                                symbol: Some(DraftSymbol::generated(11)),
                                 operation: ExpressionKindDraft::ConstI64(99),
                             },
                         ],
@@ -143,11 +147,11 @@ fn fixture(workspace: WorkspaceId, seed: u64, mode: TransactionMode) -> ApplyTra
     )
 }
 
-fn binding(receipt: &TransactionReceipt, handle: u32) -> NodeId {
+fn binding(receipt: &TransactionReceipt, symbol: u32) -> NodeId {
     receipt
         .returned_bindings
         .iter()
-        .find_map(|(candidate, id)| (candidate.get() == handle).then_some(*id))
+        .find_map(|(candidate, id)| (candidate.generated_number() == symbol).then_some(*id))
         .expect("selected binding")
 }
 
@@ -234,9 +238,9 @@ fn commit_checked(
             .receipt
             .returned_bindings
             .iter()
-            .map(|(handle, _)| *handle)
+            .map(|(symbol, _)| *symbol)
             .collect::<Vec<_>>(),
-        request.response.return_handles
+        request.response.return_symbols
     );
     for (_, node) in &prepared.receipt.returned_bindings {
         assert!(node.serial() >= before_next);
@@ -290,7 +294,7 @@ fn predict_next(workspace: &Workspace, name: &str) -> NodeId {
             idempotency_key: None,
             mode: TransactionMode::ValidateOnly,
             operations: vec![TransactionOp::CreatePackage {
-                handle: LocalHandle::new(60_000),
+                symbol: DraftSymbol::generated(60_000),
                 name: name.to_owned(),
             }],
         },
@@ -343,7 +347,7 @@ enum Action {
     ValidateThenCommit,
     StaleRevision,
     WrongWorkspace,
-    DuplicateHandle,
+    DuplicateDraftSymbol,
     DuplicateName,
     InvalidSelected,
     StructuredScenario,
@@ -363,7 +367,7 @@ impl Action {
         Self::ValidateThenCommit,
         Self::StaleRevision,
         Self::WrongWorkspace,
-        Self::DuplicateHandle,
+        Self::DuplicateDraftSymbol,
         Self::DuplicateName,
         Self::InvalidSelected,
         Self::StructuredScenario,
@@ -532,7 +536,7 @@ fn generated_sequence(seed: u64, trace: &mut Vec<Action>) {
                             mode: TransactionMode::Commit,
                             operations: vec![
                                 TransactionOp::CreatePackage {
-                                    handle: LocalHandle::new(30),
+                                    symbol: DraftSymbol::generated(30),
                                     name: format!("temporary-{seed}"),
                                 },
                                 TransactionOp::DeleteOwnedSubtree { root: local(30) },
@@ -564,7 +568,7 @@ fn generated_sequence(seed: u64, trace: &mut Vec<Action>) {
                         idempotency_key: None,
                         mode: TransactionMode::ValidateOnly,
                         operations: vec![TransactionOp::CreatePackage {
-                            handle: LocalHandle::new(31),
+                            symbol: DraftSymbol::generated(31),
                             name: format!("validated-{seed}"),
                         }],
                     },
@@ -616,7 +620,7 @@ fn generated_sequence(seed: u64, trace: &mut Vec<Action>) {
                 &format!("prediction-{seed}"),
                 ErrorCode::WrongWorkspace,
             ),
-            Action::DuplicateHandle => reject_checked(
+            Action::DuplicateDraftSymbol => reject_checked(
                 &workspace,
                 &request(
                     Transaction {
@@ -626,11 +630,11 @@ fn generated_sequence(seed: u64, trace: &mut Vec<Action>) {
                         mode: TransactionMode::Commit,
                         operations: vec![
                             TransactionOp::CreatePackage {
-                                handle: LocalHandle::new(40),
+                                symbol: DraftSymbol::generated(40),
                                 name: "duplicate-a".to_owned(),
                             },
                             TransactionOp::CreatePackage {
-                                handle: LocalHandle::new(40),
+                                symbol: DraftSymbol::generated(40),
                                 name: "duplicate-b".to_owned(),
                             },
                         ],
@@ -638,7 +642,7 @@ fn generated_sequence(seed: u64, trace: &mut Vec<Action>) {
                     &[],
                 ),
                 &format!("prediction-{seed}"),
-                ErrorCode::DuplicateHandle,
+                ErrorCode::DuplicateDraftSymbol,
             ),
             Action::DuplicateName => reject_checked(
                 &workspace,
@@ -649,7 +653,7 @@ fn generated_sequence(seed: u64, trace: &mut Vec<Action>) {
                         idempotency_key: None,
                         mode: TransactionMode::Commit,
                         operations: vec![TransactionOp::CreateFunction {
-                            handle: LocalHandle::new(41),
+                            symbol: DraftSymbol::generated(41),
                             module: existing(module),
                             name: "main".to_owned(),
                             parameters: Vec::new(),
@@ -671,14 +675,14 @@ fn generated_sequence(seed: u64, trace: &mut Vec<Action>) {
                         idempotency_key: None,
                         mode: TransactionMode::Commit,
                         operations: vec![TransactionOp::CreatePackage {
-                            handle: LocalHandle::new(42),
+                            symbol: DraftSymbol::generated(42),
                             name: "selected".to_owned(),
                         }],
                     },
                     &[43],
                 ),
                 &format!("prediction-{seed}"),
-                ErrorCode::InvalidHandle,
+                ErrorCode::InvalidDraftSymbol,
             ),
             Action::StructuredScenario => generated_structured_scenario(seed),
             Action::InvalidRefinement => reject_checked(
@@ -788,7 +792,7 @@ fn durable_reject_checked(
     let before_files = directory_files(&directory.join("revisions"));
     let before = durable.head().expect("head").clone();
     let before_tombstones: Vec<_> = before.tombstones().collect();
-    let fingerprint = protocol::transaction_fingerprint(request).expect("fingerprint");
+    let fingerprint = machine::transaction_fingerprint(request).expect("fingerprint");
     assert_eq!(
         durable
             .apply(request, fingerprint)
@@ -810,12 +814,12 @@ fn generated_structured_scenario(seed: u64) {
     bytes[..8].copy_from_slice(&seed.to_le_bytes());
     let workspace_id = WorkspaceId::from_bytes(bytes);
     let mut workspace = Workspace::new(workspace_id).expect("structured workspace");
-    let value = |handle| ValueDraft::OperationResult {
-        operation: local(handle),
+    let value = |symbol| ValueDraft::OperationResult {
+        operation: local(symbol),
         output: 0,
     };
-    let expression = |handle, operation| ExpressionDraft {
-        handle: LocalHandle::new(handle),
+    let expression = |symbol, operation| ExpressionDraft {
+        symbol: Some(DraftSymbol::generated(symbol)),
         operation,
     };
     let created = commit_checked(
@@ -828,16 +832,16 @@ fn generated_structured_scenario(seed: u64) {
                 mode: TransactionMode::Commit,
                 operations: vec![
                     TransactionOp::CreatePackage {
-                        handle: LocalHandle::new(1),
+                        symbol: DraftSymbol::generated(1),
                         name: "structured".into(),
                     },
                     TransactionOp::CreateModule {
-                        handle: LocalHandle::new(2),
+                        symbol: DraftSymbol::generated(2),
                         package: local(1),
                         name: "root".into(),
                     },
                     TransactionOp::CreateFunction {
-                        handle: LocalHandle::new(10),
+                        symbol: DraftSymbol::generated(10),
                         module: local(2),
                         name: "forward".into(),
                         parameters: Vec::new(),
@@ -854,7 +858,7 @@ fn generated_structured_scenario(seed: u64) {
                         }),
                     },
                     TransactionOp::CreateFunction {
-                        handle: LocalHandle::new(20),
+                        symbol: DraftSymbol::generated(20),
                         module: local(2),
                         name: "mutual".into(),
                         parameters: Vec::new(),
@@ -871,7 +875,7 @@ fn generated_structured_scenario(seed: u64) {
                         }),
                     },
                     TransactionOp::CreateFunction {
-                        handle: LocalHandle::new(30),
+                        symbol: DraftSymbol::generated(30),
                         module: local(2),
                         name: "nested".into(),
                         parameters: Vec::new(),
@@ -894,8 +898,8 @@ fn generated_structured_scenario(seed: u64) {
                                                     step: 1,
                                                     initial: value(31),
                                                     carried: SemanticType::I64.into(),
-                                                    index_handle: LocalHandle::new(35),
-                                                    carried_handle: LocalHandle::new(36),
+                                                    index_symbol: DraftSymbol::generated(35),
+                                                    carried_symbol: DraftSymbol::generated(36),
                                                     body: YieldingBodyDraft {
                                                         operations: vec![expression(
                                                             37,
@@ -992,11 +996,11 @@ fn durable_invalid_transaction_corpus_is_atomic_and_restart_stable() {
     prediction.transaction.idempotency_key = None;
     prediction.transaction.mode = TransactionMode::ValidateOnly;
     let prediction_fingerprint =
-        protocol::transaction_fingerprint(&prediction).expect("prediction fingerprint");
+        machine::transaction_fingerprint(&prediction).expect("prediction fingerprint");
     let predicted = durable
         .apply(&prediction, prediction_fingerprint)
         .expect("fixture prediction");
-    let fingerprint = protocol::transaction_fingerprint(&valid).expect("fixture fingerprint");
+    let fingerprint = machine::transaction_fingerprint(&valid).expect("fixture fingerprint");
     let committed = durable.apply(&valid, fingerprint).expect("fixture commit");
     assert_eq!(committed.returned_bindings, predicted.returned_bindings);
     assert_eq!(
@@ -1112,7 +1116,7 @@ fn durable_invalid_transaction_corpus_is_atomic_and_restart_stable() {
     }
     let mut conflict = valid.clone();
     conflict.transaction.operations[0] = TransactionOp::CreatePackage {
-        handle: LocalHandle::new(1),
+        symbol: DraftSymbol::generated(1),
         name: "conflict".to_owned(),
     };
     durable_reject_checked(
@@ -1139,7 +1143,7 @@ fn durable_invalid_transaction_corpus_is_atomic_and_restart_stable() {
         &[],
     );
     let refinement_fingerprint =
-        protocol::transaction_fingerprint(&refinement).expect("refinement fingerprint");
+        machine::transaction_fingerprint(&refinement).expect("refinement fingerprint");
     let refined = durable
         .apply(&refinement, refinement_fingerprint)
         .expect("durable refinement");
@@ -1224,7 +1228,7 @@ fn artifact_corpus() -> Vec<Vec<u8>> {
                 mode: TransactionMode::Commit,
                 operations: vec![
                     TransactionOp::CreatePackage {
-                        handle: LocalHandle::new(100),
+                        symbol: DraftSymbol::generated(100),
                         name: "discarded".to_owned(),
                     },
                     TransactionOp::DeleteOwnedSubtree { root: local(100) },
@@ -1245,7 +1249,7 @@ fn artifact_corpus() -> Vec<Vec<u8>> {
             block,
             before: Some(hole),
             expression: ExpressionDraft {
-                handle: LocalHandle::new(1000 + offset),
+                symbol: Some(DraftSymbol::generated(1000 + offset)),
                 operation: ExpressionKindDraft::ConstI64(i64::from(offset)),
             },
         });
@@ -1329,20 +1333,20 @@ fn request_corpus() -> Vec<Request> {
     );
     let transaction_operations = vec![
         TransactionOp::CreatePackage {
-            handle: LocalHandle::new(1),
+            symbol: DraftSymbol::generated(1),
             name: "package".to_owned(),
         },
         TransactionOp::CreateModule {
-            handle: LocalHandle::new(2),
+            symbol: DraftSymbol::generated(2),
             package: local(1),
             name: "module".to_owned(),
         },
         TransactionOp::CreateFunction {
-            handle: LocalHandle::new(3),
+            symbol: DraftSymbol::generated(3),
             module: local(2),
             name: "main".to_owned(),
             parameters: vec![FunctionParameterDraft {
-                handle: LocalHandle::new(4),
+                symbol: DraftSymbol::generated(4),
                 name: "parameter".to_owned(),
                 ty: SemanticType::I64.into(),
             }],
@@ -1350,10 +1354,10 @@ fn request_corpus() -> Vec<Request> {
             body: None,
         },
         TransactionOp::DefineFunctionBody {
-            function: local(3),
+            function: node,
             body: FunctionBodyDraft {
                 operations: vec![ExpressionDraft {
-                    handle: LocalHandle::new(7),
+                    symbol: Some(DraftSymbol::generated(7)),
                     operation: ExpressionKindDraft::Hole {
                         expected: SemanticType::I64.into(),
                     },
@@ -1365,7 +1369,7 @@ fn request_corpus() -> Vec<Request> {
             block: node,
             before: None,
             expression: ExpressionDraft {
-                handle: LocalHandle::new(8),
+                symbol: Some(DraftSymbol::generated(8)),
                 operation: ExpressionKindDraft::ConstI64(1),
             },
         },
@@ -1394,17 +1398,17 @@ fn request_corpus() -> Vec<Request> {
             },
         },
         TransactionOp::CreateProductType {
-            handle: LocalHandle::new(9),
+            symbol: DraftSymbol::generated(9),
             module: local(2),
             name: "product".to_owned(),
             fields: Vec::new(),
         },
         TransactionOp::CreateSumType {
-            handle: LocalHandle::new(10),
+            symbol: DraftSymbol::generated(10),
             module: local(2),
             name: "sum".to_owned(),
             variants: vec![SumVariantDraft {
-                handle: LocalHandle::new(11),
+                symbol: DraftSymbol::generated(11),
                 name: "variant".to_owned(),
                 payload: None,
             }],
@@ -1510,7 +1514,7 @@ fn mutate_json(source: &[u8], seed: u64, case: u64) -> Vec<u8> {
     match case % 10 {
         0 => text.replacen("{", "{\"unknown\":0,", 1).into_bytes(),
         1 => text
-            .replacen("\"version\":3", "\"version\":3,\"version\":3", 1)
+            .replacen("\"version\":5", "\"version\":5,\"version\":5", 1)
             .into_bytes(),
         2 => text
             .replacen("\"request_id\":1", "\"request_id\":-1", 1)
@@ -1552,82 +1556,76 @@ fn exercise_artifact_mutation(corpus: &[Vec<u8>], seed: u64, case: u64) {
     }
 }
 
-fn encode_protocol(request: &Request) -> Vec<u8> {
+fn encode_framed_json(request_id: RequestId, request: &Request) -> Vec<u8> {
+    let body = machine::encode_request(request_id, request).expect("JSON corpus");
     let mut bytes = Vec::new();
-    protocol::write_request(&mut bytes, RequestId::new(1), request).expect("protocol corpus");
+    transport::write_request_body(&mut bytes, &body).expect("framed JSON corpus");
     bytes
 }
 
-fn mutate_protocol(source: &[u8], seed: u64, case: u64) -> Vec<u8> {
+fn mutate_framed_json(source: &[u8], seed: u64, case: u64) -> Vec<u8> {
     let mut bytes = source.to_vec();
     match case % 10 {
         0 => bytes.truncate(bytes.len().saturating_sub(1)),
         1 => return mutate_bytes(source, seed, case),
         2 if bytes.len() >= 4 => bytes[..4].copy_from_slice(&u32::MAX.to_le_bytes()),
-        3 if bytes.len() >= 6 => bytes[4..6].copy_from_slice(&u16::MAX.to_le_bytes()),
-        4 if bytes.len() >= 14 => bytes[6..14].fill(0),
-        5 if bytes.len() >= 15 => bytes[14] = 0xff,
-        6 if bytes.len() >= 49 && bytes[14] == 2 => bytes[41..49].fill(0xff),
-        6 if bytes.len() >= 47 && bytes[14] == 3 => bytes[39..47].fill(0xff),
-        7 if bytes.len() >= 50 && bytes[14] == 2 => bytes[49] = 0xff,
-        7 if bytes.len() >= 56 && bytes[14] == 3 => bytes[55] = 0xff,
-        8 => {
-            let workspace = [0xb1; 16];
-            let serial = 2_u64.to_le_bytes();
-            if let Some(index) = bytes
-                .windows(24)
-                .position(|window| window[..16] == workspace && window[16..] == serial)
-            {
-                bytes[index + 16..index + 24].fill(0);
-            } else {
-                return mutate_bytes(source, seed, case);
-            }
+        3 if bytes.len() >= 4 => {
+            let shorter =
+                u32::from_le_bytes(bytes[..4].try_into().expect("frame length")).saturating_sub(1);
+            bytes[..4].copy_from_slice(&shorter.to_le_bytes());
         }
-        9 if bytes.len() >= 23 && bytes[14] == 2 => {
-            let start = bytes.len() - 8;
-            bytes[start..].fill(0xff);
+        4 if bytes.len() >= 4 => {
+            let longer =
+                u32::from_le_bytes(bytes[..4].try_into().expect("frame length")).saturating_add(1);
+            bytes[..4].copy_from_slice(&longer.to_le_bytes());
+        }
+        5 => bytes.extend_from_slice(&[0xde]),
+        6 => bytes.extend_from_slice(source),
+        _ if bytes.len() > 4 => {
+            let body = mutate_json(&bytes[4..], seed, case);
+            bytes.clear();
+            bytes.extend_from_slice(
+                &u32::try_from(body.len())
+                    .expect("mutated JSON length")
+                    .to_le_bytes(),
+            );
+            bytes.extend_from_slice(&body);
         }
         _ => bytes.extend_from_slice(&[0xde, 0xad]),
     }
     bytes
 }
 
-fn decode_protocol_exact(bytes: &[u8]) -> crate::Result<(RequestId, Request)> {
-    let mut cursor = Cursor::new(bytes);
-    let decoded = protocol::read_request(&mut cursor)?.ok_or_else(|| {
+fn decode_framed_json_exact(bytes: &[u8]) -> crate::Result<RequestEnvelope> {
+    let mut reader = bytes;
+    let body = transport::read_request_body(&mut reader)?.ok_or_else(|| {
         crate::error::LkError::new(ErrorCode::ProtocolMalformed, "protocol request is empty")
     })?;
-    if usize::try_from(cursor.position()).ok() != Some(bytes.len()) {
-        return Err(crate::error::LkError::new(
-            ErrorCode::ProtocolMalformed,
-            "protocol request has trailing bytes",
-        ));
-    }
-    Ok(decoded)
+    machine::decode_request(&body).map_err(|error| {
+        crate::error::LkError::new(ErrorCode::ProtocolMalformed, error.to_string())
+    })
 }
 
-fn exercise_protocol_mutation(corpus: &[Vec<u8>], seed: u64, case: u64) {
+fn exercise_framed_json_mutation(corpus: &[Vec<u8>], seed: u64, case: u64) {
     let source = &corpus
         [usize::try_from((case / 10) % u64::try_from(corpus.len()).expect("len")).expect("index")];
-    let mutated = mutate_protocol(source, seed, case);
-    let first = decode_protocol_exact(&mutated);
-    let second = decode_protocol_exact(&mutated);
+    let mutated = mutate_framed_json(source, seed, case);
+    let first = decode_framed_json_exact(&mutated);
+    let second = decode_framed_json_exact(&mutated);
     match (first, second) {
-        (Ok((id, request)), Ok(repeated)) => {
-            assert_eq!((id, request.clone()), repeated);
-            let mut canonical = Vec::new();
-            protocol::write_request(&mut canonical, id, &request)
-                .expect("accepted request re-encodes");
+        (Ok(decoded), Ok(repeated)) => {
+            assert_eq!(decoded, repeated);
+            let canonical = encode_framed_json(decoded.request_id, &decoded.request);
             assert_eq!(
-                canonical, mutated,
-                "noncanonical protocol accepted: seed={seed} case={case}"
+                decode_framed_json_exact(&canonical).expect("canonical framed JSON decodes"),
+                decoded
             );
         }
         (Err(first), Err(second)) => {
             assert_eq!(first.code, second.code);
             assert_eq!(first.message, second.message);
         }
-        _ => panic!("protocol mutation classification changed: seed={seed} case={case}"),
+        _ => panic!("framed JSON mutation classification changed: seed={seed} case={case}"),
     }
 }
 
@@ -1750,84 +1748,86 @@ fn targeted_artifact_mutations(corpus: &[Vec<u8>]) -> Vec<NamedMutation> {
     mutations
 }
 
-fn targeted_protocol_mutations(corpus: &[Vec<u8>]) -> Vec<NamedMutation> {
+fn targeted_framed_json_mutations(corpus: &[Vec<u8>]) -> Vec<NamedMutation> {
     let mut mutations = Vec::new();
     for (index, source) in corpus.iter().enumerate() {
         push_mutation(
             &mut mutations,
-            format!("protocol-family-{index}-truncation"),
+            format!("framed-json-family-{index}-truncation"),
             source,
             source[..source.len() - 1].to_vec(),
         );
     }
     let source = &corpus[1];
-    let mut frame = source.clone();
-    frame[..4].copy_from_slice(&u32::MAX.to_le_bytes());
-    push_mutation(&mut mutations, "protocol-frame-length", source, frame);
-    let mut version = source.clone();
-    version[4..6].copy_from_slice(&u16::MAX.to_le_bytes());
-    push_mutation(&mut mutations, "protocol-version", source, version);
-    let mut request_id = source.clone();
-    request_id[6..14].fill(0);
+    let mut oversized = source.clone();
+    oversized[..4].copy_from_slice(&u32::MAX.to_le_bytes());
     push_mutation(
         &mut mutations,
-        "protocol-request-id-zero",
+        "framed-json-oversized-length",
         source,
-        request_id,
+        oversized,
     );
-    let mut message = source.clone();
-    message[14] = 0xff;
-    push_mutation(&mut mutations, "protocol-message-tag", source, message);
-    let mut transaction_count = source.clone();
-    transaction_count[41..49].fill(0xff);
-    push_mutation(
-        &mut mutations,
-        "protocol-transaction-count",
-        source,
-        transaction_count,
-    );
-    let mut transaction_tag = source.clone();
-    transaction_tag[49] = 0xff;
-    push_mutation(
-        &mut mutations,
-        "protocol-transaction-operation-tag",
-        source,
-        transaction_tag,
-    );
-    let main = source
-        .windows(b"main".len())
-        .position(|window| window == b"main")
-        .expect("function name");
-    let mut type_tag = source.clone();
-    type_tag[main + b"main".len()] = 0xff;
-    push_mutation(&mut mutations, "protocol-type-tag", source, type_tag);
-    let selected_count = source.len() - 12;
-    let mut selected = source.clone();
-    selected[selected_count..selected_count + 8].fill(0xff);
-    push_mutation(&mut mutations, "protocol-selected-count", source, selected);
 
-    let query = &corpus[2];
-    let mut query_count = query.clone();
-    query_count[39..47].fill(0xff);
-    push_mutation(&mut mutations, "protocol-query-count", query, query_count);
-    let mut query_tag = query.clone();
-    query_tag[55] = 0xff;
-    push_mutation(&mut mutations, "protocol-query-tag", query, query_tag);
-    let run = &corpus[3];
-    let needle = [0xb1; 16]
-        .into_iter()
-        .chain(2_u64.to_le_bytes())
-        .collect::<Vec<_>>();
-    let node = run
-        .windows(needle.len())
-        .position(|window| window == needle)
-        .expect("run node");
-    let mut zero_node = run.clone();
-    zero_node[node + 16..node + 24].fill(0);
-    push_mutation(&mut mutations, "protocol-zero-node", run, zero_node);
-    let mut trailing = query.clone();
+    let declared = u32::from_le_bytes(source[..4].try_into().expect("frame length"));
+    let mut shorter = source.clone();
+    shorter[..4].copy_from_slice(&declared.saturating_sub(1).to_le_bytes());
+    push_mutation(
+        &mut mutations,
+        "framed-json-shorter-length",
+        source,
+        shorter,
+    );
+    let mut longer = source.clone();
+    longer[..4].copy_from_slice(&declared.saturating_add(1).to_le_bytes());
+    push_mutation(&mut mutations, "framed-json-longer-length", source, longer);
+
+    let mut trailing = source.clone();
     trailing.push(0);
-    push_mutation(&mut mutations, "protocol-trailing", query, trailing);
+    push_mutation(
+        &mut mutations,
+        "framed-json-trailing-byte",
+        source,
+        trailing,
+    );
+    let mut second = source.clone();
+    second.extend_from_slice(source);
+    push_mutation(&mut mutations, "framed-json-second-frame", source, second);
+
+    let reframe = |body: Vec<u8>| {
+        let mut framed = Vec::new();
+        transport::write_request_body(&mut framed, &body).expect("mutated framed JSON");
+        framed
+    };
+    let body = &source[4..];
+    let request_id = machine::decode_request(body)
+        .expect("framed JSON corpus body")
+        .request_id;
+    push_mutation(
+        &mut mutations,
+        "framed-json-version",
+        source,
+        reframe(replace_json(body, "\"version\":5", "\"version\":4")),
+    );
+    push_mutation(
+        &mut mutations,
+        "framed-json-zero-request-id",
+        source,
+        reframe(replace_json(
+            body,
+            &format!("\"request_id\":{}", request_id.get()),
+            "\"request_id\":0",
+        )),
+    );
+    push_mutation(
+        &mut mutations,
+        "framed-json-unknown-request",
+        source,
+        reframe(replace_json(
+            body,
+            "\"kind\":\"apply_transaction\"",
+            "\"kind\":\"unknown\"",
+        )),
+    );
     mutations
 }
 
@@ -1872,7 +1872,7 @@ fn targeted_json_mutations(requests: &[Request]) -> Vec<NamedMutation> {
         &mut mutations,
         "json-duplicate-field",
         query,
-        replace_json(query, "\"version\":4", "\"version\":4,\"version\":4"),
+        replace_json(query, "\"version\":5", "\"version\":5,\"version\":5"),
     );
     push_mutation(
         &mut mutations,
@@ -1915,18 +1915,6 @@ fn targeted_json_mutations(requests: &[Request]) -> Vec<NamedMutation> {
         run,
         replace_json(run, ":2\"", ":0\""),
     );
-    push_mutation(
-        &mut mutations,
-        "json-page-zero",
-        query,
-        replace_json(query, "\"limit\":1", "\"limit\":0"),
-    );
-    push_mutation(
-        &mut mutations,
-        "json-page-257",
-        query,
-        replace_json(query, "\"limit\":1", "\"limit\":257"),
-    );
     let mut trailing = query.clone();
     trailing.extend_from_slice(b"{}");
     push_mutation(&mut mutations, "json-trailing", query, trailing);
@@ -1950,33 +1938,18 @@ fn assert_targeted_artifact(mutation: &NamedMutation) {
     assert_eq!(first.message, second.message, "{}", mutation.name);
 }
 
-fn assert_targeted_protocol(mutation: &NamedMutation) {
-    let first = decode_protocol_exact(&mutation.bytes).expect_err(&mutation.name);
-    let second = decode_protocol_exact(&mutation.bytes).expect_err(&mutation.name);
+fn assert_targeted_framed_json(mutation: &NamedMutation) {
+    let first = decode_framed_json_exact(&mutation.bytes).expect_err(&mutation.name);
+    let second = decode_framed_json_exact(&mutation.bytes).expect_err(&mutation.name);
     assert_eq!(first.code, second.code, "{}", mutation.name);
     assert_eq!(first.message, second.message, "{}", mutation.name);
 }
 
 fn assert_targeted_json(mutation: &NamedMutation) {
-    let first = machine::decode_request(&mutation.bytes);
-    let second = machine::decode_request(&mutation.bytes);
-    match (first, second) {
-        (Ok(first), Ok(second)) => {
-            assert_eq!(first, second, "{}", mutation.name);
-            let canonical = serde_json::to_vec(&first).expect("canonical JSON");
-            assert_eq!(
-                machine::decode_request(&canonical).expect("canonical JSON decode"),
-                first,
-                "{}",
-                mutation.name
-            );
-        }
-        (Err(first), Err(second)) => {
-            assert_eq!(first.kind, second.kind, "{}", mutation.name);
-            assert_eq!(first.message, second.message, "{}", mutation.name);
-        }
-        _ => panic!("JSON mutation classification changed: {}", mutation.name),
-    }
+    let first = machine::decode_request(&mutation.bytes).expect_err(&mutation.name);
+    let second = machine::decode_request(&mutation.bytes).expect_err(&mutation.name);
+    assert_eq!(first.kind, second.kind, "{}", mutation.name);
+    assert_eq!(first.message, second.message, "{}", mutation.name);
 }
 
 #[test]
@@ -1986,9 +1959,18 @@ fn named_targeted_boundary_mutations_are_stable() {
         assert_targeted_artifact(&mutation);
     }
     let requests = request_corpus();
-    let protocol: Vec<_> = requests.iter().map(encode_protocol).collect();
-    for mutation in targeted_protocol_mutations(&protocol) {
-        assert_targeted_protocol(&mutation);
+    let framed_json: Vec<_> = requests
+        .iter()
+        .enumerate()
+        .map(|(index, request)| {
+            encode_framed_json(
+                RequestId::new(u64::try_from(index).expect("request index") + 17),
+                request,
+            )
+        })
+        .collect();
+    for mutation in targeted_framed_json_mutations(&framed_json) {
+        assert_targeted_framed_json(&mutation);
     }
     for mutation in targeted_json_mutations(&requests) {
         assert_targeted_json(&mutation);
@@ -1998,13 +1980,23 @@ fn named_targeted_boundary_mutations_are_stable() {
 fn run_boundary_mutation(seed: u64, cases: u64) {
     let artifacts = artifact_corpus();
     let requests = request_corpus();
-    let protocol: Vec<_> = requests.iter().map(encode_protocol).collect();
+    let framed_json: Vec<_> = requests
+        .iter()
+        .enumerate()
+        .map(|(index, request)| {
+            encode_framed_json(
+                RequestId::new(u64::try_from(index).expect("request index") + 41),
+                request,
+            )
+        })
+        .collect();
     let json: Vec<_> = requests
         .into_iter()
-        .map(|request| {
+        .enumerate()
+        .map(|(index, request)| {
             serde_json::to_vec(&RequestEnvelope {
                 version: machine::JSON_ENVELOPE_VERSION,
-                request_id: RequestId::new(1),
+                request_id: RequestId::new(u64::try_from(index).expect("request index") + 41),
                 request,
             })
             .expect("JSON corpus")
@@ -2014,7 +2006,7 @@ fn run_boundary_mutation(seed: u64, cases: u64) {
         let boundary_case = case / 3;
         match case % 3 {
             0 => exercise_artifact_mutation(&artifacts, seed, boundary_case),
-            1 => exercise_protocol_mutation(&protocol, seed, boundary_case),
+            1 => exercise_framed_json_mutation(&framed_json, seed, boundary_case),
             _ => exercise_json_mutation(&json, seed, boundary_case),
         }
     }

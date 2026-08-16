@@ -246,24 +246,6 @@ impl RegionRole {
             Self::MatchArm(_) => "match_arm",
         }
     }
-
-    pub const fn stable_tag(self) -> u8 {
-        match self {
-            Self::IfThen => 1,
-            Self::IfElse => 2,
-            Self::ForBody => 3,
-            Self::MatchArm(_) => 4,
-        }
-    }
-
-    pub const fn from_stable_tag(tag: u8) -> Option<Self> {
-        match tag {
-            1 => Some(Self::IfThen),
-            2 => Some(Self::IfElse),
-            3 => Some(Self::ForBody),
-            _ => None,
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]

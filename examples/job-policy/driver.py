@@ -18,12 +18,14 @@ daemon = None
 state = None
 measurements = []
 readiness_nanoseconds = []
+def draft_symbol(number):
+    return f"draft_{number}"
 
 
 def rpc(request, purpose, counted=True):
     global request_id
     request_id += 1
-    envelope = {"version": 4, "request_id": request_id, "request": request}
+    envelope = {"version": 5, "request_id": request_id, "request": request}
     encoded = json.dumps(envelope, separators=(",", ":")).encode()
     started = time.monotonic_ns()
     completed = subprocess.run(
@@ -39,7 +41,7 @@ def rpc(request, purpose, counted=True):
             f"CLI failed for {purpose} ({completed.returncode}): {completed.stderr.decode()}"
         )
     response_envelope = json.loads(completed.stdout)
-    if response_envelope.get("version") != 4:
+    if response_envelope.get("version") != 5:
         raise RuntimeError(f"response version mismatch for {purpose}")
     if response_envelope.get("request_id") != request_id:
         raise RuntimeError(f"response correlation mismatch for {purpose}")
@@ -70,8 +72,8 @@ def expect_error(response, code, target=None):
     return error
 
 
-def local(handle):
-    return {"kind": "local", "data": handle}
+def local(symbol):
+    return {"kind": "draft", "data": draft_symbol(symbol) if isinstance(symbol, int) else symbol}
 
 
 def existing(node):
@@ -82,8 +84,8 @@ def nominal(target):
     return {"nominal": target}
 
 
-def result(handle):
-    return {"kind": "operation_result", "data": {"operation": local(handle), "output": 0}}
+def result(symbol):
+    return {"kind": "operation_result", "data": {"operation": local(symbol), "output": 0}}
 
 
 def existing_result(node):
@@ -93,33 +95,44 @@ def existing_result(node):
     }
 
 
-def parameter(handle):
-    return {"kind": "function_parameter", "data": local(handle)}
+def parameter(symbol):
+    return {"kind": "function_parameter", "data": local(symbol)}
 
 
-def block_argument(handle):
-    return {"kind": "block_argument", "data": local(handle)}
+def block_argument(symbol):
+    return {"kind": "block_argument", "data": local(symbol)}
 
 
-def expression(handle, kind, data=None):
+def expression(symbol, kind, data=None):
     operation = {"kind": kind}
     if data is not None:
+        if kind == "for_i64":
+            data = dict(data)
+            data["index_symbol"] = draft_symbol(data["index_symbol"])
+            data["carried_symbol"] = draft_symbol(data["carried_symbol"])
         operation["data"] = data
-    return {"handle": handle, "operation": operation}
+    return {"symbol": draft_symbol(symbol), "operation": operation}
 
 
 def yielding(operations, value):
     return {"operations": operations, "yield_value": value}
 
 
-def function(handle, name, parameters, result_type, operations, return_value):
+def function(symbol, name, parameters, result_type, operations, return_value):
+    direct_parameters = [
+        {
+            **parameter_value,
+            "symbol": draft_symbol(parameter_value["symbol"]),
+        }
+        for parameter_value in parameters
+    ]
     return {
         "kind": "create_function",
         "data": {
-            "handle": handle,
+            "symbol": draft_symbol(symbol),
             "module": local(2),
             "name": name,
-            "parameters": parameters,
+            "parameters": direct_parameters,
             "result": result_type,
             "body": {"operations": operations, "return_value": return_value},
         },
@@ -130,10 +143,10 @@ def field(field_handle, value):
     return {"field": local(field_handle), "value": value}
 
 
-def arm(variant_handle, body, payload_handle=None):
+def arm(variant_handle, body, payload_symbol=None):
     value = {"variant": local(variant_handle), "body": body}
-    if payload_handle is not None:
-        value["payload_handle"] = payload_handle
+    if payload_symbol is not None:
+        value["payload_symbol"] = draft_symbol(payload_symbol)
     return value
 
 
@@ -280,7 +293,7 @@ def triangular_function():
     return function(
         200,
         "triangular",
-        [{"handle": 201, "name": "n", "ty": "i64"}],
+        [{"symbol": 201, "name": "n", "ty": "i64"}],
         "i64",
         [
             expression(202, "const_i64", 0),
@@ -290,8 +303,8 @@ def triangular_function():
                 "step": 1,
                 "initial": result(202),
                 "carried": "i64",
-                "index_handle": 203,
-                "carried_handle": 204,
+                "index_symbol": 203,
+                "carried_symbol": 204,
                 "body": yielding([
                     expression(205, "add_i64", {
                         "lhs": block_argument(204),
@@ -308,7 +321,7 @@ def target_bonus_function():
     return function(
         210,
         "target_bonus",
-        [{"handle": 211, "name": "target", "ty": nominal(local(120))}],
+        [{"symbol": 211, "name": "target", "ty": nominal(local(120))}],
         "i64",
         [expression(212, "match_sum", {
             "scrutinee": parameter(211),
@@ -327,7 +340,7 @@ def mode_bonus_function():
     return function(
         220,
         "mode_bonus",
-        [{"handle": 221, "name": "mode", "ty": nominal(local(130))}],
+        [{"symbol": 221, "name": "mode", "ty": nominal(local(130))}],
         "i64",
         [expression(222, "match_sum", {
             "scrutinee": parameter(221),
@@ -347,9 +360,9 @@ def score_function():
         230,
         "score",
         [
-            {"handle": 231, "name": "resources", "ty": nominal(local(100))},
-            {"handle": 232, "name": "target", "ty": nominal(local(120))},
-            {"handle": 233, "name": "mode", "ty": nominal(local(130))},
+            {"symbol": 231, "name": "resources", "ty": nominal(local(100))},
+            {"symbol": 232, "name": "target", "ty": nominal(local(120))},
+            {"symbol": 233, "name": "mode", "ty": nominal(local(130))},
         ],
         "i64",
         [
@@ -407,9 +420,9 @@ def finalize_function():
         260,
         "finalize",
         [
-            {"handle": 261, "name": "resources", "ty": nominal(local(100))},
-            {"handle": 262, "name": "target", "ty": nominal(local(120))},
-            {"handle": 263, "name": "mode", "ty": nominal(local(130))},
+            {"symbol": 261, "name": "resources", "ty": nominal(local(100))},
+            {"symbol": 262, "name": "target", "ty": nominal(local(120))},
+            {"symbol": 263, "name": "mode", "ty": nominal(local(130))},
         ],
         nominal(local(160)),
         [expression(264, "match_sum", {
@@ -464,8 +477,8 @@ def decide_function():
         300,
         "decide",
         [
-            {"handle": 301, "name": "job", "ty": nominal(local(140))},
-            {"handle": 302, "name": "limits", "ty": nominal(local(110))},
+            {"symbol": 301, "name": "job", "ty": nominal(local(140))},
+            {"symbol": 302, "name": "limits", "ty": nominal(local(110))},
         ],
         nominal(local(160)),
         [
@@ -521,9 +534,9 @@ def main_function():
 
 
 def application_operations():
-    return [
-        {"kind": "create_package", "data": {"handle": 1, "name": "job-policy"}},
-        {"kind": "create_module", "data": {"handle": 2, "package": local(1), "name": "root"}},
+    operations = [
+        {"kind": "create_package", "data": {"symbol": draft_symbol(1), "name": "job-policy"}},
+        {"kind": "create_module", "data": {"symbol": draft_symbol(2), "package": local(1), "name": "root"}},
         triangular_function(),
         target_bonus_function(),
         mode_bonus_function(),
@@ -532,58 +545,59 @@ def application_operations():
         decide_function(),
         main_function(),
         {"kind": "create_product_type", "data": {
-            "handle": 100, "module": local(2), "name": "Resources", "fields": [
-                {"handle": 101, "name": "cpu", "ty": "i64"},
-                {"handle": 102, "name": "memory", "ty": "i64"},
-                {"handle": 103, "name": "trusted", "ty": "bool"},
+            "symbol": draft_symbol(100), "module": local(2), "name": "Resources", "fields": [
+                {"symbol": draft_symbol(101), "name": "cpu", "ty": "i64"},
+                {"symbol": draft_symbol(102), "name": "memory", "ty": "i64"},
+                {"symbol": draft_symbol(103), "name": "trusted", "ty": "bool"},
             ],
         }},
         {"kind": "create_product_type", "data": {
-            "handle": 110, "module": local(2), "name": "Limits", "fields": [
-                {"handle": 111, "name": "cpu", "ty": "i64"},
-                {"handle": 112, "name": "memory", "ty": "i64"},
+            "symbol": draft_symbol(110), "module": local(2), "name": "Limits", "fields": [
+                {"symbol": draft_symbol(111), "name": "cpu", "ty": "i64"},
+                {"symbol": draft_symbol(112), "name": "memory", "ty": "i64"},
             ],
         }},
         {"kind": "create_sum_type", "data": {
-            "handle": 120, "module": local(2), "name": "Target", "variants": [
-                {"handle": 121, "name": "linux_x64"},
-                {"handle": 122, "name": "wasm"},
-                {"handle": 123, "name": "unsupported"},
+            "symbol": draft_symbol(120), "module": local(2), "name": "Target", "variants": [
+                {"symbol": draft_symbol(121), "name": "linux_x64"},
+                {"symbol": draft_symbol(122), "name": "wasm"},
+                {"symbol": draft_symbol(123), "name": "unsupported"},
             ],
         }},
         {"kind": "create_sum_type", "data": {
-            "handle": 130, "module": local(2), "name": "Mode", "variants": [
-                {"handle": 131, "name": "check"},
-                {"handle": 132, "name": "build"},
-                {"handle": 133, "name": "release"},
+            "symbol": draft_symbol(130), "module": local(2), "name": "Mode", "variants": [
+                {"symbol": draft_symbol(131), "name": "check"},
+                {"symbol": draft_symbol(132), "name": "build"},
+                {"symbol": draft_symbol(133), "name": "release"},
             ],
         }},
         {"kind": "create_product_type", "data": {
-            "handle": 140, "module": local(2), "name": "Job", "fields": [
-                {"handle": 141, "name": "resources", "ty": nominal(local(100))},
-                {"handle": 142, "name": "target", "ty": nominal(local(120))},
-                {"handle": 143, "name": "mode", "ty": nominal(local(130))},
+            "symbol": draft_symbol(140), "module": local(2), "name": "Job", "fields": [
+                {"symbol": draft_symbol(141), "name": "resources", "ty": nominal(local(100))},
+                {"symbol": draft_symbol(142), "name": "target", "ty": nominal(local(120))},
+                {"symbol": draft_symbol(143), "name": "mode", "ty": nominal(local(130))},
             ],
         }},
         {"kind": "create_sum_type", "data": {
-            "handle": 150, "module": local(2), "name": "RejectReason", "variants": [
-                {"handle": 151, "name": "cpu_limit"},
-                {"handle": 152, "name": "memory_limit"},
-                {"handle": 153, "name": "unsupported_target"},
-                {"handle": 154, "name": "untrusted_release"},
+            "symbol": draft_symbol(150), "module": local(2), "name": "RejectReason", "variants": [
+                {"symbol": draft_symbol(151), "name": "cpu_limit"},
+                {"symbol": draft_symbol(152), "name": "memory_limit"},
+                {"symbol": draft_symbol(153), "name": "unsupported_target"},
+                {"symbol": draft_symbol(154), "name": "untrusted_release"},
             ],
         }},
         {"kind": "create_sum_type", "data": {
-            "handle": 160, "module": local(2), "name": "Decision", "variants": [
-                {"handle": 161, "name": "accept", "payload": "i64"},
-                {"handle": 162, "name": "reject", "payload": nominal(local(150))},
+            "symbol": draft_symbol(160), "module": local(2), "name": "Decision", "variants": [
+                {"symbol": draft_symbol(161), "name": "accept", "payload": "i64"},
+                {"symbol": draft_symbol(162), "name": "reject", "payload": nominal(local(150))},
             ],
         }},
         {"kind": "set_entry_function", "data": {"package": local(1), "function": local(400)}},
     ]
+    return operations
 
 
-def selected_handles():
+def selected_symbols():
     return [
         100, 101, 102, 103,
         110, 111, 112,
@@ -597,18 +611,18 @@ def selected_handles():
 
 
 def count_program_facts(value):
-    handles = set()
+    symbols = set()
     expression_count = 0
     yield_count = 0
 
     def visit(item):
         nonlocal expression_count, yield_count
         if isinstance(item, dict):
-            for key in ("handle", "index_handle", "carried_handle", "payload_handle"):
+            for key in ("symbol", "index_symbol", "carried_symbol", "payload_symbol"):
                 candidate = item.get(key)
-                if isinstance(candidate, int):
-                    handles.add(candidate)
-            if "operation" in item and "handle" in item:
+                if isinstance(candidate, str):
+                    symbols.add(candidate)
+            if "operation" in item and "symbol" in item:
                 expression_count += 1
             if "yield_value" in item and "operations" in item:
                 yield_count += 1
@@ -624,7 +638,7 @@ def count_program_facts(value):
         1 for item in value if item.get("kind") in ("create_product_type", "create_sum_type")
     )
     return {
-        "explicit_handles": len(handles),
+        "explicit_symbols": len(symbols),
         "explicit_expressions": expression_count,
         "canonical_operations": expression_count + yield_count + function_count,
         "declarations": declaration_count,
@@ -632,7 +646,7 @@ def count_program_facts(value):
     }
 
 
-def apply_request(workspace, base_revision, mode, operations, return_handles=None, key=None):
+def apply_request(workspace, base_revision, mode, operations, return_symbols=None, key=None):
     transaction = {
         "workspace": workspace,
         "base_revision": base_revision,
@@ -645,7 +659,9 @@ def apply_request(workspace, base_revision, mode, operations, return_handles=Non
         "kind": "apply_transaction",
         "data": {
             "transaction": transaction,
-            "response": {"return_handles": return_handles or []},
+            "response": {
+                "return_symbols": [draft_symbol(symbol) if isinstance(symbol, int) else symbol for symbol in (return_symbols or [])]
+            },
         },
     }
 
@@ -655,7 +671,7 @@ def allocation_probe(workspace, purpose):
         workspace,
         1,
         "validate_only",
-        [{"kind": "create_package", "data": {"handle": 900, "name": "allocation-probe"}}],
+        [{"kind": "create_package", "data": {"symbol": draft_symbol(900), "name": "allocation-probe"}}],
         [900],
     ), purpose), "transaction_receipt")
 
@@ -733,14 +749,14 @@ def member_by_id(nominal_result, member_id):
 
 def assert_selected_nodes(workspace, revision, ids, purpose):
     queries = [
-        {"kind": "node", "data": {"node": ids[handle], "expand": False}}
-        for handle in selected_handles()
+        {"kind": "node", "data": {"node": ids[symbol], "expand": False}}
+        for symbol in selected_symbols()
     ]
     outcomes = query_batch(workspace, revision, queries, purpose)
-    for handle, outcome in zip(selected_handles(), outcomes):
+    for symbol, outcome in zip(selected_symbols(), outcomes):
         view = expect(outcome, "node")
-        if view["summary"]["node"] != ids[handle]:
-            raise RuntimeError(f"persistent identity changed for handle {handle} at revision {revision}")
+        if view["summary"]["node"] != ids[symbol]:
+            raise RuntimeError(f"persistent identity changed for symbol {symbol} at revision {revision}")
 
 
 def measurement_summary():
@@ -766,19 +782,27 @@ def execute():
             "projection": {"kind": "manifest"},
         }}, "schema_manifest"), "describe_schema"), "manifest")
         digest = manifest["digest"]
-        sections = [
-            "semantic_types_and_nodes",
-            "nominal_declarations",
-            "transactions_and_expressions",
-            "queries_and_repair",
-            "runtime_and_run",
-            "errors_and_limits",
+        roots = [
+            "create_workspace",
+            "apply_transaction",
+            "query_workspace_summary",
+            "query_node",
+            "query_blockers",
+            "query_body",
+            "query_incoming_uses",
+            "query_repair_context",
+            "query_semantic_diff",
+            "query_nominal_type",
+            "run",
+            "shutdown",
         ]
         selected_contract = expect(expect(rpc({"kind": "describe_schema", "data": {
-            "projection": {"kind": "sections", "data": {"sections": sections}},
-        }}, "task_contract_sections"), "describe_schema"), "sections")
-        if selected_contract["digest"] != digest or len(selected_contract["sections"]) != len(sections):
+            "projection": {"kind": "roots", "data": {"roots": roots}},
+        }}, "task_contract_roots"), "describe_schema"), "roots")
+        if selected_contract["digest"] != digest or len(selected_contract["roots"]) != len(roots):
             raise RuntimeError("task contract projection mismatch")
+        if len(selected_contract["definitions"]) <= len(roots):
+            raise RuntimeError("task contract closure is incomplete")
         unchanged = expect(expect(rpc({"kind": "describe_schema", "data": {
             "projection": {"kind": "full"}, "known_digest": digest,
         }}, "known_fingerprint_unchanged"), "describe_schema"), "unchanged")
@@ -793,11 +817,14 @@ def execute():
             0,
             "commit",
             operations,
-            selected_handles(),
+            selected_symbols(),
             "91919191919191919191919191919191",
         ), "job_policy_incomplete_creation"), "transaction_receipt")
-        ids = {handle: node for handle, node in receipt["returned_bindings"]}
-        if set(ids) != set(selected_handles()):
+        ids = {
+            int(symbol.removeprefix("draft_")): node
+            for symbol, node in receipt["returned_bindings"]
+        }
+        if set(ids) != set(selected_symbols()):
             raise RuntimeError("selected binding set does not match the driver need")
         if receipt["revision"] != 1 or receipt["complete_after"]:
             raise RuntimeError("initial job policy must be saved and incomplete")
@@ -923,7 +950,7 @@ def execute():
         type_outcomes = query_batch(
             workspace,
             2,
-            [nominal_type_query(ids[handle]) for handle in type_handles],
+            [nominal_type_query(ids[symbol]) for symbol in type_handles],
             "runtime_named_type_context",
         )
         type_contexts = [expect(outcome, "nominal_type") for outcome in type_outcomes]
@@ -1014,7 +1041,13 @@ def execute():
         program_facts = count_program_facts(operations)
         stop_daemon("final_shutdown")
         summary = {
-            "schema": {"manifest": True, "sections": len(sections), "unchanged": True, "digest": digest},
+            "schema": {
+                "manifest": True,
+                "roots": len(roots),
+                "definitions": len(selected_contract["definitions"]),
+                "unchanged": True,
+                "digest": digest,
+            },
             "revisions": {"incomplete": 1, "repaired": 2, "renamed": 3},
             "repair": {
                 "rejected_code": invalid_error["code"],
@@ -1035,7 +1068,7 @@ def execute():
                 "transaction_operations": len(operations),
                 "selected_bindings": len(ids),
                 "created_nodes": receipt["created_count"],
-                "implicit_nodes": receipt["created_count"] - program_facts["explicit_handles"],
+                "implicit_nodes": receipt["created_count"] - program_facts["explicit_symbols"],
                 "canonical_nodes": summary_two["node_count"],
                 **program_facts,
                 "expected_rejected_proposals": 1,

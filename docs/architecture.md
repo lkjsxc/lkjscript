@@ -4,12 +4,12 @@
 
 ```text
 strict JSON CLI projection (optional)
-    -> typed protocol-v4 frame over private Unix socket
+    -> strict protocol-v5 JSON frame over private Unix socket
     -> synchronous lkjscriptd
     -> one DurableWorkspace writer per workspace
     -> staged typed transaction over immutable Snapshot
     -> full deterministic validation and derived diff
-    -> preflighted compact receipt + artifact + LKJHEAD3
+    -> preflighted compact receipt + artifact + LKJHEAD4
     -> durable immutable revision, then in-memory publication
     -> revision-bound scan query or direct SPG-to-Core-IR lowering
     -> Core IR verifier -> interpreter -> typed response
@@ -21,9 +21,14 @@ and saved history; `schema.rs` owns closed node contracts and static operation d
 staging, transaction-local nominal target resolution, and compact receipts; `validate.rs` owns graph
 acceptance; `type_layout.rs` owns iterative by-value dependency validation and checked derived
 layouts; `diff.rs` owns deterministic change facts/digests; `artifact.rs` owns canonical semantic
-bytes; `persistence.rs` owns durable publication; `protocol.rs` owns version-4 IPC types/framing; `query.rs` owns derived scan queries and
-repair-context composition; `machine.rs` owns strict bounded JSON projection and executable schema
-description; `compile.rs` iteratively discovers exact direct-call and nominal-type closures and lowers
+bytes; `persistence.rs` owns durable publication; `protocol.rs` owns closed logical request/response types;
+`transport.rs` owns protocol-v5 length framing and the production client; `query.rs` owns derived scan queries and
+repair-context composition; `machine_contract.rs` owns closed schema-discovery DTOs and
+`machine.rs` owns strict bounded JSON projection, the executable definition catalogue, and iterative
+root closure, including one shared control template and one shared query template projected from the
+executable broad descriptors; compact endpoint bindings select exact leaf variants without copied
+wrapper forests; `compile.rs` iteratively discovers exact
+direct-call and nominal-type closures and lowers
 structured regions and aggregates; private `core_ir.rs` owns the dense type table, derived layouts,
 multi-function CFG and aggregate/switch contracts, and independent verification; `interpret.rs` owns
 public revision-bound runtime-value validation plus the one flat-cell explicit-frame runtime route.
@@ -55,24 +60,28 @@ ranking. There is deliberately no reverse-reference index, query engine, or cach
 remain both implementation and oracle until representative repeated cost justifies a narrow index.
 
 The generic CLI is not another service. Its RPC command strictly decodes one bounded JSON envelope,
-converts to the same closed Rust request, sends one private binary IPC request, and strictly encodes
-one typed response. JSON never becomes semantic state. The separate local `schema` command and daemon
+sends that same closed typed representation in one private length-framed IPC request, and strictly
+encodes one typed response. JSON never becomes semantic state. The separate local `schema` command and daemon
 `DescribeSchema` derive a
-compact manifest, canonical digest, exact multi-section projections, explicit full projection, and
-matching-digest `unchanged` response from one complete executable description and the protocol's
-canonical schema-facts encoder. Projection is recomputed per request; there is no schema cache,
-persisted response, or separately maintained schema table.
+compact manifest, canonical digest, exact root projections with transitive named-definition closure,
+explicit full projection, and matching-digest `unchanged` response from one complete executable
+description. Root traversal uses an iterative worklist and validates every dependency before a
+matching digest can short-circuit output. Projection is recomputed per request; there is no schema
+cache, persisted response, root-to-dependency shadow table, or separately maintained schema table.
 
 ## Durability and bounded acknowledgement
 
 A workspace retains immutable `revisions/REVISION.lkjscript` files and one compact non-semantic
-`LKJHEAD3`. HEAD is independently capped at 16 KiB and stores head revision/hash plus at most one
+`LKJHEAD4`. HEAD is independently capped at 16 KiB and stores head revision/hash plus at most one
 compact keyed fingerprint/receipt. It stores no full semantic diff or full allocation map; unkeyed
-commits preserve an existing keyed replay record. Any non-`LKJHEAD3` bytes, including prior
-`LKJHEAD1` and `LKJHEAD2` formats, reject without a compatibility reader.
+commits preserve an existing keyed replay record. Any non-`LKJHEAD4` bytes, including `LKJHEAD3`,
+reject without a compatibility reader. The direct cutover prevents canonical-JSON/v5 fingerprints
+from being interpreted under the prior durable identity.
 
-Commit preflights exact artifact, HEAD, and protocol response bytes before publication. It writes
-and flushes a revision temporary file, renames and syncs it, writes/flushes a HEAD temporary file,
+Workspace creation preflights its exact correlated `WorkspaceCreated` response from the canonical
+initial snapshot before creating durable workspace files. A transaction commit preflights exact
+artifact, HEAD, and protocol response bytes before publication. It writes and flushes a revision
+temporary file, renames and syncs it, writes/flushes a HEAD temporary file,
 atomically replaces and syncs HEAD, then publishes the in-memory `Arc<Snapshot>` and acknowledges.
 Failures before authoritative HEAD leave the prior state authoritative. If publication and rollback
 make outcome unknowable, the daemon reports `CommitOutcomeUnknown` and stops.
@@ -85,9 +94,10 @@ Corrupt or ambiguous durable state is rejected, not repaired heuristically.
 ## Trust boundaries
 
 - **JSON stdin/stdout:** 8 MiB input, bounded nesting, strict fields/variants/canonical IDs/trailing
-  policy; streaming 32 MiB output cap and bounded boundary errors;
-- **binary IPC:** private socket permissions/peer filesystem boundary, checked frame/counts/tags,
-  request correlation, request-side EOF before dispatch, and response-side EOF before acceptance;
+  policy; streaming 32 MiB output cap and boundary-error messages capped at 1,024 UTF-8 bytes;
+- **framed JSON IPC:** private socket permissions/peer filesystem boundary, checked lengths before
+  allocation, strict envelopes, request correlation, request-side EOF before dispatch, response-side
+  EOF before acceptance, and absolute connection deadlines;
 - **artifact and HEAD bytes:** separate bounded canonical decoders, hashes/checksums, graph/history
   validation, strict trailing-byte policy;
 - **agent proposals:** untrusted model output reaches deterministic validators only as closed typed requests;

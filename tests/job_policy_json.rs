@@ -1,7 +1,6 @@
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 
 use lkjscript::machine::{RequestEnvelope, ResponseEnvelope};
-use lkjscript::protocol::{encoded_request_size, encoded_response_size};
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -73,8 +72,8 @@ fn job_policy_agent_interaction_cost_measurement() {
     let mut rows = Vec::new();
     let mut json_request_total = 0_u64;
     let mut json_response_total = 0_u64;
-    let mut binary_request_total = 0_usize;
-    let mut binary_response_total = 0_usize;
+    let mut ipc_request_frame_total = 0_usize;
+    let mut ipc_response_frame_total = 0_usize;
     let mut wall_total = 0_u64;
     let mut counted_rows = 0_usize;
     let mut lifecycle_rows = 0_usize;
@@ -85,10 +84,14 @@ fn job_policy_agent_interaction_cost_measurement() {
         let response: ResponseEnvelope =
             serde_json::from_value(record["response"].clone()).expect("typed measured response");
         assert_eq!(request.request_id, response.request_id);
-        let binary_request = encoded_request_size(request.request_id, &request.request)
-            .expect("measured binary request size");
-        let binary_response = encoded_response_size(response.request_id, &response.response)
-            .expect("measured binary response size");
+        let ipc_request_frame = serde_json::to_vec(&request)
+            .expect("measured request JSON")
+            .len()
+            + u32::BITS as usize / 8;
+        let ipc_response_frame = serde_json::to_vec(&response)
+            .expect("measured response JSON")
+            .len()
+            + u32::BITS as usize / 8;
         let counted = record["counted"].as_bool().expect("counted flag");
         if counted {
             counted_rows += 1;
@@ -98,8 +101,8 @@ fn job_policy_agent_interaction_cost_measurement() {
             json_response_total += record["json_response_bytes"]
                 .as_u64()
                 .expect("JSON response bytes");
-            binary_request_total += binary_request;
-            binary_response_total += binary_response;
+            ipc_request_frame_total += ipc_request_frame;
+            ipc_response_frame_total += ipc_response_frame;
             wall_total += record["elapsed_nanoseconds"]
                 .as_u64()
                 .expect("CLI wall nanoseconds");
@@ -121,7 +124,7 @@ fn job_policy_agent_interaction_cost_measurement() {
             "query_batch_result" => response_json["data"]["results"]
                 .as_array()
                 .map_or(0, Vec::len),
-            "describe_schema" => response_json["data"]["data"]["sections"]
+            "describe_schema" => response_json["data"]["data"]["definitions"]
                 .as_array()
                 .map_or(1, Vec::len),
             _ => 1,
@@ -138,8 +141,8 @@ fn job_policy_agent_interaction_cost_measurement() {
             "counted": counted,
             "json_request_bytes": record["json_request_bytes"],
             "json_response_bytes": record["json_response_bytes"],
-            "binary_request_bytes": binary_request,
-            "binary_response_bytes": binary_response,
+            "ipc_request_frame_bytes": ipc_request_frame,
+            "ipc_response_frame_bytes": ipc_response_frame,
             "cli_daemon_wall_nanoseconds": record["elapsed_nanoseconds"],
             "semantic_outcome": semantic_outcome,
             "returned_items": returned_items,
@@ -184,8 +187,8 @@ fn job_policy_agent_interaction_cost_measurement() {
         "totals": {
             "json_request_bytes": summary["interaction"]["json_request_bytes"],
             "json_response_bytes": summary["interaction"]["json_response_bytes"],
-            "binary_request_bytes": binary_request_total,
-            "binary_response_bytes": binary_response_total,
+            "ipc_request_frame_bytes": ipc_request_frame_total,
+            "ipc_response_frame_bytes": ipc_response_frame_total,
             "cli_launches": summary["interaction"]["cli_launches"],
             "daemon_round_trips": summary["interaction"]["daemon_round_trips"],
             "lifecycle_cli_launches": summary["interaction"]["lifecycle_cli_launches"],
