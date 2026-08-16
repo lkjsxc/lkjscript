@@ -416,6 +416,11 @@ pub struct CodeFamilyDescription {
 #[serde(deny_unknown_fields)]
 pub struct StructuredAuthoringPolicyDescription {
     pub allocation_order: String,
+    pub inline_expression_variants: Vec<String>,
+    pub inline_holes_allowed: bool,
+    pub inline_region_operations_allowed: bool,
+    pub maintenance_accepts_inline_values: bool,
+    pub nesting_metric: String,
     pub explicit_symbols_are_selectable: bool,
     pub implicit_symbols_are_selectable: bool,
     pub implicit_node_kinds: Vec<NodeKind>,
@@ -680,6 +685,11 @@ pub struct StructuredAuthoringDescription {
     pub value_tagging: String,
     pub type_tagging: String,
     pub allocation_order: String,
+    pub inline_expression_variants: Vec<String>,
+    pub inline_holes_allowed: bool,
+    pub inline_region_operations_allowed: bool,
+    pub maintenance_accepts_inline_values: bool,
+    pub nesting_metric: String,
     pub explicit_symbols_are_selectable: bool,
     pub implicit_symbols_are_selectable: bool,
     pub implicit_node_kinds: Vec<NodeKind>,

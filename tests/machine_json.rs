@@ -50,7 +50,8 @@ fn every_closed_machine_variant_round_trips() {
     for value in [
         ValueDraft::FunctionParameter(existing),
         ValueDraft::BlockArgument(local),
-        value,
+        value.clone(),
+        ValueDraft::InlineExpression(Box::new(ExpressionKindDraft::ConstI64(1))),
     ] {
         round_trip(&value);
     }
@@ -68,53 +69,57 @@ fn every_closed_machine_variant_round_trips() {
         OperationDraft::ConstI64(1),
         OperationDraft::ConstBool(true),
         OperationDraft::AddI64 {
-            lhs: value,
-            rhs: value,
+            lhs: value.clone(),
+            rhs: value.clone(),
         },
         OperationDraft::LtI64 {
-            lhs: value,
-            rhs: value,
+            lhs: value.clone(),
+            rhs: value.clone(),
         },
         OperationDraft::Call {
             function: existing,
-            arguments: vec![value],
+            arguments: vec![value.clone()],
         },
         OperationDraft::Hole {
             expected: SemanticType::I64.into(),
         },
         OperationDraft::If {
-            condition: value,
+            condition: value.clone(),
             result: TypeDraft::I64,
             then_region: existing,
             else_region: local,
         },
         OperationDraft::ForI64 {
-            start: value,
-            end_exclusive: value,
+            start: value.clone(),
+            end_exclusive: value.clone(),
             step: 1,
-            initial: value,
+            initial: value.clone(),
             carried: TypeDraft::I64,
             body_region: local,
         },
-        OperationDraft::Return { value },
-        OperationDraft::Yield { value },
+        OperationDraft::Return {
+            value: value.clone(),
+        },
+        OperationDraft::Yield {
+            value: value.clone(),
+        },
         OperationDraft::ConstructProduct {
             product: existing,
             fields: vec![ProductFieldValueDraft {
                 field: local,
-                value,
+                value: value.clone(),
             }],
         },
         OperationDraft::ProjectField {
-            value,
+            value: value.clone(),
             field: existing,
         },
         OperationDraft::ConstructVariant {
             variant: existing,
-            payload: Some(value),
+            payload: Some(value.clone()),
         },
         OperationDraft::MatchSum {
-            scrutinee: value,
+            scrutinee: value.clone(),
             result: TypeDraft::I64,
             arms: vec![MatchArmOperationDraft {
                 variant: existing,
@@ -142,31 +147,31 @@ fn every_closed_machine_variant_round_trips() {
         ExpressionKindDraft::ConstBool(true),
         ExpressionKindDraft::ConstI64(1),
         ExpressionKindDraft::AddI64 {
-            lhs: value,
-            rhs: value,
+            lhs: value.clone(),
+            rhs: value.clone(),
         },
         ExpressionKindDraft::LtI64 {
-            lhs: value,
-            rhs: value,
+            lhs: value.clone(),
+            rhs: value.clone(),
         },
         ExpressionKindDraft::Call {
             function: local,
-            arguments: vec![value],
+            arguments: vec![value.clone()],
         },
         ExpressionKindDraft::Hole {
             expected: SemanticType::I64.into(),
         },
         ExpressionKindDraft::If {
-            condition: value,
+            condition: value.clone(),
             result: SemanticType::I64.into(),
             then_body: yielding(30),
             else_body: yielding(31),
         },
         ExpressionKindDraft::ForI64 {
-            start: value,
-            end_exclusive: value,
+            start: value.clone(),
+            end_exclusive: value.clone(),
             step: 1,
-            initial: value,
+            initial: value.clone(),
             carried: SemanticType::I64.into(),
             index_symbol: DraftSymbol::new("s32"),
             carried_symbol: DraftSymbol::new("s33"),
@@ -176,19 +181,19 @@ fn every_closed_machine_variant_round_trips() {
             product: existing,
             fields: vec![ProductFieldValueDraft {
                 field: local,
-                value,
+                value: value.clone(),
             }],
         },
         ExpressionKindDraft::ProjectField {
-            value,
+            value: value.clone(),
             field: existing,
         },
         ExpressionKindDraft::ConstructVariant {
             variant: existing,
-            payload: Some(value),
+            payload: Some(value.clone()),
         },
         ExpressionKindDraft::MatchSum {
-            scrutinee: value,
+            scrutinee: value.clone(),
             result: TypeDraft::I64,
             arms: vec![MatchArmDraft {
                 variant: existing,
@@ -347,7 +352,7 @@ fn every_closed_machine_variant_round_trips() {
         TransactionOp::ReplaceOperand {
             operation: existing,
             index: 1,
-            value,
+            value: value.clone(),
         },
         TransactionOp::DeleteOwnedSubtree { root: existing },
         TransactionOp::RefineHole {
@@ -995,13 +1000,20 @@ fn strict_json_rejects_malformed_shapes_values_and_limits() {
     ] {
         assert!(serde_json::from_str::<OperationDraft>(malformed).is_err());
     }
+    for malformed in [
+        r#"{"kind":"inline_expression"}"#,
+        r#"{"kind":"inline_expression","data":null}"#,
+        r#"{"kind":"inline_expression","data":{"kind":"const_i64","data":1,"extra":0}}"#,
+    ] {
+        assert!(serde_json::from_str::<ValueDraft>(malformed).is_err());
+    }
     let workspace = WorkspaceId::from_bytes([0xab; 16]);
     let valid = format!(
-        "{{\"version\":5,\"request_id\":1,\"request\":{{\"kind\":\"query_batch\",\"data\":{{\"workspace\":\"{workspace}\",\"revision\":0,\"queries\":[{{\"id\":1,\"query\":{{\"kind\":\"blockers\",\"data\":{{\"page\":{{\"limit\":1}}}}}}}}]}}}}}}"
+        "{{\"version\":6,\"request_id\":1,\"request\":{{\"kind\":\"query_batch\",\"data\":{{\"workspace\":\"{workspace}\",\"revision\":0,\"queries\":[{{\"id\":1,\"query\":{{\"kind\":\"blockers\",\"data\":{{\"page\":{{\"limit\":1}}}}}}}}]}}}}}}"
     );
     assert!(decode_request(valid.as_bytes()).is_ok());
     let invalid = [
-        valid.replacen("\"version\":5", "\"version\":4", 1),
+        valid.replacen("\"version\":6", "\"version\":5", 1),
         valid.replacen("\"request_id\":1", "\"request_id\":0", 1),
         valid.replacen("\"request_id\":1", "\"request_id\":-1", 1),
         valid.replacen("\"request_id\":1", "\"request_id\":18446744073709551616", 1),

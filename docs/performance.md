@@ -1,5 +1,194 @@
 # Performance evidence
 
+## Protocol-v6 inline-authoring campaign
+
+The campaign began on `main` at `66e45c69143c1a1720e9ccc2b6682786f9475c8b`
+(`Complete agent-facing control plane cutover`) with only the delivered root-policy replacement and
+campaign prompt present in the worktree. The verified environment was stable `rustc 1.96.0` and
+`cargo 1.96.0`, Linux 7.0.0-29 x86-64, 20 available CPUs, a 32 GiB cgroup memory ceiling, 8 MiB
+process stack limit, and ZFS storage. `/usr/bin/time`, Miri, `cargo fuzz`, provider token classes, and
+provider price telemetry were unavailable. Wall observations below use Python monotonic clocks around
+the public CLI and are single warm-cache observations, not benchmark distributions.
+
+The prior root policy was 1,060 lines and 37,461 bytes. The delivered durable replacement is 541
+lines and 30,252 bytes, a reduction of 519 lines and 7,209 bytes without removing semantic,
+durability, safety, or evidence obligations. The one-time campaign prompt is 4,606 lines and 122,195
+bytes and is not permanent policy.
+
+### Expression decision
+
+The sealed proposal contained 60 expression results: 57 had one semantic use, 56 were both one-use
+and unselected, 12 owned regions, one was the selected repairable hole, and 44 were descriptor-eligible
+regionless complete expressions. The decision used the following scale: `++` strongly favorable,
+`+` favorable, `0` neutral or workload-dependent, `-` unfavorable, and `--` disqualifying for this
+milestone.
+
+| Alternative | One authority / validator reuse | Determinism, identity, repair | Agent cost | Depth/error safety | Implementation and reversal |
+|---|---:|---:|---:|---:|---:|
+| A. explicit only | `++` | `++` | `--` measured labels and bytes | `++` | `++` |
+| B. every expression recursively inline | `+` | `-` for holes and owned regions | `++` | `-` mixed region/path closure | `-` |
+| C. complete regionless inline values | `++` | `++` | `++` for 44 measured values | `++` with one worklist | `+` |
+| D. expression-local `let` | `-` proposal mini-language | `0` | `-` adds scope and names | `-` | `--` |
+| E. embedded authoritative terms | `--` authority/artifact change | `--` history and promotion | `+` possible storage savings | `-` | `--` |
+| F. textual import | `-` second authoring grammar | `-` source-position pressure | `0` unmeasured | `-` parser diagnostics | `--` |
+
+Alternative C was retained. Eligibility is derived from the executable operation descriptors:
+`const_unit`, `const_bool`, `const_i64`, `add_i64`, `lt_i64`, `call`, `construct_product`,
+`project_field`, and `construct_variant`. `hole`, `if`, `for_i64`, and `match_sum` remain explicit.
+The same iterative event worklist normalizes inline children left-to-right before the parent; no
+nested proposal persists. Reversal remains required if later workloads show materially worse errors,
+contract cost, or maintenance behavior, or if region support would create a parallel validator.
+
+### Exact equal-work evidence
+
+The release-channel driver retains one sealed explicit proposal and derives an inline mode only by
+folding eligible, single-use, unselected, contiguous postorder values. Both modes use production v6
+binaries and the same 43-assertion semantic oracle.
+
+| Observation | Explicit v6 | Inline v6 | Change |
+|---|---:|---:|---:|
+| Compact proposal bytes | 22,062 | 17,974 | -4,088 (-18.5%) |
+| Framed creation-request JSON bytes | 22,247 | 18,159 | -4,088 (-18.4%) |
+| Explicit draft symbols | 111 | 67 | -44 (-39.6%) |
+| Selected bindings | 38 | 38 | 0 |
+| Created nodes | 216 | 216 | 0 |
+| Canonical nodes after repair | 217 | 217 | 0 |
+| Workflow request bytes | 45,824 | 41,736 | -4,088 |
+| Workflow response bytes, one observation | 33,296 | 33,292 | timing-field noise |
+| CLI launches / daemon connections | 29 / 29 | 29 / 29 | 0 |
+| Discovery launches / connections | 4 / 4 | 4 / 4 | 0 |
+| Rejected semantic proposals | 1 | 1 | 0 |
+| Summed workflow CLI wall, one observation | 56.0 ms | 59.2 ms | no speed claim |
+
+Both modes produced revision artifacts of 9,387, 9,411, and 9,403 bytes and an 81-byte HEAD. Their
+workspace IDs differ in black-box runs, so the driver compares node counts, serial positions,
+normalized runtime values, repair, history, laziness, restart, and artifact sizes. Independent
+same-workspace Rust tests prove exact receipt, Node-ID, snapshot-hash, node, artifact-byte,
+change-digest, validate-only prediction, and behavior equality for explicit postorder versus inline
+arithmetic, forward calls, products, projections, and variants. Product-field and match-arm request
+permutations also produce identical snapshots. Draft-symbol spelling remains allocation-irrelevant.
+
+Depth 16 and the first rejected depth 17 are retained tests. A call with 32,767 inline constant
+arguments reaches exactly the 65,536-item policy; one additional argument rejects before allocation.
+Rejected nested types return a bounded anonymous draft path and leave revision and allocator state
+unchanged. Maintenance values and anonymous holes or owned-region expressions reject.
+
+### Contract, durability, and build cost
+
+Protocol and strict JSON changed directly from v5 to v6; the machine schema is
+`lkjscript-machine-schema-v6`. Canonical request fingerprints changed domain from v5 to v6, so HEAD
+changed directly from `LKJHEAD4` to `LKJHEAD5`; old HEAD4 bytes reject. Artifact format 3 and semantic
+schema `lkjscript-spg003` did not change because normalized authoritative graphs did not change.
+
+| Schema result | v5 compact result | v6 compact result | Change | v6 production response |
+|---|---:|---:|---:|---:|
+| Manifest | 1,241 | 1,241 | 0 | 1,316 |
+| Twelve task roots, 111 definitions | 80,629 | 81,418 | +789 (+1.0%) | 81,493 |
+| Explicit full | 124,430 | 125,995 | +1,565 (+1.3%) | 126,070 |
+| Matching-digest unchanged | 105 | 105 | 0 | 180 |
+
+The growth makes the recursive `inline_expression` value, exact eligible variants, hole/region and
+maintenance restrictions, allocation order, nesting metric, and item policy discoverable from the
+same executable contract. No hand-maintained JSON schema or second request enum was added.
+
+The optimized client grew from 4,973,416 to 5,061,888 bytes (+88,472); the daemon grew from
+3,737,640 to 3,854,832 bytes (+117,192). The first coherent optimized rebuild completed in 79 seconds
+with a warm dependency cache. These are build observations, not steady-state regressions.
+
+### Codex tool-adapter experiment
+
+Installed Codex CLI 0.144.6 exposes stdio and streamable-HTTP MCP configuration, explicit
+environment values, startup and tool timeouts, and tool filtering. Its local help exposed no
+per-server sandbox, and no provider telemetry was available because this experiment did not run a
+model. A disposable standard-library Python MCP adapter was built outside the repository and deleted
+after measurement. It was 200 lines and 6,384 bytes and advertised six stable tools in a fixed order:
+schema, workspace creation, transaction, query, run, and shutdown. Their compact definitions cost
+2,084 bytes.
+
+Both a direct generic-CLI path and the adapter path completed the same warm probe: discover the
+manifest, create a workspace, commit a simple inline function, run it to exact `i64` 42, and shut
+down. Both published revision 1 with seven created nodes, returned function serial 4, reported nine
+changes, and used four daemon connections. The direct path used five visible CLI calls, six total
+processes including the daemon, 1,117 input bytes, 2,308 output bytes including the manifest, and a
+single summed child-wall observation of 25.249 ms. The adapter used five visible tools plus
+initialization and tool listing, eight MCP messages and seven responses, nine total processes,
+1,933 MCP input bytes, 5,217 MCP output bytes, the same 1,117 forwarded request bytes, 41,975 child
+stdout bytes including 39,667 bytes of internal startup discovery, and 28.826 ms summed child wall.
+
+The adapter was rejected and deleted. It reduced no semantic call, daemon connection, or forwarded
+request byte, while adding three processes, another protocol/lifecycle boundary, and weaker nested
+tool schemas. Closing those schemas without duplication would require a nontrivial executable-contract
+to JSON-Schema projection; cancellation behavior also remained unresolved. The generic CLI remains
+the active Codex surface. This is one small harness observation, not a general result about MCP.
+
+### Controlled protocol-v6 agent attempt
+
+A fresh isolated Codex subagent was started without inherited conversation context and was limited to
+the root policy, README, status, roadmap, public CLI help, public schema discovery, and production
+release binaries. Implementation, tests, examples, specifications, performance evidence, prompts,
+history, and prior payloads were forbidden. The attempt did not reach a semantic request: the agent
+started `lkjscriptd --foreground` in a blocking harness command, leaving no usable command channel or
+trial transcript. The parent stopped that exact daemon, confirmed that its temporary directory had
+already been removed, and interrupted the trial. Consequently there are no v6 agent-authored request
+bytes, labels, failures, elapsed task boundary, deterministic oracle, or provider telemetry to report.
+
+The earlier isolated protocol-v5 trial below remains evidence for the generic interface and passed its
+43-assertion oracle, while the retained production v6 explicit/inline replay proves the changed public
+contract deterministically. It is not honest to report either as a completed fresh-model v6 trial.
+The failed attempt is a harness-lifecycle limitation, not a product rejection or agent-success result.
+
+### Persistent identity economy
+
+No semantic node kind lost identity. The measured problem was proposal naming, not artifact size or
+history continuity.
+
+| Kind | Current identity reason | Campaign classification |
+|---|---|---|
+| Workspace root | namespace, allocator, entry ownership, history | enduring identity-bearing entity |
+| Package / module | ownership, lookup, entry and declaration targeting | current useful identity |
+| Product / sum declaration | nominal type equality and runtime values | enduring identity-bearing entity |
+| Product field / sum variant | owner, ordinal, construction, queries, diffs | enduring identity-bearing entity |
+| Function | direct calls, entry selection, history, queries | enduring identity-bearing entity |
+| Function parameter | value references, visibility, query and diff targeting | current useful identity |
+| Region | owned-control continuity and repair context | plausible future embedded structure, retained now |
+| Block | ordered body, insertion, visibility, repair and query target | current useful identity |
+| Block argument | loop/match value reference and repair visibility | current useful identity |
+| Operation | value uses, maintenance, holes, diffs, history | current useful identity; holes are enduring |
+| Implied terminator | block completeness and deterministic history | implementation scaffold that benefits from identity |
+| Direct reference slot | typed relation to an identity, not a separate entity | identity-free semantic slot |
+| Operation result | operation ID plus checked output index | composite reference, not a separate node |
+| Draft symbol | proposal sharing, selection, and return binding only | proposal-only label |
+| Core IR/runtime index | dense derived execution representation | derived identity only |
+
+Embedding regions, terminators, or expression terms remains a separate artifact/history/query/repair
+campaign. It requires a measured product problem and complete continuity and migration semantics.
+
+### Managed byte-value decision
+
+Managed bytes are a no-go for this campaign. A dedicated immutable `bytes` primitive is narrower than
+`sequence<T>` and more useful than fixed arrays; user-defined recursive lists already require a heap,
+and opaque host blobs introduce lifetime and authority questions. The proposed consumer is a pure
+bounded binary release-manifest classifier requiring runtime byte input, length, checked indexing or
+iteration, comparison, a derived typed decision, and explicit bounds failure. That application is not
+yet retained, so an operation set would be speculative. Implementing bytes would also require a
+semantic-schema and artifact cutover, canonical protocol encoding, Core IR object verification, and
+exact logical-versus-physical peak accounting. No managed-data code was started. Safe immutable
+backing, reference counting, arenas, stable handles, copying, and other hybrids remain open; a general
+sequence, tracing collector, universal reference counting, borrowing, and affine ownership remain
+unselected.
+
+### Final verification observation
+
+After the last code change, formatting and all-target/all-feature Clippy passed, 172 active tests
+passed with nine deliberate measurement or mutation-smoke tests ignored, and the optimized workspace
+build completed in 1 minute 19 seconds with warm dependencies. The final release binaries were
+5,061,888 bytes for `lkjscript` and 3,854,832 bytes for `lkjscriptd`; Rust source under `src/` and
+`tests/` totalled 1,854,416 bytes in the dirty campaign worktree. All three production example
+scripts passed. The retained ignored release mutation test then passed seed 1 with 10,000 cases.
+`git diff --check` passed. `cargo miri test` failed before test execution with: `the 'miri' component
+which provides the command 'cargo-miri' is not available for the 'stable-x86_64-unknown-linux-gnu'
+toolchain`. No nightly toolchain was installed.
+
 No performance leadership claim is made. These are bootstrap baselines whose purpose is to expose
 costs before optimization.
 
@@ -28,8 +217,8 @@ replay. The named machine/control boundary changed from 602,276 B (`machine.rs`,
 `machine_contract.rs` and new `transport.rs`, a reduction of 167,783 B (27.9 percent). These are
 source-byte counts, not token, latency, memory, or runtime-performance claims.
 
-Protocol/JSON and machine-schema identity are version 5. Durable artifacts remain format 3 under
-`lkjscript-spg003`; the direct non-compatible publication-record cutover is `LKJHEAD4`. Focused tests
+At that cutover, protocol/JSON and machine-schema identity were version 5. Durable artifacts remained
+format 3 under `lkjscript-spg003`; the publication record was `LKJHEAD4`. Focused tests
 cover strict framed JSON, exact response correlation, dropped keyed-response replay, response
 preflight before workspace or revision publication, restart/failure publication behavior, and
 explicit `LKJHEAD3` rejection. Release-path interaction observations are recorded below.
@@ -187,7 +376,7 @@ cargo test --release --test job_policy_json \
 This is retained historical protocol-v4 evidence. It invokes `examples/job-policy/driver.py`, which
 starts the real service and launches the strict generic CLI once per request. Compact JSON request
 bytes exclude a newline; JSON stdout bytes include the production newline. The binary columns used
-the then-production framed request/response codecs and do not describe the active protocol-v5 path. Wall time
+the then-production framed request/response codecs and do not describe the later protocol-v5 path. Wall time
 uses `time.monotonic_ns` around each CLI process and includes local IPC and service work. Typed
 shutdowns are lifecycle operations and excluded from the 44 agent-workflow totals. The retained test
 prints every row as one machine-readable `JOB_POLICY_AGENT_COST` record.
@@ -273,7 +462,7 @@ projection measurements remain 739 B manifest, 86,009 B for the six selected tas
 B full, and 105 B unchanged (all without the local CLI newline).
 
 The six-section response was material and the controlled baseline justified direct replacement.
-The active v5 contract now uses exact roots plus iterative transitive definition closure. The first
+The v5 contract used exact roots plus iterative transitive definition closure. The first
 root cutover observation was 1,029 B manifest, 66,957 B for 13 leaf/task roots and 96 definitions,
 121,868 B full, and 105 B unchanged, but independent review proved that the leaf/query roots omitted
 operational envelope, batch, and error layers. Those numbers are retained only as the rejected
@@ -918,7 +1107,7 @@ coverage and one typed authority.
 
 ### Durability, mutation, and remaining baselines
 
-Compact default receipts are preflighted independently of full diff size, and `LKJHEAD4` remains under
+Compact default receipts were preflighted independently of full diff size, and `LKJHEAD4` remained under
 16 KiB even at maximum 64 selected bindings (the focused test asserts it is under 4 KiB). A
 moderate 200-create transaction proves receipt size remains selected-projection bounded. Persistence
 still clones the full snapshot, materializes the full semantic diff during preparation, and rewrites

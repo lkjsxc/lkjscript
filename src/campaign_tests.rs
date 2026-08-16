@@ -1514,7 +1514,7 @@ fn mutate_json(source: &[u8], seed: u64, case: u64) -> Vec<u8> {
     match case % 10 {
         0 => text.replacen("{", "{\"unknown\":0,", 1).into_bytes(),
         1 => text
-            .replacen("\"version\":5", "\"version\":5,\"version\":5", 1)
+            .replacen("\"version\":6", "\"version\":6,\"version\":6", 1)
             .into_bytes(),
         2 => text
             .replacen("\"request_id\":1", "\"request_id\":-1", 1)
@@ -1806,7 +1806,7 @@ fn targeted_framed_json_mutations(corpus: &[Vec<u8>]) -> Vec<NamedMutation> {
         &mut mutations,
         "framed-json-version",
         source,
-        reframe(replace_json(body, "\"version\":5", "\"version\":4")),
+        reframe(replace_json(body, "\"version\":6", "\"version\":5")),
     );
     push_mutation(
         &mut mutations,
@@ -1872,7 +1872,7 @@ fn targeted_json_mutations(requests: &[Request]) -> Vec<NamedMutation> {
         &mut mutations,
         "json-duplicate-field",
         query,
-        replace_json(query, "\"version\":5", "\"version\":5,\"version\":5"),
+        replace_json(query, "\"version\":6", "\"version\":6,\"version\":6"),
     );
     push_mutation(
         &mut mutations,

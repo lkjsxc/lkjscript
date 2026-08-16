@@ -7,12 +7,12 @@
 lock, and OS filesystem ownership form the bootstrap local access boundary. There is no HTTP, TCP,
 or public JSON listener.
 
-Each connection carries exactly one request and one response and then closes. Protocol version 5
-directly replaces prior versions; protocol-v4 binary success readers and writers are deleted and no
+Each connection carries exactly one request and one response and then closes. Protocol version 6
+directly replaces prior versions; protocol-v5 success readers and writers are deleted and no
 legacy reader remains. A control frame is:
 
 ```text
-u32 little-endian body length | strict compact JSON version-5 envelope
+u32 little-endian body length | strict compact JSON version-6 envelope
 ```
 
 Request bodies are limited to 8 MiB and response bodies to 32 MiB. The response repeats the nonzero
@@ -50,16 +50,37 @@ Initial public construction uses atomic `CreateProductType` and `CreateSumType`,
 `DefineFunctionBody` only with an existing function Node ID. Declaration members carry explicit draft symbols matching
 `[a-z][a-z0-9_]*` in 1..=64 bytes. `NodeTarget` is exactly `existing` or `draft`; numeric draft targets
 and the old `local` form reject. `TypeDraft` is a closed primitive or nominal target and resolves
-existing or transaction-local declarations before canonical validation. Parameter, bound-expression,
+existing or transaction-local declarations before canonical validation. Parameter, shared or selected bound-expression,
 loop-index, loop-carried, and match-payload fields are symbols. Expression bindings are optional;
-an omitted binding is private and unselectable. Inline value-position expressions are not yet an
-accepted request form. Product
+an omitted binding is private and unselectable. A `ValueDraft` is exactly a parameter reference,
+block-argument reference, operation-result reference, or an `inline_expression` containing one
+`ExpressionKindDraft`. Inline values accept only descriptor-complete, non-terminating,
+single-result, regionless operations: `const_unit`, `const_bool`, `const_i64`, `add_i64`, `lt_i64`,
+`call`, `construct_product`, `project_field`, and `construct_variant`. Holes and region-owning
+`if`, `for_i64`, and `match_sum` remain explicit, as do shared, selected, repairable, and maintenance
+targets. Fine-grained maintenance requests reject inline values.
+
+Inline children normalize iteratively, depth-first and left-to-right before their parent. Product
+fields and match arms first normalize to declaration order. Anonymous inline nodes receive ordinary
+persistent operation IDs but no selectable draft symbol; proposal nesting and diagnostic paths are
+discarded after validation. Product
 values key bindings by field identity and match arms key bodies by variant identity. Implied match
 regions, blocks, payload arguments, and yield terminators, as well as the existing structured
 scaffolding, are expanded once into canonical nodes and the draft is discarded. The displaced low-level
-parameter/region/block/operation creation messages are not public variants. Expansion exhaustively scans every `NodeTarget`, `TypeDraft`, and `ValueDraft`, rejects undeclared or wrong-category local references before allocation, and allocates every explicit and implicit identity before applying canonical edits. A transaction-local, non-persisted nominal catalogue permits product bindings, variants, payload scaffolding, and match arms to reference declarations or members authored later in the same transaction. Match arms normalize to declaration order before implied identities are assigned, so equivalent arm permutations allocate the same canonical graph. Forward and mutual function references continue to resolve deterministically. Structured requests allow at most 16 nested
-structured bodies and 65,536 exactly counted draft items; the conservative depth remains below the
-strict JSON parser recursion boundary. The item total is the checked aggregate of top-level transaction operations, function parameters, product fields, sum variants, function bodies, yielding bodies, expressions, call arguments, product bindings, and match arms. Deeper semantic graphs remain constructible by inserting into blocks retained by prior transactions.
+parameter/region/block/operation creation messages are not public variants. Expansion exhaustively
+scans every `NodeTarget`, `TypeDraft`, and `ValueDraft`, rejects undeclared or wrong-category local
+references before allocation, and allocates every explicit and implicit identity before applying
+canonical edits. A transaction-local, non-persisted nominal catalogue permits product bindings,
+variants, payload scaffolding, and match arms to reference declarations or members authored later in
+the same transaction. Match arms and product fields normalize to declaration order before implied
+identities are assigned. Forward and mutual function references continue to resolve deterministically.
+Structured requests allow at most 16 combined inline-expression or operation-owned-body edges on one
+proposal path and 65,536 exactly counted draft items; the conservative depth remains below the strict
+JSON parser recursion boundary. The item total is the checked aggregate of top-level transaction
+operations, function parameters, product fields, sum variants, function bodies, yielding bodies,
+explicit or inline expressions, call arguments, product bindings, and match arms. Wrapper variants
+are not double-counted. Deeper semantic graphs remain constructible by inserting into blocks retained
+by prior transactions.
 
 A transaction receipt never contains the full semantic diff or every allocation by default. It
 contains bounded identity/publication/completeness facts, exact change count/digest, total explicit
@@ -109,7 +130,7 @@ once. An iterative worklist follows every named payload and draft-field type exp
 `page<T>` includes both `page` and `T`; `type_parameter` is bound by the page definition. Every
 dependency resolves within the result.
 
-The compact manifest identifies `lkjscript-machine-schema-v5`, its digest, protocol/JSON version 5,
+The compact manifest identifies `lkjscript-machine-schema-v6`, its digest, protocol/JSON version 6,
 artifact format 3, semantic schema `lkjscript-spg003`, the closed root vocabulary, the 16-root request
 policy, the type constructors, full availability, and frame/JSON output bounds. It does not contain
 the full payload catalogues. A matching known digest returns only typed `unchanged { digest }` after
@@ -173,7 +194,7 @@ catalogue.
 
 ## Strict generic JSON CLI
 
-`lkjscript --state DIRECTORY rpc [--pretty]` reads exactly one strict JSON version-5 request envelope
+`lkjscript --state DIRECTORY rpc [--pretty]` reads exactly one strict JSON version-6 request envelope
 from stdin, sends the same closed typed JSON request through the private framed Unix connection, and
 writes exactly one JSON response envelope to stdout. `lkjscript schema` emits the compact manifest locally;
 repeatable `--root NAME` requests exact transitive definition closures, `--full` requests the complete

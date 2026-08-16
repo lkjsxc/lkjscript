@@ -4,12 +4,12 @@
 
 ```text
 strict JSON CLI projection (optional)
-    -> strict protocol-v5 JSON frame over private Unix socket
+    -> strict protocol-v6 JSON frame over private Unix socket
     -> synchronous lkjscriptd
     -> one DurableWorkspace writer per workspace
     -> staged typed transaction over immutable Snapshot
     -> full deterministic validation and derived diff
-    -> preflighted compact receipt + artifact + LKJHEAD4
+    -> preflighted compact receipt + artifact + LKJHEAD5
     -> durable immutable revision, then in-memory publication
     -> revision-bound scan query or direct SPG-to-Core-IR lowering
     -> Core IR verifier -> interpreter -> typed response
@@ -17,12 +17,12 @@ strict JSON CLI projection (optional)
 
 The local service process is the only live program-model writer. `graph.rs` owns immutable snapshots
 and saved history; `schema.rs` owns closed node contracts and static operation descriptors;
-`transaction.rs` owns
-staging, transaction-local nominal target resolution, and compact receipts; `validate.rs` owns graph
+`transaction.rs` owns staging, bounded iterative explicit/inline proposal normalization,
+transaction-local nominal target resolution, and compact receipts; `validate.rs` owns graph
 acceptance; `type_layout.rs` owns iterative by-value dependency validation and checked derived
 layouts; `diff.rs` owns deterministic change facts/digests; `artifact.rs` owns canonical semantic
 bytes; `persistence.rs` owns durable publication; `protocol.rs` owns closed logical request/response types;
-`transport.rs` owns protocol-v5 length framing and the production client; `query.rs` owns derived scan queries and
+`transport.rs` owns protocol-v6 length framing and the production client; `query.rs` owns derived scan queries and
 repair-context composition; `machine_contract.rs` owns closed schema-discovery DTOs and
 `machine.rs` owns strict bounded JSON projection, the executable definition catalogue, and iterative
 root closure, including one shared control template and one shared query template projected from the
@@ -65,17 +65,19 @@ encodes one typed response. JSON never becomes semantic state. The separate loca
 `DescribeSchema` derive a
 compact manifest, canonical digest, exact root projections with transitive named-definition closure,
 explicit full projection, and matching-digest `unchanged` response from one complete executable
-description. Root traversal uses an iterative worklist and validates every dependency before a
+description. Recursive inline value DTOs are flattened by the transaction worklist into ordinary
+persistent operations; the nested proposal never reaches graph storage, lowering, or execution.
+Root traversal uses an iterative worklist and validates every dependency before a
 matching digest can short-circuit output. Projection is recomputed per request; there is no schema
 cache, persisted response, root-to-dependency shadow table, or separately maintained schema table.
 
 ## Durability and bounded acknowledgement
 
 A workspace retains immutable `revisions/REVISION.lkjscript` files and one compact non-semantic
-`LKJHEAD4`. HEAD is independently capped at 16 KiB and stores head revision/hash plus at most one
+`LKJHEAD5`. HEAD is independently capped at 16 KiB and stores head revision/hash plus at most one
 compact keyed fingerprint/receipt. It stores no full semantic diff or full allocation map; unkeyed
-commits preserve an existing keyed replay record. Any non-`LKJHEAD4` bytes, including `LKJHEAD3`,
-reject without a compatibility reader. The direct cutover prevents canonical-JSON/v5 fingerprints
+commits preserve an existing keyed replay record. Any non-`LKJHEAD5` bytes, including `LKJHEAD4`,
+reject without a compatibility reader. The direct cutover prevents canonical-JSON/v6 fingerprints
 from being interpreted under the prior durable identity.
 
 Workspace creation preflights its exact correlated `WorkspaceCreated` response from the canonical
@@ -162,3 +164,72 @@ recomputation/diff materialization, and full artifact rewrites. It has no databa
 runtime, generic graph framework, runtime schema registry, reverse index, cache, source projection,
 native backend, managed heap, plugin mechanism, or remote service. A replacement requires a current
 consumer, measurements, one preserved authority path, and evidence that supports its added cost.
+
+## Long-horizon revalidation
+
+This campaign rechecked every architecture lens without turning a bootstrap fact into permanent
+policy. “Requirement” below is the enduring constraint; “decision” is only this campaign's choice.
+
+| Lens | Current fact | Requirement | Campaign decision | Entry evidence / reversal condition |
+|---|---|---|---|---|
+| Product boundary | External agent, local model service | Deterministic one-authority acceptance | Improve proposal interface only | Agent authors/repairs publicly; reverse model-dependent correctness |
+| Human role | Humans own intent and review | Preserve governance and explanation | Keep human-first docs and review facts | Reject opaque changes without bounded explanation |
+| Source independence | No source frontend | Text can never be coequal authority | No parser; keep future views open | Reject render/reparse editing dependence |
+| Semantic shape | Closed direct Rust types | One typed model and validator | Keep SPG; no generic graph | Reverse abstraction that duplicates ownership facts |
+| Stable identity | Monotonic workspace Node IDs | Independent of names, bytes, positions | Preserve identity through inline normalization | Reverse if proposal spelling changes IDs |
+| Identity granularity | Every semantic node has an ID | Identity needs continuity or targeting | Remove labels, not semantic IDs | Reopen only with artifact/history/query closure |
+| Incomplete programs | Missing bodies and typed holes | Exact typed queryable repair | Holes remain explicit | Reject anonymous holes without retrieval |
+| Transactions | Atomic commit and validate-only | Rejection changes nothing | Normalize wholly before publication | Reverse mutation outside one transaction |
+| History and diffs | Immutable revisions, semantic diffs | History ignores proposal spelling | Inline nesting is discarded | Reverse if views become history authority |
+| Proposal language | Structured bounded drafts | Graph validator remains final | One inline value form only | Delete if it grows into a macro language |
+| Machine contract | Executable roots and closure | Complete accepted shapes | Extend the same recursive catalogue | Reject hand-maintained lite schemas |
+| Codex integration | Generic CLI retained; disposable MCP adapter rejected | Adapter cannot own semantics | Keep only the generic CLI | Reopen for a measured shell/lifecycle failure and generated exact schemas |
+| Prompt/cache economics | Policy and tools cost context | Correctness outranks compactness | Shrink durable policy; stabilize schemas | Reject token claims inferred from bytes |
+| Diagnostics | Typed bounded errors and paths | Local deterministic correction facts | Add anonymous inline paths | Reverse if locality materially worsens |
+| Type system | Closed primitives and nominal data | Explicit exact equality/conversion | No generics or dynamic types | Require a second real abstraction consumer |
+| Primitive values | Unit, bool, checked i64 | Exact checked semantics | No mandatory new primitive | Reject concision through hidden coercion |
+| Numeric semantics | Checked add and exact compare | Order and traps are observable | Preserve normalized evaluation order | Reverse changed fuel or trap behavior |
+| Named data | Immutable records and fixed variants | Identity-based nominal equality | Exercise inline construction/projection | Reject structural typing as collateral |
+| Recursive data | By-value cycles reject | Recursion needs lifetime semantics | No recursive values | Reject lists as a heap shortcut |
+| Generics | None in language | Need identity/substitution/lowering rules | Defer | Enter only for repeated consumers |
+| Collections | No sequence, map, or set | Explicit order/size/allocation | No collection framework | Reject one-consumer generalization |
+| Bytes and text | No such values | Canonical encoding and bounded sharing | Bytes no-go this campaign | Enter with retained manifest classifier |
+| Memory management | Bounded flat cells and copies | Techniques may differ by value class | Select no universal mechanism | Reverse runtime rewrite driven by one value |
+| Ownership/borrowing | No move or borrow rules | Explicit alias/lifetime semantics when needed | No borrow checker | Require a real exclusive/shared consumer |
+| Resource values | None | Non-duplication and deterministic cleanup | Defer | Reject ambient integer handles |
+| Effects/capabilities | Pure semantic programs | Every effect needs typed authority | No effects | Enter with vertical permission/failure contract |
+| Host I/O | Service I/O only | Separate service operation from language effect | Expose no host operation | Require worker and permission boundary |
+| Errors/traps/results | Distinct structured outcomes | Do not collapse domains | Keep typed proposal errors; no exceptions | Reject catch-all strings |
+| Determinism | Pure ordered observable boundaries | Nondeterminism must be explicit | Canonical inline and member order | Reverse hidden map/thread/filesystem order |
+| Concurrency/async | Synchronous one-request connection | Explicit snapshot/publication semantics | No async or request concurrency | Enter only with throughput/isolation evidence |
+| Cancellation/timeout | Transport deadlines; fuel/frames | State effect outcome exactly | Preserve publication rules | Reject silent retry after timeout |
+| Packages/modules | One workspace, no ecosystem | Immutable declared dependency authority | No package manager | Require named dependency consumer |
+| Persistence format | Artifact 3, HEAD5 | Canonical bounded unambiguous bytes | Change HEAD only; keep graph artifact | Reject compatibility reader without users |
+| Journal/compaction | Full artifact per revision | Preserve authority and non-reuse | No journal | Enter at measured size/write threshold |
+| Branch/merge | One head | Explicit parents and semantic conflicts | No branches | Require collaborative consumer |
+| Queries/index/cache | Deterministic full scans | Recomputation remains oracle | No index or cache | Differential-test any measured optimization |
+| Incrementality | Broad recomputation | Derived revision-bound results | No framework | Require representative dependency cost |
+| Core IR | One private verified IR | Derived semantics only | Unchanged | Verify each future instruction independently |
+| Interpreter | Explicit-frame oracle | Exact fuel, memory, order | Preserve behavior | Reject undifferentiated fast paths |
+| AOT/JIT/native | None | Bind exact revision and preserve oracle | No native tier | Enter after interpreter cost dominates workload |
+| Sandboxing | Local service is not a sandbox | Claims match enforced isolation | No sandbox work | Require threat model before effects/foreign code |
+| Cross-platform | Linux x86-64 Unix IPC | Semantic portability unless explicit | No cfg expansion | Require named platform consumer |
+| Daemon topology | One local durable writer | One logical authority per namespace | No topology refactor | Reject split-brain writers |
+| Multi-tenancy | OS directory/socket ownership | Auth, authorization, quota, isolation | Keep local-only boundary | Require deployment threat model |
+| Security model | Inputs and durable bytes untrusted | Unknown forms reject | Preserve strict v6 cutover | Reject permissive recovery or unknown fields |
+| Supply chain | Small locked dependency set | Every dependency has a consumer | Add no dependency | Remove unjustified dependency immediately |
+| Formal methods | Tests, models, mutations | Use tools for sustained state risk | No ceremonial proof layer | Enter for concurrency/merge/resource ownership |
+| Testing/fuzzing | Focused tests plus deterministic mutation | Retain success and rejection evidence | Extend equivalence/depth/protocol tests | Do not call mutation smoke fuzzing |
+| Observability/debugging | Structured outcomes, no debugger | Bounded revision-bound observation | Temporary campaign metrics only | Reject unbounded global traces |
+| Repository topology | One Rust package, fact-owned modules | Change locality over line quotas | Keep one package and touched owners | Split only for measured boundary |
+| Documentation | Small role-specific maintained set | One fact owner and plain language | Update existing owners only | Delete duplicate catalogues |
+| Compatibility/versioning | Pre-release direct replacement | Active bytes unambiguous | v6 and HEAD5 cutover; no old reader | Reject hidden editions/fallbacks |
+| API economics | Bytes/calls/errors measured | Never trade correctness for cost | Compare equal explicit/inline work | Reject unequal-task savings |
+| Runtime performance | Interpreter bootstrap observations | Optimize representative workloads | No runtime optimization | Preserve oracle and reversal metric |
+| Memory/energy footprint | Flat-cell bounds, full snapshots | Separate peak, retained, copy, CPU cost | Syntax savings make no runtime claim | Require named bottleneck |
+| Self-hosting | Rust implementation only | Real component without privilege escape | Defer | Reject symbolic milestone pressure |
+| Standard library | No ecosystem or broad library | Semantic, reproducible, capability-aware | Add no convenience framework | Require repeated application need |
+| Distribution/deployment | Local binaries and state dirs | Reproducible ownership and upgrade rules | No installer/service manager | Require named deployment |
+| Reproducibility/provenance | Deterministic revision hashes | Bind exact public inputs, not hidden reasoning | Record environment and public evidence | Reject prompt provenance as validity |
+| Recovery/disaster | Corruption and ambiguity reject | Never guess authority | Preserve writer-stop behavior | Reject automatic artifact repair |
+| Governance/evolution | Incompatible change is allowed | Use freedom to converge | One direct cutover and one next gate | Reverse churn without evidence |

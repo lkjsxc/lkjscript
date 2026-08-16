@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-const HEAD_MAGIC: [u8; 8] = *b"LKJHEAD4";
+const HEAD_MAGIC: [u8; 8] = *b"LKJHEAD5";
 pub const MAXIMUM_HEAD_BYTES: usize = 16 * 1024;
 static TEMP_SERIAL: AtomicU64 = AtomicU64::new(1);
 
@@ -899,7 +899,7 @@ fn put_transaction_receipt(writer: &mut Writer, receipt: &TransactionReceipt) ->
     writer.u64(u64::try_from(receipt.returned_bindings.len()).map_err(|_| {
         LkError::new(
             ErrorCode::PolicyExceeded,
-            "transaction receipt binding count exceeds HEAD4 encoding",
+            "transaction receipt binding count exceeds HEAD5 encoding",
         )
     })?);
     for (symbol, node) in &receipt.returned_bindings {
@@ -1866,17 +1866,17 @@ mod tests {
     }
 
     #[test]
-    fn head4_unkeyed_grammar_remains_fixed_and_deterministic() {
+    fn head5_unkeyed_grammar_remains_fixed_and_deterministic() {
         let revision = Revision::new(7);
         let hash = SnapshotHash::from_bytes([0xa5; SnapshotHash::BYTE_LEN]);
-        let first = encode_head(revision, hash, None).expect("HEAD4 encode");
+        let first = encode_head(revision, hash, None).expect("HEAD5 encode");
         assert_eq!(
             first,
-            encode_head(revision, hash, None).expect("deterministic HEAD4")
+            encode_head(revision, hash, None).expect("deterministic HEAD5")
         );
 
         let mut expected_body = Vec::new();
-        expected_body.extend_from_slice(b"LKJHEAD4");
+        expected_body.extend_from_slice(b"LKJHEAD5");
         expected_body.extend_from_slice(&7_u64.to_le_bytes());
         expected_body.extend_from_slice(&[0xa5; SnapshotHash::BYTE_LEN]);
         expected_body.push(0);
@@ -1887,7 +1887,7 @@ mod tests {
             blake3::hash(&expected_body).as_bytes()
         );
         let (decoded_revision, decoded_hash, decoded_record) =
-            decode_head(&first).expect("HEAD4 decode");
+            decode_head(&first).expect("HEAD5 decode");
         assert_eq!((decoded_revision, decoded_hash), (revision, hash));
         assert!(decoded_record.is_none());
     }
@@ -1931,14 +1931,14 @@ mod tests {
     }
 
     #[test]
-    fn head_version_three_magic_is_rejected_without_compatibility_reader() {
+    fn head_version_four_magic_is_rejected_without_compatibility_reader() {
         let temporary = tempfile::tempdir().expect("temporary directory");
         ensure_state_directory(temporary.path()).expect("state directory");
         let id = WorkspaceId::from_bytes([0x18; 16]);
         DurableWorkspace::create(temporary.path(), id).expect("workspace");
         let head_path = workspace_directory(temporary.path(), id).join("HEAD");
         let mut bytes = fs::read(&head_path).expect("head bytes");
-        bytes[..8].copy_from_slice(b"LKJHEAD3");
+        bytes[..8].copy_from_slice(b"LKJHEAD4");
         let body_length = bytes.len() - SnapshotHash::BYTE_LEN;
         let checksum = blake3::hash(&bytes[..body_length]);
         bytes[body_length..].copy_from_slice(checksum.as_bytes());
@@ -1946,7 +1946,7 @@ mod tests {
         assert_eq!(
             DurableWorkspace::open(temporary.path(), id)
                 .err()
-                .expect("HEAD3 must reject")
+                .expect("HEAD4 must reject")
                 .code,
             ErrorCode::ArtifactCorrupt
         );
@@ -2090,7 +2090,7 @@ mod tests {
     }
 
     #[test]
-    fn keyed_head4_publication_faults_preserve_prior_replay_and_allocator() {
+    fn keyed_head5_publication_faults_preserve_prior_replay_and_allocator() {
         let temporary = tempfile::tempdir().expect("temporary state directory");
         ensure_state_directory(temporary.path()).expect("state directory");
         let id = WorkspaceId::from_bytes([5; 16]);

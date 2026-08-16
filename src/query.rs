@@ -3739,8 +3739,8 @@ mod tests {
             body_operations.push(ExpressionDraft {
                 symbol: Some(DraftSymbol::generated(symbol)),
                 operation: ExpressionKindDraft::AddI64 {
-                    lhs: value,
-                    rhs: value,
+                    lhs: value.clone(),
+                    rhs: value.clone(),
                 },
             });
         }
@@ -3762,7 +3762,7 @@ mod tests {
                 result: SemanticType::I64.into(),
                 body: Some(FunctionBodyDraft {
                     operations: body_operations,
-                    return_value: value,
+                    return_value: value.clone(),
                 }),
             },
             TransactionOp::SetEntryFunction {

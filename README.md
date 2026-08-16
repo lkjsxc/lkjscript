@@ -71,7 +71,7 @@ model-quality benchmark.
 ## How coding agents interact
 
 `lkjscriptd` is the only live writer of durable workspace state. For RPC commands, the generic
-`lkjscript` CLI accepts one strict version-5 JSON envelope, sends the same closed typed JSON request
+`lkjscript` CLI accepts one strict version-6 JSON envelope, sends the same closed typed JSON request
 in a bounded length frame over private local Unix IPC, and writes one typed JSON response. The separate `schema`
 command derives the machine contract locally from the same executable definitions. JSON is
 transport, not a second program representation.
@@ -117,9 +117,9 @@ The current Linux x86-64 implementation provides:
   variant;
 - structured functions, parameters, identity-targeted calls, conditions, counted loops, constants,
   checked integer addition and comparison, typed placeholders, yields, and returns;
-- atomic commit and validate-only transactions, bounded transaction-local symbolic labels, selected
-  returned bindings, compact receipts, identity-preserving placeholder repair, paginated semantic
-  diffs, and bounded repair context;
+- atomic commit and validate-only transactions, bounded transaction-local symbolic labels, anonymous
+  one-use inline value expressions, selected returned bindings, compact receipts,
+  identity-preserving placeholder repair, paginated semantic diffs, and bounded repair context;
 - direct deterministic lowering from one immutable revision to one private Core IR, independent IR
   verification, and an explicit-frame interpreter;
 - exact public `unit`, `bool`, `i64`, record, and variant values identified by semantic Node IDs;

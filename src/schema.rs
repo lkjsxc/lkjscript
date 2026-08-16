@@ -1,5 +1,5 @@
 use crate::ids::NodeId;
-use crate::transaction::NodeTarget;
+use crate::transaction::{ExpressionKindDraft, NodeTarget};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
@@ -806,7 +806,7 @@ impl ValueRef {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(
     tag = "kind",
     content = "data",
@@ -817,6 +817,7 @@ pub enum ValueDraft {
     FunctionParameter(NodeTarget),
     BlockArgument(NodeTarget),
     OperationResult { operation: NodeTarget, output: u8 },
+    InlineExpression(Box<ExpressionKindDraft>),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]

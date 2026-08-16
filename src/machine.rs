@@ -14,15 +14,15 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
 use std::io::{self, Write};
 
-pub const JSON_ENVELOPE_VERSION: u16 = 5;
+pub const JSON_ENVELOPE_VERSION: u16 = 6;
 pub const MAX_JSON_INPUT_BYTES: usize = 8 * 1024 * 1024;
 pub const MAX_JSON_OUTPUT_BYTES: usize = 32 * 1024 * 1024;
-pub const MACHINE_SCHEMA_IDENTITY: &str = "lkjscript-machine-schema-v5";
+pub const MACHINE_SCHEMA_IDENTITY: &str = "lkjscript-machine-schema-v6";
 const MACHINE_SCHEMA_DIGEST_DOMAIN: &str = "lkjscript.machine-schema.digest.v2";
-const TRANSACTION_FINGERPRINT_DOMAIN: &str = "lkjscript.apply-transaction.fingerprint.v5";
+const TRANSACTION_FINGERPRINT_DOMAIN: &str = "lkjscript.apply-transaction.fingerprint.v6";
 const MAX_BOUNDARY_ERROR_MESSAGE_BYTES: usize = 1024;
 const BOUNDARY_ERROR_FALLBACK: &[u8] =
-    b"{\"version\":5,\"error\":{\"kind\":\"output\",\"message\":\"cannot encode boundary error\"}}";
+    b"{\"version\":6,\"error\":{\"kind\":\"output\",\"message\":\"cannot encode boundary error\"}}";
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -932,6 +932,11 @@ fn value_variant(code: crate::transaction::ValueDraftCode) -> DraftVariantDescri
                 draft_field("operation", T::NodeTarget, true, false),
                 draft_field("output", T::U8, true, false),
             ],
+        ),
+        C::InlineExpression => (
+            PayloadShapeKind::Newtype,
+            Some(T::ExpressionKind),
+            Vec::new(),
         ),
     };
     DraftVariantDescription {
@@ -2195,6 +2200,11 @@ fn schema_discovery_records() -> Vec<NamedPayloadDescription> {
                 ("value_tagging", "string", true),
                 ("type_tagging", "string", true),
                 ("allocation_order", "string", true),
+                ("inline_expression_variants", "list<string>", true),
+                ("inline_holes_allowed", "bool", true),
+                ("inline_region_operations_allowed", "bool", true),
+                ("maintenance_accepts_inline_values", "bool", true),
+                ("nesting_metric", "string", true),
                 ("explicit_symbols_are_selectable", "bool", true),
                 ("implicit_symbols_are_selectable", "bool", true),
                 ("implicit_node_kinds", "list<node_kind>", true),
@@ -2550,6 +2560,11 @@ fn schema_discovery_records() -> Vec<NamedPayloadDescription> {
             "structured_authoring_policy_description",
             &[
                 ("allocation_order", "string", true),
+                ("inline_expression_variants", "list<string>", true),
+                ("inline_holes_allowed", "bool", true),
+                ("inline_region_operations_allowed", "bool", true),
+                ("maintenance_accepts_inline_values", "bool", true),
+                ("nesting_metric", "string", true),
                 ("explicit_symbols_are_selectable", "bool", true),
                 ("implicit_symbols_are_selectable", "bool", true),
                 ("implicit_node_kinds", "list<node_kind>", true),
@@ -2922,7 +2937,16 @@ pub fn schema_description() -> SchemaDescription {
             operation_tagging: "adjacently_tagged(kind,data)".into(),
             value_tagging: "adjacently_tagged(kind,data)".into(),
             type_tagging: "externally_tagged; unit variants are strings and nominal is an object keyed by nominal".into(),
-            allocation_order: "depth_first_preorder_canonical_nodes".to_owned(),
+            allocation_order: "transaction_order; structured bodies preserve expression order; inline value children are normalized depth-first and left-to-right before their parent; product fields and match arms use declaration order".to_owned(),
+            inline_expression_variants: crate::transaction::ExpressionDraftCode::ALL
+                .into_iter()
+                .filter(|code| code.is_inline_eligible())
+                .map(|code| code.machine_name().to_owned())
+                .collect(),
+            inline_holes_allowed: false,
+            inline_region_operations_allowed: false,
+            maintenance_accepts_inline_values: false,
+            nesting_metric: "maximum number of inline-expression or operation-owned-body edges on one structured proposal path; list wrappers, call arguments, product fields, match-arm labels, and variant payload wrappers do not add depth".to_owned(),
             explicit_symbols_are_selectable: true,
             implicit_symbols_are_selectable: false,
             implicit_node_kinds: vec![
@@ -2940,7 +2964,7 @@ pub fn schema_description() -> SchemaDescription {
                 "sum_variant".into(),
                 "function_body".into(),
                 "yielding_body".into(),
-                "expression".into(),
+                "explicit_or_inline_expression".into(),
                 "call_argument".into(),
                 "product_binding".into(),
                 "match_arm".into(),
@@ -3194,6 +3218,10 @@ fn canonicalize_schema(mut schema: SchemaDescription) -> SchemaDescription {
         .implicit_node_kinds
         .sort_by_key(|item| item.machine_name());
     schema.structured_authoring.counted_item_categories.sort();
+    schema
+        .structured_authoring
+        .inline_expression_variants
+        .sort();
     schema
         .run
         .runtime_values
@@ -3802,6 +3830,18 @@ fn schema_definition_catalogue(
         "structured_authoring".to_owned(),
         SchemaDefinitionBody::StructuredAuthoring(StructuredAuthoringPolicyDescription {
             allocation_order: description.structured_authoring.allocation_order.clone(),
+            inline_expression_variants: description
+                .structured_authoring
+                .inline_expression_variants
+                .clone(),
+            inline_holes_allowed: description.structured_authoring.inline_holes_allowed,
+            inline_region_operations_allowed: description
+                .structured_authoring
+                .inline_region_operations_allowed,
+            maintenance_accepts_inline_values: description
+                .structured_authoring
+                .maintenance_accepts_inline_values,
+            nesting_metric: description.structured_authoring.nesting_metric.clone(),
             explicit_symbols_are_selectable: description
                 .structured_authoring
                 .explicit_symbols_are_selectable,
@@ -4170,9 +4210,9 @@ mod tests {
         assert_eq!(decode_request(&bytes).expect("decode"), request);
         let text = String::from_utf8(bytes).expect("UTF-8");
         for invalid in [
-            text.replacen("\"version\":5", "\"version\":4", 1),
+            text.replacen("\"version\":6", "\"version\":5", 1),
             text.replacen("\"request_id\":1", "\"request_id\":0", 1),
-            text.replacen("{\"version\":5", "{\"unknown\":0,\"version\":5", 1),
+            text.replacen("{\"version\":6", "{\"unknown\":0,\"version\":6", 1),
             format!("{text} {{}}"),
             text.replacen(
                 &workspace.to_string(),
@@ -5391,11 +5431,11 @@ mod tests {
         };
         let yielding = YieldingBodyDraft {
             operations: vec![],
-            yield_value: value,
+            yield_value: value.clone(),
         };
         let function_body = FunctionBodyDraft {
             operations: vec![],
-            return_value: value,
+            return_value: value.clone(),
         };
         let expression = ExpressionDraft {
             symbol: Some(DraftSymbol::generated(20)),
@@ -5447,7 +5487,7 @@ mod tests {
             TransactionOp::ReplaceOperand {
                 operation: target,
                 index: 0,
-                value,
+                value: value.clone(),
             },
             TransactionOp::DeleteOwnedSubtree { root: target },
             TransactionOp::RefineHole {
@@ -5881,31 +5921,31 @@ mod tests {
             ExpressionKindDraft::ConstBool(true),
             ExpressionKindDraft::ConstI64(1),
             ExpressionKindDraft::AddI64 {
-                lhs: value,
-                rhs: value,
+                lhs: value.clone(),
+                rhs: value.clone(),
             },
             ExpressionKindDraft::LtI64 {
-                lhs: value,
-                rhs: value,
+                lhs: value.clone(),
+                rhs: value.clone(),
             },
             ExpressionKindDraft::Call {
                 function: target,
-                arguments: vec![value],
+                arguments: vec![value.clone()],
             },
             ExpressionKindDraft::Hole {
                 expected: TypeDraft::I64,
             },
             ExpressionKindDraft::If {
-                condition: value,
+                condition: value.clone(),
                 result: TypeDraft::I64,
                 then_body: yielding.clone(),
                 else_body: yielding.clone(),
             },
             ExpressionKindDraft::ForI64 {
-                start: value,
-                end_exclusive: value,
+                start: value.clone(),
+                end_exclusive: value.clone(),
                 step: 1,
-                initial: value,
+                initial: value.clone(),
                 carried: TypeDraft::I64,
                 index_symbol: DraftSymbol::generated(30),
                 carried_symbol: DraftSymbol::generated(31),
@@ -5915,19 +5955,19 @@ mod tests {
                 product: target,
                 fields: vec![ProductFieldValueDraft {
                     field: target,
-                    value,
+                    value: value.clone(),
                 }],
             },
             ExpressionKindDraft::ProjectField {
-                value,
+                value: value.clone(),
                 field: target,
             },
             ExpressionKindDraft::ConstructVariant {
                 variant: target,
-                payload: Some(value),
+                payload: Some(value.clone()),
             },
             ExpressionKindDraft::MatchSum {
-                scrutinee: value,
+                scrutinee: value.clone(),
                 result: TypeDraft::I64,
                 arms: vec![MatchArmDraft {
                     variant: target,
@@ -5951,53 +5991,57 @@ mod tests {
             OperationDraft::ConstI64(1),
             OperationDraft::ConstBool(true),
             OperationDraft::AddI64 {
-                lhs: value,
-                rhs: value,
+                lhs: value.clone(),
+                rhs: value.clone(),
             },
             OperationDraft::LtI64 {
-                lhs: value,
-                rhs: value,
+                lhs: value.clone(),
+                rhs: value.clone(),
             },
             OperationDraft::Call {
                 function: target,
-                arguments: vec![value],
+                arguments: vec![value.clone()],
             },
             OperationDraft::Hole {
                 expected: TypeDraft::I64,
             },
             OperationDraft::If {
-                condition: value,
+                condition: value.clone(),
                 result: TypeDraft::I64,
                 then_region: target,
                 else_region: target,
             },
             OperationDraft::ForI64 {
-                start: value,
-                end_exclusive: value,
+                start: value.clone(),
+                end_exclusive: value.clone(),
                 step: 1,
-                initial: value,
+                initial: value.clone(),
                 carried: TypeDraft::I64,
                 body_region: target,
             },
-            OperationDraft::Return { value },
-            OperationDraft::Yield { value },
+            OperationDraft::Return {
+                value: value.clone(),
+            },
+            OperationDraft::Yield {
+                value: value.clone(),
+            },
             OperationDraft::ConstructProduct {
                 product: target,
                 fields: vec![ProductFieldValueDraft {
                     field: target,
-                    value,
+                    value: value.clone(),
                 }],
             },
             OperationDraft::ProjectField {
-                value,
+                value: value.clone(),
                 field: target,
             },
             OperationDraft::ConstructVariant {
                 variant: target,
-                payload: Some(value),
+                payload: Some(value.clone()),
             },
             OperationDraft::MatchSum {
-                scrutinee: value,
+                scrutinee: value.clone(),
                 result: TypeDraft::I64,
                 arms: vec![MatchArmOperationDraft {
                     variant: target,
@@ -6023,6 +6067,7 @@ mod tests {
                 output: 0,
             },
             ValueDraft::BlockArgument(target),
+            ValueDraft::InlineExpression(Box::new(ExpressionKindDraft::ConstI64(1))),
         ];
         assert_eq!(value_samples.len(), ValueDraftCode::ALL.len());
         for (sample, code) in value_samples.iter().zip(ValueDraftCode::ALL) {
@@ -6188,7 +6233,7 @@ mod tests {
             "product_field_value",
             ProductFieldValueDraft {
                 field: target,
-                value
+                value: value.clone()
             },
             ProductFieldValueDraft,
             false
@@ -9114,8 +9159,8 @@ mod tests {
             sizes,
             vec![
                 ("manifest", None, 1_241, 1_319),
-                ("selected_agent_task_roots", Some(111), 80_629, 80_707),
-                ("full", None, 124_430, 124_508),
+                ("selected_agent_task_roots", Some(111), 81_418, 81_496),
+                ("full", None, 125_995, 126_073),
                 ("unchanged", None, 105, 183),
             ]
         );

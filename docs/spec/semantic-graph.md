@@ -91,13 +91,35 @@ A structured function or expression draft is a typed proposal only. Parameters, 
 expressions, loop indexes, loop-carried values, and match payloads declare explicit draft symbols.
 Regions, blocks, block arguments, omitted expression bindings, and return/yield terminators are
 private implied nodes. Shared or forward-referenced expression results require an explicit symbol.
-Inline expressions in structured value positions are not part of the current contract.
+
+A structured value position may contain an anonymous inline expression. The retained inline set is
+derived from the same operation descriptors as graph validation: `const_unit`, `const_bool`,
+`const_i64`, `add_i64`, `lt_i64`, `call`, `construct_product`, `project_field`, and
+`construct_variant` are complete, non-terminating, single-result operations with no owned region and
+may be inline. `hole`, `if`, `for_i64`, and `match_sum` remain explicit. An inline expression has one
+use by construction, has no public draft symbol, cannot be selected in the receipt, and normalizes
+to an ordinary persistent operation with an ordinary stable Node ID. Shared values, repairable
+placeholders, receipt selections, and maintenance targets remain explicitly bound.
+
+Normalization uses one explicit worklist. It follows transaction operations and structured body
+operations in request order, normalizes each inline operand child depth-first from left to right
+before its parent, normalizes product fields and match arms into declaration order before allocating
+their contained semantics, and keeps owned-region bodies after their owning operation. Function
+return and structured-region yield values follow the same inline-child rule before the implied
+terminator. The complete nested proposal is discarded. No proposal path, nesting, or anonymous name
+is retained in semantic state.
+
+An explicit operation sequence in that canonical postorder and its inline spelling allocate the
+same persistent Node IDs and produce the same authoritative snapshot, artifact bytes, semantic
+change list, and execution behavior. Draft-symbol spelling remains irrelevant. Canonical request
+bytes, rather than normalized graph meaning, remain the idempotency fingerprint input, so differently
+spelled explicit and inline requests do not become semantic deduplication aliases.
 
 Expansion validates every public symbol and reference before allocation and normalizes labels to
 private keys. Persistent IDs are then
-allocated in depth-first canonical node order, independent of symbol spelling. Duplicate, empty,
+allocated in the flattened canonical edit order, independent of symbol spelling. Duplicate, empty,
 invalid, overlength, unknown, or wrong-category symbols reject with the exact `draft_symbol`; a
-bounded deterministic `draft_path` identifies failures on private implied nodes. Product bindings
+bounded deterministic `draft_path` identifies failures on inline or private implied nodes. Product bindings
 and match arms normalize into declaration order. Calls may name later functions or form mutual
 references, and nominal types may name later declarations. Final graph validation remains unchanged
 and authoritative; proposal labels and private keys are discarded.
@@ -157,11 +179,12 @@ ceiling. Durable workspace IDs and revision file names must use their one canoni
 Accepted decode followed by encode is byte-identical. Core IR, machine code, caches, profiles,
 receipts, and protocol frames are absent.
 
-`LKJHEAD4` directly replaces the old HEAD format; there is no compatibility reader. `LKJHEAD3`
-rejects because protocol-v5 canonical JSON changed the persisted idempotency fingerprint meaning. It
+`LKJHEAD5` directly replaces the old HEAD format; there is no compatibility reader. `LKJHEAD4`
+rejects because protocol-v6 canonical JSON and inline value proposals changed the persisted
+idempotency fingerprint meaning. It
 is a checked, independently bounded (16 KiB) non-semantic publication record containing head
 revision/hash and, when present, one compact keyed fingerprint/receipt with exact bounded symbolic
-returned bindings. This final unreleased HEAD4 grammar has no numeric-symbol interpretation and
+returned bindings. This final unreleased HEAD5 grammar has no numeric-symbol interpretation and
 stores enough receipt data for exact idempotency replay. It never contains a full diff or allocation map.
 Restart decodes every retained artifact, validates adjacent history, and recomputes/validates
 receipt facts against retained snapshots before accepting HEAD. Corrupt or old HEAD bytes reject.

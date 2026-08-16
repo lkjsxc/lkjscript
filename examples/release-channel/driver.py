@@ -14,6 +14,7 @@ CLI = pathlib.Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else ROOT / "targ
 DAEMON = pathlib.Path(sys.argv[2]).resolve() if len(sys.argv) > 2 else ROOT / "target/release/lkjscriptd"
 METRICS_PATH = pathlib.Path(sys.argv[3]).resolve() if len(sys.argv) > 3 else None
 PROPOSAL_PATH = pathlib.Path(__file__).with_name("proposal.json")
+AUTHORING_MODE = os.environ.get("LKJSCRIPT_AUTHORING_MODE", "inline")
 request_id = 0
 query_id = 0
 daemon = None
@@ -25,7 +26,7 @@ readiness_nanoseconds = []
 def rpc(request, purpose, counted=True):
     global request_id
     request_id += 1
-    envelope = {"version": 5, "request_id": request_id, "request": request}
+    envelope = {"version": 6, "request_id": request_id, "request": request}
     encoded = json.dumps(envelope, separators=(",", ":")).encode()
     started = time.monotonic_ns()
     completed = subprocess.run(
@@ -43,7 +44,7 @@ def rpc(request, purpose, counted=True):
     if completed.stderr:
         raise RuntimeError(f"CLI wrote stderr for {purpose}: {completed.stderr.decode()}")
     response_envelope = json.loads(completed.stdout)
-    if response_envelope.get("version") != 5 or response_envelope.get("request_id") != request_id:
+    if response_envelope.get("version") != 6 or response_envelope.get("request_id") != request_id:
         raise RuntimeError(f"response envelope mismatch for {purpose}")
     measurements.append({
         "purpose": purpose,
@@ -276,6 +277,128 @@ def count_explicit_symbols(value):
     return len(symbols)
 
 
+INLINE_EXPRESSION_KINDS = {
+    "const_unit", "const_bool", "const_i64", "add_i64", "lt_i64", "call",
+    "construct_product", "project_field", "construct_variant",
+}
+
+
+def inline_single_use_postorder_values(proposal):
+    """Derive the equal-graph inline replay from the sealed explicit proposal."""
+    selected = set(proposal["return_symbols"])
+    bodies = []
+
+    def nested_bodies(operation):
+        data = operation.get("data")
+        if not isinstance(data, dict):
+            return []
+        nested = [
+            data[key]
+            for key in ("then_body", "else_body", "body")
+            if isinstance(data.get(key), dict)
+        ]
+        nested.extend(
+            arm["body"]
+            for arm in data.get("arms", [])
+            if isinstance(arm, dict) and isinstance(arm.get("body"), dict)
+        )
+        return nested
+
+    def collect_body(body):
+        bodies.append(body)
+        for expression in body.get("operations", []):
+            for nested in nested_bodies(expression["operation"]):
+                collect_body(nested)
+
+    for operation in proposal["operations"]:
+        data = operation.get("data", {})
+        if operation.get("kind") == "create_function" and isinstance(data.get("body"), dict):
+            collect_body(data["body"])
+
+    def direct_result_references(value):
+        references = []
+
+        def visit(item):
+            if isinstance(item, dict):
+                data = item.get("data")
+                target = data.get("operation", {}) if isinstance(data, dict) else {}
+                if item.get("kind") == "operation_result" and target.get("kind") == "draft":
+                    references.append(item)
+                    return
+                for key, child in item.items():
+                    if key not in ("then_body", "else_body", "body", "arms"):
+                        visit(child)
+            elif isinstance(item, list):
+                for child in item:
+                    visit(child)
+
+        visit(value)
+        return references
+
+    expressions = {}
+    uses = {}
+    for body in bodies:
+        for expression in body.get("operations", []):
+            symbol = expression["symbol"]
+            expressions[symbol] = expression
+            for reference in direct_result_references(expression["operation"]):
+                symbol = reference["data"]["operation"]["data"]
+                uses.setdefault(symbol, []).append((id(body), reference))
+        terminal = body.get("return_value", body.get("yield_value"))
+        for reference in direct_result_references(terminal):
+            symbol = reference["data"]["operation"]["data"]
+            uses.setdefault(symbol, []).append((id(body), reference))
+
+    child_body_ids = {
+        id(nested)
+        for body in bodies
+        for expression in body.get("operations", [])
+        for nested in nested_bodies(expression["operation"])
+    }
+    removed = []
+
+    def eligible(symbol, body):
+        expression = expressions.get(symbol)
+        return (
+            expression is not None
+            and expression["operation"]["kind"] in INLINE_EXPRESSION_KINDS
+            and symbol not in selected
+            and len(uses.get(symbol, [])) == 1
+            and uses[symbol][0][0] == id(body)
+        )
+
+    def transform_body(body):
+        for expression in body.get("operations", []):
+            for nested in nested_bodies(expression["operation"]):
+                transform_body(nested)
+        kept = []
+
+        def consume(reference):
+            symbol = reference["data"]["operation"]["data"]
+            if eligible(symbol, body) and kept and kept[-1]["symbol"] == symbol:
+                child = kept.pop()
+                reference.clear()
+                reference.update({
+                    "kind": "inline_expression",
+                    "data": child["operation"],
+                })
+                removed.append(symbol)
+
+        for expression in body.get("operations", []):
+            for reference in reversed(direct_result_references(expression["operation"])):
+                consume(reference)
+            kept.append(expression)
+        terminal = body.get("return_value", body.get("yield_value"))
+        for reference in reversed(direct_result_references(terminal)):
+            consume(reference)
+        body["operations"] = kept
+
+    for body in bodies:
+        if id(body) not in child_body_ids:
+            transform_body(body)
+    return removed
+
+
 def measurement_summary():
     counted = [item for item in measurements if item["counted"]]
     discovery = [
@@ -352,9 +475,21 @@ def historical_revision_view(workspace, revision, ids, purpose):
 def execute():
     global state
     proposal = json.loads(PROPOSAL_PATH.read_text())
+    if AUTHORING_MODE not in ("explicit", "inline"):
+        raise RuntimeError(f"unsupported authoring mode {AUTHORING_MODE}")
+    removed_symbols = (
+        inline_single_use_postorder_values(proposal)
+        if AUTHORING_MODE == "inline"
+        else []
+    )
     operations = proposal["operations"]
     return_symbols = proposal["return_symbols"]
-    if count_explicit_symbols(operations) != 111 or len(return_symbols) != 38:
+    expected_symbol_count = 67 if AUTHORING_MODE == "inline" else 111
+    if (
+        count_explicit_symbols(operations) != expected_symbol_count
+        or len(removed_symbols) != 111 - expected_symbol_count
+        or len(return_symbols) != 38
+    ):
         raise RuntimeError("sealed proposal symbol/binding counts changed")
     with tempfile.TemporaryDirectory(prefix="lkjscript-release-channel-") as directory:
         state = pathlib.Path(directory)
@@ -619,12 +754,14 @@ def execute():
                 "unchanged_response_bytes": contract_rows["known_digest_unchanged"]["json_response_bytes"],
             },
             "proposals": {
+                "authoring_mode": AUTHORING_MODE,
                 "fixture_bytes": PROPOSAL_PATH.stat().st_size,
                 "initial_compact_payload_bytes": len(json.dumps(proposal, separators=(",", ":")).encode()),
+                "inline_removed_symbols": len(removed_symbols),
                 "rows": proposals,
             },
             "counts": {
-                "initial_operations": len(operations), "explicit_draft_symbols": 111,
+                "initial_operations": len(operations), "explicit_draft_symbols": expected_symbol_count,
                 "selected_bindings": 38, "created_nodes": creation["created_count"],
                 "canonical_nodes": summary_two["node_count"], "rejected_proposals": 1,
             },

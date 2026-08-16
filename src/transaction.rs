@@ -1,13 +1,14 @@
 use crate::diff;
-use crate::error::{ErrorCode, LkError, Result};
+use crate::error::{ErrorCode, LkError, MAX_DRAFT_PATH_BYTES, Result};
 use crate::graph::{Snapshot, Workspace, require_kind};
 use crate::ids::{
     ChangeDigest, DraftSymbol, IdempotencyKey, NodeId, Revision, SnapshotHash, WorkspaceId,
 };
 use crate::query;
 use crate::schema::{
-    MatchArm, MatchArmOperationDraft, Node, NodeKind, OperationDraft, OperationKind,
-    ProductFieldValue, ProductFieldValueDraft, SemanticType, TypeDraft, ValueDraft, ValueRef,
+    MatchArm, MatchArmOperationDraft, Node, NodeKind, OperationCode, OperationDraft, OperationKind,
+    ProductFieldValue, ProductFieldValueDraft, RegionArity, SemanticType, TypeDraft, ValueDraft,
+    ValueRef,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -162,6 +163,32 @@ impl ExpressionDraftCode {
             Self::MatchSum => "match_sum",
         }
     }
+
+    pub const fn operation_code(self) -> OperationCode {
+        match self {
+            Self::ConstUnit => OperationCode::ConstUnit,
+            Self::ConstBool => OperationCode::ConstBool,
+            Self::ConstI64 => OperationCode::ConstI64,
+            Self::AddI64 => OperationCode::AddI64,
+            Self::LtI64 => OperationCode::LtI64,
+            Self::Call => OperationCode::Call,
+            Self::Hole => OperationCode::Hole,
+            Self::If => OperationCode::If,
+            Self::ForI64 => OperationCode::ForI64,
+            Self::ConstructProduct => OperationCode::ConstructProduct,
+            Self::ProjectField => OperationCode::ProjectField,
+            Self::ConstructVariant => OperationCode::ConstructVariant,
+            Self::MatchSum => OperationCode::MatchSum,
+        }
+    }
+
+    pub fn is_inline_eligible(self) -> bool {
+        let descriptor = self.operation_code().descriptor();
+        descriptor.complete
+            && !descriptor.terminator
+            && descriptor.results.len() == 1
+            && matches!(descriptor.region_arity, RegionArity::Fixed(0))
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -169,18 +196,21 @@ pub enum ValueDraftCode {
     FunctionParameter,
     OperationResult,
     BlockArgument,
+    InlineExpression,
 }
 impl ValueDraftCode {
-    pub const ALL: [Self; 3] = [
+    pub const ALL: [Self; 4] = [
         Self::FunctionParameter,
         Self::OperationResult,
         Self::BlockArgument,
+        Self::InlineExpression,
     ];
     pub const fn machine_name(self) -> &'static str {
         match self {
             Self::FunctionParameter => "function_parameter",
             Self::OperationResult => "operation_result",
             Self::BlockArgument => "block_argument",
+            Self::InlineExpression => "inline_expression",
         }
     }
 }
@@ -191,7 +221,36 @@ impl ValueDraft {
             Self::FunctionParameter(_) => ValueDraftCode::FunctionParameter,
             Self::OperationResult { .. } => ValueDraftCode::OperationResult,
             Self::BlockArgument(_) => ValueDraftCode::BlockArgument,
+            Self::InlineExpression(_) => ValueDraftCode::InlineExpression,
         }
+    }
+}
+
+impl ExpressionKindDraft {
+    pub const fn code(&self) -> ExpressionDraftCode {
+        match self {
+            Self::ConstUnit => ExpressionDraftCode::ConstUnit,
+            Self::ConstBool(_) => ExpressionDraftCode::ConstBool,
+            Self::ConstI64(_) => ExpressionDraftCode::ConstI64,
+            Self::AddI64 { .. } => ExpressionDraftCode::AddI64,
+            Self::LtI64 { .. } => ExpressionDraftCode::LtI64,
+            Self::Call { .. } => ExpressionDraftCode::Call,
+            Self::Hole { .. } => ExpressionDraftCode::Hole,
+            Self::If { .. } => ExpressionDraftCode::If,
+            Self::ForI64 { .. } => ExpressionDraftCode::ForI64,
+            Self::ConstructProduct { .. } => ExpressionDraftCode::ConstructProduct,
+            Self::ProjectField { .. } => ExpressionDraftCode::ProjectField,
+            Self::ConstructVariant { .. } => ExpressionDraftCode::ConstructVariant,
+            Self::MatchSum { .. } => ExpressionDraftCode::MatchSum,
+        }
+    }
+
+    pub const fn operation_code(&self) -> OperationCode {
+        self.code().operation_code()
+    }
+
+    pub fn is_inline_eligible(&self) -> bool {
+        self.code().is_inline_eligible()
     }
 }
 
@@ -546,6 +605,7 @@ struct ExpandedTransaction {
     edits: Vec<CanonicalEdit>,
     edit_sources: Vec<usize>,
     explicit_symbols: BTreeSet<DraftSymbol>,
+    anonymous_paths: BTreeMap<DraftSymbol, String>,
     nominal_catalogue: StagedNominalCatalogue,
 }
 
@@ -711,6 +771,59 @@ impl StagedNominalCatalogue {
         }
         Ok(normalized)
     }
+
+    fn normalize_product_fields(
+        &self,
+        product: NodeTarget,
+        fields: Vec<ProductFieldValueDraft>,
+        source: usize,
+    ) -> Result<Vec<ProductFieldValueDraft>> {
+        let declared = self.products.get(&product).ok_or_else(|| {
+            LkError::new(
+                ErrorCode::WrongKind,
+                "product construction must name a known product declaration",
+            )
+            .at_operation(source)
+        })?;
+        let mut by_field = BTreeMap::new();
+        for field in fields {
+            if self.field_owners.get(&field.field) != Some(&product) {
+                return Err(LkError::new(
+                    ErrorCode::OwnerMismatch,
+                    "product field binding belongs to another declaration",
+                )
+                .at_operation(source));
+            }
+            let target = field.field;
+            if by_field.insert(target, field).is_some() {
+                return Err(LkError::new(
+                    ErrorCode::InvalidOperand,
+                    "product field binding is duplicated",
+                )
+                .at_operation(source));
+            }
+        }
+        let normalized = declared
+            .iter()
+            .map(|field| {
+                by_field.remove(field).ok_or_else(|| {
+                    LkError::new(
+                        ErrorCode::InvalidOperand,
+                        "product construction is missing a declared field",
+                    )
+                    .at_operation(source)
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        if !by_field.is_empty() {
+            return Err(LkError::new(
+                ErrorCode::OwnerMismatch,
+                "product construction contains a foreign field",
+            )
+            .at_operation(source));
+        }
+        Ok(normalized)
+    }
 }
 
 #[derive(Clone)]
@@ -720,12 +833,14 @@ enum ExpandEvent {
     FunctionBody {
         function: NodeTarget,
         body: FunctionBodyDraft,
+        path: String,
     },
     YieldingBody {
         owner: NodeTarget,
         region: DraftSymbol,
         arguments: Vec<(DraftSymbol, TypeDraft)>,
         body: YieldingBodyDraft,
+        path: String,
     },
     MatchArmBody {
         owner: NodeTarget,
@@ -733,11 +848,27 @@ enum ExpandEvent {
         variant: NodeTarget,
         payload_symbol: Option<DraftSymbol>,
         body: YieldingBodyDraft,
+        path: String,
     },
     Expression {
         block: NodeTarget,
         before: Option<NodeTarget>,
         expression: ExpressionDraft,
+        path: String,
+    },
+    CreateExpression {
+        block: NodeTarget,
+        before: Option<NodeTarget>,
+        symbol: DraftSymbol,
+        operation: ExpressionKindDraft,
+        path: String,
+    },
+    Terminal {
+        block: NodeTarget,
+        symbol: DraftSymbol,
+        value: ValueDraft,
+        code: OperationCode,
+        path: String,
     },
 }
 
@@ -818,6 +949,7 @@ fn expand_transaction(
                     events.push(ExpandEvent::FunctionBody {
                         function: NodeTarget::Draft(*symbol),
                         body: body.clone(),
+                        path: format!("op[{source}].body"),
                     });
                 }
                 for parameter in parameters.iter().rev() {
@@ -839,6 +971,7 @@ fn expand_transaction(
                 events.push(ExpandEvent::FunctionBody {
                     function: NodeTarget::Existing(*function),
                     body: body.clone(),
+                    path: format!("op[{source}].body"),
                 })
             }
             TransactionOp::InsertExpression {
@@ -876,6 +1009,7 @@ fn expand_transaction(
                     block: NodeTarget::Existing(*block),
                     before: before.map(NodeTarget::Existing),
                     expression: expression.clone(),
+                    path: format!("op[{source}].expression"),
                 });
             }
             TransactionOp::SetEntryFunction { package, function } => {
@@ -904,7 +1038,7 @@ fn expand_transaction(
             } => events.push(ExpandEvent::Edit(CanonicalEdit::ReplaceOperand {
                 operation: *operation,
                 index: *index,
-                value: *value,
+                value: value.clone(),
             })),
             TransactionOp::RefineHole { hole, replacement } => {
                 events.push(ExpandEvent::Edit(CanonicalEdit::RefineHole {
@@ -922,12 +1056,17 @@ fn expand_transaction(
     }
     let mut edits = Vec::new();
     let mut edit_sources = Vec::new();
+    let mut anonymous_paths = BTreeMap::new();
     let mut current_source = 0;
     while let Some(event) = events.pop() {
         match event {
             ExpandEvent::Source(source) => current_source = source,
             ExpandEvent::Edit(edit) => edits.push(edit),
-            ExpandEvent::FunctionBody { function, body } => {
+            ExpandEvent::FunctionBody {
+                function,
+                body,
+                path,
+            } => {
                 let region = synthetic.next(current_source)?;
                 let block = synthetic.next(current_source)?;
                 let terminator = synthetic.next(current_source)?;
@@ -943,19 +1082,19 @@ fn expand_transaction(
                     function,
                     region: NodeTarget::Draft(region),
                 }));
-                events.push(ExpandEvent::Edit(CanonicalEdit::CreateOperation {
-                    symbol: terminator,
+                events.push(ExpandEvent::Terminal {
                     block: NodeTarget::Draft(block),
-                    before: None,
-                    operation: OperationDraft::Return {
-                        value: body.return_value,
-                    },
-                }));
-                for expression in body.operations.into_iter().rev() {
+                    symbol: terminator,
+                    value: body.return_value,
+                    code: OperationCode::Return,
+                    path: format!("{path}.return"),
+                });
+                for (index, expression) in body.operations.into_iter().enumerate().rev() {
                     events.push(ExpandEvent::Expression {
                         block: NodeTarget::Draft(block),
                         before: None,
                         expression,
+                        path: format!("{path}.e[{index}]"),
                     });
                 }
             }
@@ -964,6 +1103,7 @@ fn expand_transaction(
                 region,
                 arguments,
                 body,
+                path,
             } => {
                 let block = synthetic.next(current_source)?;
                 edits.push(CanonicalEdit::CreateRegion {
@@ -982,19 +1122,19 @@ fn expand_transaction(
                     });
                 }
                 let terminator = synthetic.next(current_source)?;
-                events.push(ExpandEvent::Edit(CanonicalEdit::CreateOperation {
-                    symbol: terminator,
+                events.push(ExpandEvent::Terminal {
                     block: NodeTarget::Draft(block),
-                    before: None,
-                    operation: OperationDraft::Yield {
-                        value: body.yield_value,
-                    },
-                }));
-                for expression in body.operations.into_iter().rev() {
+                    symbol: terminator,
+                    value: body.yield_value,
+                    code: OperationCode::Yield,
+                    path: format!("{path}.yield"),
+                });
+                for (index, expression) in body.operations.into_iter().enumerate().rev() {
                     events.push(ExpandEvent::Expression {
                         block: NodeTarget::Draft(block),
                         before: None,
                         expression,
+                        path: format!("{path}.e[{index}]"),
                     });
                 }
             }
@@ -1004,6 +1144,7 @@ fn expand_transaction(
                 variant,
                 payload_symbol,
                 body,
+                path,
             } => {
                 let block = synthetic.next(current_source)?;
                 edits.push(CanonicalEdit::CreateRegion {
@@ -1022,19 +1163,19 @@ fn expand_transaction(
                     });
                 }
                 let terminator = synthetic.next(current_source)?;
-                events.push(ExpandEvent::Edit(CanonicalEdit::CreateOperation {
-                    symbol: terminator,
+                events.push(ExpandEvent::Terminal {
                     block: NodeTarget::Draft(block),
-                    before: None,
-                    operation: OperationDraft::Yield {
-                        value: body.yield_value,
-                    },
-                }));
-                for expression in body.operations.into_iter().rev() {
+                    symbol: terminator,
+                    value: body.yield_value,
+                    code: OperationCode::Yield,
+                    path: format!("{path}.yield"),
+                });
+                for (index, expression) in body.operations.into_iter().enumerate().rev() {
                     events.push(ExpandEvent::Expression {
                         block: NodeTarget::Draft(block),
                         before: None,
                         expression,
+                        path: format!("{path}.e[{index}]"),
                     });
                 }
             }
@@ -1042,196 +1183,281 @@ fn expand_transaction(
                 block,
                 before,
                 expression,
+                path,
             } => {
+                let explicit = expression.symbol.is_some();
                 let expression_symbol =
                     expression.symbol.unwrap_or(synthetic.next(current_source)?);
-                match expression.operation {
-                    ExpressionKindDraft::ConstUnit => edits.push(CanonicalEdit::CreateOperation {
-                        symbol: expression_symbol,
+                if !explicit {
+                    anonymous_paths.insert(expression_symbol, path.clone());
+                }
+                let mut operation = expression.operation;
+                if let ExpressionKindDraft::ConstructProduct { product, fields } = operation {
+                    operation = ExpressionKindDraft::ConstructProduct {
+                        product,
+                        fields: nominal_catalogue.normalize_product_fields(
+                            product,
+                            fields,
+                            current_source,
+                        )?,
+                    };
+                }
+                let children = extract_inline_children(
+                    &mut operation,
+                    &path,
+                    current_source,
+                    &mut synthetic,
+                    &mut anonymous_paths,
+                )?;
+                events.push(ExpandEvent::CreateExpression {
+                    block,
+                    before,
+                    symbol: expression_symbol,
+                    operation,
+                    path,
+                });
+                for (expression, path) in children.into_iter().rev() {
+                    events.push(ExpandEvent::Expression {
                         block,
                         before,
-                        operation: OperationDraft::ConstUnit,
-                    }),
-                    ExpressionKindDraft::ConstBool(value) => {
-                        edits.push(CanonicalEdit::CreateOperation {
-                            symbol: expression_symbol,
-                            block,
-                            before,
-                            operation: OperationDraft::ConstBool(value),
-                        })
-                    }
-                    ExpressionKindDraft::ConstI64(value) => {
-                        edits.push(CanonicalEdit::CreateOperation {
-                            symbol: expression_symbol,
-                            block,
-                            before,
-                            operation: OperationDraft::ConstI64(value),
-                        })
-                    }
-                    ExpressionKindDraft::AddI64 { lhs, rhs } => {
-                        edits.push(CanonicalEdit::CreateOperation {
-                            symbol: expression_symbol,
-                            block,
-                            before,
-                            operation: OperationDraft::AddI64 { lhs, rhs },
-                        })
-                    }
-                    ExpressionKindDraft::LtI64 { lhs, rhs } => {
-                        edits.push(CanonicalEdit::CreateOperation {
-                            symbol: expression_symbol,
-                            block,
-                            before,
-                            operation: OperationDraft::LtI64 { lhs, rhs },
-                        })
-                    }
-                    ExpressionKindDraft::Call {
-                        function,
-                        arguments,
-                    } => edits.push(CanonicalEdit::CreateOperation {
-                        symbol: expression_symbol,
-                        block,
-                        before,
-                        operation: OperationDraft::Call {
-                            function,
-                            arguments,
-                        },
-                    }),
-                    ExpressionKindDraft::Hole { expected } => {
-                        edits.push(CanonicalEdit::CreateOperation {
-                            symbol: expression_symbol,
-                            block,
-                            before,
-                            operation: OperationDraft::Hole { expected },
-                        })
-                    }
-                    ExpressionKindDraft::If {
-                        condition,
-                        result,
-                        then_body,
-                        else_body,
-                    } => {
-                        let then_region = synthetic.next(current_source)?;
-                        let else_region = synthetic.next(current_source)?;
-                        edits.push(CanonicalEdit::CreateOperation {
-                            symbol: expression_symbol,
-                            block,
-                            before,
-                            operation: OperationDraft::If {
-                                condition,
-                                result,
-                                then_region: NodeTarget::Draft(then_region),
-                                else_region: NodeTarget::Draft(else_region),
-                            },
-                        });
-                        events.push(ExpandEvent::YieldingBody {
-                            owner: NodeTarget::Draft(expression_symbol),
-                            region: else_region,
-                            arguments: Vec::new(),
-                            body: else_body,
-                        });
-                        events.push(ExpandEvent::YieldingBody {
-                            owner: NodeTarget::Draft(expression_symbol),
-                            region: then_region,
-                            arguments: Vec::new(),
-                            body: then_body,
-                        });
-                    }
-                    ExpressionKindDraft::ForI64 {
-                        start,
-                        end_exclusive,
-                        step,
-                        initial,
-                        carried,
-                        index_symbol,
-                        carried_symbol,
-                        body,
-                    } => {
-                        let body_region = synthetic.next(current_source)?;
-                        edits.push(CanonicalEdit::CreateOperation {
-                            symbol: expression_symbol,
-                            block,
-                            before,
-                            operation: OperationDraft::ForI64 {
-                                start,
-                                end_exclusive,
-                                step,
-                                initial,
-                                carried,
-                                body_region: NodeTarget::Draft(body_region),
-                            },
-                        });
-                        events.push(ExpandEvent::YieldingBody {
-                            owner: NodeTarget::Draft(expression_symbol),
-                            region: body_region,
-                            arguments: vec![
-                                (index_symbol, TypeDraft::I64),
-                                (carried_symbol, carried),
-                            ],
-                            body,
-                        });
-                    }
-                    ExpressionKindDraft::ConstructProduct { product, fields } => {
-                        edits.push(CanonicalEdit::CreateOperation {
-                            symbol: expression_symbol,
-                            block,
-                            before,
-                            operation: OperationDraft::ConstructProduct { product, fields },
-                        })
-                    }
-                    ExpressionKindDraft::ProjectField { value, field } => {
-                        edits.push(CanonicalEdit::CreateOperation {
-                            symbol: expression_symbol,
-                            block,
-                            before,
-                            operation: OperationDraft::ProjectField { value, field },
-                        })
-                    }
-                    ExpressionKindDraft::ConstructVariant { variant, payload } => {
-                        edits.push(CanonicalEdit::CreateOperation {
-                            symbol: expression_symbol,
-                            block,
-                            before,
-                            operation: OperationDraft::ConstructVariant { variant, payload },
-                        })
-                    }
-                    ExpressionKindDraft::MatchSum {
-                        scrutinee,
-                        result,
-                        arms,
-                    } => {
-                        let arms = nominal_catalogue.normalize_match_arms(arms, current_source)?;
-                        let mut canonical_arms = Vec::with_capacity(arms.len());
-                        let mut arm_events = Vec::with_capacity(arms.len());
-                        for arm in arms {
-                            let region = synthetic.next(current_source)?;
-                            canonical_arms.push(MatchArmOperationDraft {
-                                variant: arm.variant,
-                                region: NodeTarget::Draft(region),
-                            });
-                            arm_events.push(ExpandEvent::MatchArmBody {
-                                owner: NodeTarget::Draft(expression_symbol),
-                                region,
-                                variant: arm.variant,
-                                payload_symbol: arm.payload_symbol,
-                                body: arm.body,
-                            });
-                        }
-                        edits.push(CanonicalEdit::CreateOperation {
-                            symbol: expression_symbol,
-                            block,
-                            before,
-                            operation: OperationDraft::MatchSum {
-                                scrutinee,
-                                result,
-                                arms: canonical_arms,
-                            },
-                        });
-                        for event in arm_events.into_iter().rev() {
-                            events.push(event);
-                        }
-                    }
+                        expression,
+                        path,
+                    });
                 }
             }
+            ExpandEvent::Terminal {
+                block,
+                symbol,
+                mut value,
+                code,
+                path,
+            } => {
+                let child = extract_inline_value(
+                    &mut value,
+                    &path,
+                    current_source,
+                    &mut synthetic,
+                    &mut anonymous_paths,
+                )?;
+                let operation = match code {
+                    OperationCode::Return => OperationDraft::Return { value },
+                    OperationCode::Yield => OperationDraft::Yield { value },
+                    _ => {
+                        return Err(LkError::new(
+                            ErrorCode::InvalidOperand,
+                            "structured terminal work item has an invalid operation code",
+                        )
+                        .at_operation(current_source));
+                    }
+                };
+                events.push(ExpandEvent::Edit(CanonicalEdit::CreateOperation {
+                    symbol,
+                    block,
+                    before: None,
+                    operation,
+                }));
+                if let Some((expression, path)) = child {
+                    events.push(ExpandEvent::Expression {
+                        block,
+                        before: None,
+                        expression,
+                        path,
+                    });
+                }
+            }
+            ExpandEvent::CreateExpression {
+                block,
+                before,
+                symbol: expression_symbol,
+                operation,
+                path,
+            } => match operation {
+                ExpressionKindDraft::ConstUnit => edits.push(CanonicalEdit::CreateOperation {
+                    symbol: expression_symbol,
+                    block,
+                    before,
+                    operation: OperationDraft::ConstUnit,
+                }),
+                ExpressionKindDraft::ConstBool(value) => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::ConstBool(value),
+                    })
+                }
+                ExpressionKindDraft::ConstI64(value) => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::ConstI64(value),
+                    })
+                }
+                ExpressionKindDraft::AddI64 { lhs, rhs } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::AddI64 { lhs, rhs },
+                    })
+                }
+                ExpressionKindDraft::LtI64 { lhs, rhs } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::LtI64 { lhs, rhs },
+                    })
+                }
+                ExpressionKindDraft::Call {
+                    function,
+                    arguments,
+                } => edits.push(CanonicalEdit::CreateOperation {
+                    symbol: expression_symbol,
+                    block,
+                    before,
+                    operation: OperationDraft::Call {
+                        function,
+                        arguments,
+                    },
+                }),
+                ExpressionKindDraft::Hole { expected } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::Hole { expected },
+                    })
+                }
+                ExpressionKindDraft::If {
+                    condition,
+                    result,
+                    then_body,
+                    else_body,
+                } => {
+                    let then_region = synthetic.next(current_source)?;
+                    let else_region = synthetic.next(current_source)?;
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::If {
+                            condition,
+                            result,
+                            then_region: NodeTarget::Draft(then_region),
+                            else_region: NodeTarget::Draft(else_region),
+                        },
+                    });
+                    events.push(ExpandEvent::YieldingBody {
+                        owner: NodeTarget::Draft(expression_symbol),
+                        region: else_region,
+                        arguments: Vec::new(),
+                        body: else_body,
+                        path: format!("{path}.else"),
+                    });
+                    events.push(ExpandEvent::YieldingBody {
+                        owner: NodeTarget::Draft(expression_symbol),
+                        region: then_region,
+                        arguments: Vec::new(),
+                        body: then_body,
+                        path: format!("{path}.then"),
+                    });
+                }
+                ExpressionKindDraft::ForI64 {
+                    start,
+                    end_exclusive,
+                    step,
+                    initial,
+                    carried,
+                    index_symbol,
+                    carried_symbol,
+                    body,
+                } => {
+                    let body_region = synthetic.next(current_source)?;
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::ForI64 {
+                            start,
+                            end_exclusive,
+                            step,
+                            initial,
+                            carried,
+                            body_region: NodeTarget::Draft(body_region),
+                        },
+                    });
+                    events.push(ExpandEvent::YieldingBody {
+                        owner: NodeTarget::Draft(expression_symbol),
+                        region: body_region,
+                        arguments: vec![(index_symbol, TypeDraft::I64), (carried_symbol, carried)],
+                        body,
+                        path: format!("{path}.loop"),
+                    });
+                }
+                ExpressionKindDraft::ConstructProduct { product, fields } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::ConstructProduct { product, fields },
+                    })
+                }
+                ExpressionKindDraft::ProjectField { value, field } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::ProjectField { value, field },
+                    })
+                }
+                ExpressionKindDraft::ConstructVariant { variant, payload } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::ConstructVariant { variant, payload },
+                    })
+                }
+                ExpressionKindDraft::MatchSum {
+                    scrutinee,
+                    result,
+                    arms,
+                } => {
+                    let arms = nominal_catalogue.normalize_match_arms(arms, current_source)?;
+                    let mut canonical_arms = Vec::with_capacity(arms.len());
+                    let mut arm_events = Vec::with_capacity(arms.len());
+                    for (index, arm) in arms.into_iter().enumerate() {
+                        let region = synthetic.next(current_source)?;
+                        canonical_arms.push(MatchArmOperationDraft {
+                            variant: arm.variant,
+                            region: NodeTarget::Draft(region),
+                        });
+                        arm_events.push(ExpandEvent::MatchArmBody {
+                            owner: NodeTarget::Draft(expression_symbol),
+                            region,
+                            variant: arm.variant,
+                            payload_symbol: arm.payload_symbol,
+                            body: arm.body,
+                            path: format!("{path}.arm[{index}]"),
+                        });
+                    }
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::MatchSum {
+                            scrutinee,
+                            result,
+                            arms: canonical_arms,
+                        },
+                    });
+                    for event in arm_events.into_iter().rev() {
+                        events.push(event);
+                    }
+                }
+            },
         }
         edit_sources.resize(edits.len(), current_source);
     }
@@ -1240,8 +1466,117 @@ fn expand_transaction(
         edits,
         edit_sources,
         explicit_symbols,
+        anonymous_paths,
         nominal_catalogue,
     })
+}
+
+fn child_draft_path(base: &str, segment: &str, source: usize) -> Result<String> {
+    let path = format!("{base}.{segment}");
+    if path.len() > MAX_DRAFT_PATH_BYTES {
+        return Err(LkError::new(
+            ErrorCode::PolicyExceeded,
+            "structured draft path exceeds diagnostic policy",
+        )
+        .at_operation(source));
+    }
+    Ok(path)
+}
+
+fn extract_inline_value(
+    value: &mut ValueDraft,
+    path: &str,
+    source: usize,
+    synthetic: &mut SyntheticSymbols,
+    anonymous_paths: &mut BTreeMap<DraftSymbol, String>,
+) -> Result<Option<(ExpressionDraft, String)>> {
+    let ValueDraft::InlineExpression(operation) = value else {
+        return Ok(None);
+    };
+    if !operation.is_inline_eligible() {
+        return Err(LkError::new(
+            ErrorCode::InvalidOperand,
+            "inline expressions must be complete non-terminators with one result and no owned region",
+        )
+        .at_operation(source)
+        .at_draft_path(path));
+    }
+    let symbol = synthetic.next(source)?;
+    let replacement = ValueDraft::OperationResult {
+        operation: NodeTarget::Draft(symbol),
+        output: 0,
+    };
+    let ValueDraft::InlineExpression(operation) = std::mem::replace(value, replacement) else {
+        unreachable!()
+    };
+    anonymous_paths.insert(symbol, path.to_owned());
+    Ok(Some((
+        ExpressionDraft {
+            symbol: Some(symbol),
+            operation: *operation,
+        },
+        path.to_owned(),
+    )))
+}
+
+fn extract_inline_children(
+    operation: &mut ExpressionKindDraft,
+    path: &str,
+    source: usize,
+    synthetic: &mut SyntheticSymbols,
+    anonymous_paths: &mut BTreeMap<DraftSymbol, String>,
+) -> Result<Vec<(ExpressionDraft, String)>> {
+    let mut children = Vec::new();
+    let mut extract = |value: &mut ValueDraft, segment: String| -> Result<()> {
+        let child_path = child_draft_path(path, &segment, source)?;
+        if let Some(child) =
+            extract_inline_value(value, &child_path, source, synthetic, anonymous_paths)?
+        {
+            children.push(child);
+        }
+        Ok(())
+    };
+    match operation {
+        ExpressionKindDraft::ConstUnit
+        | ExpressionKindDraft::ConstBool(_)
+        | ExpressionKindDraft::ConstI64(_)
+        | ExpressionKindDraft::Hole { .. } => {}
+        ExpressionKindDraft::AddI64 { lhs, rhs } | ExpressionKindDraft::LtI64 { lhs, rhs } => {
+            extract(lhs, "lhs".to_owned())?;
+            extract(rhs, "rhs".to_owned())?;
+        }
+        ExpressionKindDraft::Call { arguments, .. } => {
+            for (index, value) in arguments.iter_mut().enumerate() {
+                extract(value, format!("arg[{index}]"))?;
+            }
+        }
+        ExpressionKindDraft::If { condition, .. } => extract(condition, "condition".to_owned())?,
+        ExpressionKindDraft::ForI64 {
+            start,
+            end_exclusive,
+            initial,
+            ..
+        } => {
+            extract(start, "start".to_owned())?;
+            extract(end_exclusive, "end".to_owned())?;
+            extract(initial, "initial".to_owned())?;
+        }
+        ExpressionKindDraft::ConstructProduct { fields, .. } => {
+            for (index, field) in fields.iter_mut().enumerate() {
+                extract(&mut field.value, format!("field[{index}]"))?;
+            }
+        }
+        ExpressionKindDraft::ProjectField { value, .. } => extract(value, "value".to_owned())?,
+        ExpressionKindDraft::ConstructVariant { payload, .. } => {
+            if let Some(payload) = payload {
+                extract(payload, "payload".to_owned())?;
+            }
+        }
+        ExpressionKindDraft::MatchSum { scrutinee, .. } => {
+            extract(scrutinee, "scrutinee".to_owned())?
+        }
+    }
+    Ok(children)
 }
 
 struct SyntheticSymbols {
@@ -1330,8 +1665,9 @@ impl DraftReferenceKind {
 
 fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftSymbol>> {
     enum Scan<'a> {
-        Expression(&'a ExpressionDraft, usize, usize),
-        Body(&'a [ExpressionDraft], ValueDraft, usize, usize),
+        Expression(&'a ExpressionDraft, usize, usize, String),
+        Inline(&'a ExpressionKindDraft, usize, usize, String),
+        Body(&'a [ExpressionDraft], &'a ValueDraft, usize, usize, String),
     }
     struct DraftBudget(usize);
     impl DraftBudget {
@@ -1396,26 +1732,76 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
         }
     }
     fn value_reference(
-        value: ValueDraft,
+        value: &ValueDraft,
         source: usize,
         references: &mut Vec<(DraftSymbol, DraftReferenceKind, usize)>,
     ) -> Result<()> {
-        validate_draft_value(&value, source)?;
+        validate_draft_value(value, source)?;
         match value {
             ValueDraft::FunctionParameter(target) => {
-                reference(target, DraftReferenceKind::Parameter, source, references)
+                reference(*target, DraftReferenceKind::Parameter, source, references)
             }
             ValueDraft::BlockArgument(target) => reference(
-                target,
+                *target,
                 DraftReferenceKind::BlockArgument,
                 source,
                 references,
             ),
-            ValueDraft::OperationResult { operation, .. } => {
-                reference(operation, DraftReferenceKind::Operation, source, references)
+            ValueDraft::OperationResult { operation, .. } => reference(
+                *operation,
+                DraftReferenceKind::Operation,
+                source,
+                references,
+            ),
+            ValueDraft::InlineExpression(_) => {
+                return Err(LkError::new(
+                    ErrorCode::InvalidOperand,
+                    "inline expressions are accepted only in structured value positions",
+                )
+                .at_operation(source));
             }
         }
         Ok(())
+    }
+    fn structured_value<'a>(
+        value: &'a ValueDraft,
+        depth: usize,
+        source: usize,
+        path: String,
+        stack: &mut Vec<Scan<'a>>,
+        references: &mut Vec<(DraftSymbol, DraftReferenceKind, usize)>,
+    ) -> Result<()> {
+        match value {
+            ValueDraft::InlineExpression(operation) => {
+                let depth = depth.checked_add(1).ok_or_else(|| {
+                    LkError::new(
+                        ErrorCode::PolicyExceeded,
+                        "structured draft nesting depth overflows",
+                    )
+                    .at_operation(source)
+                    .at_draft_path(path.clone())
+                })?;
+                if depth > MAX_STRUCTURED_DRAFT_DEPTH {
+                    return Err(LkError::new(
+                        ErrorCode::PolicyExceeded,
+                        "structured draft nesting exceeds request depth policy",
+                    )
+                    .at_operation(source)
+                    .at_draft_path(path));
+                }
+                if !operation.is_inline_eligible() {
+                    return Err(LkError::new(
+                        ErrorCode::InvalidOperand,
+                        "inline expressions must be complete non-terminators with one result and no owned region",
+                    )
+                    .at_operation(source)
+                    .at_draft_path(path));
+                }
+                stack.push(Scan::Inline(operation, depth, source, path));
+                Ok(())
+            }
+            _ => value_reference(value, source, references),
+        }
     }
     fn operation_references(
         operation: &OperationDraft,
@@ -1428,8 +1814,8 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
             | OperationDraft::ConstI64(_)
             | OperationDraft::ConstBool(_) => {}
             OperationDraft::AddI64 { lhs, rhs } | OperationDraft::LtI64 { lhs, rhs } => {
-                value_reference(*lhs, source, references)?;
-                value_reference(*rhs, source, references)?;
+                value_reference(lhs, source, references)?;
+                value_reference(rhs, source, references)?;
             }
             OperationDraft::Call {
                 function,
@@ -1438,7 +1824,7 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
                 reference(*function, DraftReferenceKind::Function, source, references);
                 budget.add(arguments.len(), source)?;
                 for value in arguments {
-                    value_reference(*value, source, references)?;
+                    value_reference(value, source, references)?;
                 }
             }
             OperationDraft::Hole { expected } => type_reference(*expected, source, references),
@@ -1448,7 +1834,7 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
                 then_region,
                 else_region,
             } => {
-                value_reference(*condition, source, references)?;
+                value_reference(condition, source, references)?;
                 type_reference(*result, source, references);
                 reference(*then_region, DraftReferenceKind::Region, source, references);
                 reference(*else_region, DraftReferenceKind::Region, source, references);
@@ -1461,14 +1847,14 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
                 body_region,
                 ..
             } => {
-                value_reference(*start, source, references)?;
-                value_reference(*end_exclusive, source, references)?;
-                value_reference(*initial, source, references)?;
+                value_reference(start, source, references)?;
+                value_reference(end_exclusive, source, references)?;
+                value_reference(initial, source, references)?;
                 type_reference(*carried, source, references);
                 reference(*body_region, DraftReferenceKind::Region, source, references);
             }
             OperationDraft::Return { value } | OperationDraft::Yield { value } => {
-                value_reference(*value, source, references)?;
+                value_reference(value, source, references)?;
             }
             OperationDraft::ConstructProduct { product, fields } => {
                 reference(
@@ -1485,17 +1871,17 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
                         source,
                         references,
                     );
-                    value_reference(field.value, source, references)?;
+                    value_reference(&field.value, source, references)?;
                 }
             }
             OperationDraft::ProjectField { value, field } => {
-                value_reference(*value, source, references)?;
+                value_reference(value, source, references)?;
                 reference(*field, DraftReferenceKind::ProductField, source, references);
             }
             OperationDraft::ConstructVariant { variant, payload } => {
                 reference(*variant, DraftReferenceKind::SumVariant, source, references);
                 if let Some(value) = payload {
-                    value_reference(*value, source, references)?;
+                    value_reference(value, source, references)?;
                 }
             }
             OperationDraft::MatchSum {
@@ -1503,7 +1889,7 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
                 result,
                 arms,
             } => {
-                value_reference(*scrutinee, source, references)?;
+                value_reference(scrutinee, source, references)?;
                 type_reference(*result, source, references);
                 budget.add(arms.len(), source)?;
                 for arm in arms {
@@ -1644,16 +2030,31 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
                 }
                 if let Some(body) = body {
                     budget.add(1, source)?;
-                    stack.push(Scan::Body(&body.operations, body.return_value, 0, source));
+                    stack.push(Scan::Body(
+                        &body.operations,
+                        &body.return_value,
+                        0,
+                        source,
+                        format!("op[{source}].body"),
+                    ));
                 }
             }
             TransactionOp::DefineFunctionBody { body, .. } => {
                 budget.add(1, source)?;
-                stack.push(Scan::Body(&body.operations, body.return_value, 0, source));
+                stack.push(Scan::Body(
+                    &body.operations,
+                    &body.return_value,
+                    0,
+                    source,
+                    format!("op[{source}].body"),
+                ));
             }
-            TransactionOp::InsertExpression { expression, .. } => {
-                stack.push(Scan::Expression(expression, 0, source))
-            }
+            TransactionOp::InsertExpression { expression, .. } => stack.push(Scan::Expression(
+                expression,
+                0,
+                source,
+                format!("op[{source}].expression"),
+            )),
             TransactionOp::SetEntryFunction { package, function } => {
                 reference(
                     *package,
@@ -1695,7 +2096,7 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
                     source,
                     &mut references,
                 );
-                value_reference(*value, source, &mut references)?;
+                value_reference(value, source, &mut references)?;
             }
             TransactionOp::RefineHole { hole, replacement } => {
                 reference(
@@ -1715,21 +2116,35 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
         }
     }
     while let Some(event) = stack.pop() {
-        match event {
-            Scan::Body(expressions, terminal, depth, source) => {
-                value_reference(terminal, source, &mut references)?;
+        let (operation, depth, source, path) = match event {
+            Scan::Body(expressions, terminal, depth, source, path) => {
                 if depth > MAX_STRUCTURED_DRAFT_DEPTH {
                     return Err(LkError::new(
                         ErrorCode::PolicyExceeded,
                         "structured draft nesting exceeds request depth policy",
                     )
-                    .at_operation(source));
+                    .at_operation(source)
+                    .at_draft_path(path));
                 }
-                for expression in expressions.iter().rev() {
-                    stack.push(Scan::Expression(expression, depth, source));
+                structured_value(
+                    terminal,
+                    depth,
+                    source,
+                    child_draft_path(&path, "term", source)?,
+                    &mut stack,
+                    &mut references,
+                )?;
+                for (index, expression) in expressions.iter().enumerate().rev() {
+                    stack.push(Scan::Expression(
+                        expression,
+                        depth,
+                        source,
+                        child_draft_path(&path, &format!("e[{index}]"), source)?,
+                    ));
                 }
+                continue;
             }
-            Scan::Expression(expression, depth, source) => {
+            Scan::Expression(expression, depth, source, path) => {
                 budget.add(1, source)?;
                 if let Some(symbol) = expression.symbol {
                     declare(
@@ -1740,163 +2155,251 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
                         source,
                     )?;
                 }
-                match &expression.operation {
-                    ExpressionKindDraft::ConstUnit
-                    | ExpressionKindDraft::ConstBool(_)
-                    | ExpressionKindDraft::ConstI64(_) => {}
-                    ExpressionKindDraft::AddI64 { lhs, rhs }
-                    | ExpressionKindDraft::LtI64 { lhs, rhs } => {
-                        value_reference(*lhs, source, &mut references)?;
-                        value_reference(*rhs, source, &mut references)?;
-                    }
-                    ExpressionKindDraft::Call {
-                        function,
-                        arguments,
-                    } => {
-                        reference(
-                            *function,
-                            DraftReferenceKind::Function,
-                            source,
-                            &mut references,
-                        );
-                        budget.add(arguments.len(), source)?;
-                        for value in arguments {
-                            value_reference(*value, source, &mut references)?;
-                        }
-                    }
-                    ExpressionKindDraft::Hole { expected } => {
-                        type_reference(*expected, source, &mut references)
-                    }
-                    ExpressionKindDraft::If {
-                        condition,
-                        result,
-                        then_body,
-                        else_body,
-                    } => {
-                        value_reference(*condition, source, &mut references)?;
-                        type_reference(*result, source, &mut references);
-                        budget.add(2, source)?;
-                        stack.push(Scan::Body(
-                            &else_body.operations,
-                            else_body.yield_value,
-                            depth + 1,
-                            source,
-                        ));
-                        stack.push(Scan::Body(
-                            &then_body.operations,
-                            then_body.yield_value,
-                            depth + 1,
-                            source,
-                        ));
-                    }
-                    ExpressionKindDraft::ForI64 {
-                        start,
-                        end_exclusive,
-                        initial,
-                        carried,
-                        index_symbol,
-                        carried_symbol,
-                        body,
-                        ..
-                    } => {
-                        value_reference(*start, source, &mut references)?;
-                        value_reference(*end_exclusive, source, &mut references)?;
-                        value_reference(*initial, source, &mut references)?;
-                        type_reference(*carried, source, &mut references);
-                        declare(
-                            &mut symbols,
-                            &mut kinds,
-                            *index_symbol,
-                            DraftSymbolKind::BlockArgument,
-                            source,
-                        )?;
-                        declare(
-                            &mut symbols,
-                            &mut kinds,
-                            *carried_symbol,
-                            DraftSymbolKind::BlockArgument,
-                            source,
-                        )?;
-                        budget.add(1, source)?;
-                        stack.push(Scan::Body(
-                            &body.operations,
-                            body.yield_value,
-                            depth + 1,
-                            source,
-                        ));
-                    }
-                    ExpressionKindDraft::ConstructProduct { product, fields } => {
-                        reference(
-                            *product,
-                            DraftReferenceKind::ProductType,
-                            source,
-                            &mut references,
-                        );
-                        budget.add(fields.len(), source)?;
-                        for field in fields {
-                            reference(
-                                field.field,
-                                DraftReferenceKind::ProductField,
-                                source,
-                                &mut references,
-                            );
-                            value_reference(field.value, source, &mut references)?;
-                        }
-                    }
-                    ExpressionKindDraft::ProjectField { value, field } => {
-                        value_reference(*value, source, &mut references)?;
-                        reference(
-                            *field,
-                            DraftReferenceKind::ProductField,
-                            source,
-                            &mut references,
-                        );
-                    }
-                    ExpressionKindDraft::ConstructVariant { variant, payload } => {
-                        reference(
-                            *variant,
-                            DraftReferenceKind::SumVariant,
-                            source,
-                            &mut references,
-                        );
-                        if let Some(value) = payload {
-                            value_reference(*value, source, &mut references)?;
-                        }
-                    }
-                    ExpressionKindDraft::MatchSum {
-                        scrutinee,
-                        result,
-                        arms,
-                    } => {
-                        value_reference(*scrutinee, source, &mut references)?;
-                        type_reference(*result, source, &mut references);
-                        budget.add(arms.len(), source)?;
-                        for arm in arms.iter().rev() {
-                            reference(
-                                arm.variant,
-                                DraftReferenceKind::SumVariant,
-                                source,
-                                &mut references,
-                            );
-                            if let Some(symbol) = arm.payload_symbol {
-                                declare(
-                                    &mut symbols,
-                                    &mut kinds,
-                                    symbol,
-                                    DraftSymbolKind::BlockArgument,
-                                    source,
-                                )?;
-                            }
-                            budget.add(1, source)?;
-                            stack.push(Scan::Body(
-                                &arm.body.operations,
-                                arm.body.yield_value,
-                                depth + 1,
-                                source,
-                            ));
-                        }
-                    }
+                (&expression.operation, depth, source, path)
+            }
+            Scan::Inline(operation, depth, source, path) => {
+                budget.add(1, source)?;
+                (operation, depth, source, path)
+            }
+        };
+
+        match operation {
+            ExpressionKindDraft::ConstUnit
+            | ExpressionKindDraft::ConstBool(_)
+            | ExpressionKindDraft::ConstI64(_) => {}
+            ExpressionKindDraft::AddI64 { lhs, rhs } | ExpressionKindDraft::LtI64 { lhs, rhs } => {
+                structured_value(
+                    rhs,
+                    depth,
+                    source,
+                    child_draft_path(&path, "rhs", source)?,
+                    &mut stack,
+                    &mut references,
+                )?;
+                structured_value(
+                    lhs,
+                    depth,
+                    source,
+                    child_draft_path(&path, "lhs", source)?,
+                    &mut stack,
+                    &mut references,
+                )?;
+            }
+            ExpressionKindDraft::Call {
+                function,
+                arguments,
+            } => {
+                reference(
+                    *function,
+                    DraftReferenceKind::Function,
+                    source,
+                    &mut references,
+                );
+                budget.add(arguments.len(), source)?;
+                for (index, value) in arguments.iter().enumerate().rev() {
+                    structured_value(
+                        value,
+                        depth,
+                        source,
+                        child_draft_path(&path, &format!("arg[{index}]"), source)?,
+                        &mut stack,
+                        &mut references,
+                    )?;
                 }
+            }
+            ExpressionKindDraft::Hole { expected } => {
+                type_reference(*expected, source, &mut references)
+            }
+            ExpressionKindDraft::If {
+                condition,
+                result,
+                then_body,
+                else_body,
+            } => {
+                structured_value(
+                    condition,
+                    depth,
+                    source,
+                    child_draft_path(&path, "condition", source)?,
+                    &mut stack,
+                    &mut references,
+                )?;
+                type_reference(*result, source, &mut references);
+                budget.add(2, source)?;
+                stack.push(Scan::Body(
+                    &else_body.operations,
+                    &else_body.yield_value,
+                    depth + 1,
+                    source,
+                    child_draft_path(&path, "else", source)?,
+                ));
+                stack.push(Scan::Body(
+                    &then_body.operations,
+                    &then_body.yield_value,
+                    depth + 1,
+                    source,
+                    child_draft_path(&path, "then", source)?,
+                ));
+            }
+            ExpressionKindDraft::ForI64 {
+                start,
+                end_exclusive,
+                initial,
+                carried,
+                index_symbol,
+                carried_symbol,
+                body,
+                ..
+            } => {
+                structured_value(
+                    initial,
+                    depth,
+                    source,
+                    child_draft_path(&path, "initial", source)?,
+                    &mut stack,
+                    &mut references,
+                )?;
+                structured_value(
+                    end_exclusive,
+                    depth,
+                    source,
+                    child_draft_path(&path, "end", source)?,
+                    &mut stack,
+                    &mut references,
+                )?;
+                structured_value(
+                    start,
+                    depth,
+                    source,
+                    child_draft_path(&path, "start", source)?,
+                    &mut stack,
+                    &mut references,
+                )?;
+                type_reference(*carried, source, &mut references);
+                declare(
+                    &mut symbols,
+                    &mut kinds,
+                    *index_symbol,
+                    DraftSymbolKind::BlockArgument,
+                    source,
+                )?;
+                declare(
+                    &mut symbols,
+                    &mut kinds,
+                    *carried_symbol,
+                    DraftSymbolKind::BlockArgument,
+                    source,
+                )?;
+                budget.add(1, source)?;
+                stack.push(Scan::Body(
+                    &body.operations,
+                    &body.yield_value,
+                    depth + 1,
+                    source,
+                    child_draft_path(&path, "body", source)?,
+                ));
+            }
+            ExpressionKindDraft::ConstructProduct { product, fields } => {
+                reference(
+                    *product,
+                    DraftReferenceKind::ProductType,
+                    source,
+                    &mut references,
+                );
+                budget.add(fields.len(), source)?;
+                for (index, field) in fields.iter().enumerate().rev() {
+                    reference(
+                        field.field,
+                        DraftReferenceKind::ProductField,
+                        source,
+                        &mut references,
+                    );
+                    structured_value(
+                        &field.value,
+                        depth,
+                        source,
+                        child_draft_path(&path, &format!("field[{index}]"), source)?,
+                        &mut stack,
+                        &mut references,
+                    )?;
+                }
+            }
+            ExpressionKindDraft::ProjectField { value, field } => {
+                structured_value(
+                    value,
+                    depth,
+                    source,
+                    child_draft_path(&path, "value", source)?,
+                    &mut stack,
+                    &mut references,
+                )?;
+                reference(
+                    *field,
+                    DraftReferenceKind::ProductField,
+                    source,
+                    &mut references,
+                );
+            }
+            ExpressionKindDraft::ConstructVariant { variant, payload } => {
+                reference(
+                    *variant,
+                    DraftReferenceKind::SumVariant,
+                    source,
+                    &mut references,
+                );
+                if let Some(value) = payload {
+                    structured_value(
+                        value,
+                        depth,
+                        source,
+                        child_draft_path(&path, "payload", source)?,
+                        &mut stack,
+                        &mut references,
+                    )?;
+                }
+            }
+            ExpressionKindDraft::MatchSum {
+                scrutinee,
+                result,
+                arms,
+            } => {
+                structured_value(
+                    scrutinee,
+                    depth,
+                    source,
+                    child_draft_path(&path, "scrutinee", source)?,
+                    &mut stack,
+                    &mut references,
+                )?;
+                type_reference(*result, source, &mut references);
+                budget.add(arms.len(), source)?;
+                let mut body_events = Vec::with_capacity(arms.len());
+                for (index, arm) in arms.iter().enumerate() {
+                    reference(
+                        arm.variant,
+                        DraftReferenceKind::SumVariant,
+                        source,
+                        &mut references,
+                    );
+                    if let Some(symbol) = arm.payload_symbol {
+                        declare(
+                            &mut symbols,
+                            &mut kinds,
+                            symbol,
+                            DraftSymbolKind::BlockArgument,
+                            source,
+                        )?;
+                    }
+                    budget.add(1, source)?;
+                    body_events.push(Scan::Body(
+                        &arm.body.operations,
+                        &arm.body.yield_value,
+                        depth + 1,
+                        source,
+                        child_draft_path(&path, &format!("arm[{index}]"), source)?,
+                    ));
+                }
+                stack.extend(body_events.into_iter().rev());
             }
         }
     }
@@ -1984,6 +2487,7 @@ impl Workspace {
             &expanded.edits,
             &expanded.edit_sources,
             &expanded.explicit_symbols,
+            &expanded.anonymous_paths,
         )?;
         validate_response_spec(&request.response, &allocations, &expanded.explicit_symbols)?;
         let mut nodes = base.nodes.clone();
@@ -2002,9 +2506,23 @@ impl Workspace {
                 if error.operation_index.is_none() {
                     error = error.at_operation(*source);
                 }
+                if error.draft_symbol.is_none() && error.draft_path.is_none() {
+                    error = decorate_created_edit_error(
+                        error,
+                        operation,
+                        &expanded.explicit_symbols,
+                        &expanded.anonymous_paths,
+                    );
+                }
                 return Err(error);
             }
-            record_edit_provenance(operation, *source, &allocations, &mut provenance)?;
+            record_edit_provenance(
+                operation,
+                *source,
+                &allocations,
+                &expanded.anonymous_paths,
+                &mut provenance,
+            )?;
         }
 
         if nodes == base.nodes && tombstones == base.tombstones && next_serial == base.next_serial {
@@ -2044,7 +2562,12 @@ impl Workspace {
                             &allocations,
                             &expanded.explicit_symbols,
                         );
-                        if error.draft_symbol.is_none() {
+                        if error.draft_symbol.is_none()
+                            && let Some(path) = error_path_from_provenance(&error, &provenance)
+                        {
+                            error = error.at_draft_path(path);
+                        }
+                        if error.draft_symbol.is_none() && error.draft_path.is_none() {
                             error = error.at_draft_path(format!("operations[{source}]"));
                         }
                     }
@@ -2065,7 +2588,12 @@ impl Workspace {
                         &allocations,
                         &expanded.explicit_symbols,
                     );
-                    if error.draft_symbol.is_none() {
+                    if error.draft_symbol.is_none()
+                        && let Some(path) = error_path_from_provenance(&error, &provenance)
+                    {
+                        error = error.at_draft_path(path);
+                    }
+                    if error.draft_symbol.is_none() && error.draft_path.is_none() {
                         error = error.at_draft_path(format!("operations[{source}]"));
                     }
                 }
@@ -2118,22 +2646,26 @@ impl Workspace {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct NodeProvenance {
     source: usize,
     offending_use: bool,
+    draft_path: Option<String>,
 }
 
 fn record_edit_provenance(
     edit: &CanonicalEdit,
     source: usize,
     allocations: &BTreeMap<DraftSymbol, NodeId>,
+    anonymous_paths: &BTreeMap<DraftSymbol, String>,
     provenance: &mut BTreeMap<NodeId, NodeProvenance>,
 ) -> Result<()> {
-    let (target, offending_use) = match edit {
-        CanonicalEdit::CreateOperation { symbol, .. } => {
-            (Some(allocated(allocations, *symbol)?), true)
-        }
+    let (target, offending_use, draft_path) = match edit {
+        CanonicalEdit::CreateOperation { symbol, .. } => (
+            Some(allocated(allocations, *symbol)?),
+            true,
+            anonymous_paths.get(symbol).cloned(),
+        ),
         CanonicalEdit::CreatePackage { symbol, .. }
         | CanonicalEdit::CreateModule { symbol, .. }
         | CanonicalEdit::CreateProductType { symbol, .. }
@@ -2146,27 +2678,39 @@ fn record_edit_provenance(
         | CanonicalEdit::CreateBlock { symbol, .. }
         | CanonicalEdit::CreateBlockArgument { symbol, .. }
         | CanonicalEdit::CreateMatchPayloadArgument { symbol, .. } => {
-            (Some(allocated(allocations, *symbol)?), false)
+            (Some(allocated(allocations, *symbol)?), false, None)
         }
         CanonicalEdit::ReplaceOperation { operation, .. }
-        | CanonicalEdit::ReplaceOperand { operation, .. } => {
-            (Some(resolve_for_provenance(*operation, allocations)?), true)
-        }
-        CanonicalEdit::RefineHole { hole, .. } => {
-            (Some(resolve_for_provenance(*hole, allocations)?), true)
-        }
-        CanonicalEdit::SetFunctionBody { function, .. } => {
-            (Some(resolve_for_provenance(*function, allocations)?), false)
-        }
-        CanonicalEdit::SetEntryFunction { package, .. } => {
-            (Some(resolve_for_provenance(*package, allocations)?), false)
-        }
-        CanonicalEdit::RenameNode { node, .. } => {
-            (Some(resolve_for_provenance(*node, allocations)?), false)
-        }
-        CanonicalEdit::DeleteOwnedSubtree { root } => {
-            (Some(resolve_for_provenance(*root, allocations)?), false)
-        }
+        | CanonicalEdit::ReplaceOperand { operation, .. } => (
+            Some(resolve_for_provenance(*operation, allocations)?),
+            true,
+            None,
+        ),
+        CanonicalEdit::RefineHole { hole, .. } => (
+            Some(resolve_for_provenance(*hole, allocations)?),
+            true,
+            None,
+        ),
+        CanonicalEdit::SetFunctionBody { function, .. } => (
+            Some(resolve_for_provenance(*function, allocations)?),
+            false,
+            None,
+        ),
+        CanonicalEdit::SetEntryFunction { package, .. } => (
+            Some(resolve_for_provenance(*package, allocations)?),
+            false,
+            None,
+        ),
+        CanonicalEdit::RenameNode { node, .. } => (
+            Some(resolve_for_provenance(*node, allocations)?),
+            false,
+            None,
+        ),
+        CanonicalEdit::DeleteOwnedSubtree { root } => (
+            Some(resolve_for_provenance(*root, allocations)?),
+            false,
+            None,
+        ),
     };
     if let Some(target) = target {
         provenance.insert(
@@ -2174,6 +2718,7 @@ fn record_edit_provenance(
             NodeProvenance {
                 source,
                 offending_use,
+                draft_path,
             },
         );
     }
@@ -2243,6 +2788,34 @@ fn error_symbol_from_provenance(
     })
 }
 
+fn error_path_from_provenance(
+    error: &LkError,
+    provenance: &BTreeMap<NodeId, NodeProvenance>,
+) -> Option<String> {
+    preferred_error_provenance(error, provenance)?
+        .1
+        .draft_path
+        .clone()
+}
+
+fn decorate_created_edit_error(
+    error: LkError,
+    edit: &CanonicalEdit,
+    explicit_symbols: &BTreeSet<DraftSymbol>,
+    anonymous_paths: &BTreeMap<DraftSymbol, String>,
+) -> LkError {
+    let Some(symbol) = canonical_created_symbol(edit) else {
+        return error;
+    };
+    if explicit_symbols.contains(&symbol) {
+        error.for_symbol(symbol)
+    } else if let Some(path) = anonymous_paths.get(&symbol) {
+        error.at_draft_path(path.clone())
+    } else {
+        error
+    }
+}
+
 fn validate_response_spec(
     response: &TransactionResponseSpec,
     allocations: &BTreeMap<DraftSymbol, NodeId>,
@@ -2280,10 +2853,13 @@ fn allocation_error(
     source: usize,
     symbol: DraftSymbol,
     explicit_symbols: &BTreeSet<DraftSymbol>,
+    anonymous_paths: &BTreeMap<DraftSymbol, String>,
 ) -> LkError {
     let error = LkError::new(code, message).at_operation(source);
     if explicit_symbols.contains(&symbol) {
         error.for_symbol(symbol)
+    } else if let Some(path) = anonymous_paths.get(&symbol) {
+        error.at_draft_path(path.clone())
     } else {
         error.at_draft_path(format!("operations[{source}]"))
     }
@@ -2294,6 +2870,7 @@ fn allocate_symbols(
     operations: &[CanonicalEdit],
     edit_sources: &[usize],
     explicit_symbols: &BTreeSet<DraftSymbol>,
+    anonymous_paths: &BTreeMap<DraftSymbol, String>,
 ) -> Result<(BTreeMap<DraftSymbol, NodeId>, u64)> {
     let mut allocations = BTreeMap::new();
     let mut next = base.next_serial;
@@ -2308,6 +2885,7 @@ fn allocate_symbols(
                 *source,
                 symbol,
                 explicit_symbols,
+                anonymous_paths,
             ));
         }
         let id = NodeId::new(base.workspace(), next).map_err(|error| {
@@ -2317,6 +2895,7 @@ fn allocate_symbols(
                 *source,
                 symbol,
                 explicit_symbols,
+                anonymous_paths,
             )
         })?;
         next = next.checked_add(1).ok_or_else(|| {
@@ -2326,6 +2905,7 @@ fn allocate_symbols(
                 *source,
                 symbol,
                 explicit_symbols,
+                anonymous_paths,
             )
         })?;
         allocations.insert(symbol, id);
@@ -2851,7 +3431,7 @@ fn apply_operation(
             value,
         } => {
             let operation = resolve(*operation, allocations, base.workspace())?;
-            let value = resolve_value(*value, allocations, base.workspace())?;
+            let value = resolve_value(value, allocations, base.workspace())?;
             let Node::Operation {
                 operation: current, ..
             } = require_kind_mut(nodes, operation, NodeKind::Operation)?
@@ -2965,12 +3545,12 @@ fn resolve_operation(
         OperationDraft::ConstI64(value) => OperationKind::ConstI64(*value),
         OperationDraft::ConstBool(value) => OperationKind::ConstBool(*value),
         OperationDraft::AddI64 { lhs, rhs } => OperationKind::AddI64 {
-            lhs: resolve_value(*lhs, allocations, workspace)?,
-            rhs: resolve_value(*rhs, allocations, workspace)?,
+            lhs: resolve_value(lhs, allocations, workspace)?,
+            rhs: resolve_value(rhs, allocations, workspace)?,
         },
         OperationDraft::LtI64 { lhs, rhs } => OperationKind::LtI64 {
-            lhs: resolve_value(*lhs, allocations, workspace)?,
-            rhs: resolve_value(*rhs, allocations, workspace)?,
+            lhs: resolve_value(lhs, allocations, workspace)?,
+            rhs: resolve_value(rhs, allocations, workspace)?,
         },
         OperationDraft::Call {
             function,
@@ -2979,7 +3559,6 @@ fn resolve_operation(
             function: resolve(*function, allocations, workspace)?,
             arguments: arguments
                 .iter()
-                .cloned()
                 .map(|value| resolve_value(value, allocations, workspace))
                 .collect::<Result<Vec<_>>>()?,
         },
@@ -2992,7 +3571,7 @@ fn resolve_operation(
             then_region,
             else_region,
         } => OperationKind::If {
-            condition: resolve_value(*condition, allocations, workspace)?,
+            condition: resolve_value(condition, allocations, workspace)?,
             result: resolve_type_draft(*result, allocations, workspace)?,
             then_region: resolve(*then_region, allocations, workspace)?,
             else_region: resolve(*else_region, allocations, workspace)?,
@@ -3005,18 +3584,18 @@ fn resolve_operation(
             carried,
             body_region,
         } => OperationKind::ForI64 {
-            start: resolve_value(*start, allocations, workspace)?,
-            end_exclusive: resolve_value(*end_exclusive, allocations, workspace)?,
+            start: resolve_value(start, allocations, workspace)?,
+            end_exclusive: resolve_value(end_exclusive, allocations, workspace)?,
             step: *step,
-            initial: resolve_value(*initial, allocations, workspace)?,
+            initial: resolve_value(initial, allocations, workspace)?,
             carried: resolve_type_draft(*carried, allocations, workspace)?,
             body_region: resolve(*body_region, allocations, workspace)?,
         },
         OperationDraft::Return { value } => OperationKind::Return {
-            value: resolve_value(*value, allocations, workspace)?,
+            value: resolve_value(value, allocations, workspace)?,
         },
         OperationDraft::Yield { value } => OperationKind::Yield {
-            value: resolve_value(*value, allocations, workspace)?,
+            value: resolve_value(value, allocations, workspace)?,
         },
         OperationDraft::ConstructProduct { product, fields } => {
             let product_target = *product;
@@ -3042,7 +3621,7 @@ fn resolve_operation(
                 if resolved
                     .insert(
                         field_id,
-                        resolve_value(field.value, allocations, workspace)?,
+                        resolve_value(&field.value, allocations, workspace)?,
                     )
                     .is_some()
                 {
@@ -3083,12 +3662,13 @@ fn resolve_operation(
             OperationKind::ConstructProduct { product, fields }
         }
         OperationDraft::ProjectField { value, field } => OperationKind::ProjectField {
-            value: resolve_value(*value, allocations, workspace)?,
+            value: resolve_value(value, allocations, workspace)?,
             field: resolve(*field, allocations, workspace)?,
         },
         OperationDraft::ConstructVariant { variant, payload } => OperationKind::ConstructVariant {
             variant: resolve(*variant, allocations, workspace)?,
-            payload: (*payload)
+            payload: payload
+                .as_ref()
                 .map(|value| resolve_value(value, allocations, workspace))
                 .transpose()?,
         },
@@ -3107,7 +3687,7 @@ fn resolve_operation(
                 })
                 .collect::<Result<Vec<_>>>()?;
             OperationKind::MatchSum {
-                scrutinee: resolve_value(*scrutinee, allocations, workspace)?,
+                scrutinee: resolve_value(scrutinee, allocations, workspace)?,
                 result: resolve_type_draft(*result, allocations, workspace)?,
                 arms: resolved,
             }
@@ -3131,21 +3711,26 @@ fn resolve_type_draft(
 }
 
 fn resolve_value(
-    value: ValueDraft,
+    value: &ValueDraft,
     allocations: &BTreeMap<DraftSymbol, NodeId>,
     workspace: WorkspaceId,
 ) -> Result<ValueRef> {
     Ok(match value {
         ValueDraft::FunctionParameter(parameter) => {
-            ValueRef::FunctionParameter(resolve(parameter, allocations, workspace)?)
+            ValueRef::FunctionParameter(resolve(*parameter, allocations, workspace)?)
         }
         ValueDraft::BlockArgument(argument) => {
-            ValueRef::BlockArgument(resolve(argument, allocations, workspace)?)
+            ValueRef::BlockArgument(resolve(*argument, allocations, workspace)?)
         }
         ValueDraft::OperationResult { operation, output } => ValueRef::OperationResult {
-            operation: resolve(operation, allocations, workspace)?,
-            output,
+            operation: resolve(*operation, allocations, workspace)?,
+            output: *output,
         },
+        ValueDraft::InlineExpression(_) => {
+            return Err(invariant(
+                "inline expression survived structured proposal normalization",
+            ));
+        }
     })
 }
 
@@ -3439,6 +4024,9 @@ mod tests {
             operation,
         }
     }
+    fn inline(operation: ExpressionKindDraft) -> ValueDraft {
+        ValueDraft::InlineExpression(Box::new(operation))
+    }
     fn structured_semantic_request(
         id: WorkspaceId,
         mut operations: Vec<TransactionOp>,
@@ -3464,6 +4052,402 @@ mod tests {
                 operations: all,
             },
             response: TransactionResponseSpec::default(),
+        }
+    }
+
+    fn equal_arithmetic_request(id: WorkspaceId, inline_values: bool) -> ApplyTransactionRequest {
+        let operations = if inline_values {
+            vec![draft_expression(
+                8,
+                ExpressionKindDraft::AddI64 {
+                    lhs: inline(ExpressionKindDraft::AddI64 {
+                        lhs: inline(ExpressionKindDraft::ConstI64(1)),
+                        rhs: inline(ExpressionKindDraft::ConstI64(2)),
+                    }),
+                    rhs: inline(ExpressionKindDraft::ConstI64(3)),
+                },
+            )]
+        } else {
+            vec![
+                draft_expression(4, ExpressionKindDraft::ConstI64(1)),
+                draft_expression(5, ExpressionKindDraft::ConstI64(2)),
+                draft_expression(
+                    6,
+                    ExpressionKindDraft::AddI64 {
+                        lhs: draft_result(4),
+                        rhs: draft_result(5),
+                    },
+                ),
+                draft_expression(7, ExpressionKindDraft::ConstI64(3)),
+                draft_expression(
+                    8,
+                    ExpressionKindDraft::AddI64 {
+                        lhs: draft_result(6),
+                        rhs: draft_result(7),
+                    },
+                ),
+            ]
+        };
+        let mut request = structured_semantic_request(
+            id,
+            vec![
+                TransactionOp::CreateFunction {
+                    symbol: DraftSymbol::generated(3),
+                    module: draft_symbol(2),
+                    name: "main".into(),
+                    parameters: Vec::new(),
+                    result: TypeDraft::I64,
+                    body: Some(FunctionBodyDraft {
+                        operations,
+                        return_value: draft_result(8),
+                    }),
+                },
+                TransactionOp::SetEntryFunction {
+                    package: draft_symbol(1),
+                    function: draft_symbol(3),
+                },
+            ],
+        );
+        request.response.return_symbols = [1, 2, 3, 8]
+            .into_iter()
+            .map(DraftSymbol::generated)
+            .collect();
+        request
+    }
+
+    #[test]
+    fn inline_and_explicit_postorder_proposals_produce_identical_authority() {
+        let id = WorkspaceId::from_bytes([0x70; 16]);
+        let explicit_workspace = Workspace::new(id).expect("explicit workspace");
+        let inline_workspace = Workspace::new(id).expect("inline workspace");
+        let explicit = explicit_workspace
+            .prepare_transaction(&equal_arithmetic_request(id, false))
+            .expect("explicit proposal");
+        let inline = inline_workspace
+            .prepare_transaction(&equal_arithmetic_request(id, true))
+            .expect("inline proposal");
+
+        assert_eq!(explicit.receipt, inline.receipt);
+        assert_eq!(explicit.snapshot.hash(), inline.snapshot.hash());
+        assert_eq!(
+            explicit.snapshot.nodes().collect::<Vec<_>>(),
+            inline.snapshot.nodes().collect::<Vec<_>>()
+        );
+        assert_eq!(
+            artifact::encode(&explicit.snapshot).expect("explicit artifact"),
+            artifact::encode(&inline.snapshot).expect("inline artifact")
+        );
+    }
+
+    fn equal_named_call_request(id: WorkspaceId, inline_values: bool) -> ApplyTransactionRequest {
+        let value_tree = || {
+            inline(ExpressionKindDraft::ConstructProduct {
+                product: draft_symbol(3),
+                fields: vec![ProductFieldValueDraft {
+                    field: draft_symbol(4),
+                    value: inline(ExpressionKindDraft::ProjectField {
+                        value: inline(ExpressionKindDraft::Call {
+                            function: draft_symbol(7),
+                            arguments: vec![inline(ExpressionKindDraft::ConstructProduct {
+                                product: draft_symbol(3),
+                                fields: vec![ProductFieldValueDraft {
+                                    field: draft_symbol(4),
+                                    value: inline(ExpressionKindDraft::ConstI64(9)),
+                                }],
+                            })],
+                        }),
+                        field: draft_symbol(4),
+                    }),
+                }],
+            })
+        };
+        let operations = if inline_values {
+            vec![draft_expression(
+                15,
+                ExpressionKindDraft::ConstructVariant {
+                    variant: draft_symbol(6),
+                    payload: Some(value_tree()),
+                },
+            )]
+        } else {
+            vec![
+                draft_expression(10, ExpressionKindDraft::ConstI64(9)),
+                draft_expression(
+                    11,
+                    ExpressionKindDraft::ConstructProduct {
+                        product: draft_symbol(3),
+                        fields: vec![ProductFieldValueDraft {
+                            field: draft_symbol(4),
+                            value: draft_result(10),
+                        }],
+                    },
+                ),
+                draft_expression(
+                    12,
+                    ExpressionKindDraft::Call {
+                        function: draft_symbol(7),
+                        arguments: vec![draft_result(11)],
+                    },
+                ),
+                draft_expression(
+                    13,
+                    ExpressionKindDraft::ProjectField {
+                        value: draft_result(12),
+                        field: draft_symbol(4),
+                    },
+                ),
+                draft_expression(
+                    14,
+                    ExpressionKindDraft::ConstructProduct {
+                        product: draft_symbol(3),
+                        fields: vec![ProductFieldValueDraft {
+                            field: draft_symbol(4),
+                            value: draft_result(13),
+                        }],
+                    },
+                ),
+                draft_expression(
+                    15,
+                    ExpressionKindDraft::ConstructVariant {
+                        variant: draft_symbol(6),
+                        payload: Some(draft_result(14)),
+                    },
+                ),
+            ]
+        };
+        let mut request = structured_semantic_request(
+            id,
+            vec![
+                TransactionOp::CreateProductType {
+                    symbol: DraftSymbol::generated(3),
+                    module: draft_symbol(2),
+                    name: "BoxedI64".into(),
+                    fields: vec![ProductFieldDraft {
+                        symbol: DraftSymbol::generated(4),
+                        name: "value".into(),
+                        ty: TypeDraft::I64,
+                    }],
+                },
+                TransactionOp::CreateSumType {
+                    symbol: DraftSymbol::generated(5),
+                    module: draft_symbol(2),
+                    name: "MaybeBox".into(),
+                    variants: vec![SumVariantDraft {
+                        symbol: DraftSymbol::generated(6),
+                        name: "some".into(),
+                        payload: Some(TypeDraft::Nominal(draft_symbol(3))),
+                    }],
+                },
+                TransactionOp::CreateFunction {
+                    symbol: DraftSymbol::generated(9),
+                    module: draft_symbol(2),
+                    name: "main".into(),
+                    parameters: Vec::new(),
+                    result: TypeDraft::Nominal(draft_symbol(5)),
+                    body: Some(FunctionBodyDraft {
+                        operations,
+                        return_value: draft_result(15),
+                    }),
+                },
+                TransactionOp::CreateFunction {
+                    symbol: DraftSymbol::generated(7),
+                    module: draft_symbol(2),
+                    name: "identity".into(),
+                    parameters: vec![FunctionParameterDraft {
+                        symbol: DraftSymbol::generated(8),
+                        name: "value".into(),
+                        ty: TypeDraft::Nominal(draft_symbol(3)),
+                    }],
+                    result: TypeDraft::Nominal(draft_symbol(3)),
+                    body: Some(FunctionBodyDraft {
+                        operations: Vec::new(),
+                        return_value: ValueDraft::FunctionParameter(draft_symbol(8)),
+                    }),
+                },
+                TransactionOp::SetEntryFunction {
+                    package: draft_symbol(1),
+                    function: draft_symbol(9),
+                },
+            ],
+        );
+        request.response.return_symbols = [1, 2, 3, 4, 5, 6, 7, 8, 9, 15]
+            .into_iter()
+            .map(DraftSymbol::generated)
+            .collect();
+        request
+    }
+
+    #[test]
+    fn inline_calls_products_projections_and_variants_are_byte_identical() {
+        let id = WorkspaceId::from_bytes([0x74; 16]);
+        let explicit_workspace = Workspace::new(id).expect("explicit workspace");
+        let inline_workspace = Workspace::new(id).expect("inline workspace");
+        let explicit = explicit_workspace
+            .prepare_transaction(&equal_named_call_request(id, false))
+            .expect("explicit proposal");
+        let inline = inline_workspace
+            .prepare_transaction(&equal_named_call_request(id, true))
+            .expect("inline proposal");
+        assert_eq!(explicit.receipt, inline.receipt);
+        assert_eq!(
+            artifact::encode(&explicit.snapshot).expect("explicit artifact"),
+            artifact::encode(&inline.snapshot).expect("inline artifact")
+        );
+    }
+
+    #[test]
+    fn inline_validate_only_and_commit_predict_the_same_ids_without_allocation() {
+        let id = WorkspaceId::from_bytes([0x71; 16]);
+        let workspace = Workspace::new(id).expect("workspace");
+        let mut validate = equal_arithmetic_request(id, true);
+        validate.transaction.mode = TransactionMode::ValidateOnly;
+        let predicted = workspace
+            .prepare_transaction(&validate)
+            .expect("validate-only proposal");
+        assert_eq!(workspace.head_revision(), Revision::INITIAL);
+        assert_eq!(workspace.head().expect("head").next_serial(), 2);
+
+        let committed = workspace
+            .prepare_transaction(&equal_arithmetic_request(id, true))
+            .expect("commit proposal");
+        let mut expected = predicted.receipt;
+        expected.published = true;
+        assert_eq!(committed.receipt, expected);
+        assert_eq!(committed.snapshot.hash(), predicted.snapshot.hash());
+    }
+
+    #[test]
+    fn inline_depth_and_eligibility_reject_before_allocation_with_exact_paths() {
+        let id = WorkspaceId::from_bytes([0x72; 16]);
+        let block = NodeId::new(id, 2).expect("block");
+        let operation = |value| TransactionOp::InsertExpression {
+            block,
+            before: None,
+            expression: ExpressionDraft {
+                symbol: Some(DraftSymbol::generated(1)),
+                operation: ExpressionKindDraft::AddI64 {
+                    lhs: value,
+                    rhs: inline(ExpressionKindDraft::ConstI64(0)),
+                },
+            },
+        };
+        let nested = |depth: usize| {
+            let mut value = inline(ExpressionKindDraft::ConstI64(1));
+            for _ in 1..depth {
+                value = inline(ExpressionKindDraft::AddI64 {
+                    lhs: value,
+                    rhs: inline(ExpressionKindDraft::ConstI64(1)),
+                });
+            }
+            value
+        };
+
+        validate_structured_request(&[operation(nested(MAX_STRUCTURED_DRAFT_DEPTH))])
+            .expect("maximum accepted mixed inline depth");
+        let excessive =
+            validate_structured_request(&[operation(nested(MAX_STRUCTURED_DRAFT_DEPTH + 1))])
+                .expect_err("first excessive mixed inline depth");
+        assert_eq!(excessive.code, ErrorCode::PolicyExceeded);
+        assert_eq!(excessive.operation_index, Some(0));
+        assert!(excessive.draft_path.is_some());
+
+        for forbidden in [
+            ExpressionKindDraft::Hole {
+                expected: TypeDraft::I64,
+            },
+            ExpressionKindDraft::If {
+                condition: inline(ExpressionKindDraft::ConstBool(true)),
+                result: TypeDraft::I64,
+                then_body: YieldingBodyDraft {
+                    operations: Vec::new(),
+                    yield_value: inline(ExpressionKindDraft::ConstI64(1)),
+                },
+                else_body: YieldingBodyDraft {
+                    operations: Vec::new(),
+                    yield_value: inline(ExpressionKindDraft::ConstI64(2)),
+                },
+            },
+        ] {
+            let error = validate_structured_request(&[operation(inline(forbidden))])
+                .expect_err("ineligible inline expression");
+            assert_eq!(error.code, ErrorCode::InvalidOperand);
+            assert_eq!(error.draft_path.as_deref(), Some("op[0].expression.lhs"));
+        }
+
+        let exact_inline_count = (MAX_STRUCTURED_DRAFT_ITEMS - 2) / 2;
+        let call_with_inline_arguments = |count| TransactionOp::InsertExpression {
+            block,
+            before: None,
+            expression: ExpressionDraft {
+                symbol: Some(DraftSymbol::generated(2)),
+                operation: ExpressionKindDraft::Call {
+                    function: NodeTarget::Existing(block),
+                    arguments: vec![inline(ExpressionKindDraft::ConstI64(1)); count],
+                },
+            },
+        };
+        validate_structured_request(&[call_with_inline_arguments(exact_inline_count)])
+            .expect("exact inline item limit");
+        assert_eq!(
+            validate_structured_request(&[call_with_inline_arguments(exact_inline_count + 1)])
+                .expect_err("first excessive inline item")
+                .code,
+            ErrorCode::PolicyExceeded
+        );
+    }
+
+    #[test]
+    fn invalid_inline_type_reports_anonymous_path_and_rolls_back() {
+        let id = WorkspaceId::from_bytes([0x73; 16]);
+        let workspace = Workspace::new(id).expect("workspace");
+        let mut request = equal_arithmetic_request(id, true);
+        let TransactionOp::CreateFunction {
+            body: Some(body), ..
+        } = &mut request.transaction.operations[2]
+        else {
+            panic!("function body");
+        };
+        let ExpressionKindDraft::AddI64 { lhs, .. } = &mut body.operations[0].operation else {
+            panic!("outer add");
+        };
+        *lhs = inline(ExpressionKindDraft::ConstBool(true));
+
+        let error = workspace
+            .prepare_transaction(&request)
+            .expect_err("inline type mismatch");
+        assert_eq!(error.code, ErrorCode::TypeMismatch);
+        assert_eq!(error.operation_index, Some(2));
+        assert_eq!(error.draft_path.as_deref(), Some("op[2].body.e[0].lhs"));
+        assert!(error.draft_symbol.is_none());
+        assert_eq!(workspace.head_revision(), Revision::INITIAL);
+        assert_eq!(workspace.head().expect("head").next_serial(), 2);
+    }
+
+    #[test]
+    fn maintenance_operations_reject_inline_values_before_allocation() {
+        let id = WorkspaceId::from_bytes([0x75; 16]);
+        let node = NodeTarget::Existing(NodeId::new(id, 2).expect("node"));
+        for operation in [
+            TransactionOp::ReplaceOperand {
+                operation: node,
+                index: 0,
+                value: inline(ExpressionKindDraft::ConstI64(1)),
+            },
+            TransactionOp::ReplaceOperation {
+                operation: node,
+                replacement: OperationDraft::AddI64 {
+                    lhs: inline(ExpressionKindDraft::ConstI64(1)),
+                    rhs: ValueDraft::OperationResult {
+                        operation: node,
+                        output: 0,
+                    },
+                },
+            },
+        ] {
+            let error = validate_structured_request(&[operation])
+                .expect_err("maintenance inline value must reject");
+            assert_eq!(error.code, ErrorCode::InvalidOperand);
+            assert_eq!(error.operation_index, Some(0));
         }
     }
 
@@ -4864,6 +5848,7 @@ mod tests {
             &edits,
             &[3, 8],
             &BTreeSet::from([symbol]),
+            &BTreeMap::new(),
         )
         .expect_err("duplicate canonical allocation");
         assert_eq!(error.code, ErrorCode::DuplicateDraftSymbol);
@@ -6390,7 +7375,7 @@ mod tests {
         if_target.push(TransactionOp::ReplaceOperation {
             operation: draft_symbol(4),
             replacement: OperationDraft::If {
-                condition: value,
+                condition: value.clone(),
                 result: TypeDraft::I64,
                 then_region: draft_symbol(3),
                 else_region: draft_symbol(3),
@@ -6400,10 +7385,10 @@ mod tests {
         for_target.push(TransactionOp::ReplaceOperation {
             operation: draft_symbol(4),
             replacement: OperationDraft::ForI64 {
-                start: value,
-                end_exclusive: value,
+                start: value.clone(),
+                end_exclusive: value.clone(),
                 step: 1,
-                initial: value,
+                initial: value.clone(),
                 carried: TypeDraft::I64,
                 body_region: draft_symbol(3),
             },
@@ -6443,6 +7428,29 @@ mod tests {
             } else {
                 vec![none, some]
             };
+            let fields = if permuted {
+                vec![
+                    ProductFieldValueDraft {
+                        field: draft_symbol(6),
+                        value: draft_result(20),
+                    },
+                    ProductFieldValueDraft {
+                        field: draft_symbol(5),
+                        value: draft_result(20),
+                    },
+                ]
+            } else {
+                vec![
+                    ProductFieldValueDraft {
+                        field: draft_symbol(5),
+                        value: draft_result(20),
+                    },
+                    ProductFieldValueDraft {
+                        field: draft_symbol(6),
+                        value: draft_result(20),
+                    },
+                ]
+            };
             ApplyTransactionRequest {
                 transaction: Transaction {
                     workspace: id,
@@ -6472,16 +7480,7 @@ mod tests {
                                         21,
                                         ExpressionKindDraft::ConstructProduct {
                                             product: draft_symbol(4),
-                                            fields: vec![
-                                                ProductFieldValueDraft {
-                                                    field: draft_symbol(6),
-                                                    value: draft_result(20),
-                                                },
-                                                ProductFieldValueDraft {
-                                                    field: draft_symbol(5),
-                                                    value: draft_result(20),
-                                                },
-                                            ],
+                                            fields,
                                         },
                                     ),
                                     draft_expression(

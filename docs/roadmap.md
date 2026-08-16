@@ -81,16 +81,48 @@ constant and is also larger in JSON bytes than the numeric-handle baseline. Fewe
 no unintended initial-creation rejection are real benefits; the 60-percent contract and 40-percent
 proposal planning targets were not met.
 
-## Next gate: dependency-closed single-use expressions
+## Complete: dependency-closed single-use expressions
 
-The release-channel evidence confirms that symbolic labels remove a numeric category failure but do
-not remove one-use expression scaffolding. Evaluate one closed inline value-position expression form
-only if it has one iterative normalization algorithm, exact depth/item/allocation accounting,
-deterministic canonical-equivalence tests, precise error paths, forward-reference behavior, and
-commit/validate-only/rejection rollback proof. It must directly replace redundant expression labels
-without becoming a persisted AST, macro language, template engine, or second preferred authoring
-path. Reverse it if request complexity, error quality, or validator duplication outweighs measured
-identifier and byte savings. Do not add another contract-projection vocabulary.
+Protocol v6 accepts one recursive inline value form for descriptor-complete, non-terminating,
+single-result operations that own no region. One iterative worklist flattens children left-to-right
+before their parent into the same persistent operation graph. Holes and region-owning control remain
+explicit, as do shared, selected, repairable, and maintenance targets. Depth 16, the first rejected
+depth, exact 65,536-item accounting, allocation rollback, validate-only parity, bounded anonymous
+paths, forward calls, declaration-ordered fields and arms, and strict JSON shapes have focused tests.
+
+Same-workspace equivalence tests prove identical Node IDs, snapshot hashes, artifact bytes, change
+digests, and behavior for explicit postorder and inline arithmetic, calls, records, projections, and
+variants. The retained release-channel inline mode removes 44 of 111 labels and 4,088 bytes from the
+equal-work initial request without changing selected bindings, created nodes, repair, history,
+restart, or runtime outcomes. Protocol/JSON and machine schema changed directly to v6; durable
+idempotency metadata changed to `LKJHEAD5`; artifact format 3 and `lkjscript-spg003` remain unchanged.
+
+A fresh isolated v6 agent trial was attempted under the sealed reading restrictions but its foreground
+daemon launch blocked before the first semantic request. The process and temporary state were cleaned
+up, so no v6 model-success, error-rate, task-time, or telemetry claim is available. The dependency-closed
+replay and exact same-workspace tests are the retained v6 evidence; the earlier v5 isolated trial remains
+historical evidence rather than being relabelled as a v6 result.
+
+## Complete: Codex tool-adapter decision
+
+A disposable six-tool MCP adapter invoked the same production v6 public requests and preserved a
+small exact `i64` 42 oracle. It was rejected and deleted because it reduced no semantic call,
+connection, or forwarded request byte while adding three processes, 2,084 bytes of tool definitions,
+startup schema traffic, a weaker nested schema projection, and an unresolved cancellation boundary.
+The generic CLI remains the sole retained Codex surface. Reopen adapter work only when a controlled
+agent task shows a specific shell or lifecycle failure that a generated, stable tool projection can
+remove without becoming another protocol authority.
+
+## Next gate: one bounded immutable byte-value consumer
+
+Do not begin with a general sequence or universal memory manager. First retain a concrete pure
+application that classifies a bounded binary release manifest through public runtime input and needs
+length, checked indexing or iteration, comparison, a derived typed decision, and explicit bounds
+failure. Then compare a dedicated immutable `bytes` value with a generic sequence and postponement;
+specify canonical JSON encoding, semantic copy/share behavior, logical and physical memory accounting,
+Core IR verification, artifact/schema cutover, and old-revision behavior before implementation. Stop
+again if the application is only echo, the operation set is contrived, or accounting requires a
+runtime rewrite.
 
 ## Later evidence gates
 

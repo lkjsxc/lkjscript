@@ -1,7 +1,7 @@
 # Named records, variants, and complete handling
 
 This focused example drives the release `lkjscriptd` local background service exclusively through
-the production strict version-5 generic JSON CLI. JSON is transport; immutable `.lkjscript`
+the production strict version-6 generic JSON CLI. JSON is transport; immutable `.lkjscript`
 revisions in the service's private temporary state remain the authoritative program.
 
 One structured transaction creates:

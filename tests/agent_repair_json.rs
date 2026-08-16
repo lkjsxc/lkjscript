@@ -78,7 +78,7 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
 
     let transport = invoke_raw(
         state,
-        br#"{"version":5,"request_id":1,"request":{"kind":"create_workspace"}}"#,
+        br#"{"version":6,"request_id":1,"request":{"kind":"create_workspace"}}"#,
     );
     assert_eq!(transport.status.code(), Some(3));
     assert_one_json(&transport.stdout);
@@ -90,7 +90,7 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
     let daemon = JsonDaemon::start(state);
     let raw_create = invoke_raw(
         state,
-        br#"{"version":5,"request_id":2,"request":{"kind":"create_workspace"}}"#,
+        br#"{"version":6,"request_id":2,"request":{"kind":"create_workspace"}}"#,
     );
     assert!(raw_create.status.success());
     assert!(raw_create.stderr.is_empty());
@@ -706,7 +706,7 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
 
     let zero_request_id = invoke_raw(
         state,
-        br#"{"version":5,"request_id":0,"request":{"kind":"shutdown"}}"#,
+        br#"{"version":6,"request_id":0,"request":{"kind":"shutdown"}}"#,
     );
     assert_eq!(zero_request_id.status.code(), Some(2));
     let zero_request_id: BoundaryErrorEnvelope =
@@ -716,7 +716,7 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
 
     let malformed = invoke_raw(
         state,
-        br#"{"version":5,"request_id":99,"request":{"kind":"shutdown","unknown":true}}"#,
+        br#"{"version":6,"request_id":99,"request":{"kind":"shutdown","unknown":true}}"#,
     );
     assert_eq!(malformed.status.code(), Some(2));
     assert_one_json(&malformed.stdout);
