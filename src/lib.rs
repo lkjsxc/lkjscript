@@ -4,6 +4,7 @@
 
 //! A programming system for coding agents that validates, saves, compiles, and runs typed program revisions.
 
+pub mod application;
 pub mod artifact;
 mod codec;
 mod compile;
@@ -33,6 +34,13 @@ pub mod workbench;
 #[cfg(test)]
 mod generated_invariant_tests;
 
+pub use application::{
+    APPLICATION_CONTRACT_VERSION, ApplicationBuildReceipt, ApplicationBuildRequest,
+    ApplicationDigest, ApplicationInspection, ApplicationInvocation, ApplicationLimits,
+    ApplicationRunReceipt, ApplicationTestCase, ApplicationTestDigest, ApplicationTestExpectation,
+    ApplicationTestReport, ApplicationTestResult, ApplicationTestStatus, ApplicationTrap,
+    ApplicationTrapCode, InvocationProfile,
+};
 pub use error::{ErrorCode, LkError, Result};
 pub use ids::{
     ChangeDigest, DraftSymbol, IdempotencyKey, NodeId, NodeIdentityClass, QueryId, RequestId,

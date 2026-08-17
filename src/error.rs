@@ -15,6 +15,8 @@ pub const MAX_DRAFT_PATH_BYTES: usize = 256;
 pub enum ErrorCode {
     AuthorityBusy,
     ArtifactCorrupt,
+    ArtifactPublicationOutcomeUnknown,
+    ApplicationTestFailed,
     CommitOutcomeUnknown,
     CompileIncomplete,
     CoreIrInvalid,
@@ -62,9 +64,11 @@ pub enum ErrorCode {
 }
 
 impl ErrorCode {
-    pub const ALL: [Self; 46] = [
+    pub const ALL: [Self; 48] = [
         Self::AuthorityBusy,
         Self::ArtifactCorrupt,
+        Self::ArtifactPublicationOutcomeUnknown,
+        Self::ApplicationTestFailed,
         Self::CompileIncomplete,
         Self::CoreIrInvalid,
         Self::DeleteBlocked,
@@ -114,6 +118,8 @@ impl ErrorCode {
         match self {
             Self::AuthorityBusy => "authority_busy",
             Self::ArtifactCorrupt => "artifact_corrupt",
+            Self::ArtifactPublicationOutcomeUnknown => "artifact_publication_outcome_unknown",
+            Self::ApplicationTestFailed => "application_test_failed",
             Self::CommitOutcomeUnknown => "commit_outcome_unknown",
             Self::CompileIncomplete => "compile_incomplete",
             Self::CoreIrInvalid => "core_ir_invalid",

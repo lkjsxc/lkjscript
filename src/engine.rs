@@ -1,5 +1,6 @@
 //! Topology-neutral semantic engine and single-writer authority.
 
+use crate::application::{ApplicationBuildRequest, PreparedApplication};
 use crate::error::{ErrorCode, LkError, Result};
 use crate::ids::{RequestId, WorkspaceId};
 use crate::interpret;
@@ -51,6 +52,18 @@ impl Engine {
             Err(error) if error.code == ErrorCode::CommitOutcomeUnknown => Err(error),
             Err(error) => Ok(Response::Error(error)),
         }
+    }
+
+    /// Prepares one independently validated application artifact from an exact immutable revision.
+    /// The returned bytes have passed the embedded release tests but have not been published.
+    pub fn prepare_application(
+        &self,
+        request: &ApplicationBuildRequest,
+    ) -> Result<PreparedApplication> {
+        let snapshot = self
+            .workspace(request.workspace)?
+            .snapshot(request.revision)?;
+        crate::application::prepare(snapshot, request)
     }
 
     pub(crate) fn handle(

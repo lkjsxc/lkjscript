@@ -16,7 +16,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-const ORIENTATION: &str = "A coding agent edits a typed, versioned program model through a directly opened local engine. The engine validates proposed changes, saves immutable revisions, and compiles and runs selected revisions.\n\
+const ORIENTATION: &str = "A coding agent edits a typed, versioned program model through a directly opened local engine. The engine validates proposed changes, saves immutable revisions, and can seal an exact tested semantic closure as a standalone application artifact.\n\
 \n\
 Preferred workflow:\n\
   agent create   create an empty authoritative workspace\n\
@@ -27,10 +27,15 @@ Preferred workflow:\n\
   agent apply    parse and atomically commit a bounded editable semantic document\n\
   agent diff     render exact semantic changes carried by a review packet\n\
   agent run      run an exact revision from a compact run document\n\
+  app build      test and atomically seal an exact revision and entry\n\
+  app inspect    inspect a validated artifact without source state\n\
+  app test       rerun the artifact's immutable invocation cases\n\
+  app run        invoke exact typed values from standalone artifact bytes\n\
+  app stream     invoke a compatible pure bytes -> bytes process profile\n\
 \n\
 Documents are revision-, schema-, and scope-bound proposals. They normalize into the same typed transaction used by raw JSON and never become authority. Packet aliases use @n1 spelling, require the packet digest in the document, and never become persistent identity.\n\
 \n\
-Run `lkjscript agent help` for exact command and grammar details.";
+Run `lkjscript agent help` for authoring details and `lkjscript app help` for the standalone lifecycle.";
 
 const HELP_PREFIX: &str = "usage: lkjscript agent COMMAND [OPTIONS]\n\
 \n\
@@ -46,6 +51,10 @@ Commands:\n\
   validate --state DIR [--packet FILE] [--pretty]    # editable document on stdin\n\
   apply --state DIR [--packet FILE] [--pretty]       # editable document on stdin\n\
   run --state DIR [--packet FILE] [--pretty]         # run document on stdin\n\
+\n\
+Standalone lifecycle:\n\
+  lkjscript app build|validate|inspect|test|run|stream ...\n\
+  Run `lkjscript app help` for exact artifact commands and path rules.\n\
 \n\
 Purposes: orient, create, repair, refactor, debug, extend, delete, review.\n\
 Repair, refactor, debug, extend, and delete require targets. A review packet may use --from-revision to carry an exact semantic diff.\n\

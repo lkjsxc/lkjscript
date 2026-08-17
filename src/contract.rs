@@ -13,7 +13,7 @@ use crate::schema::{NodeKind, OperationCode, SemanticType};
 use crate::transaction::{MAX_RETURNED_BINDINGS, TransactionOpCode};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-pub const MACHINE_SCHEMA_IDENTITY: &str = "lkjscript-machine-schema-v9";
+pub const MACHINE_SCHEMA_IDENTITY: &str = "lkjscript-machine-schema-v10";
 const MACHINE_SCHEMA_DIGEST_DOMAIN: &str = "lkjscript.machine-schema.digest.v2";
 
 fn scalar_types() -> Vec<MachineScalarDescription> {

@@ -11,14 +11,21 @@ use std::process::ExitCode;
 
 #[path = "lkjscript/agent.rs"]
 mod agent;
+#[path = "lkjscript/application.rs"]
+mod application;
 
 const EXIT_USAGE_OR_JSON: u8 = 2;
 const EXIT_TRANSPORT: u8 = 3;
 const EXIT_OUTPUT: u8 = 4;
+const EXIT_ARTIFACT: u8 = 5;
+const EXIT_APPLICATION_INPUT: u8 = 6;
+const EXIT_PROGRAM: u8 = 7;
+const EXIT_RESOURCE: u8 = 8;
 
 fn main() -> ExitCode {
     let outcome = match parse_command(std::env::args().skip(1)) {
         Ok(Command::Session { state }) => return run_session(state),
+        Ok(Command::Application(command)) => return application::run(command),
         Ok(command) => run_command(command),
         Err(message) => failure(EXIT_USAGE_OR_JSON, BoundaryErrorKind::Usage, message, None),
     };
@@ -61,6 +68,12 @@ fn run_command(command: Command) -> CliOutcome {
         },
         Command::Rpc { state, pretty } => run_rpc(state, pretty),
         Command::Agent(command) => agent::run(command),
+        Command::Application(_) => failure(
+            EXIT_USAGE_OR_JSON,
+            BoundaryErrorKind::Usage,
+            usage("application command must own its input and output boundary"),
+            None,
+        ),
         Command::Help => success(usage_text().as_bytes().to_vec()),
         Command::Session { .. } => failure(
             EXIT_USAGE_OR_JSON,
@@ -282,6 +295,7 @@ fn failure(
 
 enum Command {
     Agent(agent::AgentCommand),
+    Application(application::ApplicationCommand),
     Help,
     Rpc {
         state: PathBuf,
@@ -306,6 +320,11 @@ fn parse_command(mut arguments: impl Iterator<Item = String>) -> Result<Command,
     }
     if first == "agent" {
         return agent::parse(arguments).map(Command::Agent);
+    }
+    if first == "app" {
+        return Ok(Command::Application(
+            application::parse(arguments).unwrap_or_else(application::ApplicationCommand::Invalid),
+        ));
     }
     if first == "schema" {
         return parse_schema(arguments);
@@ -393,7 +412,7 @@ fn usage(reason: &str) -> String {
 }
 
 fn usage_text() -> &'static str {
-    "usage: lkjscript agent [COMMAND] [OPTIONS]\n       lkjscript --state DIRECTORY (rpc [--pretty] | session)\n       lkjscript schema [--root NAME ... | --full] [--known-digest HEX] [--pretty]\n\nRun `lkjscript agent` for the preferred semantic-workbench commands. Raw RPC and schema commands are exact low-level diagnostic surfaces."
+    "usage: lkjscript agent [COMMAND] [OPTIONS]\n       lkjscript app COMMAND [OPTIONS]\n       lkjscript --state DIRECTORY (rpc [--pretty] | session)\n       lkjscript schema [--root NAME ... | --full] [--known-digest HEX] [--pretty]\n\nRun `lkjscript agent` for semantic authoring and `lkjscript app help` for the standalone application lifecycle. Raw RPC and schema commands are exact low-level diagnostic surfaces."
 }
 
 #[cfg(test)]

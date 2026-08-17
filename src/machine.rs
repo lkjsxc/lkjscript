@@ -12,13 +12,13 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::io::{self, Write};
 
-pub const JSON_ENVELOPE_VERSION: u16 = 9;
+pub const JSON_ENVELOPE_VERSION: u16 = 10;
 pub const MAX_JSON_INPUT_BYTES: usize = 8 * 1024 * 1024;
 pub const MAX_JSON_OUTPUT_BYTES: usize = 32 * 1024 * 1024;
-const TRANSACTION_FINGERPRINT_DOMAIN: &str = "lkjscript.apply-transaction.fingerprint.v9";
+const TRANSACTION_FINGERPRINT_DOMAIN: &str = "lkjscript.apply-transaction.fingerprint.v10";
 pub(crate) const MAX_BOUNDARY_ERROR_MESSAGE_BYTES: usize = 1024;
 const BOUNDARY_ERROR_FALLBACK: &[u8] =
-    b"{\"version\":9,\"error\":{\"kind\":\"output\",\"message\":\"cannot encode boundary error\"}}";
+    b"{\"version\":10,\"error\":{\"kind\":\"output\",\"message\":\"cannot encode boundary error\"}}";
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]

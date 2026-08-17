@@ -98,9 +98,9 @@ fn explicit_and_inline_release_channel_modes_keep_equal_work_and_reduce_scaffold
     assert_eq!(inline["proposals"]["initial_compact_payload_bytes"], 17_974);
     assert_eq!(
         explicit["proposals"]["rows"][0]["json_request_bytes"],
-        22_247
+        22_248
     );
-    assert_eq!(inline["proposals"]["rows"][0]["json_request_bytes"], 18_159);
+    assert_eq!(inline["proposals"]["rows"][0]["json_request_bytes"], 18_160);
 
     for field in [
         "initial_operations",

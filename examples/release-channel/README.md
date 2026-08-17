@@ -5,7 +5,7 @@ It models named version, channel, transport, client, policy, block-reason, and d
 entry function decides whether to serve a release and computes a channel-sensitive rollout weight
 with a counted loop.
 
-The checked-in `proposal.json` is a diagnostic protocol-v9 proposal. The driver can replay it or
+The checked-in `proposal.json` is a diagnostic protocol-v10 proposal. The driver can replay it or
 derive an equal typed inline proposal by replacing only eligible contiguous one-use postorder values.
 That helper is not source syntax or a second program representation.
 

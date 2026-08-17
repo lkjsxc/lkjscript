@@ -6,7 +6,7 @@ use crate::query::{QueryBatchRequest, QueryBatchResult, WorkspaceSummary};
 use crate::transaction::{ApplyTransactionRequest, TransactionReceipt};
 use serde::{Deserialize, Serialize};
 
-pub const PROTOCOL_VERSION: u16 = 9;
+pub const PROTOCOL_VERSION: u16 = 10;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum RequestCode {

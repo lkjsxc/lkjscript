@@ -6,8 +6,9 @@ runtime values are proposals or derived projections. Only the typed transaction 
 publish program meaning.
 
 Normative semantics belong to the [semantic model](spec/semantic-model.md), [language](spec/language.md),
-and [protocol](spec/protocol.md) specifications. This document owns components, dependency direction,
-process topology, storage shape, and trust boundaries.
+the [application contract](spec/application.md), and [protocol](spec/protocol.md) specifications.
+This document owns components, dependency direction, process topology, storage shape, and trust
+boundaries.
 
 ## Primary path
 
@@ -24,6 +25,18 @@ task-scoped context packet
     -> Core IR verifier
     -> derived ownership plan and independent verifier
     -> explicit-frame managed-value interpreter
+```
+
+An exact accepted revision has a separate distribution path:
+
+```text
+exact workspace + revision + entry + profile + immutable release cases
+    -> one shared semantic dependency-closure walk
+    -> projected run-only Snapshot with no unrelated declarations or package entry
+    -> independent encode/decode and semantic validation
+    -> verified Core IR entry compile + complete release-case execution
+    -> validate-only receipt or no-overwrite atomic application publication
+    -> standalone validate / inspect / test / typed run / bytes stream
 ```
 
 The primary CLI opens `Engine` directly; users do not manage a background process. A line-delimited
@@ -77,9 +90,10 @@ implementation and differential oracle because current workloads do not justify 
 
 ## Engine and publication
 
-`engine.rs` is the only logical operation dispatcher. It owns workspace create/open, transaction,
-query, compile, and run regardless of caller topology. One `lkjscript.engine.lock` protects a state
-directory. A competing engine rejects; it does not wait indefinitely or silently retry.
+`engine.rs` is the logical authority owner. It owns workspace create/open, transaction, query,
+compile, run, and exact application preparation regardless of presentation. One
+`lkjscript.engine.lock` protects a state directory. A competing engine rejects; it does not wait
+indefinitely or silently retry.
 
 Publication is synchronous:
 
@@ -102,8 +116,17 @@ stratification made current body churn sufficiently small that an object store, 
 database did not justify its additional recovery, retention, garbage-collection, and dependency
 surface. That decision is explicitly reversible after a larger scaling corpus.
 
-Workspace artifacts are development authority, not distributable package artifacts. There is no
-package manifest, dependency resolver, registry, executable cache, or deployment artifact yet.
+Workspace artifacts are development authority. `application.rs` owns a distinct immutable run-only
+semantic closure, release-case execution, canonical application codec, standalone validation, and
+no-replace filesystem publication. It retains source workspace identity to preserve nominal values
+but excludes history, HEAD, idempotency, aliases, caches, unrelated semantics, and derived IR.
+
+Application publication writes a private file in the destination directory, synchronizes it,
+establishes one no-replace hard link, removes the private name, and synchronizes the directory.
+Failures before the link leave no destination; failures after the link report
+`artifact_publication_outcome_unknown`. Application artifacts are not package or executable-cache
+artifacts. There is no reusable package graph, dependency resolver, registry, or native deployment
+image.
 
 ## Contract and boundaries
 
@@ -115,8 +138,16 @@ domain, but remains manually assembled; deriving field metadata from authoritati
 future evidence gate.
 
 `bin/lkjscript.rs` and `bin/lkjscript/agent.rs` are presentation and lifecycle adapters. The direct
-CLI and session call `Engine`. `daemon.rs` and `transport.rs` own only the optional private socket
+CLI and session call `Engine`. `bin/lkjscript/application.rs` is a thin versioned JSON/raw-stream
+adapter over `Engine::prepare_application` and `application.rs`; it does not reimplement closure,
+tests, codecs, or execution. `daemon.rs` and `transport.rs` own only the optional private socket
 adapter and framing.
+
+The manual workspace machine catalogue remains because agent help/schema digest binding, context
+and document contracts, strict RPC clients, and dependency-closed schema projections consume it.
+Application records deliberately do not enter that catalogue: their Rust types, artifact codec,
+and command-local help are one narrower contract owner. A generator/proc-macro/IDL prototype was
+not retained because no candidate was completed with lower total debugging and build cost.
 
 JSON is limited to 8 MiB input and 32 MiB output. Documents are limited to 8 MiB, 32 parser frames,
 65,536 items, and 512-byte diagnostics. Context and review outputs are independently limited to
@@ -134,11 +165,13 @@ verifier independently recomputes those facts. `managed.rs` owns checked generat
 handles and an allocate-new differential mode. `interpret.rs` owns public-value validation,
 explicit frames, flat cells, traps, resource accounting, cleanup, and result materialization.
 
-The production immutable-byte route retains early reclamation and verified unique-left concat reuse
-because the retained corpus reduces copied and peak backing bytes from 32 to 23. This is an
-implementation strategy, not language-visible ownership. A simpler allocate-new mode remains the
-correctness oracle. A second managed value class, values escaping one invocation, cycles, or a loss
-of representative benefit reopens the decision.
+The production immutable-byte route retains early reclamation and verified unique-left concat
+reuse. On the 512-octet loop-carried append control it reduces copied backing bytes from 131,840 to
+1,024, allocated backing bytes from 131,840 to 1,528, peak backing from 1,024 to 513, and cumulative
+managed objects from 2,050 to 1,026. This is an implementation strategy, not language-visible
+ownership. A simpler allocate-new mode remains the correctness oracle. A second managed value
+class, values escaping one invocation, cycles, or loss of material representative benefit reopens
+the decision.
 
 Compilation and interpretation remain iterative for user-scalable control. Fuel, frames, live
 cells, visible managed bytes, retained backing, managed objects, allocations, and result
@@ -154,8 +187,9 @@ IDs and semantic contracts
     -> transactions and diff
     -> engine and publication
     -> queries and agent projections
+    -> application closure / canonical distribution artifact
     -> compiler and runtime
-    -> JSON, socket, and terminal adapters
+    -> JSON, stream, socket, and terminal adapters
 ```
 
 Current major owners are:
@@ -165,11 +199,12 @@ Current major owners are:
 | `ids.rs`, `schema.rs`, `graph.rs` | identity domains, semantic vocabulary, immutable state |
 | `transaction.rs`, `validate.rs`, `diff.rs` | proposal normalization, acceptance, change facts |
 | `engine.rs`, `persistence.rs`, `artifact.rs` | dispatch, locking, publication, recovery, bytes |
+| `application.rs` | application closure, release cases, canonical artifact, standalone execution |
 | `query.rs`, `workbench/` | exact observations, documents, help, and review |
 | `contract.rs`, `machine.rs`, `protocol.rs` | executable contract, strict JSON, logical boundary |
 | `compile.rs`, `core_ir.rs` | closure, lowering, origins, executable verification |
 | `ownership.rs`, `managed.rs`, `interpret.rs` | derived memory plan, managed values, execution |
-| `daemon.rs`, `transport.rs`, `bin/` | optional socket and user-facing adapters |
+| `daemon.rs`, `transport.rs`, `bin/` | optional socket and thin user-facing adapters |
 
 Large invariant suites now live beside their production owners rather than at the end of production
 files. `generated_invariant_tests.rs` retains deterministic generated cross-boundary sequences.
@@ -177,10 +212,11 @@ files. `generated_invariant_tests.rs` retains deterministic generated cross-boun
 
 ## Trust boundaries
 
-All model output, JSON, documents, packets, artifacts, filesystem metadata, and public runtime values
-are untrusted. Decoders reject unknown, malformed, oversized, noncanonical, foreign-domain, or
-trailing data. State paths must be explicit absolute directories with no symbolic-link components;
-artifacts and HEAD are bounded regular files with checked canonical names and hashes.
+All model output, JSON, documents, packets, workspace artifacts, application artifacts, filesystem
+metadata, and public runtime values are untrusted. Decoders reject unknown, malformed, oversized,
+noncanonical, foreign-domain, or trailing data. State and application paths must be explicit
+absolute paths with no symbolic-link components; inputs are bounded regular files and outputs never
+overwrite an existing destination.
 
 The package forbids local unsafe Rust. The trusted computing base nevertheless includes the Rust
 toolchain, standard library, Cargo, resolved dependencies, operating system, filesystem, and CPU.
@@ -188,15 +224,19 @@ toolchain, standard library, Cargo, resolved dependencies, operating system, fil
 safe interface. The repository has no project build script and introduced no dependency in this
 campaign.
 
-The local engine and optional process boundary are not a sandbox. Programs currently have no host
-effects or ambient authority. Future effects require explicit typed permissions, partial-action and
-retry rules, cancellation, audit, and deterministic resource cleanup. Ordinary immutable-value
-reclamation must remain separate from affine external-resource semantics.
+The local engine, application runner, and optional process boundary are not sandboxes. Programs
+currently have no host effects or ambient authority. The bytes-stream adapter converts explicit
+standard input/output to semantic values and does not add effects. Future effects require explicit
+typed permissions, partial-action and retry rules, cancellation, audit, and deterministic resource
+cleanup. Ordinary immutable-value reclamation must remain separate from affine external-resource
+semantics.
 
 ## Deliberate absences and reversal gates
 
-- No package artifact exists; add one only with an exact manifest, dependency, identity, and
-  untrusted-decoding contract.
+- No reusable package artifact exists; add one only for independent reuse with exact exports,
+  dependencies, identity, provenance, import, and untrusted-decoding contracts.
+- No serialized Core IR or executable cache exists; add one only if measured standalone startup or
+  repeated compile cost exceeds its verifier and version surface.
 - No semantic index exists; add a narrow derived index only after a scan-dominated workload and keep
   a full-scan differential oracle.
 - No incremental store exists; reopen when retained bytes, restart, branching, or package reuse are
@@ -205,5 +245,6 @@ reclamation must remain separate from affine external-resource semantics.
   or resource finalizer exists.
 - No alternate editable grammar remains. Reopen syntax only through equal-task evidence against
   document version 1.
-- The optional daemon may be deleted when socket-boundary coverage no longer justifies its source and
-  binary cost.
+- The optional daemon is retained only for the exported framed `Client` integration and its unique
+  correlation, deadline, disconnect, shutdown, and authority-lock coverage. Delete it when those
+  consumers move to Engine/session tests or cease to be public value.

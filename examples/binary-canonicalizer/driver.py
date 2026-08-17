@@ -5,6 +5,7 @@ import base64
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -20,6 +21,7 @@ query_id = 0
 measurements = []
 run_timings = []
 session_processes = 0
+application_measurements = []
 
 
 def symbol(number):
@@ -266,6 +268,20 @@ def bounds_probe_function():
     )
 
 
+def stream_function():
+    return function(
+        500,
+        "canonicalize_stream",
+        [{"symbol": 501, "name": "input", "ty": "bytes"}],
+        "bytes",
+        [
+            expression(502, "bytes_len", {"value": parameter(501)}),
+            call(503, 200, [parameter(501), result(502)]),
+        ],
+        result(503),
+    )
+
+
 def application_operations():
     return [
         {"kind": "create_package", "data": {
@@ -289,6 +305,7 @@ def application_operations():
         canonicalize_function(),
         entry_function(),
         bounds_probe_function(),
+        stream_function(),
         {"kind": "set_entry_function", "data": {
             "package": local(1), "function": local(300),
         }},
@@ -296,7 +313,36 @@ def application_operations():
 
 
 def selected_symbols():
-    return [10, 11, 20, 21, 22, 100, 200, 214, 300, 400]
+    return [10, 11, 20, 21, 22, 100, 200, 214, 300, 400, 500]
+
+
+def application_command(arguments, input_value=None, expected_returncode=0):
+    encoded = None
+    if input_value is not None:
+        encoded = json.dumps(input_value, separators=(",", ":")).encode()
+    started = time.monotonic_ns()
+    completed = subprocess.run(
+        [str(CLI), "app", *arguments],
+        input=encoded,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=30,
+        check=False,
+    )
+    application_measurements.append({
+        "command": arguments[0],
+        "elapsed_nanoseconds": time.monotonic_ns() - started,
+        "input_bytes": len(encoded or b""),
+        "output_bytes": len(completed.stdout),
+        "diagnostic_bytes": len(completed.stderr),
+        "exit": completed.returncode,
+    })
+    if completed.returncode != expected_returncode:
+        raise RuntimeError(
+            f"application command {arguments} returned {completed.returncode}: "
+            f"stdout={completed.stdout!r} stderr={completed.stderr!r}"
+        )
+    return completed
 
 
 def start_stack(count_readiness):
@@ -332,7 +378,7 @@ def stop_stack():
 def rpc(request, purpose, counted=True):
     global request_id
     request_id += 1
-    envelope = {"version": 9, "request_id": request_id, "request": request}
+    envelope = {"version": 10, "request_id": request_id, "request": request}
     encoded = json.dumps(envelope, separators=(",", ":")).encode()
     started = time.monotonic_ns()
     session.stdin.write(encoded + b"\n")
@@ -342,7 +388,7 @@ def rpc(request, purpose, counted=True):
     if not response_bytes:
         raise RuntimeError(f"CLI session ended during {purpose}")
     response = json.loads(response_bytes)
-    if response.get("version") != 9 or response.get("request_id") != request_id:
+    if response.get("version") != 10 or response.get("request_id") != request_id:
         raise RuntimeError(f"response correlation mismatch for {purpose}")
     measurements.append({
         "purpose": purpose,
@@ -510,7 +556,9 @@ def competing_writer_rejects():
 def workflow():
     global state
     with tempfile.TemporaryDirectory(prefix="lkjscript-binary-canonicalizer-") as directory:
-        state = pathlib.Path(directory)
+        root = pathlib.Path(directory)
+        state = root / "state"
+        state.mkdir()
         os.chmod(state, 0o700)
         manifest = start_stack(True)
         competing_writer_rejects()
@@ -681,12 +729,83 @@ def workflow():
                  canonical_value(ids, bytes([7, 8])))
         stop_stack()
 
+        application_request = {
+            "version": 1,
+            "workspace": workspace,
+            "revision": 3,
+            "entry": ids[500],
+            "profile": "bytes_stream",
+            "policy": {"fuel": 10_000_000, "maximum_frames": 2_000},
+            "tests": [
+                {
+                    "name": "empty",
+                    "target": ids[500],
+                    "arguments": [bytes_value(b"")],
+                    "expected": {"kind": "value", "data": bytes_value(b"")},
+                    "policy": {"fuel": 1_000, "maximum_frames": 2_000},
+                },
+                {
+                    "name": "sparse",
+                    "target": ids[500],
+                    "arguments": [bytes_value(bytes([0xA5, 0, 1, 0, 2]))],
+                    "expected": {"kind": "value", "data": bytes_value(bytes([1, 2]))},
+                    "policy": {"fuel": 100_000, "maximum_frames": 2_000},
+                },
+                {
+                    "name": "bounds_trap",
+                    "target": ids[400],
+                    "arguments": [bytes_value(bytes([0xA5, 1]))],
+                    "expected": {
+                        "kind": "trap",
+                        "data": {"code": "byte_index_out_of_bounds"},
+                    },
+                    "policy": {"fuel": 1_000, "maximum_frames": 2_000},
+                },
+            ],
+        }
+        application_path = root / "binary-canonicalizer.lkja"
+        preflight = json.loads(application_command([
+            "build", "--state", str(state), "--validate-only",
+        ], application_request).stdout)
+        if preflight["published"] or preflight["tests"]["passed"] != 3:
+            raise RuntimeError(f"application validate-only receipt is malformed: {preflight}")
+        build = json.loads(application_command([
+            "build", "--state", str(state), "--output", str(application_path),
+        ], application_request).stdout)
+        if (not build["published"] or build["tests"]["passed"] != 3
+                or build["inspection"]["profile"] != "bytes_stream"
+                or build["inspection"]["digest"] != preflight["inspection"]["digest"]):
+            raise RuntimeError(f"application build receipt is malformed: {build}")
+        repeated_path = root / "binary-canonicalizer-repeated.lkja"
+        repeated = json.loads(application_command([
+            "build", "--state", str(state), "--output", str(repeated_path),
+        ], application_request).stdout)
+        if (application_path.read_bytes() != repeated_path.read_bytes()
+                or repeated["inspection"]["digest"] != build["inspection"]["digest"]):
+            raise RuntimeError("equal application builds are not byte-identical")
+
+        failing_request = dict(application_request)
+        failing_request["tests"] = [dict(item) for item in application_request["tests"]]
+        failing_request["tests"][0] = dict(failing_request["tests"][0])
+        failing_request["tests"][0]["expected"] = {
+            "kind": "value", "data": bytes_value(b"wrong"),
+        }
+        blocked_path = root / "blocked.lkja"
+        blocked = application_command([
+            "build", "--state", str(state), "--output", str(blocked_path),
+        ], failing_request, expected_returncode=7)
+        blocked_error = json.loads(blocked.stdout)
+        if (blocked_error.get("contract_version") != 1
+                or blocked_error.get("error", {}).get("code") != "application_test_failed"
+                or blocked_path.exists()):
+            raise RuntimeError(f"failing release test did not block publication: {blocked_error}")
+
         artifact = sorted(state.rglob("*.lkjscript"))[-1]
         corrupted = bytearray(artifact.read_bytes())
         corrupted[len(corrupted) // 2] ^= 0x01
         artifact.write_bytes(corrupted)
         corrupt_probe = json.dumps({
-            "version": 9,
+            "version": 10,
             "request_id": request_id + 1,
             "request": {"kind": "describe_schema", "data": {
                 "projection": {"kind": "manifest"},
@@ -703,13 +822,62 @@ def workflow():
         if failed.returncode == 0 or not failed.stderr:
             raise RuntimeError("corrupt authority did not reject on restart")
 
+        shutil.rmtree(state)
+        validation = json.loads(application_command([
+            "validate", "--artifact", str(application_path),
+        ]).stdout)
+        inspection = json.loads(application_command([
+            "inspect", "--artifact", str(application_path),
+        ]).stdout)
+        artifact_tests = json.loads(application_command([
+            "test", "--artifact", str(application_path),
+        ]).stdout)
+        typed = json.loads(application_command([
+            "run", "--artifact", str(application_path),
+        ], {"version": 1, "arguments": [bytes_value(bytes([0xA5, 3, 0, 4]))]}).stdout)
+        stream_input = bytes([0xA5, 5, 0, 6])
+        stream_started = time.monotonic_ns()
+        streamed = subprocess.run(
+            [str(CLI), "app", "stream", "--artifact", str(application_path)],
+            input=stream_input,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=30,
+            check=False,
+        )
+        application_measurements.append({
+            "command": "stream",
+            "elapsed_nanoseconds": time.monotonic_ns() - stream_started,
+            "input_bytes": len(stream_input),
+            "output_bytes": len(streamed.stdout),
+            "diagnostic_bytes": len(streamed.stderr),
+            "exit": streamed.returncode,
+        })
+        if (validation["digest"] != build["inspection"]["digest"]
+                or inspection != validation
+                or artifact_tests["report"]["passed"] != 3
+                or typed["result"]["value"] != bytes_value(bytes([3, 4]))
+                or streamed.returncode != 0 or streamed.stdout != bytes([5, 6])
+                or streamed.stderr):
+            raise RuntimeError("standalone application validate, inspect, test, run, or stream failed")
+
+        corrupt_application_path = root / "corrupt.lkja"
+        corrupt_application = bytearray(application_path.read_bytes())
+        corrupt_application[len(corrupt_application) // 2] ^= 1
+        corrupt_application_path.write_bytes(corrupt_application)
+        corrupt_application_result = application_command([
+            "validate", "--artifact", str(corrupt_application_path),
+        ], expected_returncode=5)
+        if json.loads(corrupt_application_result.stdout).get("error", {}).get("code") != "artifact_corrupt":
+            raise RuntimeError("corrupt standalone application did not reject")
+
         counted = [item for item in measurements if item["counted"]]
         restart_timings = [
             item for item in run_timings if item["purpose"].startswith("restart_")
         ]
         report = {
             "application": "binary-canonicalizer",
-            "protocol_version": 9,
+            "protocol_version": 10,
             "schema_digest": manifest["digest"],
             "task_schema_json_bytes": len(json.dumps(task, separators=(",", ":")).encode()),
             "calls": len(counted),
@@ -738,6 +906,33 @@ def workflow():
             "dense_boundary": boundary,
             "revisions": {"incomplete": 1, "repaired": 2, "renamed": 3},
             "corrupt_restart_rejected": True,
+            "application_artifact": {
+                "bytes": len(application_path.read_bytes()),
+                "digest": build["inspection"]["digest"],
+                "semantic_digest": build["inspection"]["semantic_digest"],
+                "nodes": build["inspection"]["node_count"],
+                "tests": build["tests"]["passed"],
+                "deterministic_rebuild": True,
+                "failing_release_blocked": True,
+                "source_workspace_removed": True,
+                "standalone_validate_inspect_test_typed_run_stream": True,
+                "corrupt_rejected": True,
+            },
+            "application_workflow": {
+                "processes": len(application_measurements),
+                "input_bytes": sum(item["input_bytes"] for item in application_measurements),
+                "output_bytes": sum(item["output_bytes"] for item in application_measurements),
+                "diagnostic_bytes": sum(
+                    item["diagnostic_bytes"] for item in application_measurements
+                ),
+                "elapsed_nanoseconds": sum(
+                    item["elapsed_nanoseconds"] for item in application_measurements
+                ),
+                "failed_processes": sum(
+                    item["exit"] != 0 for item in application_measurements
+                ),
+                "validate_only_equal": True,
+            },
         }
         print(json.dumps(report, sort_keys=True))
 

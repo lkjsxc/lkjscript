@@ -22,7 +22,7 @@ def draft_symbol(number):
 def rpc(request, purpose, counted=True):
     global request_id
     request_id += 1
-    envelope = {"version": 9, "request_id": request_id, "request": request}
+    envelope = {"version": 10, "request_id": request_id, "request": request}
     encoded = json.dumps(envelope, separators=(",", ":")).encode()
     started = time.monotonic_ns()
     completed = subprocess.run(
@@ -38,7 +38,7 @@ def rpc(request, purpose, counted=True):
             f"CLI failed for {purpose} ({completed.returncode}): {completed.stderr.decode()}"
         )
     response_envelope = json.loads(completed.stdout)
-    if response_envelope.get("version") != 9:
+    if response_envelope.get("version") != 10:
         raise RuntimeError(f"response version mismatch for {purpose}")
     if response_envelope.get("request_id") != request_id:
         raise RuntimeError(f"response correlation mismatch for {purpose}")

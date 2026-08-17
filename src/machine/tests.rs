@@ -48,9 +48,9 @@ fn strict_envelope_and_canonical_id_rejections() {
     assert_eq!(decode_request(&bytes).expect("decode"), request);
     let text = String::from_utf8(bytes).expect("UTF-8");
     for invalid in [
-        text.replacen("\"version\":9", "\"version\":8", 1),
+        text.replacen("\"version\":10", "\"version\":9", 1),
         text.replacen("\"request_id\":1", "\"request_id\":0", 1),
-        text.replacen("{\"version\":9", "{\"unknown\":0,\"version\":9", 1),
+        text.replacen("{\"version\":10", "{\"unknown\":0,\"version\":10", 1),
         format!("{text} {{}}"),
         text.replacen(
             &workspace.to_string(),
@@ -5131,13 +5131,13 @@ fn schema_projection_byte_measurements_are_retained() {
     assert_eq!(
         sizes,
         vec![
-            ("manifest", None, 1_241, 1_319),
-            ("selected_agent_task_roots", Some(113), 87_916, 87_994),
-            ("full", None, 136_648, 136_726),
-            ("unchanged", None, 105, 183),
+            ("manifest", None, 1_244, 1_323),
+            ("selected_agent_task_roots", Some(113), 88_005, 88_084),
+            ("full", None, 136_734, 136_813),
+            ("unchanged", None, 105, 184),
         ]
     );
-    assert!(sizes[1].2 < 88_000);
+    assert!(sizes[1].2 < 88_100);
 }
 
 fn assert_variant_payloads<const N: usize>(

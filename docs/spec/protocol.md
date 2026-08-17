@@ -6,8 +6,9 @@ packets, editable documents, caching, limits, rejection, and exit behavior.
 ## Logical engine boundary
 
 `Engine` owns workspace create/open, transaction preparation and publication, query, compilation,
-and run. It accepts closed typed `Request` values and returns closed typed `Response` values. It does
-not depend on JSON, terminal rendering, or Unix sockets.
+run, and exact application preparation. Workspace RPC accepts closed typed `Request` values and
+returns closed typed `Response` values. Application preparation uses its own closed typed method and
+artifact contract. Engine semantics do not depend on JSON, terminal rendering, or Unix sockets.
 
 The logical request families are workspace creation, transaction application, query batch, run,
 schema description, and adapter shutdown. Semantic failures are `Response::Error`; inability to open
@@ -21,7 +22,7 @@ mutation. `commit_outcome_unknown` permanently stops that engine instance.
 
 The primary CLI opens `Engine` directly for one command and exits. This removes manual service
 lifecycle and socket setup from normal agent work. `lkjscript --state DIR session` holds one engine
-and accepts one compact protocol-v9 JSON request per line; each line has an independent publication
+and accepts one compact protocol-v10 JSON request per line; each line has an independent publication
 boundary. EOF closes the session. A successful `shutdown` response is flushed before the session
 exits.
 
@@ -36,10 +37,10 @@ disconnect. No mutation is retried after reconnect.
 
 ## Strict JSON projection
 
-Protocol and JSON envelope version is 9. A request envelope is exactly:
+Protocol and JSON envelope version is 10. A request envelope is exactly:
 
 ```json
-{"version":9,"request_id":1,"request":{"kind":"create_workspace"}}
+{"version":10,"request_id":1,"request":{"kind":"create_workspace"}}
 ```
 
 Response envelopes carry the same nonzero request ID. Unknown fields and variants, duplicate fields,
@@ -59,7 +60,7 @@ contains the shared descriptor value model. Agreement tests compare every advert
 response, record, variant, scalar domain, error, operation, query, and limit with strict serde and
 executable samples.
 
-The active identity is `lkjscript-machine-schema-v9`. Its canonical BLAKE3 digest is embedded in the
+The active identity is `lkjscript-machine-schema-v10`. Its canonical BLAKE3 digest is embedded in the
 agent binary and printed by `agent orient`. Diagnostic clients may request:
 
 - a compact manifest;
@@ -69,6 +70,12 @@ agent binary and printed by `agent orient`. Diagnostic clients may request:
 
 Unknown, duplicate, empty, or excessive roots reject. Normal agent work does not require schema
 discovery.
+
+Application build, validate, inspect, test, typed run, and stream are command-local projections of
+the separate [application contract](application.md), not additions to workspace RPC. Their Rust
+records, canonical artifact codec, and command-local help own their fields. This avoids copying an
+application manifest into the global workspace catalogue. Application JSON uses contract version 1;
+top-level application parsing and operation errors return that versioned typed envelope.
 
 ## Context packets
 
@@ -149,5 +156,6 @@ gate if measured request savings justify response preflight and idempotency comp
 
 ## Version rejection
 
-Protocol/JSON 8, machine schema v8, context packet 1, and the `plan` edit root reject. No alias,
-fallback, compatibility reader, or migration mode remains.
+Protocol/JSON 9 and older, machine schema v9 and older, context packet 1, application command
+contract 0, application artifact 0, and the `plan` edit root reject. No alias, fallback,
+compatibility reader, or migration mode remains.

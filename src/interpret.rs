@@ -187,7 +187,7 @@ pub(crate) fn compile_and_run(
     })
 }
 
-fn validate_policy(policy: RunPolicy) -> Result<()> {
+pub(crate) fn validate_policy(policy: RunPolicy) -> Result<()> {
     if policy.fuel == 0 || policy.fuel > MAX_RUN_FUEL {
         return Err(LkError::new(
             ErrorCode::PolicyExceeded,
@@ -203,7 +203,7 @@ fn validate_policy(policy: RunPolicy) -> Result<()> {
     Ok(())
 }
 
-fn validate_invocation(
+pub(crate) fn validate_invocation(
     snapshot: &Snapshot,
     entry: NodeId,
     arguments: &[RuntimeValue],
@@ -369,7 +369,7 @@ pub(crate) fn runtime_byte_value_bytes(root: &RuntimeValue) -> Result<usize> {
     Ok(total)
 }
 
-fn validate_runtime_value(
+pub(crate) fn validate_runtime_value(
     snapshot: &Snapshot,
     root: &RuntimeValue,
     expected: SemanticType,

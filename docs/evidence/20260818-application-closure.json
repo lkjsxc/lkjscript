@@ -1,0 +1,194 @@
+{
+  "evidence_class": "controlled_observation",
+  "campaign": "application-closure",
+  "date_utc": "2026-08-17",
+  "starting_commit": "da62ef361c6b5fd5a43ed440d1da45733614c5d7",
+  "branch": "main",
+  "environment": {
+    "os": "Ubuntu 24.04",
+    "kernel": "7.0.0-29-generic",
+    "architecture": "x86_64",
+    "cpu": "AMD Ryzen 9 9955HX",
+    "logical_cpus": 32,
+    "memory_gib": 32,
+    "filesystem": "ZFS",
+    "filesystem_block_bytes": 131072,
+    "rustc": "1.96.0 (ac68faa20 2026-05-25)",
+    "cargo": "1.96.0",
+    "cargo_lock_sha256": "d23b75fc162e485b7149d92f1e3349f3cca39f00420a9fef68f8abea6c405620"
+  },
+  "active_contracts": {
+    "workspace_protocol": 10,
+    "machine_schema": "lkjscript-machine-schema-v10",
+    "machine_schema_digest": "e4257d3657752f3f3f0bfae148cec38610e9002c4a749205c846efb3368ba5e1",
+    "application_cli_contract": 1,
+    "application_artifact": 1,
+    "application_magic": "LKJAPP\\0\\x01",
+    "semantic_schema": "lkjscript-tsm006",
+    "workspace_artifact": 6,
+    "workspace_head": 8
+  },
+  "starting_baseline": {
+    "format_passed": true,
+    "clippy_passed": true,
+    "tests_passed": true,
+    "release_build_passed": true,
+    "public_examples_passed": 6,
+    "rust_source_and_test_bytes": 2193899,
+    "rust_source_and_test_lines": 62103,
+    "lkjscript_release_bytes": 7011520,
+    "lkjscriptd_release_bytes": 4260656
+  },
+  "representative_application": {
+    "name": "binary-canonicalizer",
+    "application_artifact": {
+      "bytes": 3207,
+      "nodes": 69,
+      "release_tests": 3,
+      "observed_digest": "1f46d25de8e87b47c6b7f2c53e756d97dfd9474315a4d2b69448b2e6a0954b45",
+      "observed_semantic_digest": "4de752e7748ddce75be2796e8888030e94598ffbb8992cbd2d691b17330da6a9",
+      "digest_limit": "workspace identity is random per fresh run; deterministic equality was checked between two builds from the same exact revision",
+      "validate_only_equal": true,
+      "repeated_build_byte_equal": true,
+      "failed_release_published": false,
+      "source_workspace_removed": true,
+      "standalone_validate": true,
+      "standalone_inspect": true,
+      "standalone_test": true,
+      "standalone_typed_run": true,
+      "standalone_stream_run": true,
+      "corrupt_artifact_rejected": true
+    },
+    "application_workflow": {
+      "processes": 10,
+      "input_bytes": 3547,
+      "output_bytes": 12155,
+      "diagnostic_bytes": 133,
+      "elapsed_nanoseconds": 30933533,
+      "intentional_failed_processes": 2
+    },
+    "author_repair_history_workflow": {
+      "rpc_calls": 43,
+      "session_processes": 2,
+      "engine_opens": 4,
+      "socket_connections": 0,
+      "request_bytes": 56615,
+      "response_bytes": 131520,
+      "elapsed_nanoseconds": 104742017,
+      "selected_schema_json_bytes": 87342,
+      "dense_first_accepted_payload_bytes": 1445,
+      "dense_first_rejected_payload_bytes": 1446,
+      "dense_rejection": "managed_visible_byte_policy_exceeded"
+    }
+  },
+  "runtime_comparison": {
+    "input_octets": 512,
+    "allocate_new": {
+      "cumulative_visible_bytes": 131840,
+      "cumulative_allocated_bytes": 131840,
+      "peak_live_backing_bytes": 1024,
+      "cumulative_objects": 2050,
+      "copied_bytes": 131840,
+      "reuse_attempts": 0,
+      "reuse_hits": 0
+    },
+    "ownership_reuse": {
+      "cumulative_visible_bytes": 131840,
+      "cumulative_allocated_bytes": 1528,
+      "peak_live_backing_bytes": 513,
+      "cumulative_objects": 1026,
+      "copied_bytes": 1024,
+      "reuse_attempts": 512,
+      "reuse_hits": 512
+    },
+    "forced_shared": {
+      "cumulative_visible_bytes": 131840,
+      "cumulative_allocated_bytes": 131840,
+      "peak_live_backing_bytes": 1024,
+      "cumulative_objects": 2050,
+      "copied_bytes": 131840,
+      "reuse_attempts": 512,
+      "reuse_hits": 0
+    },
+    "decision": "retain current ownership planner with allocate-new differential oracle",
+    "limitation": "one deterministic append shape plus the retained small concat control, not a workload distribution"
+  },
+  "contract_and_topology": {
+    "contract_source_bytes": 153227,
+    "manifest_json_bytes": 1244,
+    "selected_agent_roots_json_bytes": 88005,
+    "full_json_bytes": 136734,
+    "unchanged_json_bytes": 105,
+    "catalogue_decision": "retain for active workspace RPC, help, schema-digest, context, document, and diagnostic consumers; application types stay command-local",
+    "daemon_production_source_bytes": 32936,
+    "daemon_integration_test_bytes": 77569,
+    "daemon_release_bytes": 4252144,
+    "daemon_decision": "retain for exported framed Client and unique correlation, deadline, disconnect, shutdown, and authority-lock integration"
+  },
+  "source_and_binary": {
+    "rust_source_and_test_bytes": 2287367,
+    "rust_source_and_test_lines": 64768,
+    "rust_byte_change": 93468,
+    "rust_line_change": 2665,
+    "application_owner_bytes": 90664,
+    "application_production_prefix_bytes": 76552,
+    "application_inline_test_suffix_bytes": 14112,
+    "lkjscript_release_bytes": 7261216,
+    "lkjscript_release_byte_change": 249696,
+    "lkjscriptd_release_bytes": 4252144,
+    "lkjscriptd_release_byte_change": -8512,
+    "dependencies_added": 0,
+    "build_scripts_added": 0,
+    "unsafe_rust_added": false,
+    "incremental_release_build_seconds": 110.223,
+    "maximum_rss": "unavailable: /usr/bin/time is not installed"
+  },
+  "verification": {
+    "format": "passed",
+    "clippy_all_targets_all_features_locked_deny_warnings": "passed",
+    "tests": {
+      "discovered": 229,
+      "passed": 224,
+      "ignored_manual": 5,
+      "failed": 0
+    },
+    "release_build": "passed",
+    "public_applications": {
+      "passed": 6,
+      "failed": 0
+    },
+    "deterministic_mutation": {
+      "application_seed_hex": "1a11cafe20260818",
+      "application_cases": 10000,
+      "rpc_artifact_seed": 1,
+      "rpc_artifact_cases": 10000,
+      "workbench_seed": 1,
+      "workbench_cases": 10000,
+      "coverage_guided": false
+    },
+    "miri": {
+      "toolchain": "rustc 1.99.0-nightly (9f36de775 2026-07-19)",
+      "application_round_trip": "passed",
+      "application_corruption_version_release_gate": "passed",
+      "application_publication": "passed with -Zmiri-disable-isolation",
+      "default_isolation_publication": "unavailable because Miri intentionally rejects mkdir"
+    },
+    "address_sanitizer": {
+      "toolchain": "nightly rustc 1.99.0",
+      "detect_leaks": true,
+      "application_round_trip": "passed",
+      "application_corruption_version_release_gate": "passed",
+      "application_publication": "passed"
+    },
+    "git_diff_check": "passed"
+  },
+  "evidence_not_obtained": [
+    "coverage-guided fuzzing: cargo-fuzz is unavailable and no stable target exists",
+    "publication model checker",
+    "cross-platform build, artifact decode, inspect, test, and run",
+    "fresh provider trial and provider price telemetry",
+    "equal-capability source-like parser implementation",
+    "reusable package workload",
+    "large-history restart and resident-memory distribution"
+  ]
+}

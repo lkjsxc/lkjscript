@@ -150,7 +150,7 @@ The receipt includes exact base/result revision, canonical snapshot hash, public
 created count, selected bindings, semantic change count/digest, and completeness facts. Local body
 churn is summarized as `FunctionBodyChanged`; durable entity changes remain individually visible.
 
-Idempotency binds canonical protocol-v9 transaction bytes, including the requested receipt
+Idempotency binds canonical protocol-v10 transaction bytes, including the requested receipt
 projection. Exact replay returns the retained receipt. Reuse with different bytes rejects.
 
 ## History
@@ -200,9 +200,15 @@ bytes per revision. Reconsider delta/checkpoint or immutable-object storage when
 bytes become material on a representative larger corpus. Such a cutover must define object
 validation, root retention, interruption-safe garbage collection, and one reconstruction oracle.
 
-## Workspace versus package artifacts
+## Workspace versus application and package artifacts
 
 The `.lkjscript` file is a workspace revision artifact. It includes development history contracts
-and is not a package, dependency, or distribution format. Publishable package graphs and executable
-artifacts remain separate future contracts. Storage digests will not become package or entity
-identity by implication.
+and is not a package, dependency, or distribution format. Application artifact version 1 is a
+separate target-neutral run-only semantic closure with one exact entry, invocation profile, and
+immutable release cases; its contract is owned by [application.md](application.md). It retains
+workspace-qualified identities but contains no workspace history, HEAD, idempotency, aliases,
+caches, or unrelated declarations.
+
+No reusable package graph or executable cache exists. Workspace, application, package, and derived
+executable domains remain distinct. Their content digests do not become package, application,
+release, or entity identity by implication.
