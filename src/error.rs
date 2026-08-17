@@ -13,6 +13,7 @@ pub const MAX_DRAFT_PATH_BYTES: usize = 256;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorCode {
+    AuthorityBusy,
     ArtifactCorrupt,
     CommitOutcomeUnknown,
     CompileIncomplete,
@@ -61,7 +62,8 @@ pub enum ErrorCode {
 }
 
 impl ErrorCode {
-    pub const ALL: [Self; 45] = [
+    pub const ALL: [Self; 46] = [
+        Self::AuthorityBusy,
         Self::ArtifactCorrupt,
         Self::CompileIncomplete,
         Self::CoreIrInvalid,
@@ -110,6 +112,7 @@ impl ErrorCode {
     ];
     pub const fn machine_name(self) -> &'static str {
         match self {
+            Self::AuthorityBusy => "authority_busy",
             Self::ArtifactCorrupt => "artifact_corrupt",
             Self::CommitOutcomeUnknown => "commit_outcome_unknown",
             Self::CompileIncomplete => "compile_incomplete",

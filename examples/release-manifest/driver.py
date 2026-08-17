@@ -13,14 +13,11 @@ import time
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 CLI = pathlib.Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else ROOT / "target/release/lkjscript"
-DAEMON = pathlib.Path(sys.argv[2]).resolve() if len(sys.argv) > 2 else ROOT / "target/release/lkjscriptd"
-METRICS_PATH = pathlib.Path(sys.argv[3]).resolve() if len(sys.argv) > 3 else None
+METRICS_PATH = pathlib.Path(sys.argv[2]).resolve() if len(sys.argv) > 2 else None
 request_id = 0
 query_id = 0
-daemon = None
 state = None
 measurements = []
-readiness_nanoseconds = []
 
 
 def symbol(number):
@@ -531,7 +528,7 @@ def manifest(channel=0, target=1, flags=0):
 def rpc(request, purpose, counted=True):
     global request_id
     request_id += 1
-    envelope = {"version": 8, "request_id": request_id, "request": request}
+    envelope = {"version": 9, "request_id": request_id, "request": request}
     encoded = json.dumps(envelope, separators=(",", ":")).encode()
     started = time.monotonic_ns()
     completed = subprocess.run(
@@ -549,7 +546,7 @@ def rpc(request, purpose, counted=True):
     if completed.stderr:
         raise RuntimeError(f"CLI wrote stderr for {purpose}: {completed.stderr.decode()}")
     response = json.loads(completed.stdout)
-    if response.get("version") != 8 or response.get("request_id") != request_id:
+    if response.get("version") != 9 or response.get("request_id") != request_id:
         raise RuntimeError(f"response correlation mismatch for {purpose}")
     measurements.append({
         "purpose": purpose,
@@ -574,38 +571,6 @@ def expect_error(response, code, target=None):
     if target is not None and error.get("target") != target:
         raise RuntimeError(f"expected error target {target}, received {error}")
     return error
-
-
-def start_daemon():
-    global daemon
-    started = time.monotonic_ns()
-    daemon = subprocess.Popen(
-        [str(DAEMON), "--state", str(state), "--foreground"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-    )
-    deadline = time.monotonic() + 5
-    endpoint = state / "lkjscript.sock"
-    while not endpoint.exists():
-        if daemon.poll() is not None:
-            raise RuntimeError(f"daemon exited early: {daemon.stderr.read().decode()}")
-        if time.monotonic() >= deadline:
-            raise RuntimeError("daemon readiness timeout")
-        time.sleep(0.001)
-    readiness_nanoseconds.append(time.monotonic_ns() - started)
-
-
-def stop_daemon(purpose):
-    global daemon
-    if daemon is None or daemon.poll() is not None:
-        raise RuntimeError(f"daemon is absent before typed shutdown {purpose}")
-    expect(rpc({"kind": "shutdown"}, purpose, counted=False), "acknowledged")
-    if daemon.wait(timeout=5) != 0:
-        raise RuntimeError("daemon shutdown failed")
-    stderr = daemon.stderr.read()
-    if stderr:
-        raise RuntimeError(f"daemon wrote stderr: {stderr.decode()}")
-    daemon = None
 
 
 def apply_request(workspace, revision, mode, operations, return_symbols=None):
@@ -698,7 +663,6 @@ def workflow():
     with tempfile.TemporaryDirectory(prefix="lkjscript-release-manifest-") as directory:
         state = pathlib.Path(directory)
         os.chmod(state, 0o700)
-        start_daemon()
 
         manifest_schema = expect(expect(rpc({
             "kind": "describe_schema", "data": {"projection": {"kind": "manifest"}},
@@ -707,7 +671,7 @@ def workflow():
             "create_workspace", "apply_transaction", "query_workspace_summary",
             "query_node", "query_blockers", "query_body", "query_incoming_uses",
             "query_repair_context", "query_semantic_diff", "query_nominal_type",
-            "run", "shutdown",
+            "run",
         ]
         task_schema = expect(expect(rpc({
             "kind": "describe_schema",
@@ -905,8 +869,7 @@ def workflow():
         ):
             raise RuntimeError("presentation rename diff mismatch")
 
-        stop_daemon("shutdown_before_restart")
-        start_daemon()
+        # Each direct CLI invocation reopens and validates durable state.
         summaries = [
             expect(query(workspace, revision, {"kind": "workspace_summary"},
                          f"restart_summary_{revision}"), "workspace_summary")
@@ -940,8 +903,6 @@ def workflow():
             for revision in (1, 2, 3)
         }
         head_size = (workspace_dir / "HEAD").stat().st_size
-        stop_daemon("final_shutdown")
-
         counted = [item for item in measurements if item["counted"]]
         summary = {
             "schema": {
@@ -966,8 +927,6 @@ def workflow():
             },
             "artifacts": {"revision_bytes": artifact_sizes, "head_bytes": head_size},
             "timings": {
-                "cold_readiness_nanoseconds": readiness_nanoseconds[0],
-                "restart_readiness_nanoseconds": readiness_nanoseconds[1],
                 "case_compile_nanoseconds": sum(item["compile_nanoseconds"] for item in cases),
                 "case_execute_nanoseconds": sum(item["execute_nanoseconds"] for item in cases),
                 "restart_compile_nanoseconds": restart_two["compile_nanoseconds"] + restart_three["compile_nanoseconds"],
@@ -975,12 +934,13 @@ def workflow():
             },
             "interaction": {
                 "cli_launches": len(counted),
-                "daemon_connections": len(counted),
+                "engine_opens": len(counted),
+                "connections": 0,
                 "request_bytes": sum(item["json_request_bytes"] for item in counted),
                 "response_bytes": sum(item["json_response_bytes"] for item in counted),
                 "wall_nanoseconds": sum(item["elapsed_nanoseconds"] for item in counted),
             },
-            "shutdown": "acknowledged",
+            "reopen": "passed on every direct command",
         }
         if METRICS_PATH is not None:
             METRICS_PATH.write_text(json.dumps({
@@ -994,13 +954,4 @@ def main():
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    finally:
-        if daemon is not None and daemon.poll() is None:
-            daemon.terminate()
-            try:
-                daemon.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                daemon.kill()
-                daemon.wait()
+    main()

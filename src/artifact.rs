@@ -8,9 +8,10 @@ use crate::schema::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const MAGIC: [u8; 8] = *b"LKJSPG\0\x05";
-pub const FORMAT_VERSION: ArtifactVersion = ArtifactVersion(5);
-pub const SCHEMA_ID: SchemaId = SchemaId(*b"lkjscript-spg005");
+pub const MAGIC: [u8; 8] = *b"LKJTSM\0\x06";
+pub const FORMAT_VERSION: ArtifactVersion = ArtifactVersion(6);
+pub const SCHEMA_ID: SchemaId = SchemaId(*b"lkjscript-tsm006");
+const SNAPSHOT_HASH_DOMAIN: &str = "lkjscript.typed-semantic-model.snapshot.v6";
 pub const MAXIMUM_ARTIFACT_BYTES: usize = 64 * 1024 * 1024;
 pub const MAXIMUM_ARTIFACT_NAME_BYTES: usize = 1024 * 1024;
 const ENCODED_COUNT_BYTES: usize = 8;
@@ -41,7 +42,7 @@ pub fn encode(snapshot: &Snapshot) -> Result<Vec<u8>> {
             "artifact payload length does not fit canonical u64 encoding",
         )
     })?;
-    let hash = SnapshotHash::from_bytes(*blake3::hash(&payload).as_bytes());
+    let hash = hash_payload(&payload);
     if hash != snapshot.hash() {
         return Err(LkError::new(
             ErrorCode::ArtifactCorrupt,
@@ -114,7 +115,7 @@ pub fn decode_with_policy(bytes: &[u8], policy: DecodePolicy) -> Result<Snapshot
     reader.finish().map_err(artifact_codec)?;
 
     let snapshot = decode_payload(payload, policy)?;
-    let computed = SnapshotHash::from_bytes(*blake3::hash(payload).as_bytes());
+    let computed = hash_payload(payload);
     let mut expected = [0_u8; SnapshotHash::BYTE_LEN];
     expected.copy_from_slice(encoded_hash);
     let expected = SnapshotHash::from_bytes(expected);
@@ -131,7 +132,13 @@ pub fn decode_with_policy(bytes: &[u8], policy: DecodePolicy) -> Result<Snapshot
 
 pub(crate) fn compute_snapshot_hash(snapshot: &Snapshot) -> Result<SnapshotHash> {
     let payload = encode_payload(snapshot)?;
-    Ok(SnapshotHash::from_bytes(*blake3::hash(&payload).as_bytes()))
+    Ok(hash_payload(&payload))
+}
+
+pub(crate) fn hash_payload(payload: &[u8]) -> SnapshotHash {
+    let mut hasher = blake3::Hasher::new_derive_key(SNAPSHOT_HASH_DOMAIN);
+    hasher.update(payload);
+    SnapshotHash::from_bytes(*hasher.finalize().as_bytes())
 }
 
 fn encode_payload(snapshot: &Snapshot) -> Result<Vec<u8>> {
@@ -777,7 +784,7 @@ fn put_node_id(writer: &mut Writer, value: NodeId) {
 
 fn read_node_id(reader: &mut Reader<'_>, workspace: WorkspaceId) -> Result<NodeId> {
     let serial = reader.u64().map_err(artifact_codec)?;
-    NodeId::new(workspace, serial).map_err(|error| {
+    NodeId::from_encoded(workspace, serial).map_err(|error| {
         LkError::new(
             ErrorCode::ArtifactCorrupt,
             format!("artifact contains an invalid node identity: {error}"),
@@ -1107,12 +1114,12 @@ mod tests {
     }
 
     #[test]
-    fn artifact_format_four_rejects_without_compatibility_reader() {
-        let mut bytes = encode(&initial()).expect("format five artifact");
-        bytes[..MAGIC.len()].copy_from_slice(b"LKJSPG\0\x04");
-        bytes[MAGIC.len()..MAGIC.len() + 2].copy_from_slice(&4_u16.to_le_bytes());
+    fn artifact_format_five_rejects_without_compatibility_reader() {
+        let mut bytes = encode(&initial()).expect("format six artifact");
+        bytes[..MAGIC.len()].copy_from_slice(b"LKJSPG\0\x05");
+        bytes[MAGIC.len()..MAGIC.len() + 2].copy_from_slice(&5_u16.to_le_bytes());
         assert_eq!(
-            decode(&bytes).expect_err("format four must reject").code,
+            decode(&bytes).expect_err("format five must reject").code,
             ErrorCode::ArtifactCorrupt
         );
     }
@@ -1229,7 +1236,7 @@ mod tests {
         writer.fixed(&SCHEMA_ID.0);
         writer.u64(u64::try_from(payload.len()).expect("payload length"));
         writer.fixed(payload);
-        writer.fixed(blake3::hash(payload).as_bytes());
+        writer.fixed(&hash_payload(payload).as_bytes());
         writer.finish()
     }
 }

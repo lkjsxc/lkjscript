@@ -1,245 +1,120 @@
-# Bootstrap language specification
+# Language semantics
+
+This specification owns observable types, values, operations, control flow, completeness,
+compilation, execution, and resource failures. Identity and publication belong to
+[`semantic-model.md`](semantic-model.md).
 
 ## Types and values
 
-The closed semantic types are `unit`, `bool`, signed two's-complement `i64`, immutable `bytes`, and
-`nominal(declaration Node ID)`. A nominal target is exactly one product or closed-sum declaration in
-the same workspace. Primitive equality is by primitive kind; nominal equality is only by persistent
-declaration identity. Names and equal shape do not affect type equality. There are no implicit
-conversions, null or dynamic values, casts, exceptions, or generics. Functions own ordered
-parameters and one result type. Values are function parameters, structured block arguments, or the
-single result of an operation.
+The closed type set is:
 
-A product declaration owns an immutable ordered field sequence; fields have persistent identity,
-dense ordinals, names, and exact value types. A sum declaration owns a nonempty immutable ordered
-variant sequence; variants have persistent identity, dense ordinals, names, and zero or one payload
-type. Duplicate member names reject. Rename is presentation-only. Shape changes require a new
-declaration identity.
+- `unit`;
+- `bool`;
+- checked signed `i64`;
+- immutable `bytes`;
+- a nominal product declaration;
+- a nominal sum declaration.
 
-Product fields and variant payloads are by-value dependencies. Direct, indirect, and mixed
-product/sum cycles reject through deterministic iterative validation. The cycle diagnostic selects
-the strongly connected cycle component whose lowest declaration ID is smallest, targets that
-participant, and reports only that component's sorted participants under the generic diagnostic
-bound; acyclic declarations that depend on the cycle are not participants. Derived layout is not
-semantic state. The direct primitive descriptors define `unit` as size 0/alignment 1/zero cells,
-`bool` as 1/1/one immediate cell, `i64` as 8/8/one immediate cell, and `bytes` as one managed-handle
-cell with no fixed semantic payload size.
-Products lay out fields in declaration order with checked alignment; sums use declaration ordinal as
-discriminant, the smallest 1/2/4/8-byte tag width, and maximum payload size/alignment/cells. Layout
-overflow is an explicit derived unrepresentable fact and does not invalidate the graph.
+Product values contain exactly one value for every declared field in declaration order. Sum values
+contain exactly one declared variant and a payload exactly when that variant declares one. Nominal
+equality requires the same declaration and member identities; equal shape or names are insufficient.
 
-Current primitive and named immutable values are semantically duplicable. Operation contracts record
-nonconsuming `read` operand use; they do not require physical deep copying. An immutable byte value
-has no observable address or allocation identity, equality depends only on its visible octets, and a
-duplicate may share backing. Products and variants containing bytes retain those semantics. This is
-not a decision that a future resource-owning or move-only value must be duplicable. No resource
-ownership or surface borrow rules are currently accepted. Physical ownership, borrowing, and
-storage reuse for ordinary immutable values are compiler-derived implementation facts.
+Bytes are ordered octets. Public JSON uses one strict unpadded URL-safe base64 spelling. Backing
+allocation, sharing, views, handles, and reuse are not observable language state. Bytes are not an
+implicit text type and no Unicode normalization is defined for runtime values.
 
-Empty bytes are valid. A slice denotes exactly one contiguous subsequence and may share the original
-backing. A zero-length slice is valid at any start in `0..=length`; other ranges must fit completely.
-Index and slice coordinates are `i64`. Negative values, host-unrepresentable values, arithmetic
-overflow, an index equal to length, or a range outside the value trap deterministically. A valid
-index produces an `i64` in `0..=255`, and length is an exact nonnegative `i64`.
-Byte equality is deterministic but has no constant-time or cryptographic side-channel guarantee.
+## Operations
 
-## Memory-safety surface
+The closed operation set includes:
 
-A valid program in the current language cannot express raw pointers, arbitrary addresses, unchecked
-loads or stores, pointer arithmetic, unchecked casts, arbitrary byte reinterpretation, direct
-foreign-memory access, explicit deallocation, or shared mutable memory. It therefore cannot express
-use-after-free, double free, invalid pointer dereference, out-of-bounds pointer access, type confusion,
-or a data race through an accepted operation. Primitive values and acyclic named immutable values
-are lowered through independently verified layouts; the current interpreter stores them in bounded
-flat cells.
+- unit, boolean, integer, and byte constants;
+- checked `i64` addition and less-than;
+- direct function call;
+- `if`;
+- counted `for_i64`;
+- product construction and field projection;
+- sum construction and exhaustive `match_sum`;
+- byte length, checked index, checked slice, equality, and concatenation;
+- typed `hole`;
+- `return` and `yield` terminators.
 
-Bytes add no unchecked memory operation. During one invocation, public inputs and executed byte
-constants enter a bounded managed store as backing buffers plus constant-depth views. Flat cells
-contain kind-specific opaque nonzero handles, never pointers. Reused descriptor slots advance a
-checked generation; every access checks the handle domain, kind, index, generation, liveness,
-backing range, and owner store. A stale generation rejects and generation wrap retires the slot. No
-handle is serializable or may survive `Run`. The public result is copied into an owned boundary value
-after exact output checks and before the store is dropped.
+Integer overflow traps; it never wraps. Byte index and slice bounds are checked before access. A
+product constructor supplies each field exactly once. A sum match supplies every variant exactly
+once and binds a payload only for payload-bearing variants.
 
-The compiler derives a closed ownership plan from verified Core control flow and exact managed-cell
-maps. A separate verifier recomputes type, liveness, edge, cleanup, and uniqueness facts before
-managed execution. Reads borrow while a live owner dominates them; transfers preserve one claim;
-semantic duplication creates one checked ownership claim; and final drop reclaims a byte view and
-then any unreferenced backing. Products enumerate every managed field, while variants enumerate only
-the active payload. Ordinary byte topology is acyclic, so precise reference counting is the fallback
-only for actual sharing and there is no tracing collector. Cleanup uses the verified roots on normal
-returns and every runtime failure.
+Calls target durable function entities. Nominal operations target durable declarations and members.
+Ordinary operation results, branch values, loop binders, and match payload binders are
+revision-local and cannot escape their owning function body.
 
-This language-level exclusion is one layer of the memory-safety contract, not a formal proof about
-the implementation or its trusted computing base. Resource exhaustion is distinct: fuel, frames,
-runtime-value depth/items/bytes, and live cells may reject under documented operational policy.
-User-scalable calls, control, aggregate traversal, validation, and decoding must use explicit frames
-or work collections rather than consuming unbounded native stack.
+## Evaluation order and laziness
 
-The managed store is selected only for nonescaping, cycle-free bytes. A simple allocate-new mode is
-retained under tests as the semantic differential oracle, not as a second language. A future
-persistent heap, escaping shared value, cycle, mutable object, foreign value, or external resource
-must add implemented and verified aliasing, lifetime, cleanup, concurrency, and permission semantics
-appropriate to that data class. Tracing remains reserved for a real cyclic consumer; affine
-semantic ownership remains reserved for external resources or unique mutable values whose
-duplication or cleanup is observable.
+Expression order, operand order, field order, argument order, loop order, and selected control edges
+are deterministic. `if` evaluates only the selected arm. `match_sum` evaluates only the selected
+variant arm. A counted loop uses explicit start, exclusive end, nonzero step, loop-index binder, and
+loop-carried binder; its next iteration receives the prior yield.
 
-## Pure operation contracts
+Calls and user-scalable control use explicit runtime frames. User depth does not consume unbounded
+native call stack. Recursion is limited by the explicit maximum-frame policy.
 
-`src/schema.rs` owns the exhaustive operation contracts consumed by graph validation, queries,
-codecs, history checks, and runtime schema description.
+## Incomplete programs
 
-- `const_unit` has no operands and produces `unit`;
-- `const_bool(value)` has no operands and produces `bool`;
-- `const_i64(value)` has no operands and produces `i64`;
-- `const_bytes(value)` carries at most 4,096 octets and produces `bytes`;
-- `add_i64(lhs, rhs)` reads two `i64` values and produces `i64`;
-- `lt_i64(lhs, rhs)` reads two `i64` values and produces `bool`;
-- `bytes_len(value)` reads bytes and produces its exact length as `i64`;
-- `bytes_at(value, index)` reads bytes and an `i64`, returning the selected octet as `i64` or
-  trapping with `byte_index_out_of_bounds`;
-- `bytes_slice(value, start, length)` reads bytes and two `i64` values, producing a possibly shared
-  immutable view or trapping with `byte_slice_out_of_bounds`;
-- `bytes_equal(lhs, rhs)` compares visible ordered octets and produces `bool`;
-- `bytes_concat(lhs, rhs)` reads two byte values and produces their exact left-to-right
-  concatenation. Empty operands are exact, checked length addition precedes allocation or reuse,
-  and a result above 65,536 octets traps with `byte_value_too_large`;
-- `call(function, arguments)` names a function by Node ID, requires one argument per ordered
-  parameter with exact types, and produces the target function's result type;
-- `hole(expected)` produces one value of its exact expected type but remains incomplete;
-- `if(condition, result, then_body, else_body)` requires a `bool` condition, owns ordered then/else
-  regions, and produces `result`; each region has one block with no block arguments and ends in
-  `yield` of exactly `result`;
-- `for_i64(start, end_exclusive, step, initial, carried, body)` requires `i64` bounds, a positive
-  literal step, and an initial value of `carried`; its one body block owns ordered `loop_index: i64`
-  and `loop_carried: carried` arguments, ends in `yield(carried)`, and the operation produces
-  `carried`;
-- `construct_product(product, fields)` names one product declaration and one identity-keyed value
-  for every exact field; canonical storage follows declaration order and every value has the field's
-  exact type;
-- `project_field(value, field)` names an exact product field and requires a value of that field's
-  owning product type;
-- `construct_variant(variant, payload)` names an exact sum variant and carries no payload for a
-  nullary variant or exactly one value of the declared payload type;
-- `match_sum(scrutinee, result, arms)` requires a closed-sum value and owns exactly one arm for every
-  variant in declaration order. A payload arm has one exact payload block argument, a nullary arm has
-  none, every arm yields `result`, and only the selected arm is semantically evaluated;
-- `yield(value)` terminates an operation-owned structured region and must match that region's
-  derived yield contract;
-- `return(value)` terminates a function body and must match the function result type.
+A function with no body and a typed `hole` are valid incomplete accepted states. A selected entry
+may run only if its complete dependency closure contains no missing body or hole. Incomplete unused
+declarations do not block an otherwise complete entry.
 
-`yield` is not a function terminator, and `return` is not a structured-region terminator. Structured
-regions have exactly one block in the current schema. Operations are pure. Checked `i64` addition
-overflow is a structured runtime trap once the operation enters executable lowering.
+A hole is an explicit durable repair anchor. Refinement must preserve its exact result type and body
+scope. Ordinary body terms remain revision-local.
 
-## Visibility, calls, and recursion
+## Compilation
 
-Value visibility is lexical and structural. A use may reference function parameters, prior regular
-operations in its current block, and values visible before each enclosing structured operation.
-Values produced later in the same block, in a sibling arm, or inside a completed nested region are
-not visible. A nested body may capture visible ancestor values. Loop body arguments are visible in
-the loop body and all nested regions within it.
+Compilation consumes one immutable accepted snapshot and one durable entry function. It discovers
+the complete reachable function and nominal-type closure and lowers only that closure to private
+Core IR. Dense compiler IDs, layouts, blocks, values, ownership actions, and source-origin tables are
+derived and never become semantic identity.
 
-Calls use function identity rather than names. Forward and mutually recursive calls are valid and
-executable when signatures and all value contracts are exact. Calls and recursion execute with an
-explicit interpreter frame vector rather than user-depth Rust recursion.
+The independent Core IR verifier checks type tables, nominal closure, blocks, instructions, control
+edges, result indexes, layouts, call signatures, switch exhaustiveness, and all bounds before
+execution. Invalid derived IR rejects rather than being interpreted.
 
-`RefineHole` is a semantic graph edit, not an executable operation. It is the sole one-way
-identity-preserving constructor transition: a typed hole may become a complete, regionless,
-non-terminator operation with the same one-result contract while retaining Node ID, owner, body
-position, and uses. Another hole, a terminator, a different result contract, a region-owning
-operation, or an already-complete target rejects. A nominally typed hole may refine only to a valid
-regionless product construction, variant construction, or field projection with the same result
-type; `match_sum` is never refinement-eligible.
+## Execution
 
-## Compilation and execution
+One explicit-frame interpreter defines behavior. `Run` is pure with respect to workspace authority:
+success and traps publish nothing. A trap does not poison a reusable engine or session.
 
-A selected entry is eligible for lowering only when its dependency closure is complete. Unused
-incomplete definitions do not block that entry. The single executable route is:
+`RunPolicy` separately bounds fuel and frames. Additional fixed policies bound arguments, public
+value depth/items/bytes, result materialization, flat cells, managed visible bytes, retained backing
+bytes, and managed objects. Logical fuel is independent of allocation reuse; optimized and
+allocate-new byte execution consume the same fuel and produce the same value or typed trap.
 
-```text
-immutable SPG snapshot -> completeness/type validation -> Core IR -> IR verifier
-    -> derived ownership plan -> ownership verifier -> managed interpreter
-```
+The production byte representation uses verified managed-reference maps, checked generation-tagged
+handles, precise acyclic sharing counts, deterministic early reclamation, and uniqueness-guided
+left-buffer concat reuse. A test-only allocate-new mode is the correctness oracle. On the retained
+concat control, production copies 23 bytes and peaks at 23 backing bytes versus 32/32 for the oracle,
+with identical behavior and fuel.
 
-The compiler iteratively discovers the exact direct-call closure and transitive nominal-type closure.
-Dense private function IDs follow persistent function Node-ID order. The private type table derives
-the deterministic primitive prefix (`unit`, `bool`, `i64`, then `bytes`) from the primitive
-descriptors, then appends reachable nominal declarations in persistent Node-ID order;
-unreachable declarations are omitted. Every nominal entry retains its semantic declaration/member
-origins and a fully recomputed deterministic layout. Core value types use only private type IDs.
+This optimization is not language ownership. Authors cannot observe handles, retain/release actions,
+buffer reuse, allocator slots, or memory addresses. A second managed value class, escaping values,
+or cycles triggers revalidation of this strategy.
 
-Function-scoped blocks use typed parameters and explicit branch arguments; values never flow
-implicitly between blocks. Lowering threads the complete visible semantic environment through
-generated block parameters. `if` lowers to lazy arm blocks and a join. `for_i64` lowers through a
-header, body, and exit. Product construction, projection, and variant construction lower to exact
-aggregate instructions. `match_sum` lowers to one exhaustive variant switch, one payload marker only
-for payload variants, lazy arm blocks, deterministic captures, and one typed join. The independent
-IR verifier rederives type layouts and frame footprints and rejects malformed dependencies, aggregate
-instructions, switch tables, payload edges, or indexes.
+## Public values and failures
 
-Public invocation values are exact `unit`, `bool`, `i64`, `bytes`, product, or sum projections. Bytes
-use canonical unpadded URL-safe base64 at JSON boundaries; padding, whitespace, noncanonical trailing
-bits, aliases, and values over 65,536 decoded octets reject. Products name
-the declaration and every field Node ID; input field order may vary but is normalized to declaration
-order. Sums name the declaration and exact variant Node ID and carry a payload exactly when declared.
-Nested values are checked against the selected immutable revision and bounded to depth 24. The
-4,096-item and 64 KiB structural-value policies aggregate across all Run arguments, with a separate
-65,536 decoded-byte aggregate. Type-based result preflight bounds mandatory structural depth, items,
-and structural accounting; the compiler and verifier establish fixed cell layouts. Managed payload
-is checked dynamically against managed-store and actual-result limits; `Run` is pure, so such a
-result-policy rejection publishes nothing.
+Run inputs and outputs use exact typed public values. Nominal values name durable declaration/member
+IDs. Every value is validated for type, shape, depth, counts, bytes, and foreign-domain references
+before flattening or materialization.
 
-Execution uses one deterministic loop over explicit frames. Each frame owns one flat cell array plus
-separate per-value initialized facts. Unit uses zero cells, bool and i64 use one, bytes uses one
-validated handle cell, products concatenate field ranges, and sums use one discriminant cell plus the
-maximum payload range; inactive payload cells are not initialized managed references. Exact
-managed-reference maps derive the byte-handle cells in primitives, records, and active variant
-payloads. The invocation owns a separate byte store bounded to 1,048,576 cumulative visible bytes,
-262,144 live backing bytes, and 4,096 simultaneously live backing/view objects. A view charges its
-logical visible construction and object descriptor while the complete distinct backing it pins
-remains charged once. Dead views and backing reclaim at their final verified drop; descriptor slots
-may be reused only with a new generation. Semantic copies through calls, branches, products,
-projections, and variants create an exact ownership claim only when sharing remains; borrows and
-transfers add no claim.
-The 65,536 live-cell policy applies to the peak of all live frame arrays plus exact argument, edge,
-return, and public-flatten scratch, plus a new callee array when applicable. The peak is checked before
-allocation or transfer; scratch ends at its transfer boundary and returned frame arrays are released
-immediately. Aggregate construction, projection, and discriminant reads operate directly on exact
-cell ranges, and block entry invalidates value facts without clearing the array.
+Failures distinguish proposal/semantic rejection, incomplete compilation, invalid derived IR,
+runtime traps, fuel/frame/resource policy, I/O, and unknown publication outcome. Diagnostics name a
+durable entity or an exact revision-local origin where applicable.
 
-Fuel is charged before work. Every executed instruction or transfer costs one base unit. Each
-logically transferred value additionally costs `max(1, materialized_cells)`, so unit values, unit fields,
-and unit arguments remain metered. Product construction charges its field copies, projection charges
-the full projected result, selected match edges charge only their selected captures/payload, and call,
-branch, and return charge every transferred value. Variant construction charges the full sum cell
-range for canonicalization plus the active payload's logical transfer, including one unit for
-zero-cell payloads. Unselected match arms consume neither execution work nor transfer fuel.
-`bytes_slice` additionally charges one logical view unit, independent of the visible slice length.
-`bytes_equal` additionally charges one unit per octet actually compared, stopping at the first
-mismatch; unequal lengths compare no octets. `bytes_concat` additionally charges one unit per octet
-of the complete logical result. This full-result charge is identical for allocate-new and unique
-reuse, so repeated one-octet immutable concatenation has quadratic logical fuel even when the
-physical buffer grows efficiently. Physical borrowing, ownership counts, reclamation, allocation,
-and reuse never change logical fuel.
-Frame/live-cell exhaustion, managed-object/visible/retained-byte policy exhaustion, fuel exhaustion,
-byte bounds, result policy, and arithmetic overflow are distinct structured failures and do not
-mutate daemon state. Verified cleanup drops live owners on return and every trap before Rust scope
-drops the final store and temporary conversion buffers.
+## Safety and effects
 
-Core instructions retain their originating semantic operation identity as derived compiler data.
-When an execution failure has one exact operation origin, the public typed error names that semantic
-Node ID rather than requiring a client to interpret a Core block or instruction index. A debug-purpose
-context packet may combine that identity with its immutable node, owner, dependency, incoming-use,
-and visible-value facts. The packet and its text rendering are observation projections only: they add
-no catchable exception, stack-trace semantics, persisted trace, fuel change, or alternate execution
-route. The retained maintenance corpus was correctable from the existing operation origin and focused
-context, so there is currently no execution tracer or debugger contract.
+Accepted language semantics expose no raw address, unchecked memory access, pointer arithmetic,
+unchecked cast, manual deallocation, shared mutable heap, or foreign memory. The Rust package forbids
+local unsafe code. This is an implementation safety boundary, not a formal proof.
 
-The current pure synchronous runtime has no cooperative cancellation operation. Client disconnect
-does not expose or preserve store state; the bounded Run continues until result or trap and then
-drops the store. Process termination is operating-system reclamation, not an observable language
-cleanup guarantee.
-
-There are currently no general patterns, generics, effects, permission values, host operations,
-resource-owning or move-only values, native execution, or source syntax.
+The language currently has no host effects, permission values, resource-owning values, concurrency,
+time, randomness, filesystem access, sockets, process access, or nondeterministic finalization.
+Those absences are bootstrap limits, not permanent semantic prohibitions. A future effect must add
+explicit typed authority, ordering, cancellation, retry/partial-action, audit, and deterministic
+cleanup contracts. Ordinary immutable-value reclamation will remain separate from affine external
+resource cleanup.

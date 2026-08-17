@@ -13,7 +13,6 @@ fn run_driver(authoring_mode: &str) -> Output {
     command
         .arg(driver_path())
         .arg(env!("CARGO_BIN_EXE_lkjscript"))
-        .arg(env!("CARGO_BIN_EXE_lkjscriptd"))
         .env("LKJSCRIPT_AUTHORING_MODE", authoring_mode);
     command.output().expect("run release-channel replay driver")
 }
@@ -78,11 +77,10 @@ fn real_cli_release_channel_replay_repairs_runs_renames_and_restarts() {
     assert_eq!(summary["counts"]["explicit_draft_symbols"], 67);
     assert_eq!(summary["counts"]["selected_bindings"], 38);
     assert_eq!(summary["counts"]["rejected_proposals"], 1);
-    assert_eq!(summary["contracts"]["task_roots"], 12);
+    assert_eq!(summary["contracts"]["task_roots"], 11);
     assert_eq!(summary["provider_telemetry"]["available"], false);
-    assert_eq!(summary["interaction"]["daemon_processes"], 2);
-    assert_eq!(summary["interaction"]["lifecycle_cli_launches"], 2);
-    assert_eq!(summary["shutdown"], "acknowledged");
+    assert_eq!(summary["interaction"]["connections"], 0);
+    assert_eq!(summary["reopen"], "passed on every direct command");
 }
 
 #[test]
@@ -107,7 +105,7 @@ fn explicit_and_inline_release_channel_modes_keep_equal_work_and_reduce_scaffold
     for field in [
         "initial_operations",
         "selected_bindings",
-        "created_nodes",
+        "created_durable_entities",
         "canonical_nodes",
         "rejected_proposals",
     ] {

@@ -10,14 +10,11 @@ import tempfile
 import time
 
 CLI = pathlib.Path(sys.argv[1]).resolve()
-DAEMON = pathlib.Path(sys.argv[2]).resolve()
-METRICS_PATH = pathlib.Path(sys.argv[3]).resolve() if len(sys.argv) > 3 else None
+METRICS_PATH = pathlib.Path(sys.argv[2]).resolve() if len(sys.argv) > 2 else None
 request_id = 0
 query_id = 0
-daemon = None
 state = None
 measurements = []
-readiness_nanoseconds = []
 def draft_symbol(number):
     return f"draft_{number}"
 
@@ -25,7 +22,7 @@ def draft_symbol(number):
 def rpc(request, purpose, counted=True):
     global request_id
     request_id += 1
-    envelope = {"version": 8, "request_id": request_id, "request": request}
+    envelope = {"version": 9, "request_id": request_id, "request": request}
     encoded = json.dumps(envelope, separators=(",", ":")).encode()
     started = time.monotonic_ns()
     completed = subprocess.run(
@@ -41,7 +38,7 @@ def rpc(request, purpose, counted=True):
             f"CLI failed for {purpose} ({completed.returncode}): {completed.stderr.decode()}"
         )
     response_envelope = json.loads(completed.stdout)
-    if response_envelope.get("version") != 8:
+    if response_envelope.get("version") != 9:
         raise RuntimeError(f"response version mismatch for {purpose}")
     if response_envelope.get("request_id") != request_id:
         raise RuntimeError(f"response correlation mismatch for {purpose}")
@@ -148,38 +145,6 @@ def arm(variant_handle, body, payload_symbol=None):
     if payload_symbol is not None:
         value["payload_symbol"] = draft_symbol(payload_symbol)
     return value
-
-
-def start_daemon():
-    global daemon
-    started = time.monotonic_ns()
-    daemon = subprocess.Popen(
-        [str(DAEMON), "--state", str(state), "--foreground"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-    )
-    endpoint = state / "lkjscript.sock"
-    deadline = time.monotonic() + 5
-    while not endpoint.exists():
-        if daemon.poll() is not None:
-            raise RuntimeError(f"daemon exited early: {daemon.stderr.read().decode()}")
-        if time.monotonic() >= deadline:
-            raise RuntimeError("daemon readiness timeout")
-        time.sleep(0.001)
-    readiness_nanoseconds.append(time.monotonic_ns() - started)
-
-
-def stop_daemon(purpose):
-    global daemon
-    if daemon is None:
-        raise RuntimeError(f"daemon is absent before typed shutdown {purpose}")
-    status = daemon.poll()
-    if status is not None:
-        raise RuntimeError(f"daemon exited before typed shutdown {purpose}: {status}")
-    expect(rpc({"kind": "shutdown"}, purpose, counted=False), "acknowledged")
-    if daemon.wait(timeout=5) != 0:
-        raise RuntimeError("daemon shutdown failed")
-    daemon = None
 
 
 def query_batch(workspace, revision, queries, purpose):
@@ -765,9 +730,8 @@ def measurement_summary():
         "json_request_bytes": sum(item["json_request_bytes"] for item in counted),
         "json_response_bytes": sum(item["json_response_bytes"] for item in counted),
         "cli_launches": len(counted),
-        "daemon_round_trips": len(counted),
-        "lifecycle_cli_launches": len(measurements) - len(counted),
-        "cli_daemon_wall_nanoseconds": sum(item["elapsed_nanoseconds"] for item in counted),
+        "engine_opens": len(counted),
+        "cli_engine_wall_nanoseconds": sum(item["elapsed_nanoseconds"] for item in counted),
     }
 
 
@@ -776,7 +740,6 @@ def execute():
     with tempfile.TemporaryDirectory(prefix="lkjscript-job-policy-") as directory:
         state = pathlib.Path(directory)
         os.chmod(state, 0o700)
-        start_daemon()
 
         manifest = expect(expect(rpc({"kind": "describe_schema", "data": {
             "projection": {"kind": "manifest"},
@@ -794,7 +757,6 @@ def execute():
             "query_semantic_diff",
             "query_nominal_type",
             "run",
-            "shutdown",
         ]
         selected_contract = expect(expect(rpc({"kind": "describe_schema", "data": {
             "projection": {"kind": "roots", "data": {"roots": roots}},
@@ -1001,9 +963,7 @@ def execute():
             workspace, 3, ids[400], [], accepted_value(ids, 25), "renamed_revision_main"
         )
 
-        stop_daemon("shutdown_before_restart")
-        start_daemon()
-
+        # Every direct CLI invocation reopens and reconstructs the workspace.
         assert_selected_nodes(workspace, 1, ids, "restart_revision_one_identities")
         assert_selected_nodes(workspace, 2, ids, "restart_revision_two_identities")
         assert_selected_nodes(workspace, 3, ids, "restart_revision_three_identities")
@@ -1039,7 +999,8 @@ def execute():
         }
         head_size = (workspace_directory / "HEAD").stat().st_size
         program_facts = count_program_facts(operations)
-        stop_daemon("final_shutdown")
+        durable_bindings = sum(".l" not in node for node in ids.values())
+        local_bindings = len(ids) - durable_bindings
         summary = {
             "schema": {
                 "manifest": True,
@@ -1067,16 +1028,15 @@ def execute():
             "counts": {
                 "transaction_operations": len(operations),
                 "selected_bindings": len(ids),
-                "created_nodes": receipt["created_count"],
-                "implicit_nodes": receipt["created_count"] - program_facts["explicit_symbols"],
+                "created_durable_entities": receipt["created_count"],
+                "selected_durable_bindings": durable_bindings,
+                "selected_local_bindings": local_bindings,
                 "canonical_nodes": summary_two["node_count"],
                 **program_facts,
                 "expected_rejected_proposals": 1,
             },
             "artifacts": {"revision_bytes": artifact_sizes, "head_bytes": head_size},
             "timings": {
-                "cold_readiness_nanoseconds": readiness_nanoseconds[0],
-                "restart_readiness_nanoseconds": readiness_nanoseconds[1],
                 "main_revision_two_compile_nanoseconds": main_two["compile_nanoseconds"],
                 "main_revision_two_execute_nanoseconds": main_two["execute_nanoseconds"],
                 "case_revision_two_compile_nanoseconds": sum(item["compile_nanoseconds"] for item in case_results_two),
@@ -1085,11 +1045,8 @@ def execute():
                 "restart_current_execute_nanoseconds": current_main["execute_nanoseconds"] + sum(item["execute_nanoseconds"] for item in restart_case_results),
             },
             "interaction": measurement_summary(),
-            "shutdown": "acknowledged",
+            "reopen": "passed on every direct command",
         }
-        if summary["interaction"]["lifecycle_cli_launches"] != 2:
-            raise RuntimeError("workflow must complete exactly two typed shutdowns")
-        # Agent-workflow totals intentionally exclude both typed shutdowns.
         if METRICS_PATH is not None:
             METRICS_PATH.write_text(json.dumps({
                 "summary": summary,
@@ -1104,13 +1061,4 @@ def main():
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    finally:
-        if daemon is not None and daemon.poll() is None:
-            daemon.terminate()
-            try:
-                daemon.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                daemon.kill()
-                daemon.wait()
+    main()

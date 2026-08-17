@@ -1,6 +1,5 @@
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 
-use lkjscript::daemon;
 use lkjscript::diff::ChangeKind;
 use lkjscript::machine::{
     BoundaryErrorEnvelope, BoundaryErrorKind, DescribeSchemaRequest, DescribeSchemaResult,
@@ -20,83 +19,25 @@ use lkjscript::{
     TypeDraft, ValueDraft, ValueRef, WorkspaceId, YieldingBodyDraft,
 };
 use serde::Deserialize;
-use std::collections::BTreeSet;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Output, Stdio};
-use std::thread;
-use std::time::{Duration, Instant};
-
-struct JsonDaemon {
-    child: Child,
-}
-
-impl JsonDaemon {
-    fn start(state: &Path) -> Self {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_lkjscriptd"))
-            .args([
-                "--state",
-                state.to_str().expect("UTF-8 state path"),
-                "--foreground",
-            ])
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .spawn()
-            .expect("spawn daemon");
-        let deadline = Instant::now() + Duration::from_secs(5);
-        let endpoint = daemon::endpoint_path(state);
-        while !endpoint.exists() {
-            if let Some(status) = child.try_wait().expect("daemon status") {
-                panic!("daemon exited before readiness: {status}");
-            }
-            assert!(Instant::now() < deadline, "daemon readiness timeout");
-            thread::sleep(Duration::from_millis(1));
-        }
-        Self { child }
-    }
-
-    fn wait(mut self) {
-        let status = self.child.wait().expect("wait daemon");
-        assert!(status.success());
-    }
-}
-
-impl Drop for JsonDaemon {
-    fn drop(&mut self) {
-        if self.child.try_wait().ok().flatten().is_none() {
-            let _ = self.child.kill();
-            let _ = self.child.wait();
-        }
-    }
-}
+use std::process::{Command, Output, Stdio};
 
 #[test]
-fn real_json_cli_repairs_hole_and_operand_across_restart() {
+fn real_json_cli_repairs_hole_and_operand_across_direct_reopen() {
     let temporary = tempfile::tempdir().expect("state directory");
     let state = temporary.path();
 
-    let transport = invoke_raw(
-        state,
-        br#"{"version":8,"request_id":1,"request":{"kind":"create_workspace"}}"#,
-    );
-    assert_eq!(transport.status.code(), Some(3));
-    assert_one_json(&transport.stdout);
-    let transport_error: BoundaryErrorEnvelope =
-        serde_json::from_slice(&transport.stdout).expect("transport error JSON");
-    assert_eq!(transport_error.request_id, Some(RequestId::new(1)));
-    assert_eq!(transport_error.error.kind, BoundaryErrorKind::Transport);
-
-    let daemon = JsonDaemon::start(state);
     let raw_create = invoke_raw(
         state,
-        br#"{"version":8,"request_id":2,"request":{"kind":"create_workspace"}}"#,
+        br#"{"version":9,"request_id":1,"request":{"kind":"create_workspace"}}"#,
     );
     assert!(raw_create.status.success());
     assert!(raw_create.stderr.is_empty());
     let created: ResponseEnvelope =
         serde_json::from_slice(&raw_create.stdout).expect("raw create response");
-    assert_eq!(created.request_id, RequestId::new(2));
+    assert_eq!(created.request_id, RequestId::new(1));
     let Response::WorkspaceCreated(initial) = created.response else {
         panic!("workspace response")
     };
@@ -183,7 +124,7 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
         panic!("incoming uses")
     };
     let return_operation = uses.items[0].source;
-    assert_eq!(committed.created_count, 10);
+    assert_eq!(committed.created_count, 4);
     assert!(!committed.complete_after);
 
     let invalid_page = rpc(
@@ -204,7 +145,7 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
         }),
     );
     let Response::Error(invalid_page) = invalid_page.response else {
-        panic!("zero-page daemon error")
+        panic!("zero-page engine error")
     };
     assert_eq!(invalid_page.code, ErrorCode::InvalidQuery);
     let duplicate_query_ids = rpc(
@@ -226,7 +167,7 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
         }),
     );
     let Response::Error(duplicate_query_ids) = duplicate_query_ids.response else {
-        panic!("duplicate query daemon error")
+        panic!("duplicate query engine error")
     };
     assert_eq!(duplicate_query_ids.code, ErrorCode::InvalidQuery);
 
@@ -506,8 +447,6 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
     assert_run(state, 20, workspace, Revision::new(2), function, 42);
 
     shutdown(state, 21);
-    daemon.wait();
-    let daemon = JsonDaemon::start(state);
     assert_eq!(hole_context(state, workspace, hole, 22), context_before);
     assert_eq!(
         collect_diff(state, workspace, Revision::new(1), Revision::new(2)),
@@ -640,19 +579,18 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
     );
     let bulk = receipt(bulk_response.clone());
     assert_eq!(bulk.revision, Revision::new(4));
-    assert_eq!(bulk.created_count, 200);
+    assert_eq!(bulk.created_count, 0);
     assert_eq!(bulk.returned_bindings.len(), 1);
     assert_eq!(binding(&bulk, 100), predicted_frontier);
+    assert!(predicted_frontier.is_function_local());
     let mut all_bindings = bulk.clone();
-    all_bindings.returned_bindings = (0..200_u64)
+    let first_local_ordinal = predicted_frontier.local_ordinal().expect("local frontier");
+    all_bindings.returned_bindings = (0..200_u32)
         .map(|offset| {
             (
-                DraftSymbol::new(&format!(
-                    "s{}",
-                    100 + u32::try_from(offset).expect("bulk symbol")
-                )),
-                NodeId::new(workspace, predicted_frontier.serial() + offset)
-                    .expect("bulk predicted node"),
+                DraftSymbol::new(&format!("s{}", 100 + offset)),
+                NodeId::new_function_local(workspace, function, first_local_ordinal + offset)
+                    .expect("bulk predicted local reference"),
             )
         })
         .collect();
@@ -668,17 +606,17 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
     assert_run(state, 50, workspace, Revision::new(3), function, 80);
     assert_run(state, 51, workspace, Revision::new(2), function, 42);
 
-    let Response::DescribeSchema(daemon_schema) = rpc(
+    let Response::DescribeSchema(engine_schema) = rpc(
         state,
         37,
         Request::DescribeSchema(DescribeSchemaRequest::manifest()),
     )
     .response
     else {
-        panic!("daemon schema")
+        panic!("engine schema")
     };
     let local_schema = local_schema();
-    assert_eq!(*daemon_schema, local_schema);
+    assert_eq!(*engine_schema, local_schema);
 
     let root_request = DescribeSchemaRequest {
         projection: SchemaProjection::Roots {
@@ -686,10 +624,10 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
         },
         known_digest: None,
     };
-    let Response::DescribeSchema(daemon_roots) =
+    let Response::DescribeSchema(engine_roots) =
         rpc(state, 38, Request::DescribeSchema(root_request)).response
     else {
-        panic!("daemon schema roots")
+        panic!("engine schema roots")
     };
     let local_roots = Command::new(env!("CARGO_BIN_EXE_lkjscript"))
         .args([
@@ -703,14 +641,14 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
         .expect("local schema roots");
     assert!(local_roots.status.success());
     assert_eq!(
-        *daemon_roots,
+        *engine_roots,
         serde_json::from_slice(&local_roots.stdout).expect("local root JSON")
     );
     assert_eq!(module.workspace(), workspace);
 
     let zero_request_id = invoke_raw(
         state,
-        br#"{"version":8,"request_id":0,"request":{"kind":"shutdown"}}"#,
+        br#"{"version":9,"request_id":0,"request":{"kind":"shutdown"}}"#,
     );
     assert_eq!(zero_request_id.status.code(), Some(2));
     let zero_request_id: BoundaryErrorEnvelope =
@@ -720,7 +658,7 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
 
     let malformed = invoke_raw(
         state,
-        br#"{"version":8,"request_id":99,"request":{"kind":"shutdown","unknown":true}}"#,
+        br#"{"version":9,"request_id":99,"request":{"kind":"shutdown","unknown":true}}"#,
     );
     assert_eq!(malformed.status.code(), Some(2));
     assert_one_json(&malformed.stdout);
@@ -730,7 +668,6 @@ fn real_json_cli_repairs_hole_and_operand_across_restart() {
     assert_eq!(malformed.error.kind, BoundaryErrorKind::InvalidJson);
 
     shutdown(state, 40);
-    daemon.wait();
 }
 
 fn incomplete_fixture(
@@ -1132,54 +1069,6 @@ fn binding(receipt: &TransactionReceipt, symbol: u32) -> NodeId {
         .expect("selected binding")
 }
 
-#[derive(Debug)]
-struct RpcMeasurement {
-    name: &'static str,
-    elapsed_ns: u128,
-    json_request_bytes: usize,
-    json_stdout_bytes: usize,
-    ipc_request_frame_bytes: usize,
-    ipc_response_frame_bytes: usize,
-}
-
-fn measured_rpc(
-    state: &Path,
-    request_id: u64,
-    name: &'static str,
-    request: Request,
-) -> (ResponseEnvelope, RpcMeasurement) {
-    let request_id = RequestId::new(request_id);
-    let input = serde_json::to_vec(&RequestEnvelope {
-        version: JSON_ENVELOPE_VERSION,
-        request_id,
-        request: request.clone(),
-    })
-    .expect("encode measured request");
-    let ipc_request_frame_bytes = input.len() + u32::BITS as usize / 8;
-    let started = Instant::now();
-    let output = invoke_raw(state, &input);
-    let elapsed_ns = started.elapsed().as_nanos();
-    assert!(output.status.success(), "measured RPC failed");
-    assert!(output.stderr.is_empty());
-    let response: ResponseEnvelope =
-        serde_json::from_slice(&output.stdout).expect("measured response JSON");
-    assert_eq!(response.request_id, request_id);
-    let ipc_response_frame_bytes =
-        lkjscript::machine::encode_response(request_id, &response.response, false)
-            .expect("IPC response JSON")
-            .len()
-            + u32::BITS as usize / 8;
-    let measurement = RpcMeasurement {
-        name,
-        elapsed_ns,
-        json_request_bytes: input.len(),
-        json_stdout_bytes: output.stdout.len(),
-        ipc_request_frame_bytes,
-        ipc_response_frame_bytes,
-    };
-    (response, measurement)
-}
-
 fn structured_creation(workspace: WorkspaceId) -> ApplyTransactionRequest {
     let local = |symbol| NodeTarget::Draft(DraftSymbol::new(&format!("s{symbol}")));
     let result = |symbol| ValueDraft::OperationResult {
@@ -1336,7 +1225,6 @@ fn structured_creation(workspace: WorkspaceId) -> ApplyTransactionRequest {
 fn real_json_cli_structured_program_repair_vertical() {
     let temporary = tempfile::tempdir().expect("state directory");
     let state = temporary.path();
-    let daemon = JsonDaemon::start(state);
     let Response::WorkspaceCreated(initial) = rpc(state, 500, Request::CreateWorkspace).response
     else {
         panic!("workspace")
@@ -1346,7 +1234,7 @@ fn real_json_cli_structured_program_repair_vertical() {
     assert_eq!(creation.transaction.operations.len(), 6);
     let created = receipt(rpc(state, 501, Request::ApplyTransaction(creation)));
     assert_eq!(created.returned_bindings.len(), 4);
-    assert_eq!(created.created_count, 36);
+    assert_eq!(created.created_count, 8);
     assert!(!created.complete_after);
     let range = binding(&created, 10);
     let hole = binding(&created, 16);
@@ -1548,8 +1436,6 @@ fn real_json_cli_structured_program_repair_vertical() {
     }
 
     shutdown(state, 510);
-    daemon.wait();
-    let daemon = JsonDaemon::start(state);
     for revision in [Revision::new(1), Revision::new(2)] {
         for (offset, node) in [hole, range, normalize, main].into_iter().enumerate() {
             let QueryResult::Node(view) = query(
@@ -1577,779 +1463,6 @@ fn real_json_cli_structured_program_repair_vertical() {
     };
     assert_eq!(repaired.value, RuntimeValue::I64(5050));
     shutdown(state, 552);
-    daemon.wait();
-}
-
-#[test]
-#[ignore = "manual structured generic-CLI interaction-cost measurement"]
-fn structured_agent_interaction_cost_measurement() {
-    let temporary = tempfile::tempdir().expect("state directory");
-    let state = temporary.path();
-    let cold_started = Instant::now();
-    let daemon = JsonDaemon::start(state);
-    let cold_start_ns = cold_started.elapsed().as_nanos();
-    let (_, schema) = measured_rpc(
-        state,
-        600,
-        "schema_discovery",
-        Request::DescribeSchema(DescribeSchemaRequest::manifest()),
-    );
-    let (workspace_response, workspace_metric) =
-        measured_rpc(state, 601, "workspace_create", Request::CreateWorkspace);
-    let Response::WorkspaceCreated(initial) = workspace_response.response else {
-        panic!("workspace")
-    };
-    let workspace = initial.workspace;
-    let creation_request = structured_creation(workspace);
-    let transaction_items = creation_request.transaction.operations.len();
-    let requested_bindings = creation_request.response.return_symbols.len();
-    let (creation_response, creation_metric) = measured_rpc(
-        state,
-        602,
-        "structured_creation",
-        Request::ApplyTransaction(creation_request),
-    );
-    let Response::TransactionReceipt(created) = creation_response.response else {
-        panic!("creation")
-    };
-    let hole = binding(&created, 16);
-    let normalize = binding(&created, 20);
-    let main = binding(&created, 30);
-    let incomplete_artifact_bytes = fs::metadata(
-        workspace_path(state, workspace).join("revisions/00000000000000000001.lkjscript"),
-    )
-    .expect("incomplete artifact")
-    .len();
-
-    let context_request = Request::QueryBatch(QueryBatchRequest {
-        workspace,
-        revision: Revision::new(1),
-        queries: vec![QueryItem {
-            id: QueryId::new(1),
-            query: Query::RepairContext {
-                target: RepairTarget::Hole(hole),
-                budget: context_budget(),
-            },
-        }],
-    });
-    let (context_response, context_metric) =
-        measured_rpc(state, 603, "repair_context", context_request);
-    let Response::QueryBatchResult(batch) = context_response.response else {
-        panic!("context batch")
-    };
-    let QueryOutcome::Success(context) = &batch.results[0].outcome else {
-        panic!("context outcome")
-    };
-    let QueryResult::RepairContext(context) = context.as_ref() else {
-        panic!("context")
-    };
-    let index = context
-        .visible_block_arguments
-        .iter()
-        .find(|fact| fact.role == BlockArgumentRole::LoopIndex)
-        .expect("index")
-        .argument;
-    let carried = context
-        .visible_block_arguments
-        .iter()
-        .find(|fact| fact.role == BlockArgumentRole::LoopCarried)
-        .expect("carried")
-        .argument;
-
-    let invalid_request = Request::ApplyTransaction(ApplyTransactionRequest {
-        transaction: Transaction {
-            workspace,
-            base_revision: Revision::new(1),
-            idempotency_key: None,
-            mode: TransactionMode::Commit,
-            operations: vec![TransactionOp::RefineHole {
-                hole: NodeTarget::Existing(hole),
-                replacement: OperationDraft::ConstBool(true),
-            }],
-        },
-        response: TransactionResponseSpec::default(),
-    });
-    let (invalid_response, invalid_metric) =
-        measured_rpc(state, 604, "invalid_repair", invalid_request);
-    assert!(matches!(invalid_response.response, Response::Error(_)));
-    let repair_request = Request::ApplyTransaction(ApplyTransactionRequest {
-        transaction: Transaction {
-            workspace,
-            base_revision: Revision::new(1),
-            idempotency_key: None,
-            mode: TransactionMode::Commit,
-            operations: vec![TransactionOp::RefineHole {
-                hole: NodeTarget::Existing(hole),
-                replacement: OperationDraft::AddI64 {
-                    lhs: ValueDraft::BlockArgument(NodeTarget::Existing(carried)),
-                    rhs: ValueDraft::BlockArgument(NodeTarget::Existing(index)),
-                },
-            }],
-        },
-        response: TransactionResponseSpec::default(),
-    });
-    let (repair_response, repair_metric) = measured_rpc(state, 605, "valid_repair", repair_request);
-    let Response::TransactionReceipt(repaired) = repair_response.response else {
-        panic!("repair")
-    };
-    assert_eq!(repaired.created_count, 0);
-    let repaired_artifact_bytes = fs::metadata(
-        workspace_path(state, workspace).join("revisions/00000000000000000002.lkjscript"),
-    )
-    .expect("repaired artifact")
-    .len();
-
-    let diff_request = Request::QueryBatch(QueryBatchRequest {
-        workspace,
-        revision: Revision::new(2),
-        queries: vec![QueryItem {
-            id: QueryId::new(2),
-            query: Query::SemanticDiff {
-                from: Revision::new(1),
-                page: PageRequest {
-                    after: None,
-                    limit: 64,
-                },
-            },
-        }],
-    });
-    let (_, diff_metric) = measured_rpc(state, 606, "semantic_diff", diff_request);
-    let mut run_metrics = Vec::new();
-    for (request_id, name, entry, arguments, expected) in [
-        (607, "run_main", main, vec![], 5050),
-        (
-            608,
-            "run_negative",
-            normalize,
-            vec![RuntimeValue::I64(-3)],
-            0,
-        ),
-        (
-            609,
-            "run_eleven",
-            normalize,
-            vec![RuntimeValue::I64(11)],
-            55,
-        ),
-    ] {
-        let request = Request::Run {
-            workspace,
-            revision: Revision::new(2),
-            entry,
-            arguments,
-            policy: lkjscript::RunPolicy {
-                fuel: 1_000_000,
-                maximum_frames: 10_000,
-            },
-        };
-        let (response, metric) = measured_rpc(state, request_id, name, request);
-        let Response::Run(result) = response.response else {
-            panic!("run")
-        };
-        assert_eq!(result.value, RuntimeValue::I64(expected));
-        run_metrics.push(metric);
-    }
-    shutdown(state, 610);
-    daemon.wait();
-    let restart_started = Instant::now();
-    let daemon = JsonDaemon::start(state);
-    let restart_ns = restart_started.elapsed().as_nanos();
-    let restart_request = Request::QueryBatch(QueryBatchRequest {
-        workspace,
-        revision: Revision::new(2),
-        queries: vec![QueryItem {
-            id: QueryId::new(3),
-            query: Query::Node {
-                node: hole,
-                expand: false,
-            },
-        }],
-    });
-    let (_, restart_query_metric) =
-        measured_rpc(state, 611, "restart_retained_query", restart_request);
-
-    let all_metrics = [
-        &schema,
-        &workspace_metric,
-        &creation_metric,
-        &context_metric,
-        &invalid_metric,
-        &repair_metric,
-        &diff_metric,
-        &run_metrics[0],
-        &run_metrics[1],
-        &run_metrics[2],
-        &restart_query_metric,
-    ];
-    println!(
-        "STRUCTURED_AGENT_COST {}",
-        serde_json::json!({
-            "round_trips": all_metrics.len(),
-            "cli_invocations": all_metrics.len(),
-            "daemon_cold_start_ns": cold_start_ns,
-            "restart_ns": restart_ns,
-            "public_transaction_items": transaction_items,
-            "explicit_requested_bindings": requested_bindings,
-            "canonical_created_nodes": created.created_count,
-            "incomplete_artifact_bytes": incomplete_artifact_bytes,
-            "repaired_artifact_bytes": repaired_artifact_bytes,
-            "json_request_bytes": all_metrics.iter().map(|metric| metric.json_request_bytes).sum::<usize>(),
-            "json_stdout_bytes": all_metrics.iter().map(|metric| metric.json_stdout_bytes).sum::<usize>(),
-            "ipc_request_frame_bytes": all_metrics.iter().map(|metric| metric.ipc_request_frame_bytes).sum::<usize>(),
-            "ipc_response_frame_bytes": all_metrics.iter().map(|metric| metric.ipc_response_frame_bytes).sum::<usize>(),
-            "cli_wall_ns": all_metrics.iter().map(|metric| metric.elapsed_ns).sum::<u128>(),
-            "per_request": all_metrics.iter().map(|metric| metric_json(metric)).collect::<Vec<_>>(),
-            "oracles": [5050, 0, 55],
-            "model_tokens_measured": false,
-        })
-    );
-    shutdown(state, 612);
-    daemon.wait();
-}
-
-fn percentile_ns(samples: &[u128], percentile: usize) -> u128 {
-    let mut sorted = samples.to_vec();
-    sorted.sort_unstable();
-    let rank = (sorted.len() * percentile).div_ceil(100).saturating_sub(1);
-    sorted[rank.min(sorted.len() - 1)]
-}
-
-fn timed_rpc(state: &Path, request_id: u64, request: Request) -> (ResponseEnvelope, u128) {
-    let started = Instant::now();
-    let response = rpc(state, request_id, request);
-    (response, started.elapsed().as_nanos())
-}
-
-#[test]
-#[ignore = "manual repeated structured product-path performance measurement"]
-fn structured_product_path_performance_measurement() {
-    let mut cold_start = Vec::new();
-    for sample in 0..12 {
-        let temporary = tempfile::tempdir().expect("cold state");
-        let started = Instant::now();
-        let daemon = JsonDaemon::start(temporary.path());
-        let elapsed = started.elapsed().as_nanos();
-        shutdown(temporary.path(), 7000 + sample);
-        daemon.wait();
-        if sample > 0 {
-            cold_start.push(elapsed);
-        }
-    }
-
-    let temporary = tempfile::tempdir().expect("performance state");
-    let state = temporary.path();
-    let daemon = JsonDaemon::start(state);
-    let mut workspace_create = Vec::new();
-    let mut workspaces = Vec::new();
-    for sample in 0..32 {
-        let (response, elapsed) = timed_rpc(state, 7100 + sample, Request::CreateWorkspace);
-        let Response::WorkspaceCreated(summary) = response.response else {
-            panic!("workspace")
-        };
-        if sample > 0 {
-            workspace_create.push(elapsed);
-        }
-        workspaces.push(summary.workspace);
-    }
-    let mut structured_commit = Vec::new();
-    let mut selected = None;
-    for (sample, workspace) in workspaces.into_iter().take(12).enumerate() {
-        let request = Request::ApplyTransaction(structured_creation(workspace));
-        let (response, elapsed) = timed_rpc(state, 7200 + sample as u64, request);
-        let Response::TransactionReceipt(receipt) = response.response else {
-            panic!("commit")
-        };
-        if sample > 0 {
-            structured_commit.push(elapsed);
-        }
-        selected = Some((workspace, receipt));
-    }
-    let (workspace, created) = selected.expect("selected workspace");
-    let hole = binding(&created, 16);
-    let normalize = binding(&created, 20);
-    let main = binding(&created, 30);
-    let context_request = || {
-        Request::QueryBatch(QueryBatchRequest {
-            workspace,
-            revision: Revision::new(1),
-            queries: vec![QueryItem {
-                id: QueryId::new(1),
-                query: Query::RepairContext {
-                    target: RepairTarget::Hole(hole),
-                    budget: context_budget(),
-                },
-            }],
-        })
-    };
-    let mut repair_context = Vec::new();
-    let mut context_value = None;
-    for sample in 0..32 {
-        let (response, elapsed) = timed_rpc(state, 7300 + sample, context_request());
-        let Response::QueryBatchResult(batch) = response.response else {
-            panic!("context")
-        };
-        let QueryOutcome::Success(result) = &batch.results[0].outcome else {
-            panic!("context outcome")
-        };
-        let QueryResult::RepairContext(context) = result.as_ref() else {
-            panic!("context result")
-        };
-        context_value = Some(context.clone());
-        if sample > 0 {
-            repair_context.push(elapsed);
-        }
-    }
-    let context = context_value.expect("context value");
-    let index = context
-        .visible_block_arguments
-        .iter()
-        .find(|fact| fact.role == BlockArgumentRole::LoopIndex)
-        .expect("index")
-        .argument;
-    let carried = context
-        .visible_block_arguments
-        .iter()
-        .find(|fact| fact.role == BlockArgumentRole::LoopCarried)
-        .expect("carried")
-        .argument;
-    let repair = Request::ApplyTransaction(ApplyTransactionRequest {
-        transaction: Transaction {
-            workspace,
-            base_revision: Revision::new(1),
-            idempotency_key: None,
-            mode: TransactionMode::Commit,
-            operations: vec![TransactionOp::RefineHole {
-                hole: NodeTarget::Existing(hole),
-                replacement: OperationDraft::AddI64 {
-                    lhs: ValueDraft::BlockArgument(NodeTarget::Existing(carried)),
-                    rhs: ValueDraft::BlockArgument(NodeTarget::Existing(index)),
-                },
-            }],
-        },
-        response: TransactionResponseSpec::default(),
-    });
-    let Response::TransactionReceipt(_) = rpc(state, 7400, repair).response else {
-        panic!("repair")
-    };
-
-    let run_request = |entry, arguments, fuel| Request::Run {
-        workspace,
-        revision: Revision::new(2),
-        entry,
-        arguments,
-        policy: lkjscript::RunPolicy {
-            fuel,
-            maximum_frames: 10_000,
-        },
-    };
-    let mut main_wall = Vec::new();
-    let mut main_compile = Vec::new();
-    let mut main_execute = Vec::new();
-    let mut direct_wall = Vec::new();
-    let mut recursion_wall = Vec::new();
-    let mut fuel_wall = Vec::new();
-    for sample in 0..32 {
-        let (response, elapsed) =
-            timed_rpc(state, 7500 + sample, run_request(main, vec![], 1_000_000));
-        let Response::Run(result) = response.response else {
-            panic!("main run")
-        };
-        assert_eq!(result.value, RuntimeValue::I64(5050));
-        if sample > 0 {
-            main_wall.push(elapsed);
-            main_compile.push(u128::from(result.compile_nanoseconds));
-            main_execute.push(u128::from(result.execute_nanoseconds));
-        }
-        let (response, elapsed) = timed_rpc(
-            state,
-            7600 + sample,
-            run_request(normalize, vec![RuntimeValue::I64(11)], 1_000_000),
-        );
-        let Response::Run(result) = response.response else {
-            panic!("direct run")
-        };
-        assert_eq!(result.value, RuntimeValue::I64(55));
-        if sample > 0 {
-            direct_wall.push(elapsed);
-        }
-        let (response, elapsed) = timed_rpc(state, 7700 + sample, run_request(main, vec![], 1));
-        assert!(
-            matches!(response.response, Response::Error(ref error) if error.code == ErrorCode::ExecutionFuelExhausted)
-        );
-        if sample > 0 {
-            fuel_wall.push(elapsed);
-        }
-    }
-
-    let recursion_workspace = match rpc(state, 7800, Request::CreateWorkspace).response {
-        Response::WorkspaceCreated(summary) => summary.workspace,
-        _ => panic!("recursion workspace"),
-    };
-    let local = |symbol| NodeTarget::Draft(DraftSymbol::new(&format!("s{symbol}")));
-    let parameter = ValueDraft::FunctionParameter(local(4));
-    let recursion_creation = ApplyTransactionRequest {
-        transaction: Transaction {
-            workspace: recursion_workspace,
-            base_revision: Revision::INITIAL,
-            idempotency_key: None,
-            mode: TransactionMode::Commit,
-            operations: vec![
-                TransactionOp::CreatePackage {
-                    symbol: DraftSymbol::new("s1"),
-                    name: "recursion".into(),
-                },
-                TransactionOp::CreateModule {
-                    symbol: DraftSymbol::new("s2"),
-                    package: local(1),
-                    name: "root".into(),
-                },
-                TransactionOp::CreateFunction {
-                    symbol: DraftSymbol::new("s3"),
-                    module: local(2),
-                    name: "once".into(),
-                    parameters: vec![FunctionParameterDraft {
-                        symbol: DraftSymbol::new("s4"),
-                        name: "again".into(),
-                        ty: SemanticType::Bool.into(),
-                    }],
-                    result: SemanticType::I64.into(),
-                    body: Some(FunctionBodyDraft {
-                        operations: vec![ExpressionDraft {
-                            symbol: Some(DraftSymbol::new("s5")),
-                            operation: ExpressionKindDraft::If {
-                                condition: parameter,
-                                result: SemanticType::I64.into(),
-                                then_body: YieldingBodyDraft {
-                                    operations: vec![
-                                        ExpressionDraft {
-                                            symbol: Some(DraftSymbol::new("s6")),
-                                            operation: ExpressionKindDraft::ConstBool(false),
-                                        },
-                                        ExpressionDraft {
-                                            symbol: Some(DraftSymbol::new("s7")),
-                                            operation: ExpressionKindDraft::Call {
-                                                function: local(3),
-                                                arguments: vec![ValueDraft::OperationResult {
-                                                    operation: local(6),
-                                                    output: 0,
-                                                }],
-                                            },
-                                        },
-                                    ],
-                                    yield_value: ValueDraft::OperationResult {
-                                        operation: local(7),
-                                        output: 0,
-                                    },
-                                },
-                                else_body: YieldingBodyDraft {
-                                    operations: vec![ExpressionDraft {
-                                        symbol: Some(DraftSymbol::new("s8")),
-                                        operation: ExpressionKindDraft::ConstI64(1),
-                                    }],
-                                    yield_value: ValueDraft::OperationResult {
-                                        operation: local(8),
-                                        output: 0,
-                                    },
-                                },
-                            },
-                        }],
-                        return_value: ValueDraft::OperationResult {
-                            operation: local(5),
-                            output: 0,
-                        },
-                    }),
-                },
-                TransactionOp::SetEntryFunction {
-                    package: local(1),
-                    function: local(3),
-                },
-            ],
-        },
-        response: TransactionResponseSpec {
-            return_symbols: vec![DraftSymbol::new("s3")],
-        },
-    };
-    let recursion_receipt = receipt(rpc(
-        state,
-        7801,
-        Request::ApplyTransaction(recursion_creation),
-    ));
-    let recursion_entry = binding(&recursion_receipt, 3);
-    for sample in 0..32 {
-        let request = Request::Run {
-            workspace: recursion_workspace,
-            revision: Revision::new(1),
-            entry: recursion_entry,
-            arguments: vec![RuntimeValue::Bool(true)],
-            policy: lkjscript::RunPolicy {
-                fuel: 100,
-                maximum_frames: 10,
-            },
-        };
-        let (response, elapsed) = timed_rpc(state, 7900 + sample, request);
-        assert!(
-            matches!(response.response, Response::Run(ref result) if result.value == RuntimeValue::I64(1))
-        );
-        if sample > 0 {
-            recursion_wall.push(elapsed);
-        }
-    }
-
-    shutdown(state, 8000);
-    daemon.wait();
-    let mut restart = Vec::new();
-    for sample in 0..12 {
-        let started = Instant::now();
-        let daemon = JsonDaemon::start(state);
-        let elapsed = started.elapsed().as_nanos();
-        shutdown(state, 8010 + sample);
-        daemon.wait();
-        if sample > 0 {
-            restart.push(elapsed);
-        }
-    }
-    let row = |samples: &[u128]| serde_json::json!({"samples": samples.len(), "median_ns": percentile_ns(samples, 50), "p95_ns": percentile_ns(samples, 95)});
-    println!(
-        "STRUCTURED_PRODUCT_PATH {}",
-        serde_json::json!({
-            "warmup_samples": 1,
-            "cold_start": row(&cold_start),
-            "workspace_create": row(&workspace_create),
-            "structured_commit": row(&structured_commit),
-            "repair_context": row(&repair_context),
-            "main_request_wall": row(&main_wall),
-            "main_compile": row(&main_compile),
-            "main_execute": row(&main_execute),
-            "direct_parameterized_run": row(&direct_wall),
-            "finite_recursion": row(&recursion_wall),
-            "controlled_fuel_exhaustion": row(&fuel_wall),
-            "restart_retained_workspaces": row(&restart),
-            "oracles": {"main": 5050, "direct": 55, "recursion": 1, "fuel_error": "execution_fuel_exhausted"},
-        })
-    );
-}
-
-#[test]
-#[ignore = "manual real-daemon agent repair cost measurement"]
-fn agent_repair_cost_measurement() {
-    let temporary = tempfile::tempdir().expect("state directory");
-    let state = temporary.path();
-    let daemon = JsonDaemon::start(state);
-    let created = rpc(state, 1, Request::CreateWorkspace);
-    let Response::WorkspaceCreated(initial) = created.response else {
-        panic!("workspace response")
-    };
-    let workspace = initial.workspace;
-    let committed = receipt(rpc(
-        state,
-        2,
-        Request::ApplyTransaction(incomplete_fixture(
-            workspace,
-            TransactionMode::Commit,
-            Some(IdempotencyKey::from_bytes([0x71; 16])),
-        )),
-    ));
-    let function = binding(&committed, 3);
-    let forty = binding(&committed, 6);
-    let two = binding(&committed, 7);
-    let boolean = binding(&committed, 8);
-    let hole = binding(&committed, 9);
-
-    let discovery_request = Request::QueryBatch(QueryBatchRequest {
-        workspace,
-        revision: Revision::new(1),
-        queries: vec![QueryItem {
-            id: QueryId::new(1),
-            query: Query::Blockers {
-                page: PageRequest {
-                    after: None,
-                    limit: 1,
-                },
-            },
-        }],
-    });
-    let (_, discovery) = measured_rpc(state, 3, "blockers", discovery_request);
-
-    let invalid = refinement(
-        workspace,
-        None,
-        hole,
-        OperationDraft::AddI64 {
-            lhs: existing_result(forty),
-            rhs: existing_result(boolean),
-        },
-    );
-    let (invalid_response, invalid_measurement) =
-        measured_rpc(state, 4, "invalid_edit", Request::ApplyTransaction(invalid));
-    let Response::Error(invalid_error) = invalid_response.response else {
-        panic!("invalid edit response")
-    };
-    assert_eq!(invalid_error.code, ErrorCode::TypeMismatch);
-
-    let context_request = Request::QueryBatch(QueryBatchRequest {
-        workspace,
-        revision: Revision::new(1),
-        queries: vec![QueryItem {
-            id: QueryId::new(2),
-            query: Query::RepairContext {
-                target: RepairTarget::Hole(hole),
-                budget: context_budget(),
-            },
-        }],
-    });
-    let (context_response, context) = measured_rpc(state, 5, "repair_context", context_request);
-    let Response::QueryBatchResult(context_batch) = &context_response.response else {
-        panic!("context response")
-    };
-    assert!(matches!(
-        context_batch.results[0].outcome,
-        QueryOutcome::Success(_)
-    ));
-
-    let refine_request = Request::ApplyTransaction(refinement(
-        workspace,
-        Some(IdempotencyKey::from_bytes([0x72; 16])),
-        hole,
-        OperationDraft::AddI64 {
-            lhs: existing_result(forty),
-            rhs: existing_result(two),
-        },
-    ));
-    let (refine_response, refine) = measured_rpc(state, 6, "refine", refine_request);
-    let Response::TransactionReceipt(refine_receipt) = &refine_response.response else {
-        panic!("refinement receipt")
-    };
-    assert_eq!(refine_receipt.created_count, 0);
-    assert!(refine_receipt.complete_after);
-
-    let run_request = Request::Run {
-        workspace,
-        revision: Revision::new(2),
-        entry: function,
-        arguments: vec![],
-        policy: lkjscript::RunPolicy {
-            fuel: 1_000_000,
-            maximum_frames: 10_000,
-        },
-    };
-    let (run_response, run) = measured_rpc(state, 7, "run", run_request);
-    let Response::Run(run_result) = run_response.response else {
-        panic!("run response")
-    };
-    assert_eq!(run_result.value, RuntimeValue::I64(42));
-
-    let diff_request = Request::QueryBatch(QueryBatchRequest {
-        workspace,
-        revision: Revision::new(2),
-        queries: vec![QueryItem {
-            id: QueryId::new(3),
-            query: Query::SemanticDiff {
-                from: Revision::new(1),
-                page: PageRequest {
-                    after: None,
-                    limit: 256,
-                },
-            },
-        }],
-    });
-    let (diff_response, diff_page) = measured_rpc(state, 8, "diff_page", diff_request);
-    let Response::QueryBatchResult(diff_batch) = &diff_response.response else {
-        panic!("diff response")
-    };
-    let QueryOutcome::Success(diff_result) = &diff_batch.results[0].outcome else {
-        panic!("diff outcome")
-    };
-    let QueryResult::SemanticDiff(diff_result) = diff_result.as_ref() else {
-        panic!("diff result")
-    };
-    assert!(diff_result.page.items.iter().any(|change| {
-        change.node == hole && matches!(change.kind, ChangeKind::OperationRefined { .. })
-    }));
-
-    let summary_request = Request::QueryBatch(QueryBatchRequest {
-        workspace,
-        revision: Revision::new(2),
-        queries: vec![QueryItem {
-            id: QueryId::new(4),
-            query: Query::WorkspaceSummary,
-        }],
-    });
-    let (summary_response, summary_measurement) =
-        measured_rpc(state, 9, "workspace_summary", summary_request);
-    let Response::QueryBatchResult(summary_batch) = &summary_response.response else {
-        panic!("summary response")
-    };
-    let QueryOutcome::Success(summary_result) = &summary_batch.results[0].outcome else {
-        panic!("summary outcome")
-    };
-    let QueryResult::WorkspaceSummary(summary) = summary_result.as_ref() else {
-        panic!("summary result")
-    };
-    assert_eq!(summary.node_count, 11);
-
-    let workflow = [&context, &refine, &run];
-    let total_elapsed_ns: u128 = workflow.iter().map(|item| item.elapsed_ns).sum();
-    let total_json_request_bytes: usize = workflow.iter().map(|item| item.json_request_bytes).sum();
-    let total_json_stdout_bytes: usize = workflow.iter().map(|item| item.json_stdout_bytes).sum();
-    let total_ipc_request_frame_bytes: usize = workflow
-        .iter()
-        .map(|item| item.ipc_request_frame_bytes)
-        .sum();
-    let total_ipc_response_frame_bytes: usize = workflow
-        .iter()
-        .map(|item| item.ipc_response_frame_bytes)
-        .sum();
-    let largest_json_response_bytes = workflow
-        .iter()
-        .map(|item| item.json_stdout_bytes)
-        .max()
-        .expect("workflow response");
-    let per_request = workflow
-        .iter()
-        .map(|item| {
-            serde_json::json!({
-                "name": item.name,
-                "elapsed_ns": item.elapsed_ns,
-                "json_request_bytes": item.json_request_bytes,
-                "json_stdout_bytes": item.json_stdout_bytes,
-                "ipc_request_frame_bytes": item.ipc_request_frame_bytes,
-                "ipc_response_frame_bytes": item.ipc_response_frame_bytes,
-            })
-        })
-        .collect::<Vec<_>>();
-    println!(
-        "AGENT_REPAIR_COST {}",
-        serde_json::json!({
-            "simple_workflow": {
-                "requests": 3,
-                "cli_invocations": 3,
-                "round_trips": 3,
-                "elapsed_ns": total_elapsed_ns,
-                "json_request_bytes": total_json_request_bytes,
-                "json_stdout_bytes": total_json_stdout_bytes,
-                "ipc_request_frame_bytes": total_ipc_request_frame_bytes,
-                "ipc_response_frame_bytes": total_ipc_response_frame_bytes,
-                "largest_json_response_bytes": largest_json_response_bytes,
-                "per_request": per_request,
-                "result_i64": 42,
-            },
-            "separate": {
-                "blockers": metric_json(&discovery),
-                "invalid_edit": metric_json(&invalid_measurement),
-                "diff_page": metric_json(&diff_page),
-                "workspace_summary": metric_json(&summary_measurement),
-                "rejected_edits_before_success_in_invalid_scenario": 1,
-            },
-            "context_json_stdout_bytes": context.json_stdout_bytes,
-            "receipt_json_stdout_bytes": refine.json_stdout_bytes,
-            "diff_page_json_stdout_bytes": diff_page.json_stdout_bytes,
-            "whole_workspace_node_count": summary.node_count,
-            "whole_workspace_dump_requested": false,
-            "model_tokens_measured": false,
-        })
-    );
-    shutdown(state, 10);
-    daemon.wait();
 }
 
 fn nominal_reading_application(workspace: WorkspaceId) -> ApplyTransactionRequest {
@@ -2814,7 +1927,6 @@ fn run_value_observed(
 fn real_json_cli_nominal_reading_repair_application_vertical() {
     let temporary = tempfile::tempdir().expect("state directory");
     let state = temporary.path();
-    let daemon = JsonDaemon::start(state);
 
     let Response::DescribeSchema(manifest) = rpc(
         state,
@@ -3151,7 +2263,7 @@ fn real_json_cli_nominal_reading_repair_application_vertical() {
     )
     .response
     else {
-        panic!("daemon usability after rejection")
+        panic!("engine usability after rejection")
     };
     assert_eq!(still_usable.value, RuntimeValue::I64(0));
 
@@ -3540,8 +2652,6 @@ fn real_json_cli_nominal_reading_repair_application_vertical() {
     run_i64(931, lazy_probe, vec![missing_input.clone()], 0);
 
     shutdown(state, 932);
-    daemon.wait();
-    let daemon = JsonDaemon::start(state);
     for revision in [Revision::new(1), Revision::new(2)] {
         for node in [
             reading,
@@ -3649,679 +2759,6 @@ fn real_json_cli_nominal_reading_repair_application_vertical() {
     };
     assert_eq!(output_after_restart.value, expected_reading);
     shutdown(state, 1004);
-    daemon.wait();
-}
-
-fn nominal_reading_refinement(
-    workspace: WorkspaceId,
-    created: &TransactionReceipt,
-    valid: bool,
-) -> ApplyTransactionRequest {
-    let value_field = binding(created, 4);
-    let valid_field = binding(created, 5);
-    let value = binding(created, 31);
-    let boolean = binding(created, 32);
-    let (value_input, valid_input) = if valid {
-        (value, boolean)
-    } else {
-        (boolean, value)
-    };
-    ApplyTransactionRequest {
-        transaction: Transaction {
-            workspace,
-            base_revision: Revision::new(1),
-            idempotency_key: valid.then(|| IdempotencyKey::from_bytes([0x83; 16])),
-            mode: TransactionMode::Commit,
-            operations: vec![TransactionOp::RefineHole {
-                hole: NodeTarget::Existing(binding(created, 33)),
-                replacement: OperationDraft::ConstructProduct {
-                    product: NodeTarget::Existing(binding(created, 3)),
-                    fields: vec![
-                        ProductFieldValueDraft {
-                            field: NodeTarget::Existing(valid_field),
-                            value: existing_result(valid_input),
-                        },
-                        ProductFieldValueDraft {
-                            field: NodeTarget::Existing(value_field),
-                            value: existing_result(value_input),
-                        },
-                    ],
-                },
-            }],
-        },
-        response: TransactionResponseSpec::default(),
-    }
-}
-
-#[test]
-#[ignore = "manual nominal generic-CLI interaction-cost measurement"]
-fn nominal_agent_interaction_cost_measurement() {
-    let temporary = tempfile::tempdir().expect("state directory");
-    let state = temporary.path();
-    let cold_started = Instant::now();
-    let daemon = JsonDaemon::start(state);
-    let cold_start_ns = cold_started.elapsed().as_nanos();
-    let (manifest_response, manifest_metric) = measured_rpc(
-        state,
-        1100,
-        "schema_manifest",
-        Request::DescribeSchema(DescribeSchemaRequest::manifest()),
-    );
-    let Response::DescribeSchema(manifest) = manifest_response.response else {
-        panic!("manifest")
-    };
-    let DescribeSchemaResult::Manifest(manifest) = *manifest else {
-        panic!("manifest projection")
-    };
-    assert_eq!(
-        manifest.schema_identity,
-        lkjscript::machine::MACHINE_SCHEMA_IDENTITY
-    );
-    assert_eq!(manifest.json_envelope_version, JSON_ENVELOPE_VERSION);
-    assert_eq!(manifest.roots.len(), SchemaRoot::ALL.len());
-    assert!(manifest.full_available);
-    let digest = manifest.digest;
-    let requested_roots = vec![
-        SchemaRoot::CreateWorkspace,
-        SchemaRoot::ApplyTransaction,
-        SchemaRoot::QueryWorkspaceSummary,
-        SchemaRoot::QueryNode,
-        SchemaRoot::QueryBlockers,
-        SchemaRoot::QueryBody,
-        SchemaRoot::QueryIncomingUses,
-        SchemaRoot::QueryRepairContext,
-        SchemaRoot::QuerySemanticDiff,
-        SchemaRoot::QueryNominalType,
-        SchemaRoot::Run,
-        SchemaRoot::Shutdown,
-    ];
-    let root_request = DescribeSchemaRequest {
-        projection: SchemaProjection::Roots {
-            roots: requested_roots.clone(),
-        },
-        known_digest: None,
-    };
-    let (roots_response, roots_metric) = measured_rpc(
-        state,
-        1101,
-        "schema_task_roots",
-        Request::DescribeSchema(root_request.clone()),
-    );
-    let Response::DescribeSchema(roots) = roots_response.response else {
-        panic!("schema roots")
-    };
-    let DescribeSchemaResult::Roots(roots) = *roots else {
-        panic!("schema root projection")
-    };
-    assert_eq!(roots.digest, digest);
-    assert_eq!(roots.roots.len(), requested_roots.len());
-    assert!(roots.definitions.len() > roots.roots.len());
-    let (unchanged_response, unchanged_metric) = measured_rpc(
-        state,
-        1102,
-        "schema_known_digest",
-        Request::DescribeSchema(DescribeSchemaRequest {
-            known_digest: Some(digest),
-            ..root_request
-        }),
-    );
-    let Response::DescribeSchema(unchanged) = unchanged_response.response else {
-        panic!("known schema digest")
-    };
-    assert_eq!(*unchanged, DescribeSchemaResult::Unchanged { digest });
-    let (workspace_response, workspace_metric) =
-        measured_rpc(state, 1103, "workspace_create", Request::CreateWorkspace);
-    let Response::WorkspaceCreated(workspace_summary) = workspace_response.response else {
-        panic!("workspace")
-    };
-    assert_eq!(workspace_summary.revision, Revision::INITIAL);
-    assert_eq!(workspace_summary.node_count, 1);
-    assert!(!workspace_summary.complete);
-    let workspace = workspace_summary.workspace;
-    let (creation_response, creation_metric) = measured_rpc(
-        state,
-        1104,
-        "nominal_structured_creation",
-        Request::ApplyTransaction(nominal_reading_application(workspace)),
-    );
-    let Response::TransactionReceipt(created) = creation_response.response else {
-        panic!("creation")
-    };
-    assert!(created.published);
-    assert_eq!(created.base_revision, Revision::INITIAL);
-    assert_eq!(created.revision, Revision::new(1));
-    assert_eq!(created.created_count, 97);
-    assert!(!created.complete_after);
-    let expected_handles = [
-        3, 4, 5, 6, 7, 8, 9, 10, 30, 31, 32, 33, 40, 50, 55, 60, 70, 79,
-    ];
-    assert_eq!(created.returned_bindings.len(), expected_handles.len());
-    assert_eq!(
-        created
-            .returned_bindings
-            .iter()
-            .map(|(symbol, _)| symbol.to_string())
-            .collect::<Vec<_>>(),
-        expected_handles
-            .into_iter()
-            .map(|value| format!("s{value}"))
-            .collect::<Vec<_>>()
-    );
-    assert_eq!(
-        created
-            .returned_bindings
-            .iter()
-            .map(|(_, node)| *node)
-            .collect::<BTreeSet<_>>()
-            .len(),
-        expected_handles.len()
-    );
-    assert!(
-        created
-            .returned_bindings
-            .iter()
-            .all(|(_, node)| node.workspace() == workspace)
-    );
-    let hole = binding(&created, 33);
-    let context_request = Request::QueryBatch(QueryBatchRequest {
-        workspace,
-        revision: Revision::new(1),
-        queries: vec![QueryItem {
-            id: QueryId::new(1),
-            query: Query::RepairContext {
-                target: RepairTarget::Hole(hole),
-                budget: context_budget(),
-            },
-        }],
-    });
-    let (context_response, context_metric) =
-        measured_rpc(state, 1105, "reading_repair_context", context_request);
-    let context = one_query_result(
-        context_response,
-        workspace,
-        Revision::new(1),
-        QueryId::new(1),
-    );
-    let QueryResult::RepairContext(context) = context else {
-        panic!("Reading repair context")
-    };
-    assert_eq!(context.operation, hole);
-    assert_eq!(
-        context.expected_type,
-        SemanticType::Nominal(binding(&created, 3))
-    );
-    assert_eq!(context.owner_function, binding(&created, 30));
-    let nominal_context = context
-        .nominal_type
-        .as_ref()
-        .expect("Reading nominal context");
-    assert_eq!(nominal_context.declaration, binding(&created, 3));
-    assert_eq!(nominal_context.members.items.len(), 2);
-    assert!(context.legal_constructors.iter().any(|constructor| {
-        constructor.code == OperationCode::ConstructProduct
-            && constructor.declaration == Some(binding(&created, 3))
-            && constructor.members == vec![binding(&created, 4), binding(&created, 5)]
-            && constructor.direct_refinement
-    }));
-    let (invalid_response, invalid_metric) = measured_rpc(
-        state,
-        1106,
-        "wrong_identity_keyed_repair",
-        Request::ApplyTransaction(nominal_reading_refinement(workspace, &created, false)),
-    );
-    let Response::Error(invalid_error) = invalid_response.response else {
-        panic!("intentional invalid repair must be the only measured semantic error")
-    };
-    assert_eq!(invalid_error.code, ErrorCode::TypeMismatch);
-    assert_eq!(invalid_error.expected_type, Some(SemanticType::I64));
-    assert_eq!(invalid_error.actual_type, Some(SemanticType::Bool));
-    assert!(!invalid_error.retryable);
-    let (repair_response, repair_metric) = measured_rpc(
-        state,
-        1107,
-        "valid_identity_keyed_repair",
-        Request::ApplyTransaction(nominal_reading_refinement(workspace, &created, true)),
-    );
-    let Response::TransactionReceipt(repaired) = repair_response.response else {
-        panic!("valid repair receipt")
-    };
-    assert!(repaired.published);
-    assert_eq!(repaired.base_revision, Revision::new(1));
-    assert_eq!(repaired.revision, Revision::new(2));
-    assert_eq!(repaired.created_count, 0);
-    assert!(repaired.returned_bindings.is_empty());
-    assert!(repaired.complete_after);
-    assert_eq!(repaired.change_count, 4);
-    let nominal_query = Request::QueryBatch(QueryBatchRequest {
-        workspace,
-        revision: Revision::new(2),
-        queries: vec![QueryItem {
-            id: QueryId::new(2),
-            query: Query::NominalType {
-                declaration: binding(&created, 3),
-                page: PageRequest {
-                    after: None,
-                    limit: 8,
-                },
-            },
-        }],
-    });
-    let (layout_response, layout_metric) =
-        measured_rpc(state, 1108, "reading_type_layout", nominal_query);
-    let layout = one_query_result(
-        layout_response,
-        workspace,
-        Revision::new(2),
-        QueryId::new(2),
-    );
-    let QueryResult::NominalType(layout) = layout else {
-        panic!("Reading type layout")
-    };
-    assert_eq!(layout.declaration, binding(&created, 3));
-    assert_eq!(layout.name, "Reading");
-    assert_eq!(layout.kind, NodeKind::ProductType);
-    assert!(layout.layout.representable);
-    assert_eq!(layout.layout.failure, None);
-    assert_eq!(layout.layout.size, Some(16));
-    assert_eq!(layout.layout.align, Some(8));
-    assert_eq!(layout.layout.cells, Some(2));
-    assert_eq!(layout.layout.discriminant_bytes, None);
-    assert_eq!(layout.layout.payload_offset, None);
-    assert!(matches!(
-        layout.members.items.as_slice(),
-        [
-            lkjscript::query::NominalMemberFact::ProductField {
-                field,
-                ordinal: 0,
-                ty: SemanticType::I64,
-                offset: Some(0),
-                cells: Some(1),
-                ..
-            },
-            lkjscript::query::NominalMemberFact::ProductField {
-                field: valid,
-                ordinal: 1,
-                ty: SemanticType::Bool,
-                offset: Some(8),
-                cells: Some(1),
-                ..
-            },
-        ] if *field == binding(&created, 4) && *valid == binding(&created, 5)
-    ));
-    let diff_request = Request::QueryBatch(QueryBatchRequest {
-        workspace,
-        revision: Revision::new(2),
-        queries: vec![QueryItem {
-            id: QueryId::new(3),
-            query: Query::SemanticDiff {
-                from: Revision::new(1),
-                page: PageRequest {
-                    after: None,
-                    limit: 8,
-                },
-            },
-        }],
-    });
-    let (diff_response, diff_metric) = measured_rpc(state, 1109, "semantic_diff", diff_request);
-    let diff = one_query_result(diff_response, workspace, Revision::new(2), QueryId::new(3));
-    let QueryResult::SemanticDiff(diff) = diff else {
-        panic!("semantic refinement diff")
-    };
-    assert_eq!(diff.from, Revision::new(1));
-    assert_eq!(diff.to, Revision::new(2));
-    assert_eq!(diff.change_count, repaired.change_count);
-    assert_eq!(diff.change_digest, repaired.change_digest);
-    assert_eq!(diff.page.items.len() as u64, diff.change_count);
-    assert!(diff.page.next.is_none());
-    assert!(diff.page.items.iter().any(|change| {
-        change.node == hole
-            && matches!(
-                change.kind,
-                ChangeKind::OperationRefined {
-                    before: OperationCode::Hole,
-                    after: OperationCode::ConstructProduct,
-                    result_type: SemanticType::Nominal(declaration),
-                    ..
-                } if declaration == binding(&created, 3)
-            )
-    }));
-    let (run_response, run_metric) = measured_rpc(
-        state,
-        1110,
-        "run_main",
-        Request::Run {
-            workspace,
-            revision: Revision::new(2),
-            entry: binding(&created, 30),
-            arguments: vec![],
-            policy: lkjscript::RunPolicy {
-                fuel: 1_000_000,
-                maximum_frames: 1_000,
-            },
-        },
-    );
-    let Response::Run(run_result) = run_response.response else {
-        panic!("Run")
-    };
-    assert_eq!(run_result.value, RuntimeValue::I64(42));
-    let incomplete_artifact_bytes = fs::metadata(
-        workspace_path(state, workspace).join("revisions/00000000000000000001.lkjscript"),
-    )
-    .expect("incomplete artifact")
-    .len();
-    let repaired_artifact_bytes = fs::metadata(
-        workspace_path(state, workspace).join("revisions/00000000000000000002.lkjscript"),
-    )
-    .expect("repaired artifact")
-    .len();
-    let head_bytes = fs::metadata(workspace_path(state, workspace).join("HEAD"))
-        .expect("HEAD")
-        .len();
-    shutdown(state, 1111);
-    daemon.wait();
-    let restart_started = Instant::now();
-    let daemon = JsonDaemon::start(state);
-    let restart_ns = restart_started.elapsed().as_nanos();
-    let (restart_response, restart_metric) = measured_rpc(
-        state,
-        1112,
-        "restart_retained_hole_query",
-        Request::QueryBatch(QueryBatchRequest {
-            workspace,
-            revision: Revision::new(2),
-            queries: vec![QueryItem {
-                id: QueryId::new(4),
-                query: Query::Node {
-                    node: hole,
-                    expand: false,
-                },
-            }],
-        }),
-    );
-    let restart_result = one_query_result(
-        restart_response,
-        workspace,
-        Revision::new(2),
-        QueryId::new(4),
-    );
-    let QueryResult::Node(retained_hole) = restart_result else {
-        panic!("retained refined hole")
-    };
-    assert_eq!(retained_hole.summary.node, hole);
-    assert_eq!(retained_hole.summary.revision, Revision::new(2));
-    assert_eq!(retained_hole.summary.kind, NodeKind::Operation);
-    assert_eq!(
-        retained_hole.summary.value_type,
-        Some(SemanticType::Nominal(binding(&created, 3)))
-    );
-    assert!(retained_hole.summary.complete);
-    let metrics = [
-        &manifest_metric,
-        &roots_metric,
-        &unchanged_metric,
-        &workspace_metric,
-        &creation_metric,
-        &context_metric,
-        &invalid_metric,
-        &repair_metric,
-        &layout_metric,
-        &diff_metric,
-        &run_metric,
-        &restart_metric,
-    ];
-    assert_eq!(metrics.len(), 12);
-    println!(
-        "NOMINAL_AGENT_COST {}",
-        serde_json::json!({
-            "workload": "single Reading/Input repair workflow through production daemon and strict generic JSON CLI",
-            "round_trips": metrics.len(),
-            "cli_invocations": metrics.len(),
-            "measured_semantic_successes": metrics.len() - 1,
-            "measured_expected_semantic_errors": 1,
-            "excluded_lifecycle_requests": {
-                "kind": "typed_shutdown",
-                "count": 2,
-                "included_in_agent_round_trips": false,
-                "included_in_cli_invocations": false,
-            },
-            "daemon_cold_start_ns": cold_start_ns,
-            "restart_ns": restart_ns,
-            "incomplete_artifact_bytes": incomplete_artifact_bytes,
-            "repaired_artifact_bytes": repaired_artifact_bytes,
-            "head_bytes": head_bytes,
-            "compile_nanoseconds": run_result.compile_nanoseconds,
-            "execute_nanoseconds": run_result.execute_nanoseconds,
-            "json_request_bytes": metrics.iter().map(|metric| metric.json_request_bytes).sum::<usize>(),
-            "json_stdout_bytes": metrics.iter().map(|metric| metric.json_stdout_bytes).sum::<usize>(),
-            "ipc_request_frame_bytes": metrics.iter().map(|metric| metric.ipc_request_frame_bytes).sum::<usize>(),
-            "ipc_response_frame_bytes": metrics.iter().map(|metric| metric.ipc_response_frame_bytes).sum::<usize>(),
-            "cli_and_daemon_wall_ns": metrics.iter().map(|metric| metric.elapsed_ns).sum::<u128>(),
-            "per_request": metrics.iter().map(|metric| metric_json(metric)).collect::<Vec<_>>(),
-            "type_layout_observed": true,
-            "compile_execute_observed": true,
-            "model_tokens_measured": false,
-        })
-    );
-    shutdown(state, 1113);
-    daemon.wait();
-}
-
-#[test]
-#[ignore = "manual repeated nominal application performance measurement"]
-fn nominal_reading_performance_measurement() {
-    let temporary = tempfile::tempdir().expect("state directory");
-    let state = temporary.path();
-    let daemon = JsonDaemon::start(state);
-    let Response::WorkspaceCreated(workspace) = rpc(state, 1200, Request::CreateWorkspace).response
-    else {
-        panic!("workspace")
-    };
-    let workspace = workspace.workspace;
-    let created = receipt(rpc(
-        state,
-        1201,
-        Request::ApplyTransaction(nominal_reading_application(workspace)),
-    ));
-    let _ = receipt(rpc(
-        state,
-        1202,
-        Request::ApplyTransaction(nominal_reading_refinement(workspace, &created, true)),
-    ));
-    let reading = binding(&created, 3);
-    let value_field = binding(&created, 4);
-    let valid_field = binding(&created, 5);
-    let input = binding(&created, 6);
-    let sample = binding(&created, 7);
-    let evaluate = binding(&created, 10);
-    let main = binding(&created, 30);
-    let make_reading = binding(&created, 60);
-    let mut main_wall = Vec::new();
-    let mut compile = Vec::new();
-    let mut execute = Vec::new();
-    let mut nominal_input_wall = Vec::new();
-    let mut nominal_output_wall = Vec::new();
-    for sample_index in 0..32_u64 {
-        let (response, wall) = timed_rpc(
-            state,
-            1210 + sample_index,
-            Request::Run {
-                workspace,
-                revision: Revision::new(2),
-                entry: main,
-                arguments: vec![],
-                policy: lkjscript::RunPolicy {
-                    fuel: 1_000_000,
-                    maximum_frames: 1_000,
-                },
-            },
-        );
-        let Response::Run(result) = response.response else {
-            panic!("main")
-        };
-        assert_eq!(result.value, RuntimeValue::I64(42));
-        if sample_index > 0 {
-            main_wall.push(wall);
-            compile.push(u128::from(result.compile_nanoseconds));
-            execute.push(u128::from(result.execute_nanoseconds));
-        }
-        let (input_response, input_wall) = timed_rpc(
-            state,
-            1250 + sample_index,
-            Request::Run {
-                workspace,
-                revision: Revision::new(2),
-                entry: evaluate,
-                arguments: vec![input_value(
-                    input,
-                    sample,
-                    Some(reading_value(reading, value_field, valid_field, 5, true)),
-                )],
-                policy: lkjscript::RunPolicy {
-                    fuel: 1_000_000,
-                    maximum_frames: 1_000,
-                },
-            },
-        );
-        let Response::Run(input_result) = input_response.response else {
-            panic!("nominal input")
-        };
-        assert_eq!(input_result.value, RuntimeValue::I64(5));
-        let (output_response, output_wall) = timed_rpc(
-            state,
-            1290 + sample_index,
-            Request::Run {
-                workspace,
-                revision: Revision::new(2),
-                entry: make_reading,
-                arguments: vec![RuntimeValue::I64(9), RuntimeValue::Bool(true)],
-                policy: lkjscript::RunPolicy {
-                    fuel: 1_000_000,
-                    maximum_frames: 1_000,
-                },
-            },
-        );
-        let Response::Run(output_result) = output_response.response else {
-            panic!("nominal output")
-        };
-        assert_eq!(
-            output_result.value,
-            RuntimeValue::Product {
-                ty: reading,
-                fields: vec![
-                    RuntimeFieldValue {
-                        field: value_field,
-                        value: RuntimeValue::I64(9),
-                    },
-                    RuntimeFieldValue {
-                        field: valid_field,
-                        value: RuntimeValue::Bool(true),
-                    },
-                ],
-            }
-        );
-        if sample_index > 0 {
-            nominal_input_wall.push(input_wall);
-            nominal_output_wall.push(output_wall);
-        }
-    }
-    assert_eq!(main_wall.len(), 31);
-    assert_eq!(compile.len(), 31);
-    assert_eq!(execute.len(), 31);
-    assert_eq!(nominal_input_wall.len(), 31);
-    assert_eq!(nominal_output_wall.len(), 31);
-    let query_started = Instant::now();
-    let QueryResult::NominalType(layout) = query(
-        state,
-        1400,
-        workspace,
-        Revision::new(2),
-        Query::NominalType {
-            declaration: reading,
-            page: PageRequest {
-                after: None,
-                limit: 8,
-            },
-        },
-    ) else {
-        panic!("layout")
-    };
-    let layout_wall_ns = query_started.elapsed().as_nanos();
-    assert_eq!(layout.declaration, reading);
-    assert_eq!(layout.name, "Reading");
-    assert!(layout.layout.representable);
-    assert_eq!(layout.layout.failure, None);
-    assert_eq!(layout.layout.size, Some(16));
-    assert_eq!(layout.layout.align, Some(8));
-    assert_eq!(layout.layout.cells, Some(2));
-    assert_eq!(layout.members.items.len(), 2);
-    shutdown(state, 1401);
-    daemon.wait();
-    let restart_started = Instant::now();
-    let daemon = JsonDaemon::start(state);
-    let restart_ns = restart_started.elapsed().as_nanos();
-    let QueryResult::NominalType(retained_layout) = query(
-        state,
-        1402,
-        workspace,
-        Revision::new(2),
-        Query::NominalType {
-            declaration: reading,
-            page: PageRequest {
-                after: None,
-                limit: 8,
-            },
-        },
-    ) else {
-        panic!("retained layout after restart")
-    };
-    assert_eq!(retained_layout, layout);
-    let row = |samples: &[u128]| {
-        serde_json::json!({
-            "samples": samples.len(),
-            "median_ns": percentile_ns(samples, 50),
-            "p95_ns": percentile_ns(samples, 95),
-        })
-    };
-    println!(
-        "NOMINAL_PERFORMANCE {}",
-        serde_json::json!({
-            "workload": "Reading/Input microbenchmark; one warmup plus 31 measured generic-CLI requests per route",
-            "main_request_wall": row(&main_wall),
-            "compile": row(&compile),
-            "execute": row(&execute),
-            "nominal_input_match_wall": row(&nominal_input_wall),
-            "nominal_output_wall": row(&nominal_output_wall),
-            "type_layout_query": {
-                "sampling": "single_observation",
-                "sample_count": 1,
-                "wall_ns": layout_wall_ns,
-                "median_p95_claimed": false,
-                "output_oracle": layout.layout,
-            },
-            "restart": {
-                "sampling": "single_observation",
-                "sample_count": 1,
-                "wall_ns": restart_ns,
-                "median_p95_claimed": false,
-                "retained_layout_oracle_asserted": true,
-            },
-            "oracles": {"main": 42, "sample": 5, "output_value": 9},
-            "leadership_claim": false,
-        })
-    );
-    shutdown(state, 1403);
-    daemon.wait();
-}
-
-fn metric_json(item: &RpcMeasurement) -> serde_json::Value {
-    serde_json::json!({
-        "name": item.name,
-        "elapsed_ns": item.elapsed_ns,
-        "json_request_bytes": item.json_request_bytes,
-        "json_stdout_bytes": item.json_stdout_bytes,
-        "ipc_request_frame_bytes": item.ipc_request_frame_bytes,
-        "ipc_response_frame_bytes": item.ipc_response_frame_bytes,
-    })
 }
 
 fn rpc(state: &Path, request_id: u64, request: Request) -> ResponseEnvelope {

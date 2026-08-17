@@ -13,7 +13,6 @@ fn semantic_workbench_completes_the_eight_revision_maintenance_corpus() {
     let output = Command::new("python3")
         .arg(driver_path())
         .arg(env!("CARGO_BIN_EXE_lkjscript"))
-        .arg(env!("CARGO_BIN_EXE_lkjscriptd"))
         .output()
         .expect("run agent-maintenance driver");
     assert!(
@@ -50,17 +49,17 @@ fn semantic_workbench_completes_the_eight_revision_maintenance_corpus() {
         true
     );
     assert_eq!(
-        summary["interface_comparison"]["candidate_plan_accepted"],
+        summary["interface_comparison"]["candidate_document_accepted"],
         true
     );
     assert!(
-        summary["interface_comparison"]["candidate_plan_bytes"]
+        summary["interface_comparison"]["candidate_document_bytes"]
             .as_u64()
-            .expect("candidate plan bytes")
+            .expect("candidate document bytes")
             < summary["interface_comparison"]["baseline_request_bytes"]
                 .as_u64()
                 .expect("baseline request bytes")
     );
     assert_eq!(summary["provider_telemetry"], "unavailable");
-    assert_eq!(summary["shutdown"], "acknowledged");
+    assert_eq!(summary["reopen"], "passed on every direct command");
 }

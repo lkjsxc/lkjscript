@@ -6,9 +6,9 @@ use crate::schema::{
 };
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
-const DIGEST_DOMAIN: &[u8] = b"lkjscript.semantic-diff.v3\0";
+const DIGEST_DOMAIN: &[u8] = b"lkjscript.semantic-diff.v4\0";
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -79,6 +79,13 @@ pub enum ChangeKind {
         replacement: OperationKind,
     },
     AllocatedAndTombstoned,
+    FunctionBodyChanged {
+        before_items: u64,
+        after_items: u64,
+        added_items: u64,
+        removed_items: u64,
+        modified_items: u64,
+    },
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
@@ -109,6 +116,7 @@ impl ChangeKind {
             Self::CompletenessChanged { .. } => 9,
             Self::OperationRefined { .. } => 10,
             Self::AllocatedAndTombstoned => 11,
+            Self::FunctionBodyChanged { .. } => 12,
         }
     }
 }
@@ -120,7 +128,21 @@ pub(crate) fn between(before: &Snapshot, after: &Snapshot) -> SemanticDiff {
         .chain(after.nodes().map(|(id, _)| id))
         .collect();
     let mut changes = Vec::new();
+    let mut changed_body_functions = BTreeSet::new();
     for id in ids {
+        if let Some(function_serial) = id.local_function_serial() {
+            if before.nodes.get(&id) != after.nodes.get(&id)
+                && let Ok(function) = NodeId::new(after.workspace(), function_serial)
+            {
+                changed_body_functions.insert(function);
+            }
+            if let (Some(old), Some(new)) = (before.nodes.get(&id), after.nodes.get(&id))
+                && old != new
+            {
+                classify_change(id, old, new, &mut changes);
+            }
+            continue;
+        }
         match (before.nodes.get(&id), after.nodes.get(&id)) {
             (None, Some(node)) => changes.push(Change {
                 node: id,
@@ -133,6 +155,47 @@ pub(crate) fn between(before: &Snapshot, after: &Snapshot) -> SemanticDiff {
             (Some(old), Some(new)) if old != new => classify_change(id, old, new, &mut changes),
             _ => {}
         }
+    }
+    for function in changed_body_functions {
+        let before_items: BTreeMap<_, _> = before
+            .nodes()
+            .filter_map(|(id, node)| {
+                (id.local_function_serial() == Some(function.serial())).then_some((id, node))
+            })
+            .collect();
+        let after_items: BTreeMap<_, _> = after
+            .nodes()
+            .filter_map(|(id, node)| {
+                (id.local_function_serial() == Some(function.serial())).then_some((id, node))
+            })
+            .collect();
+        let added_items = after_items
+            .keys()
+            .filter(|id| !before_items.contains_key(id))
+            .count();
+        let removed_items = before_items
+            .keys()
+            .filter(|id| !after_items.contains_key(id))
+            .count();
+        let modified_items = before_items
+            .iter()
+            .filter(|(id, node)| {
+                after
+                    .nodes
+                    .get(id)
+                    .is_some_and(|after_node| after_node != **node)
+            })
+            .count();
+        changes.push(Change {
+            node: function,
+            kind: ChangeKind::FunctionBodyChanged {
+                before_items: u64::try_from(before_items.len()).unwrap_or(u64::MAX),
+                after_items: u64::try_from(after_items.len()).unwrap_or(u64::MAX),
+                added_items: u64::try_from(added_items).unwrap_or(u64::MAX),
+                removed_items: u64::try_from(removed_items).unwrap_or(u64::MAX),
+                modified_items: u64::try_from(modified_items).unwrap_or(u64::MAX),
+            },
+        });
     }
     for serial in after.tombstones.difference(&before.tombstones) {
         if *serial >= before.next_serial
@@ -242,6 +305,19 @@ fn hash_change_kind(hasher: &mut blake3::Hasher, kind: &ChangeKind) {
             hash_operation(hasher, replacement);
         }
         ChangeKind::AllocatedAndTombstoned => {}
+        ChangeKind::FunctionBodyChanged {
+            before_items,
+            after_items,
+            added_items,
+            removed_items,
+            modified_items,
+        } => {
+            hasher.update(&before_items.to_le_bytes());
+            hasher.update(&after_items.to_le_bytes());
+            hasher.update(&added_items.to_le_bytes());
+            hasher.update(&removed_items.to_le_bytes());
+            hasher.update(&modified_items.to_le_bytes());
+        }
     }
 }
 

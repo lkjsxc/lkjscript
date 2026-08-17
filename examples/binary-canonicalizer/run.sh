@@ -12,4 +12,4 @@ esac
 
 cargo build --workspace --release --locked
 exec python3 "$ROOT/examples/binary-canonicalizer/driver.py" \
-  "$TARGET_DIR/release/lkjscript" "$TARGET_DIR/release/lkjscriptd"
+  "$TARGET_DIR/release/lkjscript"

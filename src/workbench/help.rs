@@ -103,7 +103,7 @@ pub fn authoring_help_cards() -> Result<String> {
   nominal type     ({} NODE_TARGET)\n\
   operation result ({} {{ {} NODE_TARGET {} N }})\n\
   body operation   {{ {} SYMBOL {} OPERATION_DRAFT }}\n\
-Draft SYMBOL values are ordinary bare or quoted strings; @ spelling is reserved exclusively for aliases already present in the supplied packet. A create-purpose packet at revision zero therefore cannot alias nodes that the plan is about to draft. Unit type forms such as {integer_type} are bare values, not `({integer_type})`. Validate plans must omit idempotency_key. Apply may omit it or supply exactly {}.\n\
+Draft SYMBOL values are ordinary bare or quoted strings; @ spelling is reserved exclusively for aliases already present in the supplied packet. A create-purpose packet at revision zero therefore cannot alias nodes that the document is about to draft. Unit type forms such as {integer_type} are bare values, not `({integer_type})`. Validate documents must omit idempotency_key. Apply may omit it or supply exactly {}.\n\
 \n\
 Use `lkjscript schema --root apply_transaction --root run --pretty` for the exact typed forms accepted inside operations, runtime values, and policies.",
         draft_target.name,

@@ -567,8 +567,11 @@ pub enum MachineScalarDomain {
     },
     NodeId {
         workspace_bytes: u8,
-        minimum_serial: u64,
-        maximum_serial: u64,
+        durable_minimum_serial: u64,
+        durable_maximum_serial: u64,
+        function_local_grammar: String,
+        maximum_function_serial: u64,
+        maximum_local_ordinal: u32,
     },
 }
 

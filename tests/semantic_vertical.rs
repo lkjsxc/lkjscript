@@ -105,31 +105,16 @@ fn cli_session_preserves_one_request_semantics_and_recovers_per_line() {
     let mut stdin = session.stdin.take().expect("session stdin");
     let mut stdout = BufReader::new(session.stdout.take().expect("session stdout"));
 
-    let unavailable = session_exchange(
+    let first = session_exchange(
         &mut stdin,
         &mut stdout,
         &lkjscript::machine::encode_request(RequestId::new(1), &Request::CreateWorkspace)
             .expect("request JSON"),
     );
-    let unavailable: serde_json::Value =
-        serde_json::from_slice(&unavailable).expect("transport boundary JSON");
-    assert_eq!(unavailable["version"], 8);
-    assert_eq!(unavailable["request_id"], 1);
-    assert_eq!(unavailable["error"]["kind"], "transport");
-
-    let mut daemon = RunningDaemon::start(temporary.path());
-    let first = session_exchange(
-        &mut stdin,
-        &mut stdout,
-        &lkjscript::machine::encode_request(RequestId::new(2), &Request::CreateWorkspace)
-            .expect("first request JSON"),
-    );
-    assert!(matches!(
-        lkjscript::machine::decode_response(&first)
-            .expect("first response")
-            .response,
-        Response::WorkspaceCreated(_)
-    ));
+    let first = lkjscript::machine::decode_response(&first).expect("first response");
+    assert_eq!(first.version, lkjscript::machine::JSON_ENVELOPE_VERSION);
+    assert_eq!(first.request_id, RequestId::new(1));
+    assert!(matches!(first.response, Response::WorkspaceCreated(_)));
 
     let malformed = session_exchange(&mut stdin, &mut stdout, b"{");
     let malformed: serde_json::Value =
@@ -161,18 +146,6 @@ fn cli_session_preserves_one_request_semantics_and_recovers_per_line() {
             .response,
         Response::Acknowledged
     );
-    assert!(daemon.child.wait().expect("daemon shutdown wait").success());
-
-    let after_shutdown = session_exchange(
-        &mut stdin,
-        &mut stdout,
-        &lkjscript::machine::encode_request(RequestId::new(5), &Request::CreateWorkspace)
-            .expect("post-shutdown request JSON"),
-    );
-    let after_shutdown: serde_json::Value =
-        serde_json::from_slice(&after_shutdown).expect("post-shutdown boundary JSON");
-    assert_eq!(after_shutdown["request_id"], 5);
-    assert_eq!(after_shutdown["error"]["kind"], "transport");
 
     drop(stdin);
     let mut trailing = Vec::new();
@@ -195,7 +168,6 @@ fn cli_session_preserves_one_request_semantics_and_recovers_per_line() {
 #[test]
 fn cli_session_stdout_failure_is_fatal_and_does_not_retry_a_published_mutation() {
     let temporary = tempfile::tempdir().expect("state");
-    let daemon = RunningDaemon::start(temporary.path());
     let mut session = Command::new(env!("CARGO_BIN_EXE_lkjscript"))
         .args([
             "--state",
@@ -232,7 +204,6 @@ fn cli_session_stdout_failure_is_fatal_and_does_not_retry_a_published_mutation()
         .collect::<std::io::Result<Vec<_>>>()
         .expect("workspace entries");
     assert_eq!(workspaces.len(), 1, "session must not retry the mutation");
-    daemon.shutdown();
 }
 
 #[test]
@@ -1286,7 +1257,7 @@ fn explicit_hole_is_queryable_and_cannot_execute() {
 fn real_daemon_executes_repaired_structured_program_across_restart() {
     let temporary = tempfile::tempdir().expect("temporary state directory");
     let daemon = RunningDaemon::start(temporary.path());
-    assert_daemon_start_rejects(temporary.path(), "WorkspaceExists");
+    assert_daemon_start_rejects(temporary.path(), "AuthorityBusy");
     let client = daemon.client();
     let Response::WorkspaceCreated(initial) = client
         .request(RequestId::new(500), &Request::CreateWorkspace)
@@ -1614,6 +1585,7 @@ fn real_daemon_executes_repaired_structured_program_across_restart() {
         run(&client, 506, range, vec![RuntimeValue::I64(5)]),
         RuntimeValue::I64(10)
     );
+    daemon.shutdown();
     let envelope = lkjscript::machine::RequestEnvelope {
         version: lkjscript::machine::JSON_ENVELOPE_VERSION,
         request_id: RequestId::new(509),
@@ -1656,7 +1628,6 @@ fn real_daemon_executes_repaired_structured_program_across_restart() {
         panic!("CLI run response")
     };
     assert_eq!(result.value, RuntimeValue::I64(5050));
-    daemon.shutdown();
     let restarted = RunningDaemon::start(temporary.path());
     assert_eq!(
         run(&restarted.client(), 507, main, vec![]),

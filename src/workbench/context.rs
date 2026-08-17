@@ -1,6 +1,7 @@
 use super::{MAX_CONTEXT_PACKET_BYTES, WORKBENCH_VERSION};
+use crate::engine::Engine;
 use crate::error::{ErrorCode, LkError, Result};
-use crate::ids::{NodeId, QueryId, RequestId, Revision, WorkspaceId};
+use crate::ids::{NodeId, NodeIdentityClass, QueryId, RequestId, Revision, WorkspaceId};
 use crate::machine::{MachineSchemaDigest, active_machine_schema_digest};
 use crate::protocol::{Request, Response};
 use crate::query::{
@@ -9,15 +10,13 @@ use crate::query::{
 };
 use crate::schema::{Node, NodeKind, ValueRef};
 use crate::transaction::{ExpressionDraftCode, TransactionOpCode};
-use crate::transport::Client;
 use serde::de::{self, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
-use std::path::Path;
 use std::str::FromStr;
 
-const CONTEXT_PACKET_DIGEST_DOMAIN: &[u8] = b"lkjscript.context-packet.v1\0";
+const CONTEXT_PACKET_DIGEST_DOMAIN: &[u8] = b"lkjscript.context-packet.v2\0";
 const DEFAULT_MAX_CONTEXT_NODES: u32 = 64;
 const MAX_CONTEXT_NODES: u32 = 256;
 const MAX_CONTEXT_TARGETS: usize = 8;
@@ -247,6 +246,7 @@ impl ContextBuildRequest {
 pub struct ContextAlias {
     pub alias: String,
     pub node: NodeId,
+    pub identity_class: NodeIdentityClass,
     pub kind: NodeKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display_name: Option<NamePreview>,
@@ -311,7 +311,7 @@ pub struct ContextPacket {
 }
 
 pub fn build_context_packet(
-    endpoint: &Path,
+    engine: &mut Engine,
     request: &ContextBuildRequest,
 ) -> Result<ContextPacket> {
     request.validate()?;
@@ -321,7 +321,7 @@ pub fn build_context_packet(
             format!("cannot derive active machine schema digest: {error}"),
         )
     })?;
-    let mut remote = Remote::new(endpoint);
+    let mut session = EngineSession::new(engine);
     let mut primary_queries = vec![
         Query::WorkspaceSummary,
         Query::Blockers {
@@ -334,7 +334,7 @@ pub fn build_context_packet(
             page: first_page(crate::query::MAX_PAGE_ITEMS),
         });
     }
-    let mut primary = remote.query(request.workspace, request.revision, primary_queries)?;
+    let mut primary = session.query(request.workspace, request.revision, primary_queries)?;
     let summary = take_success(&mut primary, "workspace_summary", |result| match result {
         QueryResult::WorkspaceSummary(summary) => Some(summary),
         _ => None,
@@ -361,18 +361,19 @@ pub fn build_context_packet(
     } else {
         request.targets.clone()
     };
-    let (nodes, omitted_frontier) = collect_nodes(&mut remote, request, &roots)?;
+    let (nodes, omitted_frontier) = collect_nodes(&mut session, request, &roots)?;
     let aliases = nodes
         .iter()
         .enumerate()
         .map(|(index, view)| ContextAlias {
             alias: format!("n{}", index + 1),
             node: view.summary.node,
+            identity_class: view.summary.identity_class,
             kind: view.summary.kind,
             display_name: view.summary.display_name.clone(),
         })
         .collect();
-    let observations = collect_observations(&mut remote, request, &nodes)?;
+    let observations = collect_observations(&mut session, request, &nodes)?;
     let blockers_truncated = blockers.next.is_some();
     let semantic_diff_truncated = semantic_diff
         .as_ref()
@@ -512,6 +513,7 @@ fn validate_packet(packet: &ContextPacket) -> Result<()> {
         if view.summary.workspace != packet.payload.workspace
             || view.summary.revision != packet.payload.revision
             || view.summary.node.workspace() != packet.payload.workspace
+            || view.summary.identity_class != view.summary.node.identity_class()
         {
             return Err(LkError::new(
                 ErrorCode::WrongWorkspace,
@@ -533,7 +535,9 @@ fn validate_packet(packet: &ContextPacket) -> Result<()> {
                 "context packet aliases are not canonical and unique",
             ));
         }
-        if nodes.get(&alias.node) != Some(&alias.kind) {
+        if nodes.get(&alias.node) != Some(&alias.kind)
+            || alias.identity_class != alias.node.identity_class()
+        {
             return Err(LkError::new(
                 ErrorCode::ProtocolMalformed,
                 "context packet alias does not match its node fact",
@@ -564,15 +568,15 @@ fn digest_payload(payload: &ContextPacketPayload) -> Result<ContextPacketDigest>
     ))
 }
 
-struct Remote {
-    client: Client,
+struct EngineSession<'a> {
+    engine: &'a mut Engine,
     next_request_id: u64,
 }
 
-impl Remote {
-    fn new(endpoint: &Path) -> Self {
+impl<'a> EngineSession<'a> {
+    fn new(engine: &'a mut Engine) -> Self {
         Self {
-            client: Client::new(endpoint),
+            engine,
             next_request_id: 1,
         }
     }
@@ -583,7 +587,7 @@ impl Remote {
             .next_request_id
             .checked_add(1)
             .ok_or_else(|| LkError::new(ErrorCode::PolicyExceeded, "request ID overflow"))?;
-        self.client.request(id, &request)
+        self.engine.request(id, request)
     }
 
     fn query(
@@ -613,7 +617,7 @@ impl Remote {
             Response::Error(error) => Err(error),
             _ => Err(LkError::new(
                 ErrorCode::ProtocolMalformed,
-                "daemon returned the wrong response family for a context query",
+                "engine returned the wrong response family for a context query",
             )),
         }
     }
@@ -646,7 +650,7 @@ fn take_success<T>(
 }
 
 fn collect_nodes(
-    remote: &mut Remote,
+    session: &mut EngineSession<'_>,
     request: &ContextBuildRequest,
     roots: &[NodeId],
 ) -> Result<(Vec<crate::query::NodeView>, BTreeSet<NodeId>)> {
@@ -685,7 +689,7 @@ fn collect_nodes(
                 expand: true,
             })
             .collect();
-        let outcomes = remote.query(request.workspace, request.revision, queries)?;
+        let outcomes = session.query(request.workspace, request.revision, queries)?;
         if outcomes.len() != pending.len() {
             return Err(LkError::new(
                 ErrorCode::ProtocolMalformed,
@@ -797,7 +801,7 @@ fn enqueue_related(
 }
 
 fn collect_observations(
-    remote: &mut Remote,
+    session: &mut EngineSession<'_>,
     request: &ContextBuildRequest,
     nodes: &[crate::query::NodeView],
 ) -> Result<Vec<ContextObservation>> {
@@ -871,7 +875,7 @@ fn collect_observations(
     }
     let mut observations = Vec::new();
     for chunk in specifications.chunks(crate::query::MAX_BATCH_QUERIES) {
-        let outcomes = remote.query(
+        let outcomes = session.query(
             request.workspace,
             request.revision,
             chunk.iter().map(|(_, _, query)| query.clone()).collect(),

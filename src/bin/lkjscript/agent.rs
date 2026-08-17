@@ -1,35 +1,34 @@
 use super::{CliOutcome, EXIT_OUTPUT, EXIT_TRANSPORT, EXIT_USAGE_OR_JSON, failure, success, usage};
-use lkjscript::Client;
-use lkjscript::daemon;
+use lkjscript::engine::Engine;
 use lkjscript::error::{ErrorCode, LkError};
 use lkjscript::ids::{NodeId, RequestId, Revision, WorkspaceId};
 use lkjscript::machine::{BoundaryErrorKind, MAX_JSON_OUTPUT_BYTES, active_machine_schema_digest};
 use lkjscript::protocol::{PROTOCOL_VERSION, Request, Response};
 use lkjscript::transaction::TransactionMode;
 use lkjscript::workbench::{
-    ContextBuildRequest, ContextPacket, ContextPurpose, MAX_CONTEXT_PACKET_BYTES,
-    MAX_WORKBENCH_INPUT_BYTES, PlanError, WORKBENCH_VERSION, authoring_help_cards,
-    build_context_packet, decode_context_packet, encode_context_packet, parse_edit_plan,
-    parse_run_plan, render_context_packet, render_semantic_diff,
+    ContextBuildRequest, ContextPacket, ContextPacketDigest, ContextPurpose, DocumentError,
+    MAX_CONTEXT_PACKET_BYTES, MAX_WORKBENCH_INPUT_BYTES, WORKBENCH_VERSION, authoring_help_cards,
+    build_context_packet, decode_context_packet, encode_context_packet, parse_edit_document,
+    parse_run_document, render_context_packet, render_function_document, render_semantic_diff,
 };
 use serde::Serialize;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-const ORIENTATION: &str = "lkjscript semantic workbench v1\n\
-A coding agent edits a typed, versioned program model through a local service. The service validates proposed changes, saves immutable revisions, and compiles and runs selected revisions.\n\
+const ORIENTATION: &str = "A coding agent edits a typed, versioned program model through a directly opened local engine. The engine validates proposed changes, saves immutable revisions, and compiles and runs selected revisions.\n\
 \n\
 Preferred workflow:\n\
   agent create   create an empty authoritative workspace\n\
   agent context  derive an exact revision-bound task packet\n\
   agent view     render a deterministic, non-authoritative semantic review\n\
-  agent validate parse and validate a compact typed edit plan without publishing\n\
-  agent apply    parse and atomically commit a compact typed edit plan\n\
+  agent document render one packet-bound editable function document\n\
+  agent validate parse and validate a bounded editable semantic document without publishing\n\
+  agent apply    parse and atomically commit a bounded editable semantic document\n\
   agent diff     render exact semantic changes carried by a review packet\n\
-  agent run      run an exact revision from a compact run plan\n\
+  agent run      run an exact revision from a compact run document\n\
 \n\
-Plans are ephemeral projections. They normalize into the same typed transaction used by raw JSON; the daemon remains the only semantic authority. Packet aliases use @n1 spelling, require the packet digest in the plan, and never become persistent identity.\n\
+Documents are revision-, schema-, and scope-bound proposals. They normalize into the same typed transaction used by raw JSON and never become authority. Packet aliases use @n1 spelling, require the packet digest in the document, and never become persistent identity.\n\
 \n\
 Run `lkjscript agent help` for exact command and grammar details.";
 
@@ -39,23 +38,26 @@ Commands:\n\
   orient | help\n\
   create --state DIR [--pretty]\n\
   context --state DIR --workspace ID --revision N --purpose PURPOSE\n\
-          [--target NODE ...] [--from-revision N] [--max-nodes N] [--pretty]\n\
+          [--target NODE ...] [--from-revision N] [--max-nodes N]\n\
+          [--known-digest DIGEST] [--pretty]\n\
   view --packet FILE [--ids]\n\
   diff --packet FILE [--ids]\n\
-  validate --state DIR [--packet FILE] [--pretty]    # plan on stdin\n\
-  apply --state DIR [--packet FILE] [--pretty]       # plan on stdin\n\
-  run --state DIR [--packet FILE] [--pretty]         # run plan on stdin\n\
+  document --packet FILE\n\
+  validate --state DIR [--packet FILE] [--pretty]    # editable document on stdin\n\
+  apply --state DIR [--packet FILE] [--pretty]       # editable document on stdin\n\
+  run --state DIR [--packet FILE] [--pretty]         # run document on stdin\n\
 \n\
 Purposes: orient, create, repair, refactor, debug, extend, delete, review.\n\
 Repair, refactor, debug, extend, and delete require targets. A review packet may use --from-revision to carry an exact semantic diff.\n\
 \n\
-Plan grammar:\n\
-  plan { workspace VALUE base_revision N packet DIGEST operations [ ... ]\n\
+Editable document grammar:\n\
+  document { version 1 schema DIGEST workspace VALUE base_revision N\n\
+             scope (workspace) | (function NODE) packet DIGEST edits [ ... ]\n\
          return_symbols [ ... ] idempotency_key VALUE }\n\
   run  { workspace VALUE revision N packet DIGEST entry VALUE\n\
          arguments [ ... ] policy { ... } }\n\
 \n\
-Objects are `{ field value ... }`, lists are `[ value ... ]`, and tagged variants are `(kind payload)` or `(kind)`. Strings use JSON quoting. Bare identifiers are strings. Booleans, null, and signed integers are literals. Packet aliases are unquoted @n1 values. Commas, semicolons, equals signs, comments, unknown fields, duplicate fields, trailing input, and implicit current-head lookup are rejected. Omit both packet and aliases for a packet-free plan.";
+Objects are `{ field value ... }`, lists are `[ value ... ]`, and tagged variants are `(kind payload)` or `(kind)`. Strings use JSON quoting. Bare identifiers are strings. Booleans, null, and signed integers are literals. Packet aliases are unquoted @n1 values. Commas, semicolons, equals signs, comments, unknown fields, duplicate fields, trailing input, and implicit current-head lookup are rejected. Function scope accepts exactly one matching replace_function_body edit. Omit both packet and aliases for a packet-free document.";
 
 fn help_text() -> Result<String, Box<LkError>> {
     authoring_help_cards()
@@ -73,6 +75,7 @@ pub(super) enum AgentCommand {
     Context {
         state: PathBuf,
         request: ContextBuildRequest,
+        known_digest: Option<ContextPacketDigest>,
         pretty: bool,
     },
     View {
@@ -82,6 +85,9 @@ pub(super) enum AgentCommand {
     Diff {
         packet: PathBuf,
         full_ids: bool,
+    },
+    FunctionDocument {
+        packet: PathBuf,
     },
     Edit {
         state: PathBuf,
@@ -109,6 +115,7 @@ pub(super) fn parse(arguments: impl Iterator<Item = String>) -> Result<AgentComm
         "context" => parse_context(rest),
         "view" => parse_packet_view(rest, false),
         "diff" => parse_packet_view(rest, true),
+        "document" => parse_function_document(rest),
         "validate" => parse_edit(rest, TransactionMode::ValidateOnly),
         "apply" => parse_edit(rest, TransactionMode::Commit),
         "run" => parse_run(rest),
@@ -132,10 +139,12 @@ pub(super) fn run(command: AgentCommand) -> CliOutcome {
         AgentCommand::Context {
             state,
             request,
+            known_digest,
             pretty,
-        } => run_context(&state, &request, pretty),
+        } => run_context(&state, &request, known_digest, pretty),
         AgentCommand::View { packet, full_ids } => run_view(&packet, full_ids, false),
         AgentCommand::Diff { packet, full_ids } => run_view(&packet, full_ids, true),
+        AgentCommand::FunctionDocument { packet } => run_function_document(&packet),
         AgentCommand::Edit {
             state,
             packet,
@@ -146,15 +155,26 @@ pub(super) fn run(command: AgentCommand) -> CliOutcome {
             state,
             packet,
             pretty,
-        } => run_plan(&state, packet.as_deref(), pretty),
+        } => run_document(&state, packet.as_deref(), pretty),
     }
+}
+
+fn parse_function_document(arguments: &[String]) -> Result<AgentCommand, String> {
+    if arguments.len() != 2 || arguments[0] != "--packet" {
+        return Err(agent_usage("document requires exactly --packet FILE"));
+    }
+    Ok(AgentCommand::FunctionDocument {
+        packet: PathBuf::from(&arguments[1]),
+    })
 }
 
 fn run_orientation() -> CliOutcome {
     match active_machine_schema_digest() {
         Ok(digest) => success(
-            format!("{ORIENTATION}\nactive protocol {PROTOCOL_VERSION} machine_schema {digest}")
-                .into_bytes(),
+            format!(
+                "lkjscript semantic workbench v{WORKBENCH_VERSION}\n{ORIENTATION}\nactive protocol {PROTOCOL_VERSION} machine_schema {digest}"
+            )
+            .into_bytes(),
         ),
         Err(error) => agent_error(error, false),
     }
@@ -176,6 +196,7 @@ fn parse_context(arguments: &[String]) -> Result<AgentCommand, String> {
     let mut targets = Vec::new();
     let mut from_revision = None;
     let mut maximum_nodes = None;
+    let mut known_digest = None;
     let mut pretty = false;
     let mut index = 0;
     while index < arguments.len() {
@@ -227,6 +248,12 @@ fn parse_context(arguments: &[String]) -> Result<AgentCommand, String> {
                         .map_err(|_| agent_usage("--max-nodes must be a canonical u32"))?,
                 );
             }
+            "--known-digest" if known_digest.is_none() => {
+                let value = value_after(arguments, &mut index, "--known-digest")?;
+                known_digest = Some(value.parse::<ContextPacketDigest>().map_err(|error| {
+                    agent_usage(&format!("invalid context packet digest: {error}"))
+                })?);
+            }
             "--pretty" if !pretty => pretty = true,
             _ => return Err(agent_usage("invalid or duplicate context option")),
         }
@@ -245,6 +272,7 @@ fn parse_context(arguments: &[String]) -> Result<AgentCommand, String> {
     Ok(AgentCommand::Context {
         state,
         request,
+        known_digest,
         pretty,
     })
 }
@@ -343,11 +371,48 @@ fn parse_revision(value: &str) -> Result<Revision, String> {
     Ok(Revision::new(number))
 }
 
-fn run_context(state: &Path, request: &ContextBuildRequest, pretty: bool) -> CliOutcome {
-    let packet = match build_context_packet(&daemon::endpoint_path(state), request) {
+fn run_context(
+    state: &Path,
+    request: &ContextBuildRequest,
+    known_digest: Option<ContextPacketDigest>,
+    pretty: bool,
+) -> CliOutcome {
+    let mut engine = match Engine::open(state) {
+        Ok(engine) => engine,
+        Err(error) => return agent_error_with_exit(error, pretty, EXIT_TRANSPORT),
+    };
+    let packet = match build_context_packet(&mut engine, request) {
         Ok(packet) => packet,
         Err(error) => return agent_error(error, pretty),
     };
+    if known_digest == Some(packet.digest) {
+        #[derive(Serialize)]
+        struct UnchangedContext {
+            version: u16,
+            digest: ContextPacketDigest,
+            unchanged: bool,
+        }
+        let response = UnchangedContext {
+            version: WORKBENCH_VERSION,
+            digest: packet.digest,
+            unchanged: true,
+        };
+        let encoded = if pretty {
+            serde_json::to_vec_pretty(&response)
+        } else {
+            serde_json::to_vec(&response)
+        };
+        return match encoded {
+            Ok(output) => success(output),
+            Err(error) => agent_error(
+                LkError::new(
+                    ErrorCode::ProtocolMalformed,
+                    format!("cannot encode unchanged context response: {error}"),
+                ),
+                pretty,
+            ),
+        };
+    }
     match encode_context_packet(&packet, pretty) {
         Ok(output) => success(output),
         Err(error) => agent_error(error, pretty),
@@ -370,13 +435,24 @@ fn run_view(packet_path: &Path, full_ids: bool, diff: bool) -> CliOutcome {
     }
 }
 
+fn run_function_document(packet_path: &Path) -> CliOutcome {
+    let packet = match read_packet(packet_path) {
+        Ok(packet) => packet,
+        Err(error) => return agent_error(*error, false),
+    };
+    match render_function_document(&packet) {
+        Ok(output) => success(output),
+        Err(error) => agent_error(error, false),
+    }
+}
+
 fn run_edit(
     state: &Path,
     packet_path: Option<&Path>,
     mode: TransactionMode,
     pretty: bool,
 ) -> CliOutcome {
-    let input = match read_stdin_bounded(MAX_WORKBENCH_INPUT_BYTES, "workbench plan") {
+    let input = match read_stdin_bounded(MAX_WORKBENCH_INPUT_BYTES, "editable semantic document") {
         Ok(input) => input,
         Err(error) => return agent_error(*error, pretty),
     };
@@ -384,9 +460,9 @@ fn run_edit(
         Ok(packet) => packet,
         Err(error) => return agent_error(*error, pretty),
     };
-    let parsed = match parse_edit_plan(&input, mode, packet.as_ref()) {
+    let parsed = match parse_edit_document(&input, mode, packet.as_ref()) {
         Ok(parsed) => parsed,
-        Err(error) => return plan_error(error, pretty),
+        Err(error) => return document_error(error, pretty),
     };
     request(
         state,
@@ -396,8 +472,8 @@ fn run_edit(
     )
 }
 
-fn run_plan(state: &Path, packet_path: Option<&Path>, pretty: bool) -> CliOutcome {
-    let input = match read_stdin_bounded(MAX_WORKBENCH_INPUT_BYTES, "workbench run plan") {
+fn run_document(state: &Path, packet_path: Option<&Path>, pretty: bool) -> CliOutcome {
+    let input = match read_stdin_bounded(MAX_WORKBENCH_INPUT_BYTES, "run document") {
         Ok(input) => input,
         Err(error) => return agent_error(*error, pretty),
     };
@@ -405,9 +481,9 @@ fn run_plan(state: &Path, packet_path: Option<&Path>, pretty: bool) -> CliOutcom
         Ok(packet) => packet,
         Err(error) => return agent_error(*error, pretty),
     };
-    let parsed = match parse_run_plan(&input, packet.as_ref()) {
+    let parsed = match parse_run_document(&input, packet.as_ref()) {
         Ok(parsed) => parsed,
-        Err(error) => return plan_error(error, pretty),
+        Err(error) => return document_error(error, pretty),
     };
     request(
         state,
@@ -430,11 +506,14 @@ enum ExpectedResponse {
 }
 
 fn request(state: &Path, request: Request, expected: ExpectedResponse, pretty: bool) -> CliOutcome {
-    let response =
-        match Client::new(daemon::endpoint_path(state)).request(RequestId::new(1), &request) {
-            Ok(response) => response,
-            Err(error) => return agent_error_with_exit(error, pretty, EXIT_TRANSPORT),
-        };
+    let mut engine = match Engine::open(state) {
+        Ok(engine) => engine,
+        Err(error) => return agent_error_with_exit(error, pretty, EXIT_TRANSPORT),
+    };
+    let response = match engine.request(RequestId::new(1), request) {
+        Ok(response) => response,
+        Err(error) => return agent_error_with_exit(error, pretty, EXIT_TRANSPORT),
+    };
     let right_family = matches!(
         (&expected, &response),
         (ExpectedResponse::Workspace, Response::WorkspaceCreated(_))
@@ -449,7 +528,7 @@ fn request(state: &Path, request: Request, expected: ExpectedResponse, pretty: b
         return agent_error_with_exit(
             LkError::new(
                 ErrorCode::ProtocolMalformed,
-                "daemon returned the wrong response family for the workbench action",
+                "engine returned the wrong response family for the workbench action",
             ),
             pretty,
             EXIT_TRANSPORT,
@@ -531,16 +610,16 @@ fn read_stdin_bounded(maximum: usize, label: &str) -> Result<Vec<u8>, Box<LkErro
 
 #[derive(Serialize)]
 #[serde(deny_unknown_fields)]
-struct PlanErrorEnvelope<'a> {
+struct DocumentErrorEnvelope<'a> {
     workbench_version: u16,
     kind: &'static str,
-    error: &'a PlanError,
+    error: &'a DocumentError,
 }
 
-fn plan_error(error: PlanError, pretty: bool) -> CliOutcome {
-    let envelope = PlanErrorEnvelope {
+fn document_error(error: DocumentError, pretty: bool) -> CliOutcome {
+    let envelope = DocumentErrorEnvelope {
         workbench_version: WORKBENCH_VERSION,
-        kind: "plan_error",
+        kind: "document_error",
         error: &error,
     };
     let encoded = if pretty {
@@ -557,7 +636,7 @@ fn plan_error(error: PlanError, pretty: bool) -> CliOutcome {
         Err(encoding) => failure(
             EXIT_OUTPUT,
             BoundaryErrorKind::Output,
-            format!("cannot encode plan error: {encoding}"),
+            format!("cannot encode document error: {encoding}"),
             None,
         ),
     }
@@ -605,12 +684,9 @@ mod tests {
     fn orientation_reports_the_active_schema_digest() {
         let digest = active_machine_schema_digest().unwrap().to_string();
         assert_eq!(digest.len(), 64);
-        assert!(ORIENTATION.contains("semantic workbench"));
-        assert!(
-            String::from_utf8(run_orientation().stdout)
-                .unwrap()
-                .contains(&digest)
-        );
+        let output = String::from_utf8(run_orientation().stdout).unwrap();
+        assert!(output.contains(&format!("semantic workbench v{WORKBENCH_VERSION}")));
+        assert!(output.contains(&digest));
     }
 
     #[test]
@@ -619,7 +695,7 @@ mod tests {
         assert!(help.contains("(draft SYMBOL) | (existing NODE_OR_@ALIAS)"));
         assert!(help.contains("unit | bool | i64 | bytes"));
         assert!(help.contains("@ spelling is reserved exclusively for aliases"));
-        assert!(help.contains("Validate plans must omit idempotency_key"));
+        assert!(help.contains("Validate documents must omit idempotency_key"));
         assert!(help.contains("exactly 32 lowercase hexadecimal characters"));
     }
 }

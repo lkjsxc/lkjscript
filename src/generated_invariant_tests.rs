@@ -243,11 +243,16 @@ fn commit_checked(
         request.response.return_symbols
     );
     for (_, node) in &prepared.receipt.returned_bindings {
-        assert!(node.serial() >= before_next);
-        assert!(node.serial() < prepared.snapshot.next_serial());
+        if node.is_durable() {
+            assert!(node.serial() >= before_next);
+            assert!(node.serial() < prepared.snapshot.next_serial());
+        } else {
+            assert!(node.is_function_local());
+            assert!(node.local_ordinal().is_some());
+        }
         assert!(
             prepared.snapshot.node(*node).is_ok()
-                || prepared.snapshot.contains_tombstone(node.serial())
+                || (node.is_durable() && prepared.snapshot.contains_tombstone(node.serial()))
         );
     }
     let receipt = prepared.receipt.clone();
@@ -1365,6 +1370,13 @@ fn request_corpus() -> Vec<Request> {
                 return_value: local_value(7),
             },
         },
+        TransactionOp::ReplaceFunctionBody {
+            function: node,
+            body: FunctionBodyDraft {
+                operations: Vec::new(),
+                return_value: local_value(7),
+            },
+        },
         TransactionOp::InsertExpression {
             block: node,
             before: None,
@@ -1514,7 +1526,7 @@ fn mutate_json(source: &[u8], seed: u64, case: u64) -> Vec<u8> {
     match case % 10 {
         0 => text.replacen("{", "{\"unknown\":0,", 1).into_bytes(),
         1 => text
-            .replacen("\"version\":8", "\"version\":8,\"version\":8", 1)
+            .replacen("\"version\":9", "\"version\":9,\"version\":9", 1)
             .into_bytes(),
         2 => text
             .replacen("\"request_id\":1", "\"request_id\":-1", 1)
@@ -1688,7 +1700,7 @@ fn rebuild_artifact(payload: &[u8]) -> Vec<u8> {
             .to_le_bytes(),
     );
     bytes.extend_from_slice(payload);
-    bytes.extend_from_slice(blake3::hash(payload).as_bytes());
+    bytes.extend_from_slice(&artifact::hash_payload(payload).as_bytes());
     bytes
 }
 
@@ -1806,7 +1818,7 @@ fn targeted_framed_json_mutations(corpus: &[Vec<u8>]) -> Vec<NamedMutation> {
         &mut mutations,
         "framed-json-version",
         source,
-        reframe(replace_json(body, "\"version\":8", "\"version\":7")),
+        reframe(replace_json(body, "\"version\":9", "\"version\":8")),
     );
     push_mutation(
         &mut mutations,
@@ -1872,7 +1884,7 @@ fn targeted_json_mutations(requests: &[Request]) -> Vec<NamedMutation> {
         &mut mutations,
         "json-duplicate-field",
         query,
-        replace_json(query, "\"version\":8", "\"version\":8,\"version\":8"),
+        replace_json(query, "\"version\":9", "\"version\":9,\"version\":9"),
     );
     push_mutation(
         &mut mutations,

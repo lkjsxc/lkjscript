@@ -7,9 +7,11 @@
 pub mod artifact;
 mod codec;
 mod compile;
+mod contract;
 mod core_ir;
 pub mod daemon;
 pub mod diff;
+pub mod engine;
 pub mod error;
 pub mod graph;
 pub mod ids;
@@ -29,12 +31,12 @@ mod validate;
 pub mod workbench;
 
 #[cfg(test)]
-mod campaign_tests;
+mod generated_invariant_tests;
 
 pub use error::{ErrorCode, LkError, Result};
 pub use ids::{
-    ChangeDigest, DraftSymbol, IdempotencyKey, NodeId, QueryId, RequestId, Revision, SnapshotHash,
-    WorkspaceId,
+    ChangeDigest, DraftSymbol, IdempotencyKey, NodeId, NodeIdentityClass, QueryId, RequestId,
+    Revision, SnapshotHash, WorkspaceId,
 };
 pub use interpret::{RunPolicy, RuntimeFieldValue, RuntimeValue};
 pub use machine::{

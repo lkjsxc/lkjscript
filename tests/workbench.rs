@@ -1,74 +1,15 @@
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 
-use lkjscript::daemon;
 use lkjscript::error::ErrorCode;
-use lkjscript::protocol::{Request, Response};
+use lkjscript::machine::active_machine_schema_digest;
+use lkjscript::protocol::Response;
 use lkjscript::schema::NodeKind;
 use lkjscript::transaction::{TransactionMode, TransactionReceipt};
-use lkjscript::workbench::{ContextPacket, decode_context_packet, parse_edit_plan};
-use lkjscript::{Client, RequestId};
+use lkjscript::workbench::{ContextPacket, decode_context_packet, parse_edit_document};
 use std::fs;
 use std::io::Write;
-use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Output, Stdio};
-use std::thread;
-use std::time::{Duration, Instant};
-
-struct RunningDaemon {
-    child: Child,
-    state: PathBuf,
-}
-
-impl RunningDaemon {
-    fn start(state: &Path) -> Self {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_lkjscriptd"))
-            .args([
-                "--state",
-                state.to_str().expect("UTF-8 state path"),
-                "--foreground",
-            ])
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .spawn()
-            .expect("spawn foreground daemon");
-        let endpoint = daemon::endpoint_path(state);
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while !endpoint.exists() {
-            if let Some(status) = child.try_wait().expect("daemon status") {
-                panic!("daemon exited before readiness: {status}");
-            }
-            assert!(Instant::now() < deadline, "daemon readiness timeout");
-            thread::sleep(Duration::from_millis(1));
-        }
-        Self {
-            child,
-            state: state.to_owned(),
-        }
-    }
-
-    fn client(&self) -> Client {
-        Client::new(daemon::endpoint_path(&self.state))
-    }
-
-    fn shutdown(mut self) {
-        assert_eq!(
-            self.client()
-                .request(RequestId::new(900), &Request::Shutdown)
-                .expect("shutdown response"),
-            Response::Acknowledged
-        );
-        assert!(self.child.wait().expect("wait daemon").success());
-    }
-}
-
-impl Drop for RunningDaemon {
-    fn drop(&mut self) {
-        if self.child.try_wait().ok().flatten().is_none() {
-            let _ = self.child.kill();
-            let _ = self.child.wait();
-        }
-    }
-}
+use std::path::Path;
+use std::process::{Command, Output, Stdio};
 
 fn cli(arguments: &[String], input: &[u8]) -> Output {
     let mut child = Command::new(env!("CARGO_BIN_EXE_lkjscript"))
@@ -119,9 +60,8 @@ fn transaction_receipt(output: &Output) -> TransactionReceipt {
 }
 
 #[test]
-fn public_workbench_packet_view_alias_plan_and_stale_rejection_are_exact() {
+fn public_workbench_packet_view_document_and_stale_rejection_are_exact() {
     let temporary = tempfile::tempdir().expect("state directory");
-    let daemon = RunningDaemon::start(temporary.path());
     let create_arguments = vec![
         "agent".into(),
         "create".into(),
@@ -163,17 +103,22 @@ fn public_workbench_packet_view_alias_plan_and_stale_rejection_are_exact() {
     assert!(first_view.status.success());
     assert_eq!(first_view.stdout, second_view.stdout);
     let rendered = String::from_utf8(first_view.stdout).expect("UTF-8 view");
-    assert!(rendered.contains("lkjscript semantic review v1"));
+    assert!(rendered.contains("lkjscript semantic review v2"));
     assert!(rendered.contains("purpose orient"));
     assert!(rendered.contains("@n1="));
     assert!(!rendered.contains('\u{1b}'));
 
-    let create_plan = format!(
-        "plan {{ workspace {workspace} base_revision 0 operations [ \
+    let schema = active_machine_schema_digest().expect("active schema");
+    let create_document = format!(
+        "document {{ version 1 schema {schema} workspace {workspace} base_revision 0 scope (workspace) edits [ \
          (create_package {{ symbol draft_1 name demo }}) \
          (create_module {{ symbol draft_2 package (draft draft_1) name focused }}) \
          (create_module {{ symbol draft_3 package (draft draft_1) name unrelated }}) \
-         ] return_symbols [ draft_1 draft_2 draft_3 ] }}"
+         (create_function {{ symbol draft_4 module (draft draft_2) name score parameters [] result i64 \
+           body {{ operations [ {{ symbol initial operation (const_i64 7) }} ] \
+                  return_value (operation_result {{ operation (draft initial) output 0 }}) }} }}) \
+         (set_entry_function {{ package (draft draft_1) function (draft draft_4) }}) \
+         ] return_symbols [ draft_1 draft_2 draft_3 draft_4 ] }}"
     );
     let validate_arguments = vec![
         "agent".into(),
@@ -187,9 +132,9 @@ fn public_workbench_packet_view_alias_plan_and_stale_rejection_are_exact() {
         "--state".into(),
         temporary.path().display().to_string(),
     ];
-    let predicted = transaction_receipt(&cli(&validate_arguments, create_plan.as_bytes()));
+    let predicted = transaction_receipt(&cli(&validate_arguments, create_document.as_bytes()));
     assert!(!predicted.published);
-    let committed = transaction_receipt(&cli(&apply_arguments, create_plan.as_bytes()));
+    let committed = transaction_receipt(&cli(&apply_arguments, create_document.as_bytes()));
     assert!(committed.published);
     let mut expected = predicted.clone();
     expected.published = true;
@@ -201,6 +146,7 @@ fn public_workbench_packet_view_alias_plan_and_stale_rejection_are_exact() {
         .collect();
     let focused_module = bindings["draft_2"];
     let unrelated_module = bindings["draft_3"];
+    let function = bindings["draft_4"];
 
     let focused_arguments = vec![
         "agent".into(),
@@ -236,6 +182,21 @@ fn public_workbench_packet_view_alias_plan_and_stale_rejection_are_exact() {
     assert!(context_one_output.status.success());
     let context_one: ContextPacket =
         decode_context_packet(&context_one_output.stdout).expect("revision-one packet");
+    let mut unchanged_arguments = packet_command(temporary.path(), &workspace, 1);
+    unchanged_arguments.extend(["--known-digest".to_owned(), context_one.digest.to_string()]);
+    let unchanged = cli(&unchanged_arguments, &[]);
+    assert!(unchanged.status.success());
+    let unchanged: serde_json::Value =
+        serde_json::from_slice(&unchanged.stdout).expect("unchanged context response");
+    assert_eq!(unchanged["version"], 2);
+    assert_eq!(unchanged["digest"], context_one.digest.to_string());
+    assert_eq!(unchanged["unchanged"], true);
+    assert!(
+        serde_json::to_vec(&unchanged)
+            .expect("unchanged JSON")
+            .len()
+            < context_one_output.stdout.len()
+    );
     let package_alias = context_one
         .payload
         .aliases
@@ -246,8 +207,8 @@ fn public_workbench_packet_view_alias_plan_and_stale_rejection_are_exact() {
         .clone();
     let packet_one_path = temporary.path().join("revision-one.packet.json");
     fs::write(&packet_one_path, &context_one_output.stdout).expect("write revision-one packet");
-    let rename_plan = format!(
-        "plan {{ packet {} workspace {workspace} base_revision 1 operations [ \
+    let rename_document = format!(
+        "document {{ version 1 schema {schema} packet {} workspace {workspace} base_revision 1 scope (workspace) edits [ \
          (rename_node {{ node (existing @{package_alias}) name demo_renamed }}) ] return_symbols [] }}",
         context_one.digest
     );
@@ -268,14 +229,14 @@ fn public_workbench_packet_view_alias_plan_and_stale_rejection_are_exact() {
         packet_one_path.display().to_string(),
     ];
     let predicted_rename =
-        transaction_receipt(&cli(&packet_validate_arguments, rename_plan.as_bytes()));
+        transaction_receipt(&cli(&packet_validate_arguments, rename_document.as_bytes()));
     let committed_rename =
-        transaction_receipt(&cli(&packet_apply_arguments, rename_plan.as_bytes()));
+        transaction_receipt(&cli(&packet_apply_arguments, rename_document.as_bytes()));
     let mut expected_rename = predicted_rename;
     expected_rename.published = true;
     assert_eq!(committed_rename, expected_rename);
 
-    let stale = cli(&packet_apply_arguments, rename_plan.as_bytes());
+    let stale = cli(&packet_apply_arguments, rename_document.as_bytes());
     assert!(
         stale.status.success(),
         "semantic rejection is a valid response"
@@ -291,7 +252,7 @@ fn public_workbench_packet_view_alias_plan_and_stale_rejection_are_exact() {
         "--state".into(),
         temporary.path().display().to_string(),
         "--workspace".into(),
-        workspace,
+        workspace.clone(),
         "--revision".into(),
         "2".into(),
         "--purpose".into(),
@@ -316,6 +277,82 @@ fn public_workbench_packet_view_alias_plan_and_stale_rejection_are_exact() {
     let diff = String::from_utf8(diff.stdout).expect("UTF-8 diff");
     assert!(diff.contains("renamed \"demo\" -> \"demo_renamed\""));
 
+    let function_context_arguments = vec![
+        "agent".into(),
+        "context".into(),
+        "--state".into(),
+        temporary.path().display().to_string(),
+        "--workspace".into(),
+        workspace.clone(),
+        "--revision".into(),
+        "2".into(),
+        "--purpose".into(),
+        "refactor".into(),
+        "--target".into(),
+        function.to_string(),
+    ];
+    let function_packet_output = cli(&function_context_arguments, &[]);
+    assert!(function_packet_output.status.success());
+    let function_packet =
+        decode_context_packet(&function_packet_output.stdout).expect("function context packet");
+    let function_packet_path = temporary.path().join("function.packet.json");
+    fs::write(&function_packet_path, &function_packet_output.stdout)
+        .expect("write function packet");
+    let rendered_document = cli(
+        &[
+            "agent".into(),
+            "document".into(),
+            "--packet".into(),
+            function_packet_path.display().to_string(),
+        ],
+        &[],
+    );
+    assert!(
+        rendered_document.status.success(),
+        "document render failed: {}",
+        String::from_utf8_lossy(&rendered_document.stderr)
+    );
+    assert!(rendered_document.stdout.starts_with(b"document {"));
+    parse_edit_document(
+        &rendered_document.stdout,
+        TransactionMode::ValidateOnly,
+        Some(&function_packet),
+    )
+    .expect("rendered function document parses");
+    let no_op = cli(
+        &[
+            "agent".into(),
+            "validate".into(),
+            "--state".into(),
+            temporary.path().display().to_string(),
+            "--packet".into(),
+            function_packet_path.display().to_string(),
+        ],
+        &rendered_document.stdout,
+    );
+    assert!(no_op.status.success());
+    match serde_json::from_slice::<Response>(&no_op.stdout).expect("no-op response") {
+        Response::Error(error) => assert_eq!(error.code, ErrorCode::NoChange),
+        response => panic!("expected rendered no-op rejection, received {response:?}"),
+    }
+    let edited_document = String::from_utf8(rendered_document.stdout)
+        .expect("UTF-8 document")
+        .replacen("(const_i64 7)", "(const_i64 8)", 1);
+    assert!(edited_document.contains("(const_i64 8)"));
+    let edited = transaction_receipt(&cli(
+        &[
+            "agent".into(),
+            "apply".into(),
+            "--state".into(),
+            temporary.path().display().to_string(),
+            "--packet".into(),
+            function_packet_path.display().to_string(),
+        ],
+        edited_document.as_bytes(),
+    ));
+    assert_eq!(edited.revision.get(), 3);
+    assert_eq!(edited.created_count, 0);
+
     let malformed = cli(
         &strings(&[
             "agent",
@@ -323,15 +360,116 @@ fn public_workbench_packet_view_alias_plan_and_stale_rejection_are_exact() {
             "--state",
             temporary.path().to_str().expect("UTF-8 state"),
         ]),
-        b"plan { workspace }",
+        b"document { workspace }",
     );
     assert_eq!(malformed.status.code(), Some(2));
     let malformed: serde_json::Value =
-        serde_json::from_slice(&malformed.stdout).expect("plan error JSON");
-    assert_eq!(malformed["kind"], "plan_error");
+        serde_json::from_slice(&malformed.stdout).expect("document error JSON");
+    assert_eq!(malformed["kind"], "document_error");
     assert_eq!(malformed["error"]["line"], 1);
+}
 
-    daemon.shutdown();
+#[test]
+fn editable_document_performs_an_independent_variant_replacement() {
+    let temporary = tempfile::tempdir().expect("state directory");
+    let state = temporary.path().display().to_string();
+    let created = cli(&strings(&["agent", "create", "--state", &state]), &[]);
+    let Response::WorkspaceCreated(created) =
+        serde_json::from_slice::<Response>(&created.stdout).expect("workspace response")
+    else {
+        panic!("workspace response");
+    };
+    let workspace = created.workspace.to_string();
+    let schema = active_machine_schema_digest().expect("active schema");
+    let apply = strings(&["agent", "apply", "--state", &state]);
+    let first = format!(
+        "document {{ version 1 schema {schema} workspace {workspace} base_revision 0 \
+         scope (workspace) edits [ \
+         (create_package {{ symbol package name migration }}) \
+         (create_module {{ symbol module package (draft package) name api }}) \
+         (create_sum_type {{ symbol old_choice module (draft module) name Choice variants [ \
+           {{ symbol old_first name first }} {{ symbol old_second name second }} ] }}) \
+         (create_function {{ symbol old_entry module (draft module) name choose parameters [] \
+           result {{ nominal (draft old_choice) }} body {{ operations [ \
+             {{ symbol selected operation (construct_variant {{ variant (draft old_first) }}) }} \
+           ] return_value (operation_result {{ operation (draft selected) output 0 }}) }} }}) \
+         (set_entry_function {{ package (draft package) function (draft old_entry) }}) \
+         ] return_symbols [ package module old_choice old_first old_second old_entry ] }}"
+    );
+    let first = transaction_receipt(&cli(&apply, first.as_bytes()));
+    let old: std::collections::BTreeMap<_, _> = first
+        .returned_bindings
+        .iter()
+        .map(|(symbol, node)| (symbol.to_string(), *node))
+        .collect();
+
+    let blocked = format!(
+        "document {{ version 1 schema {schema} workspace {workspace} base_revision 1 \
+         scope (workspace) edits [ (delete_owned_subtree {{ root (existing \"{}\") }}) ] \
+         return_symbols [] }}",
+        old["old_choice"]
+    );
+    let blocked = cli(&apply, blocked.as_bytes());
+    assert!(blocked.status.success());
+    match serde_json::from_slice::<Response>(&blocked.stdout).expect("blocked response") {
+        Response::Error(error) => assert_eq!(error.code, ErrorCode::DeleteBlocked),
+        response => panic!("expected blocked variant deletion, received {response:?}"),
+    }
+
+    let replacement = format!(
+        "document {{ version 1 schema {schema} workspace {workspace} base_revision 1 \
+         scope (workspace) edits [ \
+         (create_sum_type {{ symbol new_choice module (existing \"{}\") name Decision variants [ \
+           {{ symbol new_second name fallback }} {{ symbol new_first name selected }} \
+           {{ symbol new_third name unavailable }} ] }}) \
+         (create_function {{ symbol new_entry module (existing \"{}\") name choose parameters [] \
+           result {{ nominal (draft new_choice) }} body {{ operations [ \
+             {{ symbol selected operation (construct_variant {{ variant (draft new_first) }}) }} \
+           ] return_value (operation_result {{ operation (draft selected) output 0 }}) }} }}) \
+         (set_entry_function {{ package (existing \"{}\") function (draft new_entry) }}) \
+         (delete_owned_subtree {{ root (existing \"{}\") }}) \
+         (delete_owned_subtree {{ root (existing \"{}\") }}) \
+         ] return_symbols [ new_choice new_second new_first new_third new_entry ] }}",
+        old["module"], old["module"], old["package"], old["old_entry"], old["old_choice"]
+    );
+    eprintln!("variant_migration_document_bytes={}", replacement.len());
+    assert!(replacement.len() < 2_000);
+    let second = transaction_receipt(&cli(&apply, replacement.as_bytes()));
+    assert_eq!(second.revision.get(), 2);
+    let new: std::collections::BTreeMap<_, _> = second
+        .returned_bindings
+        .iter()
+        .map(|(symbol, node)| (symbol.to_string(), *node))
+        .collect();
+    assert_ne!(old["old_choice"], new["new_choice"]);
+    assert_ne!(old["old_first"], new["new_first"]);
+
+    let run = format!(
+        "run {{ workspace {workspace} revision 2 entry \"{}\" arguments [] \
+         policy {{ fuel 1000 maximum_frames 32 }} }}",
+        new["new_entry"]
+    );
+    let output = cli(
+        &strings(&["agent", "run", "--state", &state]),
+        run.as_bytes(),
+    );
+    assert!(output.status.success());
+    let Response::Run(result) =
+        serde_json::from_slice::<Response>(&output.stdout).expect("run response")
+    else {
+        panic!("run response");
+    };
+    let lkjscript::interpret::RuntimeValue::Sum {
+        ty,
+        variant,
+        payload,
+    } = result.value
+    else {
+        panic!("variant result");
+    };
+    assert_eq!(ty, new["new_choice"]);
+    assert_eq!(variant, new["new_first"]);
+    assert!(payload.is_none());
 }
 
 fn mutate_boundary(source: &[u8], seed: u64, case: u64) -> Vec<u8> {
@@ -357,7 +495,6 @@ fn mutate_boundary(source: &[u8], seed: u64, case: u64) -> Vec<u8> {
 
 fn run_workbench_boundary_mutation(seed: u64, cases: u64) {
     let temporary = tempfile::tempdir().expect("state directory");
-    let daemon = RunningDaemon::start(temporary.path());
     let created = cli(
         &strings(&[
             "agent",
@@ -376,17 +513,18 @@ fn run_workbench_boundary_mutation(seed: u64, cases: u64) {
     let packet_bytes = cli(&packet_command(temporary.path(), &workspace, 0), &[]).stdout;
     let packet = decode_context_packet(&packet_bytes).expect("context packet");
     let root_alias = &packet.payload.aliases[0].alias;
-    let plan = format!(
-        "plan {{ packet {} workspace {workspace} base_revision 0 operations [ \
+    let schema = active_machine_schema_digest().expect("active schema");
+    let document = format!(
+        "document {{ version 1 schema {schema} packet {} workspace {workspace} base_revision 0 scope (workspace) edits [ \
          (rename_node {{ node (existing @{root_alias}) name trial }}) ] return_symbols [] }}",
         packet.digest
     );
-    parse_edit_plan(
-        plan.as_bytes(),
+    parse_edit_document(
+        document.as_bytes(),
         TransactionMode::ValidateOnly,
         Some(&packet),
     )
-    .expect("valid mutation-plan corpus");
+    .expect("valid mutation-document corpus");
 
     for case in 0..cases {
         if case % 32 == 0 {
@@ -397,15 +535,14 @@ fn run_workbench_boundary_mutation(seed: u64, cases: u64) {
                 "packet mutation {case} is nondeterministic"
             );
         } else {
-            let mutation = mutate_boundary(plan.as_bytes(), seed, case);
+            let mutation = mutate_boundary(document.as_bytes(), seed, case);
             assert_eq!(
-                parse_edit_plan(&mutation, TransactionMode::ValidateOnly, Some(&packet)),
-                parse_edit_plan(&mutation, TransactionMode::ValidateOnly, Some(&packet)),
-                "plan mutation {case} is nondeterministic"
+                parse_edit_document(&mutation, TransactionMode::ValidateOnly, Some(&packet)),
+                parse_edit_document(&mutation, TransactionMode::ValidateOnly, Some(&packet)),
+                "document mutation {case} is nondeterministic"
             );
         }
     }
-    daemon.shutdown();
 }
 
 #[test]

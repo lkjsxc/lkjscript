@@ -11,22 +11,19 @@ import time
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 CLI = pathlib.Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else ROOT / "target/release/lkjscript"
-DAEMON = pathlib.Path(sys.argv[2]).resolve() if len(sys.argv) > 2 else ROOT / "target/release/lkjscriptd"
-METRICS_PATH = pathlib.Path(sys.argv[3]).resolve() if len(sys.argv) > 3 else None
+METRICS_PATH = pathlib.Path(sys.argv[2]).resolve() if len(sys.argv) > 2 else None
 PROPOSAL_PATH = pathlib.Path(__file__).with_name("proposal.json")
 AUTHORING_MODE = os.environ.get("LKJSCRIPT_AUTHORING_MODE", "inline")
 request_id = 0
 query_id = 0
-daemon = None
 state = None
 measurements = []
-readiness_nanoseconds = []
 
 
 def rpc(request, purpose, counted=True):
     global request_id
     request_id += 1
-    envelope = {"version": 8, "request_id": request_id, "request": request}
+    envelope = {"version": 9, "request_id": request_id, "request": request}
     encoded = json.dumps(envelope, separators=(",", ":")).encode()
     started = time.monotonic_ns()
     completed = subprocess.run(
@@ -44,7 +41,7 @@ def rpc(request, purpose, counted=True):
     if completed.stderr:
         raise RuntimeError(f"CLI wrote stderr for {purpose}: {completed.stderr.decode()}")
     response_envelope = json.loads(completed.stdout)
-    if response_envelope.get("version") != 8 or response_envelope.get("request_id") != request_id:
+    if response_envelope.get("version") != 9 or response_envelope.get("request_id") != request_id:
         raise RuntimeError(f"response envelope mismatch for {purpose}")
     measurements.append({
         "purpose": purpose,
@@ -83,38 +80,6 @@ def existing_result(node):
 
 def function_parameter(node):
     return {"kind": "function_parameter", "data": existing(node)}
-
-
-def start_daemon():
-    global daemon
-    started = time.monotonic_ns()
-    daemon = subprocess.Popen(
-        [str(DAEMON), "--state", str(state), "--foreground"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-    )
-    endpoint = state / "lkjscript.sock"
-    deadline = time.monotonic() + 5
-    while not endpoint.exists():
-        if daemon.poll() is not None:
-            raise RuntimeError(f"daemon exited early: {daemon.stderr.read().decode()}")
-        if time.monotonic() >= deadline:
-            raise RuntimeError("daemon readiness timeout")
-        time.sleep(0.001)
-    readiness_nanoseconds.append(time.monotonic_ns() - started)
-
-
-def stop_daemon(purpose):
-    global daemon
-    if daemon is None or daemon.poll() is not None:
-        raise RuntimeError(f"daemon is absent before typed shutdown {purpose}")
-    expect(rpc({"kind": "shutdown"}, purpose, counted=False), "acknowledged")
-    if daemon.wait(timeout=5) != 0:
-        raise RuntimeError("daemon shutdown failed")
-    daemon_error = daemon.stderr.read()
-    if daemon_error:
-        raise RuntimeError(f"daemon wrote stderr: {daemon_error.decode()}")
-    daemon = None
 
 
 def query_batch(workspace, revision, queries, purpose):
@@ -412,17 +377,15 @@ def measurement_summary():
             "json_request_bytes": sum(item["json_request_bytes"] for item in items),
             "json_response_bytes": sum(item["json_response_bytes"] for item in items),
             "cli_launches": len(items),
-            "daemon_round_trips": len(items),
-            "connections": len(items),
-            "cli_daemon_wall_nanoseconds": sum(item["elapsed_nanoseconds"] for item in items),
+            "engine_opens": len(items),
+            "connections": 0,
+            "cli_engine_wall_nanoseconds": sum(item["elapsed_nanoseconds"] for item in items),
         }
 
     summary = totals(workflow)
     summary.update({
         "discovery": totals(discovery),
-        "total_excluding_lifecycle": totals(counted),
-        "lifecycle_cli_launches": len(measurements) - len(counted),
-        "daemon_processes": len(readiness_nanoseconds),
+        "total": totals(counted),
         "boundary_errors": 0,
     })
     return summary
@@ -494,7 +457,6 @@ def execute():
     with tempfile.TemporaryDirectory(prefix="lkjscript-release-channel-") as directory:
         state = pathlib.Path(directory)
         os.chmod(state, 0o700)
-        start_daemon()
 
         manifest = expect(expect(rpc({"kind": "describe_schema", "data": {
             "projection": {"kind": "manifest"},
@@ -503,7 +465,7 @@ def execute():
         roots = [
             "create_workspace", "apply_transaction", "query_workspace_summary", "query_node",
             "query_blockers", "query_body", "query_incoming_uses", "query_repair_context",
-            "query_semantic_diff", "query_nominal_type", "run", "shutdown",
+            "query_semantic_diff", "query_nominal_type", "run",
         ]
         task_contract = expect(expect(rpc({"kind": "describe_schema", "data": {
             "projection": {"kind": "roots", "data": {"roots": roots}},
@@ -681,8 +643,7 @@ def execute():
         ):
             raise RuntimeError("rename history/diff mismatch")
 
-        stop_daemon("shutdown_before_restart")
-        start_daemon()
+        # Each CLI request reopens the workspace before reconstructing historical state.
         historical_views = [
             historical_revision_view(
                 workspace, revision, ids, f"restart_revision_{revision}_history"
@@ -715,8 +676,6 @@ def execute():
             for revision in (1, 2, 3)
         }
         head_size = (workspace_directory / "HEAD").stat().st_size
-        stop_daemon("final_shutdown")
-
         contract_rows = {item["purpose"]: item for item in measurements}
         proposals = proposal_metrics()
         counted = measurement_summary()
@@ -762,24 +721,20 @@ def execute():
             },
             "counts": {
                 "initial_operations": len(operations), "explicit_draft_symbols": expected_symbol_count,
-                "selected_bindings": 38, "created_nodes": creation["created_count"],
+                "selected_bindings": 38, "created_durable_entities": creation["created_count"],
                 "canonical_nodes": summary_two["node_count"], "rejected_proposals": 1,
             },
             "interaction": counted,
             "artifacts": {"revision_bytes": artifact_sizes, "head_bytes": head_size},
             "timings": {
-                "cold_readiness_nanoseconds": readiness_nanoseconds[0],
-                "restart_readiness_nanoseconds": readiness_nanoseconds[1],
                 "normal_compile_nanoseconds": sum(item["compile_nanoseconds"] for item in run_timings),
                 "normal_execute_nanoseconds": sum(item["execute_nanoseconds"] for item in run_timings),
                 "restart_revision_two_compile_nanoseconds": restart_two["compile_nanoseconds"],
                 "restart_revision_three_compile_nanoseconds": restart_three["compile_nanoseconds"],
             },
             "provider_telemetry": {"available": False},
-            "shutdown": "acknowledged",
+            "reopen": "passed on every direct command",
         }
-        if counted["lifecycle_cli_launches"] != 2 or counted["daemon_processes"] != 2:
-            raise RuntimeError("workflow process counts changed")
         if METRICS_PATH is not None:
             METRICS_PATH.write_text(json.dumps({
                 "summary": summary, "measurements": measurements,
@@ -788,14 +743,7 @@ def execute():
 
 
 def main():
-    global daemon
-    try:
-        summary = execute()
-    finally:
-        if daemon is not None and daemon.poll() is None:
-            daemon.kill()
-            daemon.wait(timeout=5)
-            daemon = None
+    summary = execute()
     print(json.dumps(summary, separators=(",", ":")))
 
 

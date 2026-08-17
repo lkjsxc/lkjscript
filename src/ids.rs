@@ -96,10 +96,70 @@ pub struct NodeId {
     serial: NonZeroU64,
 }
 
+const LOCAL_NODE_BIT: u64 = 1_u64 << 63;
+const LOCAL_FUNCTION_MASK: u64 = (1_u64 << 31) - 1;
+const LOCAL_ORDINAL_MASK: u64 = u32::MAX as u64;
+pub const MAX_DURABLE_NODE_SERIAL: u64 = LOCAL_NODE_BIT - 1;
+pub const MAX_LOCAL_FUNCTION_SERIAL: u64 = LOCAL_FUNCTION_MASK;
+pub const MAX_FUNCTION_LOCAL_ORDINAL: u32 = u32::MAX;
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NodeIdentityClass {
+    Durable,
+    FunctionLocal,
+}
+
+impl NodeIdentityClass {
+    pub const fn machine_name(self) -> &'static str {
+        match self {
+            Self::Durable => "durable",
+            Self::FunctionLocal => "function_local",
+        }
+    }
+}
+
 impl NodeId {
+    /// Creates a durable workspace identity.
     pub fn new(workspace: WorkspaceId, serial: u64) -> Result<Self, IdentityError> {
         let serial = NonZeroU64::new(serial).ok_or(IdentityError::ZeroNodeSerial)?;
+        if serial.get() & LOCAL_NODE_BIT != 0 {
+            return Err(IdentityError::InvalidNodeDomain);
+        }
         Ok(Self { workspace, serial })
+    }
+
+    /// Creates a revision-bound local reference in one durable function's body.
+    pub fn new_function_local(
+        workspace: WorkspaceId,
+        function: Self,
+        ordinal: u32,
+    ) -> Result<Self, IdentityError> {
+        if function.workspace != workspace || function.is_function_local() {
+            return Err(IdentityError::InvalidLocalOwner);
+        }
+        let function_serial = function.serial();
+        if function_serial > LOCAL_FUNCTION_MASK || ordinal == 0 {
+            return Err(IdentityError::InvalidFunctionLocalId);
+        }
+        let encoded = LOCAL_NODE_BIT | (function_serial << 32) | u64::from(ordinal);
+        let serial = NonZeroU64::new(encoded).ok_or(IdentityError::InvalidFunctionLocalId)?;
+        Ok(Self { workspace, serial })
+    }
+
+    pub(crate) fn from_encoded(
+        workspace: WorkspaceId,
+        encoded: u64,
+    ) -> Result<Self, IdentityError> {
+        if encoded & LOCAL_NODE_BIT == 0 {
+            return Self::new(workspace, encoded);
+        }
+        let serial = NonZeroU64::new(encoded).ok_or(IdentityError::ZeroNodeSerial)?;
+        let id = Self { workspace, serial };
+        if id.local_function_serial().is_none() || id.local_ordinal().is_none() {
+            return Err(IdentityError::InvalidFunctionLocalId);
+        }
+        Ok(id)
     }
 
     pub const fn workspace(self) -> WorkspaceId {
@@ -109,11 +169,49 @@ impl NodeId {
     pub const fn serial(self) -> u64 {
         self.serial.get()
     }
+
+    pub const fn identity_class(self) -> NodeIdentityClass {
+        if self.is_function_local() {
+            NodeIdentityClass::FunctionLocal
+        } else {
+            NodeIdentityClass::Durable
+        }
+    }
+
+    pub const fn is_durable(self) -> bool {
+        !self.is_function_local()
+    }
+
+    pub const fn is_function_local(self) -> bool {
+        self.serial.get() & LOCAL_NODE_BIT != 0
+    }
+
+    pub const fn local_function_serial(self) -> Option<u64> {
+        if !self.is_function_local() {
+            return None;
+        }
+        let serial = (self.serial.get() >> 32) & LOCAL_FUNCTION_MASK;
+        if serial == 0 { None } else { Some(serial) }
+    }
+
+    pub const fn local_ordinal(self) -> Option<u32> {
+        if !self.is_function_local() {
+            return None;
+        }
+        let ordinal = (self.serial.get() & LOCAL_ORDINAL_MASK) as u32;
+        if ordinal == 0 { None } else { Some(ordinal) }
+    }
 }
 
 impl fmt::Display for NodeId {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{}:{}", self.workspace, self.serial)
+        if let (Some(function), Some(ordinal)) =
+            (self.local_function_serial(), self.local_ordinal())
+        {
+            write!(formatter, "{}:l{function}.{ordinal}", self.workspace)
+        } else {
+            write!(formatter, "{}:{}", self.workspace, self.serial)
+        }
     }
 }
 
@@ -123,10 +221,22 @@ impl FromStr for NodeId {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         let (workspace, serial) = value.split_once(':').ok_or(IdentityError::InvalidNodeId)?;
         let workspace = workspace.parse()?;
-        let serial = serial
-            .parse::<u64>()
-            .map_err(|_| IdentityError::InvalidNodeId)?;
-        Self::new(workspace, serial)
+        if let Some(local) = serial.strip_prefix('l') {
+            let (function, ordinal) = local.split_once('.').ok_or(IdentityError::InvalidNodeId)?;
+            let function = function
+                .parse::<u64>()
+                .map_err(|_| IdentityError::InvalidNodeId)?;
+            let ordinal = ordinal
+                .parse::<u32>()
+                .map_err(|_| IdentityError::InvalidNodeId)?;
+            let function = Self::new(workspace, function)?;
+            Self::new_function_local(workspace, function, ordinal)
+        } else {
+            let serial = serial
+                .parse::<u64>()
+                .map_err(|_| IdentityError::InvalidNodeId)?;
+            Self::new(workspace, serial)
+        }
     }
 }
 
@@ -483,6 +593,9 @@ pub enum IdentityError {
     InvalidHex,
     InvalidLength,
     InvalidNodeId,
+    InvalidNodeDomain,
+    InvalidFunctionLocalId,
+    InvalidLocalOwner,
     ZeroNodeSerial,
 }
 
@@ -492,7 +605,14 @@ impl fmt::Display for IdentityError {
             Self::EntropyUnavailable => "operating-system entropy is unavailable",
             Self::InvalidHex => "identity contains invalid hexadecimal digits",
             Self::InvalidLength => "identity has the wrong encoded length",
-            Self::InvalidNodeId => "node identity must be WORKSPACE:SERIAL",
+            Self::InvalidNodeId => {
+                "node identity must be WORKSPACE:SERIAL or WORKSPACE:lFUNCTION.ORDINAL"
+            }
+            Self::InvalidNodeDomain => "durable node serial enters the function-local domain",
+            Self::InvalidFunctionLocalId => "function-local node identity is outside its domain",
+            Self::InvalidLocalOwner => {
+                "function-local node identity requires a durable function in the same workspace"
+            }
             Self::ZeroNodeSerial => "node serial zero is reserved",
         };
         formatter.write_str(message)
@@ -587,5 +707,65 @@ mod tests {
         assert_eq!(encoded.parse::<WorkspaceId>(), Ok(workspace));
         let node = NodeId::new(workspace, 42).expect("nonzero serial");
         assert_eq!(node.to_string().parse::<NodeId>(), Ok(node));
+    }
+
+    #[test]
+    fn durable_and_function_local_identity_domains_are_disjoint_and_canonical() {
+        let workspace = WorkspaceId::from_bytes([0x42; 16]);
+        let function = NodeId::new(workspace, 17).expect("durable function");
+        let local = NodeId::new_function_local(workspace, function, 23).expect("local term");
+        assert_eq!(function.identity_class(), NodeIdentityClass::Durable);
+        assert_eq!(local.identity_class(), NodeIdentityClass::FunctionLocal);
+        assert_eq!(local.local_function_serial(), Some(17));
+        assert_eq!(local.local_ordinal(), Some(23));
+        assert_eq!(local.to_string(), format!("{workspace}:l17.23"));
+        assert_eq!(local.to_string().parse::<NodeId>(), Ok(local));
+        assert_eq!(
+            serde_json::to_string(&local).expect("encode"),
+            format!("\"{local}\"")
+        );
+        assert_eq!(
+            serde_json::from_str::<NodeId>(&format!("\"{local}\""))
+                .expect("decode canonical local ID"),
+            local
+        );
+        assert!(serde_json::from_str::<NodeId>(&format!("\"{workspace}:l017.23\"")).is_err());
+        assert!(serde_json::from_str::<NodeId>(&format!("\"{workspace}:l17.023\"")).is_err());
+    }
+
+    #[test]
+    fn function_local_identity_rejects_foreign_local_and_exhausted_owners() {
+        let workspace = WorkspaceId::from_bytes([0x42; 16]);
+        let foreign = WorkspaceId::from_bytes([0x43; 16]);
+        let function = NodeId::new(workspace, 1).expect("function");
+        let local = NodeId::new_function_local(workspace, function, 1).expect("local");
+        assert_eq!(
+            NodeId::new_function_local(foreign, function, 1),
+            Err(IdentityError::InvalidLocalOwner)
+        );
+        assert_eq!(
+            NodeId::new_function_local(workspace, local, 1),
+            Err(IdentityError::InvalidLocalOwner)
+        );
+        assert_eq!(
+            NodeId::new_function_local(workspace, function, 0),
+            Err(IdentityError::InvalidFunctionLocalId)
+        );
+        assert_eq!(
+            NodeId::new(workspace, MAX_DURABLE_NODE_SERIAL + 1),
+            Err(IdentityError::InvalidNodeDomain)
+        );
+        let largest_function =
+            NodeId::new(workspace, MAX_LOCAL_FUNCTION_SERIAL).expect("largest local owner");
+        assert!(
+            NodeId::new_function_local(workspace, largest_function, MAX_FUNCTION_LOCAL_ORDINAL)
+                .is_ok()
+        );
+        let too_large = NodeId::new(workspace, MAX_LOCAL_FUNCTION_SERIAL + 1)
+            .expect("durable identity outside local owner encoding");
+        assert_eq!(
+            NodeId::new_function_local(workspace, too_large, 1),
+            Err(IdentityError::InvalidFunctionLocalId)
+        );
     }
 }

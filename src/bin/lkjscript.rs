@@ -1,10 +1,10 @@
-use lkjscript::Client;
-use lkjscript::daemon;
+use lkjscript::engine::Engine;
 use lkjscript::machine::{
     BoundaryErrorKind, DescribeSchemaRequest, MAX_JSON_INPUT_BYTES, MachineSchemaDigest,
     SchemaProjection, SchemaRoot, decode_request, encode_boundary_error, encode_response,
     encode_schema, request_id_hint,
 };
+use lkjscript::protocol::Request;
 use std::io::{BufRead, Read, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -99,9 +99,26 @@ fn process_rpc(state: &std::path::Path, input: &[u8], pretty: bool) -> CliOutcom
             );
         }
     };
-    let response = match Client::new(daemon::endpoint_path(state))
-        .request(envelope.request_id, &envelope.request)
-    {
+    let mut engine = match Engine::open(state) {
+        Ok(engine) => engine,
+        Err(error) => {
+            return failure(
+                EXIT_TRANSPORT,
+                BoundaryErrorKind::Transport,
+                error.to_string(),
+                Some(envelope.request_id),
+            );
+        }
+    };
+    process_decoded_rpc(&mut engine, envelope, pretty)
+}
+
+fn process_decoded_rpc(
+    engine: &mut Engine,
+    envelope: lkjscript::machine::RequestEnvelope,
+    pretty: bool,
+) -> CliOutcome {
+    let response = match engine.request(envelope.request_id, envelope.request) {
         Ok(response) => response,
         Err(error) => {
             return failure(
@@ -166,17 +183,46 @@ fn read_session_line(reader: &mut impl BufRead, maximum: usize) -> std::io::Resu
 }
 
 fn run_session(state: PathBuf) -> ExitCode {
+    let mut engine = match Engine::open(&state) {
+        Ok(engine) => engine,
+        Err(error) => {
+            let outcome = failure(
+                EXIT_TRANSPORT,
+                BoundaryErrorKind::Transport,
+                error.to_string(),
+                None,
+            );
+            return write_outcome(outcome);
+        }
+    };
     let mut reader = std::io::BufReader::new(std::io::stdin().lock());
     let mut stdout = std::io::stdout().lock();
     loop {
-        let outcome = match read_session_line(&mut reader, MAX_JSON_INPUT_BYTES) {
+        let (outcome, shutdown) = match read_session_line(&mut reader, MAX_JSON_INPUT_BYTES) {
             Ok(SessionLine::End) => return ExitCode::SUCCESS,
-            Ok(SessionLine::Data(input)) => process_rpc(&state, &input, false),
-            Ok(SessionLine::TooLarge) => failure(
-                EXIT_USAGE_OR_JSON,
-                BoundaryErrorKind::InputTooLarge,
-                "session JSON line exceeds input byte policy".to_owned(),
-                None,
+            Ok(SessionLine::Data(input)) => match decode_request(&input) {
+                Ok(envelope) => {
+                    let shutdown = matches!(envelope.request, Request::Shutdown);
+                    (process_decoded_rpc(&mut engine, envelope, false), shutdown)
+                }
+                Err(error) => (
+                    failure(
+                        EXIT_USAGE_OR_JSON,
+                        error.kind,
+                        error.to_string(),
+                        request_id_hint(&input),
+                    ),
+                    false,
+                ),
+            },
+            Ok(SessionLine::TooLarge) => (
+                failure(
+                    EXIT_USAGE_OR_JSON,
+                    BoundaryErrorKind::InputTooLarge,
+                    "session JSON line exceeds input byte policy".to_owned(),
+                    None,
+                ),
+                false,
             ),
             Err(error) => {
                 eprintln!("cannot read session JSON line: {error}");
@@ -188,6 +234,9 @@ fn run_session(state: PathBuf) -> ExitCode {
         if let Err(error) = stdout.write_all(&output).and_then(|()| stdout.flush()) {
             eprintln!("cannot write session machine response: {error}");
             return ExitCode::from(EXIT_OUTPUT);
+        }
+        if shutdown {
+            return ExitCode::SUCCESS;
         }
     }
 }

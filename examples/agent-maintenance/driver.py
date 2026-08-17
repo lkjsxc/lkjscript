@@ -14,8 +14,7 @@ import time
 
 
 CLI = pathlib.Path(sys.argv[1]).resolve()
-DAEMON = pathlib.Path(sys.argv[2]).resolve()
-METRICS_PATH = pathlib.Path(sys.argv[3]).resolve() if len(sys.argv) > 3 else None
+METRICS_PATH = pathlib.Path(sys.argv[2]).resolve() if len(sys.argv) > 2 else None
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 JOB_DRIVER = ROOT / "examples" / "job-policy" / "driver.py"
 
@@ -26,6 +25,7 @@ job = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(job)
 
 state = None
+active_schema = None
 agent_measurements = []
 packet_metrics = []
 
@@ -105,51 +105,58 @@ def compact(value, aliases):
         if keys == {"kind"}:
             kind = value["kind"]
             if not isinstance(kind, str) or IDENTIFIER.fullmatch(kind) is None:
-                raise RuntimeError(f"invalid tagged-plan kind {kind!r}")
+                raise RuntimeError(f"invalid tagged-document kind {kind!r}")
             return f"({kind})"
         if keys == {"kind", "data"}:
             kind = value["kind"]
             if not isinstance(kind, str) or IDENTIFIER.fullmatch(kind) is None:
-                raise RuntimeError(f"invalid tagged-plan kind {kind!r}")
+                raise RuntimeError(f"invalid tagged-document kind {kind!r}")
             return f"({kind} {compact(value['data'], aliases)})"
         fields = []
         for key, item in value.items():
             if IDENTIFIER.fullmatch(key) is None:
-                raise RuntimeError(f"invalid plan field {key!r}")
+                raise RuntimeError(f"invalid document field {key!r}")
             fields.append(f"{key} {compact(item, aliases)}")
         return "{ " + " ".join(fields) + " }"
-    raise RuntimeError(f"unsupported plan value {type(value).__name__}")
+    raise RuntimeError(f"unsupported document value {type(value).__name__}")
 
 
-def edit_plan(request, packet=None):
+def edit_document(request, packet=None):
     if request.get("kind") != "apply_transaction":
-        raise RuntimeError("edit plan requires an apply_transaction request")
+        raise RuntimeError("edit document requires an apply_transaction request")
     data = request["data"]
     transaction = data["transaction"]
     aliases = alias_map(packet) if packet is not None else {}
-    fields = []
+    schema = packet["payload"]["schema_digest"] if packet is not None else active_schema
+    if schema is None:
+        raise RuntimeError("active semantic schema is unavailable")
+    fields = [
+        "version 1",
+        f"schema {json.dumps(schema)}",
+    ]
     if packet is not None:
         fields.append(f"packet {json.dumps(packet['digest'])}")
     fields.extend([
         f"workspace {compact(transaction['workspace'], aliases)}",
         f"base_revision {transaction['base_revision']}",
+        "scope (workspace)",
     ])
     if "idempotency_key" in transaction:
         fields.append(
             f"idempotency_key {compact(transaction['idempotency_key'], aliases)}"
         )
-    fields.append(f"operations {compact(transaction['operations'], aliases)}")
+    fields.append(f"edits {compact(transaction['operations'], aliases)}")
     fields.append(
         "return_symbols "
         + compact(data.get("response", {}).get("return_symbols", []), aliases)
     )
-    return ("plan { " + " ".join(fields) + " }").encode()
+    return ("document { " + " ".join(fields) + " }").encode()
 
 
 def packet_file(packet):
     cache = state / "client-cache"
     cache.mkdir(mode=0o700, exist_ok=True)
-    path = cache / f"context-v1-{packet['digest']}.json"
+    path = cache / f"context-v2-{packet['digest']}.json"
     encoded = json.dumps(packet, separators=(",", ":")).encode()
     if not path.exists():
         path.write_bytes(encoded)
@@ -196,12 +203,12 @@ def agent_context(workspace, revision, purpose, targets=None, from_revision=None
 def agent_edit(request, purpose, packet=None):
     transaction = request["data"]["transaction"]
     command = "validate" if transaction["mode"] == "validate_only" else "apply"
-    plan = edit_plan(request, packet)
+    document = edit_document(request, packet)
     arguments = ["agent", command, "--state", str(state)]
     if packet is not None:
         arguments.extend(["--packet", str(packet_file(packet))])
-    completed = invoke(arguments, plan, purpose)
-    return response(completed, purpose), plan
+    completed = invoke(arguments, document, purpose)
+    return response(completed, purpose), document
 
 
 def agent_run(workspace, revision, entry, arguments, purpose, fuel=1_000_000, packet=None):
@@ -216,11 +223,11 @@ def agent_run(workspace, revision, entry, arguments, purpose, fuel=1_000_000, pa
         f"arguments {compact(arguments, aliases)}",
         f"policy {compact({'fuel': fuel, 'maximum_frames': 1000}, aliases)}",
     ])
-    plan = ("run { " + " ".join(fields) + " }").encode()
+    document = ("run { " + " ".join(fields) + " }").encode()
     command = ["agent", "run", "--state", str(state)]
     if packet is not None:
         command.extend(["--packet", str(packet_file(packet))])
-    return response(invoke(command, plan, purpose), purpose), plan
+    return response(invoke(command, document, purpose), purpose), document
 
 
 def same_predicted_receipt(predicted, committed):
@@ -553,6 +560,7 @@ def migrated_cases(ids):
 
 
 def schema_and_orientation_measurements():
+    global active_schema
     roots = ["apply_transaction", "query_repair_context", "query_semantic_diff", "run"]
     baseline = invoke(
         ["schema", *sum((["--root", root] for root in roots), [])],
@@ -562,6 +570,10 @@ def schema_and_orientation_measurements():
     orientation = invoke(["agent", "orient"], b"", "workbench_orientation")
     if b"machine_schema" not in orientation.stdout:
         raise RuntimeError("workbench orientation omits its schema digest")
+    match = re.search(rb"machine_schema ([0-9a-f]{64})", orientation.stdout)
+    if match is None:
+        raise RuntimeError("workbench orientation has no canonical schema digest")
+    active_schema = match.group(1).decode()
     return {
         "baseline_root_bytes": len(baseline.stdout),
         "workbench_orientation_bytes": len(orientation.stdout),
@@ -580,8 +592,6 @@ def execute():
         job.request_id = 0
         job.query_id = 0
         job.measurements.clear()
-        job.readiness_nanoseconds.clear()
-        job.start_daemon()
 
         workspace = agent_create()["workspace"]
         orient_packet, _, orient_view = agent_context(workspace, 0, "orient")
@@ -599,16 +609,16 @@ def execute():
             job.rpc(raw_prediction_request, "baseline_json_validate"),
             "transaction_receipt",
         )
-        candidate_prediction, initial_plan = agent_edit(
-            raw_prediction_request, "candidate_plan_validate"
+        candidate_prediction, initial_document = agent_edit(
+            raw_prediction_request, "candidate_document_validate"
         )
         candidate_prediction = expect(candidate_prediction, "transaction_receipt")
         if raw_prediction != candidate_prediction:
-            raise RuntimeError("JSON and edit-plan validation disagree")
+            raise RuntimeError("JSON and editable-document validation disagree")
         creation_request = job.apply_request(
             workspace, 0, "commit", operations, maintenance_symbols
         )
-        creation, _ = agent_edit(creation_request, "candidate_plan_commit")
+        creation, _ = agent_edit(creation_request, "candidate_document_commit")
         creation = expect(creation, "transaction_receipt")
         same_predicted_receipt(candidate_prediction, creation)
         ids = {
@@ -781,7 +791,7 @@ def execute():
         )
         migration_validate = copy.deepcopy(migration_request)
         migration_validate["data"]["transaction"]["mode"] = "validate_only"
-        migration_prediction, migration_plan = agent_edit(
+        migration_prediction, migration_document = agent_edit(
             migration_validate, "migration_validate", delete_packet
         )
         migrated, _ = agent_edit(
@@ -811,11 +821,28 @@ def execute():
         if review_packet["payload"]["omissions"]["semantic_diff_truncated"]:
             raise RuntimeError("maintenance semantic diff unexpectedly truncated")
 
-        job.stop_daemon("shutdown_before_restart")
-        job.start_daemon()
+        # Every workbench invocation reopens the durable workspace through the engine.
         restarted_packet, _, _ = agent_context(workspace, 8, "orient")
-        if restarted_packet["digest"] != agent_context(workspace, 8, "orient")[0]["digest"]:
-            raise RuntimeError("restart context packet is nondeterministic")
+        unchanged = invoke([
+            "agent", "context", "--state", str(state), "--workspace", workspace,
+            "--revision", "8", "--purpose", "orient", "--max-nodes", "256",
+            "--known-digest", restarted_packet["digest"],
+        ], b"", "context_orient_r8_unchanged")
+        unchanged_response = response(unchanged, "context_orient_r8_unchanged")
+        if unchanged_response != {
+            "version": 2,
+            "digest": restarted_packet["digest"],
+            "unchanged": True,
+        }:
+            raise RuntimeError("known context digest did not return exact unchanged response")
+        packet_metrics.append({
+            "purpose": "orient_unchanged",
+            "revision": 8,
+            "packet_bytes": len(unchanged.stdout),
+            "view_bytes": 0,
+            "nodes": 0,
+            "truncated": False,
+        })
         old_incomplete, _ = agent_run(
             workspace, 1, ids[400], [], "restart_incomplete"
         )
@@ -855,15 +882,13 @@ def execute():
             for path in (state / "client-cache").iterdir()
             if path.is_file()
         )
-        job.stop_daemon("final_shutdown")
-
         baseline_measurement = next(
             item for item in job.measurements
             if item["purpose"] == "baseline_json_validate"
         )
         candidate_measurement = next(
             item for item in agent_measurements
-            if item["purpose"] == "candidate_plan_validate"
+            if item["purpose"] == "candidate_document_validate"
         )
         summary = {
             "application": "release_deployment_policy",
@@ -893,13 +918,13 @@ def execute():
             "interface_comparison": {
                 "task": "validate identical initial application creation",
                 "baseline_json_accepted": True,
-                "candidate_plan_accepted": True,
+                "candidate_document_accepted": True,
                 "receipts_identical": raw_prediction == candidate_prediction,
                 "baseline_request_bytes": baseline_measurement["json_request_bytes"],
                 "baseline_response_bytes": baseline_measurement["json_response_bytes"],
-                "candidate_plan_bytes": len(initial_plan),
+                "candidate_document_bytes": len(initial_document),
                 "candidate_response_bytes": candidate_measurement["stdout_bytes"],
-                "migration_plan_bytes": len(migration_plan),
+                "migration_document_bytes": len(migration_document),
             },
             "observation": {
                 **orientation,
@@ -923,11 +948,9 @@ def execute():
             },
             "timing": {
                 "wall_nanoseconds": time.monotonic_ns() - started,
-                "cold_readiness_nanoseconds": job.readiness_nanoseconds[0],
-                "restart_readiness_nanoseconds": job.readiness_nanoseconds[1],
             },
             "provider_telemetry": "unavailable",
-            "shutdown": "acknowledged",
+            "reopen": "passed on every direct command",
         }
         if METRICS_PATH is not None:
             METRICS_PATH.write_text(json.dumps({
@@ -943,13 +966,4 @@ def main():
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    finally:
-        if job.daemon is not None and job.daemon.poll() is None:
-            job.daemon.terminate()
-            try:
-                job.daemon.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                job.daemon.kill()
-                job.daemon.wait()
+    main()

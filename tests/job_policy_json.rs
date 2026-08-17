@@ -13,8 +13,7 @@ fn run_driver(metrics: Option<&Path>) -> Output {
     let mut command = Command::new("python3");
     command
         .arg(driver_path())
-        .arg(env!("CARGO_BIN_EXE_lkjscript"))
-        .arg(env!("CARGO_BIN_EXE_lkjscriptd"));
+        .arg(env!("CARGO_BIN_EXE_lkjscript"));
     if let Some(path) = metrics {
         command.arg(path);
     }
@@ -51,7 +50,7 @@ fn real_cli_job_policy_repairs_renames_runs_and_restarts() {
     assert_eq!(summary["oracles"]["exact_named_ids"], true);
     assert_eq!(summary["counts"]["selected_bindings"], 32);
     assert_eq!(summary["counts"]["expected_rejected_proposals"], 1);
-    assert_eq!(summary["shutdown"], "acknowledged");
+    assert_eq!(summary["reopen"], "passed on every direct command");
 }
 
 #[test]
@@ -143,7 +142,7 @@ fn job_policy_agent_interaction_cost_measurement() {
             "json_response_bytes": record["json_response_bytes"],
             "ipc_request_frame_bytes": ipc_request_frame,
             "ipc_response_frame_bytes": ipc_response_frame,
-            "cli_daemon_wall_nanoseconds": record["elapsed_nanoseconds"],
+            "cli_engine_wall_nanoseconds": record["elapsed_nanoseconds"],
             "semantic_outcome": semantic_outcome,
             "returned_items": returned_items,
             "selected_bindings": selected_bindings,
@@ -151,9 +150,9 @@ fn job_policy_agent_interaction_cost_measurement() {
     }
 
     assert_eq!(
-        summary["interaction"]["daemon_round_trips"]
+        summary["interaction"]["engine_opens"]
             .as_u64()
-            .expect("round trips") as usize,
+            .expect("engine opens") as usize,
         counted_rows
     );
     assert_eq!(
@@ -162,13 +161,7 @@ fn job_policy_agent_interaction_cost_measurement() {
             .expect("CLI launches") as usize,
         counted_rows
     );
-    assert_eq!(
-        summary["interaction"]["lifecycle_cli_launches"]
-            .as_u64()
-            .expect("lifecycle CLI launches") as usize,
-        lifecycle_rows
-    );
-    assert_eq!(lifecycle_rows, 2);
+    assert_eq!(lifecycle_rows, 0);
     assert_eq!(records.len(), counted_rows + lifecycle_rows);
     assert_eq!(
         summary["interaction"]["json_request_bytes"],
@@ -179,7 +172,7 @@ fn job_policy_agent_interaction_cost_measurement() {
         json!(json_response_total)
     );
     assert_eq!(
-        summary["interaction"]["cli_daemon_wall_nanoseconds"],
+        summary["interaction"]["cli_engine_wall_nanoseconds"],
         json!(wall_total)
     );
     let report = json!({
@@ -190,9 +183,9 @@ fn job_policy_agent_interaction_cost_measurement() {
             "ipc_request_frame_bytes": ipc_request_frame_total,
             "ipc_response_frame_bytes": ipc_response_frame_total,
             "cli_launches": summary["interaction"]["cli_launches"],
-            "daemon_round_trips": summary["interaction"]["daemon_round_trips"],
-            "lifecycle_cli_launches": summary["interaction"]["lifecycle_cli_launches"],
-            "cli_daemon_wall_nanoseconds": summary["interaction"]["cli_daemon_wall_nanoseconds"],
+            "engine_opens": summary["interaction"]["engine_opens"],
+            "connections": 0,
+            "cli_engine_wall_nanoseconds": summary["interaction"]["cli_engine_wall_nanoseconds"],
         },
         "summary": summary,
         "provider_telemetry": {

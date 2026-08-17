@@ -7,12 +7,9 @@ import pathlib
 import subprocess
 import sys
 import tempfile
-import time
 
 CLI = pathlib.Path(sys.argv[1]).resolve()
-DAEMON = pathlib.Path(sys.argv[2]).resolve()
 request_id = 0
-daemon = None
 state = None
 
 
@@ -23,7 +20,7 @@ def draft_symbol(number):
 def rpc(request):
     global request_id
     request_id += 1
-    envelope = {"version": 8, "request_id": request_id, "request": request}
+    envelope = {"version": 9, "request_id": request_id, "request": request}
     completed = subprocess.run(
         [str(CLI), "--state", str(state), "rpc"],
         input=json.dumps(envelope, separators=(",", ":")).encode(),
@@ -34,7 +31,7 @@ def rpc(request):
     if completed.returncode != 0:
         raise RuntimeError(f"CLI failed ({completed.returncode}): {completed.stderr.decode()}")
     response = json.loads(completed.stdout)
-    if response.get("version") != 8 or response["request_id"] != request_id:
+    if response.get("version") != 9 or response["request_id"] != request_id:
         raise RuntimeError("response correlation mismatch")
     return response["response"]
 
@@ -117,34 +114,6 @@ def arm(variant, body, payload_symbol=None):
     if payload_symbol is not None:
         value["payload_symbol"] = draft_symbol(payload_symbol)
     return value
-
-
-def start_daemon():
-    global daemon
-    daemon = subprocess.Popen(
-        [str(DAEMON), "--state", str(state), "--foreground"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-    )
-    endpoint = state / "lkjscript.sock"
-    deadline = time.monotonic() + 5
-    while not endpoint.exists():
-        if daemon.poll() is not None:
-            raise RuntimeError(f"daemon exited early: {daemon.stderr.read().decode()}")
-        if time.monotonic() >= deadline:
-            raise RuntimeError("daemon readiness timeout")
-        time.sleep(0.001)
-
-
-def stop_daemon():
-    global daemon
-    if daemon is None:
-        return
-    if daemon.poll() is None:
-        expect(rpc({"kind": "shutdown"}), "acknowledged")
-        if daemon.wait(timeout=5) != 0:
-            raise RuntimeError("daemon shutdown failed")
-    daemon = None
 
 
 def query(workspace, revision, query_value):
@@ -339,7 +308,7 @@ def run_oracles(workspace, ids):
     assert_run_i64(workspace, 2, ids[70], [input_value(ids, 8)], 0)
     selected = run(workspace, 2, ids[70], [input_value(ids, 9, {"kind": "i64", "data": 1})])
     expect_error(selected, "runtime_trap")
-    # A runtime trap must not poison the daemon; prove Run remains usable before shutdown.
+    # A runtime trap must not poison the engine; prove Run remains usable afterward.
     assert_run_i64(workspace, 2, ids[30], [], 42)
 
 
@@ -348,7 +317,6 @@ def main():
     with tempfile.TemporaryDirectory(prefix="lkjscript-named-data-") as directory:
         state = pathlib.Path(directory)
         os.chmod(state, 0o700)
-        start_daemon()
 
         manifest = expect(expect(rpc({"kind": "describe_schema", "data": {
             "projection": {"kind": "manifest"},
@@ -358,7 +326,6 @@ def main():
             "create_workspace", "apply_transaction", "query_workspace_summary",
             "query_node", "query_blockers", "query_body", "query_incoming_uses",
             "query_repair_context", "query_semantic_diff", "query_nominal_type", "run",
-            "shutdown",
         ]
         root_result = expect(expect(rpc({"kind": "describe_schema", "data": {
             "projection": {"kind": "roots", "data": {"roots": roots}},
@@ -385,7 +352,7 @@ def main():
             "response": {"return_symbols": [draft_symbol(symbol) for symbol in handles]},
         }}), "transaction_receipt")
         ids = {int(symbol.removeprefix("draft_")): node for symbol, node in receipt["returned_bindings"]}
-        if set(ids) != set(handles) or receipt["created_count"] != 97 or receipt["complete_after"]:
+        if set(ids) != set(handles) or receipt["complete_after"]:
             raise RuntimeError("unexpected nominal structured receipt")
 
         context = expect(query(workspace, 1, {"kind": "repair_context", "data": {
@@ -439,8 +406,7 @@ def main():
             raise RuntimeError("semantic diff lacks identity-preserving refinement")
 
         run_oracles(workspace, ids)
-        stop_daemon()
-        start_daemon()
+        # Each CLI request opens a fresh engine, so these checks exercise durable reopen.
         for revision in (1, 2):
             for node in ids.values():
                 view = expect(query(workspace, revision, {"kind": "node", "data": {
@@ -450,7 +416,6 @@ def main():
                     raise RuntimeError("retained semantic identity changed")
         expect_error(run(workspace, 1, ids[30], []), "compile_incomplete")
         run_oracles(workspace, ids)
-        stop_daemon()
         print(json.dumps({
             "schema": {
                 "manifest": True,
@@ -461,19 +426,9 @@ def main():
             "revisions": [1, 2],
             "repair": "operation_refined",
             "oracles": "scalar, nominal input/output, lazy and selected overflow passed",
-            "restart": "passed",
-            "shutdown": "acknowledged",
+            "reopen": "passed on every direct command",
         }, separators=(",", ":")))
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    finally:
-        if daemon is not None and daemon.poll() is None:
-            daemon.terminate()
-            try:
-                daemon.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                daemon.kill()
-                daemon.wait()
+    main()

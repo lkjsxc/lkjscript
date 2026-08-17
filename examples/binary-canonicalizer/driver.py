@@ -5,8 +5,6 @@ import base64
 import json
 import os
 import pathlib
-import socket
-import struct
 import subprocess
 import sys
 import tempfile
@@ -15,9 +13,7 @@ import time
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 CLI = pathlib.Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else ROOT / "target/release/lkjscript"
-DAEMON = pathlib.Path(sys.argv[2]).resolve() if len(sys.argv) > 2 else ROOT / "target/release/lkjscriptd"
 state = None
-daemon = None
 session = None
 request_id = 0
 query_id = 0
@@ -303,21 +299,8 @@ def selected_symbols():
     return [10, 11, 20, 21, 22, 100, 200, 214, 300, 400]
 
 
-def start_stack():
-    global daemon, session, session_processes
-    daemon = subprocess.Popen(
-        [str(DAEMON), "--state", str(state), "--foreground"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-    )
-    endpoint = state / "lkjscript.sock"
-    deadline = time.monotonic() + 5
-    while not endpoint.exists():
-        if daemon.poll() is not None:
-            raise RuntimeError(f"daemon exited early: {daemon.stderr.read().decode()}")
-        if time.monotonic() >= deadline:
-            raise RuntimeError("daemon readiness timeout")
-        time.sleep(0.001)
+def start_stack(count_readiness):
+    global session, session_processes
     session = subprocess.Popen(
         [str(CLI), "--state", str(state), "session"],
         stdin=subprocess.PIPE,
@@ -325,32 +308,31 @@ def start_stack():
         stderr=subprocess.PIPE,
     )
     session_processes += 1
+    response = rpc({
+        "kind": "describe_schema",
+        "data": {"projection": {"kind": "manifest"}},
+    }, "schema_manifest" if count_readiness else "restart_session_ready",
+        counted=count_readiness)
+    return expect(expect(response, "describe_schema"), "manifest")
 
 
 def stop_stack():
-    global daemon, session
-    if daemon is None or session is None:
+    global session
+    if session is None:
         return
-    expect(rpc({"kind": "shutdown"}, "shutdown", counted=False), "acknowledged")
     session.stdin.close()
     if session.wait(timeout=5) != 0:
-        raise RuntimeError("CLI session shutdown failed")
+        raise RuntimeError("CLI session close failed")
     session_stderr = session.stderr.read()
     if session_stderr:
         raise RuntimeError(f"CLI session wrote stderr: {session_stderr.decode()}")
-    if daemon.wait(timeout=5) != 0:
-        raise RuntimeError(f"daemon shutdown failed: {daemon.stderr.read().decode()}")
-    daemon_stderr = daemon.stderr.read()
-    if daemon_stderr:
-        raise RuntimeError(f"daemon wrote stderr: {daemon_stderr.decode()}")
-    daemon = None
     session = None
 
 
 def rpc(request, purpose, counted=True):
     global request_id
     request_id += 1
-    envelope = {"version": 8, "request_id": request_id, "request": request}
+    envelope = {"version": 9, "request_id": request_id, "request": request}
     encoded = json.dumps(envelope, separators=(",", ":")).encode()
     started = time.monotonic_ns()
     session.stdin.write(encoded + b"\n")
@@ -360,7 +342,7 @@ def rpc(request, purpose, counted=True):
     if not response_bytes:
         raise RuntimeError(f"CLI session ended during {purpose}")
     response = json.loads(response_bytes)
-    if response.get("version") != 8 or response.get("request_id") != request_id:
+    if response.get("version") != 9 or response.get("request_id") != request_id:
         raise RuntimeError(f"response correlation mismatch for {purpose}")
     measurements.append({
         "purpose": purpose,
@@ -504,40 +486,25 @@ def dense_boundary(workspace, ids):
             "first_rejected_code": rejected}
 
 
-def dropped_run_response(workspace, ids):
-    global request_id
-    request_id += 1
-    body = json.dumps({
-        "version": 8,
-        "request_id": request_id,
-        "request": {
-            "kind": "run",
-            "data": {
-                "workspace": workspace,
-                "revision": 2,
-                "entry": ids[300],
-                "arguments": [bytes_value(bytes([0xA5, 1, 0, 2]))],
-                "policy": {"fuel": 100_000, "maximum_frames": 100},
-            },
-        },
-    }, separators=(",", ":")).encode()
-    connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    connection.connect(str(state / "lkjscript.sock"))
-    connection.sendall(struct.pack("<I", len(body)) + body)
-    connection.shutdown(socket.SHUT_WR)
-    connection.close()
-
-
 def competing_writer_rejects():
     contender = subprocess.run(
-        [str(DAEMON), "--state", str(state), "--foreground"],
+        [str(CLI), "--state", str(state), "session"],
+        input=b"",
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         timeout=5,
         check=False,
     )
-    if contender.returncode == 0 or not contender.stderr:
-        raise RuntimeError("competing workspace writer did not reject")
+    try:
+        boundary = json.loads(contender.stdout)
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+        raise RuntimeError("competing engine returned malformed boundary JSON") from error
+    message = boundary.get("error", {}).get("message", "")
+    if (contender.returncode != 3
+            or boundary.get("error", {}).get("kind") != "transport"
+            or "AuthorityBusy" not in message
+            or b"AuthorityBusy" not in contender.stderr):
+        raise RuntimeError(f"competing engine authority rejection disagrees: {boundary}")
 
 
 def workflow():
@@ -545,18 +512,13 @@ def workflow():
     with tempfile.TemporaryDirectory(prefix="lkjscript-binary-canonicalizer-") as directory:
         state = pathlib.Path(directory)
         os.chmod(state, 0o700)
-        start_stack()
+        manifest = start_stack(True)
         competing_writer_rejects()
-
-        manifest = expect(expect(rpc({
-            "kind": "describe_schema",
-            "data": {"projection": {"kind": "manifest"}},
-        }, "schema_manifest"), "describe_schema"), "manifest")
         roots = [
             "create_workspace", "apply_transaction", "query_workspace_summary",
             "query_node", "query_blockers", "query_body", "query_incoming_uses",
             "query_repair_context", "query_semantic_diff", "query_nominal_type",
-            "run", "shutdown",
+            "run",
         ]
         task = expect(expect(rpc({
             "kind": "describe_schema",
@@ -691,9 +653,7 @@ def workflow():
                                  "bounds_probe"), "byte_index_out_of_bounds")
         boundary = dense_boundary(workspace, ids)
 
-        dropped_run_response(workspace, ids)
-        time.sleep(0.01)
-        run_case(workspace, 2, ids, "after_dropped_response", bytes([0xA5, 1, 0, 2]),
+        run_case(workspace, 2, ids, "after_runtime_traps", bytes([0xA5, 1, 0, 2]),
                  canonical_value(ids, bytes([1, 2])))
 
         rename = expect(rpc(apply_request(workspace, 2, "commit", [{
@@ -712,7 +672,7 @@ def workflow():
                  canonical_value(ids, bytes([3, 4])))
 
         stop_stack()
-        start_stack()
+        start_stack(False)
         expect_error(run_request(workspace, 1, ids[300], bytes([0xA5]),
                                  "restart_old_incomplete"), "compile_incomplete")
         run_case(workspace, 2, ids, "restart_repaired", bytes([0xA5, 5, 0, 6]),
@@ -725,8 +685,16 @@ def workflow():
         corrupted = bytearray(artifact.read_bytes())
         corrupted[len(corrupted) // 2] ^= 0x01
         artifact.write_bytes(corrupted)
+        corrupt_probe = json.dumps({
+            "version": 9,
+            "request_id": request_id + 1,
+            "request": {"kind": "describe_schema", "data": {
+                "projection": {"kind": "manifest"},
+            }},
+        }, separators=(",", ":")).encode()
         failed = subprocess.run(
-            [str(DAEMON), "--state", str(state), "--foreground"],
+            [str(CLI), "--state", str(state), "rpc"],
+            input=corrupt_probe,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             timeout=5,
@@ -741,12 +709,13 @@ def workflow():
         ]
         report = {
             "application": "binary-canonicalizer",
-            "protocol_version": 8,
+            "protocol_version": 9,
             "schema_digest": manifest["digest"],
             "task_schema_json_bytes": len(json.dumps(task, separators=(",", ":")).encode()),
             "calls": len(counted),
             "session_processes": session_processes,
-            "daemon_connections": len(measurements) + 1,
+            "engine_opens": session_processes + 2,
+            "connections": 0,
             "request_bytes": sum(item["json_request_bytes"] for item in counted),
             "response_bytes": sum(item["json_response_bytes"] for item in counted),
             "elapsed_nanoseconds": sum(item["elapsed_nanoseconds"] for item in counted),
@@ -779,8 +748,6 @@ def main():
     finally:
         if session is not None and session.poll() is None:
             session.kill()
-        if daemon is not None and daemon.poll() is None:
-            daemon.kill()
 
 
 if __name__ == "__main__":

@@ -15,7 +15,7 @@ pub fn render_context_packet(packet: &ContextPacket, include_full_ids: bool) -> 
         .map(|view| (view.summary.node, view))
         .collect();
     let mut output = Vec::new();
-    push_line(&mut output, "lkjscript semantic review v1")?;
+    push_line(&mut output, "lkjscript semantic review v2")?;
     push_line(
         &mut output,
         &format!(
@@ -35,9 +35,13 @@ pub fn render_context_packet(packet: &ContextPacket, include_full_ids: bool) -> 
     push_line(
         &mut output,
         &format!(
-            "scope nodes={} workspace_nodes={} complete={} blockers={}",
+            "scope nodes={} workspace_nodes={} durable={} local={} anchors={} tombstones={} complete={} blockers={}",
             nodes.len(),
             packet.payload.summary.node_count,
+            packet.payload.summary.durable_identity_count,
+            packet.payload.summary.function_local_reference_count,
+            packet.payload.summary.anchor_count,
+            packet.payload.summary.tombstone_count,
             packet.payload.summary.complete,
             packet.payload.summary.blocker_count
         ),
@@ -124,7 +128,7 @@ pub fn render_semantic_diff(packet: &ContextPacket, include_full_ids: bool) -> R
         )
     })?;
     let mut output = Vec::new();
-    push_line(&mut output, "lkjscript semantic diff review v1")?;
+    push_line(&mut output, "lkjscript semantic diff review v2")?;
     push_line(
         &mut output,
         &format!(
@@ -193,6 +197,15 @@ pub fn render_semantic_diff(packet: &ContextPacket, include_full_ids: bool) -> R
                 render_operation(replacement, &aliases, include_full_ids)
             ),
             ChangeKind::AllocatedAndTombstoned => "allocated_and_tombstoned".to_owned(),
+            ChangeKind::FunctionBodyChanged {
+                before_items,
+                after_items,
+                added_items,
+                removed_items,
+                modified_items,
+            } => format!(
+                "function_body_changed items {before_items}->{after_items} added={added_items} removed={removed_items} modified={modified_items}"
+            ),
         };
         push_line(&mut output, &format!("{node} {description}"))?;
     }
@@ -236,8 +249,9 @@ fn render_tree(
         push_line(
             output,
             &format!(
-                "{prefix}{} {}",
+                "{prefix}{} [{}] {}",
                 anchor(id, aliases, include_full_ids),
+                view.summary.identity_class.machine_name(),
                 render_node(record, aliases, include_full_ids)
             ),
         )?;

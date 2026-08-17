@@ -396,6 +396,19 @@ fn every_closed_machine_variant_round_trips() {
                 },
             },
         },
+        TransactionOp::ReplaceFunctionBody {
+            function: first,
+            body: FunctionBodyDraft {
+                operations: vec![ExpressionDraft {
+                    symbol: Some(DraftSymbol::new("s15")),
+                    operation: ExpressionKindDraft::ConstI64(2),
+                }],
+                return_value: ValueDraft::OperationResult {
+                    operation: NodeTarget::Draft(DraftSymbol::new("s15")),
+                    output: 0,
+                },
+            },
+        },
         TransactionOp::InsertExpression {
             block: first,
             before: Some(second),
@@ -749,6 +762,13 @@ fn every_closed_machine_variant_round_trips() {
             replacement: OperationKind::ConstI64(1),
         },
         ChangeKind::AllocatedAndTombstoned,
+        ChangeKind::FunctionBodyChanged {
+            before_items: 1,
+            after_items: 2,
+            added_items: 1,
+            removed_items: 0,
+            modified_items: 0,
+        },
     ];
     for change in &changes {
         round_trip(change);
@@ -802,6 +822,10 @@ fn every_closed_machine_variant_round_trips() {
         hash: SnapshotHash::from_bytes([1; 32]),
         root: first,
         node_count: 2,
+        durable_identity_count: 2,
+        function_local_reference_count: 0,
+        anchor_count: 0,
+        tombstone_count: 0,
         complete: true,
         blocker_count: 0,
         entry_count: 1,
@@ -810,6 +834,7 @@ fn every_closed_machine_variant_round_trips() {
         workspace,
         revision: Revision::new(1),
         node: first,
+        identity_class: lkjscript::NodeIdentityClass::Durable,
         kind: NodeKind::Operation,
         owner: Some(second),
         display_name: None,
@@ -1103,11 +1128,11 @@ fn strict_json_rejects_malformed_shapes_values_and_limits() {
     }
     let workspace = WorkspaceId::from_bytes([0xab; 16]);
     let valid = format!(
-        "{{\"version\":8,\"request_id\":1,\"request\":{{\"kind\":\"query_batch\",\"data\":{{\"workspace\":\"{workspace}\",\"revision\":0,\"queries\":[{{\"id\":1,\"query\":{{\"kind\":\"blockers\",\"data\":{{\"page\":{{\"limit\":1}}}}}}}}]}}}}}}"
+        "{{\"version\":9,\"request_id\":1,\"request\":{{\"kind\":\"query_batch\",\"data\":{{\"workspace\":\"{workspace}\",\"revision\":0,\"queries\":[{{\"id\":1,\"query\":{{\"kind\":\"blockers\",\"data\":{{\"page\":{{\"limit\":1}}}}}}}}]}}}}}}"
     );
     assert!(decode_request(valid.as_bytes()).is_ok());
     let invalid = [
-        valid.replacen("\"version\":8", "\"version\":7", 1),
+        valid.replacen("\"version\":9", "\"version\":8", 1),
         valid.replacen("\"request_id\":1", "\"request_id\":0", 1),
         valid.replacen("\"request_id\":1", "\"request_id\":-1", 1),
         valid.replacen("\"request_id\":1", "\"request_id\":18446744073709551616", 1),

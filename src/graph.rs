@@ -109,6 +109,24 @@ impl Snapshot {
         self.nodes.len()
     }
 
+    pub fn durable_identity_count(&self) -> usize {
+        self.nodes.keys().filter(|id| id.is_durable()).count()
+    }
+
+    pub fn function_local_reference_count(&self) -> usize {
+        self.nodes
+            .keys()
+            .filter(|id| id.is_function_local())
+            .count()
+    }
+
+    pub fn anchor_count(&self) -> usize {
+        self.nodes
+            .iter()
+            .filter(|(id, node)| id.is_durable() && matches!(node, Node::Operation { .. }))
+            .count()
+    }
+
     pub fn contains_tombstone(&self, serial: u64) -> bool {
         self.tombstones.contains(&serial)
     }
@@ -271,6 +289,9 @@ pub(crate) fn validate_history_transition(previous: &Snapshot, next: &Snapshot) 
         ));
     }
     for (id, old_node) in &previous.nodes {
+        if id.is_function_local() {
+            continue;
+        }
         match next.nodes.get(id) {
             Some(new_node) => {
                 if old_node.kind() != new_node.kind()
@@ -304,12 +325,25 @@ pub(crate) fn validate_history_transition(previous: &Snapshot, next: &Snapshot) 
             }
         }
     }
-    for id in next.nodes.keys() {
+    for (id, node) in &next.nodes {
+        if id.is_function_local() {
+            continue;
+        }
         if !previous.nodes.contains_key(id) && id.serial() < previous.next_serial() {
             return Err(history_error(
                 next.workspace(),
                 next.revision(),
                 "a prior identity was resurrected or reused",
+            )
+            .for_node(*id));
+        }
+        if !previous.nodes.contains_key(id)
+            && matches!(node, Node::Operation { operation, .. } if !matches!(operation, crate::schema::OperationKind::Hole { .. }))
+        {
+            return Err(history_error(
+                next.workspace(),
+                next.revision(),
+                "a new durable body anchor must begin as a typed hole",
             )
             .for_node(*id));
         }
@@ -328,6 +362,9 @@ fn surviving_child_order_is_stable(
         let Some(old_child) = old.owned_child(old_index) else {
             return false;
         };
+        if old_child.is_function_local() {
+            continue;
+        }
         if !next.nodes.contains_key(&old_child) {
             continue;
         }
@@ -336,6 +373,9 @@ fn surviving_child_order_is_stable(
                 return false;
             };
             new_index += 1;
+            if new_child.is_function_local() {
+                continue;
+            }
             if previous.nodes.contains_key(&new_child) {
                 if new_child != old_child {
                     return false;
@@ -345,7 +385,7 @@ fn surviving_child_order_is_stable(
         }
     }
     while let Some(new_child) = new.owned_child(new_index) {
-        if previous.nodes.contains_key(&new_child) {
+        if new_child.is_durable() && previous.nodes.contains_key(&new_child) {
             return false;
         }
         new_index += 1;

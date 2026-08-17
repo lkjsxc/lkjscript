@@ -10,6 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 pub(crate) fn validate_snapshot(snapshot: &Snapshot) -> Result<()> {
     validate_identity(snapshot)?;
     validate_containment(snapshot)?;
+    validate_identity_domains(snapshot)?;
     validate_names(snapshot)?;
     validate_semantics(snapshot)?;
     crate::type_layout::validate_acyclic(snapshot)?;
@@ -29,12 +30,19 @@ fn validate_identity(snapshot: &Snapshot) -> Result<()> {
                 .for_node(snapshot.root),
         );
     }
-    let live_count = u64::try_from(snapshot.nodes.len()).map_err(|_| {
-        corrupt(
+    if NodeId::new(snapshot.workspace, snapshot.next_serial).is_err() {
+        return Err(corrupt(
             snapshot,
-            "live node count overflows allocator representation",
-        )
-    })?;
+            "durable allocator frontier is outside the durable identity domain",
+        ));
+    }
+    let live_count = u64::try_from(snapshot.nodes.keys().filter(|id| id.is_durable()).count())
+        .map_err(|_| {
+            corrupt(
+                snapshot,
+                "live durable identity count overflows allocator representation",
+            )
+        })?;
     let tombstone_count = u64::try_from(snapshot.tombstones.len()).map_err(|_| {
         corrupt(
             snapshot,
@@ -44,13 +52,13 @@ fn validate_identity(snapshot: &Snapshot) -> Result<()> {
     let represented = live_count.checked_add(tombstone_count).ok_or_else(|| {
         corrupt(
             snapshot,
-            "represented identity count overflows allocator state",
+            "represented durable identity count overflows allocator state",
         )
     })?;
     if represented != snapshot.next_serial - 1 {
         return Err(corrupt(
             snapshot,
-            "every allocated node serial must be live or tombstoned",
+            "every allocated durable identity must be live or tombstoned",
         ));
     }
     for serial in &snapshot.tombstones {
@@ -74,8 +82,10 @@ fn validate_identity(snapshot: &Snapshot) -> Result<()> {
             .for_workspace(snapshot.workspace)
             .for_node(*id));
         }
-        if id.serial() >= snapshot.next_serial {
-            return Err(corrupt(snapshot, "live node is beyond allocator state").for_node(*id));
+        if id.is_durable() && id.serial() >= snapshot.next_serial {
+            return Err(
+                corrupt(snapshot, "live durable identity is beyond allocator state").for_node(*id),
+            );
         }
     }
     let root = snapshot
@@ -98,6 +108,86 @@ fn validate_identity(snapshot: &Snapshot) -> Result<()> {
             snapshot,
             "snapshot must contain exactly one workspace root",
         ));
+    }
+    Ok(())
+}
+
+fn validate_identity_domains(snapshot: &Snapshot) -> Result<()> {
+    for (id, node) in &snapshot.nodes {
+        let local_kind = matches!(
+            node,
+            Node::Region { .. }
+                | Node::Block { .. }
+                | Node::BlockArgument { .. }
+                | Node::Operation { .. }
+        );
+        if id.is_function_local() && !local_kind {
+            return Err(LkError::new(
+                ErrorCode::InvalidContainment,
+                "durable semantic entities cannot use a function-local reference",
+            )
+            .for_node(*id));
+        }
+        if id.is_durable()
+            && matches!(
+                node,
+                Node::Region { .. } | Node::Block { .. } | Node::BlockArgument { .. }
+            )
+        {
+            return Err(LkError::new(
+                ErrorCode::InvalidContainment,
+                "body scaffolding requires a function-local reference",
+            )
+            .for_node(*id));
+        }
+        let Some(function_serial) = id.local_function_serial() else {
+            continue;
+        };
+        let function = NodeId::new(snapshot.workspace, function_serial).map_err(|error| {
+            corrupt(
+                snapshot,
+                &format!("function-local reference has an invalid owner domain: {error}"),
+            )
+            .for_node(*id)
+        })?;
+        if !matches!(snapshot.nodes.get(&function), Some(Node::Function { .. })) {
+            return Err(LkError::new(
+                ErrorCode::InvalidContainment,
+                "function-local reference names a missing or non-function durable owner",
+            )
+            .for_node(*id)
+            .with_related([function]));
+        }
+        let mut current = *id;
+        let mut remaining = snapshot.nodes.len().saturating_add(1);
+        loop {
+            if remaining == 0 {
+                return Err(corrupt(
+                    snapshot,
+                    "function-local owner chain does not terminate at its durable function",
+                )
+                .for_node(*id));
+            }
+            remaining -= 1;
+            if current == function {
+                break;
+            }
+            let current_node = snapshot.nodes.get(&current).ok_or_else(|| {
+                corrupt(
+                    snapshot,
+                    "function-local owner chain contains a missing node",
+                )
+                .for_node(current)
+                .with_related([*id])
+            })?;
+            current = current_node.owner().ok_or_else(|| {
+                corrupt(
+                    snapshot,
+                    "function-local owner chain reached a root before its function",
+                )
+                .for_node(*id)
+            })?;
+        }
     }
     Ok(())
 }
@@ -1350,7 +1440,19 @@ mod tests {
     fn deeply_nested_match_validation_uses_explicit_graph_work() {
         const DEPTH: usize = 1_000;
         let workspace = WorkspaceId::from_bytes([0x96; 16]);
-        let id = |serial| NodeId::new(workspace, serial).expect("node");
+        let function = NodeId::new(workspace, 6).expect("function");
+        let id = |serial: u64| {
+            if serial <= 6 {
+                NodeId::new(workspace, serial).expect("durable entity")
+            } else {
+                NodeId::new_function_local(
+                    workspace,
+                    function,
+                    u32::try_from(serial - 6).expect("local ordinal"),
+                )
+                .expect("function-local node")
+            }
+        };
         let mut nodes = BTreeMap::new();
         nodes.insert(
             id(1),
@@ -1421,23 +1523,22 @@ mod tests {
                 },
             },
         );
-        let mut next = 10_u64;
+        let mut next_local = 10_u64;
         let mut matches = Vec::with_capacity(DEPTH);
         for _ in 0..DEPTH {
-            let operation = id(next);
-            next += 1;
-            let region = id(next);
-            next += 1;
-            let block = id(next);
-            next += 1;
-            let yield_operation = id(next);
-            next += 1;
+            let operation = id(next_local);
+            next_local += 1;
+            let region = id(next_local);
+            next_local += 1;
+            let block = id(next_local);
+            next_local += 1;
+            let yield_operation = id(next_local);
+            next_local += 1;
             matches.push((operation, region, block, yield_operation));
         }
-        let constant = id(next);
-        next += 1;
-        let return_operation = id(next);
-        next += 1;
+        let constant = id(next_local);
+        next_local += 1;
+        let return_operation = id(next_local);
         nodes.insert(
             id(8),
             Node::Block {
@@ -1529,7 +1630,7 @@ mod tests {
             workspace,
             Revision::INITIAL,
             id(1),
-            next,
+            7,
             BTreeSet::new(),
             nodes,
         )
@@ -1569,9 +1670,24 @@ mod tests {
         );
     }
 
+    fn structured_for_id(workspace: WorkspaceId, serial: u64) -> NodeId {
+        if serial <= 5 {
+            NodeId::new(workspace, serial).expect("durable entity")
+        } else if serial == 15 {
+            NodeId::new(workspace, 6).expect("durable hole anchor")
+        } else {
+            NodeId::new_function_local(
+                workspace,
+                NodeId::new(workspace, 4).expect("function"),
+                u32::try_from(serial).expect("local ordinal"),
+            )
+            .expect("function-local node")
+        }
+    }
+
     fn structured_for_nodes(step: i64) -> (WorkspaceId, BTreeMap<NodeId, Node>) {
         let workspace = WorkspaceId::from_bytes([0x4a; 16]);
-        let id = |serial| NodeId::new(workspace, serial).expect("node");
+        let id = |serial| structured_for_id(workspace, serial);
         let result = |serial| ValueRef::OperationResult {
             operation: id(serial),
             output: 0,
@@ -1726,12 +1842,12 @@ mod tests {
     #[test]
     fn structured_for_contract_scope_and_nested_refinement_are_exact() {
         let (workspace, nodes) = structured_for_nodes(1);
-        let id = |serial| NodeId::new(workspace, serial).expect("node");
+        let id = |serial| structured_for_id(workspace, serial);
         let previous = Snapshot::from_parts(
             workspace,
             Revision::new(1),
             id(1),
-            18,
+            7,
             BTreeSet::new(),
             nodes.clone(),
         )
@@ -1750,7 +1866,7 @@ mod tests {
             workspace,
             Revision::new(2),
             id(1),
-            18,
+            7,
             BTreeSet::new(),
             refined_nodes,
         )
@@ -1776,7 +1892,7 @@ mod tests {
                 workspace,
                 Revision::new(1),
                 id(1),
-                18,
+                7,
                 BTreeSet::new(),
                 owner_result_capture
             )
@@ -1789,13 +1905,13 @@ mod tests {
     #[test]
     fn structured_region_shape_step_and_terminator_rejections_are_typed() {
         let (workspace, nodes) = structured_for_nodes(0);
-        let id = |serial| NodeId::new(workspace, serial).expect("node");
+        let id = |serial| structured_for_id(workspace, serial);
         assert_eq!(
             Snapshot::from_parts(
                 workspace,
                 Revision::new(1),
                 id(1),
-                18,
+                7,
                 BTreeSet::new(),
                 nodes
             )
@@ -1814,7 +1930,7 @@ mod tests {
                 workspace,
                 Revision::new(1),
                 id(1),
-                18,
+                7,
                 BTreeSet::new(),
                 bad_argument
             )
@@ -1838,7 +1954,7 @@ mod tests {
                 workspace,
                 Revision::new(1),
                 id(1),
-                18,
+                7,
                 BTreeSet::new(),
                 bad_yield
             )
@@ -1851,7 +1967,19 @@ mod tests {
     #[test]
     fn structured_if_arms_capture_only_prior_outer_values() {
         let workspace = WorkspaceId::from_bytes([0x4b; 16]);
-        let id = |serial| NodeId::new(workspace, serial).expect("node");
+        let function = NodeId::new(workspace, 4).expect("function");
+        let id = |serial: u64| {
+            if serial <= 5 {
+                NodeId::new(workspace, serial).expect("durable entity")
+            } else {
+                NodeId::new_function_local(
+                    workspace,
+                    function,
+                    u32::try_from(serial - 5).expect("local ordinal"),
+                )
+                .expect("function-local node")
+            }
+        };
         let result = |serial| ValueRef::OperationResult {
             operation: id(serial),
             output: 0,
@@ -2007,7 +2135,7 @@ mod tests {
             workspace,
             Revision::new(1),
             id(1),
-            19,
+            6,
             BTreeSet::new(),
             nodes.clone(),
         )
@@ -2021,7 +2149,7 @@ mod tests {
                 workspace,
                 Revision::new(1),
                 id(1),
-                19,
+                6,
                 BTreeSet::new(),
                 nodes
             )
@@ -2034,25 +2162,27 @@ mod tests {
     #[test]
     fn direct_call_uses_target_identity_and_exact_signature() {
         let (workspace, mut nodes) = structured_for_nodes(1);
-        let id = |serial| NodeId::new(workspace, serial).expect("node");
+        let id = |serial| structured_for_id(workspace, serial);
+        let callee = NodeId::new(workspace, 7).expect("callee entity");
+        let callee_parameter = NodeId::new(workspace, 8).expect("callee parameter entity");
         let Node::Module { functions, .. } = nodes.get_mut(&id(3)).expect("module") else {
             unreachable!()
         };
-        functions.push(id(18));
+        functions.push(callee);
         nodes.insert(
-            id(18),
+            callee,
             Node::Function {
                 owner: id(3),
                 name: "callee".into(),
-                parameters: vec![id(19)],
+                parameters: vec![callee_parameter],
                 result: SemanticType::I64,
                 body: None,
             },
         );
         nodes.insert(
-            id(19),
+            callee_parameter,
             Node::Parameter {
-                owner: id(18),
+                owner: callee,
                 ordinal: 0,
                 name: "x".into(),
                 ty: SemanticType::I64,
@@ -2062,14 +2192,14 @@ mod tests {
             unreachable!()
         };
         *operation = OperationKind::Call {
-            function: id(18),
+            function: callee,
             arguments: vec![ValueRef::FunctionParameter(id(5))],
         };
         Snapshot::from_parts(
             workspace,
             Revision::new(1),
             id(1),
-            20,
+            9,
             BTreeSet::new(),
             nodes.clone(),
         )
@@ -2078,7 +2208,7 @@ mod tests {
             unreachable!()
         };
         *operation = OperationKind::Call {
-            function: id(18),
+            function: callee,
             arguments: vec![],
         };
         assert_eq!(
@@ -2086,7 +2216,7 @@ mod tests {
                 workspace,
                 Revision::new(1),
                 id(1),
-                20,
+                9,
                 BTreeSet::new(),
                 nodes
             )

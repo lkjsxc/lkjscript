@@ -1,194 +1,160 @@
-# Roadmap
+# Evidence-gated roadmap
 
-Work advances through dependency-closed evidence gates, not compatibility milestones or promises.
-Program meaning must keep one authoritative typed model; implementation mechanisms remain open when
-evidence justifies them.
+This roadmap contains only future gates. Current behavior belongs to `docs/status.md`; accepted
+semantics belong to `docs/spec/`; measurements and reversal conditions belong to
+`docs/performance.md`.
 
-## Complete: agent-facing repair and structured pure programs
+## 1. Derive the executable contract from one field owner
 
-An external coding agent can use the real generic CLI and local service to discover the closed
-machine contract; create functions, parameters, calls, conditions, loops, and typed placeholders;
-inspect bounded repair context; reject invalid changes atomically; fill a scalar placeholder without
-identity churn; query saved-revision diffs; run arguments through one verified Core IR and
-explicit-frame interpreter; and continue after restart. Retained measurements cover bytes, round
-trips, artifacts, build/test cost, runtime policy, and deterministic malformed-boundary mutation.
+Problem: the machine catalogue is now isolated from JSON codecs, but record fields and some shape
+facts are still manually assembled. A new semantic form can still require distant matching edits.
 
-## Complete: named immutable data
+Gate:
 
-Persistent named records, variants with fixed alternatives, stable members, atomic forward-resolving
-declarations, acyclic by-value layouts, exact construction/projection, complete lazy variant handling,
-named query/repair context, and exact public named Run values work through the same durable service
-and executable route. The focused Reading/Input example remains a public-path oracle. Digest-aware
-manifest/root-closure/full/unchanged machine-contract discovery derives from one executable authority.
+- choose ordinary Rust declarative metadata, a small derive, or a checked IDL only after implementing
+  the same representative operation/query/error in disposable alternatives;
+- preserve strict unknown-field/variant rejection and explicit semantic invariants;
+- generate dependency-closed schema fragments, help cards, and document facts deterministically;
+- fail verification on stale output;
+- measure source opened, incremental/clean build time, proc-macro/build-script surface, binary size,
+  and debugging cost;
+- delete the manual copied owner if a candidate wins.
 
-## Complete: broader application, plain product model, and safety contract
+Oracle: strict codec samples and schema/help agreement remain exhaustive. Reversal: retain the local
+manual catalogue if derivation saves little duplication or obscures accepted shapes.
 
-The retained job-admission policy uses only the accepted language and public production path. It
-combines seven named types and seven functions with nested data, calls, conditions, a counted loop,
-nested complete variant handling, a typed placeholder, rejected and valid repair, exact semantic
-diff, accepted and domain-rejected results, presentation-only rename, old revisions, and restart. It
-proved no missing language operation.
+## 2. Reduce maintenance process and proposal cost
 
-Human-facing documentation now explains the positive architecture before the formal Semantic Program
-Graph term: coding agents edit a typed, versioned program model through a local service, and optional
-future text cannot become another source of truth. Current implementation baselines are separated
-from enduring invariants and evidence-gated choices.
+Problem: direct Engine removed socket lifecycle, but the eight-revision agent corpus still launches
+81 CLI processes and the primary declaration migration document is 9,100 bytes. The process target
+and migration-byte target were missed.
 
-The memory-safety contract now distinguishes accepted language operations, the package-wide unsafe
-Rust prohibition, the trusted computing base, resource limits, stack safety, resource ownership,
-cleanup, aliasing, concurrency, and permission security. The current flat-cell runtime remains a
-verified baseline; no universal future memory-management strategy was selected.
+Gate:
 
-The complete job workflow measures every generic-CLI request, framed JSON bytes, round trips,
-selected bindings, rejected proposals, artifact growth, startup/restart, compile/interpreter
-observations, and active repository instruction/document size. Exact observations belong to
-[`docs/performance.md`](performance.md). No token claim is inferred from bytes.
+- prototype an agent-aware bounded session using the existing Engine and document contracts;
+- compare explicit per-command publication with a script containing multiple exact commands;
+- prototype apply-and-refresh only if measured follow-up context/diff calls dominate;
+- preflight every returned delta before publication and include it in replay semantics;
+- run one fresh sealed document-v1 agent trial only after deterministic gates;
+- record exact provider token classes when exposed; do not rerun the raw control unnecessarily;
+- retain no alternate session grammar or hidden client state.
 
-## Complete: controlled proposal-ergonomics correction
+Oracle: identical revisions, rejections, receipts, historical runs, and command audit. Reversal:
+delete batching/deltas if they merely move bytes into larger responses or weaken failure diagnosis.
 
-A sealed broad creation task exposed numeric transaction-handle and one-use expression scaffolding as
-the material failure source. Protocol-v5 now uses bounded canonical `DraftSymbol` strings directly
-and keeps proposal labels outside semantic identity. The retained job-policy example sends direct
-canonical symbols; exact interaction bytes and the absence of a byte-saving claim are recorded in performance
-evidence. A focused inline-expression prototype was removed because it had not yet closed validation
-and iterative-flattening obligations; inline single-use values remain a measured follow-up rather
-than a partial second request shape.
+## 3. First-class tests and package artifact boundary
 
-The broad machine-contract sections have been directly replaced by bounded exact roots and an
-iterative transitive definition closure. The closure is derived from the executable descriptor graph,
-not a public AST or a second schema. Independent review rejected initially smaller leaf/query roots
-because they omitted operational wire wrappers. A second duplicated-wrapper correction was also
-rejected because its task projection exceeded explicit full. Endpoint roots now bind one shared
-control template or one shared query template plus exact leaf variants, errors, IDs, and limits. The
-retained operationally complete projection is smaller than explicit full and the old six-section
-baseline; correctness was not traded for the 60-percent planning target.
+Problem: external Rust/Python tests are effective but do not travel with semantic programs, and a
+workspace revision is not a publishable dependency unit.
 
-## Complete: controlled coding-agent replay
+Gate:
 
-A fresh isolated coding agent repeated the sealed release-channel task using production protocol-v5
-binaries, only four allowed orientation documents, public schema discovery, and no implementation,
-test, example, prompt, specification, history, or prior-trial payload. It published exactly three
-revisions and passed 43/43 deterministic assertions for declarations, rejected and valid repair,
-allocation rollback, identity continuity, exact decisions, lazy low-fuel selection, rename history,
-and restart. The initial symbolic creation succeeded on its first attempt; one later query guessed an
-invalid shorthand for a value reference, received strict `invalid_json`, and was corrected from the
-contract. Provider token and cost telemetry was not exposed.
+- identify one real two-package application and its independent behavior oracle;
+- define immutable package identity/version/content domains without using storage digests as entity
+  IDs;
+- define manifest exports, dependencies, compiler inputs, tests, permissions, and provenance;
+- decide entity preservation for publish, import, copy, fork, and vendoring;
+- decode an untrusted package under exact bounds and reject missing, corrupt, wrong-schema, and
+  foreign-domain references;
+- keep workspace idempotency, history, aliases, and caches out of package bytes;
+- compile/run an exact package graph and expose first-class test results in task context and review.
 
-The active task contract was operationally complete but only 6.0 percent smaller than the historical
-compact six-section projection. The agent-authored initial request was larger and used four more
-symbols because it selected an allowed helper. The retained exact-graph replay holds symbol count
-constant and is also larger in JSON bytes than the numeric-handle baseline. Fewer total requests and
-no unintended initial-creation rejection are real benefits; the 60-percent contract and 40-percent
-proposal planning targets were not met.
+Oracle: workspace and package reconstructions yield equal accepted semantics while their metadata
+domains remain distinct. Reversal: keep tests external and defer packages if the application does
+not justify the semantic surface.
 
-## Complete: dependency-closed single-use expressions
+## 4. Storage and query scaling
 
-Protocol v6 accepts one recursive inline value form for descriptor-complete, non-terminating,
-single-result operations that own no region. One iterative worklist flattens children left-to-right
-before their parent into the same persistent operation graph. Holes and region-owning control remain
-explicit, as do shared, selected, repairable, and maintenance targets. Depth 16, the first rejected
-depth, exact 65,536-item accounting, allocation rollback, validate-only parity, bounded anonymous
-paths, forward calls, declaration-ordered fields and arms, and strict JSON shapes have focused tests.
+Problem: current full snapshots are small, but reopen decodes all retained history and exact queries
+scan the selected snapshot.
 
-Same-workspace equivalence tests prove identical Node IDs, snapshot hashes, artifact bytes, change
-digests, and behavior for explicit postorder and inline arithmetic, calls, records, projections, and
-variants. The retained release-channel inline mode removes 44 of 111 labels and 4,088 bytes from the
-equal-work initial request without changing selected bindings, created nodes, repair, history,
-restart, or runtime outcomes. Protocol/JSON and machine schema changed directly to v6; durable
-idempotency metadata changed to `LKJHEAD5`; artifact format 3 and `lkjscript-spg003` remain unchanged.
+Gate:
 
-A fresh isolated v6 agent trial was attempted under the sealed reading restrictions but its foreground
-daemon launch blocked before the first semantic request. The process and temporary state were cleaned
-up, so no v6 model-success, error-rate, task-time, or telemetry claim is available. The dependency-closed
-replay and exact same-workspace tests are the retained v6 evidence; the earlier v5 isolated trial remains
-historical evidence rather than being relabelled as a v6 result.
+- build deterministic scale corpora varying body size, durable entities, history length, incoming
+  uses, and shared package content;
+- measure artifact bytes, duplicate bytes, transaction peak memory, restart, resident memory, query
+  scans, and corruption traversal;
+- prototype at most the strongest candidate: delta/checkpoint, immutable objects/persistent tree, or
+  embedded transactional store;
+- require improvement in at least two retained dimensions such as growth, restart, branch fit,
+  package reuse, query locality, or transaction allocation;
+- specify publication, full reconstruction, retention, compaction/GC interruption, digest-kind
+  separation, and filesystem attacks before selection;
+- add narrow derived indexes only for measured scan hotspots and retain full-scan differentials.
 
-## Complete: Codex tool-adapter decision
+Oracle: byte-canonical full reconstruction and semantic validation against the snapshot path.
+Reversal: retain snapshots/scans if the added recovery and trusted surface outweighs measured wins.
 
-A disposable six-tool MCP adapter invoked the same production v6 public requests and preserved a
-small exact `i64` 42 oracle. It was rejected and deleted because it reduced no semantic call,
-connection, or forwarded request byte while adding three processes, 2,084 bytes of tool definitions,
-startup schema traffic, a weaker nested schema projection, and an unresolved cancellation boundary.
-The adapter was not retained. The later direct workbench changes action and context projection
-without adding an adapter process or semantic vocabulary. Reopen adapter work only when a controlled
-agent task shows a specific shell or lifecycle failure that the direct CLI cannot remove without
-becoming another protocol authority.
+## 5. Branches and parallel agent candidates
 
-## Complete: bounded immutable bytes and inferred invocation lifetime
+Problem: one authority-owned monotonic allocator is correct and simple, but unpublished parallel
+entity creation and semantic merge are not modeled.
 
-The retained release-manifest classifier justifies one dedicated immutable `bytes` primitive and
-exactly five operations: constant, length, checked index, checked slice, and visible-content equality.
-Protocol/JSON 7 uses one strict unpadded URL-safe base64 spelling; artifact 4 / SPG004 stores raw
-bounded literals; HEAD6 binds the v7 fingerprint domain. Old forms reject directly.
+Gate:
 
-Core types now distinguish zero-cell, immediate, fixed aggregate, and managed-handle storage without
-magic primitive counts. The explicit-frame interpreter keeps immutable backing and canonical
-root-based views in one bounded invocation arena. Opaque nonzero handles are validated, never
-serialized or reused, and are copied through calls and named values without copying payload. Visible
-allocation, retained backing, backing/view objects, cells, fuel, and result materialization remain separate.
-Scope-owned cleanup and owned output conversion cover success, bounds traps, fuel/frame exhaustion,
-and result-policy failure. No reference counting, tracing, borrow syntax, finalizer, or general heap
-was added.
+- start from a retained parallel-agent task, not a generic collaboration framework;
+- define immutable candidate parentage, authority status, bounds, cancellation, abandonment,
+  publication, recovery, and exact query/run behavior;
+- compare branch-qualified counters, authority-assigned random IDs, and explicit merge remapping;
+- represent conflicts at durable entities and structural bodies rather than text offsets or storage
+  hashes;
+- define continuity maps explicitly and reject ambiguity;
+- model-check the small candidate/publication state machine when practical.
 
-The same-vocabulary CLI session is retained as a process-lifecycle projection. In the measured
-32-request task it reduced client processes from 32 to one while retaining 32 daemon connections and
-byte-identical response shapes; it does not alter daemon framing or silently retry mutations.
+Oracle: deterministic merge/rejection and identity non-reuse under generated interleavings.
+Reversal: keep one-writer exact-base transactions until a real task wins on total correction/cost.
 
-## Complete: ownership-first managed bytes and construction
+## 6. Managed-value revalidation with a second consumer
 
-The binary canonicalizer supplies the previously missing construction and lifetime consumer.
-Protocol/JSON 8, artifact 5 / SPG005, and HEAD7 directly add pure `bytes_concat` without preserving
-old readers. The operation retains immutable content semantics and a full-result logical fuel charge.
+Problem: ownership-optimized bytes show a small retained benefit but carry compiler, verifier, and
+runtime surface. One value class is weak architecture evidence.
 
-Verified Core IR now feeds derived managed-reference maps and a compact ownership plan. A separate
-verifier recomputes maps, local liveness, actions, edge cleanup, and uniqueness before execution.
-The production managed store reclaims dead views and backing, advances generations when descriptor
-slots are reused, counts only actual shared ownership, and can reuse a verified unique full-left
-concat buffer. Shared, borrowed, aliased, and partial-view cases retain an allocate-new fallback; a
-test-only allocate-new mode remains the differential oracle. Generated differential cases, malformed
-plan tests, recursion cleanup, the public canonicalizer, Miri, sanitizer, and final measurements are
-owned by status and performance evidence. No tracing, surface ownership syntax, unsafe Rust, or new
-dependency was added.
+Gate:
 
-## Complete: semantic workbench and sustained maintenance
+- select a real application requiring immutable text, a sequence, or another managed value;
+- compare current ownership planning, invocation arena, safe `Arc` values, and typed-tree execution;
+- measure compile/runtime source, verification tests, allocations, copies, peak retained bytes, fuel,
+  escape behavior, and cleanup;
+- preserve the allocate-new semantic oracle;
+- delete the ownership planner and reuse path if benefit becomes marginal;
+- do not add tracing without real cycles or expose memory choreography to authors.
 
-`lkjscript agent` is now the preferred direct coding-agent surface. It derives bounded purpose- and
-target-scoped packets from immutable revisions, binds canonical aliases to exact packet digests,
-renders deterministic one-way semantic review and diff text, and normalizes a strict iterative edit
-or run plan into the existing closed protocol types. Raw JSON remains the exact low-level diagnostic
-surface. Protocol/JSON 8, artifact 5 / SPG005, HEAD7, one semantic validator, and one execution route
-were unchanged.
+Oracle: exact result/trap/fuel/resource differential across all modes. Reversal: complexity must stay
+proportionate to representative wins.
 
-The retained deployment-policy corpus exercises eight revisions of incompleteness, invalid and valid
-repair, extension, refactor, rename, exact trap diagnosis, declaration replacement, blocked and safe
-deletion, validate-only, restart, history, and old/current runs. A final fresh equal-task observation
-completed with no unintended workbench correction and materially fewer exposed provider token
-classes than the raw control; it remains a two-run controlled observation rather than a benchmark.
-The first candidate observation's draft/alias/type/idempotency mistakes were converted into exact
-generated help and verified by a second fresh context. No automatic cache, persistent connection,
-candidate session, branch, runtime tracer, language feature, or dependency was justified.
+## 7. Capability-secure effects and resources
 
-## Next gate: exact mapped declaration migration
+Problem: pure programs cannot yet perform useful host work, and the local Engine is not a deployment
+runtime or sandbox.
 
-The maintenance corpus completed an immutable `Limits` to `DeploymentLimits` migration, but the
-single atomic plan was 9,035 bytes and had to clone or rewrite construction, projection, function
-input/output, and call-site structure before old references could be deleted. The next gate is one
-focused identity-safe declaration-migration operation with an explicit old-member to new-member map,
-exact replacement identities, preflighted all-use coverage, deterministic rejection of unmapped or
-ambiguous uses, and the existing fine-grained transaction as differential oracle. It must reduce the
-same migration's action/correction cost without mutating declaration shape under surviving identity
-or becoming a generic rewrite language. Delete it if a second independently authored migration does
-not reuse the contract or if verification is less local than the explicit transaction.
+Gate:
 
-Representation-independent linear byte construction moves behind this product gate because no
-second retained construction consumer appeared. Escaping values, lexical regions, real cycles,
-effects, and external resources remain separate gates; real cycles alone reopen isolated tracing,
-and external resources require semantic affine ownership plus explicit permission and cleanup.
+- choose one narrow retained host-effect application;
+- define explicit permission values, structured outcomes, order, cancellation, timeout, partial
+  action, idempotency, retry, audit, isolation, crash behavior, and deterministic tests;
+- model resource-owning values separately from ordinary immutable memory;
+- require deterministic consume/close/cleanup on success, rejection, cancellation, and traps;
+- establish a worker/sandbox threat model before executing untrusted host effects;
+- keep deployment topology separate from workspace-authority topology.
 
-## Later evidence gates
+Oracle: fake deterministic host plus failure injection for every lifecycle edge. Reversal: reject the
+effect if its permission or partial-action contract cannot be made explicit.
 
-Real application needs may justify a pure collection, effects with explicit permission values,
-resource-owning values, packages, large-value memory strategy, a narrow query index, persistence
-compaction, concurrent request handling, process isolation, or a mature native acceleration tier.
-None is preselected. Each gate needs a named consumer, safety and durability obligations, before/after
-evidence, one preserved semantic route, and a reversal condition.
+## 8. Portable executable substrate
+
+Problem: Core IR plus interpreter is a trustworthy bootstrap, not evidence for a final performance
+tier. Only Linux x86-64 is verified.
+
+Gate:
+
+- obtain representative package/application compile and execution profiles;
+- evaluate compact bytecode only if it improves dispatch, serialization, caching, or backend
+  layering enough to justify a second derived format;
+- retain the interpreter as the semantic oracle;
+- bind every executable artifact to exact package graph, target, compiler/backend identity, policy,
+  and memory contract;
+- add cross-platform storage/client/build checks before support claims;
+- isolate and validate any future native/unsafe boundary.
+
+Oracle: differential behavior, deterministic traps, bounded resources, and reproducible builds.
+Reversal: do not add JIT/AOT/native code from aspirational performance alone.
