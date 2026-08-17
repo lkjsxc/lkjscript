@@ -282,7 +282,8 @@ fn hash_operation(hasher: &mut blake3::Hasher, operation: &OperationKind) {
         }
         OperationKind::AddI64 { lhs, rhs }
         | OperationKind::LtI64 { lhs, rhs }
-        | OperationKind::BytesEqual { lhs, rhs } => {
+        | OperationKind::BytesEqual { lhs, rhs }
+        | OperationKind::BytesConcat { lhs, rhs } => {
             hash_value(hasher, *lhs);
             hash_value(hasher, *rhs);
         }

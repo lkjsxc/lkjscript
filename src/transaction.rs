@@ -135,9 +135,10 @@ pub enum ExpressionDraftCode {
     BytesAt,
     BytesSlice,
     BytesEqual,
+    BytesConcat,
 }
 impl ExpressionDraftCode {
-    pub const ALL: [Self; 18] = [
+    pub const ALL: [Self; 19] = [
         Self::ConstUnit,
         Self::ConstBool,
         Self::ConstI64,
@@ -156,6 +157,7 @@ impl ExpressionDraftCode {
         Self::BytesAt,
         Self::BytesSlice,
         Self::BytesEqual,
+        Self::BytesConcat,
     ];
     pub const fn machine_name(self) -> &'static str {
         match self {
@@ -177,6 +179,7 @@ impl ExpressionDraftCode {
             Self::BytesAt => "bytes_at",
             Self::BytesSlice => "bytes_slice",
             Self::BytesEqual => "bytes_equal",
+            Self::BytesConcat => "bytes_concat",
         }
     }
 
@@ -200,6 +203,7 @@ impl ExpressionDraftCode {
             Self::BytesAt => OperationCode::BytesAt,
             Self::BytesSlice => OperationCode::BytesSlice,
             Self::BytesEqual => OperationCode::BytesEqual,
+            Self::BytesConcat => OperationCode::BytesConcat,
         }
     }
 
@@ -268,6 +272,7 @@ impl ExpressionKindDraft {
             Self::BytesAt { .. } => ExpressionDraftCode::BytesAt,
             Self::BytesSlice { .. } => ExpressionDraftCode::BytesSlice,
             Self::BytesEqual { .. } => ExpressionDraftCode::BytesEqual,
+            Self::BytesConcat { .. } => ExpressionDraftCode::BytesConcat,
         }
     }
 
@@ -369,6 +374,10 @@ pub enum ExpressionKindDraft {
         length: ValueDraft,
     },
     BytesEqual {
+        lhs: ValueDraft,
+        rhs: ValueDraft,
+    },
+    BytesConcat {
         lhs: ValueDraft,
         rhs: ValueDraft,
     },
@@ -1399,6 +1408,14 @@ fn expand_transaction(
                         operation: OperationDraft::BytesEqual { lhs, rhs },
                     })
                 }
+                ExpressionKindDraft::BytesConcat { lhs, rhs } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::BytesConcat { lhs, rhs },
+                    })
+                }
                 ExpressionKindDraft::Call {
                     function,
                     arguments,
@@ -1633,7 +1650,8 @@ fn extract_inline_children(
         | ExpressionKindDraft::Hole { .. } => {}
         ExpressionKindDraft::AddI64 { lhs, rhs }
         | ExpressionKindDraft::LtI64 { lhs, rhs }
-        | ExpressionKindDraft::BytesEqual { lhs, rhs } => {
+        | ExpressionKindDraft::BytesEqual { lhs, rhs }
+        | ExpressionKindDraft::BytesConcat { lhs, rhs } => {
             extract(lhs, "lhs".to_owned())?;
             extract(rhs, "rhs".to_owned())?;
         }
@@ -1951,7 +1969,8 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
             OperationDraft::ConstBytes(value) => budget.add_byte_literal(value, source)?,
             OperationDraft::AddI64 { lhs, rhs }
             | OperationDraft::LtI64 { lhs, rhs }
-            | OperationDraft::BytesEqual { lhs, rhs } => {
+            | OperationDraft::BytesEqual { lhs, rhs }
+            | OperationDraft::BytesConcat { lhs, rhs } => {
                 value_reference(lhs, source, references)?;
                 value_reference(rhs, source, references)?;
             }
@@ -2326,7 +2345,8 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
             }
             ExpressionKindDraft::AddI64 { lhs, rhs }
             | ExpressionKindDraft::LtI64 { lhs, rhs }
-            | ExpressionKindDraft::BytesEqual { lhs, rhs } => {
+            | ExpressionKindDraft::BytesEqual { lhs, rhs }
+            | ExpressionKindDraft::BytesConcat { lhs, rhs } => {
                 structured_value(
                     rhs,
                     depth,
@@ -3770,6 +3790,10 @@ fn resolve_operation(
             lhs: resolve_value(lhs, allocations, workspace)?,
             rhs: resolve_value(rhs, allocations, workspace)?,
         },
+        OperationDraft::BytesConcat { lhs, rhs } => OperationKind::BytesConcat {
+            lhs: resolve_value(lhs, allocations, workspace)?,
+            rhs: resolve_value(rhs, allocations, workspace)?,
+        },
         OperationDraft::Call {
             function,
             arguments,
@@ -4517,17 +4541,22 @@ mod tests {
     fn equal_bytes_request(id: WorkspaceId, inline_values: bool) -> ApplyTransactionRequest {
         let operations = if inline_values {
             vec![draft_expression(
-                9,
+                11,
                 ExpressionKindDraft::BytesEqual {
-                    lhs: inline(ExpressionKindDraft::BytesSlice {
-                        value: inline(ExpressionKindDraft::ConstBytes(
-                            ByteString::from_slice(b"LKJMpayload").expect("literal"),
+                    lhs: inline(ExpressionKindDraft::BytesConcat {
+                        lhs: inline(ExpressionKindDraft::BytesSlice {
+                            value: inline(ExpressionKindDraft::ConstBytes(
+                                ByteString::from_slice(b"LKJMpayload").expect("literal"),
+                            )),
+                            start: inline(ExpressionKindDraft::ConstI64(0)),
+                            length: inline(ExpressionKindDraft::ConstI64(4)),
+                        }),
+                        rhs: inline(ExpressionKindDraft::ConstBytes(
+                            ByteString::from_slice(b"!").expect("literal"),
                         )),
-                        start: inline(ExpressionKindDraft::ConstI64(0)),
-                        length: inline(ExpressionKindDraft::ConstI64(4)),
                     }),
                     rhs: inline(ExpressionKindDraft::ConstBytes(
-                        ByteString::from_slice(b"LKJM").expect("literal"),
+                        ByteString::from_slice(b"LKJM!").expect("literal"),
                     )),
                 },
             )]
@@ -4551,15 +4580,26 @@ mod tests {
                 ),
                 draft_expression(
                     8,
-                    ExpressionKindDraft::ConstBytes(
-                        ByteString::from_slice(b"LKJM").expect("literal"),
-                    ),
+                    ExpressionKindDraft::ConstBytes(ByteString::from_slice(b"!").expect("literal")),
                 ),
                 draft_expression(
                     9,
-                    ExpressionKindDraft::BytesEqual {
+                    ExpressionKindDraft::BytesConcat {
                         lhs: draft_result(7),
                         rhs: draft_result(8),
+                    },
+                ),
+                draft_expression(
+                    10,
+                    ExpressionKindDraft::ConstBytes(
+                        ByteString::from_slice(b"LKJM!").expect("literal"),
+                    ),
+                ),
+                draft_expression(
+                    11,
+                    ExpressionKindDraft::BytesEqual {
+                        lhs: draft_result(9),
+                        rhs: draft_result(10),
                     },
                 ),
             ]
@@ -4575,7 +4615,7 @@ mod tests {
                     result: TypeDraft::Bool,
                     body: Some(FunctionBodyDraft {
                         operations,
-                        return_value: draft_result(9),
+                        return_value: draft_result(11),
                     }),
                 },
                 TransactionOp::SetEntryFunction {
@@ -4584,7 +4624,7 @@ mod tests {
                 },
             ],
         );
-        request.response.return_symbols = [1, 2, 3, 9]
+        request.response.return_symbols = [1, 2, 3, 11]
             .into_iter()
             .map(DraftSymbol::generated)
             .collect();

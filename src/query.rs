@@ -2891,7 +2891,11 @@ mod tests {
         )
         .expect("byte repair context");
         assert_eq!(context.expected_type, SemanticType::Bytes);
-        for code in [OperationCode::ConstBytes, OperationCode::BytesSlice] {
+        for code in [
+            OperationCode::ConstBytes,
+            OperationCode::BytesSlice,
+            OperationCode::BytesConcat,
+        ] {
             assert!(
                 context
                     .legal_constructors

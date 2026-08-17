@@ -8,9 +8,9 @@ use crate::schema::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const MAGIC: [u8; 8] = *b"LKJSPG\0\x04";
-pub const FORMAT_VERSION: ArtifactVersion = ArtifactVersion(4);
-pub const SCHEMA_ID: SchemaId = SchemaId(*b"lkjscript-spg004");
+pub const MAGIC: [u8; 8] = *b"LKJSPG\0\x05";
+pub const FORMAT_VERSION: ArtifactVersion = ArtifactVersion(5);
+pub const SCHEMA_ID: SchemaId = SchemaId(*b"lkjscript-spg005");
 pub const MAXIMUM_ARTIFACT_BYTES: usize = 64 * 1024 * 1024;
 pub const MAXIMUM_ARTIFACT_NAME_BYTES: usize = 1024 * 1024;
 const ENCODED_COUNT_BYTES: usize = 8;
@@ -449,7 +449,8 @@ pub(crate) fn put_operation(writer: &mut Writer, operation: &OperationKind) -> R
         }
         OperationKind::AddI64 { lhs, rhs }
         | OperationKind::LtI64 { lhs, rhs }
-        | OperationKind::BytesEqual { lhs, rhs } => {
+        | OperationKind::BytesEqual { lhs, rhs }
+        | OperationKind::BytesConcat { lhs, rhs } => {
             put_value(writer, *lhs);
             put_value(writer, *rhs);
         }
@@ -592,6 +593,10 @@ pub(crate) fn read_operation(
             length: read_value(reader, workspace)?,
         }),
         OperationCode::BytesEqual => Ok(OperationKind::BytesEqual {
+            lhs: read_value(reader, workspace)?,
+            rhs: read_value(reader, workspace)?,
+        }),
+        OperationCode::BytesConcat => Ok(OperationKind::BytesConcat {
             lhs: read_value(reader, workspace)?,
             rhs: read_value(reader, workspace)?,
         }),
@@ -1033,6 +1038,10 @@ mod tests {
                 lhs: ValueRef::BlockArgument(first),
                 rhs: ValueRef::BlockArgument(second),
             },
+            OperationKind::BytesConcat {
+                lhs: ValueRef::BlockArgument(first),
+                rhs: ValueRef::BlockArgument(second),
+            },
         ];
         assert_eq!(operations.len(), OperationCode::ALL.len());
         for operation in operations {
@@ -1098,12 +1107,12 @@ mod tests {
     }
 
     #[test]
-    fn artifact_format_three_rejects_without_compatibility_reader() {
-        let mut bytes = encode(&initial()).expect("format four artifact");
-        bytes[..MAGIC.len()].copy_from_slice(b"LKJSPG\0\x03");
-        bytes[MAGIC.len()..MAGIC.len() + 2].copy_from_slice(&3_u16.to_le_bytes());
+    fn artifact_format_four_rejects_without_compatibility_reader() {
+        let mut bytes = encode(&initial()).expect("format five artifact");
+        bytes[..MAGIC.len()].copy_from_slice(b"LKJSPG\0\x04");
+        bytes[MAGIC.len()..MAGIC.len() + 2].copy_from_slice(&4_u16.to_le_bytes());
         assert_eq!(
-            decode(&bytes).expect_err("format three must reject").code,
+            decode(&bytes).expect_err("format four must reject").code,
             ErrorCode::ArtifactCorrupt
         );
     }

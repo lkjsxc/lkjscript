@@ -3,16 +3,18 @@
 ## Current flow and authority
 
 ```text
-strict JSON CLI projection (optional)
-    -> strict protocol-v7 JSON frame over private Unix socket
+semantic workbench (preferred) or strict JSON diagnostic projection
+    -> client-side packet/view/plan normalization when selected
+    -> strict protocol-v8 JSON frame over private Unix socket
     -> synchronous lkjscriptd
     -> one DurableWorkspace writer per workspace
     -> staged typed transaction over immutable Snapshot
     -> full deterministic validation and derived diff
-    -> preflighted compact receipt + artifact + LKJHEAD6
+    -> preflighted compact receipt + artifact + LKJHEAD7
     -> durable immutable revision, then in-memory publication
     -> revision-bound scan query or direct SPG-to-Core-IR lowering
-    -> Core IR verifier -> interpreter -> typed response
+    -> Core IR verifier -> derived ownership plan -> ownership verifier
+    -> managed interpreter -> typed response
 ```
 
 The local service process is the only live program-model writer. `graph.rs` owns immutable snapshots
@@ -22,7 +24,7 @@ transaction-local nominal target resolution, and compact receipts; `validate.rs`
 acceptance; `type_layout.rs` owns iterative by-value dependency validation and checked derived
 layouts; `diff.rs` owns deterministic change facts/digests; `artifact.rs` owns canonical semantic
 bytes; `persistence.rs` owns durable publication; `protocol.rs` owns closed logical request/response types;
-`transport.rs` owns protocol-v7 length framing and the production client; `query.rs` owns derived scan queries and
+`transport.rs` owns protocol-v8 length framing and the production client; `query.rs` owns derived scan queries and
 repair-context composition; `machine_contract.rs` owns closed schema-discovery DTOs and
 `machine.rs` owns strict bounded JSON projection, the executable definition catalogue, and iterative
 root closure, including one shared control template and one shared query template projected from the
@@ -30,9 +32,21 @@ executable broad descriptors; compact endpoint bindings select exact leaf varian
 wrapper forests; `compile.rs` iteratively discovers exact
 direct-call and nominal-type closures and lowers
 structured regions and aggregates; private `core_ir.rs` owns the dense type table, derived layouts,
-multi-function CFG and aggregate/switch contracts, and independent verification; `interpret.rs` owns
-public revision-bound runtime-value validation plus the one flat-cell explicit-frame runtime route,
-including the invocation-scoped immutable-byte arena and its private checked handles.
+multi-function CFG and aggregate/switch contracts, and independent verification; `ownership.rs`
+owns derived managed-reference maps, control-flow ownership planning, and a verifier that separately
+recomputes liveness, edge cleanup, and uniqueness; `managed.rs` owns generation-checked byte views,
+backing buffers, exact ownership claims, reclamation, reuse, and physical metrics; `interpret.rs`
+owns public revision-bound runtime-value validation plus the one flat-cell explicit-frame semantic
+route and applies only a verified ownership plan.
+
+The agent-facing boundary is kept out of `machine.rs`: `workbench/plan.rs` owns the bounded iterative
+proposal grammar and normalization into existing protocol DTOs; `workbench/context.rs` owns pure
+revision-bound packet composition, canonical aliases, digesting, and strict packet decoding;
+`workbench/view.rs` owns deterministic terminal-safe semantic review and diff rendering;
+`workbench/help.rs` derives concise authoring cards from the executable machine description; and
+`bin/lkjscript/agent.rs` owns command routing and presentation exit behavior. These modules consume
+the same query, schema, transaction, Run, and error types as the raw projection. They define no node,
+operation, validation, execution, or persistence contract.
 Generated CFG blocks thread the complete
 visible semantic environment in `ValueRef` derived order: reference variant first, then canonical
 workspace/node identity, then operation output index. This is a private deterministic lowering
@@ -60,6 +74,19 @@ counting the exact total. Repair context is a bounded composition of typed facts
 ranking. There is deliberately no reverse-reference index, query engine, or cache; full scans
 remain both implementation and oracle until representative repeated cost justifies a narrow index.
 
+One context packet composes those existing queries for a closed purpose and exact target set. Its
+digest binds workspace, revision, active machine-schema digest, purpose, options, aliases, and all
+returned facts. Alias spelling is local to that packet and never enters a daemon request: the client
+resolves it to a canonical Node ID before sending the normalized typed transaction. Saved packet
+files are disposable client data revalidated on every read. There is no automatic schema/context
+cache, server-side candidate, persistent workbench session, transcript store, or model-ranked
+retrieval path.
+
+The semantic review renderer is a one-way presentation over packet facts. It exposes revision,
+packet and schema identities, signatures, structured bodies, typed placeholders, exact change facts,
+and explicit omissions while excluding Core IDs, layouts, handles, artifact offsets, and storage
+order. It cannot be parsed into a proposal and is never written into an artifact.
+
 The generic CLI is not another service. Its RPC command strictly decodes one bounded JSON envelope,
 sends that same closed typed representation in one private length-framed IPC request, and strictly
 encodes one typed response. JSON never becomes semantic state. The separate local `schema` command and daemon
@@ -78,10 +105,10 @@ request DTO, persistent daemon connection, correlation layer, or retry policy.
 ## Durability and bounded acknowledgement
 
 A workspace retains immutable `revisions/REVISION.lkjscript` files and one compact non-semantic
-`LKJHEAD6`. HEAD is independently capped at 16 KiB and stores head revision/hash plus at most one
+`LKJHEAD7`. HEAD is independently capped at 16 KiB and stores head revision/hash plus at most one
 compact keyed fingerprint/receipt. It stores no full semantic diff or full allocation map; unkeyed
-commits preserve an existing keyed replay record. Any non-`LKJHEAD6` bytes, including `LKJHEAD5`,
-reject without a compatibility reader. The direct cutover prevents canonical-JSON/v7 fingerprints
+commits preserve an existing keyed replay record. Any non-`LKJHEAD7` bytes, including `LKJHEAD6`,
+reject without a compatibility reader. The direct cutover prevents canonical-JSON/v8 fingerprints
 from being interpreted under the prior durable identity.
 
 Workspace creation preflights its exact correlated `WorkspaceCreated` response from the canonical
@@ -101,32 +128,42 @@ Corrupt or ambiguous durable state is rejected, not repaired heuristically.
 
 - **JSON stdin/stdout:** 8 MiB input, bounded nesting, strict fields/variants/canonical IDs/trailing
   policy; streaming 32 MiB output cap and boundary-error messages capped at 1,024 UTF-8 bytes;
+- **workbench plans and packets:** plans are bounded to 8 MiB, 32 open containers, and 65,536
+  counted values and parse without user-depth native recursion; packet and rendered-view boundaries
+  are independently capped at 4 MiB. Unknown fields/forms, duplicate fields, stale schema or packet
+  digests, foreign workspace/revision domains, unknown aliases, trailing input, and malformed UTF-8
+  reject before dispatch. Presentation quotes untrusted names and bytes, and packet aliases never
+  fall back to names, current head, Node IDs, or draft symbols;
 - **framed JSON IPC:** private socket permissions/peer filesystem boundary, checked lengths before
   allocation, strict envelopes, request correlation, request-side EOF before dispatch, response-side
   EOF before acceptance, and absolute connection deadlines;
 - **artifact and HEAD bytes:** separate bounded canonical decoders, hashes/checksums, graph/history
   validation, strict trailing-byte policy;
 - **agent proposals:** untrusted model output reaches deterministic validators only as closed typed requests;
-- **runtime:** verified Core IR only, exact revision-bound primitive/bytes/product/sum values, bounded
-  nesting/items/structural bytes/result projection, positive bounded fuel and frame policy, and one
-  non-recursive interpreter loop over explicit frames; each frame uses a flat cell arena with separate
-  initialized facts. A separate invocation-owned arena stores immutable byte backing and
-  constant-depth views behind nonzero checked handle cells; handles never serialize, escape, or
-  reuse an index during the invocation. Aggregate instructions read or initialize exact cell ranges directly, switch
-  reads only the discriminant, and block entry invalidates facts without clearing the arena. Fuel is
+- **runtime:** verified Core IR only, followed by a derived ownership plan that cannot execute until
+  a separate verifier has recomputed managed-cell maps, liveness, exact actions, edge cleanup, and
+  reuse eligibility. One non-recursive interpreter loop uses explicit frames, flat cells, and
+  separate initialized facts. An invocation-owned managed store keeps byte backing and normalized
+  views behind private typed index-plus-generation handles. Every access validates kind, index,
+  generation, liveness, and range; stale handles reject, generation wrap retires a slot, and handles
+  never serialize or escape. Owned claims use checked non-atomic counts only when sharing remains;
+  borrows and transfers do not increment them. Verified last drops reclaim descriptors and backing,
+  and verified unique full-left concat may reuse capacity after all semantic and allocation
+  preflights. Shared, borrowed, partial-view, or aliased inputs use the allocate-new fallback.
+  Aggregate managed-cell maps cover every record field and only the active variant payload. Fuel is
   charged before work as one base per instruction/transfer plus `max(1,cells)` per logical value
-  transfer, with per-octet byte equality work and full-sum charging for variant canonicalization plus
-  the active payload's logical transfer. The 65,536-cell peak covers live frame arrays plus
-  exact argument/edge/return/public-flatten scratch and prospective callee arenas before allocation or
-  transfer. Separate policies bound cumulative visible byte allocation, distinct retained backing,
-  managed backing/view objects, decoded input, and materialized output. Public output becomes owned bytes
-  before arena drop; Rust scope cleanup covers success and every trap/policy failure. The language
-  runtime generates no program machine code and exposes no implicit host access or
-  foreign program boundary.
+  transfer, per-octet byte equality work, and full-result concat work; ownership counts and reuse do
+  not alter it. The 65,536-cell peak covers live frame arrays plus exact argument, edge, return,
+  public-flatten scratch, and prospective callee frames. Separate policies bound cumulative visible
+  construction, live backing, live managed objects, decoded input, and materialized output. Public
+  output becomes owned bytes before store destruction; verified cleanup roots cover success and
+  every trap/policy failure, with final Rust scope drop as a safe backstop. A test-only allocate-new
+  mode over the same Core behavior remains the differential oracle. The runtime generates no program
+  machine code and exposes no implicit host access or foreign program boundary.
 
 There is no cooperative in-Run cancellation mechanism. A disconnected client does not make a byte
 handle escape: the fuel/frame-bounded synchronous Run continues to a normal result or trap and then
-drops its arena. Daemon-process termination relies on operating-system process reclamation rather
+drops its store. Daemon-process termination relies on operating-system process reclamation rather
 than language-level cleanup ordering. A future cancellable effect or resource must define a stronger
 explicit cleanup contract before it is accepted.
 
@@ -171,18 +208,21 @@ None exists in the current implementation. The local service is not a sandbox.
 
 Memory safety, resource exhaustion, resource ownership, deterministic cleanup, aliasing,
 concurrency safety, and permission security are separate contracts. Current immediate and fixed
-immutable values use flat cells; nonescaping bytes use a bounded invocation arena and opaque handles.
-That choice does not select a universal future heap. Escaping cycle-free values would reopen precise
-ownership or reference counting; measured long-invocation retention would reopen lexical regions;
-real long-lived cycles would reopen isolated tracing; and external resources would require affine
-ownership plus explicit deterministic cleanup.
+immutable values use flat cells; nonescaping bytes use compiler-inferred ownership, a verified plan,
+and a bounded managed store. This is ownership-first rather than a universal memory mechanism:
+precise reference counting is only the cycle-free sharing fallback, and lexical regions remain
+available when one future common lifetime is simpler. Real long-lived cycles would reopen isolated
+tracing; external resources would require semantic affine ownership, explicit permission, and
+deterministic close/cleanup contracts. No tracing collector, surface lifetime syntax, or resource
+finalizer exists.
 
 ## Deliberate restraint
 
 The measured bootstrap retains `BTreeMap`, vectors, full snapshot clones, full semantic
 recomputation/diff materialization, and full artifact rewrites. It has no database, journal, async
-runtime, generic graph framework, runtime schema registry, reverse index, cache, source projection,
-native backend, general managed heap, plugin mechanism, or remote service. A replacement requires a current
+runtime, generic graph framework, runtime schema registry, reverse index, cache, source frontend,
+native backend, general managed heap, plugin mechanism, or remote service. The retained read-only
+semantic rendering is not a round-trip source projection. A replacement requires a current
 consumer, measurements, one preserved authority path, and evidence that supports its added cost.
 
 ## Long-horizon revalidation
@@ -192,20 +232,20 @@ policy. “Requirement” below is the enduring constraint; “decision” is on
 
 | Lens | Current fact | Requirement | Campaign decision | Entry evidence / reversal condition |
 |---|---|---|---|---|
-| Product boundary | External agent, local model service | Deterministic one-authority acceptance | Improve proposal interface only | Agent authors/repairs publicly; reverse model-dependent correctness |
-| Human role | Humans own intent and review | Preserve governance and explanation | Keep human-first docs and review facts | Reject opaque changes without bounded explanation |
-| Source independence | No source frontend | Text can never be coequal authority | No parser; keep future views open | Reject render/reparse editing dependence |
+| Product boundary | Semantic workbench over a local model service | Deterministic one-authority acceptance | Prefer context/view/plan; retain raw JSON as diagnostic | Reverse if equal-task success, correction, or review evidence regresses |
+| Human role | Humans own intent and review | Preserve governance and explanation | Deterministic semantic review plus exact typed expansion | Reject views that hide identity-changing edits |
+| Source independence | No source frontend; one-way semantic review text | Text can never be coequal authority | Retain non-round-trip rendering | Reject render/reparse editing dependence |
 | Semantic shape | Closed direct Rust types | One typed model and validator | Keep SPG; no generic graph | Reverse abstraction that duplicates ownership facts |
 | Stable identity | Monotonic workspace Node IDs | Independent of names, bytes, positions | Preserve identity through inline normalization | Reverse if proposal spelling changes IDs |
 | Identity granularity | Every semantic node has an ID | Identity needs continuity or targeting | Remove labels, not semantic IDs | Reopen only with artifact/history/query closure |
 | Incomplete programs | Missing bodies and typed holes | Exact typed queryable repair | Holes remain explicit | Reject anonymous holes without retrieval |
 | Transactions | Atomic commit and validate-only | Rejection changes nothing | Normalize wholly before publication | Reverse mutation outside one transaction |
 | History and diffs | Immutable revisions, semantic diffs | History ignores proposal spelling | Inline nesting is discarded | Reverse if views become history authority |
-| Proposal language | Structured bounded drafts | Graph validator remains final | One inline value form only | Delete if it grows into a macro language |
+| Proposal language | Typed drafts plus compact ephemeral plan projection | Graph validator remains final | Iterative one-to-one plan normalization | Delete if grammar needs independent semantic rules |
 | Machine contract | Executable roots and closure | Complete accepted shapes | Extend the same recursive catalogue | Reject hand-maintained lite schemas |
-| Codex integration | Generic CLI plus same-vocabulary session; disposable MCP adapter rejected | Projection cannot own semantics | Retain process-only session | Delete if no harness can keep it alive or process reduction ceases to matter |
-| Prompt/cache economics | Policy and tools cost context | Correctness outranks compactness | Shrink durable policy; stabilize schemas | Reject token claims inferred from bytes |
-| Diagnostics | Typed bounded errors and paths | Local deterministic correction facts | Add anonymous inline paths | Reverse if locality materially worsens |
+| Codex integration | Preferred workbench; raw JSON and process-only session remain diagnostic | Projection cannot own semantics | Retain direct CLI, no adapter or persistent connection | Reopen lifecycle work only for measured remaining overhead |
+| Prompt/cache economics | Stable policy, task packets, digest facts | Correctness outranks compactness | Keep packets bounded and cache files disposable | Reject token claims inferred from bytes |
+| Diagnostics | Typed errors, semantic origins, targeted debug packets | Local deterministic correction facts | Current runtime facts suffice; no trace framework | Add bounded call-path facts only if a retained task needs them |
 | Type system | Closed primitives and nominal data | Explicit exact equality/conversion | No generics or dynamic types | Require a second real abstraction consumer |
 | Primitive values | Unit, bool, checked i64, immutable bytes | Exact checked semantics | Dedicated bounded bytes | Reject concision through hidden coercion or generic sequence scope |
 | Numeric semantics | Checked add and exact compare | Order and traps are observable | Preserve normalized evaluation order | Reverse changed fuel or trap behavior |
@@ -213,9 +253,9 @@ policy. “Requirement” below is the enduring constraint; “decision” is on
 | Recursive data | By-value cycles reject | Recursion needs lifetime semantics | No recursive values | Reject lists as a heap shortcut |
 | Generics | None in language | Need identity/substitution/lowering rules | Defer | Enter only for repeated consumers |
 | Collections | No sequence, map, or set | Explicit order/size/allocation | No collection framework | Reject one-consumer generalization |
-| Bytes and text | Managed immutable bytes; no text | Canonical encoding and bounded sharing | Retain URL-safe unpadded base64 and five byte operations | Reopen representation only by direct cutover or add text for its own consumer |
-| Memory management | Flat fixed cells plus invocation byte arena | Techniques may differ by value class | Checked handles for nonescaping bytes; no RC/GC | Reopen at measured retention, escape, cycle, or resource trigger |
-| Ownership/borrowing | Read-only duplicable values; no move or borrow rules | Explicit alias/lifetime semantics when needed | Infer Run lifetime; no borrow checker | Require a real exclusive/shared consumer |
+| Bytes and text | Managed immutable bytes; no text | Canonical encoding and bounded sharing | Retain URL-safe unpadded base64 and six byte operations including concat | Add text only for its own consumer |
+| Memory management | Flat cells plus managed byte store | Techniques may differ by value class | Verified ownership, early reclaim, narrow RC fallback; no tracing | Reopen at escape, cycle, region, or resource trigger |
+| Ownership/borrowing | Duplicable immutable values; derived physical actions | Keep memory choreography out of ordinary semantics | Infer and verify borrow/share/transfer/drop | Add surface ownership only for an observable consumer |
 | Resource values | None | Non-duplication and deterministic cleanup | Defer | Reject ambient integer handles |
 | Effects/capabilities | Pure semantic programs | Every effect needs typed authority | No effects | Enter with vertical permission/failure contract |
 | Host I/O | Service I/O only | Separate service operation from language effect | Expose no host operation | Require worker and permission boundary |
@@ -224,29 +264,29 @@ policy. “Requirement” below is the enduring constraint; “decision” is on
 | Concurrency/async | Synchronous one-request connection | Explicit snapshot/publication semantics | No async or request concurrency | Enter only with throughput/isolation evidence |
 | Cancellation/timeout | Transport deadlines; fuel/frames | State effect outcome exactly | Preserve publication rules | Reject silent retry after timeout |
 | Packages/modules | One workspace, no ecosystem | Immutable declared dependency authority | No package manager | Require named dependency consumer |
-| Persistence format | Artifact 4 / SPG004, HEAD6 | Canonical bounded unambiguous bytes | Raw bounded literals and v7 fingerprint | Reject compatibility reader without users |
+| Persistence format | Artifact 5 / SPG005, HEAD7 | Canonical bounded unambiguous bytes | Concat tag and v8 fingerprint, no derived plans | Reject compatibility reader without users |
 | Journal/compaction | Full artifact per revision | Preserve authority and non-reuse | No journal | Enter at measured size/write threshold |
 | Branch/merge | One head | Explicit parents and semantic conflicts | No branches | Require collaborative consumer |
-| Queries/index/cache | Deterministic full scans | Recomputation remains oracle | No index or cache | Differential-test any measured optimization |
+| Queries/index/cache | Deterministic full scans plus client-saved packets | Recomputation remains oracle | No automatic cache or index | Differential-test any measured optimization |
 | Incrementality | Broad recomputation | Derived revision-bound results | No framework | Require representative dependency cost |
-| Core IR | One private verified IR | Derived semantics only | Unchanged | Verify each future instruction independently |
-| Interpreter | Explicit-frame oracle | Exact fuel, memory, order | Preserve behavior | Reject undifferentiated fast paths |
+| Core IR | One private verified IR | Derived semantics only | Add concat and derived managed-cell maps | Verify each future instruction independently |
+| Interpreter | One explicit-frame semantic route | Exact fuel, values, order, and traps | Verified ownership is default; allocate-new is a test oracle | Delete reuse if differential evidence fails |
 | AOT/JIT/native | None | Bind exact revision and preserve oracle | No native tier | Enter after interpreter cost dominates workload |
 | Sandboxing | Local service is not a sandbox | Claims match enforced isolation | No sandbox work | Require threat model before effects/foreign code |
 | Cross-platform | Linux x86-64 Unix IPC | Semantic portability unless explicit | No cfg expansion | Require named platform consumer |
 | Daemon topology | One local durable writer; one request per connection | One logical authority per namespace | Session reuses only client process | Reject hidden multi-frame or split-brain writers |
 | Multi-tenancy | OS directory/socket ownership | Auth, authorization, quota, isolation | Keep local-only boundary | Require deployment threat model |
-| Security model | Inputs and durable bytes untrusted | Unknown forms reject | Preserve strict v7 cutover | Reject permissive recovery or unknown fields |
+| Security model | Inputs, plans, handles, and durable bytes untrusted | Unknown forms reject | Preserve strict v8 cutover and plan verification | Reject permissive recovery or unknown fields |
 | Supply chain | Small locked dependency set | Every dependency has a consumer | Add safe-feature `base64` for the one canonical codec | Remove if build/safety cost or aliases appear |
 | Formal methods | Tests, models, mutations | Use tools for sustained state risk | No ceremonial proof layer | Enter for concurrency/merge/resource ownership |
 | Testing/fuzzing | Focused tests plus deterministic mutation | Retain success and rejection evidence | Extend equivalence/depth/protocol tests | Do not call mutation smoke fuzzing |
-| Observability/debugging | Structured outcomes, no debugger | Bounded revision-bound observation | Temporary campaign metrics only | Reject unbounded global traces |
-| Repository topology | One Rust package, fact-owned modules | Change locality over line quotas | Keep one package and touched owners | Split only for measured boundary |
+| Observability/debugging | Structured outcomes and bounded semantic packets; no debugger | Bounded revision-bound observation | Retain one-way review and targeted debug context | Reject unbounded global traces |
+| Repository topology | One Rust package; separate workbench plan/context/view owners | Change locality over line quotas | Keep machine authority untouched by presentation code | Split another large owner only when its changed path proves need |
 | Documentation | Small role-specific maintained set | One fact owner and plain language | Update existing owners only | Delete duplicate catalogues |
-| Compatibility/versioning | Pre-release direct replacement | Active bytes unambiguous | v7/artifact4/SPG004/HEAD6; no old reader | Reject hidden editions/fallbacks |
-| API economics | Bytes/calls/errors measured | Never trade correctness for cost | Compare equal explicit/inline work | Reject unequal-task savings |
-| Runtime performance | Interpreter bootstrap observations | Optimize representative workloads | No runtime optimization | Preserve oracle and reversal metric |
-| Memory/energy footprint | Flat-cell bounds, full snapshots | Separate peak, retained, copy, CPU cost | Syntax savings make no runtime claim | Require named bottleneck |
+| Compatibility/versioning | Pre-release direct replacement | Active bytes unambiguous | v8/artifact5/SPG005/HEAD7; no old reader | Reject hidden editions/fallbacks |
+| API economics | Bytes/calls/errors and exposed provider token classes measured | Never trade correctness for cost | Retain workbench after equal-task observation | Reverse if broader tasks lose the success/correction/context tradeoff |
+| Runtime performance | Canonicalizer exposes repeated concat | Optimize representative workloads | Retain measured unique-left reuse with fallback | Delete below copied-byte/peak benefit threshold |
+| Memory/energy footprint | Early reclaim plus reuse | Separate peak, cumulative, retained, copy, and time | Record physical metrics apart from fuel | Reverse any policy that changes semantics implicitly |
 | Self-hosting | Rust implementation only | Real component without privilege escape | Defer | Reject symbolic milestone pressure |
 | Standard library | No ecosystem or broad library | Semantic, reproducible, capability-aware | Add no convenience framework | Require repeated application need |
 | Distribution/deployment | Local binaries and state dirs | Reproducible ownership and upgrade rules | No installer/service manager | Require named deployment |

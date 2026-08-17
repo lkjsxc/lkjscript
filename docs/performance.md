@@ -1,5 +1,380 @@
 # Performance evidence
 
+## Semantic workbench and maintenance convergence campaign
+
+### Starting state and baseline
+
+The campaign ran on `main` at the audited commit
+`59839070f83209155cd5b21d266efd967620736f` (`Add bounded managed bytes architecture`).
+`origin/main` named the same commit. The worktree already contained the user-supplied policy and
+campaign prompts plus the dependency-closed protocol-v8 ownership-first byte-construction work; those
+changes were inspected and preserved. Draft PR 1 was read only through the connected GitHub metadata
+surface, confirmed stale and unmergeable, and was not checked out, rebased, closed, or otherwise
+modified. No remote state changed.
+
+The reproduced environment is stable `rustc 1.96.0` and `cargo 1.96.0`, Linux 7.0.0-29 x86-64.
+Before workbench implementation, all five then-retained release example drivers passed, as did the
+focused ownership and managed-store tests, formatting, and an optimized build. The active protocol
+and JSON version was 8, artifact format 5, semantic schema `lkjscript-spg005`, `LKJHEAD7`, and machine
+schema digest `fc8ef2e31d01b0e45eb4c45ebb0f344cbbd2d0d150306e90da5407e889a2f886`.
+The workbench changed none of those identities or accepted daemon bytes.
+
+| Baseline observation | Exact result |
+| --- | ---: |
+| compact manifest / explicit full output, including final LF | 1,242 B / 135,010 B |
+| retained 12-root compact result | 86,567 B |
+| four roots used by the maintenance driver | 74,397 B |
+| pre-workbench release client / daemon | 5,297,712 B / 4,203,144 B |
+| `machine.rs` at workbench start | 9,493 lines / 361,989 B |
+| `interpret.rs` at workbench start | 4,304 lines / 158,137 B |
+| `compile.rs` at workbench start | 3,076 lines / 117,694 B |
+
+The audited root policy was 1,086 lines and 40,860 bytes. The supplied durable replacement is 485
+lines and 26,383 bytes with SHA-256
+`dafff5bc1a8459c468d71f32f1e050c0b67ed664144d4197fd68608af9671d5e`: 601 fewer lines and
+14,477 fewer bytes without moving campaign procedure into policy. This campaign prompt is 5,701
+lines and 188,049 bytes with SHA-256
+`4efeb5b2a081624b29a56e8cd52fca1c9169d651867f5920ac5770b242d10929`; it is a one-time
+execution artifact. Bytes are not tokens.
+
+### Product and interface decision
+
+The selected product boundary is a local semantic development workbench: compact orientation,
+revision-bound context, deterministic review, typed validate/apply plans, exact diff, and exact Run
+over the existing service. Raw JSON remains the complete low-level diagnostic control. The text view
+and plan are deliberately different one-way projections: review text does not parse, while plan text
+is discarded immediately after strict normalization. Neither enters semantic artifacts, HEAD,
+history, idempotency fingerprints, or daemon state.
+
+The major decisions share these impacts: one SPG and one validator remain; stable Node identity and
+allocation rules are unchanged; protocol/artifact/HEAD versions are unchanged; malformed input still
+rejects before dispatch; durable publication remains preflighted and failure-atomic; no unsafe Rust,
+dependency, network listener, retry, model decision, or mutable client workspace was introduced.
+
+| Question and consumer | Alternatives evaluated | Evidence and decision | Reversal condition |
+| --- | --- | --- | --- |
+| primary agent action surface for sustained maintenance | raw root-selected JSON; packet-scoped JSON; generated nested CLI flags; pure positional S-expression; indentation-significant plan; indentation-insensitive named plan | Raw JSON is retained as control/diagnostic. Packet-scoped JSON saved IDs but retained repeated DTO fields. Generated commands are retained for bounded task routing but rejected for structured bodies because nested flags and shell quoting preserve the accidental scaffolding. A pure positional form required a second arity table; indentation significance added a boundary failure without semantic value. The retained hybrid uses named objects/lists plus S-expression-like tagged variants and deserializes into existing DTOs. No losing parser or flag forest remains. | Delete the grammar if broader equal tasks show more correction or descriptor drift than strict JSON. |
+| observation for create, repair, refactor, debug, delete, and review | selected schema roots and ad hoc queries; source-like review only; exact packet only; hybrid packet plus review | One closed packet deterministically composes existing queries and exact omissions; one renderer gives concise review while packet JSON remains machine-exact. A target-locality test proves an unrelated sibling module is omitted. | Narrow or delete a purpose whose missing/irrelevant facts repeatedly force broader context than direct queries. |
+| compact references | full Node IDs; name lookup; shell state; packet aliases | Revision/schema/workspace/digest-bound aliases are exact and never fall back to names, current head, full IDs, or draft symbols. Rename and stale-domain tests close the main ambiguity risks. | Delete aliases if another application exposes ambiguity or packet churn that outweighs repeated-ID savings. |
+| validate/apply loop | independent re-authoring; hidden client candidate; same plan against exact base | `validate` and `apply` parse the same bytes; daemon validation remains authoritative and stale base rejects. No server candidate or provisional identity domain was needed by the eight-revision corpus. | Reopen an ephemeral candidate only if a larger atomic change cannot fit one bounded transaction without accidental history. |
+| local cache and connection lifecycle | automatic schema/context cache; saved packet files; existing line session; persistent daemon connection | The corpus saved exact packet bytes under their digest in a private temporary client directory, then deleted them without semantic effect. No production cache was retained. Existing one-request connections and the line session were adequate; no correlation, cancellation, reconnect, or unknown-outcome expansion was justified. | Add only a digest-keyed cache or sequential connection after cold/warm or connection setup dominates a second workload. |
+| runtime debugging | existing typed operation origin; bounded semantic packet; call-path trace; debugger | The overflow task was located and repaired from the exact `runtime_trap` target plus a 8,927-byte debug packet and 2,076-byte view. No trace framework was retained. | Add the smallest bounded call-path facts only when a retained failure cannot be corrected from current origins and context. |
+| implementation locality | add workbench logic to `machine.rs`; broad repository split; focused owners | Workbench code lives in plan/context/view/help modules and the agent CLI module; `machine.rs`, compiler, interpreter, protocol, persistence, and semantic validator did not gain presentation logic. No cosmetic split or forwarding forest was made. | Split another owner only when a representative changed path requires unrelated bytes or concerns. |
+
+The serious generated-command alternative is retained only where one shell operation remains bounded:
+orientation, create, context, view, validate/apply dispatch, diff, and run. It was rejected as a
+per-node/per-operation command family after mapping the 715-byte sealed creation plan: its nested body,
+target, type, expression, and response fields would require repeated quoting and operation-specific
+flags. The packet-scoped JSON and positional/indentation prototypes remained disposable comparison
+forms and left no production files, dependency, feature flag, or success test.
+
+This direction is consistent with, but not delegated to, primary design inputs: purpose-built
+agent-computer interfaces in [SWE-agent](https://arxiv.org/abs/2405.15793), semantically local typed
+facts in [Statically Contextualizing Large Language Models with Typed
+Holes](https://arxiv.org/abs/2409.00921), multiple derived forms over one semantic representation in
+the [MLIR language reference](https://mlir.llvm.org/docs/LangRef/), and codebase-manager orientation
+in the [Unison tour](https://www.unison-lang.org/docs/tour/). `lkjscript` retains its own identity,
+transaction, validation, durability, and execution contracts.
+
+### Sustained-maintenance application
+
+`examples/agent-maintenance` evolves the release/deployment policy through public production
+binaries. It imports the retained job-policy request builder rather than copying a private graph
+fixture; every seed and change still crosses the CLI, protocol, service, transaction, artifact, query,
+compiler, verifier, and runtime path.
+
+| Revision | Retained maintenance fact and oracle |
+| ---: | --- |
+| 1 | reachable `i64` placeholder published; Run rejects `compile_incomplete`; wrong-type repair rejects without head or allocator movement |
+| 2 | same hole identity refines with validate/commit parity; no node created; `Decision.accept(25)` |
+| 3 | helper-based score extension; all rejection alternatives preserved; accepted score 27 |
+| 4 | helper refactor preserves the public oracle and the existing checked-add identity |
+| 5 | `Resources.memory` becomes `memory_units` without identity or behavior change |
+| 6 | deliberate checked-add overflow reports `runtime_trap` at the exact semantic addition |
+| 7 | exact constant producer changes from `i64::MAX` to -1; debug entry returns `i64(0)` |
+| 8 | immutable `Limits` is replaced by `DeploymentLimits` with rollout flag; construction, projection, function input/output, and calls migrate; old references first block deletion, then old entry/function/type and debug function delete atomically; disabled rollout returns the exact trust-policy rejection |
+
+Restart reproduced incomplete revision 1, score 25 at revision 2, score 27 at revisions 3--5, the
+historical revision-6 trap, revision-7 zero, and migrated revision-8 score 27. The multi-revision
+review reports both deleted and created product declarations. Artifact sizes for revisions 1--8 are
+8,354, 8,373, 8,662, 8,915, 8,921, 9,203, 9,203, and 10,017 bytes; HEAD is 81 bytes.
+
+For identical initial-application validation, the complete raw JSON request/response was
+21,924/2,540 bytes and the compact plan/logical response was 15,562/2,500 bytes. Receipts were exact
+except for the intentionally absent low-level envelope, so the plan reduced action bytes by 29.0
+percent without changing the candidate graph. The later declaration migration plan was 9,035 bytes;
+that is the retained evidence for the next focused migration gate rather than a generic rewrite
+engine.
+
+The complete driver used 82 workbench CLI processes, 85,430 stdin bytes, and 460,335 stdout bytes.
+It observed two required semantic rejections and three required runtime failures. One measured run
+took 266,272,398 ns, with initial/restart daemon readiness of 10,784,317/6,517,475 ns. These are one
+warm-machine application observations, not latency distributions.
+
+| Context purpose and revision | Packet bytes | Review bytes | Included nodes |
+| --- | ---: | ---: | ---: |
+| orient r0 | 1,740 | 601 | 1 |
+| repair r1 | 20,029 | 2,792 | 7 |
+| extend r2 | 26,040 | 2,926 | 35 |
+| refactor r3 | 28,104 | 3,171 | 38 |
+| refactor r4 | 6,176 | 1,878 | 5 |
+| debug r6 | 8,927 | 2,076 | 9 |
+| delete r7 | 6,511 | 1,818 | 6 |
+| full review r8 from r2 | 150,859 | 11,421 | 212 |
+| orient r8 | 35,734 | 3,554 | 52 |
+
+The initial repair prototype accidentally traversed owner siblings and produced a 132,224-byte,
+189-node packet. Scope-aware owner/dependency/target traversal reduced the same packet to 20,029
+bytes and seven nodes. Full-workspace review remains intentionally broad and states its scope. Saved
+packet files occupied 284,111 bytes in the disposable example cache; deleting them changes no
+request or result.
+
+### Controlled equal-task coding-agent observation
+
+Installed `codex-cli 0.147.0` ran explicit model `gpt-5.4` with fresh ephemeral contexts and identical
+semantic task wording. Each task had to create one incomplete `answer(): i64`, reject a bool repair,
+validate and commit identity-preserving `const_i64(42)`, rename the same function, run revisions 1--3,
+and inspect the exact diff. Both daemons began with private empty state. Agents could read only the
+task, local production binaries, public help/schema, and public responses in their scratch directory;
+implementation, tests, examples, specifications, repository docs, history, prompts, prior payloads,
+and the other transcript were forbidden. The audited command logs contain no prohibited read, raw
+RPC in the candidate, workbench command in the baseline, repository mutation, or remote action.
+
+The nested `workspace-write` harness first failed before even `pwd` because Bubblewrap could not set
+loopback (`RTM_NEWADDR: Operation not permitted`). That 46.65-second attempt completed zero schema or
+semantic request and is not an interface result. The equal tasks were rerun without the nested
+Bubblewrap sandbox in dedicated scratch directories; isolation was therefore prompt- and
+command-audit-enforced rather than an operating-system filesystem sandbox. The external daemon was
+started and stopped by the harness, not the agent.
+
+| Observation | Raw JSON control | Final workbench candidate |
+| --- | ---: | ---: |
+| exact semantic task and independent oracle | pass | pass |
+| published revisions | 1, 2, 3 only | 1, 2, 3 only |
+| required invalid semantic edit | 1 | 1 |
+| unintended boundary/authoring corrections | 4 | 0 |
+| schema requests reported by agent | 8 | 3 |
+| context requests | 0 | 3 |
+| audited shell commands / failed commands | 33 / 8 | 32 / 0 |
+| wall boundary from JSONL creation to completion | 305.575 s | 178.718 s |
+| provider input tokens | 1,253,055 | 473,927 |
+| provider cached-input tokens | 1,177,984 | 437,888 |
+| provider output tokens | 15,290 | 8,230 |
+| provider reasoning-output tokens | 3,969 | 3,110 |
+| JSONL event bytes | 581,889 | 147,992 |
+
+Relative to this single raw run, the final candidate used 62.2 percent fewer input tokens, 62.8
+percent fewer cached-input tokens, 46.2 percent fewer output tokens, 21.6 percent fewer reasoning
+output tokens, and 41.5 percent less wall time. These provider-reported classes are not inferred from
+bytes and are not a general benchmark. The provider exposed no price/cost field, so no monetary claim
+is made.
+
+The first workbench candidate observation is retained as negative evidence. It completed the task but
+needed five unintended corrections involving draft targets, packet aliases, primitive type spelling,
+and idempotency. Generated help was then changed to state those executable-contract facts exactly.
+A fresh final candidate authored revision 1 on its first plan attempt and completed with zero failed
+commands or unintended correction. The final candidate still chose three selected schema calls; the
+workbench does not claim that ordinary fresh-agent work is schema-free. Its saved repair/refactor/
+review packets were 20,779/11,265/12,513 bytes and their views were 930/782/789 bytes.
+
+The raw agent preserved 11 request/response pairs totaling 6,377/5,060 bytes, but did not preserve
+every early probe byte. The final candidate likewise did not meter every CLI stdin/stdout boundary.
+Therefore no exact equal-task total action/observation-byte claim is made from the model trials; the
+deterministic driver above owns the equal-payload byte comparison. Provider price was unavailable.
+
+### Context-local implementation cost
+
+The workbench added no normal dependency and no semantic/runtime module. Its production ownership is
+88,595 bytes under `src/workbench/` plus 22,071 bytes in `src/bin/lkjscript/agent.rs` (110,666 bytes
+total). Focused public integration owners are 15,498 bytes for packet/plan/view boundaries and 2,387
+bytes for the maintenance corpus. The retained example itself is 41,362 bytes, including its public
+driver, concise domain README, sealed tasks, and shell entry point.
+
+`machine.rs` remains 361,989 bytes and received no workbench logic. `interpret.rs`, `compile.rs`,
+protocol DTOs, transaction normalization, validation, artifacts, and persistence also keep their
+existing authorities. A representative help or parser change now opens the small agent/help or
+agent/plan owners rather than the 361,989-byte machine projection. The client release binary is
+6,922,560 bytes and the
+daemon is 4,204,616 bytes: against the reproduced pre-workbench build this is +1,624,848 client bytes
+and +1,472 daemon bytes. This is one incremental optimized build observation; binary size is the main
+retained implementation cost and a reversal signal if future client projections continue to pull in
+unrelated service code.
+
+Final `agent orient` and `agent help`, including LF, are 1,130 and 2,254 bytes. The active manifest,
+root, full, and digest identities remain byte-for-byte governed by the pre-existing v8 machine
+contract. The 10,000-case seed-1 workbench mutation smoke covers plan, alias, and packet mutations
+separately from the existing artifact/framed-JSON/JSON mutation smoke; both are deterministic mutation
+testing, not coverage-guided fuzzing.
+
+The final normal verification counts and timings are recorded below after the final documentation
+boundary. Provider token classes were exposed only for the controlled CLI trials, and provider price
+was not exposed. For the deterministic replays: Provider token, cache, hidden-reasoning, and price
+telemetry were unavailable; byte and interaction measurements are proxies only.
+
+### Verification boundary
+
+The locked all-target/all-feature test boundary passed 212 active tests with 10 deliberate ignored
+measurement or mutation tests in 8.35 seconds of shell wall time. Warnings-denied all-target Clippy
+passed in 3.53 seconds. Formatting, the 18.09-second optimized build, and `git diff --check` passed. All six
+production example scripts passed through release binaries; their warm aggregate shell boundary was
+0.93 seconds, including six unchanged release-build checks. The fresh optimized test build used by
+the existing seed-1 boundary smoke took 2 minutes 36 seconds; the 10,000 artifact/frame/JSON cases
+then ran in 0.03 seconds and the 10,000 plan/packet/alias cases in 0.13 seconds. A separately focused
+workbench release smoke ran its 10,000 cases in 0.15 seconds after a 54.10-second optimized build.
+These compile and elapsed observations are single warm/cold states, not distributions.
+
+Installed nightly Miri passed all seven focused workbench library tests (10.87 seconds reported test
+time), and nightly AddressSanitizer with `detect_leaks=1` passed the same seven tests after a
+4.52-second build. The campaign did not change
+the interpreter, ownership planner, managed store, persistence state machine, or concurrency model,
+so it did not relabel the earlier 15-test interpreter sanitizer scope or add model checking. No
+coverage-guided fuzzer was retained. Safe Rust, Miri, sanitizers, deterministic mutation, and agent
+observations are evidence for their exercised boundaries, not formal proof or production-readiness
+claims.
+
+## Ownership-first byte construction campaign
+
+### Consumer and architecture decision
+
+The sealed base is `59839070f83209155cd5b21d266efd967620736f` on `main`. The retained consumer is
+[`examples/binary-canonicalizer`](../examples/binary-canonicalizer/): it checks marker `0xa5`, scans
+the payload, discards zero padding, and carries an immutable `bytes` accumulator through a loop and
+call. The prior operation set could inspect and slice bytes but could not construct the exact compact
+output. Allocate-new `bytes_concat` makes that program possible while exposing both cumulative copy
+work and invocation-wide intermediate retention.
+
+The selected semantic primitive is pure `bytes_concat(lhs, rhs) -> bytes`. Equality and behavior
+depend only on visible octets; no address, capacity, ownership count, or mutation is observable. The
+fuel contract charges the complete result length on every concat. This is representation-independent
+and keeps allocate-new fallback work bounded by logical fuel, but makes repeated one-octet append
+quadratic logical work. The retained canonicalizer is therefore a bounded construction consumer, not
+evidence that concat is a scalable general builder.
+
+The selected physical route is ownership plus precise reference counting only when sharing remains.
+Verified Core IR feeds exact managed-reference maps and compiler-derived borrow/share/transfer/drop/
+reuse actions. A separate verifier recomputes type maps, local liveness, actions, edge cleanup, and
+uniqueness before the interpreter may create managed objects. Final claims reclaim views and backing;
+reused descriptor slots advance a checked generation. A verified unique full-left concat can grow
+and reuse its buffer after preflight. Sharing, aliases, borrows, and partial views take the
+allocate-new fallback. The allocate-new mode remains test-only as the differential oracle.
+
+| Alternative | Decision | Evidence and reversal condition |
+|---|---|---|
+| invocation-wide allocate-new store | retain as oracle only | smallest safe semantic route; quadratic copies and retained intermediates reject it as production default |
+| lexical regions | defer | one invocation/frame lifetime does not express loop-carried replacement and sharing as directly; reopen for a value set with one proven common lifetime |
+| precise reference counting everywhere | reject | borrows and last-use transfers avoid count traffic; counts remain only for actual multiple claims |
+| ownership with RC fallback | retain | exact for acyclic byte sharing and independently verifiable; reverse if plan complexity exceeds measured memory benefit |
+| affine byte builder | defer | would add observable consumption and agent concepts; compare only for a second linear-construction consumer |
+| rope or piece tree | reject for this workload | adds depth, balancing, indexing, equality, and flattening contracts while unique append already removes physical quadratic copying |
+| copy-on-write buffer | retain as private reuse technique | unique buffer mutation remains invisible and always has allocate-new fallback |
+| tracing collector | reject | accepted managed values are acyclic and exact ownership already reclaims them |
+| process-isolated worker | defer | changes fault containment but does not solve copying or lifetime |
+| postponement | reject | the public canonicalizer is a concrete missing construction capability |
+
+One SPG remains the program authority; operation Node IDs retain their current granularity; semantic
+operand use remains `Read`; ownership planning follows Core verification; flat cells remain the
+execution oracle; managed-reference maps derive from Core types; one Rust package remains adequate;
+and ownership internals remain absent from the machine contract. The managed store replaces the
+arena as the production byte route while the allocate-new mode remains a test oracle. No tracing,
+surface lifetime syntax, new dependency, unsafe Rust, concurrency, native backend, or effect was
+introduced.
+
+### Deterministic construction measurement
+
+The focused `managed::tests::loop_carried_construction_reclaims_early_and_reuses_unique_storage`
+workload appends 512 deterministic nonzero octets one at a time and drops every obsolete claim. It
+runs the same store contract in allocate-new oracle and ownership modes. `Cumulative allocated`
+counts committed `Vec` capacity at backing creation and after a capacity-growth event; it is neither
+RSS nor allocator traffic. `Copied bytes` counts exact explicit slice-to-buffer copies in the managed
+store and excludes allocator-internal relocation, which safe `Vec` growth does not expose.
+`Cumulative visible` is the semantic construction policy and is therefore identical in both modes.
+
+| Metric | Allocate-new oracle | Unique ownership | Forced shared fallback |
+|---|---:|---:|---:|
+| exact result bytes | 512 | 512 | 512 |
+| cumulative visible bytes | 131,840 | 131,840 | 131,840 |
+| cumulative allocated backing capacity | 131,840 | 1,528 | 131,840 |
+| peak live backing bytes | 1,024 | 513 | 1,024 |
+| peak live managed objects | 6 | 4 | 6 |
+| cumulative managed objects | 2,050 | 1,026 | 2,050 |
+| copied bytes | 131,840 | 1,024 | 131,840 |
+| ownership-count increments | 0 | 0 | 512 |
+| ownership-count decrements | 2,050 | 1,026 | 2,562 |
+| reuse attempts / hits / fallbacks | 0 / 0 / 0 | 512 / 512 / 0 | 512 / 0 / 512 |
+| live bytes / objects after final drop | 0 / 0 | 0 / 0 | 0 / 0 |
+
+The optimized route is retained as default because this equal-result workload materially reduces
+copied bytes, committed capacity, peak live backing, and descriptor churn while preserving a simple
+fallback. Delete unique reuse if later representative workloads lose those benefits or the verifier
+cannot continue to prove eligibility independently.
+
+The deterministic differential corpus uses seed `0x6c6b6a7363726970` and 256 generated concat cases.
+It compares exact values plus periodic one-unit-below fuel failures in oracle and ownership modes.
+The recursive managed-argument case creates seven shared claims across eight explicit frames, then
+proves frame exhaustion unwinds to zero live objects and zero live backing without native recursive
+cleanup. Malformed plan tests independently reject missing and duplicate drops, a false uniqueness
+claim, a transfer where a borrow is required, a missing cleanup root, a dangling return borrow, and
+an incorrect managed-reference map.
+
+### Public workload and cutover
+
+The direct boundary is protocol/strict JSON 8, machine schema `lkjscript-machine-schema-v8`, artifact
+format 5, semantic schema `lkjscript-spg005`, `LKJHEAD7`, and the v8 canonical transaction fingerprint
+domain. Version 7, artifact 4, SPG004, and HEAD6 success readers are absent. Stable operation tag 21
+identifies `bytes_concat`; ownership plans and managed handles never serialize.
+
+The production canonicalizer performs schema discovery, incomplete construction, invalid and valid
+repair, exact execution vectors, bounds and fuel failures, rename, diff, old/current revision runs,
+restart, corruption rejection, competing-writer rejection, and a dropped pure-run response. Its
+dense construction boundary is payload 1,445 accepted and 1,446 rejected with
+`managed_visible_byte_policy_exceeded`. That boundary follows cumulative logical visible work, not
+peak physical memory; it is the reason the next gate remains a representation-independent linear
+pure-construction decision rather than a claim that reuse makes immutable concat logically linear.
+
+### Verification, build, and interaction evidence
+
+The final environment is stable `rustc 1.96.0` and `cargo 1.96.0` on Linux 7.0.0-29 x86-64. The
+all-target/all-feature boundary has 199 active tests and nine ignored manual measurement or mutation
+tests. Formatting, warnings-denied Clippy, all tests, a locked release build, diff checking, all five
+production examples, and the seed-1 10,000-case malformed-boundary release smoke passed. The mutation
+smoke is deterministic mutation testing, not coverage-guided fuzzing.
+
+Installed nightly Miri passed six managed-store tests, two ownership-plan tests, and the focused
+interpreter cleanup test. Nightly AddressSanitizer with `detect_leaks=1` passed all 15 interpreter
+tests. These tools strengthen evidence for the exercised paths but are not a proof of the complete
+trusted computing base. Stable-toolchain Miri, `cargo-fuzz`, provider token/price telemetry, and
+`/usr/bin/time` were unavailable. No local unsafe Rust, FFI, build script, native code generator, or
+new dependency was introduced.
+
+The active machine-schema digest is
+`fc8ef2e31d01b0e45eb4c45ebb0f344cbbd2d0d150306e90da5407e889a2f886`. Exact compact/framed byte
+counts are 1,241/1,319 for the manifest, 86,567/86,645 for the selected 12-root closure, 135,009/
+135,087 for the explicit full projection, and 105/183 for a digest-matched unchanged response. The
+selected and full compact projections grew 740 and 1,235 bytes from the sealed v7 baseline. This is
+schema-byte evidence, not a token estimate.
+
+One sealed canonicalizer replay used 43 semantic calls, 46 daemon connections, 55,770 compact
+request bytes, and 129,871 compact response bytes in 93,764,035 ns. Two session CLI processes span
+the initial daemon and the deliberate restart. Its recorded compile/execute observations in ns were
+70,683/87,785 for the first empty run, 513,197/13,026,353 for the measured dense run, and
+117,501/153,269 after restart. These are single application observations, not distributions or
+performance-leadership claims.
+
+A fresh isolated release target built in 83.13 seconds of shell wall time (103.26 user, 2.57 system);
+an unchanged warm release build took 0.02 seconds. The resulting `lkjscript` and `lkjscriptd` binaries
+are 5,297,712 and 4,203,144 bytes, compared with 5,265,840 and 4,014,360 bytes at the sealed base.
+RSS was not recorded. The Rust source changed from 46,299 lines/1,685,443 bytes to 49,543 lines/
+1,804,639 bytes. `interpret.rs` changed from 3,768 lines/135,401 bytes to 4,304 lines/158,137 bytes;
+the focused new `managed.rs` and `ownership.rs` owners are 1,197 lines/44,259 bytes and 1,357 lines/
+46,639 bytes. These sizes are context and maintenance-cost evidence, not quality scores.
+
+No fresh protocol-v8 coding-agent model trial was run. The production canonicalizer deterministically
+proved targeted schema discovery and public-path authoring, repair, execution, history, and restart;
+another isolated model call would not answer a new interface question. Provider telemetry was not
+available, so only request/response bytes, calls, processes, connections, failures, and elapsed time
+are reported.
+
+
 ## Managed-bytes campaign: sealed baseline and preimplementation decision
 
 This campaign began on `main` at `5c07498a2dbb8c0a45973769eb1af1e460ac6921`

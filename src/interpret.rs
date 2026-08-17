@@ -6,11 +6,19 @@ use crate::core_ir::{
 use crate::error::{ErrorCode, LkError, Result};
 use crate::graph::Snapshot;
 use crate::ids::NodeId;
+use crate::managed::{ByteHandle, ManagedStore};
+use crate::ownership::{
+    self, EdgeOwnership, EdgeSource, InstructionOwnership, OwnershipPlan, TerminatorOwnership,
+    UseAction,
+};
 use crate::schema::{ByteString, MAXIMUM_BYTE_STRING_BYTES, Node, SemanticType};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
-use std::num::NonZeroU32;
 use std::time::Instant;
+
+pub use crate::managed::{
+    MAX_RUN_MANAGED_OBJECTS, MAX_RUN_MANAGED_VISIBLE_BYTES, MAX_RUN_RETAINED_BACKING_BYTES,
+};
 
 pub const MAX_RUN_ARGUMENTS: usize = 1_024;
 pub const MAX_RUN_FUEL: u64 = 10_000_000;
@@ -20,9 +28,6 @@ pub const MAX_RUNTIME_VALUE_DEPTH: usize = 24;
 pub const MAX_RUNTIME_VALUE_ITEMS: usize = 4_096;
 pub const MAX_RUNTIME_VALUE_BYTES: usize = 64 * 1024;
 pub const MAX_RUN_ARGUMENT_BYTE_BYTES: usize = 64 * 1024;
-pub const MAX_RUN_MANAGED_VISIBLE_BYTES: usize = 1024 * 1024;
-pub const MAX_RUN_RETAINED_BACKING_BYTES: usize = 256 * 1024;
-pub const MAX_RUN_MANAGED_OBJECTS: usize = 4_096;
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -150,7 +155,7 @@ pub(crate) fn compile_and_run(
                     .ok_or_else(|| invalid_ir("entry argument cell count overflowed"))
             })?;
     ensure_peak_cells(frame_cells(entry_function)?, argument_cells, 0, entry)?;
-    let mut managed = InvocationArena::default();
+    let mut managed = InvocationStore::default();
     let mut flat_arguments = Vec::with_capacity(arguments.len());
     for (value, parameter) in arguments.iter().zip(&entry_function.parameters) {
         flat_arguments.push(to_flat(
@@ -163,7 +168,7 @@ pub(crate) fn compile_and_run(
         )?);
     }
     let execute_started = Instant::now();
-    let flat = interpret_with_arena(&program, flat_arguments, policy, &mut managed)?;
+    let flat = interpret_with_store(&program, flat_arguments, policy, &mut managed)?;
     preflight_flat_output(&program, &managed, &flat, entry)?;
     let value = from_flat(&program, &managed, &flat, 1, entry)?;
     validate_runtime_value(snapshot, &value, result_type, entry)?;
@@ -681,230 +686,10 @@ fn metric_of(
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct ByteHandle(NonZeroU32);
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct BackingHandle(NonZeroU32);
-
-#[derive(Clone, Copy, Debug)]
-struct ByteView {
-    backing: BackingHandle,
-    start: usize,
-    length: usize,
-}
-
-#[derive(Debug)]
-struct ByteBacking {
-    bytes: Box<[u8]>,
-    retained_by_view: bool,
-}
-
-#[derive(Default)]
-struct InvocationArena {
-    backings: Vec<ByteBacking>,
-    views: Vec<ByteView>,
-    visible_bytes: usize,
-    retained_backing_bytes: usize,
-    retained_by_views: usize,
-    #[cfg(test)]
-    drop_witness: Option<std::sync::Arc<std::sync::atomic::AtomicUsize>>,
-}
-
-impl Drop for InvocationArena {
-    fn drop(&mut self) {
-        #[cfg(test)]
-        if let Some(witness) = &self.drop_witness {
-            witness.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        }
-    }
-}
-
-impl InvocationArena {
-    fn allocate_backing(&mut self, bytes: &[u8], origin: NodeId) -> Result<ByteHandle> {
-        let visible = self.checked_visible(bytes.len(), origin)?;
-        let retained = self
-            .retained_backing_bytes
-            .checked_add(bytes.len())
-            .ok_or_else(|| {
-                retained_policy(origin, "retained backing byte accounting overflowed")
-            })?;
-        if retained > MAX_RUN_RETAINED_BACKING_BYTES {
-            return Err(retained_policy(
-                origin,
-                "invocation retained backing byte policy exceeded",
-            ));
-        }
-        self.preflight_objects(2, origin)?;
-        self.backings
-            .try_reserve(1)
-            .map_err(|_| allocation_error(origin))?;
-        self.views
-            .try_reserve(1)
-            .map_err(|_| allocation_error(origin))?;
-        let mut owned = Vec::new();
-        owned
-            .try_reserve_exact(bytes.len())
-            .map_err(|_| allocation_error(origin))?;
-        owned.extend_from_slice(bytes);
-        let backing = BackingHandle(nonzero_handle(self.backings.len(), origin)?);
-        self.backings.push(ByteBacking {
-            bytes: owned.into_boxed_slice(),
-            retained_by_view: false,
-        });
-        let view = ByteHandle(nonzero_handle(self.views.len(), origin)?);
-        self.views.push(ByteView {
-            backing,
-            start: 0,
-            length: bytes.len(),
-        });
-        self.visible_bytes = visible;
-        self.retained_backing_bytes = retained;
-        Ok(view)
-    }
-
-    fn slice(
-        &mut self,
-        source: ByteHandle,
-        start: i64,
-        length: i64,
-        origin: NodeId,
-    ) -> Result<ByteHandle> {
-        let start = usize::try_from(start).map_err(|_| slice_error(origin))?;
-        let length = usize::try_from(length).map_err(|_| slice_error(origin))?;
-        let view = self.view(source, origin)?;
-        let relative_end = start
-            .checked_add(length)
-            .ok_or_else(|| slice_error(origin))?;
-        if start > view.length || relative_end > view.length {
-            return Err(slice_error(origin));
-        }
-        let absolute_start = view
-            .start
-            .checked_add(start)
-            .ok_or_else(|| slice_error(origin))?;
-        let visible = self.checked_visible(length, origin)?;
-        self.preflight_objects(1, origin)?;
-        self.views
-            .try_reserve(1)
-            .map_err(|_| allocation_error(origin))?;
-        let backing_index = handle_index(view.backing.0, origin)?;
-        let backing = self
-            .backings
-            .get_mut(backing_index)
-            .ok_or_else(|| invalid_handle(origin, "byte view names an absent backing"))?;
-        if !backing.retained_by_view {
-            self.retained_by_views = self
-                .retained_by_views
-                .checked_add(backing.bytes.len())
-                .ok_or_else(|| retained_policy(origin, "view retention accounting overflowed"))?;
-            backing.retained_by_view = true;
-        }
-        let handle = ByteHandle(nonzero_handle(self.views.len(), origin)?);
-        self.views.push(ByteView {
-            backing: view.backing,
-            start: absolute_start,
-            length,
-        });
-        self.visible_bytes = visible;
-        Ok(handle)
-    }
-
-    fn bytes(&self, handle: ByteHandle, origin: NodeId) -> Result<&[u8]> {
-        let view = self.view(handle, origin)?;
-        let backing = self
-            .backings
-            .get(handle_index(view.backing.0, origin)?)
-            .ok_or_else(|| invalid_handle(origin, "byte view names an absent backing"))?;
-        let end = view
-            .start
-            .checked_add(view.length)
-            .ok_or_else(|| invalid_handle(origin, "byte view range overflows"))?;
-        backing
-            .bytes
-            .get(view.start..end)
-            .ok_or_else(|| invalid_handle(origin, "byte view range exceeds its backing"))
-    }
-
-    fn view(&self, handle: ByteHandle, origin: NodeId) -> Result<ByteView> {
-        self.views
-            .get(handle_index(handle.0, origin)?)
-            .copied()
-            .ok_or_else(|| invalid_handle(origin, "managed byte handle is out of bounds"))
-    }
-
-    fn checked_visible(&self, added: usize, origin: NodeId) -> Result<usize> {
-        let visible = self.visible_bytes.checked_add(added).ok_or_else(|| {
-            LkError::new(
-                ErrorCode::ManagedVisibleBytePolicyExceeded,
-                "managed visible byte accounting overflowed",
-            )
-            .for_node(origin)
-        })?;
-        if visible > MAX_RUN_MANAGED_VISIBLE_BYTES {
-            return Err(LkError::new(
-                ErrorCode::ManagedVisibleBytePolicyExceeded,
-                "invocation managed visible byte policy exceeded",
-            )
-            .for_node(origin));
-        }
-        Ok(visible)
-    }
-
-    fn preflight_objects(&self, added: usize, origin: NodeId) -> Result<()> {
-        if self
-            .backings
-            .len()
-            .checked_add(self.views.len())
-            .and_then(|value| value.checked_add(added))
-            .is_none_or(|value| value > MAX_RUN_MANAGED_OBJECTS)
-        {
-            return Err(LkError::new(
-                ErrorCode::ManagedObjectPolicyExceeded,
-                "invocation managed object policy exceeded",
-            )
-            .for_node(origin));
-        }
-        Ok(())
-    }
-}
-
-fn nonzero_handle(index: usize, origin: NodeId) -> Result<NonZeroU32> {
-    let one_based = index
-        .checked_add(1)
-        .and_then(|value| u32::try_from(value).ok())
-        .and_then(NonZeroU32::new)
-        .ok_or_else(|| invalid_handle(origin, "managed handle domain is exhausted"))?;
-    Ok(one_based)
-}
-
-fn handle_index(handle: NonZeroU32, origin: NodeId) -> Result<usize> {
-    usize::try_from(handle.get() - 1)
-        .map_err(|_| invalid_handle(origin, "managed handle overflows host indexes"))
-}
+type InvocationStore = ManagedStore;
 
 fn invalid_handle(origin: NodeId, message: &str) -> LkError {
     LkError::new(ErrorCode::InvalidManagedHandle, message).for_node(origin)
-}
-
-fn retained_policy(origin: NodeId, message: &str) -> LkError {
-    LkError::new(ErrorCode::RetainedBytePolicyExceeded, message).for_node(origin)
-}
-
-fn slice_error(origin: NodeId) -> LkError {
-    LkError::new(
-        ErrorCode::ByteSliceOutOfBounds,
-        "byte slice start and length must select a valid range",
-    )
-    .for_node(origin)
-}
-
-fn allocation_error(origin: NodeId) -> LkError {
-    LkError::new(
-        ErrorCode::ExecutionMemoryExhausted,
-        "managed invocation allocation could not be reserved",
-    )
-    .for_node(origin)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -931,9 +716,66 @@ struct FlatValue {
     ty: CoreTypeId,
     cells: Vec<Cell>,
 }
+
+fn managed_handles(
+    plan: &OwnershipPlan,
+    ty: CoreTypeId,
+    cells: &[Cell],
+    origin: NodeId,
+) -> Result<Vec<ByteHandle>> {
+    let map = plan
+        .managed_maps
+        .get(index(ty.0, "managed-reference type")?)
+        .ok_or_else(|| invalid_ir("managed-reference map is out of bounds"))?;
+    let mut result = Vec::new();
+    'path: for path in &map.paths {
+        for condition in &path.conditions {
+            let condition_cell = cells
+                .get(index(condition.cell, "managed discriminant cell")?)
+                .ok_or_else(|| invalid_ir("managed discriminant cell is out of bounds"))?;
+            match condition_cell {
+                Cell::Scalar(value) if *value == u64::from(condition.variant) => {}
+                Cell::Scalar(_) => continue 'path,
+                Cell::Bytes(_) => {
+                    return Err(invalid_handle(
+                        origin,
+                        "managed discriminant cell contains a byte handle",
+                    ));
+                }
+            }
+        }
+        match cells
+            .get(index(path.cell, "managed cell")?)
+            .copied()
+            .ok_or_else(|| invalid_ir("managed cell is out of bounds"))?
+        {
+            Cell::Bytes(handle) => result.push(handle),
+            Cell::Scalar(_) => {
+                return Err(invalid_handle(
+                    origin,
+                    "managed-reference cell contains the wrong runtime kind",
+                ));
+            }
+        }
+    }
+    Ok(result)
+}
+
+fn share_flat_value(
+    managed: &mut InvocationStore,
+    plan: &OwnershipPlan,
+    value: &FlatValue,
+    origin: NodeId,
+) -> Result<()> {
+    for handle in managed_handles(plan, value.ty, &value.cells, origin)? {
+        managed.share(handle, origin)?;
+    }
+    Ok(())
+}
+
 fn to_flat(
     program: &CoreProgram,
-    managed: &mut InvocationArena,
+    managed: &mut InvocationStore,
     value: &RuntimeValue,
     expected: CoreTypeId,
     depth: usize,
@@ -949,7 +791,7 @@ fn to_flat(
 
 fn write_flat(
     program: &CoreProgram,
-    managed: &mut InvocationArena,
+    managed: &mut InvocationStore,
     value: &RuntimeValue,
     expected: CoreTypeId,
     depth: usize,
@@ -1044,7 +886,7 @@ fn write_flat(
 
 fn from_flat(
     program: &CoreProgram,
-    managed: &InvocationArena,
+    managed: &InvocationStore,
     value: &FlatValue,
     depth: usize,
     origin: NodeId,
@@ -1054,7 +896,7 @@ fn from_flat(
 
 fn preflight_flat_output(
     program: &CoreProgram,
-    managed: &InvocationArena,
+    managed: &InvocationStore,
     value: &FlatValue,
     origin: NodeId,
 ) -> Result<()> {
@@ -1071,7 +913,7 @@ fn preflight_flat_output(
 
 fn flat_visible_bytes(
     program: &CoreProgram,
-    managed: &InvocationArena,
+    managed: &InvocationStore,
     ty: CoreTypeId,
     cells: &[Cell],
     depth: usize,
@@ -1152,7 +994,7 @@ fn flat_visible_bytes(
 
 fn from_flat_cells(
     program: &CoreProgram,
-    managed: &InvocationArena,
+    managed: &InvocationStore,
     value_ty: CoreTypeId,
     cells: &[Cell],
     depth: usize,
@@ -1292,6 +1134,8 @@ fn from_flat_cells(
 #[derive(Clone, Copy)]
 struct Continuation {
     result: ValueId,
+    origin: NodeId,
+    drop_result: bool,
 }
 struct Frame {
     function: FunctionId,
@@ -1309,17 +1153,17 @@ fn interpret(
     arguments: Vec<FlatValue>,
     policy: RunPolicy,
 ) -> Result<FlatValue> {
-    let mut managed = InvocationArena::default();
-    interpret_with_arena(program, arguments, policy, &mut managed)
+    let mut managed = InvocationStore::default();
+    interpret_with_store(program, arguments, policy, &mut managed)
 }
 
-fn interpret_with_arena(
+fn interpret_with_store(
     program: &CoreProgram,
     arguments: Vec<FlatValue>,
     policy: RunPolicy,
-    managed: &mut InvocationArena,
+    managed: &mut InvocationStore,
 ) -> Result<FlatValue> {
-    core_ir::verify(program)?;
+    let ownership_plan = ownership::derive(program)?;
     validate_policy(policy)?;
     let mut fuel = policy.fuel;
     let entry = program
@@ -1336,484 +1180,717 @@ fn interpret_with_arena(
     let entry_frame = new_frame(program, program.entry, &arguments, None)?;
     drop(arguments);
     let mut frames = vec![entry_frame];
-    loop {
-        let frame_index = frames
-            .len()
-            .checked_sub(1)
-            .ok_or_else(|| invalid_ir("interpreter frame stack became empty"))?;
-        let function_id = frames[frame_index].function;
-        let block_id = frames[frame_index].block;
-        let function = program
-            .functions
-            .get(index(function_id.0, "function")?)
-            .ok_or_else(|| invalid_ir("runtime function is out of bounds"))?;
-        let block = function
-            .blocks
-            .get(index(block_id.0, "block")?)
-            .ok_or_else(|| invalid_ir("runtime block is out of bounds"))?;
-        if frames[frame_index].instruction < block.instructions.len() {
-            let instruction = &block.instructions[frames[frame_index].instruction];
-            let copy_cells = instruction_copy_cells(program, function, instruction)?;
-            consume_fuel(
-                &mut fuel,
-                1_u64
-                    .checked_add(copy_cells)
-                    .ok_or_else(|| invalid_ir("instruction fuel cost overflowed"))?,
-                instruction.origin(),
-            )?;
-            match instruction {
-                Instruction::ConstUnit { result, .. } => {
-                    write_unit_direct(program, function, &mut frames[frame_index], *result)?
-                }
-                Instruction::ConstBool { result, value, .. } => write_scalar_direct(
-                    program,
+    let outcome = (|| -> Result<FlatValue> {
+        loop {
+            let frame_index = frames
+                .len()
+                .checked_sub(1)
+                .ok_or_else(|| invalid_ir("interpreter frame stack became empty"))?;
+            let function_id = frames[frame_index].function;
+            let block_id = frames[frame_index].block;
+            let function = program
+                .functions
+                .get(index(function_id.0, "function")?)
+                .ok_or_else(|| invalid_ir("runtime function is out of bounds"))?;
+            let block = function
+                .blocks
+                .get(index(block_id.0, "block")?)
+                .ok_or_else(|| invalid_ir("runtime block is out of bounds"))?;
+            let block_plan = ownership_plan
+                .functions
+                .get(index(function_id.0, "ownership function")?)
+                .and_then(|function| {
+                    function
+                        .blocks
+                        .get(index(block_id.0, "ownership block").ok()?)
+                })
+                .ok_or_else(|| invalid_ir("verified ownership block plan is absent"))?;
+            if frames[frame_index].instruction == 0 {
+                drop_frame_values(
                     function,
                     &mut frames[frame_index],
-                    *result,
-                    BOOL_TYPE,
-                    u64::from(*value),
-                )?,
-                Instruction::ConstI64 { result, value, .. } => write_scalar_direct(
-                    program,
-                    function,
-                    &mut frames[frame_index],
-                    *result,
-                    I64_TYPE,
-                    *value as u64,
-                )?,
-                Instruction::ConstBytes {
-                    origin,
-                    result,
-                    value,
-                } => {
-                    let handle = managed.allocate_backing(value.as_slice(), *origin)?;
-                    write_bytes_direct(
-                        program,
-                        function,
-                        &mut frames[frame_index],
-                        *result,
-                        handle,
-                    )?;
-                }
-                Instruction::AddI64 {
-                    origin,
-                    result,
-                    lhs,
-                    rhs,
-                } => {
-                    let value = require_i64(program, function, &frames[frame_index], *lhs)?
-                        .checked_add(require_i64(program, function, &frames[frame_index], *rhs)?)
-                        .ok_or_else(|| {
-                            LkError::new(ErrorCode::RuntimeTrap, "i64 addition overflowed")
-                                .for_node(*origin)
-                        })?;
-                    write_scalar_direct(
-                        program,
-                        function,
-                        &mut frames[frame_index],
-                        *result,
-                        I64_TYPE,
-                        value as u64,
-                    )?;
-                }
-                Instruction::LtI64 {
-                    result, lhs, rhs, ..
-                } => {
-                    let value = require_i64(program, function, &frames[frame_index], *lhs)?
-                        < require_i64(program, function, &frames[frame_index], *rhs)?;
-                    write_scalar_direct(
+                    &block_plan.entry_drops,
+                    &ownership_plan,
+                    managed,
+                    block.origin,
+                )?;
+            }
+            if frames[frame_index].instruction < block.instructions.len() {
+                let instruction_index = frames[frame_index].instruction;
+                let instruction = &block.instructions[instruction_index];
+                let instruction_plan = block_plan
+                    .instructions
+                    .get(instruction_index)
+                    .ok_or_else(|| invalid_ir("verified ownership instruction plan is absent"))?;
+                let copy_cells = instruction_copy_cells(program, function, instruction)?;
+                consume_fuel(
+                    &mut fuel,
+                    1_u64
+                        .checked_add(copy_cells)
+                        .ok_or_else(|| invalid_ir("instruction fuel cost overflowed"))?,
+                    instruction.origin(),
+                )?;
+                match instruction {
+                    Instruction::ConstUnit { result, .. } => {
+                        write_unit_direct(program, function, &mut frames[frame_index], *result)?
+                    }
+                    Instruction::ConstBool { result, value, .. } => write_scalar_direct(
                         program,
                         function,
                         &mut frames[frame_index],
                         *result,
                         BOOL_TYPE,
-                        u64::from(value),
-                    )?;
-                }
-                Instruction::BytesLen {
-                    origin,
-                    result,
-                    value,
-                } => {
-                    let handle = require_bytes_handle(
-                        program,
-                        function,
-                        &frames[frame_index],
-                        *value,
-                        *origin,
-                    )?;
-                    let length = i64::try_from(managed.bytes(handle, *origin)?.len())
-                        .map_err(|_| invalid_handle(*origin, "byte length exceeds i64"))?;
-                    write_scalar_direct(
+                        u64::from(*value),
+                    )?,
+                    Instruction::ConstI64 { result, value, .. } => write_scalar_direct(
                         program,
                         function,
                         &mut frames[frame_index],
                         *result,
                         I64_TYPE,
-                        length as u64,
-                    )?;
-                }
-                Instruction::BytesAt {
-                    origin,
-                    result,
-                    value,
-                    index,
-                } => {
-                    let handle = require_bytes_handle(
-                        program,
-                        function,
-                        &frames[frame_index],
-                        *value,
-                        *origin,
-                    )?;
-                    let requested = require_i64(program, function, &frames[frame_index], *index)?;
-                    let requested = usize::try_from(requested).map_err(|_| {
-                        LkError::new(
-                            ErrorCode::ByteIndexOutOfBounds,
-                            "byte index must be nonnegative and within the visible value",
-                        )
-                        .for_node(*origin)
-                    })?;
-                    let octet = managed
-                        .bytes(handle, *origin)?
-                        .get(requested)
-                        .copied()
-                        .ok_or_else(|| {
-                            LkError::new(
-                                ErrorCode::ByteIndexOutOfBounds,
-                                "byte index is outside the visible value",
-                            )
-                            .for_node(*origin)
-                        })?;
-                    write_scalar_direct(
-                        program,
-                        function,
-                        &mut frames[frame_index],
-                        *result,
-                        I64_TYPE,
-                        u64::from(octet),
-                    )?;
-                }
-                Instruction::BytesSlice {
-                    origin,
-                    result,
-                    value,
-                    start,
-                    length,
-                } => {
-                    let handle = require_bytes_handle(
-                        program,
-                        function,
-                        &frames[frame_index],
-                        *value,
-                        *origin,
-                    )?;
-                    let start = require_i64(program, function, &frames[frame_index], *start)?;
-                    let length = require_i64(program, function, &frames[frame_index], *length)?;
-                    let slice = managed.slice(handle, start, length, *origin)?;
-                    write_bytes_direct(
-                        program,
-                        function,
-                        &mut frames[frame_index],
-                        *result,
-                        slice,
-                    )?;
-                }
-                Instruction::BytesEqual {
-                    origin,
-                    result,
-                    lhs,
-                    rhs,
-                } => {
-                    let lhs = require_bytes_handle(
-                        program,
-                        function,
-                        &frames[frame_index],
-                        *lhs,
-                        *origin,
-                    )?;
-                    let rhs = require_bytes_handle(
-                        program,
-                        function,
-                        &frames[frame_index],
-                        *rhs,
-                        *origin,
-                    )?;
-                    let left = managed.bytes(lhs, *origin)?;
-                    let right = managed.bytes(rhs, *origin)?;
-                    let mut equal = left.len() == right.len();
-                    if equal {
-                        for (left, right) in left.iter().zip(right) {
-                            consume_fuel(&mut fuel, 1, *origin)?;
-                            if left != right {
-                                equal = false;
-                                break;
-                            }
-                        }
+                        *value as u64,
+                    )?,
+                    Instruction::ConstBytes {
+                        origin,
+                        result,
+                        value,
+                    } => {
+                        let handle = managed.allocate_backing(value.as_slice(), *origin)?;
+                        write_bytes_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            handle,
+                        )?;
                     }
-                    write_scalar_direct(
-                        program,
-                        function,
-                        &mut frames[frame_index],
-                        *result,
-                        BOOL_TYPE,
-                        u64::from(equal),
-                    )?;
-                }
-                Instruction::Call {
-                    origin,
-                    result,
-                    function: callee,
-                    arguments,
-                } => {
-                    frames[frame_index].instruction += 1;
-                    if frames.len()
-                        >= usize::try_from(policy.maximum_frames)
-                            .map_err(|_| invalid_ir("frame policy overflows host indexes"))?
-                    {
-                        return Err(LkError::new(
-                            ErrorCode::ExecutionFrameExhausted,
-                            "execution frame policy exhausted before call",
-                        )
-                        .for_node(*origin));
+                    Instruction::AddI64 {
+                        origin,
+                        result,
+                        lhs,
+                        rhs,
+                    } => {
+                        let value = require_i64(program, function, &frames[frame_index], *lhs)?
+                            .checked_add(require_i64(
+                                program,
+                                function,
+                                &frames[frame_index],
+                                *rhs,
+                            )?)
+                            .ok_or_else(|| {
+                                LkError::new(ErrorCode::RuntimeTrap, "i64 addition overflowed")
+                                    .for_node(*origin)
+                            })?;
+                        write_scalar_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            I64_TYPE,
+                            value as u64,
+                        )?;
                     }
-                    let callee_function = program
-                        .functions
-                        .get(index(callee.0, "callee")?)
-                        .ok_or_else(|| invalid_ir("callee is out of bounds"))?;
-                    let callee_cells = frame_cells(callee_function)?;
-                    let scratch_cells = edge_scratch_cells(program, function, arguments)?;
-                    ensure_peak_cells(live_cells, scratch_cells, callee_cells, *origin)?;
-                    let values = arguments
-                        .iter()
-                        .map(|value| read_value(program, function, &frames[frame_index], *value))
-                        .collect::<Result<Vec<_>>>()?;
-                    frames.push(new_frame(
-                        program,
-                        *callee,
-                        &values,
-                        Some(Continuation { result: *result }),
-                    )?);
-                    live_cells = live_cells
-                        .checked_add(callee_cells)
-                        .ok_or_else(|| invalid_ir("live-cell accounting overflowed"))?;
-                    continue;
-                }
-                Instruction::ConstructProduct {
-                    result, ty, fields, ..
-                } => {
-                    write_product_direct(
-                        program,
-                        function,
-                        &mut frames[frame_index],
-                        *result,
-                        *ty,
-                        fields,
-                    )?;
-                }
-                Instruction::ProjectField {
-                    result,
-                    value,
-                    field,
-                    ..
-                } => {
-                    project_field_direct(
-                        program,
-                        function,
-                        &mut frames[frame_index],
-                        *result,
-                        *value,
-                        *field,
-                    )?;
-                }
-                Instruction::ConstructVariant {
-                    result,
-                    sum,
-                    variant,
-                    payload,
-                    ..
-                } => {
-                    construct_variant_direct(
-                        program,
-                        function,
-                        &mut frames[frame_index],
-                        *result,
-                        *sum,
-                        *variant,
-                        *payload,
-                    )?;
-                }
-            }
-            frames[frame_index].instruction += 1;
-            continue;
-        }
-        let terminator = &block.terminator;
-        match terminator {
-            Terminator::Return { origin, value } => {
-                let scratch_cells =
-                    core_ir::type_cells(program, core_ir::value_type(function, *value)?)?;
-                let copy_cost = logical_copy_cost(scratch_cells)?;
-                consume_fuel(
-                    &mut fuel,
-                    1_u64
-                        .checked_add(copy_cost)
-                        .ok_or_else(|| invalid_ir("return fuel cost overflowed"))?,
-                    *origin,
-                )?;
-                ensure_peak_cells(live_cells, scratch_cells, 0, *origin)?;
-                let returned = read_value(program, function, &frames[frame_index], *value)?;
-                let continuation = frames[frame_index].continuation;
-                let released = frames[frame_index].cells.len();
-                frames.pop();
-                live_cells = live_cells
-                    .checked_sub(released)
-                    .ok_or_else(|| invalid_ir("live-cell accounting underflow"))?;
-                if let Some(continuation) = continuation {
-                    let caller_index = frames
-                        .len()
-                        .checked_sub(1)
-                        .ok_or_else(|| invalid_ir("call return has no caller frame"))?;
-                    let caller_function = program
-                        .functions
-                        .get(index(frames[caller_index].function.0, "caller")?)
-                        .ok_or_else(|| invalid_ir("caller is out of bounds"))?;
-                    write_value(
-                        program,
-                        caller_function,
-                        &mut frames[caller_index],
-                        continuation.result,
-                        &returned,
-                    )?;
-                } else {
-                    if !frames.is_empty() {
-                        return Err(invalid_ir("entry return left unexpected frames"));
+                    Instruction::LtI64 {
+                        result, lhs, rhs, ..
+                    } => {
+                        let value = require_i64(program, function, &frames[frame_index], *lhs)?
+                            < require_i64(program, function, &frames[frame_index], *rhs)?;
+                        write_scalar_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            BOOL_TYPE,
+                            u64::from(value),
+                        )?;
                     }
-                    return Ok(returned);
-                }
-            }
-            Terminator::Branch {
-                origin,
-                target,
-                arguments,
-            } => {
-                let cost = edge_copy_cost(program, function, arguments)?;
-                consume_fuel(
-                    &mut fuel,
-                    1_u64
-                        .checked_add(cost)
-                        .ok_or_else(|| invalid_ir("branch fuel cost overflowed"))?,
-                    *origin,
-                )?;
-                let scratch_cells = edge_scratch_cells(program, function, arguments)?;
-                ensure_peak_cells(live_cells, scratch_cells, 0, *origin)?;
-                let values = arguments
-                    .iter()
-                    .map(|value| read_value(program, function, &frames[frame_index], *value))
-                    .collect::<Result<Vec<_>>>()?;
-                enter_block(
-                    program,
-                    function,
-                    &mut frames[frame_index],
-                    *target,
-                    &values,
-                )?;
-            }
-            Terminator::CondBranch {
-                origin,
-                condition,
-                then_target,
-                then_arguments,
-                else_target,
-                else_arguments,
-            } => {
-                consume_fuel(&mut fuel, 1, *origin)?;
-                let selected = if require_bool(program, function, &frames[frame_index], *condition)?
-                {
-                    (then_target, then_arguments)
-                } else {
-                    (else_target, else_arguments)
-                };
-                let cost = edge_copy_cost(program, function, selected.1)?;
-                consume_fuel(&mut fuel, cost, *origin)?;
-                let scratch_cells = edge_scratch_cells(program, function, selected.1)?;
-                ensure_peak_cells(live_cells, scratch_cells, 0, *origin)?;
-                let values = selected
-                    .1
-                    .iter()
-                    .map(|value| read_value(program, function, &frames[frame_index], *value))
-                    .collect::<Result<Vec<_>>>()?;
-                enter_block(
-                    program,
-                    function,
-                    &mut frames[frame_index],
-                    *selected.0,
-                    &values,
-                )?;
-            }
-            Terminator::SwitchVariant {
-                origin,
-                scrutinee,
-                arms,
-            } => {
-                consume_fuel(&mut fuel, 1, *origin)?;
-                let sum_ty = core_ir::value_type(function, *scrutinee)?;
-                let sum_range = value_range(&frames[frame_index], *scrutinee)?;
-                let discriminant = match frames[frame_index].cells[sum_range.start] {
-                    Cell::Scalar(value) => value,
-                    Cell::Bytes(_) => {
-                        return Err(invalid_handle(
-                            *origin,
-                            "sum discriminant contains a managed byte handle",
-                        ));
-                    }
-                };
-                let ordinal = usize::try_from(discriminant)
-                    .map_err(|_| invalid_ir("sum discriminant overflows host"))?;
-                let arm = arms
-                    .get(ordinal)
-                    .ok_or_else(|| invalid_ir("verified switch discriminant is out of bounds"))?;
-                let CoreTypeKind::Sum { variants } = &core_ir::type_at(program, sum_ty)?.kind
-                else {
-                    return Err(invalid_ir("verified switch value is not a sum"));
-                };
-                let variant = &variants[ordinal];
-                let (copy_cost, scratch_cells) =
-                    switch_edge_cost_and_cells(program, function, arm, variant.payload)?;
-                consume_fuel(&mut fuel, copy_cost, *origin)?;
-                ensure_peak_cells(live_cells, scratch_cells, 0, *origin)?;
-                let mut values = Vec::with_capacity(arm.arguments.len());
-                for argument in &arm.arguments {
-                    match argument {
-                        SwitchArgument::Value(value) => values.push(read_value(
+                    Instruction::BytesLen {
+                        origin,
+                        result,
+                        value,
+                    } => {
+                        let handle = require_bytes_handle(
                             program,
                             function,
                             &frames[frame_index],
                             *value,
-                        )?),
-                        SwitchArgument::Payload => {
-                            let ty = variant.payload.ok_or_else(|| {
-                                invalid_ir("payload marker selected nullary variant")
+                            *origin,
+                        )?;
+                        let length = i64::try_from(managed.bytes(handle, *origin)?.len())
+                            .map_err(|_| invalid_handle(*origin, "byte length exceeds i64"))?;
+                        write_scalar_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            I64_TYPE,
+                            length as u64,
+                        )?;
+                    }
+                    Instruction::BytesAt {
+                        origin,
+                        result,
+                        value,
+                        index,
+                    } => {
+                        let handle = require_bytes_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *value,
+                            *origin,
+                        )?;
+                        let requested =
+                            require_i64(program, function, &frames[frame_index], *index)?;
+                        let requested = usize::try_from(requested).map_err(|_| {
+                            LkError::new(
+                                ErrorCode::ByteIndexOutOfBounds,
+                                "byte index must be nonnegative and within the visible value",
+                            )
+                            .for_node(*origin)
+                        })?;
+                        let octet = managed
+                            .bytes(handle, *origin)?
+                            .get(requested)
+                            .copied()
+                            .ok_or_else(|| {
+                                LkError::new(
+                                    ErrorCode::ByteIndexOutOfBounds,
+                                    "byte index is outside the visible value",
+                                )
+                                .for_node(*origin)
                             })?;
-                            let count = core_ir::type_cells(program, ty)?;
-                            values.push(FlatValue {
-                                ty,
-                                cells: frames[frame_index].cells
-                                    [sum_range.start + 1..sum_range.start + 1 + count]
-                                    .to_vec(),
-                            });
+                        write_scalar_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            I64_TYPE,
+                            u64::from(octet),
+                        )?;
+                    }
+                    Instruction::BytesSlice {
+                        origin,
+                        result,
+                        value,
+                        start,
+                        length,
+                    } => {
+                        let handle = require_bytes_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *value,
+                            *origin,
+                        )?;
+                        let start = require_i64(program, function, &frames[frame_index], *start)?;
+                        let length = require_i64(program, function, &frames[frame_index], *length)?;
+                        let slice = managed.slice(handle, start, length, *origin)?;
+                        write_bytes_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            slice,
+                        )?;
+                    }
+                    Instruction::BytesEqual {
+                        origin,
+                        result,
+                        lhs,
+                        rhs,
+                    } => {
+                        let lhs_handle = require_bytes_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *lhs,
+                            *origin,
+                        )?;
+                        let rhs_handle = require_bytes_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *rhs,
+                            *origin,
+                        )?;
+                        let left = managed.bytes(lhs_handle, *origin)?;
+                        let right = managed.bytes(rhs_handle, *origin)?;
+                        let mut equal = left.len() == right.len();
+                        if equal {
+                            for (left, right) in left.iter().zip(right) {
+                                consume_fuel(&mut fuel, 1, *origin)?;
+                                if left != right {
+                                    equal = false;
+                                    break;
+                                }
+                            }
+                        }
+                        write_scalar_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            BOOL_TYPE,
+                            u64::from(equal),
+                        )?;
+                    }
+                    Instruction::BytesConcat {
+                        origin,
+                        result,
+                        lhs,
+                        rhs,
+                    } => {
+                        let lhs_handle = require_bytes_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *lhs,
+                            *origin,
+                        )?;
+                        let rhs_handle = require_bytes_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *rhs,
+                            *origin,
+                        )?;
+                        let result_len = managed
+                            .bytes(lhs_handle, *origin)?
+                            .len()
+                            .checked_add(managed.bytes(rhs_handle, *origin)?.len())
+                            .ok_or_else(|| {
+                                LkError::new(
+                                    ErrorCode::ByteValueTooLarge,
+                                    "byte concatenation length overflowed",
+                                )
+                                .for_node(*origin)
+                            })?;
+                        if result_len > MAXIMUM_BYTE_STRING_BYTES {
+                            return Err(LkError::new(
+                                ErrorCode::ByteValueTooLarge,
+                                "byte concatenation result exceeds the byte value policy",
+                            )
+                            .for_node(*origin));
+                        }
+                        consume_fuel(
+                            &mut fuel,
+                            u64::try_from(result_len)
+                                .map_err(|_| invalid_ir("concat fuel length overflows u64"))?,
+                            *origin,
+                        )?;
+                        let (value, reused) = managed.concat(
+                            lhs_handle,
+                            rhs_handle,
+                            instruction_plan.reuse_left,
+                            MAXIMUM_BYTE_STRING_BYTES,
+                            *origin,
+                        )?;
+                        write_bytes_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            value,
+                        )?;
+                        if reused {
+                            transfer_frame_value(&mut frames[frame_index], *lhs, managed)?;
                         }
                     }
+                    Instruction::Call {
+                        origin,
+                        result,
+                        function: callee,
+                        arguments,
+                    } => {
+                        frames[frame_index].instruction += 1;
+                        if frames.len()
+                            >= usize::try_from(policy.maximum_frames)
+                                .map_err(|_| invalid_ir("frame policy overflows host indexes"))?
+                        {
+                            return Err(LkError::new(
+                                ErrorCode::ExecutionFrameExhausted,
+                                "execution frame policy exhausted before call",
+                            )
+                            .for_node(*origin));
+                        }
+                        let callee_function = program
+                            .functions
+                            .get(index(callee.0, "callee")?)
+                            .ok_or_else(|| invalid_ir("callee is out of bounds"))?;
+                        let callee_cells = frame_cells(callee_function)?;
+                        let scratch_cells = edge_scratch_cells(program, function, arguments)?;
+                        ensure_peak_cells(live_cells, scratch_cells, callee_cells, *origin)?;
+                        let values = arguments
+                            .iter()
+                            .map(|value| {
+                                read_value(program, function, &frames[frame_index], *value)
+                            })
+                            .collect::<Result<Vec<_>>>()?;
+                        apply_use_actions(
+                            function,
+                            &mut frames[frame_index],
+                            instruction,
+                            instruction_plan,
+                            &ownership_plan,
+                            managed,
+                        )?;
+                        let call_result = match instruction {
+                            Instruction::Call { result, .. } => *result,
+                            _ => unreachable!(),
+                        };
+                        let mut call_source_drops = instruction_plan.drops_after.clone();
+                        let drop_result = call_source_drops.contains(&call_result);
+                        call_source_drops.retain(|value| *value != call_result);
+                        drop_frame_values(
+                            function,
+                            &mut frames[frame_index],
+                            &call_source_drops,
+                            &ownership_plan,
+                            managed,
+                            *origin,
+                        )?;
+                        frames.push(new_frame(
+                            program,
+                            *callee,
+                            &values,
+                            Some(Continuation {
+                                result: *result,
+                                origin: *origin,
+                                drop_result,
+                            }),
+                        )?);
+                        live_cells = live_cells
+                            .checked_add(callee_cells)
+                            .ok_or_else(|| invalid_ir("live-cell accounting overflowed"))?;
+                        continue;
+                    }
+                    Instruction::ConstructProduct {
+                        result, ty, fields, ..
+                    } => {
+                        write_product_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            *ty,
+                            fields,
+                        )?;
+                    }
+                    Instruction::ProjectField {
+                        result,
+                        value,
+                        field,
+                        ..
+                    } => {
+                        project_field_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            *value,
+                            *field,
+                        )?;
+                    }
+                    Instruction::ConstructVariant {
+                        result,
+                        sum,
+                        variant,
+                        payload,
+                        ..
+                    } => {
+                        construct_variant_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            *sum,
+                            *variant,
+                            *payload,
+                        )?;
+                    }
                 }
-                enter_block(
-                    program,
+                apply_instruction_ownership(
                     function,
                     &mut frames[frame_index],
-                    arm.target,
-                    &values,
+                    instruction,
+                    instruction_plan,
+                    &ownership_plan,
+                    managed,
                 )?;
+                frames[frame_index].instruction += 1;
+                continue;
+            }
+            let terminator = &block.terminator;
+            match terminator {
+                Terminator::Return { origin, value } => {
+                    let scratch_cells =
+                        core_ir::type_cells(program, core_ir::value_type(function, *value)?)?;
+                    let copy_cost = logical_copy_cost(scratch_cells)?;
+                    consume_fuel(
+                        &mut fuel,
+                        1_u64
+                            .checked_add(copy_cost)
+                            .ok_or_else(|| invalid_ir("return fuel cost overflowed"))?,
+                        *origin,
+                    )?;
+                    ensure_peak_cells(live_cells, scratch_cells, 0, *origin)?;
+                    let returned = read_value(program, function, &frames[frame_index], *value)?;
+                    let TerminatorOwnership::Return { action, .. } = &block_plan.terminator else {
+                        return Err(invalid_ir(
+                            "verified ownership return plan has the wrong kind",
+                        ));
+                    };
+                    if *action == UseAction::Transfer {
+                        transfer_frame_value(&mut frames[frame_index], *value, managed)?;
+                    }
+                    drop_frame_values(
+                        function,
+                        &mut frames[frame_index],
+                        &block_plan.cleanup_roots,
+                        &ownership_plan,
+                        managed,
+                        *origin,
+                    )?;
+                    let continuation = frames[frame_index].continuation;
+                    let released = frames[frame_index].cells.len();
+                    frames.pop();
+                    live_cells = live_cells
+                        .checked_sub(released)
+                        .ok_or_else(|| invalid_ir("live-cell accounting underflow"))?;
+                    if let Some(continuation) = continuation {
+                        let caller_index = frames
+                            .len()
+                            .checked_sub(1)
+                            .ok_or_else(|| invalid_ir("call return has no caller frame"))?;
+                        let caller_function = program
+                            .functions
+                            .get(index(frames[caller_index].function.0, "caller")?)
+                            .ok_or_else(|| invalid_ir("caller is out of bounds"))?;
+                        write_value(
+                            program,
+                            caller_function,
+                            &mut frames[caller_index],
+                            continuation.result,
+                            &returned,
+                        )?;
+                        if continuation.drop_result {
+                            drop_frame_value(
+                                caller_function,
+                                &mut frames[caller_index],
+                                continuation.result,
+                                &ownership_plan,
+                                managed,
+                                continuation.origin,
+                            )?;
+                        }
+                    } else {
+                        if !frames.is_empty() {
+                            return Err(invalid_ir("entry return left unexpected frames"));
+                        }
+                        return Ok(returned);
+                    }
+                }
+                Terminator::Branch {
+                    origin,
+                    target,
+                    arguments,
+                } => {
+                    let cost = edge_copy_cost(program, function, arguments)?;
+                    consume_fuel(
+                        &mut fuel,
+                        1_u64
+                            .checked_add(cost)
+                            .ok_or_else(|| invalid_ir("branch fuel cost overflowed"))?,
+                        *origin,
+                    )?;
+                    let scratch_cells = edge_scratch_cells(program, function, arguments)?;
+                    ensure_peak_cells(live_cells, scratch_cells, 0, *origin)?;
+                    let values = arguments
+                        .iter()
+                        .map(|value| read_value(program, function, &frames[frame_index], *value))
+                        .collect::<Result<Vec<_>>>()?;
+                    let TerminatorOwnership::Branch(edge) = &block_plan.terminator else {
+                        return Err(invalid_ir(
+                            "verified ownership branch plan has the wrong kind",
+                        ));
+                    };
+                    apply_edge_ownership(
+                        function,
+                        &mut frames[frame_index],
+                        &values,
+                        edge,
+                        &ownership_plan,
+                        managed,
+                        *origin,
+                    )?;
+                    enter_block(
+                        program,
+                        function,
+                        &mut frames[frame_index],
+                        *target,
+                        &values,
+                    )?;
+                }
+                Terminator::CondBranch {
+                    origin,
+                    condition,
+                    then_target,
+                    then_arguments,
+                    else_target,
+                    else_arguments,
+                } => {
+                    consume_fuel(&mut fuel, 1, *origin)?;
+                    let selected =
+                        if require_bool(program, function, &frames[frame_index], *condition)? {
+                            (then_target, then_arguments, true)
+                        } else {
+                            (else_target, else_arguments, false)
+                        };
+                    let cost = edge_copy_cost(program, function, selected.1)?;
+                    consume_fuel(&mut fuel, cost, *origin)?;
+                    let scratch_cells = edge_scratch_cells(program, function, selected.1)?;
+                    ensure_peak_cells(live_cells, scratch_cells, 0, *origin)?;
+                    let values = selected
+                        .1
+                        .iter()
+                        .map(|value| read_value(program, function, &frames[frame_index], *value))
+                        .collect::<Result<Vec<_>>>()?;
+                    let TerminatorOwnership::CondBranch {
+                        then_edge,
+                        else_edge,
+                    } = &block_plan.terminator
+                    else {
+                        return Err(invalid_ir(
+                            "verified ownership conditional plan has the wrong kind",
+                        ));
+                    };
+                    let edge = if selected.2 { then_edge } else { else_edge };
+                    apply_edge_ownership(
+                        function,
+                        &mut frames[frame_index],
+                        &values,
+                        edge,
+                        &ownership_plan,
+                        managed,
+                        *origin,
+                    )?;
+                    enter_block(
+                        program,
+                        function,
+                        &mut frames[frame_index],
+                        *selected.0,
+                        &values,
+                    )?;
+                }
+                Terminator::SwitchVariant {
+                    origin,
+                    scrutinee,
+                    arms,
+                } => {
+                    consume_fuel(&mut fuel, 1, *origin)?;
+                    let sum_ty = core_ir::value_type(function, *scrutinee)?;
+                    let sum_range = value_range(&frames[frame_index], *scrutinee)?;
+                    let discriminant = match frames[frame_index].cells[sum_range.start] {
+                        Cell::Scalar(value) => value,
+                        Cell::Bytes(_) => {
+                            return Err(invalid_handle(
+                                *origin,
+                                "sum discriminant contains a managed byte handle",
+                            ));
+                        }
+                    };
+                    let ordinal = usize::try_from(discriminant)
+                        .map_err(|_| invalid_ir("sum discriminant overflows host"))?;
+                    let arm = arms.get(ordinal).ok_or_else(|| {
+                        invalid_ir("verified switch discriminant is out of bounds")
+                    })?;
+                    let CoreTypeKind::Sum { variants } = &core_ir::type_at(program, sum_ty)?.kind
+                    else {
+                        return Err(invalid_ir("verified switch value is not a sum"));
+                    };
+                    let variant = &variants[ordinal];
+                    let (copy_cost, scratch_cells) =
+                        switch_edge_cost_and_cells(program, function, arm, variant.payload)?;
+                    consume_fuel(&mut fuel, copy_cost, *origin)?;
+                    ensure_peak_cells(live_cells, scratch_cells, 0, *origin)?;
+                    let mut values = Vec::with_capacity(arm.arguments.len());
+                    for argument in &arm.arguments {
+                        match argument {
+                            SwitchArgument::Value(value) => values.push(read_value(
+                                program,
+                                function,
+                                &frames[frame_index],
+                                *value,
+                            )?),
+                            SwitchArgument::Payload => {
+                                let ty = variant.payload.ok_or_else(|| {
+                                    invalid_ir("payload marker selected nullary variant")
+                                })?;
+                                let count = core_ir::type_cells(program, ty)?;
+                                values.push(FlatValue {
+                                    ty,
+                                    cells: frames[frame_index].cells
+                                        [sum_range.start + 1..sum_range.start + 1 + count]
+                                        .to_vec(),
+                                });
+                            }
+                        }
+                    }
+                    let TerminatorOwnership::SwitchVariant { arms: edge_plans } =
+                        &block_plan.terminator
+                    else {
+                        return Err(invalid_ir(
+                            "verified ownership switch plan has the wrong kind",
+                        ));
+                    };
+                    let edge = edge_plans
+                        .get(ordinal)
+                        .ok_or_else(|| invalid_ir("verified ownership switch arm is absent"))?;
+                    managed.record_borrow()?;
+                    apply_edge_ownership(
+                        function,
+                        &mut frames[frame_index],
+                        &values,
+                        edge,
+                        &ownership_plan,
+                        managed,
+                        *origin,
+                    )?;
+                    enter_block(
+                        program,
+                        function,
+                        &mut frames[frame_index],
+                        arm.target,
+                        &values,
+                    )?;
+                }
             }
         }
+    })();
+    if outcome.is_err() {
+        for frame in &mut frames {
+            let function_index = index(frame.function.0, "cleanup function")?;
+            let function = program
+                .functions
+                .get(function_index)
+                .ok_or_else(|| invalid_ir("cleanup function is out of bounds"))?;
+            let cleanup_roots = ownership_plan
+                .functions
+                .get(function_index)
+                .and_then(|plan| plan.blocks.get(index(frame.block.0, "cleanup block").ok()?))
+                .ok_or_else(|| invalid_ir("cleanup ownership roots are absent"))?;
+            drop_frame_values(
+                function,
+                frame,
+                &cleanup_roots.cleanup_roots,
+                &ownership_plan,
+                managed,
+                function.origin,
+            )?;
+        }
     }
+    outcome
 }
 
 fn instruction_copy_cells(
@@ -1911,12 +1988,12 @@ fn switch_edge_cost_and_cells(
 fn ensure_peak_cells(
     live_cells: usize,
     scratch_cells: usize,
-    additional_arena_cells: usize,
+    additional_frame_cells: usize,
     origin: NodeId,
 ) -> Result<()> {
     if live_cells
         .checked_add(scratch_cells)
-        .and_then(|total| total.checked_add(additional_arena_cells))
+        .and_then(|total| total.checked_add(additional_frame_cells))
         .is_none_or(|total| total > MAX_RUN_LIVE_CELLS)
     {
         return Err(LkError::new(
@@ -2215,6 +2292,165 @@ fn read_value(
     }
     Ok(FlatValue { ty, cells })
 }
+
+fn share_frame_value(
+    function: &crate::core_ir::CoreFunction,
+    frame: &Frame,
+    value: ValueId,
+    plan: &OwnershipPlan,
+    managed: &mut InvocationStore,
+    origin: NodeId,
+) -> Result<()> {
+    let ty = core_ir::value_type(function, value)?;
+    let range = value_range(frame, value)?;
+    for handle in managed_handles(plan, ty, &frame.cells[range], origin)? {
+        managed.share(handle, origin)?;
+    }
+    Ok(())
+}
+
+fn transfer_frame_value(
+    frame: &mut Frame,
+    value: ValueId,
+    managed: &mut InvocationStore,
+) -> Result<()> {
+    let initialized = frame
+        .initialized
+        .get_mut(index(value.0, "ownership transfer value")?)
+        .ok_or_else(|| invalid_ir("ownership transfer value is out of bounds"))?;
+    if !*initialized {
+        return Err(invalid_ir("ownership transfer source is not initialized"));
+    }
+    *initialized = false;
+    managed.record_transfer()
+}
+
+fn drop_frame_value(
+    function: &crate::core_ir::CoreFunction,
+    frame: &mut Frame,
+    value: ValueId,
+    plan: &OwnershipPlan,
+    managed: &mut InvocationStore,
+    origin: NodeId,
+) -> Result<()> {
+    let value_index = index(value.0, "ownership drop value")?;
+    if !frame
+        .initialized
+        .get(value_index)
+        .copied()
+        .ok_or_else(|| invalid_ir("ownership drop value is out of bounds"))?
+    {
+        return Ok(());
+    }
+    let ty = core_ir::value_type(function, value)?;
+    let range = value_range_unchecked(frame, value)?;
+    let handles = managed_handles(plan, ty, &frame.cells[range], origin)?;
+    frame.initialized[value_index] = false;
+    for handle in handles {
+        managed.drop_claim(handle, origin)?;
+    }
+    Ok(())
+}
+
+fn drop_frame_values(
+    function: &crate::core_ir::CoreFunction,
+    frame: &mut Frame,
+    values: &[ValueId],
+    plan: &OwnershipPlan,
+    managed: &mut InvocationStore,
+    origin: NodeId,
+) -> Result<()> {
+    for value in values {
+        drop_frame_value(function, frame, *value, plan, managed, origin)?;
+    }
+    Ok(())
+}
+
+fn apply_instruction_ownership(
+    function: &crate::core_ir::CoreFunction,
+    frame: &mut Frame,
+    instruction: &Instruction,
+    instruction_plan: &InstructionOwnership,
+    plan: &OwnershipPlan,
+    managed: &mut InvocationStore,
+) -> Result<()> {
+    apply_use_actions(
+        function,
+        frame,
+        instruction,
+        instruction_plan,
+        plan,
+        managed,
+    )?;
+    drop_frame_values(
+        function,
+        frame,
+        &instruction_plan.drops_after,
+        plan,
+        managed,
+        instruction.origin(),
+    )
+}
+
+fn apply_use_actions(
+    function: &crate::core_ir::CoreFunction,
+    frame: &mut Frame,
+    instruction: &Instruction,
+    instruction_plan: &InstructionOwnership,
+    plan: &OwnershipPlan,
+    managed: &mut InvocationStore,
+) -> Result<()> {
+    for (value, action) in &instruction_plan.uses {
+        match action {
+            UseAction::Immediate => {}
+            UseAction::Borrow => managed.record_borrow()?,
+            UseAction::Share if matches!(instruction, Instruction::ProjectField { .. }) => {
+                let result = match instruction {
+                    Instruction::ProjectField { result, .. } => *result,
+                    _ => unreachable!(),
+                };
+                share_frame_value(function, frame, result, plan, managed, instruction.origin())?;
+            }
+            UseAction::Share => {
+                share_frame_value(function, frame, *value, plan, managed, instruction.origin())?
+            }
+            UseAction::Transfer => transfer_frame_value(frame, *value, managed)?,
+        }
+    }
+    Ok(())
+}
+
+fn apply_edge_ownership(
+    function: &crate::core_ir::CoreFunction,
+    frame: &mut Frame,
+    values: &[FlatValue],
+    edge: &EdgeOwnership,
+    plan: &OwnershipPlan,
+    managed: &mut InvocationStore,
+    origin: NodeId,
+) -> Result<()> {
+    if values.len() != edge.sources.len() {
+        return Err(invalid_ir(
+            "runtime edge values disagree with the verified ownership plan",
+        ));
+    }
+    for (value, (source, action)) in values.iter().zip(&edge.sources) {
+        match action {
+            UseAction::Immediate => {}
+            UseAction::Borrow => managed.record_borrow()?,
+            UseAction::Share => share_flat_value(managed, plan, value, origin)?,
+            UseAction::Transfer => match source {
+                EdgeSource::Value(source) => transfer_frame_value(frame, *source, managed)?,
+                EdgeSource::Payload => {
+                    return Err(invalid_ir(
+                        "payload ownership cannot transfer independently of its wrapper",
+                    ));
+                }
+            },
+        }
+    }
+    drop_frame_values(function, frame, &edge.drops, plan, managed, origin)
+}
 fn require_i64(
     program: &CoreProgram,
     function: &crate::core_ir::CoreFunction,
@@ -2321,6 +2557,7 @@ mod tests {
         UNIT_TYPE,
     };
     use crate::ids::{Revision, SnapshotHash, WorkspaceId};
+    use crate::managed::{ExecutionMode, ManagedLimits};
     use crate::schema::{MAXIMUM_BYTE_LITERAL_BYTES, Node};
     use crate::type_layout::{FieldLayout, LayoutShape, ValueLayout, VariantLayout};
     fn node(serial: u64) -> NodeId {
@@ -2362,8 +2599,8 @@ mod tests {
                 origin: None,
                 kind: CoreTypeKind::Bytes,
                 layout: ValueLayout {
-                    size: 4,
-                    align: 4,
+                    size: 8,
+                    align: 8,
                     cells: 1,
                     shape: LayoutShape::Primitive,
                 },
@@ -2635,11 +2872,85 @@ mod tests {
         )
     }
 
+    fn byte_concat_program(left: &[u8], right: &[u8]) -> CoreProgram {
+        one_function_program(
+            BYTES_TYPE,
+            vec![BYTES_TYPE, BYTES_TYPE, BYTES_TYPE],
+            vec![
+                Instruction::ConstBytes {
+                    origin: node(114),
+                    result: ValueId(0),
+                    value: ByteString::from_slice(left).unwrap(),
+                },
+                Instruction::ConstBytes {
+                    origin: node(115),
+                    result: ValueId(1),
+                    value: ByteString::from_slice(right).unwrap(),
+                },
+                Instruction::BytesConcat {
+                    origin: node(116),
+                    result: ValueId(2),
+                    lhs: ValueId(0),
+                    rhs: ValueId(1),
+                },
+            ],
+            ValueId(2),
+        )
+    }
+
+    fn byte_concat_argument_program() -> CoreProgram {
+        CoreProgram {
+            types: primitives(),
+            entry: FunctionId(0),
+            functions: vec![CoreFunction {
+                origin: node(117),
+                parameters: vec![ValueId(0), ValueId(1)],
+                result: BYTES_TYPE,
+                value_types: vec![BYTES_TYPE, BYTES_TYPE, BYTES_TYPE],
+                frame_cells: 3,
+                entry: BlockId(0),
+                blocks: vec![CoreBlock {
+                    origin: node(118),
+                    parameters: vec![ValueId(0), ValueId(1)],
+                    instructions: vec![Instruction::BytesConcat {
+                        origin: node(119),
+                        result: ValueId(2),
+                        lhs: ValueId(0),
+                        rhs: ValueId(1),
+                    }],
+                    terminator: Terminator::Return {
+                        origin: node(120),
+                        value: ValueId(2),
+                    },
+                }],
+            }],
+        }
+    }
+
     fn run_core_value(program: &CoreProgram, policy: RunPolicy) -> Result<RuntimeValue> {
-        let mut managed = InvocationArena::default();
-        let flat = interpret_with_arena(program, vec![], policy, &mut managed)?;
+        let mut managed = InvocationStore::default();
+        let flat = interpret_with_store(program, vec![], policy, &mut managed)?;
         preflight_flat_output(program, &managed, &flat, program.functions[0].origin)?;
         from_flat(program, &managed, &flat, 1, program.functions[0].origin)
+    }
+
+    fn run_core_value_with_mode(
+        program: &CoreProgram,
+        policy: RunPolicy,
+        mode: ExecutionMode,
+    ) -> Result<(RuntimeValue, crate::managed::ManagedMetrics)> {
+        let mut managed = InvocationStore::new(
+            ManagedLimits {
+                cumulative_visible_bytes: MAX_RUN_MANAGED_VISIBLE_BYTES,
+                live_backing_bytes: MAX_RUN_RETAINED_BACKING_BYTES,
+                live_objects: MAX_RUN_MANAGED_OBJECTS,
+            },
+            mode,
+        );
+        let flat = interpret_with_store(program, vec![], policy, &mut managed)?;
+        preflight_flat_output(program, &managed, &flat, program.functions[0].origin)?;
+        let value = from_flat(program, &managed, &flat, 1, program.functions[0].origin)?;
+        Ok((value, managed.metrics()))
     }
 
     #[test]
@@ -2728,53 +3039,265 @@ mod tests {
                 ErrorCode::ExecutionFuelExhausted
             );
         }
+
+        for (left, right, expected) in [
+            (&b""[..], &b""[..], &b""[..]),
+            (&b""[..], &b"abc"[..], &b"abc"[..]),
+            (&b"abc"[..], &b""[..], &b"abc"[..]),
+            (&b"abc"[..], &b"def"[..], &b"abcdef"[..]),
+        ] {
+            let fuel = 5 + expected.len();
+            assert_eq!(
+                run_core_value(&byte_concat_program(left, right), policy(fuel as u64)).unwrap(),
+                RuntimeValue::Bytes(ByteString::from_slice(expected).unwrap())
+            );
+            assert_eq!(
+                run_core_value(&byte_concat_program(left, right), policy((fuel - 1) as u64))
+                    .expect_err("one fuel below exact concat work")
+                    .code,
+                ErrorCode::ExecutionFuelExhausted
+            );
+        }
+
+        let program = byte_concat_argument_program();
+        for (right_length, expected) in [
+            (MAXIMUM_BYTE_STRING_BYTES / 2, None),
+            (
+                MAXIMUM_BYTE_STRING_BYTES / 2 + 1,
+                Some(ErrorCode::ByteValueTooLarge),
+            ),
+        ] {
+            let mut managed = InvocationStore::default();
+            let left = to_flat(
+                &program,
+                &mut managed,
+                &RuntimeValue::Bytes(
+                    ByteString::new(vec![0x61; MAXIMUM_BYTE_STRING_BYTES / 2]).unwrap(),
+                ),
+                BYTES_TYPE,
+                1,
+                node(117),
+            )
+            .unwrap();
+            let right = to_flat(
+                &program,
+                &mut managed,
+                &RuntimeValue::Bytes(ByteString::new(vec![0x62; right_length]).unwrap()),
+                BYTES_TYPE,
+                1,
+                node(117),
+            )
+            .unwrap();
+            let outcome = interpret_with_store(
+                &program,
+                vec![left, right],
+                policy(MAX_RUN_FUEL),
+                &mut managed,
+            );
+            match expected {
+                None => {
+                    let value = outcome.unwrap();
+                    assert_eq!(
+                        managed
+                            .bytes(
+                                match value.cells[0] {
+                                    Cell::Bytes(handle) => handle,
+                                    Cell::Scalar(_) => panic!("concat result must be managed"),
+                                },
+                                node(120),
+                            )
+                            .unwrap()
+                            .len(),
+                        MAXIMUM_BYTE_STRING_BYTES
+                    );
+                }
+                Some(code) => assert_eq!(outcome.unwrap_err().code, code),
+            }
+        }
     }
 
     #[test]
-    fn arena_handles_views_and_physical_accounting_are_bounded_and_canonical() {
+    fn allocate_new_oracle_and_ownership_reuse_are_observably_equivalent() {
+        let program = byte_concat_program(b"ownership", b"-oracle");
+        let fuel = policy(5 + 16);
+        let (oracle, oracle_metrics) =
+            run_core_value_with_mode(&program, fuel, ExecutionMode::Oracle).unwrap();
+        let (optimized, optimized_metrics) =
+            run_core_value_with_mode(&program, fuel, ExecutionMode::Ownership).unwrap();
+        assert_eq!(oracle, optimized);
+        assert_eq!(oracle_metrics.reuse_hits, 0);
+        assert_eq!(optimized_metrics.reuse_attempts, 1);
+        assert_eq!(optimized_metrics.reuse_hits, 1);
+        assert!(optimized_metrics.copied_bytes < oracle_metrics.copied_bytes);
+        assert!(optimized_metrics.peak_live_backing_bytes < oracle_metrics.peak_live_backing_bytes);
+
+        let exhausted = policy(5 + 16 - 1);
+        for mode in [ExecutionMode::Oracle, ExecutionMode::Ownership] {
+            assert_eq!(
+                run_core_value_with_mode(&program, exhausted, mode)
+                    .unwrap_err()
+                    .code,
+                ErrorCode::ExecutionFuelExhausted
+            );
+        }
+    }
+
+    #[test]
+    fn deterministic_generated_concat_corpus_matches_oracle() {
+        const SEED: u64 = 0x6c6b_6a73_6372_6970;
+        const CASES: usize = 256;
+        let mut state = SEED;
+        for case in 0..CASES {
+            let mut next = || {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                state
+            };
+            let left_len = usize::try_from(next() % 65).unwrap();
+            let right_len = usize::try_from(next() % 65).unwrap();
+            let left = (0..left_len).map(|_| next() as u8).collect::<Vec<_>>();
+            let right = (0..right_len).map(|_| next() as u8).collect::<Vec<_>>();
+            let program = byte_concat_program(&left, &right);
+            let exact_fuel = u64::try_from(5 + left_len + right_len).unwrap();
+            let oracle =
+                run_core_value_with_mode(&program, policy(exact_fuel), ExecutionMode::Oracle)
+                    .unwrap();
+            let optimized =
+                run_core_value_with_mode(&program, policy(exact_fuel), ExecutionMode::Ownership)
+                    .unwrap();
+            assert_eq!(optimized.0, oracle.0, "generated case {case}");
+            if exact_fuel > 0 && case % 16 == 0 {
+                let oracle_error = run_core_value_with_mode(
+                    &program,
+                    policy(exact_fuel - 1),
+                    ExecutionMode::Oracle,
+                )
+                .unwrap_err();
+                let optimized_error = run_core_value_with_mode(
+                    &program,
+                    policy(exact_fuel - 1),
+                    ExecutionMode::Ownership,
+                )
+                .unwrap_err();
+                assert_eq!(optimized_error.code, oracle_error.code);
+                assert_eq!(optimized_error.target, oracle_error.target);
+            }
+        }
+        eprintln!("concat-differential seed={SEED:#018x} cases={CASES}");
+    }
+
+    #[test]
+    fn recursive_shared_managed_argument_unwinds_every_claim_iteratively() {
+        let program = CoreProgram {
+            types: primitives(),
+            entry: FunctionId(0),
+            functions: vec![CoreFunction {
+                origin: node(121),
+                parameters: vec![ValueId(0)],
+                result: BYTES_TYPE,
+                value_types: vec![BYTES_TYPE, BYTES_TYPE, I64_TYPE],
+                frame_cells: 3,
+                entry: BlockId(0),
+                blocks: vec![CoreBlock {
+                    origin: node(122),
+                    parameters: vec![ValueId(0)],
+                    instructions: vec![
+                        Instruction::Call {
+                            origin: node(123),
+                            result: ValueId(1),
+                            function: FunctionId(0),
+                            arguments: vec![ValueId(0)],
+                        },
+                        Instruction::BytesLen {
+                            origin: node(124),
+                            result: ValueId(2),
+                            value: ValueId(0),
+                        },
+                    ],
+                    terminator: Terminator::Return {
+                        origin: node(125),
+                        value: ValueId(1),
+                    },
+                }],
+            }],
+        };
+        let mut managed = InvocationStore::default();
+        let argument = to_flat(
+            &program,
+            &mut managed,
+            &RuntimeValue::Bytes(ByteString::from_slice(b"shared-recursion").unwrap()),
+            BYTES_TYPE,
+            1,
+            node(121),
+        )
+        .unwrap();
+        assert_eq!(
+            interpret_with_store(
+                &program,
+                vec![argument],
+                RunPolicy {
+                    fuel: 1_000,
+                    maximum_frames: 8,
+                },
+                &mut managed,
+            )
+            .unwrap_err()
+            .code,
+            ErrorCode::ExecutionFrameExhausted
+        );
+        let metrics = managed.metrics();
+        assert_eq!(metrics.reference_count_increments, 7);
+        assert_eq!(metrics.live_objects, 0);
+        assert_eq!(metrics.live_backing_bytes, 0);
+    }
+
+    #[test]
+    fn managed_store_handles_views_and_physical_accounting_are_bounded_and_canonical() {
         let origin = node(200);
-        let mut arena = InvocationArena::default();
-        let root = arena
+        let mut store = InvocationStore::default();
+        let root = store
             .allocate_backing(&vec![0xa5; MAX_RUN_RETAINED_BACKING_BYTES], origin)
             .expect("exact retained backing maximum");
-        assert_eq!(arena.visible_bytes, MAX_RUN_RETAINED_BACKING_BYTES);
-        assert_eq!(arena.retained_backing_bytes, MAX_RUN_RETAINED_BACKING_BYTES);
-        assert_eq!(arena.backings.len() + arena.views.len(), 2);
         assert_eq!(
-            arena.allocate_backing(&[0], origin).unwrap_err().code,
+            store.metrics().cumulative_visible_bytes,
+            MAX_RUN_RETAINED_BACKING_BYTES
+        );
+        assert_eq!(
+            store.metrics().live_backing_bytes,
+            MAX_RUN_RETAINED_BACKING_BYTES
+        );
+        assert_eq!(store.metrics().live_objects, 2);
+        assert_eq!(
+            store.allocate_backing(&[0], origin).unwrap_err().code,
             ErrorCode::RetainedBytePolicyExceeded
         );
 
-        let one = arena.slice(root, 17, 1, origin).unwrap();
-        assert_eq!(arena.bytes(one, origin).unwrap(), &[0xa5]);
-        assert_eq!(arena.retained_by_views, MAX_RUN_RETAINED_BACKING_BYTES);
-        let nested = arena.slice(one, 1, 0, origin).unwrap();
-        assert_eq!(arena.bytes(nested, origin).unwrap(), b"");
+        let one = store.slice(root, 17, 1, origin).unwrap();
+        assert_eq!(store.bytes(one, origin).unwrap(), &[0xa5]);
+        assert_eq!(store.metrics().retained_by_views, 0);
+        store.share(root, origin).unwrap();
+        store.drop_claim(root, origin).unwrap();
         assert_eq!(
-            arena.view(nested, origin).unwrap().backing,
-            arena.view(root, origin).unwrap().backing
+            store.bytes(root, origin).unwrap().len(),
+            MAX_RUN_RETAINED_BACKING_BYTES
         );
+        let nested = store.slice(one, 1, 0, origin).unwrap();
+        assert_eq!(store.bytes(nested, origin).unwrap(), b"");
         let mut deeply_nested = nested;
         for _ in 0..128 {
-            deeply_nested = arena.slice(deeply_nested, 0, 0, origin).unwrap();
-            assert_eq!(
-                arena.view(deeply_nested, origin).unwrap().backing,
-                arena.view(root, origin).unwrap().backing
-            );
+            deeply_nested = store.slice(deeply_nested, 0, 0, origin).unwrap();
+            assert_eq!(store.bytes(deeply_nested, origin).unwrap(), b"");
         }
-        assert_eq!(arena.retained_backing_bytes, MAX_RUN_RETAINED_BACKING_BYTES);
-
-        let copies = vec![Cell::Bytes(root); 1_000];
-        assert!(copies.iter().all(|cell| *cell == Cell::Bytes(root)));
-        assert_eq!(arena.backings.len(), 1);
-        assert_eq!(arena.retained_backing_bytes, MAX_RUN_RETAINED_BACKING_BYTES);
-
-        let invalid = ByteHandle(NonZeroU32::new(u32::MAX).unwrap());
+        store.drop_claim(root, origin).unwrap();
         assert_eq!(
-            arena.bytes(invalid, origin).unwrap_err().code,
-            ErrorCode::InvalidManagedHandle
+            store.metrics().retained_by_views,
+            MAX_RUN_RETAINED_BACKING_BYTES
         );
-        assert!(NonZeroU32::new(0).is_none());
+        assert_eq!(
+            store.metrics().live_backing_bytes,
+            MAX_RUN_RETAINED_BACKING_BYTES
+        );
 
         let wrong_kind_program = CoreProgram {
             types: primitives(),
@@ -2820,7 +3343,7 @@ mod tests {
             ErrorCode::InvalidManagedHandle
         );
 
-        let mut visible = InvocationArena::default();
+        let mut visible = InvocationStore::default();
         let root = visible
             .allocate_backing(&vec![0; MAX_RUN_RETAINED_BACKING_BYTES], origin)
             .unwrap();
@@ -2829,27 +3352,31 @@ mod tests {
                 .slice(root, 0, MAX_RUN_RETAINED_BACKING_BYTES as i64, origin)
                 .unwrap();
         }
-        assert_eq!(visible.visible_bytes, MAX_RUN_MANAGED_VISIBLE_BYTES);
+        assert_eq!(
+            visible.metrics().cumulative_visible_bytes,
+            MAX_RUN_MANAGED_VISIBLE_BYTES
+        );
         assert_eq!(
             visible.slice(root, 0, 1, origin).unwrap_err().code,
             ErrorCode::ManagedVisibleBytePolicyExceeded
         );
-        assert_eq!(visible.retained_by_views, MAX_RUN_RETAINED_BACKING_BYTES);
+        visible.drop_claim(root, origin).unwrap();
+        assert_eq!(
+            visible.metrics().retained_by_views,
+            MAX_RUN_RETAINED_BACKING_BYTES
+        );
 
-        let mut objects = InvocationArena::default();
+        let mut objects = InvocationStore::default();
         for _ in 0..(MAX_RUN_MANAGED_OBJECTS / 2) {
             objects.allocate_backing(b"", origin).unwrap();
         }
-        assert_eq!(
-            objects.backings.len() + objects.views.len(),
-            MAX_RUN_MANAGED_OBJECTS
-        );
+        assert_eq!(objects.metrics().live_objects, MAX_RUN_MANAGED_OBJECTS);
         assert_eq!(
             objects.allocate_backing(b"", origin).unwrap_err().code,
             ErrorCode::ManagedObjectPolicyExceeded
         );
 
-        let mut distinct = InvocationArena::default();
+        let mut distinct = InvocationStore::default();
         let left = distinct.allocate_backing(b"same", origin).unwrap();
         let right = distinct.allocate_backing(b"same", origin).unwrap();
         assert_eq!(
@@ -2857,15 +3384,21 @@ mod tests {
             distinct.bytes(right, origin).unwrap()
         );
         assert_ne!(left, right);
-        assert_eq!(distinct.retained_backing_bytes, 8);
+        assert_eq!(distinct.metrics().live_backing_bytes, 8);
     }
 
-    fn arena_with_witness(
+    fn store_with_witness(
         witness: std::sync::Arc<std::sync::atomic::AtomicUsize>,
-    ) -> InvocationArena {
-        let mut arena = InvocationArena::default();
-        arena.drop_witness = Some(witness);
-        arena
+    ) -> InvocationStore {
+        InvocationStore::with_drop_witness(
+            ManagedLimits {
+                cumulative_visible_bytes: MAX_RUN_MANAGED_VISIBLE_BYTES,
+                live_backing_bytes: MAX_RUN_RETAINED_BACKING_BYTES,
+                live_objects: MAX_RUN_MANAGED_OBJECTS,
+            },
+            ExecutionMode::Ownership,
+            witness,
+        )
     }
 
     fn byte_pair_output_program() -> CoreProgram {
@@ -2886,8 +3419,8 @@ mod tests {
                 ],
             },
             layout: ValueLayout {
-                size: 8,
-                align: 4,
+                size: 16,
+                align: 8,
                 cells: 2,
                 shape: LayoutShape::Product {
                     fields: vec![
@@ -2898,7 +3431,7 @@ mod tests {
                         },
                         FieldLayout {
                             field: node(222),
-                            offset: 4,
+                            offset: 8,
                             cells: 1,
                         },
                     ],
@@ -2936,7 +3469,7 @@ mod tests {
     }
 
     #[test]
-    fn invocation_arena_drops_on_success_trap_fuel_frame_and_output_failures() {
+    fn managed_store_drops_on_success_trap_fuel_frame_and_output_failures() {
         use std::sync::{
             Arc,
             atomic::{AtomicUsize, Ordering},
@@ -2946,11 +3479,11 @@ mod tests {
         let owned_output;
         {
             let program = byte_slice_program(b"abcd", 1, 2);
-            let mut arena = arena_with_witness(Arc::clone(&success_witness));
-            let flat = interpret_with_arena(&program, vec![], policy(7), &mut arena).unwrap();
-            preflight_flat_output(&program, &arena, &flat, program.functions[0].origin).unwrap();
-            owned_output = from_flat(&program, &arena, &flat, 1, program.functions[0].origin)
-                .expect("owned public result before arena drop");
+            let mut store = store_with_witness(Arc::clone(&success_witness));
+            let flat = interpret_with_store(&program, vec![], policy(7), &mut store).unwrap();
+            preflight_flat_output(&program, &store, &flat, program.functions[0].origin).unwrap();
+            owned_output = from_flat(&program, &store, &flat, 1, program.functions[0].origin)
+                .expect("owned public result before store drop");
         }
         assert_eq!(success_witness.load(Ordering::SeqCst), 1);
         assert_eq!(
@@ -2961,26 +3494,28 @@ mod tests {
         let trap_witness = Arc::new(AtomicUsize::new(0));
         {
             let program = byte_index_program(b"abc", -1);
-            let mut arena = arena_with_witness(Arc::clone(&trap_witness));
+            let mut store = store_with_witness(Arc::clone(&trap_witness));
             assert_eq!(
-                interpret_with_arena(&program, vec![], policy(5), &mut arena)
+                interpret_with_store(&program, vec![], policy(5), &mut store)
                     .unwrap_err()
                     .code,
                 ErrorCode::ByteIndexOutOfBounds
             );
+            assert_eq!(store.metrics().live_objects, 0);
         }
         assert_eq!(trap_witness.load(Ordering::SeqCst), 1);
 
         let fuel_witness = Arc::new(AtomicUsize::new(0));
         {
             let program = byte_equality_program(b"abc", b"abc");
-            let mut arena = arena_with_witness(Arc::clone(&fuel_witness));
+            let mut store = store_with_witness(Arc::clone(&fuel_witness));
             assert_eq!(
-                interpret_with_arena(&program, vec![], policy(7), &mut arena)
+                interpret_with_store(&program, vec![], policy(7), &mut store)
                     .unwrap_err()
                     .code,
                 ErrorCode::ExecutionFuelExhausted
             );
+            assert_eq!(store.metrics().live_objects, 0);
         }
         assert_eq!(fuel_witness.load(Ordering::SeqCst), 1);
 
@@ -3004,21 +3539,22 @@ mod tests {
                 ],
                 ValueId(1),
             );
-            let mut arena = arena_with_witness(Arc::clone(&frame_witness));
+            let mut store = store_with_witness(Arc::clone(&frame_witness));
             assert_eq!(
-                interpret_with_arena(
+                interpret_with_store(
                     &recursive,
                     vec![],
                     RunPolicy {
                         fuel: 100,
                         maximum_frames: 1,
                     },
-                    &mut arena,
+                    &mut store,
                 )
                 .unwrap_err()
                 .code,
                 ErrorCode::ExecutionFrameExhausted
             );
+            assert_eq!(store.metrics().live_objects, 0);
         }
         assert_eq!(frame_witness.load(Ordering::SeqCst), 1);
 
@@ -3026,21 +3562,21 @@ mod tests {
         {
             let program = byte_pair_output_program();
             core_ir::verify(&program).unwrap();
-            let mut arena = arena_with_witness(Arc::clone(&output_witness));
+            let mut store = store_with_witness(Arc::clone(&output_witness));
             let argument = to_flat(
                 &program,
-                &mut arena,
+                &mut store,
                 &RuntimeValue::Bytes(ByteString::new(vec![0; 40 * 1024]).unwrap()),
                 BYTES_TYPE,
                 1,
                 program.functions[0].origin,
             )
             .unwrap();
-            let flat = interpret_with_arena(&program, vec![argument], policy(10), &mut arena)
+            let flat = interpret_with_store(&program, vec![argument], policy(10), &mut store)
                 .expect("pure product construction");
-            assert_eq!(arena.retained_backing_bytes, 40 * 1024);
+            assert_eq!(store.metrics().live_backing_bytes, 40 * 1024);
             assert_eq!(
-                preflight_flat_output(&program, &arena, &flat, program.functions[0].origin)
+                preflight_flat_output(&program, &store, &flat, program.functions[0].origin)
                     .unwrap_err()
                     .code,
                 ErrorCode::ResultBytePolicyExceeded

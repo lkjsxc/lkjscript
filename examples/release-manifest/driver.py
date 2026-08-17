@@ -531,7 +531,7 @@ def manifest(channel=0, target=1, flags=0):
 def rpc(request, purpose, counted=True):
     global request_id
     request_id += 1
-    envelope = {"version": 7, "request_id": request_id, "request": request}
+    envelope = {"version": 8, "request_id": request_id, "request": request}
     encoded = json.dumps(envelope, separators=(",", ":")).encode()
     started = time.monotonic_ns()
     completed = subprocess.run(
@@ -549,7 +549,7 @@ def rpc(request, purpose, counted=True):
     if completed.stderr:
         raise RuntimeError(f"CLI wrote stderr for {purpose}: {completed.stderr.decode()}")
     response = json.loads(completed.stdout)
-    if response.get("version") != 7 or response.get("request_id") != request_id:
+    if response.get("version") != 8 or response.get("request_id") != request_id:
         raise RuntimeError(f"response correlation mismatch for {purpose}")
     measurements.append({
         "purpose": purpose,

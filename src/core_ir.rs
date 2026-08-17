@@ -146,6 +146,12 @@ pub(crate) enum Instruction {
         lhs: ValueId,
         rhs: ValueId,
     },
+    BytesConcat {
+        origin: NodeId,
+        result: ValueId,
+        lhs: ValueId,
+        rhs: ValueId,
+    },
     Call {
         origin: NodeId,
         result: ValueId,
@@ -186,6 +192,7 @@ impl Instruction {
             | Self::BytesAt { origin, .. }
             | Self::BytesSlice { origin, .. }
             | Self::BytesEqual { origin, .. }
+            | Self::BytesConcat { origin, .. }
             | Self::Call { origin, .. }
             | Self::ConstructProduct { origin, .. }
             | Self::ProjectField { origin, .. }
@@ -570,6 +577,7 @@ fn instruction_result(instruction: &Instruction) -> ValueId {
         | Instruction::BytesAt { result, .. }
         | Instruction::BytesSlice { result, .. }
         | Instruction::BytesEqual { result, .. }
+        | Instruction::BytesConcat { result, .. }
         | Instruction::Call { result, .. }
         | Instruction::ConstructProduct { result, .. }
         | Instruction::ProjectField { result, .. }
@@ -627,6 +635,11 @@ fn verify_instruction(
             require_local(function, local, *lhs, BYTES_TYPE)?;
             require_local(function, local, *rhs, BYTES_TYPE)?;
             Ok(BOOL_TYPE)
+        }
+        Instruction::BytesConcat { lhs, rhs, .. } => {
+            require_local(function, local, *lhs, BYTES_TYPE)?;
+            require_local(function, local, *rhs, BYTES_TYPE)?;
+            Ok(BYTES_TYPE)
         }
         Instruction::Call {
             function: target,
@@ -933,8 +946,8 @@ mod tests {
                 origin: None,
                 kind: CoreTypeKind::Bytes,
                 layout: ValueLayout {
-                    size: 4,
-                    align: 4,
+                    size: 8,
+                    align: 8,
                     cells: 1,
                     shape: LayoutShape::Primitive,
                 },
@@ -1109,9 +1122,9 @@ mod tests {
                 result: BOOL_TYPE,
                 value_types: vec![
                     BYTES_TYPE, I64_TYPE, I64_TYPE, I64_TYPE, I64_TYPE, I64_TYPE, BYTES_TYPE,
-                    BOOL_TYPE,
+                    BYTES_TYPE, BOOL_TYPE,
                 ],
-                frame_cells: 8,
+                frame_cells: 9,
                 entry: BlockId(0),
                 blocks: vec![CoreBlock {
                     origin: node(51),
@@ -1155,16 +1168,22 @@ mod tests {
                             start: ValueId(4),
                             length: ValueId(5),
                         },
-                        Instruction::BytesEqual {
+                        Instruction::BytesConcat {
                             origin: node(59),
                             result: ValueId(7),
                             lhs: ValueId(6),
-                            rhs: ValueId(6),
+                            rhs: ValueId(0),
+                        },
+                        Instruction::BytesEqual {
+                            origin: node(60),
+                            result: ValueId(8),
+                            lhs: ValueId(7),
+                            rhs: ValueId(7),
                         },
                     ],
                     terminator: Terminator::Return {
-                        origin: node(60),
-                        value: ValueId(7),
+                        origin: node(61),
+                        value: ValueId(8),
                     },
                 }],
             }],
@@ -1205,12 +1224,21 @@ mod tests {
 
         let mut equality_type = bytes_program();
         let Instruction::BytesEqual { rhs, .. } =
-            &mut equality_type.functions[0].blocks[0].instructions[7]
+            &mut equality_type.functions[0].blocks[0].instructions[8]
         else {
             unreachable!()
         };
         *rhs = ValueId(2);
         cases.push(equality_type);
+
+        let mut concat_type = bytes_program();
+        let Instruction::BytesConcat { rhs, .. } =
+            &mut concat_type.functions[0].blocks[0].instructions[7]
+        else {
+            unreachable!()
+        };
+        *rhs = ValueId(2);
+        cases.push(concat_type);
 
         let mut literal = bytes_program();
         let Instruction::ConstBytes { value, .. } =

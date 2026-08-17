@@ -16,6 +16,8 @@ pub mod ids;
 pub mod interpret;
 pub mod machine;
 mod machine_contract;
+mod managed;
+mod ownership;
 mod persistence;
 pub mod protocol;
 pub mod query;
@@ -24,6 +26,7 @@ pub mod transaction;
 pub mod transport;
 pub mod type_layout;
 mod validate;
+pub mod workbench;
 
 #[cfg(test)]
 mod campaign_tests;

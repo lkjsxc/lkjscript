@@ -55,11 +55,13 @@ pub enum ErrorCode {
     ByteSliceOutOfBounds,
     InvalidManagedHandle,
     ResultBytePolicyExceeded,
+    ByteValueTooLarge,
     ExecutionMemoryExhausted,
+    OwnershipPlanInvalid,
 }
 
 impl ErrorCode {
-    pub const ALL: [Self; 43] = [
+    pub const ALL: [Self; 45] = [
         Self::ArtifactCorrupt,
         Self::CompileIncomplete,
         Self::CoreIrInvalid,
@@ -102,7 +104,9 @@ impl ErrorCode {
         Self::ByteSliceOutOfBounds,
         Self::InvalidManagedHandle,
         Self::ResultBytePolicyExceeded,
+        Self::ByteValueTooLarge,
         Self::ExecutionMemoryExhausted,
+        Self::OwnershipPlanInvalid,
     ];
     pub const fn machine_name(self) -> &'static str {
         match self {
@@ -148,7 +152,9 @@ impl ErrorCode {
             Self::ByteSliceOutOfBounds => "byte_slice_out_of_bounds",
             Self::InvalidManagedHandle => "invalid_managed_handle",
             Self::ResultBytePolicyExceeded => "result_byte_policy_exceeded",
+            Self::ByteValueTooLarge => "byte_value_too_large",
             Self::ExecutionMemoryExhausted => "execution_memory_exhausted",
+            Self::OwnershipPlanInvalid => "ownership_plan_invalid",
         }
     }
 }

@@ -1010,6 +1010,12 @@ fn lower_instruction(
             lhs: lower_value(environment, *lhs)?,
             rhs: lower_value(environment, *rhs)?,
         },
+        OperationKind::BytesConcat { lhs, rhs } => Instruction::BytesConcat {
+            origin,
+            result,
+            lhs: lower_value(environment, *lhs)?,
+            rhs: lower_value(environment, *rhs)?,
+        },
         OperationKind::Call {
             function,
             arguments,
@@ -1096,7 +1102,9 @@ fn semantic_result_type(snapshot: &Snapshot, operation: &OperationKind) -> Resul
         | OperationKind::AddI64 { .. }
         | OperationKind::BytesLen { .. }
         | OperationKind::BytesAt { .. } => SemanticType::I64,
-        OperationKind::ConstBytes(_) | OperationKind::BytesSlice { .. } => SemanticType::Bytes,
+        OperationKind::ConstBytes(_)
+        | OperationKind::BytesSlice { .. }
+        | OperationKind::BytesConcat { .. } => SemanticType::Bytes,
         OperationKind::BytesEqual { .. } => SemanticType::Bool,
         OperationKind::Call { function, .. } => match snapshot.node(*function)? {
             Node::Function { result, .. } => *result,

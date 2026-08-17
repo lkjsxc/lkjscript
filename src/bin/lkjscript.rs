@@ -9,6 +9,9 @@ use std::io::{BufRead, Read, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+#[path = "lkjscript/agent.rs"]
+mod agent;
+
 const EXIT_USAGE_OR_JSON: u8 = 2;
 const EXIT_TRANSPORT: u8 = 3;
 const EXIT_OUTPUT: u8 = 4;
@@ -57,6 +60,8 @@ fn run_command(command: Command) -> CliOutcome {
             ),
         },
         Command::Rpc { state, pretty } => run_rpc(state, pretty),
+        Command::Agent(command) => agent::run(command),
+        Command::Help => success(usage_text().as_bytes().to_vec()),
         Command::Session { .. } => failure(
             EXIT_USAGE_OR_JSON,
             BoundaryErrorKind::Usage,
@@ -227,6 +232,8 @@ fn failure(
 }
 
 enum Command {
+    Agent(agent::AgentCommand),
+    Help,
     Rpc {
         state: PathBuf,
         pretty: bool,
@@ -242,6 +249,15 @@ enum Command {
 
 fn parse_command(mut arguments: impl Iterator<Item = String>) -> Result<Command, String> {
     let first = arguments.next().ok_or_else(|| usage("missing command"))?;
+    if first == "--help" || first == "help" {
+        if arguments.next().is_some() {
+            return Err(usage("help accepts no arguments"));
+        }
+        return Ok(Command::Help);
+    }
+    if first == "agent" {
+        return agent::parse(arguments).map(Command::Agent);
+    }
     if first == "schema" {
         return parse_schema(arguments);
     }
@@ -324,9 +340,11 @@ fn parse_pretty(mut arguments: impl Iterator<Item = String>) -> Result<bool, Str
 }
 
 fn usage(reason: &str) -> String {
-    format!(
-        "{reason}; usage: lkjscript --state DIRECTORY (rpc [--pretty] | session) | lkjscript schema [--root NAME ... | --full] [--known-digest HEX] [--pretty]"
-    )
+    format!("{reason}; {}", usage_text().replace('\n', " | "))
+}
+
+fn usage_text() -> &'static str {
+    "usage: lkjscript agent [COMMAND] [OPTIONS]\n       lkjscript --state DIRECTORY (rpc [--pretty] | session)\n       lkjscript schema [--root NAME ... | --full] [--known-digest HEX] [--pretty]\n\nRun `lkjscript agent` for the preferred semantic-workbench commands. Raw RPC and schema commands are exact low-level diagnostic surfaces."
 }
 
 #[cfg(test)]

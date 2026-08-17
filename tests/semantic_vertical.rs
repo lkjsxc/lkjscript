@@ -113,7 +113,7 @@ fn cli_session_preserves_one_request_semantics_and_recovers_per_line() {
     );
     let unavailable: serde_json::Value =
         serde_json::from_slice(&unavailable).expect("transport boundary JSON");
-    assert_eq!(unavailable["version"], 7);
+    assert_eq!(unavailable["version"], 8);
     assert_eq!(unavailable["request_id"], 1);
     assert_eq!(unavailable["error"]["kind"], "transport");
 

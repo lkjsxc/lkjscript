@@ -7,9 +7,9 @@ typed, versioned model managed by a local background service (`lkjscriptd`). An 
 operations the service accepts, submits a bounded typed change, receives deterministic validation
 facts, and runs an immutable saved revision.
 
-Textual source, diagrams, and other views may exist in the future. They would remain views or import
-formats: program meaning has one authoritative stored form, and normal editing never depends on
-rendering and reparsing text.
+A deterministic semantic review view exists today. Future source frontends, diagrams, and import
+formats would remain projections: program meaning has one authoritative stored form, and normal
+editing never depends on rendering and reparsing text.
 
 The formal name of this model is the **Semantic Program Graph** (SPG). “Graph” describes semantic
 entities and relations such as containment, ordered children, value uses, and direct references. It
@@ -33,7 +33,10 @@ not remove human agency.
 ```text
 human intent and governance
     -> coding agent
-    -> bounded typed operations and queries
+    -> compact semantic workbench
+         -> revision-bound context and deterministic review
+         -> exact typed edit plan -> validate or commit
+         -> semantic diff and exact run
     -> local service (`lkjscriptd`)
     -> validated immutable program revisions
     -> verified Core IR -> explicit-frame interpreter
@@ -60,6 +63,11 @@ the public service path. It saves an incomplete revision, rejects an invalid rep
 placeholder without identity churn, runs accepted and rejected outcomes, renames a field, restarts,
 and checks old and current revisions.
 
+The [agent-maintenance corpus](examples/agent-maintenance/) evolves that policy through eight
+revisions using the preferred workbench. It covers incomplete construction, rejected and accepted
+repair, extension, behavior-preserving refactoring, rename, exact trap diagnosis, immutable
+declaration replacement, safe deletion, validate-only parity, restart, and historical execution.
+
 The focused [named-data example](examples/named-data/) demonstrates immutable records, variants with
 a fixed alternative set, complete lazy handling, named runtime input/output, and placeholder repair.
 
@@ -73,15 +81,41 @@ It classifies an exact binary manifest using immutable bytes, checked indexing a
 equality, and a bounded payload scan. Byte values behave like ordinary immutable values; the runtime
 may share their storage, and callers never see an address or allocation identity.
 
+The [binary canonicalizer](examples/binary-canonicalizer/) is the byte-construction and lifetime
+consumer. It validates a marker, drops zero padding, and carries an immutable byte accumulator
+through a loop. The compiler infers ownership and borrowing; the verified runtime reclaims dead
+managed storage and can reuse a uniquely owned accumulator without making mutation observable.
+
 ## How coding agents interact
 
-`lkjscriptd` is the only live writer of durable workspace state. For RPC commands, the generic
-`lkjscript` CLI accepts one strict version-7 JSON envelope, sends the same closed typed JSON request
-in a bounded length frame over private local Unix IPC, and writes one typed JSON response. The separate `schema`
-command derives the machine contract locally from the same executable definitions. JSON is
-transport, not a second program representation.
+`lkjscriptd` is the only live writer of durable workspace state. The preferred agent surface is the
+client-side semantic workbench:
 
-For repeated requests, `lkjscript --state DIRECTORY session` accepts one compact version-7 envelope
+```sh
+cargo run --quiet --locked --bin lkjscript -- agent orient
+cargo run --quiet --locked --bin lkjscript -- agent help
+```
+
+`agent create` creates a workspace. `agent context` derives an exact packet for one workspace,
+revision, purpose, and optional target set. `agent view` renders that packet as deterministic
+read-only text; `agent diff` renders exact semantic change facts. `agent validate` and `agent apply`
+parse one bounded compact edit plan from stdin, resolve any packet-scoped `@n1` aliases, and normalize
+directly into the existing typed transaction. `agent run` does the same for an exact Run request.
+The packet, aliases, plan text, and review text are disposable projections: none is persisted as
+program meaning, and no parser or model decides semantic acceptance.
+
+The workbench intentionally does not dump the full machine contract during orientation. Its exact
+grammar and task paths are in generated `agent help`; exact accepted nested forms remain available
+through selected schema roots. A typical maintenance loop saves a packet to a temporary file,
+reviews it, validates a plan, and commits that same plan against the unchanged base revision.
+
+The generic JSON CLI remains the named low-level diagnostic surface. For RPC commands it accepts one
+strict version-8 JSON envelope, sends the same closed typed request in a bounded length frame over
+private local Unix IPC, and writes one typed JSON response. The separate `schema` command derives the
+machine contract locally from the same executable definitions. JSON is transport, not a second
+program representation.
+
+For repeated requests, `lkjscript --state DIRECTORY session` accepts one compact version-8 envelope
 per bounded line and flushes one compact response per line. It reuses the CLI process while retaining
 the daemon's existing one-request-per-connection publication boundary and the same request vocabulary.
 
@@ -126,25 +160,28 @@ The current Linux x86-64 implementation provides:
   variant;
 - structured functions, parameters, identity-targeted calls, conditions, counted loops, constants,
   checked integer addition and comparison, typed placeholders, yields, and returns;
-- immutable `bytes` values with canonical public encoding, checked length/index/slice/equality
-  operations, byte literals, and composition inside records and variants;
+- immutable `bytes` values with canonical public encoding, checked length/index/slice/equality/
+  concatenation operations, byte literals, and composition inside records and variants;
 - atomic commit and validate-only transactions, bounded transaction-local symbolic labels, anonymous
   one-use inline value expressions, selected returned bindings, compact receipts,
   identity-preserving placeholder repair, paginated semantic diffs, and bounded repair context;
+- a compact `agent` workbench with digest-bound context packets, deterministic semantic review and
+  diff text, revision-scoped aliases, strict bounded edit/run plans, and typed parser locations;
 - direct deterministic lowering from one immutable revision to one private Core IR, independent IR
-  verification, and an explicit-frame interpreter;
+  verification, a compiler-derived ownership plan, independent plan verification, and an
+  explicit-frame interpreter;
 - exact public `unit`, `bool`, `i64`, `bytes`, record, and variant values identified by semantic Node IDs;
 - strict generic JSON projection over private synchronous local IPC;
-- a bounded invocation-scoped byte arena whose validated opaque handles occupy fixed runtime cells,
-  with deterministic cleanup and separately checked cells, visible bytes, retained backing, views,
-  objects, and result materialization;
+- a bounded invocation-scoped managed byte store with generation-checked private handles, precise
+  cycle-free ownership counts, deterministic early reclamation, verified borrowing and transfer,
+  uniqueness-guided concat reuse, a safe allocate-new fallback, and owned result materialization;
 - package-wide `unsafe_code = "forbid"` for this Rust package, checked untrusted boundaries, and
   explicit resource policies.
 
 These are current verified implementation choices, not universal architecture mandates: one Rust
 package, synchronous requests, maps and vectors, full snapshot cloning, full scans, full artifact
-rewrites, flat runtime cells, and interpretation. Future storage, indexing, concurrency, memory
-strategies beyond the current invocation arena, frontends, or acceleration require a real consumer and evidence while preserving one
+rewrites, flat runtime cells, and interpretation. Future storage, indexing, concurrency, additional
+managed-value classes, frontends, or acceleration require a real consumer and evidence while preserving one
 program authority and one semantic execution route.
 
 ## Current limitations
@@ -153,7 +190,8 @@ There is no source frontend, public network service, sandbox, package ecosystem,
 host operation, permission-value system, resource-owning value, general managed heap, debugger, native
 backend, optimizer tier, daemon request concurrency, or cross-platform support. Programs currently
 operate only on pure primitives and acyclic immutable named values; managed bytes cannot escape one
-`Run`. The local access boundary relies
+`Run`. There is no automatic schema/context cache, persistent daemon connection, candidate session,
+branch, or merge. The local access boundary relies
 on operating-system directory and socket permissions.
 
 The package forbids local unsafe Rust, but this is not a formal proof or a claim that every dependency
@@ -175,9 +213,11 @@ From the repository root:
 ./examples/named-data/run.sh
 ./examples/release-channel/run.sh
 ./examples/release-manifest/run.sh
+./examples/binary-canonicalizer/run.sh
+./examples/agent-maintenance/run.sh
 ```
 
-All four scripts build production release binaries, create private temporary state, communicate only
+All six scripts build production release binaries, create private temporary state, communicate only
 through the production CLI and service, perform typed shutdown and restart, and remove only state
 they created. They require a current stable Rust toolchain, a POSIX shell, and Python 3.
 

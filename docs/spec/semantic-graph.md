@@ -14,7 +14,7 @@ function parameter name is valid UTF-8 and contains at least one UTF-8 byte. Nam
 the exact sibling groups `workspace.packages`, `package.modules`, `module.types` (product and sum
 declarations together), `module.functions`, `product.fields`, `sum.variants`, and
 `function.parameters`; names in different groups may coincide. Derived blockers, query facts, diffs,
-Core IR, diagnostics, and timings are not mutable
+Core IR, managed-reference maps, ownership plans, diagnostics, and timings are not mutable
 graph authority.
 
 `src/schema.rs` owns the closed node and operation vocabulary and its stable boundary tags. Unknown
@@ -45,7 +45,7 @@ addresses never determine identity. A `DraftSymbol` is a transaction-local propo
 
 Allocation is staged. A rejected or validate-only request changes no published allocator state.
 Persistent identity non-reuse is the semantic contract: a deleted serial can never identify a later
-entity. Artifact format 4 currently proves this by physically retaining deletion tombstones and all
+entity. Artifact format 5 currently proves this by physically retaining deletion tombstones and all
 saved snapshots; that representation and full-retention strategy are not themselves a mandate for
 future physical storage. Under the active format, every serial below the allocator frontier is live
 or tombstoned. Adjacent history requires stable root identity, monotonic allocation and tombstones,
@@ -95,7 +95,7 @@ private implied nodes. Shared or forward-referenced expression results require a
 A structured value position may contain an anonymous inline expression. The retained inline set is
 derived from the same operation descriptors as graph validation: `const_unit`, `const_bool`,
 `const_i64`, `const_bytes`, `add_i64`, `lt_i64`, `call`, `construct_product`, `project_field`,
-`construct_variant`, `bytes_len`, `bytes_at`, `bytes_slice`, and `bytes_equal` are complete,
+`construct_variant`, `bytes_len`, `bytes_at`, `bytes_slice`, `bytes_equal`, and `bytes_concat` are complete,
 non-terminating, single-result operations with no owned region and may be inline. `hole`, `if`,
 `for_i64`, and `match_sum` remain explicit. An inline expression has one
 use by construction, has no public draft symbol, cannot be selected in the receipt, and normalizes
@@ -170,10 +170,37 @@ uses persistent graph identities rather than reconstructing private draft symbol
 requires a complete selected-entry dependency closure; holes never lower. Unused incomplete
 definitions do not block an otherwise complete entry.
 
+## Derived workbench facts and reference domains
+
+A workbench context packet is a pure bounded observation of one exact immutable workspace revision.
+It carries its workspace, revision, machine-schema digest, closed purpose, targets and options,
+canonical packet digest, included node facts, typed query outcomes, legal transaction/expression
+codes, and explicit omission facts. Packet purposes select deterministic fact families; they do not
+rank facts with a model. Target traversal includes the target-owned closure, exact direct
+dependencies and their signatures, and owner anchors without pulling unrelated owner siblings.
+Workspace review is deliberately broader. Full scan queries remain the correctness oracle.
+
+Each included node receives one canonical packet-local alias `n1`, `n2`, and so on in Node-ID order.
+Plan spelling adds `@` to distinguish an alias from a Node ID or `DraftSymbol`. An alias resolves to
+exactly one persistent Node ID only under the packet's workspace, revision, schema, and digest.
+Aliases are never semantic identities, names, transaction-local symbols, allocator inputs, history
+facts, artifact fields, or implicit current-head lookups. A mutation using an old packet still names
+the packet revision as its exact transaction base and therefore rejects with the ordinary revision
+conflict after head movement. A historical pure Run may deliberately use an old exact revision.
+
+A compact edit plan is an ephemeral proposal projection. Parsing resolves packet aliases and
+produces the existing closed `ApplyTransactionRequest`; it allocates no persistent identity and adds
+no semantic form or validator. The selected CLI command supplies commit versus validate-only mode.
+Plan spelling, packet layout, aliases, and derived text are discarded before transaction
+normalization and therefore cannot affect candidate allocation order, snapshot hashes, artifacts,
+change digests, or execution. A derived semantic view is one-way review text and is not required to
+parse or round-trip. Saving, changing, deleting, or corrupting a packet or view cannot alter any
+workspace revision.
+
 ## Artifact and durable HEAD
 
-A `.lkjscript` artifact uses format version 4 and semantic schema identity `lkjscript-spg004`;
-format-3 and older artifact bytes reject without a compatibility reader. It has fixed magic and
+A `.lkjscript` artifact uses format version 5 and semantic schema identity `lkjscript-spg005`;
+format-4 and older artifact bytes reject without a compatibility reader. It has fixed magic and
 semantic schema ID, little-endian integers, checked u64 counts, canonical node/tombstone order,
 allocator/root state, and a BLAKE3 snapshot hash. `ConstBytes` stores a checked canonical length
 followed by raw octets; public base64 and runtime handles are absent. The exact
@@ -184,16 +211,16 @@ UTF-8, unknown tags, duplicate or wrong-workspace IDs, empty or category-duplica
 containment or references, hash mismatch, and trailing bytes. Count work is bounded from remaining
 artifact bytes and exact minimum record widths; there is no separate semantic node or tombstone
 ceiling. Durable workspace IDs and revision file names must use their one canonical path spelling.
-Accepted decode followed by encode is byte-identical. Core IR, machine code, caches, profiles,
-receipts, and protocol frames are absent.
+Accepted decode followed by encode is byte-identical. Core IR, managed handles, ownership plans,
+machine code, caches, profiles, receipts, and protocol frames are absent.
 
-`LKJHEAD6` directly replaces the old HEAD format; there is no compatibility reader. `LKJHEAD5`
-rejects because protocol-v7 canonical JSON, byte proposals, and runtime values changed the persisted
+`LKJHEAD7` directly replaces the old HEAD format; there is no compatibility reader. `LKJHEAD6`
+rejects because protocol-v8 canonical JSON and the concat proposal vocabulary changed the persisted
 idempotency fingerprint meaning. It
 is a checked, independently bounded (16 KiB) non-semantic publication record containing head
 revision/hash and, when present, one compact keyed fingerprint/receipt with exact bounded symbolic
-returned bindings. The HEAD6 grammar has no numeric-symbol interpretation and
+returned bindings. The HEAD7 grammar has no numeric-symbol interpretation and
 stores enough receipt data for exact idempotency replay. It never contains a full diff or allocation map.
 Restart decodes every retained artifact, validates adjacent history, and recomputes/validates
-receipt facts against retained snapshots before accepting HEAD. The fingerprint uses the v7 domain.
+receipt facts against retained snapshots before accepting HEAD. The fingerprint uses the v8 domain.
 Corrupt or old HEAD bytes reject.

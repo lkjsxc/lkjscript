@@ -170,6 +170,10 @@ fn every_closed_machine_variant_round_trips() {
             lhs: value.clone(),
             rhs: value.clone(),
         },
+        OperationDraft::BytesConcat {
+            lhs: value.clone(),
+            rhs: value.clone(),
+        },
     ];
     assert_eq!(drafts.len(), OperationCode::ALL.len());
     for (draft, code) in drafts.iter().zip(OperationCode::ALL) {
@@ -262,6 +266,10 @@ fn every_closed_machine_variant_round_trips() {
             lhs: value.clone(),
             rhs: value.clone(),
         },
+        ExpressionKindDraft::BytesConcat {
+            lhs: value.clone(),
+            rhs: value.clone(),
+        },
     ];
     for (index, operation) in expression_variants.into_iter().enumerate() {
         round_trip(&ExpressionDraft {
@@ -331,6 +339,10 @@ fn every_closed_machine_variant_round_trips() {
             length: ValueRef::FunctionParameter(second),
         },
         OperationKind::BytesEqual {
+            lhs: ValueRef::FunctionParameter(first),
+            rhs: ValueRef::FunctionParameter(second),
+        },
+        OperationKind::BytesConcat {
             lhs: ValueRef::FunctionParameter(first),
             rhs: ValueRef::FunctionParameter(second),
         },
@@ -1091,11 +1103,11 @@ fn strict_json_rejects_malformed_shapes_values_and_limits() {
     }
     let workspace = WorkspaceId::from_bytes([0xab; 16]);
     let valid = format!(
-        "{{\"version\":7,\"request_id\":1,\"request\":{{\"kind\":\"query_batch\",\"data\":{{\"workspace\":\"{workspace}\",\"revision\":0,\"queries\":[{{\"id\":1,\"query\":{{\"kind\":\"blockers\",\"data\":{{\"page\":{{\"limit\":1}}}}}}}}]}}}}}}"
+        "{{\"version\":8,\"request_id\":1,\"request\":{{\"kind\":\"query_batch\",\"data\":{{\"workspace\":\"{workspace}\",\"revision\":0,\"queries\":[{{\"id\":1,\"query\":{{\"kind\":\"blockers\",\"data\":{{\"page\":{{\"limit\":1}}}}}}}}]}}}}}}"
     );
     assert!(decode_request(valid.as_bytes()).is_ok());
     let invalid = [
-        valid.replacen("\"version\":7", "\"version\":6", 1),
+        valid.replacen("\"version\":8", "\"version\":7", 1),
         valid.replacen("\"request_id\":1", "\"request_id\":0", 1),
         valid.replacen("\"request_id\":1", "\"request_id\":-1", 1),
         valid.replacen("\"request_id\":1", "\"request_id\":18446744073709551616", 1),

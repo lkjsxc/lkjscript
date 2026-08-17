@@ -484,7 +484,7 @@ mod tests {
 
         let matching_text = String::from_utf8(matching).expect("boundary error UTF-8");
         for malformed in [
-            matching_text.replacen("\"version\":7", "\"version\":7,\"version\":7", 1),
+            matching_text.replacen("\"version\":8", "\"version\":8,\"version\":8", 1),
             matching_text.replacen('{', "{\"unknown\":true,", 1),
             format!("{matching_text} null"),
         ] {
@@ -556,7 +556,7 @@ mod tests {
 
         let duplicate = String::from_utf8(valid.clone())
             .expect("UTF-8 response")
-            .replacen("\"version\":7", "\"version\":7,\"version\":7", 1);
+            .replacen("\"version\":8", "\"version\":8,\"version\":8", 1);
         assert!(machine::decode_response(duplicate.as_bytes()).is_err());
         let unknown = String::from_utf8(valid.clone())
             .expect("UTF-8 response")

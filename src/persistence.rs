@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-const HEAD_MAGIC: [u8; 8] = *b"LKJHEAD6";
+const HEAD_MAGIC: [u8; 8] = *b"LKJHEAD7";
 pub const MAXIMUM_HEAD_BYTES: usize = 16 * 1024;
 static TEMP_SERIAL: AtomicU64 = AtomicU64::new(1);
 
@@ -899,7 +899,7 @@ fn put_transaction_receipt(writer: &mut Writer, receipt: &TransactionReceipt) ->
     writer.u64(u64::try_from(receipt.returned_bindings.len()).map_err(|_| {
         LkError::new(
             ErrorCode::PolicyExceeded,
-            "transaction receipt binding count exceeds HEAD6 encoding",
+            "transaction receipt binding count exceeds HEAD7 encoding",
         )
     })?);
     for (symbol, node) in &receipt.returned_bindings {
@@ -1244,7 +1244,7 @@ mod tests {
     }
 
     #[test]
-    fn nominal_declarations_survive_format_four_restart_and_rederive_layout() {
+    fn nominal_declarations_survive_format_five_restart_and_rederive_layout() {
         let temporary = tempfile::tempdir().expect("state");
         ensure_state_directory(temporary.path()).expect("state directory");
         let id = WorkspaceId::from_bytes([0x94; 16]);
@@ -1300,7 +1300,7 @@ mod tests {
     }
 
     #[test]
-    fn nominal_operation_and_match_graph_survives_format_four_restart_and_retained_query() {
+    fn nominal_operation_and_match_graph_survives_format_five_restart_and_retained_query() {
         let temporary = tempfile::tempdir().expect("state");
         ensure_state_directory(temporary.path()).expect("state directory");
         let id = WorkspaceId::from_bytes([0x96; 16]);
@@ -1866,17 +1866,17 @@ mod tests {
     }
 
     #[test]
-    fn head6_unkeyed_grammar_remains_fixed_and_deterministic() {
+    fn head7_unkeyed_grammar_remains_fixed_and_deterministic() {
         let revision = Revision::new(7);
         let hash = SnapshotHash::from_bytes([0xa5; SnapshotHash::BYTE_LEN]);
-        let first = encode_head(revision, hash, None).expect("HEAD6 encode");
+        let first = encode_head(revision, hash, None).expect("HEAD7 encode");
         assert_eq!(
             first,
-            encode_head(revision, hash, None).expect("deterministic HEAD6")
+            encode_head(revision, hash, None).expect("deterministic HEAD7")
         );
 
         let mut expected_body = Vec::new();
-        expected_body.extend_from_slice(b"LKJHEAD6");
+        expected_body.extend_from_slice(b"LKJHEAD7");
         expected_body.extend_from_slice(&7_u64.to_le_bytes());
         expected_body.extend_from_slice(&[0xa5; SnapshotHash::BYTE_LEN]);
         expected_body.push(0);
@@ -1887,7 +1887,7 @@ mod tests {
             blake3::hash(&expected_body).as_bytes()
         );
         let (decoded_revision, decoded_hash, decoded_record) =
-            decode_head(&first).expect("HEAD6 decode");
+            decode_head(&first).expect("HEAD7 decode");
         assert_eq!((decoded_revision, decoded_hash), (revision, hash));
         assert!(decoded_record.is_none());
     }
@@ -1931,14 +1931,14 @@ mod tests {
     }
 
     #[test]
-    fn head_version_five_magic_is_rejected_without_compatibility_reader() {
+    fn head_version_six_magic_is_rejected_without_compatibility_reader() {
         let temporary = tempfile::tempdir().expect("temporary directory");
         ensure_state_directory(temporary.path()).expect("state directory");
         let id = WorkspaceId::from_bytes([0x18; 16]);
         DurableWorkspace::create(temporary.path(), id).expect("workspace");
         let head_path = workspace_directory(temporary.path(), id).join("HEAD");
         let mut bytes = fs::read(&head_path).expect("head bytes");
-        bytes[..8].copy_from_slice(b"LKJHEAD5");
+        bytes[..8].copy_from_slice(b"LKJHEAD6");
         let body_length = bytes.len() - SnapshotHash::BYTE_LEN;
         let checksum = blake3::hash(&bytes[..body_length]);
         bytes[body_length..].copy_from_slice(checksum.as_bytes());
@@ -1946,7 +1946,7 @@ mod tests {
         assert_eq!(
             DurableWorkspace::open(temporary.path(), id)
                 .err()
-                .expect("HEAD5 must reject")
+                .expect("HEAD6 must reject")
                 .code,
             ErrorCode::ArtifactCorrupt
         );
@@ -2090,7 +2090,7 @@ mod tests {
     }
 
     #[test]
-    fn keyed_head6_publication_faults_preserve_prior_replay_and_allocator() {
+    fn keyed_head7_publication_faults_preserve_prior_replay_and_allocator() {
         let temporary = tempfile::tempdir().expect("temporary state directory");
         ensure_state_directory(temporary.path()).expect("state directory");
         let id = WorkspaceId::from_bytes([5; 16]);

@@ -190,8 +190,8 @@ impl SemanticType {
             machine_name: "bytes",
             stable_tag: 5,
             storage_class: ValueStorageClass::ManagedHandle,
-            physical_slot_size: 4,
-            physical_slot_align: 4,
+            physical_slot_size: 8,
+            physical_slot_align: 8,
             cells: 1,
         },
     ];
@@ -485,10 +485,11 @@ pub enum OperationCode {
     BytesAt,
     BytesSlice,
     BytesEqual,
+    BytesConcat,
 }
 
 impl OperationCode {
-    pub const ALL: [Self; 20] = [
+    pub const ALL: [Self; 21] = [
         Self::ConstUnit,
         Self::ConstI64,
         Self::ConstBool,
@@ -509,6 +510,7 @@ impl OperationCode {
         Self::BytesAt,
         Self::BytesSlice,
         Self::BytesEqual,
+        Self::BytesConcat,
     ];
 
     pub const fn stable_tag(self) -> u8 {
@@ -537,6 +539,7 @@ impl OperationCode {
             18 => Some(Self::BytesAt),
             19 => Some(Self::BytesSlice),
             20 => Some(Self::BytesEqual),
+            21 => Some(Self::BytesConcat),
             _ => None,
         }
     }
@@ -567,6 +570,7 @@ impl OperationCode {
             Self::BytesAt => &BYTES_AT_DESCRIPTOR,
             Self::BytesSlice => &BYTES_SLICE_DESCRIPTOR,
             Self::BytesEqual => &BYTES_EQUAL_DESCRIPTOR,
+            Self::BytesConcat => &BYTES_CONCAT_DESCRIPTOR,
         }
     }
 }
@@ -1105,6 +1109,19 @@ descriptor!(
     false,
     true
 );
+descriptor!(
+    BYTES_CONCAT_DESCRIPTOR,
+    BytesConcat,
+    "bytes_concat",
+    21,
+    OperandArity::Fixed(2),
+    BYTES_BINARY_OPERANDS,
+    BYTES_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
 #[serde(
@@ -1192,6 +1209,10 @@ pub enum OperationDraft {
         lhs: ValueDraft,
         rhs: ValueDraft,
     },
+    BytesConcat {
+        lhs: ValueDraft,
+        rhs: ValueDraft,
+    },
     Call {
         function: NodeTarget,
         arguments: Vec<ValueDraft>,
@@ -1252,6 +1273,7 @@ impl OperationDraft {
             Self::BytesAt { .. } => OperationCode::BytesAt,
             Self::BytesSlice { .. } => OperationCode::BytesSlice,
             Self::BytesEqual { .. } => OperationCode::BytesEqual,
+            Self::BytesConcat { .. } => OperationCode::BytesConcat,
             Self::Call { .. } => OperationCode::Call,
             Self::Hole { .. } => OperationCode::Hole,
             Self::If { .. } => OperationCode::If,
@@ -1316,6 +1338,10 @@ pub enum OperationKind {
         lhs: ValueRef,
         rhs: ValueRef,
     },
+    BytesConcat {
+        lhs: ValueRef,
+        rhs: ValueRef,
+    },
     Call {
         function: NodeId,
         arguments: Vec<ValueRef>,
@@ -1376,6 +1402,7 @@ impl OperationKind {
             Self::BytesAt { .. } => OperationCode::BytesAt,
             Self::BytesSlice { .. } => OperationCode::BytesSlice,
             Self::BytesEqual { .. } => OperationCode::BytesEqual,
+            Self::BytesConcat { .. } => OperationCode::BytesConcat,
             Self::Call { .. } => OperationCode::Call,
             Self::Hole { .. } => OperationCode::Hole,
             Self::If { .. } => OperationCode::If,
@@ -1413,11 +1440,17 @@ impl OperationKind {
     pub fn operand(&self, index: usize) -> Option<ValueRef> {
         match (self, index) {
             (
-                Self::AddI64 { lhs, .. } | Self::LtI64 { lhs, .. } | Self::BytesEqual { lhs, .. },
+                Self::AddI64 { lhs, .. }
+                | Self::LtI64 { lhs, .. }
+                | Self::BytesEqual { lhs, .. }
+                | Self::BytesConcat { lhs, .. },
                 0,
             ) => Some(*lhs),
             (
-                Self::AddI64 { rhs, .. } | Self::LtI64 { rhs, .. } | Self::BytesEqual { rhs, .. },
+                Self::AddI64 { rhs, .. }
+                | Self::LtI64 { rhs, .. }
+                | Self::BytesEqual { rhs, .. }
+                | Self::BytesConcat { rhs, .. },
                 1,
             ) => Some(*rhs),
             (Self::BytesLen { value }, 0) => Some(*value),
@@ -1494,11 +1527,17 @@ impl OperationKind {
         };
         match (self, index) {
             (
-                Self::AddI64 { lhs, .. } | Self::LtI64 { lhs, .. } | Self::BytesEqual { lhs, .. },
+                Self::AddI64 { lhs, .. }
+                | Self::LtI64 { lhs, .. }
+                | Self::BytesEqual { lhs, .. }
+                | Self::BytesConcat { lhs, .. },
                 0,
             ) => *lhs = replacement,
             (
-                Self::AddI64 { rhs, .. } | Self::LtI64 { rhs, .. } | Self::BytesEqual { rhs, .. },
+                Self::AddI64 { rhs, .. }
+                | Self::LtI64 { rhs, .. }
+                | Self::BytesEqual { rhs, .. }
+                | Self::BytesConcat { rhs, .. },
                 1,
             ) => *rhs = replacement,
             (Self::BytesLen { value }, 0) => *value = replacement,
@@ -2079,7 +2118,7 @@ mod tests {
                 bytes.physical_slot_align,
                 bytes.cells
             ),
-            (4, 4, 1)
+            (8, 8, 1)
         );
         assert!(
             SemanticType::Nominal(

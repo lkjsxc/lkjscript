@@ -7,12 +7,12 @@
 lock, and OS filesystem ownership form the bootstrap local access boundary. There is no HTTP, TCP,
 or public JSON listener.
 
-Each connection carries exactly one request and one response and then closes. Protocol version 7
-directly replaces prior versions; protocol-v6 success readers and writers are deleted and no
+Each connection carries exactly one request and one response and then closes. Protocol version 8
+directly replaces prior versions; protocol-v7 success readers and writers are deleted and no
 legacy reader remains. A control frame is:
 
 ```text
-u32 little-endian body length | strict compact JSON version-7 envelope
+u32 little-endian body length | strict compact JSON version-8 envelope
 ```
 
 Request bodies are limited to 8 MiB and response bodies to 32 MiB. The response repeats the nonzero
@@ -46,7 +46,8 @@ at most 64 deterministically ordered related IDs, and
 retryability; prose is presentation only. Exact larger blocker detail remains available through the
 paginated blockers query. Run argument mismatch, execution-fuel exhaustion, and execution-frame exhaustion have distinct stable
 error codes; byte encoding/literal/input/result limits, managed object/visible/retained policies,
-byte index/slice bounds, and invalid internal handles also remain distinct. Arithmetic overflow
+byte index/slice/concat bounds, invalid ownership plans, allocation exhaustion, and invalid internal
+handles also remain distinct. Arithmetic overflow
 remains a runtime trap.
 
 Initial public construction uses atomic `CreateProductType` and `CreateSumType`, structured
@@ -62,7 +63,7 @@ block-argument reference, operation-result reference, or an `inline_expression` 
 `ExpressionKindDraft`. Inline values accept only descriptor-complete, non-terminating,
 single-result, regionless operations: `const_unit`, `const_bool`, `const_i64`, `const_bytes`,
 `add_i64`, `lt_i64`, `call`, `construct_product`, `project_field`, `construct_variant`,
-`bytes_len`, `bytes_at`, `bytes_slice`, and `bytes_equal`. Holes and region-owning
+`bytes_len`, `bytes_at`, `bytes_slice`, `bytes_equal`, and `bytes_concat`. Holes and region-owning
 `if`, `for_i64`, and `match_sum` remain explicit, as do shared, selected, repairable, and maintenance
 targets. Fine-grained maintenance requests reject inline values.
 
@@ -141,8 +142,8 @@ once. An iterative worklist follows every named payload and draft-field type exp
 `page<T>` includes both `page` and `T`; `type_parameter` is bound by the page definition. Every
 dependency resolves within the result.
 
-The compact manifest identifies `lkjscript-machine-schema-v7`, its digest, protocol/JSON version 7,
-artifact format 4, semantic schema `lkjscript-spg004`, the closed root vocabulary, the 16-root request
+The compact manifest identifies `lkjscript-machine-schema-v8`, its digest, protocol/JSON version 8,
+artifact format 5, semantic schema `lkjscript-spg005`, the closed root vocabulary, the 16-root request
 policy, the type constructors, full availability, and frame/JSON output bounds. It does not contain
 the full payload catalogues. A matching known digest returns only typed `unchanged { digest }` after
 root validation. A mismatch is not an error and returns the requested active projection. Root and
@@ -193,14 +194,14 @@ is `A-Z`, `a-z`, `0-9`, `-`, and `_`; padding and whitespace reject, a length co
 four rejects, and unused trailing bits must be zero. Decode length is checked before allocation and
 decode followed by re-encode must reproduce the input. Empty bytes are `""`. `ConstBytes` drafts and
 `RuntimeValue::Bytes` use this same scalar; no hexadecimal, padded, standard-alphabet, or integer-list
-alias is accepted. Output contains visible octets only, never arena backing, views, or handles.
+alias is accepted. Output contains visible octets only, never managed backing, views, or handles.
 
 Runtime limits are 1,024 ordered arguments, 10,000,000 fuel units, 100,000 frames, 65,536 peak
 materialized cells, runtime-value depth 24, 4,096 runtime-value items aggregated across all Run
 arguments, and 64 KiB of structural runtime-value accounting aggregated across all Run arguments.
 Bytes add a 65,536-octet limit per public value and across all decoded byte arguments, 1,048,576
-cumulative visible arena bytes, 262,144 distinct retained backing bytes, 4,096 combined backing and
-view objects, and a 65,536-octet public result limit. The strict JSON Run envelope enforces the same depth, item, byte, and
+cumulative visible construction bytes, 262,144 simultaneously live backing bytes, 4,096
+simultaneously live backing/view objects, and a 65,536-octet public result limit. The strict JSON Run envelope enforces the same depth, item, byte, and
 argument-count constants through the CLI and daemon. Request writers stop before growth beyond the
 8 MiB input ceiling, response writers stream through the independent 32 MiB output ceiling, and
 framing checks declared lengths before allocating.
@@ -212,9 +213,118 @@ Malformed variants, truncation, trailing bytes, foreign members, duplicate field
 payload mismatches reject. This specification does not duplicate the remaining exhaustive payload
 catalogue.
 
+## Semantic workbench CLI
+
+The preferred coding-agent projection is `lkjscript agent`. It is a client of the unchanged
+protocol-v8 service, not a daemon request family or another semantic authority. `agent create`
+sends `CreateWorkspace`; `agent context` composes existing revision-bound queries; `agent validate`
+and `agent apply` normalize one compact edit plan to the existing `ApplyTransaction` request; and
+`agent run` normalizes one compact run plan to the existing `Run` request. `agent view` and `agent
+diff` read a packet without contacting the daemon. No workbench operation silently retries a
+request. Protocol, JSON, artifact, semantic-schema, HEAD, and idempotency-fingerprint versions remain
+8, 8, 5, `lkjscript-spg005`, `LKJHEAD7`, and their existing v8 domain because accepted daemon bytes
+did not change.
+
+`agent orient` (also the default with no agent subcommand) reports the plain product model,
+high-level task loop, workbench version, active protocol version, and exact machine-schema digest.
+`agent help` owns command and grammar discovery; its core authoring cards derive from the executable
+machine description rather than a duplicate operation or type catalogue. `agent create`, `validate`,
+`apply`, and `run` emit one logical typed `Response` without the low-level correlation envelope. A
+well-formed semantic rejection is still a successful transport observation and exits 0. Usage or
+plan/context boundary failure exits 2, transport failure exits 3, and output failure exits 4.
+Machine JSON and presentation text never share one invocation's stdout.
+
+### Context packet version 1
+
+`agent context` requires `--state`, canonical workspace, exact revision, and one closed purpose:
+`orient`, `create`, `repair`, `refactor`, `debug`, `extend`, `delete`, or `review`. At most eight
+repeatable targets are accepted. Repair requires exactly one hole target; refactor, debug, extend,
+and delete require at least one target. Only review accepts `--from-revision`. `--max-nodes` is
+1..=256 and defaults to 64. Unknown and duplicate options reject.
+
+The strict packet JSON has workbench version 1, a domain-separated BLAKE3 digest over its canonical
+payload, and exactly these payload fact families: workspace, revision, active machine-schema digest,
+purpose, ordered targets, optional diff origin, workspace summary, canonical alias table, expanded
+node facts, blockers, target observations, optional semantic diff, legal transaction/expression
+codes, and explicit omission facts. Set-like nodes and aliases use Node-ID order; semantic child order
+remains semantic order. A packet is capped at 4 MiB. Unsupported version/schema, trailing JSON,
+digest mismatch, foreign domain, duplicate node, noncanonical alias order, alias/node-kind mismatch,
+or size overflow rejects before plan parsing.
+
+Aliases are exactly `@` followed by the packet's canonical `n1`, `n2`, ... labels. They resolve only
+from an explicitly supplied packet file whose digest is also declared in the plan. Unknown aliases,
+an absent packet, a different digest, workspace, or revision, and cross-domain use reject with a
+typed `PlanError` code. There is no fallback from alias to name, Node ID, current head, or draft
+symbol. Full canonical Node IDs remain valid in plans.
+
+Packet files are disposable client data. The CLI does not maintain an automatic cache. A caller may
+save a packet under its digest and reuse it for local view/plan operations; every read revalidates
+version, active schema, canonical facts, and digest. Deleting the file changes no semantics. The
+daemon never receives or trusts cached packet facts; it receives only the normalized typed request
+and validates all referenced identities against the exact revision.
+
+`agent view --packet FILE [--ids]` emits deterministic UTF-8 semantic review text capped at 4 MiB.
+It states view version, workspace, revision, snapshot hash, schema and packet digests, purpose,
+scope counts, completeness, blockers, and omissions. It renders signatures and structured bodies in
+semantic order, placeholders visibly, packet anchors by default, and canonical full IDs when
+`--ids` is selected. Untrusted names and byte values use escaped canonical presentation, so terminal
+control bytes are not emitted. `agent diff` requires a review packet with a semantic diff and renders
+the exact typed change list; it does not infer behavioral equivalence. Neither rendering parses or
+round-trips.
+
+### Compact plan grammar
+
+Edit and run plans are UTF-8, limited to 8 MiB, 32 open containers, and 65,536 counted containers and
+values. Parsing is iterative and fail-fast; user nesting does not consume native recursive stack.
+ASCII space, tab, CR, and LF are whitespace. Comments, commas, semicolons, equals signs, raw newlines
+inside strings, duplicate object fields, mismatched delimiters, extra variant payloads, trailing
+input, and unknown typed fields or variants reject. JSON string escape and Unicode rules define
+quoted strings. Bare atoms contain only ASCII letters, digits, underscore, hyphen, dot, or colon;
+`true`, `false`, and `null` are scalars in value position. Signed decimal integer candidates must fit
+the strict destination JSON integer/domain. Plan aliases match `@[a-z][a-z0-9_]*`. A quoted `"@n1"`
+is an ordinary string, not an alias.
+
+```text
+edit-document = "plan" object EOF
+run-document  = "run" object EOF
+object        = "{" *(field value) "}"
+field         = bare-atom
+list          = "[" *value "]"
+variant       = "(" kind [value] ")"
+value         = object / list / variant / json-string / integer /
+                "true" / "false" / "null" / bare-atom / packet-alias
+```
+
+A tagged variant normalizes to the same `{kind,data}` closed enum representation; a nullary variant
+omits data. An edit document has exactly optional `packet`, required `workspace`, required
+`base_revision`, optional `idempotency_key`, required `operations`, and optional
+`return_symbols`. The CLI command supplies mode: `agent validate` is validate-only and rejects an
+idempotency key; `agent apply` is commit. A run document has optional `packet`, required `workspace`,
+`revision`, `entry`, `arguments`, and exact `policy`. Parsed shapes deserialize directly into the
+same closed transaction, operation, value, and Run DTOs described by machine-schema roots. There is
+no second operation table, expression language, name resolver, semantic validator, or persistent
+syntax tree.
+
+Within the grammar, a transaction-local target is `(draft SYMBOL)` and a persistent target is
+`(existing NODE_OR_@ALIAS)`. Draft symbols are ordinary string values and never use `@`; `@` is
+reserved for aliases already present in the supplied packet, so a create packet cannot alias a node
+that the plan is about to draft. Primitive type drafts are the bare unit values `unit`, `bool`,
+`i64`, and `bytes`; a named type is `(nominal NODE_TARGET)`. An operation result is
+`(operation_result { operation NODE_TARGET output U8 })`. Validate-only plans must omit
+`idempotency_key`; commit plans may omit it or use the existing exact 32-lowercase-hexadecimal key
+domain. These are presentation rules for the executable `node_target`, `type_draft`, `value_draft`,
+and transaction contracts, not alternate accepted DTOs.
+
+Plan syntax failures emit one strict JSON object containing `workbench_version: 1`,
+`kind: "plan_error"`, and an error with stable code, one-based line/column, zero-based byte offset,
+and a message capped at 512 UTF-8 bytes. Codes distinguish invalid UTF-8, input size, syntax, depth,
+item count, duplicate field, unknown alias, missing packet, packet mismatch, and typed shape. Syntax
+and packet failures publish nothing and occur before daemon dispatch or persistent identity
+allocation. Semantic errors remain the daemon's existing typed errors with operation/draft paths.
+
 ## Strict generic JSON CLI
 
-`lkjscript --state DIRECTORY rpc [--pretty]` reads exactly one strict JSON version-7 request envelope
+`lkjscript --state DIRECTORY rpc [--pretty]` reads exactly one strict JSON version-8 request envelope
 from stdin, sends the same closed typed JSON request through the private framed Unix connection, and
 writes exactly one JSON response envelope to stdout. `lkjscript schema` emits the compact manifest locally;
 repeatable `--root NAME` requests exact transitive definition closures, `--full` requests the complete
@@ -224,7 +334,7 @@ produce a bounded usage error. Local output and daemon `DescribeSchema` use the 
 functions. JSON is transport only and is never persisted as program authority.
 
 `lkjscript --state DIRECTORY session` is a same-vocabulary process-lifecycle projection. It reads one
-version-7 request envelope per LF-delimited line, bounded to the same 8 MiB before decoding, opens one
+version-8 request envelope per LF-delimited line, bounded to the same 8 MiB before decoding, opens one
 ordinary single-request daemon connection for that line, writes one compact response followed by LF,
 and flushes before reading the next request. A final nonempty line at EOF is processed; EOF after a
 response exits cleanly. Blank, malformed, or oversized lines produce one boundary-error value and

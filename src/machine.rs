@@ -14,15 +14,15 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
 use std::io::{self, Write};
 
-pub const JSON_ENVELOPE_VERSION: u16 = 7;
+pub const JSON_ENVELOPE_VERSION: u16 = 8;
 pub const MAX_JSON_INPUT_BYTES: usize = 8 * 1024 * 1024;
 pub const MAX_JSON_OUTPUT_BYTES: usize = 32 * 1024 * 1024;
-pub const MACHINE_SCHEMA_IDENTITY: &str = "lkjscript-machine-schema-v7";
+pub const MACHINE_SCHEMA_IDENTITY: &str = "lkjscript-machine-schema-v8";
 const MACHINE_SCHEMA_DIGEST_DOMAIN: &str = "lkjscript.machine-schema.digest.v2";
-const TRANSACTION_FINGERPRINT_DOMAIN: &str = "lkjscript.apply-transaction.fingerprint.v7";
+const TRANSACTION_FINGERPRINT_DOMAIN: &str = "lkjscript.apply-transaction.fingerprint.v8";
 const MAX_BOUNDARY_ERROR_MESSAGE_BYTES: usize = 1024;
 const BOUNDARY_ERROR_FALLBACK: &[u8] =
-    b"{\"version\":7,\"error\":{\"kind\":\"output\",\"message\":\"cannot encode boundary error\"}}";
+    b"{\"version\":8,\"error\":{\"kind\":\"output\",\"message\":\"cannot encode boundary error\"}}";
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -724,7 +724,7 @@ fn expression_variant(code: crate::transaction::ExpressionDraftCode) -> DraftVar
                 draft_field("rhs", T::Value, true, false),
             ],
         ),
-        C::BytesEqual => (
+        C::BytesEqual | C::BytesConcat => (
             PayloadShapeKind::Record,
             None,
             vec![
@@ -849,7 +849,7 @@ fn operation_variant(code: OperationCode) -> DraftVariantDescription {
                 draft_field("rhs", T::Value, true, false),
             ],
         ),
-        C::BytesEqual => (
+        C::BytesEqual | C::BytesConcat => (
             PayloadShapeKind::Record,
             None,
             vec![
@@ -1160,6 +1160,10 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
                 ),
                 variant_payload(
                     "bytes_equal",
+                    record_payload(&[("lhs", "value_ref", true), ("rhs", "value_ref", true)]),
+                ),
+                variant_payload(
+                    "bytes_concat",
                     record_payload(&[("lhs", "value_ref", true), ("rhs", "value_ref", true)]),
                 ),
             ],
@@ -3164,7 +3168,8 @@ pub fn schema_description() -> SchemaDescription {
                 "fuel charges before work: one base per instruction or transfer plus max(1, materialized cells) for every logical value transfer; variant construction charges its full canonical sum cells".into(),
                 "bytes_slice additionally charges one logical view unit without charging per visible octet".into(),
                 "bytes_equal additionally charges one fuel unit per compared octet and stops at the first mismatch; differing lengths compare no octets".into(),
-                "decoded byte values, invocation visible bytes, distinct retained backing bytes, and managed object count have independent limits".into(),
+                "bytes_concat additionally charges one fuel unit per octet in the complete logical result, independent of allocation or reuse".into(),
+                "decoded byte values, cumulative invocation visible construction, live distinct backing bytes, and live managed object count have independent limits".into(),
             ],
         },
         queries: QueryCode::ALL
@@ -4346,9 +4351,9 @@ mod tests {
         assert_eq!(decode_request(&bytes).expect("decode"), request);
         let text = String::from_utf8(bytes).expect("UTF-8");
         for invalid in [
-            text.replacen("\"version\":7", "\"version\":6", 1),
+            text.replacen("\"version\":8", "\"version\":7", 1),
             text.replacen("\"request_id\":1", "\"request_id\":0", 1),
-            text.replacen("{\"version\":7", "{\"unknown\":0,\"version\":7", 1),
+            text.replacen("{\"version\":8", "{\"unknown\":0,\"version\":8", 1),
             format!("{text} {{}}"),
             text.replacen(
                 &workspace.to_string(),
@@ -4531,6 +4536,10 @@ mod tests {
                 length: value,
             },
             OperationKind::BytesEqual {
+                lhs: value,
+                rhs: value,
+            },
+            OperationKind::BytesConcat {
                 lhs: value,
                 rhs: value,
             },
@@ -6155,6 +6164,10 @@ mod tests {
                 lhs: value.clone(),
                 rhs: value.clone(),
             },
+            ExpressionKindDraft::BytesConcat {
+                lhs: value.clone(),
+                rhs: value.clone(),
+            },
         ];
         assert_eq!(expression_samples.len(), ExpressionDraftCode::ALL.len());
         for (sample, code) in expression_samples.iter().zip(ExpressionDraftCode::ALL) {
@@ -6242,6 +6255,10 @@ mod tests {
                 length: value.clone(),
             },
             OperationDraft::BytesEqual {
+                lhs: value.clone(),
+                rhs: value.clone(),
+            },
+            OperationDraft::BytesConcat {
                 lhs: value.clone(),
                 rhs: value.clone(),
             },
@@ -9392,12 +9409,12 @@ mod tests {
             sizes,
             vec![
                 ("manifest", None, 1_241, 1_319),
-                ("selected_agent_task_roots", Some(112), 85_827, 85_905),
-                ("full", None, 133_774, 133_852),
+                ("selected_agent_task_roots", Some(112), 86_567, 86_645),
+                ("full", None, 135_009, 135_087),
                 ("unchanged", None, 105, 183),
             ]
         );
-        assert!(sizes[1].2 < 86_009);
+        assert!(sizes[1].2 < 87_000);
     }
 
     fn assert_variant_payloads<const N: usize>(

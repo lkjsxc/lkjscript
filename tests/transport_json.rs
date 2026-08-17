@@ -164,7 +164,7 @@ fn real_daemon_framing_rejects_before_dispatch_and_remains_usable() {
             .join("HEAD"),
     )
     .expect("workspace HEAD");
-    assert_eq!(&head[..8], b"LKJHEAD6");
+    assert_eq!(&head[..8], b"LKJHEAD7");
     daemon.shutdown(13);
 }
 

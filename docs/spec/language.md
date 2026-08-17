@@ -33,7 +33,8 @@ nonconsuming `read` operand use; they do not require physical deep copying. An i
 has no observable address or allocation identity, equality depends only on its visible octets, and a
 duplicate may share backing. Products and variants containing bytes retain those semantics. This is
 not a decision that a future resource-owning or move-only value must be duplicable. No resource
-ownership or borrow rules are currently accepted.
+ownership or surface borrow rules are currently accepted. Physical ownership, borrowing, and
+storage reuse for ordinary immutable values are compiler-derived implementation facts.
 
 Empty bytes are valid. A slice denotes exactly one contiguous subsequence and may share the original
 backing. A zero-length slice is valid at any start in `0..=length`; other ranges must fit completely.
@@ -53,11 +54,21 @@ are lowered through independently verified layouts; the current interpreter stor
 flat cells.
 
 Bytes add no unchecked memory operation. During one invocation, public inputs and executed byte
-constants enter a bounded invocation-scoped arena as immutable backing plus constant-depth views.
-Flat cells contain kind-specific opaque nonzero handles, never pointers. Handles are monotonic and
-not reused within the invocation; every access checks the handle domain, table bound, backing kind,
-and view range. No handle is serializable or may survive `Run`. The public result is copied into an
-owned boundary value after exact output checks and before the arena is dropped.
+constants enter a bounded managed store as backing buffers plus constant-depth views. Flat cells
+contain kind-specific opaque nonzero handles, never pointers. Reused descriptor slots advance a
+checked generation; every access checks the handle domain, kind, index, generation, liveness,
+backing range, and owner store. A stale generation rejects and generation wrap retires the slot. No
+handle is serializable or may survive `Run`. The public result is copied into an owned boundary value
+after exact output checks and before the store is dropped.
+
+The compiler derives a closed ownership plan from verified Core control flow and exact managed-cell
+maps. A separate verifier recomputes type, liveness, edge, cleanup, and uniqueness facts before
+managed execution. Reads borrow while a live owner dominates them; transfers preserve one claim;
+semantic duplication creates one checked ownership claim; and final drop reclaims a byte view and
+then any unreferenced backing. Products enumerate every managed field, while variants enumerate only
+the active payload. Ordinary byte topology is acyclic, so precise reference counting is the fallback
+only for actual sharing and there is no tracing collector. Cleanup uses the verified roots on normal
+returns and every runtime failure.
 
 This language-level exclusion is one layer of the memory-safety contract, not a formal proof about
 the implementation or its trusted computing base. Resource exhaustion is distinct: fuel, frames,
@@ -65,12 +76,13 @@ runtime-value depth/items/bytes, and live cells may reject under documented oper
 User-scalable calls, control, aggregate traversal, validation, and decoding must use explicit frames
 or work collections rather than consuming unbounded native stack.
 
-The invocation arena is selected only for nonescaping managed bytes. A future persistent heap,
-escaping shared value,
-cycle, mutable object, foreign value, or external resource must add implemented and verified aliasing,
-lifetime, cleanup, concurrency, and permission semantics appropriate to that data class. Tracing
-collection, reference counting, affine ownership, regions, stable handles, borrowing, copy-on-write,
-and hybrids remain evidence-gated implementation and language-design options.
+The managed store is selected only for nonescaping, cycle-free bytes. A simple allocate-new mode is
+retained under tests as the semantic differential oracle, not as a second language. A future
+persistent heap, escaping shared value, cycle, mutable object, foreign value, or external resource
+must add implemented and verified aliasing, lifetime, cleanup, concurrency, and permission semantics
+appropriate to that data class. Tracing remains reserved for a real cyclic consumer; affine
+semantic ownership remains reserved for external resources or unique mutable values whose
+duplication or cleanup is observable.
 
 ## Pure operation contracts
 
@@ -89,6 +101,9 @@ codecs, history checks, and runtime schema description.
 - `bytes_slice(value, start, length)` reads bytes and two `i64` values, producing a possibly shared
   immutable view or trapping with `byte_slice_out_of_bounds`;
 - `bytes_equal(lhs, rhs)` compares visible ordered octets and produces `bool`;
+- `bytes_concat(lhs, rhs)` reads two byte values and produces their exact left-to-right
+  concatenation. Empty operands are exact, checked length addition precedes allocation or reuse,
+  and a result above 65,536 octets traps with `byte_value_too_large`;
 - `call(function, arguments)` names a function by Node ID, requires one argument per ordered
   parameter with exact types, and produces the target function's result type;
 - `hole(expected)` produces one value of its exact expected type but remains incomplete;
@@ -143,7 +158,8 @@ A selected entry is eligible for lowering only when its dependency closure is co
 incomplete definitions do not block that entry. The single executable route is:
 
 ```text
-immutable SPG snapshot -> completeness/type validation -> Core IR -> verifier -> interpreter
+immutable SPG snapshot -> completeness/type validation -> Core IR -> IR verifier
+    -> derived ownership plan -> ownership verifier -> managed interpreter
 ```
 
 The compiler iteratively discovers the exact direct-call closure and transitive nominal-type closure.
@@ -159,7 +175,7 @@ generated block parameters. `if` lowers to lazy arm blocks and a join. `for_i64`
 header, body, and exit. Product construction, projection, and variant construction lower to exact
 aggregate instructions. `match_sum` lowers to one exhaustive variant switch, one payload marker only
 for payload variants, lazy arm blocks, deterministic captures, and one typed join. The independent
-verifier rederives type layouts and frame footprints and rejects malformed dependencies, aggregate
+IR verifier rederives type layouts and frame footprints and rejects malformed dependencies, aggregate
 instructions, switch tables, payload edges, or indexes.
 
 Public invocation values are exact `unit`, `bool`, `i64`, `bytes`, product, or sum projections. Bytes
@@ -171,17 +187,21 @@ Nested values are checked against the selected immutable revision and bounded to
 4,096-item and 64 KiB structural-value policies aggregate across all Run arguments, with a separate
 65,536 decoded-byte aggregate. Type-based result preflight bounds mandatory structural depth, items,
 and structural accounting; the compiler and verifier establish fixed cell layouts. Managed payload
-is checked dynamically against arena and actual-result limits; `Run` is pure, so such a
+is checked dynamically against managed-store and actual-result limits; `Run` is pure, so such a
 result-policy rejection publishes nothing.
 
 Execution uses one deterministic loop over explicit frames. Each frame owns one flat cell array plus
 separate per-value initialized facts. Unit uses zero cells, bool and i64 use one, bytes uses one
 validated handle cell, products concatenate field ranges, and sums use one discriminant cell plus the
-maximum payload range; inactive payload cells are not initialized managed references. The invocation
-owns a separate byte arena bounded to 1,048,576 cumulative visible bytes, 262,144 distinct retained
-backing bytes, and 4,096 combined backing and view objects. A view charges its visible allocation and
-object descriptor while the complete distinct backing it pins remains charged once. Semantic copies through calls,
-branches, products, projections, and variants copy fixed cells only and allocate no backing or view.
+maximum payload range; inactive payload cells are not initialized managed references. Exact
+managed-reference maps derive the byte-handle cells in primitives, records, and active variant
+payloads. The invocation owns a separate byte store bounded to 1,048,576 cumulative visible bytes,
+262,144 live backing bytes, and 4,096 simultaneously live backing/view objects. A view charges its
+logical visible construction and object descriptor while the complete distinct backing it pins
+remains charged once. Dead views and backing reclaim at their final verified drop; descriptor slots
+may be reused only with a new generation. Semantic copies through calls, branches, products,
+projections, and variants create an exact ownership claim only when sharing remains; borrows and
+transfers add no claim.
 The 65,536 live-cell policy applies to the peak of all live frame arrays plus exact argument, edge,
 return, and public-flatten scratch, plus a new callee array when applicable. The peak is checked before
 allocation or transfer; scratch ends at its transfer boundary and returned frame arrays are released
@@ -197,15 +217,28 @@ range for canonicalization plus the active payload's logical transfer, including
 zero-cell payloads. Unselected match arms consume neither execution work nor transfer fuel.
 `bytes_slice` additionally charges one logical view unit, independent of the visible slice length.
 `bytes_equal` additionally charges one unit per octet actually compared, stopping at the first
-mismatch; unequal lengths compare no octets. Physical sharing never changes logical fuel.
+mismatch; unequal lengths compare no octets. `bytes_concat` additionally charges one unit per octet
+of the complete logical result. This full-result charge is identical for allocate-new and unique
+reuse, so repeated one-octet immutable concatenation has quadratic logical fuel even when the
+physical buffer grows efficiently. Physical borrowing, ownership counts, reclamation, allocation,
+and reuse never change logical fuel.
 Frame/live-cell exhaustion, managed-object/visible/retained-byte policy exhaustion, fuel exhaustion,
 byte bounds, result policy, and arithmetic overflow are distinct structured failures and do not
-mutate daemon state. Rust scope drops frames, temporary conversion buffers, and the invocation arena
-on success and every failure path.
+mutate daemon state. Verified cleanup drops live owners on return and every trap before Rust scope
+drops the final store and temporary conversion buffers.
+
+Core instructions retain their originating semantic operation identity as derived compiler data.
+When an execution failure has one exact operation origin, the public typed error names that semantic
+Node ID rather than requiring a client to interpret a Core block or instruction index. A debug-purpose
+context packet may combine that identity with its immutable node, owner, dependency, incoming-use,
+and visible-value facts. The packet and its text rendering are observation projections only: they add
+no catchable exception, stack-trace semantics, persisted trace, fuel change, or alternate execution
+route. The retained maintenance corpus was correctable from the existing operation origin and focused
+context, so there is currently no execution tracer or debugger contract.
 
 The current pure synchronous runtime has no cooperative cancellation operation. Client disconnect
-does not expose or preserve arena state; the bounded Run continues until result or trap and then
-drops the arena. Process termination is operating-system reclamation, not an observable language
+does not expose or preserve store state; the bounded Run continues until result or trap and then
+drops the store. Process termination is operating-system reclamation, not an observable language
 cleanup guarantee.
 
 There are currently no general patterns, generics, effects, permission values, host operations,

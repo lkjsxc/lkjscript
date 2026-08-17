@@ -109,9 +109,10 @@ A disposable six-tool MCP adapter invoked the same production v6 public requests
 small exact `i64` 42 oracle. It was rejected and deleted because it reduced no semantic call,
 connection, or forwarded request byte while adding three processes, 2,084 bytes of tool definitions,
 startup schema traffic, a weaker nested schema projection, and an unresolved cancellation boundary.
-The generic CLI remains the sole retained Codex surface. Reopen adapter work only when a controlled
-agent task shows a specific shell or lifecycle failure that a generated, stable tool projection can
-remove without becoming another protocol authority.
+The adapter was not retained. The later direct workbench changes action and context projection
+without adding an adapter process or semantic vocabulary. Reopen adapter work only when a controlled
+agent task shows a specific shell or lifecycle failure that the direct CLI cannot remove without
+becoming another protocol authority.
 
 ## Complete: bounded immutable bytes and inferred invocation lifetime
 
@@ -133,16 +134,56 @@ The same-vocabulary CLI session is retained as a process-lifecycle projection. I
 32-request task it reduced client processes from 32 to one while retaining 32 daemon connections and
 byte-identical response shapes; it does not alter daemon framing or silently retry mutations.
 
-## Next gate: a real escaping managed-value consumer
+## Complete: ownership-first managed bytes and construction
 
-Do not add precise reference counting, ownership IR, or another region solely to generalize bytes.
-First retain a value that must outlive one `Run`, or reproduce a long-running pure workload where
-invocation-wide backing retention is the measured limiting cost. For an escaping cycle-free value,
-compare caller-region placement, exact ownership/borrow inference, and precise reference counting
-against the current safe arena oracle. For retention without escape, compare inferred lexical regions.
-Require exact cleanup, peak-memory, loop/join/call verification, and reversal evidence before either
-mechanism is retained. Real cycles reopen isolated tracing only then; external resources remain a
-separate affine-ownership and effects gate.
+The binary canonicalizer supplies the previously missing construction and lifetime consumer.
+Protocol/JSON 8, artifact 5 / SPG005, and HEAD7 directly add pure `bytes_concat` without preserving
+old readers. The operation retains immutable content semantics and a full-result logical fuel charge.
+
+Verified Core IR now feeds derived managed-reference maps and a compact ownership plan. A separate
+verifier recomputes maps, local liveness, actions, edge cleanup, and uniqueness before execution.
+The production managed store reclaims dead views and backing, advances generations when descriptor
+slots are reused, counts only actual shared ownership, and can reuse a verified unique full-left
+concat buffer. Shared, borrowed, aliased, and partial-view cases retain an allocate-new fallback; a
+test-only allocate-new mode remains the differential oracle. Generated differential cases, malformed
+plan tests, recursion cleanup, the public canonicalizer, Miri, sanitizer, and final measurements are
+owned by status and performance evidence. No tracing, surface ownership syntax, unsafe Rust, or new
+dependency was added.
+
+## Complete: semantic workbench and sustained maintenance
+
+`lkjscript agent` is now the preferred direct coding-agent surface. It derives bounded purpose- and
+target-scoped packets from immutable revisions, binds canonical aliases to exact packet digests,
+renders deterministic one-way semantic review and diff text, and normalizes a strict iterative edit
+or run plan into the existing closed protocol types. Raw JSON remains the exact low-level diagnostic
+surface. Protocol/JSON 8, artifact 5 / SPG005, HEAD7, one semantic validator, and one execution route
+were unchanged.
+
+The retained deployment-policy corpus exercises eight revisions of incompleteness, invalid and valid
+repair, extension, refactor, rename, exact trap diagnosis, declaration replacement, blocked and safe
+deletion, validate-only, restart, history, and old/current runs. A final fresh equal-task observation
+completed with no unintended workbench correction and materially fewer exposed provider token
+classes than the raw control; it remains a two-run controlled observation rather than a benchmark.
+The first candidate observation's draft/alias/type/idempotency mistakes were converted into exact
+generated help and verified by a second fresh context. No automatic cache, persistent connection,
+candidate session, branch, runtime tracer, language feature, or dependency was justified.
+
+## Next gate: exact mapped declaration migration
+
+The maintenance corpus completed an immutable `Limits` to `DeploymentLimits` migration, but the
+single atomic plan was 9,035 bytes and had to clone or rewrite construction, projection, function
+input/output, and call-site structure before old references could be deleted. The next gate is one
+focused identity-safe declaration-migration operation with an explicit old-member to new-member map,
+exact replacement identities, preflighted all-use coverage, deterministic rejection of unmapped or
+ambiguous uses, and the existing fine-grained transaction as differential oracle. It must reduce the
+same migration's action/correction cost without mutating declaration shape under surviving identity
+or becoming a generic rewrite language. Delete it if a second independently authored migration does
+not reuse the contract or if verification is less local than the explicit transaction.
+
+Representation-independent linear byte construction moves behind this product gate because no
+second retained construction consumer appeared. Escaping values, lexical regions, real cycles,
+effects, and external resources remain separate gates; real cycles alone reopen isolated tracing,
+and external resources require semantic affine ownership plus explicit permission and cleanup.
 
 ## Later evidence gates
 

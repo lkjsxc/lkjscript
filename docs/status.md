@@ -1,8 +1,8 @@
 # Current status
 
-Date: 2026-08-16
+Date: 2026-08-17
 
-Campaign base: `5c07498a2dbb8c0a45973769eb1af1e460ac6921` on `main`
+Campaign base: `59839070f83209155cd5b21d266efd967620736f` on `main`
 
 ## Implemented product path
 
@@ -10,9 +10,11 @@ The repository contains one Rust package and one active route from a coding agen
 runnable program:
 
 ```text
-strict generic JSON CLI (optional) -> private protocol-v7 framed-JSON Unix IPC -> synchronous local service
+semantic workbench (preferred) or strict generic JSON diagnostic CLI
+-> private protocol-v8 framed-JSON Unix IPC -> synchronous local service
 -> durable workspace -> typed staged transaction -> immutable typed program-model revision
--> revision-bound scan query or direct Core IR lowering -> verifier -> interpreter
+-> revision-bound scan query or direct Core IR lowering -> IR verifier -> ownership plan/verifier
+-> managed interpreter
 ```
 
 Program meaning is stored in the typed, versioned model formally specified as the Semantic Program
@@ -30,8 +32,8 @@ The current public path implements:
   variant through identity-keyed structured drafts normalized to declaration order;
 - structured functions, parameters, bodies, calls, `if`, counted `for_i64`, typed placeholders,
   yields, returns, checked integer addition, and integer comparison;
-- immutable `bytes`, bounded literals, length, checked index and slice, content equality, canonical
-  public base64, and byte fields/payloads in named values;
+- immutable `bytes`, bounded literals, length, checked index and slice, content equality, pure
+  concatenation, canonical public base64, and byte fields/payloads in named values;
 - one identity-preserving `RefineHole` transition that fills a typed placeholder while retaining its
   Node ID, owner, body position, output zero, and incoming uses;
 - deterministic semantic diffs that report `OperationRefined` and `Renamed` rather than identity
@@ -41,19 +43,35 @@ The current public path implements:
   selected receipts with at most 64 returned bindings, and commit-only idempotency;
 - revision-bound query batches, paginated node/body/use/reference/dependency/diff/type facts, visible
   values, legal constructors, completeness blockers, owner chains, and bounded repair context;
-- immutable format-4 `.lkjscript` artifacts under semantic schema `lkjscript-spg004`, compact
-  checksummed `LKJHEAD6`, contiguous history validation, restart, and strict corruption rejection;
-- protocol and strict JSON version 7 with one request/response per private local connection;
+- client-side context-packet version 1 with exact workspace/revision/schema/purpose binding, at most
+  eight targets, at most 256 expanded nodes, deterministic `@n1` aliases, explicit omissions, a
+  4 MiB boundary, and strict digest/schema/domain validation on every read;
+- a deterministic one-way semantic review and exact semantic-diff rendering with optional full Node
+  IDs, terminal-safe quoted content, explicit revision/digest facts, and no render/reparse editing;
+- a bounded iterative compact edit/run plan parser that resolves packet aliases, distinguishes draft
+  symbols from persistent identity, reports typed line/column failures, deserializes directly into
+  the existing closed DTOs, and reaches the same transaction validator and Run route as raw JSON;
+- immutable format-5 `.lkjscript` artifacts under semantic schema `lkjscript-spg005`, compact
+  checksummed `LKJHEAD7`, contiguous history validation, restart, and strict corruption rejection;
+- protocol and strict JSON version 8 with one request/response per private local connection;
 - direct lowering of the complete selected-entry reachable definitions and named types to one private
   Core IR, followed by independent verification and one explicit-frame interpreter route;
 - exact public `unit`, `bool`, `i64`, `bytes`, record, and variant Run values using semantic declaration/member
   IDs rather than display names or private layout indexes;
-- positive fuel/frame policy, checked aggregate live-cell policy, separate managed object/visible/
-  retained backing policies, opaque checked byte handles in an invocation arena, lazy branch and
-  variant-arm execution, checked byte and arithmetic traps, owned result materialization, and daemon
-  usability after ordinary semantic rejection or trap;
+- compiler-derived managed-reference maps and ownership actions for calls, branches, loops, records,
+  variants, returns, and traps, followed by verifier-owned recomputation before execution;
+- a safe managed byte store with typed index-plus-generation handles, precise cycle-free ownership
+  counts only for actual sharing, deterministic early reclamation, uniqueness-guided concat reuse,
+  an allocate-new fallback and test oracle, separately checked live/cumulative metrics, owned result
+  materialization, and daemon usability after ordinary semantic rejection or trap;
 - an optional same-vocabulary line session that reuses one CLI process while keeping one daemon
   connection and one publication boundary per request.
+
+`lkjscript agent` is the preferred coding-agent projection. `orient` and `help` provide compact
+bootstrap facts; `create`, `context`, `view`, `validate`, `apply`, `diff`, and `run` implement the
+explicit maintenance loop. The workbench is client-side and did not change protocol/JSON version 8,
+artifact format 5, `lkjscript-spg005`, `LKJHEAD7`, or the v8 idempotency domain. Raw RPC JSON and
+schema expansion remain the exact low-level diagnostic surface.
 
 Structured authoring remains a typed proposal. Public `DraftSymbol` strings are transaction-local
 labels, not identities. Complete, non-terminating, single-result regionless expressions may instead
@@ -65,6 +83,30 @@ proposal nesting do not affect the candidate graph, and the proposal is discarde
 persisted as a second program.
 
 ## Representative applications
+
+[`examples/agent-maintenance`](../examples/agent-maintenance/) is the sustained-maintenance and
+workbench oracle. It constructs the job/release deployment policy through production binaries and
+evolves it across eight immutable revisions: reachable incompleteness; rejected wrong-type repair;
+identity-preserving valid repair; behavior extension; helper refactor; presentation rename; exact
+overflow diagnosis and correction; immutable declaration replacement with mapped construction,
+projection, inputs, outputs and calls; blocked then safe deletion; restart; multi-revision diff; and
+old/current execution. Its exact results are `Decision.accept(25)` before extension,
+`Decision.accept(27)` after extension and migration, `i64(0)` after the debug repair, and the exact
+existing rejection alternatives for resource, platform, trust, and rollout failures. The driver
+uses only public CLI/service boundaries and imports the retained job-policy payload builder rather
+than duplicating a private graph fixture.
+
+[`examples/binary-canonicalizer`](../examples/binary-canonicalizer/) is the ownership and byte-
+construction consumer. Through production release binaries and one same-vocabulary CLI session it
+discovers exact schema roots, creates a named byte record and result variant, saves a reachable byte
+hole, obtains repair context, rejects an `i64` repair atomically, and refines the same identity to
+`bytes_concat`. The repaired program checks marker `0xa5`, scans the payload, removes zero octets,
+and carries an immutable byte accumulator through a counted loop and helper call. It proves empty,
+all-padding, alternating, sparse, and dense output; lazy header rejection; fuel and bounds failures;
+presentation-only rename; exact diffs; competing-writer rejection; dropped-response daemon health;
+restart, old/current revisions, and corruption rejection. Under the full-result concat fuel and
+cumulative-visible policy, dense payload 1,445 is the first accepted size and 1,446 the first
+rejected size in this exact program.
 
 [`examples/release-manifest`](../examples/release-manifest/) is the managed-bytes oracle. It builds
 an exact 32-byte classifier using every retained byte operation and a bounded payload loop. Through
@@ -127,9 +169,9 @@ An iterative worklist returns every transitive named dependency once in lexical 
 `page` and its bound element type for `page<T>`. Root results
 explicitly document list, optional, tuple, and page constructors. Unknown, duplicate, empty,
 noncanonical, or excessive roots reject before digest-based `unchanged` handling. Explicit full
-projection remains available. The active machine schema is `lkjscript-machine-schema-v7` with
-protocol and JSON version 7, artifact format 4, semantic schema `lkjscript-spg004`, and `LKJHEAD6`.
-The persisted idempotency fingerprint binds canonical JSON/v7 bytes. Old protocol, artifact, semantic
+projection remains available. The active machine schema is `lkjscript-machine-schema-v8` with
+protocol and JSON version 8, artifact format 5, semantic schema `lkjscript-spg005`, and `LKJHEAD7`.
+The persisted idempotency fingerprint binds canonical JSON/v8 bytes. Old protocol, artifact, semantic
 schema, HEAD, and fingerprint forms reject directly; no compatibility reader remains.
 
 The retained examples now request 12 operational endpoint roots covering workspace creation,
@@ -150,10 +192,19 @@ encoding. Current accepted language
 operations expose no raw pointer, arbitrary address, unchecked load/store, pointer arithmetic,
 unchecked cast, byte reinterpretation, explicit deallocation, shared mutable heap, or foreign memory.
 Immediate and fixed immutable values use independently verified layouts and bounded flat runtime
-cells. Bytes contributes one checked-handle cell while immutable payload and constant-depth views
-live in a bounded arena owned by one `Run`. Handles are nonzero, invocation-local, monotonic,
-unserialized, and validated before every access. Semantic copies copy cells only. Output bytes are
-owned before arena drop.
+cells. Bytes contributes one private 64-bit checked-handle cell while payload and constant-depth
+views live in a managed store owned by one `Run`. Handles encode a typed slot and nonzero generation,
+never serialize, and validate domain, kind, index, generation, liveness, and range before every
+access. Reused slots advance generation and wrap retires the slot. Output bytes are independently
+owned before store destruction.
+
+`ownership.rs` derives exact managed-cell maps and compact borrow/share/transfer/drop/reuse facts
+from verified Core IR. Its verifier separately recomputes type maps, local liveness, instruction and
+edge actions, cleanup roots, and reuse eligibility; malformed plans reject before managed objects are
+created. Managed reads borrow, last-use transfers add no count traffic, actual duplication creates a
+checked non-atomic claim, and final drops reclaim views and backing. Records enumerate every managed
+field and variants enumerate only the active payload. The accepted byte object topology is acyclic;
+there is no tracing collector.
 
 That evidence does not prove the whole trusted computing base safe. Memory safety still trusts the
 Rust compiler and standard library, Cargo/build tooling, operating system, filesystem/socket
@@ -167,30 +218,48 @@ timeouts are explicit operational policies with typed failure. User-scalable val
 type-cycle checks, query composition, compilation, runtime calls, and aggregate conversion use
 explicit work structures where applicable rather than user-depth native recursion.
 
-The invocation arena is the retained mechanism only for nonescaping, cycle-free immutable bytes. It
-deliberately retains dead backing until invocation end. No reference count, tracing collector,
-finalizer, surface lifetime, borrow checker, or general heap is implemented. Escaping cycle-free
-values, measured long-invocation retention, real cycles, and external resources are separate future
-gates for precise ownership/RC, lexical regions, isolated tracing, and affine cleanup respectively.
+The ownership-managed route is the production default for nonescaping, cycle-free immutable bytes.
+It reclaims dead values during execution and reuses a verified unique full-left concat buffer after
+preflight; shared operands, live borrows, aliases, and partial views fall back to allocate-new. A
+simple allocate-new invocation-store mode remains test-only as the differential oracle. There is no
+finalizer, surface lifetime syntax, user-authored move/drop operation, general heap, or universal
+reference count. Escaping values, lexical-region consumers, real cycles, and external resources are
+separate future gates for persistent ownership, region inference, isolated tracing, and semantic
+affine cleanup respectively.
 There is no cooperative in-Run cancellation: disconnect leaves the bounded synchronous Run to finish
-or trap and drop its arena, while daemon termination relies on operating-system process reclamation.
+or trap and drop its store, while daemon termination relies on operating-system process reclamation.
 
 ## Evidence
 
-The final all-target/all-feature campaign boundary reported 188 active passes and nine explicitly
+The final all-target/all-feature campaign boundary reported 212 active passes and 10 explicitly
 ignored measurement or mutation-smoke tests. All-target/all-feature Clippy, formatting, the optimized
-release build, and diff check passed. All four production example drivers and the deterministic seed-1
-10,000-case malformed-boundary release smoke also passed. Integration tests use the real
-`lkjscriptd`, production framed JSON IPC, and generic CLI. Focused tests cover strict JSON framing and artifact decoding, operation/schema
-coverage, stable identity and history, allocation rollback, validate-only parity, idempotency,
-publication failure injection, query bounds/cursors, named layouts and values, compiler/Core IR
-rejection, interpreter policies and traps, generated transaction sequences, restart/corruption, and
-competing writers. A 10,000-node subtree exercise proves iterative validation/deletion; the retained
-seed-1 10,000-case malformed-boundary release smoke covers artifact, framed JSON, and JSON byte
-mutations and is not coverage-guided fuzzing. Stable Miri is unavailable, but installed nightly Miri
-passed four focused arena/cleanup/operation/codec tests; nightly AddressSanitizer with leak detection
-passed all 12 interpreter tests. No retained coverage-guided fuzzer or installed `cargo-fuzz` command
-was available.
+release build, and diff check passed. All six production example drivers and the deterministic
+seed-1 10,000-case malformed-boundary release smoke passed. Integration tests use the real
+`lkjscriptd`, production framed JSON IPC, raw CLI, and semantic workbench. Focused tests cover strict JSON framing and
+artifact decoding, operation/schema coverage, stable identity and history, allocation rollback,
+validate-only parity, idempotency, publication failure injection, query bounds/cursors, named layouts
+and values, compiler/Core IR and ownership-plan rejection, exact managed-reference maps, generation-
+safe stale-handle rejection, deterministic reclamation, sharing, unique reuse and fallback,
+allocation-failure rollback, interpreter policies and cleanup, generated transaction sequences,
+restart/corruption, competing writers, packet determinism/locality, alias domain rejection, plan/JSON
+normalization, parser bounds, and semantic review. A 10,000-node subtree exercise proves iterative
+validation/deletion; the retained seed-1 10,000-case malformed-boundary release smoke covers artifact,
+framed JSON, and JSON byte mutations. A separate seed-1 10,000-case smoke covers workbench plan,
+packet, and alias mutations. Neither is coverage-guided fuzzing.
+
+Stable Miri is unavailable, but installed nightly Miri passed six focused managed-store tests, two
+ownership-plan tests, the interpreter cleanup test, and all seven focused workbench library tests. Nightly
+AddressSanitizer with leak detection passed all 15 interpreter tests in the ownership campaign and
+all seven focused workbench library tests in this campaign. The deterministic oracle-versus-ownership corpus passed 256 generated
+cases with seed `0x6c6b6a7363726970`. No retained coverage-guided fuzzer or installed `cargo-fuzz`
+command was available. A fresh equal-task protocol-v8 observation compared raw JSON with the final
+workbench using installed Codex CLI 0.147.0 and explicit model `gpt-5.4`. Both black-box runs
+published exactly the intended three revisions and passed the independent public oracle. The final
+workbench run had zero unintended correction, three schema and three context requests, and exposed
+provider input/cached-input/output/reasoning token classes of 473,927/437,888/8,230/3,110. The raw
+run required four unintended protocol/request corrections and exposed
+1,253,055/1,177,984/15,290/3,969. Price was not exposed. These are two controlled observations, not
+a general model benchmark; exact trial method and caveats belong to performance evidence.
 
 Exact commands, environments, byte counts, artifact growth, timings, build observations, and the
 claim boundary are retained in [`docs/performance.md`](performance.md).
@@ -205,17 +274,21 @@ Byte payload is invocation-owned derived runtime state rather than another progr
 
 There is no source frontend, public network service, sandbox, package system, general collection,
 generic type, string, effect or permission-value system, host I/O, resource-owning value, general managed heap,
-debugger, optimizer tier, native backend, database, journal, reverse index, cache, async runtime,
-request concurrency, or cross-platform contract. These are current absences, not permanent
+debugger, optimizer tier, native backend, database, journal, reverse index, automatic schema/context
+cache, persistent client connection, candidate session, branch, merge, async runtime, request
+concurrency, or cross-platform contract. Packet files may be saved by a client under their exact
+digest, but are disposable and never trusted by the daemon. These are current absences, not permanent
 prohibitions. A concrete consumer, safety contract, measurement, preserved correctness oracle, and
 direct cutover are required before selecting one.
 
 The current machine contract is generated at runtime rather than committed as a file. The retained
-12-endpoint projection returns 112 closed definitions in 85,827 compact result bytes (85,905 bytes
-as a production framed response). The explicit full result is 133,774 compact bytes (133,852 bytes as a
-production framed response). Relative to the sealed v6 baseline, compact results grew by 4,409 and 7,779
-bytes respectively for the byte scalar/value/drafts/operations, new limits and failures, and storage
-semantics. Bytes are not converted into token claims.
+12-endpoint projection returns 112 closed definitions in 86,567 compact result bytes (86,645 bytes
+as a production framed response). The explicit full result is 135,009 compact bytes (135,087 bytes
+as a production framed response); manifest and unchanged results are 1,241/1,319 and 105/183 compact/
+framed bytes. Relative to the sealed v7 baseline, the selected and full compact projections grew 740
+and 1,235 bytes for concat, active versions, exact failures, and the private handle-cell descriptor.
+Ownership actions, counts, generations, and reuse remain absent from the public schema. Bytes are not
+converted into token claims.
 
 The equal-graph retained replay removes 44 of 111 explicit draft symbols. Its compact proposal falls
 from 22,062 to 17,974 bytes and its framed initial request from 22,247 to 18,159 bytes while selected
@@ -248,6 +321,6 @@ benchmark.
 A disposable six-tool MCP adapter was tested outside the repository with installed Codex CLI 0.144.6
 and was not retained. It preserved a small exact run oracle but added three processes, 2,084 bytes of
 tool definitions, MCP traffic, startup schema reads, and an unresolved cancellation boundary without
-reducing semantic calls, daemon connections, or forwarded request bytes. The generic CLI and its
-same-vocabulary process session are therefore the retained Codex programming surface; there is no
-adapter code, configuration, credential, or second request vocabulary in the repository.
+reducing semantic calls, daemon connections, or forwarded request bytes. The later direct workbench
+solves a different action/context problem without an adapter process or request vocabulary. There is
+no adapter code, configuration, credential, or second semantic authority in the repository.
