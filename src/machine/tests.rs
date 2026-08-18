@@ -5132,8 +5132,8 @@ fn schema_projection_byte_measurements_are_retained() {
         sizes,
         vec![
             ("manifest", None, 1_244, 1_323),
-            ("selected_agent_task_roots", Some(113), 88_005, 88_084),
-            ("full", None, 136_734, 136_813),
+            ("selected_agent_task_roots", Some(113), 88_048, 88_127),
+            ("full", None, 136_795, 136_874),
             ("unchanged", None, 105, 184),
         ]
     );

@@ -9,18 +9,18 @@ packets, editable documents, caching, limits, rejection, and exit behavior.
 run, and exact reusable-release preparation. Workspace RPC accepts closed typed `Request` values
 and returns closed typed `Response` values. Release preparation uses one exact immutable workspace
 revision plus explicit dependency bytes through its own typed method. Application composition uses
-only explicit immutable release bytes and needs no Engine. Semantics do not depend on JSON,
-terminal rendering, or Unix sockets.
+only explicit immutable release bytes; instance operation uses a separate exact local store.
+Semantics do not depend on JSON or terminal rendering.
 
 The logical request families are workspace creation, transaction application, query batch, run,
 schema description, and adapter shutdown. Semantic failures are `Response::Error`; inability to open
 the authority or a publication outcome that may be unknown is a transport/fatal engine failure.
 
 One engine holds an exclusive `lkjscript.engine.lock` for the state directory. A competing direct
-command, session, or daemon rejects with `authority_busy`. The engine never silently retries a
-mutation. `commit_outcome_unknown` permanently stops that engine instance.
+command or session rejects with `authority_busy`. The engine never silently retries a mutation.
+`commit_outcome_unknown` permanently stops that engine object.
 
-## Primary and optional topologies
+## Process topologies
 
 The primary CLI opens `Engine` directly for one command and exits. This removes manual service
 lifecycle and socket setup from normal agent work. `lkjscript --state DIR session` holds one engine
@@ -28,14 +28,10 @@ and accepts one compact protocol-v10 JSON request per line; each line has an ind
 boundary. EOF closes the session. A successful `shutdown` response is flushed before the session
 exits.
 
-`lkjscriptd --state DIR --foreground` is an optional diagnostic Unix-socket adapter over the same
-engine. It accepts one framed request per connection, uses an absolute five-second connection
-deadline, writes one framed response, and supports typed shutdown. The socket is private mode 0600.
-It is not a second semantic route or the documented primary workflow.
-
-Disconnect does not cancel an already accepted synchronous operation. Pure queries and runs may
-finish and discard their response. Publication follows its durability contract regardless of client
-disconnect. No mutation is retried after reconnect.
+There is one installed binary and no daemon, socket client, or transport protocol. Instance commands
+are short-lived processes serialized by the instance-store lock. Disconnect or stdout failure does
+not roll back a published workspace revision, instance revision, or host outcome. Exact idempotency
+receipts are the only retry route; no mutation or possibly visible host action is retried implicitly.
 
 ## Strict JSON projection
 
@@ -47,8 +43,7 @@ Protocol and JSON envelope version is 10. A request envelope is exactly:
 
 Response envelopes carry the same nonzero request ID. Unknown fields and variants, duplicate fields,
 invalid canonical IDs, wrong version, trailing JSON, excessive input, invalid UTF-8, and a second
-framed request reject. JSON input is limited to 8 MiB and output to 32 MiB; socket framing has
-independent checked limits.
+request reject. JSON input is limited to 8 MiB and output to 32 MiB.
 
 The protocol uses stable typed error codes and structured targets. Process exit distinguishes CLI
 usage/JSON/document error, authority/transport failure, and output failure. A semantic rejection is
@@ -80,10 +75,12 @@ explicit command inputs. Its strict Rust records, canonical codec, and command-l
 fields.
 
 Application build, validate, inspect, test, typed run, and stream are command-local projections of
-the separate [application contract](application.md). Application JSON uses contract version 2 and
-build accepts only explicit release files. Release and application records are deliberately absent
-from the global workspace catalogue, avoiding a duplicate schema owner and a mandatory global
-schema dump. Top-level parsing and operation errors return the applicable contract version.
+the separate [application contract](application.md). Application JSON uses contract version 3 and
+build accepts only explicit release files. Durable-instance commands use command-local contract
+version 1 specified by [instance.md](instance.md). Release, application, and instance records are
+deliberately absent from the global workspace catalogue, avoiding duplicate schema owners and a
+mandatory global dump. Top-level parsing and operation errors return the applicable contract
+version.
 
 ## Context packets
 
@@ -165,6 +162,6 @@ gate if measured request savings justify response preflight and idempotency comp
 ## Version rejection
 
 Protocol/JSON 9 and older, machine schema v9 and older, context packet 1, release command contract
-0, application command contract 1 and older, release artifact formats other than 1, application
-artifact format 1 and older, and the `plan` edit root reject. No alias, fallback, compatibility
-reader, or migration mode remains.
+0, application command contract 2 and older, application artifact format 2 and older, instance
+contract/format versions other than 1, release artifact formats other than 1, and the `plan` edit
+root reject. No alias, fallback, compatibility reader, daemon transport, or migration mode remains.

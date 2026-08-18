@@ -574,10 +574,10 @@ def build_application(path, request, releases):
 def application_request(root_release, entry_item, profile, arguments, expected):
     entry = target(root_release, entry_item)
     return {
-        "version": 2,
+        "version": 3,
         "root_release": root_release,
         "entry": entry,
-        "profile": profile,
+        "profile": {"kind": profile},
         "policy": {"fuel": 10000, "maximum_frames": 64},
         "tests": [
             {
@@ -592,7 +592,7 @@ def application_request(root_release, entry_item, profile, arguments, expected):
 
 
 def invocation(arguments):
-    return {"version": 2, "arguments": arguments}
+    return {"version": 3, "arguments": arguments}
 
 
 def release_test(path, dependencies):
@@ -955,7 +955,7 @@ def workflow():
         report = {
             "campaign": "reusable-semantic-release",
             "release_contract": 1,
-            "application_contract": 2,
+            "application_contract": 3,
             "canonical_rebuild_across_workspace_histories": True,
             "private_access_rejected": True,
             "workspaces_removed": not state.exists(),

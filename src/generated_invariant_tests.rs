@@ -16,7 +16,6 @@ use crate::transaction::{
     FunctionParameterDraft, NodeTarget, SumVariantDraft, Transaction, TransactionMode,
     TransactionOp, TransactionReceipt, TransactionResponseSpec, YieldingBodyDraft,
 };
-use crate::transport;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::sync::Arc;
@@ -1568,79 +1567,6 @@ fn exercise_artifact_mutation(corpus: &[Vec<u8>], seed: u64, case: u64) {
     }
 }
 
-fn encode_framed_json(request_id: RequestId, request: &Request) -> Vec<u8> {
-    let body = machine::encode_request(request_id, request).expect("JSON corpus");
-    let mut bytes = Vec::new();
-    transport::write_request_body(&mut bytes, &body).expect("framed JSON corpus");
-    bytes
-}
-
-fn mutate_framed_json(source: &[u8], seed: u64, case: u64) -> Vec<u8> {
-    let mut bytes = source.to_vec();
-    match case % 10 {
-        0 => bytes.truncate(bytes.len().saturating_sub(1)),
-        1 => return mutate_bytes(source, seed, case),
-        2 if bytes.len() >= 4 => bytes[..4].copy_from_slice(&u32::MAX.to_le_bytes()),
-        3 if bytes.len() >= 4 => {
-            let shorter =
-                u32::from_le_bytes(bytes[..4].try_into().expect("frame length")).saturating_sub(1);
-            bytes[..4].copy_from_slice(&shorter.to_le_bytes());
-        }
-        4 if bytes.len() >= 4 => {
-            let longer =
-                u32::from_le_bytes(bytes[..4].try_into().expect("frame length")).saturating_add(1);
-            bytes[..4].copy_from_slice(&longer.to_le_bytes());
-        }
-        5 => bytes.extend_from_slice(&[0xde]),
-        6 => bytes.extend_from_slice(source),
-        _ if bytes.len() > 4 => {
-            let body = mutate_json(&bytes[4..], seed, case);
-            bytes.clear();
-            bytes.extend_from_slice(
-                &u32::try_from(body.len())
-                    .expect("mutated JSON length")
-                    .to_le_bytes(),
-            );
-            bytes.extend_from_slice(&body);
-        }
-        _ => bytes.extend_from_slice(&[0xde, 0xad]),
-    }
-    bytes
-}
-
-fn decode_framed_json_exact(bytes: &[u8]) -> crate::Result<RequestEnvelope> {
-    let mut reader = bytes;
-    let body = transport::read_request_body(&mut reader)?.ok_or_else(|| {
-        crate::error::LkError::new(ErrorCode::ProtocolMalformed, "protocol request is empty")
-    })?;
-    machine::decode_request(&body).map_err(|error| {
-        crate::error::LkError::new(ErrorCode::ProtocolMalformed, error.to_string())
-    })
-}
-
-fn exercise_framed_json_mutation(corpus: &[Vec<u8>], seed: u64, case: u64) {
-    let source = &corpus
-        [usize::try_from((case / 10) % u64::try_from(corpus.len()).expect("len")).expect("index")];
-    let mutated = mutate_framed_json(source, seed, case);
-    let first = decode_framed_json_exact(&mutated);
-    let second = decode_framed_json_exact(&mutated);
-    match (first, second) {
-        (Ok(decoded), Ok(repeated)) => {
-            assert_eq!(decoded, repeated);
-            let canonical = encode_framed_json(decoded.request_id, &decoded.request);
-            assert_eq!(
-                decode_framed_json_exact(&canonical).expect("canonical framed JSON decodes"),
-                decoded
-            );
-        }
-        (Err(first), Err(second)) => {
-            assert_eq!(first.code, second.code);
-            assert_eq!(first.message, second.message);
-        }
-        _ => panic!("framed JSON mutation classification changed: seed={seed} case={case}"),
-    }
-}
-
 fn exercise_json_mutation(corpus: &[Vec<u8>], seed: u64, case: u64) {
     let source = &corpus
         [usize::try_from((case / 10) % u64::try_from(corpus.len()).expect("len")).expect("index")];
@@ -1760,89 +1686,6 @@ fn targeted_artifact_mutations(corpus: &[Vec<u8>]) -> Vec<NamedMutation> {
     mutations
 }
 
-fn targeted_framed_json_mutations(corpus: &[Vec<u8>]) -> Vec<NamedMutation> {
-    let mut mutations = Vec::new();
-    for (index, source) in corpus.iter().enumerate() {
-        push_mutation(
-            &mut mutations,
-            format!("framed-json-family-{index}-truncation"),
-            source,
-            source[..source.len() - 1].to_vec(),
-        );
-    }
-    let source = &corpus[1];
-    let mut oversized = source.clone();
-    oversized[..4].copy_from_slice(&u32::MAX.to_le_bytes());
-    push_mutation(
-        &mut mutations,
-        "framed-json-oversized-length",
-        source,
-        oversized,
-    );
-
-    let declared = u32::from_le_bytes(source[..4].try_into().expect("frame length"));
-    let mut shorter = source.clone();
-    shorter[..4].copy_from_slice(&declared.saturating_sub(1).to_le_bytes());
-    push_mutation(
-        &mut mutations,
-        "framed-json-shorter-length",
-        source,
-        shorter,
-    );
-    let mut longer = source.clone();
-    longer[..4].copy_from_slice(&declared.saturating_add(1).to_le_bytes());
-    push_mutation(&mut mutations, "framed-json-longer-length", source, longer);
-
-    let mut trailing = source.clone();
-    trailing.push(0);
-    push_mutation(
-        &mut mutations,
-        "framed-json-trailing-byte",
-        source,
-        trailing,
-    );
-    let mut second = source.clone();
-    second.extend_from_slice(source);
-    push_mutation(&mut mutations, "framed-json-second-frame", source, second);
-
-    let reframe = |body: Vec<u8>| {
-        let mut framed = Vec::new();
-        transport::write_request_body(&mut framed, &body).expect("mutated framed JSON");
-        framed
-    };
-    let body = &source[4..];
-    let request_id = machine::decode_request(body)
-        .expect("framed JSON corpus body")
-        .request_id;
-    push_mutation(
-        &mut mutations,
-        "framed-json-version",
-        source,
-        reframe(replace_json(body, "\"version\":10", "\"version\":9")),
-    );
-    push_mutation(
-        &mut mutations,
-        "framed-json-zero-request-id",
-        source,
-        reframe(replace_json(
-            body,
-            &format!("\"request_id\":{}", request_id.get()),
-            "\"request_id\":0",
-        )),
-    );
-    push_mutation(
-        &mut mutations,
-        "framed-json-unknown-request",
-        source,
-        reframe(replace_json(
-            body,
-            "\"kind\":\"apply_transaction\"",
-            "\"kind\":\"unknown\"",
-        )),
-    );
-    mutations
-}
-
 fn replace_json(source: &[u8], from: &str, to: &str) -> Vec<u8> {
     String::from_utf8(source.to_vec())
         .expect("JSON source")
@@ -1950,13 +1793,6 @@ fn assert_targeted_artifact(mutation: &NamedMutation) {
     assert_eq!(first.message, second.message, "{}", mutation.name);
 }
 
-fn assert_targeted_framed_json(mutation: &NamedMutation) {
-    let first = decode_framed_json_exact(&mutation.bytes).expect_err(&mutation.name);
-    let second = decode_framed_json_exact(&mutation.bytes).expect_err(&mutation.name);
-    assert_eq!(first.code, second.code, "{}", mutation.name);
-    assert_eq!(first.message, second.message, "{}", mutation.name);
-}
-
 fn assert_targeted_json(mutation: &NamedMutation) {
     let first = machine::decode_request(&mutation.bytes).expect_err(&mutation.name);
     let second = machine::decode_request(&mutation.bytes).expect_err(&mutation.name);
@@ -1971,19 +1807,6 @@ fn named_targeted_boundary_mutations_are_stable() {
         assert_targeted_artifact(&mutation);
     }
     let requests = request_corpus();
-    let framed_json: Vec<_> = requests
-        .iter()
-        .enumerate()
-        .map(|(index, request)| {
-            encode_framed_json(
-                RequestId::new(u64::try_from(index).expect("request index") + 17),
-                request,
-            )
-        })
-        .collect();
-    for mutation in targeted_framed_json_mutations(&framed_json) {
-        assert_targeted_framed_json(&mutation);
-    }
     for mutation in targeted_json_mutations(&requests) {
         assert_targeted_json(&mutation);
     }
@@ -1992,16 +1815,6 @@ fn named_targeted_boundary_mutations_are_stable() {
 fn run_boundary_mutation(seed: u64, cases: u64) {
     let artifacts = artifact_corpus();
     let requests = request_corpus();
-    let framed_json: Vec<_> = requests
-        .iter()
-        .enumerate()
-        .map(|(index, request)| {
-            encode_framed_json(
-                RequestId::new(u64::try_from(index).expect("request index") + 41),
-                request,
-            )
-        })
-        .collect();
     let json: Vec<_> = requests
         .into_iter()
         .enumerate()
@@ -2015,10 +1828,9 @@ fn run_boundary_mutation(seed: u64, cases: u64) {
         })
         .collect();
     for case in 0..cases {
-        let boundary_case = case / 3;
-        match case % 3 {
+        let boundary_case = case / 2;
+        match case % 2 {
             0 => exercise_artifact_mutation(&artifacts, seed, boundary_case),
-            1 => exercise_framed_json_mutation(&framed_json, seed, boundary_case),
             _ => exercise_json_mutation(&json, seed, boundary_case),
         }
     }

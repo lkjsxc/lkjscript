@@ -1,228 +1,178 @@
 # Current evidence and architecture decisions
 
-This file owns reproduced measurements, selected alternatives, current complexity decisions, and
-reversal conditions. Exact structured values are retained in
-[`evidence/20260818-reusable-release.json`](evidence/20260818-reusable-release.json). Earlier
-evidence files are historical baselines, not current authority.
+This file interprets current reproduced measurements and reversal evidence. Exact machine-readable
+campaign facts are in
+[`evidence/20260818-stateful-instance.json`](evidence/20260818-stateful-instance.json). Older
+evidence files remain historical baselines, not current status.
 
 ## Measurement boundary
 
-The campaign started on branch `main` at
-`e465cc3b7d12353aa4c6fba13dc02de41d381346`, the audited standalone-application baseline. The
-implementation, policy, and campaign prompt were committed locally as
-`46d382d70090ca26a2ad1b2a7629f7eac8c07585`; the evidence metadata was reconciled in a separate
-follow-up commit so it does not attempt to record its own Git hash. The pre-existing worktree
-changes were `AGENTS.md` and the untracked campaign prompt; both were preserved and included. The
-active root policy's Git blob ID was
-`6384d5384c373080a02a89c9e96eb85932524cc8`.
+The campaign started on branch `main` at audited commit
+`18740edc55bd31162085c027d9e965163f1e119f`. The checkout equalled, rather than preceded or
+followed, that baseline. Pre-existing work was a modified root `AGENTS.md` and untracked active
+campaign prompt `prompts/202608181036.md`; both remain user-owned and preserved. The effective root
+policy SHA-256 is `0ff2bf906987f31937c11d12e3e50e60f8e10f5dd814d0f381c777b7e432e501`
+and is 21,881 bytes, below its 24 KiB budget.
 
-The environment is Linux x86-64 with rustc/cargo 1.96.0 and stable Rust edition 2024.
-`Cargo.lock` SHA-256 is
+The observation host is Linux 7.0.0-29-generic x86-64 on ZFS, AMD Ryzen 9 9955HX, 32 logical CPUs,
+32 GiB memory, rustc/cargo 1.96.0, and stable Rust edition 2024. `Cargo.lock` SHA-256 is
 `d23b75fc162e485b7149d92f1e3349f3cca39f00420a9fef68f8abea6c405620`.
-`/usr/bin/time` is unavailable, so no maximum-RSS result exists. Times are single observations
-unless a sample count is stated and are not benchmark distributions. Provider tokens, cached
-tokens, reasoning tokens, calls, and prices are unavailable; bytes are not labelled as tokens.
+Times below are single observations unless a sample count is stated. They are not distributions.
+`/usr/bin/time` is absent, so maximum RSS is unavailable. Provider input, cached-input, output, and
+reasoning tokens, provider calls, pricing, and exact monetary cost were not exposed. Bytes are not
+tokens.
 
-Before edits, formatting, all-target/all-feature Clippy, 218 tests (214 pass, four ignored), release
-build, and all six retained examples passed. The baseline had 2,287,367 bytes / 64,768 lines under
-`src/` and `tests/`; documentation had 99,572 bytes / 1,903 lines. Release binaries were 7,261,216
-bytes for `lkjscript` and 4,252,144 bytes for `lkjscriptd`.
+At the starting checkout, 234 tests were discovered: 230 passed and four manual measurements were
+ignored. `src/` plus `tests/` contained 2,474,799 bytes / 70,489 lines. Optimized binaries were
+7,920,072 bytes for `lkjscript` and 4,252,144 bytes for `lkjscriptd` (12,172,216 combined). The
+reusable-release workflow used 56 processes, nine Engine opens, 33,370 action bytes, and 84,805
+observation bytes.
 
-## Selected architecture
+The current tree has 2,562,705 bytes / 72,900 lines across 58 files under `src/` and `tests/`:
+2,303,117 source bytes / 65,738 lines and 259,588 integration-test bytes / 7,162 lines. That is an
+87,906-byte (3.6%) and 2,411-line increase after adding the complete instance vertical while deleting
+daemon/transport code and tests. Cargo metadata now exposes one installed binary. The optimized
+`lkjscript` is 8,312,104 bytes; compared with the two-binary baseline installation this removes
+3,860,112 bytes (31.7%), although the remaining binary itself grew 392,032 bytes (4.9%).
 
-One selected workspace package produces one canonical reusable semantic release. Release-local
-IDs erase workspace lineage; the exact `ReleaseId` is the domain-separated digest of the complete
-canonical payload. Dependencies are exact external release graphs with explicit local proxies.
-Graph boundaries survive release and application inspection; application format 2 embeds every
-exact release once and privately flattens only for the existing compiler/interpreter.
+One incremental optimized LTO build after source changes took 112.389 seconds. One all-target,
+all-feature test run including incremental compilation took 17.391 seconds. These single values are
+observations, not clean-build or stable performance claims.
 
-This is the combined candidate E + H + I + J from the campaign: release content digest plus local
-IDs, external exact graph, application-time flattening, and a bundled graph application. Build uses
-explicit artifact paths; there is no resolver, lock record, registry, or immutable store. The
-application bundle is the offline transfer unit.
+## Selected stateful architecture
+
+The retained design is pure one-command suspension with full canonical state records and a separate
+trusted host executor. State publishes before host execution; an immutable typed outcome is resumed
+by another pure transition. The production capability is one exact activation slot. A disjoint
+executor-bound fake host is the independent lifecycle oracle. One store-wide lock gives canonical
+serial order.
 
 ### Serious alternatives
 
-| Candidate | Correctness result | Cost/result | Decision and reversal |
+| candidate | workload result | cost and safety result | disposition / reversal |
 |---|---|---|---|
-| duplicated application closure | Could run two apps, but cannot independently publish/test one shared authority or prove one diamond nominal identity | smallest format surface; duplicates semantic/test work and does not satisfy the reuse workload | rejected; reconsider only if release graph maintenance repeatedly exceeds duplicated end-to-end work |
-| workspace-lineage release | preserves existing IDs | equal semantics from unrelated workspaces produce unequal bytes and leak allocator/history into transfer | rejected; no product consumer requires producer lineage as semantic identity |
-| canonical release-local IDs + whole-release digest | passes unrelated-history equality, private visibility, R1/R2, diamond, offline transfer | whole-release changes intentionally churn exact identity; one bounded canonicalizer/codec/graph | selected; reopen if fine-grained updates dominate real workloads |
-| definition/SCC content identity | could deduplicate below release | creates a much larger semantic hash surface, recursive-group canonicalization, provenance confusion, and diagnostics cost for no current consumer | boundedly rejected without retained prototype; reopen for measured sub-release sharing |
-| assigned release ID + content digest | separates lineage/content | needs an allocator/publication namespace and makes equal offline reconstruction ambiguous; no continuity consumer | rejected; add only with a concrete lineage or external-targeting operation |
-| deterministic vendoring | reuses existing workspace tools | mutates consumer authority and creates copy/update/fork/nominal rules while losing one exact graph | rejected; add an explicit adapt/copy operation only for a real editing consumer |
-| manifest + immutable store | deduplicates bytes across applications | adds mutable directory/recovery/availability state; retained bundles are only 2.9–6.2 KiB | rejected; prototype after aggregate bundle duplication becomes material |
-| flattened semantic application authority | simple runtime | erases reviewable graph boundaries and risks nominal/version confusion | rejected as authority; retained only as a private verified compiler projection |
+| pure `(state,event)->(state,response)` only | closed state persistence but moved validation, activation phase, retry, and reconciliation intent into Python/Rust orchestration | smallest language surface, but host became the real controller | rejected; reconsider if all retained applications remain state-only |
+| transition plus command batch | could encode the controller | added collection, cursor, partial completion, and ordering rules while the workload always has one causal command | rejected and no batch form retained; reopen for measured independent commands |
+| one-command suspension/resume | expresses validation, activation, unknown visibility, reconciliation, retry, cancellation, and terminal states as ordinary semantic data | no opaque continuation, direct effect, collection, scheduler, or second semantic authority | selected; reopen if ordinary state duplicates control unacceptably |
+| typed algebraic effects/handlers | effect signatures could describe host intent | does not solve authority, crash publication, or unknown result; adds type/lowering/handler/continuation surface for one action | boundedly rejected before broad implementation under the stop rule |
+| direct capability values and host calls | concise call syntax | makes pure evaluation host-dependent and introduces resource/capability lifetime into interpreter and artifact semantics | rejected; reopen only if command data makes the host application-specific |
+| external Rust/Python orchestration | useful as prototype/oracle | split authority and could not keep the transferable application as the workflow owner | retained only as driver/oracle, not product semantics |
+| database/general workflow engine | could supply transactions/replay services | imports a scheduler/service/storage TCB far larger than five- and nine-record example histories | rejected; measure compaction/replay thresholds before reconsidering |
 
-Losing candidates left no format, reader, flag, resolver, store, allocator, compatibility path, or
-prototype in the active tree.
+Application format 3 directly replaces format 2 because the invocation profile now owns exact
+stateful event/resume/decision targets. Release format 1 remains sufficient: all required nominal
+types and functions were already expressible. No new language value, operation, generic result,
+sequence, map, text, clock, capability value, or host effect was added.
 
-## Identity, boundary, and composition decisions
+## Durable-controller observation
 
-- **Reusable unit:** one existing workspace package is one release root. Modules remain internal
-  namespace/containment. A workspace may construct several releases in separate requests.
-- **Exact identity:** `ReleaseId` is the digest of all canonical payload content, including
-  coordinate and user version. `ReleaseContentDigest` is a separate integrity domain. Provenance,
-  signature, authorization, and freshness are absent.
-- **Canonical IDs:** modules and definitions are deterministically ordered; member/parameter/body
-  order follows accepted semantics. All selected definitions are assigned before references are
-  remapped, which handles mutual recursion without definition hashes or graph-isomorphism code.
-- **Exports:** one explicit flat symbolic namespace exports functions and nominal declarations.
-  Exact consumers ultimately bind item IDs. Dependency proxies cannot be re-exported in format 1.
-- **Private implementation:** reachable private content and private tests travel and affect exact
-  identity; unrelated private declarations are omitted. Private imports reject.
-- **Dependencies:** every slot binds an exact immutable release. Resolution and lock records are
-  absent. Direct proxy references cannot escape to transitive/private items.
-- **Versions:** coordinate and user version support bounded human review only. R1 and R2 can coexist;
-  aliases/slots disambiguate local intent and exact pairs define nominal equality.
-- **Diamond:** a `BTreeMap<ReleaseId, DecodedRelease>` owns graph nodes. Equal exact R1 is validated,
-  embedded, and flattened once; conflicting bytes and extra inputs reject.
-- **Import:** accepted workspace semantics use deliberately bodyless/type-shape proxies plus an
-  exact release request binding. Vendoring, copy, fork, and import-into-workspace are absent.
-- **Tests:** producer-owned primitive invocation cases remain inside each release; public nominal
-  cases live in the application. Every dependency suite runs before dependent publication.
-- **Application:** v2 bundles graph authorities and application facts without workspace identity.
-  v1 reader/writer/magic success paths were deleted and format 1 rejects.
-- **Agent surface:** release/app contracts are command-local and inspections provide bounded exact
-  summaries; they do not enlarge the global workspace schema or require a schema dump.
+One `examples/durable-controller/run.sh` observation produced:
 
-Reversal for the overall architecture: reopen when a representative workload needs independently
-updatable sub-release definitions, graph bundles exceed 64 MiB or repeatedly duplicate more than
-50% of deployment bytes across at least ten retained applications, explicit file provision causes
-measured correction failures, or an authenticity/provenance consumer cannot remain a separate
-artifact.
-
-## Representative reusable-release observation
-
-`examples/reusable-release/run.sh` uses only production protocol-v10 transactions and public
-release/application commands. One run produced these deterministic artifacts:
-
-| Release | Exact ID | Bytes |
-|---|---|---:|
-| shared-codec R1 | `cbb4ec4d4362fc24d486fcdbd0fbcd5890a88158940d90aea94950b805854b91` | 1,694 |
-| shared-codec R2 | `adfd2e30c8628fe1ed6fa0b0b80a1fda747e8e0124a4ed0c9f1f5feeb2789a5d` | 1,744 |
-| consumer-normalizer | `c8d5286c36190cfe6ba59cd5e89063ea824436464763b3e1d1256c5e5a5680b7` | 1,473 |
-| consumer-inspector | `05190135b304282509254cc9599631304480a12f2ebc8b9284b7fcce8aec3871` | 889 |
-| release-version-coexistence | `602c8019e2ed85eb901699d36217965805380d06f5c8b2396ccff5f34472ff6f` | 1,665 |
-| release-diamond | `a39ad1bfd9b3a706a7600a87841e5b0e57f0353c7bd8d36ad4f4bc736992eed7` | 1,111 |
-
-| Application | Bytes | Nodes / edges / depth |
-|---|---:|---:|
-| consumer-normalizer | 3,507 | 2 / 1 / 2 |
-| consumer-inspector | 2,916 | 2 / 1 / 2 |
-| version coexistence | 6,203 | 3 / 2 / 2 |
-| exact diamond | 5,523 | 4 / 4 / 3 |
-
-R1 bytes were equal from two unrelated workspace IDs, different durable serial histories, reversed
-function/export order, unrelated extra content, and different function-local numbering. R2 has the
-same coordinate but different exact ID and behavior. The diamond inspection contains one R1.
-Private import, R2-for-R1 nominal value, corrupt dependency, missing dependency, extra dependency,
-and release-order-sensitive application output all follow their promised reject/equality behavior.
-
-The complete state directory containing all seven workspaces was removed. Six release artifacts
-then validated/inspected/tested, and four applications validated/inspected/tested and rebuilt
-byte-identically. Normalizer and diamond stream runs returned `abc`; inspector typed run returned
-`3`; coexistence returned an exact R1 nominal value and rejected the structurally identical R2
-substitution. No network or ambient store was used.
-
-The workload used 15 authoring RPC calls in one direct session, 56 total processes, nine Engine
-opens, 33,370 action bytes, 84,802 observation bytes, 501 diagnostic bytes, and a summed command/RPC
-boundary of 273,462,995 ns. These are complete
-workflow byte/process observations, not provider tokens or monetary cost.
-
-## Existing application/runtime observation
-
-The updated `binary-canonicalizer` retained the full repair/history/runtime workload and observed:
-
-| Measure | Result |
+| measure | observed value |
 |---|---:|
-| reusable release | 4,979 B, 5 exports, 3 cases |
-| application-v2 bundle | 5,568 B, 1 release, 105 flattened items, 6 total cases |
-| release command boundary | 5 processes, 3,813 input / 8,017 output bytes |
-| application command boundary | 10 processes, 4,447 input / 14,345 output / 150 diagnostic bytes |
-| workspace authoring | 43 calls, 5 Engine opens, 56,625 request / 131,567 response bytes |
-| deterministic release/application rebuild | pass |
-| workspace deletion and offline validate/test/typed/stream | pass |
+| authoring workspace RPC calls | 2 |
+| Engine opens | 1 |
+| total processes | 41 |
+| action bytes | 56,595 |
+| observation plus diagnostic bytes | 26,419 |
+| summed command/RPC boundary time | 485,881,456 ns |
+| controller application | 19,669 B |
+| activated payload application | 16,479 B |
+| primary retained revisions | 5 (revision 0 through 4) |
+| primary retained record bytes | 6,312 B |
+| secondary retained revision before tombstone | 8 |
 
-The managed-byte dense boundary still accepts 1,445 input payload bytes and rejects 1,446 under the
-visible-byte policy. The representative 512-octet append control retains 1,024 copied backing bytes
-and 513 peak backing bytes versus 131,840 copied and 1,024 peak for allocate-new. The optimization
-still materially wins this shared-release application; the allocate-new route remains the oracle.
+The process count includes one workspace session and 40 short-lived release/application/instance
+commands, including deliberate rejection and corruption probes. The session reduces two dependent
+workspace RPCs to one Engine/process open; instance operations remain process-per-command. This is
+an operational count, not a provider-cost proxy.
 
-## Contract, daemon, storage, and build decisions
+The workflow proves source-workspace and standalone-release deletion, exact embedded application
+replay, process restart between instance calls, validate/apply parity, duplicate event/result
+replay, stale rejection, two instance/grant domains, denied cross-executor use, production slot
+activation, deterministic fake unknown outcome, reconciliation absent, retry, known failure,
+cancellation, bounded history, corrupt record/outcome rejection, tombstone deletion, and no identity
+reuse. The exact slot bytes equal the validated payload artifact.
 
-| Domain | Retained result | Evidence and reversal |
+The current record counts and sub-20-KiB applications do not cross any journal, database,
+compaction, external bundle store, executable cache, or instance-session threshold.
+
+## Architecture compression decisions
+
+| domain | retained result and measurement | rejection/deletion and reversal |
 |---|---|---|
-| manual workspace catalogue | retained; release/app fields are command-local | schema digest, agent help, packet/document binding, diagnostic root projection, and strict clients still consume it; re-run a complete derive candidate before deleting the 153,227-byte owner |
-| optional daemon | retained only for exported framed client tests | no release/app consumer; delete binary/client/transport/tests/docs together when correlation/deadline/disconnect/shutdown/lock coverage moves to direct Engine/session |
-| full workspace snapshots | retained | reusable release removes no workspace history and current restart/retained bytes are not dominant; prototype object/delta storage only after two measured thresholds cross |
-| deterministic full scans | retained | no shared-release workflow exposed a scan bottleneck; any index remains disposable and differential against scans |
-| Core IR cache | absent | compile/run observations do not justify a second verified format; require material gains in at least two of startup, compile, dispatch, or transfer |
-| managed bytes | retained | application-scale copy/peak reduction remains material; delete planner/verifier/handles if a broader distribution removes that benefit |
-| dependencies/build tooling | unchanged | no crate, feature, build script, proc macro, unsafe Rust, resolver library, database, or network client was added |
+| global workspace contract | retained 153,227-byte `contract.rs` for workspace schema digest, root projection, help, and strict client consumers | instance family uses an 18,838-byte command-local CLI owner plus its semantic owner; macro/proc-macro generation rejected because it adds expanded/derived review surface without displacing the workspace owner; rerun frozen changes if broad discovery recurs |
+| daemon/transport | deleted binary, client, socket framing, public exports, docs, and tests | unique lock, disconnect, shutdown/flush, and restart behavior moved to direct Engine/session tests; reopen only for a measured multi-client authority |
+| binary topology | one 8,312,104-byte binary versus 12,172,216 bytes across two baseline binaries | no worker added; add a binary only for a proved security/lifecycle boundary |
+| managed immutable bytes | retained with allocate-new differential oracle; durable controller does not expose a contrary copy bottleneck | no new planner feature; reopen if broader stateful values reverse absolute benefit or verifier maintenance dominates |
+| workspace storage | full snapshots and deterministic scans retained | release/controller workloads show no restart/query bottleneck; prototype one delta/object design only after two measured thresholds cross |
+| instance storage | full canonical state record per revision plus HEAD; five primary and nine secondary records | journal/database/compaction rejected; unresolved evidence and event receipts must survive any later cutover |
+| application distribution | embedded exact graph retained at 16,479–19,669 bytes in controller workload | mutable store rejected; reopen for measured repeated-bundle cost across current deployments |
+| compiler/interpreter | decode, graph validation, lowering, Core verification, and explicit-frame execution remain one exact route | no serialized IR, bytecode, JIT, native cache, or second runtime; optimize only a measured dominant term |
+| module ownership | cohesive `instance.rs` is 87,510 bytes with command CLI separate at 18,838 bytes | no forwarding split; split when a subsequent change repeatedly crosses an independently nameable codec/persistence/host boundary |
+| active prompts | two tracked superseded campaign prompts deleted; Git retains history | the current untracked 320,321-byte user-supplied campaign is preserved rather than overwritten/deleted; remove only with explicit ownership authorization or a later commit decision |
 
-One post-cutover optimized LTO build took 1 minute 57 seconds after source changes; this is a single
-incremental build observation, not clean-build evidence. Consistent clean/incremental distributions
-and maximum RSS remain unavailable.
+The command-local contract experiment compared four ownership shapes for the instance family. Manual
+global metadata would enlarge the already-consumed workspace catalogue; `macro_rules!` would still
+require separate cross-field validators; a proc macro would add a build dependency and expanded
+diagnostic surface; strict local serde plus explicit semantic validation provides one reviewable
+owner and passed unknown/duplicate/trailing tests. The local owner was selected; no losing generator,
+schema root, or generated file remains.
 
-## External design comparison
+## Agent-facing economy
 
-Primary sources were refreshed on 2026-08-18. They informed dimensions and failure cases, not an
-ecosystem copy:
+The instance command help is 1,777 bytes. The global full workspace schema response is 136,796 bytes
+and its manifest is 1,245 bytes. Instance creation, operation, diagnosis, unknown reconciliation,
+history, and deletion use only command-local help plus exact inspection; they do not require the
+136-KiB catalogue. The root repeated policy remained byte-identical at 21,881 bytes. Two historical
+tracked prompts totalling 13,147 lines were removed from active discovery.
 
-- [Unison's big idea](https://www.unison-lang.org/docs/the-big-idea/) separates names from
-  definition identity; lkjscript keeps that lesson but chooses one bounded release identity instead
-  of definition hashes.
-- [Nix store objects](https://nix.dev/manual/nix/latest/store/store-object/) distinguish immutable
-  store objects and closures; lkjscript needs no ambient store because explicit files and embedded
-  graph bundles close the current offline workload.
-- [Cargo resolution](https://doc.rust-lang.org/cargo/reference/resolver.html) distinguishes human
-  dependency intent, exact selected packages, lockfiles, and multi-version graphs; lkjscript begins
-  after selection and encodes only exact release IDs.
-- The [WebAssembly Component Model explainer](https://github.com/WebAssembly/component-model/blob/main/design/mvp/Explainer.md)
-  reinforces explicit imports/exports and composition boundaries; lkjscript has no ABI, host
-  interface, or component linker surface.
-- [OCI descriptors](https://github.com/opencontainers/image-spec/blob/main/descriptor.md) separate
-  media type, digest, size, and graph transfer; lkjscript uses strict domain-specific release bytes
-  rather than a general blob manifest.
-- [TUF](https://theupdateframework.github.io/specification/latest/),
-  [in-toto](https://in-toto.io/), and
-  [SLSA provenance](https://slsa.dev/spec/v1.2/provenance) separate content from freshness, roles,
-  authorization, and build evidence; those domains are explicitly absent rather than overloaded
-  onto `ReleaseId`.
-- [Git objects](https://git-scm.com/book/en/v2/Git-Internals-Git-Objects) and
-  [IPFS CIDs](https://docs.ipfs.tech/concepts/content-addressing/) demonstrate immutable graph
-  addressing and mutable names, but lkjscript does not inherit their object graph, transport,
-  multicodec, or trust model.
-- [Leroy's applicative-functor work](https://caml.inria.fr/pub/papers/xleroy-applicative_functors-toplas.pdf)
-  highlights nominal identity and repeated application. lkjscript uses exact release/item pairs and
-  rejects release cycles instead of implementing a general module calculus.
+Deterministic task oracles cover creation, adding state/event transitions, stale base, denied grant,
+unknown result, minimum resume facts, corruption, exact application binding, review via inspection,
+and tombstone deletion. The public driver completed the operational subset with zero correction
+rounds. This is not an independent model trial. Model/version/token/cost telemetry and multiple
+provider attempts were unavailable, so no claim is made about weak-model success, prompt-cache
+tokens, or monetary savings. A provider-backed equal-task comparison remains an explicit roadmap
+gate rather than an estimated result.
 
-## Adversarial and tool evidence
+## Verification and adversarial evidence
 
-- Both release and application decoders reject every truncation point and 10,000 deterministic
-  one-bit mutations. This is deterministic mutation, not coverage-guided fuzzing.
-- Release coordinate, version, name, slot, and declared-payload policies accept their exact
-  boundaries and reject one-over. Exact graph node, edge, depth, and aggregate-byte arithmetic
-  policies likewise cover boundary, one-over, and byte-count overflow. Equal duplicate exact
-  bytes deduplicate; conflicting bytes for one ID, self-dependencies, and two-release cycles reject.
-- Release tests cover unrelated-history canonical equality, private rejection, two consumers,
-  multi-version nominal distinction, exact diamond deduplication, no-overwrite publication,
-  symlink/non-regular paths, and all before/after write-sync-link-cleanup-directory-sync outcomes.
-- Application tests cover old-v1 rejection, graph permutation, missing/extra/corrupt releases,
-  exact nominal values, offline typed/stream execution, no-overwrite, and the same publication
-  transitions.
-- Nightly Miri 0.1.0 passed the exact graph limit/duplicate/cycle test in 573.83 seconds and the
-  exact application nominal-value test in 166.12 seconds. Existing Core-IR verification, runtime
-  differential, and workspace mutation smoke also remain applicable.
-- `cargo-fuzz`, model checking, cross-platform execution, a sanitizer run, and provider telemetry
-  were unavailable or not run. No claim of formal verification follows.
+- Generic instance envelopes reject every truncation point, deterministic one-bit mutation, wrong
+  version/digest, and trailing byte, with byte-identical re-encode.
+- Exact and one-over policy, event-key, and path grammar values are tested. Application format 2,
+  contract 2, and old string profiles reject.
+- Explicit state-machine tests enumerate creation-directory, immutable-object, HEAD, and activation
+  boundaries before/after write, file sync, link/rename visibility, cleanup, and directory sync.
+- Public integration covers two processes/instances, restart, response replay, stale bases,
+  capability denial, unknown/reconciliation, deletion, source removal, and retained-byte corruption.
+- The full explicit-frame interpreter and managed allocate-new differential remain applicable.
+- Nightly Miri 0.1.0 passed all 11 current instance unit/fault tests in 9.84 seconds with
+  filesystem isolation deliberately disabled for temporary-directory syscalls. The initial isolated run failed
+  before tests because Miri forbids `mkdir`; it was not counted as a pass.
+- `cargo-fuzz` is not installed. Coverage-guided fuzzing, sanitizers, external formal tools,
+  cross-platform execution, and provider trials were not run. Deterministic mutation and the finite
+  publication model are retained; no formal-verification claim follows.
 
-## Next evidence gate
+## External comparison
 
-The highest-value next gate is weak-model/application-authoring economy for the now-complete release
-surface: freeze equal create/bind/update/inspect/corrupt tasks, compare the current exact
-command-local JSON plus task-scoped inspection against one bounded typed action candidate, and
-measure semantic success, corrections, action/observation bytes, processes, Engine opens, files
-opened, and actual provider telemetry when exposed. Delete the candidate if it does not improve the
-complete task.
+Primary sources were consulted for failure dimensions rather than copied architecture:
+
+- [Temporal documentation](https://docs.temporal.io/) informed deterministic workflow versus
+  externally fallible activity separation; no service, scheduler, or opaque replay engine was used.
+- [Koka's book](https://koka-lang.github.io/koka/doc/book.html) informed comparison with typed
+  effects; explicit effect signatures were not confused with capability grants.
+- [SQLite atomic commit](https://www2.sqlite.org/atomiccommit.html) informed file/directory sync and
+  failure-point analysis; no database was imported.
+- [WebAssembly Component Model concepts](https://component-model.bytecodealliance.org/design/component-model-concepts.html)
+  informed closed interface comparison; no component ABI/runtime was added.
+- [OpenAI model guidance](https://developers.openai.com/api/docs/guides/latest-model) informed the
+  preference for stable lean instructions and representative evals; provider telemetry was absent.
+
+## Reversal summary
+
+Reopen the selected design for a concrete application that needs command parallelism, a live
+resource, unattended time, revocable grants, hostile-code isolation, state migration, or a second
+capability that justifies a shared narrower abstraction. Reopen storage only after measured state or
+history thresholds. Reopen agent surfaces only with frozen deterministic tasks and actual provider
+telemetry. In every case retain the current pure interpreter, full-history replay, and fake-host
+oracle until direct cutover is complete.

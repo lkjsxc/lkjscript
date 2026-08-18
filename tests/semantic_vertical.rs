@@ -1,77 +1,68 @@
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 
-use lkjscript::daemon;
+use lkjscript::engine::Engine;
 use lkjscript::query::{
     ContextBudget, PageRequest, Query, QueryBatchRequest, QueryItem, QueryOutcome, QueryResult,
     RepairTarget, VisibleCursorPurpose,
 };
 use lkjscript::{
-    ApplyTransactionRequest, ByteString, Client, DraftSymbol, ErrorCode, ExpressionDraft,
+    ApplyTransactionRequest, ByteString, DraftSymbol, ErrorCode, ExpressionDraft,
     ExpressionKindDraft, FunctionBodyDraft, FunctionParameterDraft, IdempotencyKey, NodeId,
     NodeTarget, OperationDraft, ProductFieldDraft, QueryId, Request, RequestId, Response, Revision,
     RuntimeFieldValue, RuntimeValue, SemanticType, SumVariantDraft, Transaction, TransactionMode,
     TransactionOp, TransactionResponseSpec, TypeDraft, ValueDraft, WorkspaceId, YieldingBodyDraft,
 };
+use std::cell::RefCell;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
-use std::thread;
-use std::time::{Duration, Instant};
+use std::process::{Command, Stdio};
+use std::rc::Rc;
+use std::time::Instant;
 
-struct RunningDaemon {
-    child: Child,
-    state: PathBuf,
+#[derive(Clone)]
+struct DirectClient {
+    engine: Rc<RefCell<Option<Engine>>>,
 }
 
-impl RunningDaemon {
+impl DirectClient {
+    #[allow(clippy::result_large_err)]
+    fn request(&self, request_id: RequestId, request: &Request) -> lkjscript::Result<Response> {
+        let mut engine = self.engine.borrow_mut();
+        engine
+            .as_mut()
+            .expect("direct authority remains open")
+            .request(request_id, request.clone())
+    }
+}
+
+struct DirectAuthority {
+    engine: Rc<RefCell<Option<Engine>>>,
+}
+
+impl DirectAuthority {
     fn start(state: &Path) -> Self {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_lkjscriptd"))
-            .args([
-                "--state",
-                state.to_str().expect("UTF-8 state path"),
-                "--foreground",
-            ])
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .spawn()
-            .expect("spawn daemon");
-        let deadline = Instant::now() + Duration::from_secs(5);
-        let endpoint = daemon::endpoint_path(state);
-        while !endpoint.exists() {
-            if let Some(status) = child.try_wait().expect("query daemon status") {
-                panic!("daemon exited before readiness with {status}");
-            }
-            assert!(Instant::now() < deadline, "daemon readiness timed out");
-            thread::sleep(Duration::from_millis(1));
-        }
         Self {
-            child,
-            state: state.to_owned(),
+            engine: Rc::new(RefCell::new(Some(
+                Engine::open(state).expect("open direct semantic authority"),
+            ))),
         }
     }
 
-    fn client(&self) -> Client {
-        Client::new(daemon::endpoint_path(&self.state))
+    fn client(&self) -> DirectClient {
+        DirectClient {
+            engine: Rc::clone(&self.engine),
+        }
     }
 
-    fn shutdown(mut self) {
-        let response = self
-            .client()
-            .request(RequestId::new(9000), &Request::Shutdown)
-            .expect("shutdown request");
-        assert_eq!(response, Response::Acknowledged);
-        let status = self.child.wait().expect("wait for daemon");
-        assert!(status.success());
+    fn shutdown(self) {
+        *self.engine.borrow_mut() = None;
     }
 }
 
-impl Drop for RunningDaemon {
+impl Drop for DirectAuthority {
     fn drop(&mut self) {
-        if self.child.try_wait().ok().flatten().is_none() {
-            let _ = self.child.kill();
-            let _ = self.child.wait();
-        }
+        *self.engine.borrow_mut() = None;
     }
 }
 
@@ -207,10 +198,10 @@ fn cli_session_stdout_failure_is_fatal_and_does_not_retry_a_published_mutation()
 }
 
 #[test]
-fn real_daemon_generic_client_accepts_and_returns_canonical_nominal_value() {
+fn real_authority_generic_client_accepts_and_returns_canonical_nominal_value() {
     let temporary = tempfile::tempdir().expect("state");
-    let daemon = RunningDaemon::start(temporary.path());
-    let client = daemon.client();
+    let authority = DirectAuthority::start(temporary.path());
+    let client = authority.client();
     let Response::WorkspaceCreated(created) = client
         .request(RequestId::new(1), &Request::CreateWorkspace)
         .expect("create workspace")
@@ -342,9 +333,9 @@ fn real_daemon_generic_client_accepts_and_returns_canonical_nominal_value() {
         ],
     };
     assert_eq!(result.value, expected);
-    daemon.shutdown();
+    authority.shutdown();
 
-    let restarted = RunningDaemon::start(temporary.path());
+    let restarted = DirectAuthority::start(temporary.path());
     let Response::Run(result) = restarted
         .client()
         .request(
@@ -369,10 +360,10 @@ fn real_daemon_generic_client_accepts_and_returns_canonical_nominal_value() {
 }
 
 #[test]
-fn real_daemon_persists_managed_bytes_in_products_and_variants_across_restart() {
+fn real_authority_persists_managed_bytes_in_products_and_variants_across_restart() {
     let temporary = tempfile::tempdir().expect("state");
-    let daemon = RunningDaemon::start(temporary.path());
-    let client = daemon.client();
+    let authority = DirectAuthority::start(temporary.path());
+    let client = authority.client();
     let Response::WorkspaceCreated(created) = client
         .request(RequestId::new(100), &Request::CreateWorkspace)
         .expect("create workspace")
@@ -491,7 +482,7 @@ fn real_daemon_persists_managed_bytes_in_products_and_variants_across_restart() 
             },
         ],
     };
-    let run = |client: &Client, request_id, value: RuntimeValue| {
+    let run = |client: &DirectClient, request_id, value: RuntimeValue| {
         let Response::Run(result) = client
             .request(
                 RequestId::new(request_id),
@@ -534,47 +525,22 @@ fn real_daemon_persists_managed_bytes_in_products_and_variants_across_restart() 
         ],
     };
     assert_eq!(run(&client, 102, input.clone()), expected);
-    daemon.shutdown();
+    authority.shutdown();
 
-    let restarted = RunningDaemon::start(temporary.path());
+    let restarted = DirectAuthority::start(temporary.path());
     assert_eq!(run(&restarted.client(), 103, input), expected);
     restarted.shutdown();
 }
 
-fn assert_daemon_start_rejects(state: &Path, expected: &str) {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_lkjscriptd"))
-        .args([
-            "--state",
-            state.to_str().expect("UTF-8 state path"),
-            "--foreground",
-        ])
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn rejecting daemon");
-    let deadline = Instant::now() + Duration::from_secs(5);
-    let status = loop {
-        if let Some(status) = child.try_wait().expect("query rejecting daemon") {
-            break status;
-        }
-        if Instant::now() >= deadline {
-            let _ = child.kill();
-            let _ = child.wait();
-            panic!("rejecting daemon did not exit before deadline");
-        }
-        thread::sleep(Duration::from_millis(1));
+fn assert_engine_open_rejects(state: &Path, expected: &str) {
+    let error = match Engine::open(state) {
+        Ok(_) => panic!("direct Engine open unexpectedly succeeded"),
+        Err(error) => error,
     };
-    let mut stderr = String::new();
-    child
-        .stderr
-        .take()
-        .expect("rejecting daemon stderr")
-        .read_to_string(&mut stderr)
-        .expect("read rejecting daemon stderr");
-    assert!(!status.success(), "rejecting daemon unexpectedly succeeded");
+    let diagnostic = error.to_string();
     assert!(
-        stderr.contains(expected),
-        "daemon rejection did not contain {expected:?}: {stderr}"
+        diagnostic.contains(expected),
+        "Engine rejection did not contain {expected:?}: {diagnostic}"
     );
 }
 
@@ -583,9 +549,9 @@ fn assert_daemon_start_rejects(state: &Path, expected: &str) {
 fn product_path_performance_baseline() {
     let temporary = tempfile::tempdir().expect("temporary state directory");
     let started = Instant::now();
-    let daemon = RunningDaemon::start(temporary.path());
+    let authority = DirectAuthority::start(temporary.path());
     let startup = started.elapsed().as_nanos();
-    let client = daemon.client();
+    let client = authority.client();
 
     let create_started = Instant::now();
     let created = client
@@ -658,14 +624,14 @@ fn product_path_performance_baseline() {
     let artifact_size = fs::metadata(revision_path(temporary.path(), workspace, Revision::new(1)))
         .expect("artifact metadata")
         .len();
-    daemon.shutdown();
+    authority.shutdown();
 
     let mut restart_samples = Vec::new();
     for _ in 0..11 {
         let restart_started = Instant::now();
-        let daemon = RunningDaemon::start(temporary.path());
+        let authority = DirectAuthority::start(temporary.path());
         restart_samples.push(restart_started.elapsed().as_nanos());
-        daemon.shutdown();
+        authority.shutdown();
     }
 
     println!(
@@ -740,8 +706,8 @@ fn bootstrap_agent_request_cost_is_bounded_and_reproducible() {
 #[test]
 fn operand_repair_context_rejects_wrong_type_and_publishes_typed_repair() {
     let temporary = tempfile::tempdir().expect("temporary state directory");
-    let daemon = RunningDaemon::start(temporary.path());
-    let client = daemon.client();
+    let authority = DirectAuthority::start(temporary.path());
+    let client = authority.client();
     let Response::WorkspaceCreated(initial) = client
         .request(RequestId::new(40), &Request::CreateWorkspace)
         .expect("create workspace")
@@ -919,14 +885,14 @@ fn operand_repair_context_rejects_wrong_type_and_publishes_typed_repair() {
     assert_run(&client, workspace, Revision::new(3), function, 80);
     assert_run(&client, workspace, Revision::new(2), function, 42);
     assert_run(&client, workspace, Revision::new(1), function, 42);
-    daemon.shutdown();
+    authority.shutdown();
 }
 
 #[test]
 fn explicit_hole_is_queryable_and_cannot_execute() {
     let temporary = tempfile::tempdir().expect("temporary state directory");
-    let daemon = RunningDaemon::start(temporary.path());
-    let client = daemon.client();
+    let authority = DirectAuthority::start(temporary.path());
+    let client = authority.client();
     let Response::WorkspaceCreated(initial) = client
         .request(RequestId::new(20), &Request::CreateWorkspace)
         .expect("create workspace")
@@ -1191,10 +1157,10 @@ fn explicit_hole_is_queryable_and_cannot_execute() {
         )
         .expect("old incomplete run response");
     assert_error(old_run, ErrorCode::CompileIncomplete);
-    daemon.shutdown();
+    authority.shutdown();
 
-    let daemon = RunningDaemon::start(temporary.path());
-    let client = daemon.client();
+    let authority = DirectAuthority::start(temporary.path());
+    let client = authority.client();
     assert_run(&client, workspace, Revision::new(2), function, 42);
     let restarted_context = client
         .request(
@@ -1250,15 +1216,15 @@ fn explicit_hole_is_queryable_and_cannot_execute() {
             ..
         })
     ));
-    daemon.shutdown();
+    authority.shutdown();
 }
 
 #[test]
-fn real_daemon_executes_repaired_structured_program_across_restart() {
+fn real_authority_executes_repaired_structured_program_across_restart() {
     let temporary = tempfile::tempdir().expect("temporary state directory");
-    let daemon = RunningDaemon::start(temporary.path());
-    assert_daemon_start_rejects(temporary.path(), "AuthorityBusy");
-    let client = daemon.client();
+    let authority = DirectAuthority::start(temporary.path());
+    assert_engine_open_rejects(temporary.path(), "AuthorityBusy");
+    let client = authority.client();
     let Response::WorkspaceCreated(initial) = client
         .request(RequestId::new(500), &Request::CreateWorkspace)
         .expect("create")
@@ -1551,7 +1517,7 @@ fn real_daemon_executes_repaired_structured_program_across_restart() {
     );
     assert_eq!(frames.target, Some(main_call));
 
-    let run = |client: &Client, request_id, entry, arguments| {
+    let run = |client: &DirectClient, request_id, entry, arguments| {
         let response = client
             .request(
                 RequestId::new(request_id),
@@ -1585,7 +1551,7 @@ fn real_daemon_executes_repaired_structured_program_across_restart() {
         run(&client, 506, range, vec![RuntimeValue::I64(5)]),
         RuntimeValue::I64(10)
     );
-    daemon.shutdown();
+    authority.shutdown();
     let envelope = lkjscript::machine::RequestEnvelope {
         version: lkjscript::machine::JSON_ENVELOPE_VERSION,
         request_id: RequestId::new(509),
@@ -1628,7 +1594,7 @@ fn real_daemon_executes_repaired_structured_program_across_restart() {
         panic!("CLI run response")
     };
     assert_eq!(result.value, RuntimeValue::I64(5050));
-    let restarted = RunningDaemon::start(temporary.path());
+    let restarted = DirectAuthority::start(temporary.path());
     assert_eq!(
         run(&restarted.client(), 507, main, vec![]),
         RuntimeValue::I64(5050)
@@ -1639,7 +1605,7 @@ fn real_daemon_executes_repaired_structured_program_across_restart() {
     let mut corrupt = fs::read(&repaired_revision).expect("read repaired structured revision");
     *corrupt.last_mut().expect("structured revision hash byte") ^= 1;
     fs::write(&repaired_revision, corrupt).expect("corrupt repaired structured revision");
-    assert_daemon_start_rejects(temporary.path(), "ArtifactCorrupt");
+    assert_engine_open_rejects(temporary.path(), "ArtifactCorrupt");
 }
 
 fn bootstrap_transaction(workspace: WorkspaceId, hole: bool) -> Transaction {
@@ -1800,7 +1766,7 @@ fn one_query(response: Response) -> QueryResult {
     }
 }
 fn collect_diff(
-    client: &Client,
+    client: &DirectClient,
     workspace: WorkspaceId,
     from: Revision,
     to: Revision,
@@ -1840,7 +1806,7 @@ fn collect_diff(
 }
 
 fn workspace_summary(
-    client: &Client,
+    client: &DirectClient,
     workspace: WorkspaceId,
     revision: Revision,
 ) -> lkjscript::query::WorkspaceSummary {
@@ -1857,7 +1823,7 @@ fn workspace_summary(
 }
 
 fn assert_run(
-    client: &Client,
+    client: &DirectClient,
     workspace: WorkspaceId,
     revision: Revision,
     entry: NodeId,

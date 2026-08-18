@@ -829,10 +829,10 @@ def workflow():
         bounds_target = {"release": release_id, "item": release_exports["bounds_probe"]}
 
         application_request = {
-            "version": 2,
+            "version": 3,
             "root_release": release_id,
             "entry": stream_target,
-            "profile": "bytes_stream",
+            "profile": {"kind": "bytes_stream"},
             "policy": {"fuel": 10_000_000, "maximum_frames": 2_000},
             "tests": [
                 {
@@ -871,7 +871,7 @@ def workflow():
             "build", "--release", str(release_path), "--output", str(application_path),
         ], application_request).stdout)
         if (not build["published"] or build["tests"]["passed"] != 6
-                or build["inspection"]["profile"] != "bytes_stream"
+                or build["inspection"]["profile"] != {"kind": "bytes_stream"}
                 or build["inspection"]["digest"] != preflight["inspection"]["digest"]):
             raise RuntimeError(f"application build receipt is malformed: {build}")
         repeated_path = root / "binary-canonicalizer-repeated.lkja"
@@ -893,7 +893,7 @@ def workflow():
             "build", "--release", str(release_path), "--output", str(blocked_path),
         ], failing_request, expected_returncode=7)
         blocked_error = json.loads(blocked.stdout)
-        if (blocked_error.get("contract_version") != 2
+        if (blocked_error.get("contract_version") != 3
                 or blocked_error.get("error", {}).get("code") != "application_test_failed"
                 or blocked_path.exists()):
             raise RuntimeError(f"failing release test did not block publication: {blocked_error}")
@@ -938,7 +938,7 @@ def workflow():
         ]).stdout)
         typed = json.loads(application_command([
             "run", "--artifact", str(application_path),
-        ], {"version": 2, "arguments": [bytes_value(bytes([0xA5, 3, 0, 4]))]}).stdout)
+        ], {"version": 3, "arguments": [bytes_value(bytes([0xA5, 3, 0, 4]))]}).stdout)
         stream_input = bytes([0xA5, 5, 0, 6])
         stream_started = time.monotonic_ns()
         streamed = subprocess.run(

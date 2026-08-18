@@ -1,7 +1,7 @@
 //! Independently transferable exact-release-graph applications.
 //!
-//! Application format 2 embeds one canonical exact reusable-release graph, an exact exported
-//! entry, an invocation profile, resource policy, and typed application cases. Source workspace
+//! Application format 3 embeds one canonical exact reusable-release graph, exact exported
+//! entries, an invocation profile, resource policy, and typed application cases. Source workspace
 //! identity, mutable resolver state, proposal syntax, Core IR, and runtime handles are absent.
 
 use crate::artifact;
@@ -19,16 +19,16 @@ use serde::{Deserialize, Serialize, Serializer};
 use std::fmt;
 use std::path::Path;
 
-pub const APPLICATION_MAGIC: [u8; 8] = *b"LKJAPP\0\x02";
-pub const APPLICATION_FORMAT_VERSION: u16 = 2;
-pub const APPLICATION_CONTRACT_VERSION: u16 = 2;
+pub const APPLICATION_MAGIC: [u8; 8] = *b"LKJAPP\0\x03";
+pub const APPLICATION_FORMAT_VERSION: u16 = 3;
+pub const APPLICATION_CONTRACT_VERSION: u16 = 3;
 pub const MAXIMUM_APPLICATION_ARTIFACT_BYTES: usize = 256 * 1024 * 1024;
 pub const MAXIMUM_APPLICATION_TESTS: usize = 256;
 pub const MAXIMUM_APPLICATION_TEST_NAME_BYTES: usize = 64;
 pub const MAXIMUM_APPLICATION_SUITE_FUEL: u64 = 100_000_000;
 pub const MAXIMUM_APPLICATION_PATH_BYTES: usize = artifact_io::MAXIMUM_ARTIFACT_PATH_BYTES;
 const MAXIMUM_APPLICATION_VALUE_JSON_BYTES: usize = 1024 * 1024;
-const APPLICATION_DIGEST_DOMAIN: &str = "lkjscript.application-artifact.v2";
+const APPLICATION_DIGEST_DOMAIN: &str = "lkjscript.application-artifact.v3";
 const APPLICATION_GRAPH_DIGEST_DOMAIN: &str = "lkjscript.application-release-graph.v1";
 const APPLICATION_TEST_DIGEST_DOMAIN: &str = "lkjscript.application-test-case.v2";
 const TEMPORARY_PREFIX: &str = ".lkjscript-application-";
@@ -37,6 +37,10 @@ const TEMPORARY_PREFIX: &str = ".lkjscript-application-";
 pub struct ApplicationDigest([u8; 32]);
 
 impl ApplicationDigest {
+    pub const fn from_bytes(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
     pub const fn as_bytes(self) -> [u8; 32] {
         self.0
     }
@@ -54,6 +58,15 @@ impl Serialize for ApplicationDigest {
         S: Serializer,
     {
         serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for ApplicationDigest {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        ReleaseId::deserialize(deserializer).map(|digest| Self(digest.as_bytes()))
     }
 }
 
@@ -145,27 +158,108 @@ pub enum ApplicationValue {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
+pub struct StatefulApplicationProfile {
+    pub resume: ApplicationTarget,
+    pub decision: ApplicationTarget,
+    pub state_field: ApplicationTarget,
+    pub response_field: ApplicationTarget,
+    pub command_field: ApplicationTarget,
+    pub target_field: ApplicationTarget,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(
+    tag = "kind",
+    content = "data",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
+#[allow(clippy::large_enum_variant)] // Profiles are bounded manifests; indirection adds no consumer value.
 pub enum InvocationProfile {
     Typed,
     BytesStream,
+    Stateful(StatefulApplicationProfile),
 }
 
 impl InvocationProfile {
-    const fn stable_tag(self) -> u8 {
+    const fn stable_tag(&self) -> u8 {
         match self {
             Self::Typed => 1,
             Self::BytesStream => 2,
+            Self::Stateful(_) => 3,
         }
     }
+}
 
-    const fn from_stable_tag(tag: u8) -> Option<Self> {
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StatefulCommandKind {
+    ValidateApplication,
+    ActivateApplication,
+    ReconcileActivation,
+}
+
+impl StatefulCommandKind {
+    const fn from_semantic_tag(tag: i64) -> Option<Option<Self>> {
         match tag {
-            1 => Some(Self::Typed),
-            2 => Some(Self::BytesStream),
+            0 => Some(None),
+            1 => Some(Some(Self::ValidateApplication)),
+            2 => Some(Some(Self::ActivateApplication)),
+            3 => Some(Some(Self::ReconcileActivation)),
             _ => None,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HostOutcomeKind {
+    KnownSuccess,
+    KnownFailureBeforeVisibility,
+    OutcomeUnknown,
+    ReconciliationPresent,
+    ReconciliationAbsent,
+    ReconciliationIndeterminate,
+    CancelledBeforeAction,
+    TimeoutBeforeAction,
+    TimeoutAfterPossibleVisibility,
+    CleanupFailure,
+}
+
+impl HostOutcomeKind {
+    pub const fn semantic_tag(self) -> i64 {
+        match self {
+            Self::KnownSuccess => 1,
+            Self::KnownFailureBeforeVisibility => 2,
+            Self::OutcomeUnknown => 3,
+            Self::ReconciliationPresent => 4,
+            Self::ReconciliationAbsent => 5,
+            Self::ReconciliationIndeterminate => 6,
+            Self::CancelledBeforeAction => 7,
+            Self::TimeoutBeforeAction => 8,
+            Self::TimeoutAfterPossibleVisibility => 9,
+            Self::CleanupFailure => 10,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct StatefulCommand {
+    pub kind: StatefulCommandKind,
+    pub application: ApplicationDigest,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct StatefulTransition {
+    pub state: ApplicationValue,
+    pub response: ByteString,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<StatefulCommand>,
+    pub compile_nanoseconds: u64,
+    pub execute_nanoseconds: u64,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -444,7 +538,7 @@ pub fn prepare(
         &graph,
         &flattened,
         request.entry,
-        request.profile,
+        &request.profile,
         request.policy,
         &tests,
     )?;
@@ -453,7 +547,7 @@ pub fn prepare(
     let bytes = encode_application(
         &graph,
         request.entry,
-        request.profile,
+        &request.profile,
         request.policy,
         &tests,
     )?;
@@ -515,7 +609,7 @@ pub fn run(bytes: &[u8], invocation: &ApplicationInvocation) -> Result<Applicati
 
 pub fn run_stream(bytes: &[u8], input: &[u8]) -> Result<Vec<u8>> {
     let application = decode_application(bytes)?;
-    if application.profile != InvocationProfile::BytesStream {
+    if !matches!(application.profile, InvocationProfile::BytesStream) {
         return Err(LkError::new(
             ErrorCode::RunArgumentMismatch,
             "application does not declare the bytes_stream invocation profile",
@@ -543,6 +637,186 @@ pub fn run_stream(bytes: &[u8], input: &[u8]) -> Result<Vec<u8>> {
         ));
     };
     Ok(output.into_vec())
+}
+
+/// Validates one durable state value against the exact stateful application interface.
+pub fn validate_stateful_state(bytes: &[u8], state: &ApplicationValue) -> Result<()> {
+    let application = decode_application(bytes)?;
+    let _ = stateful_profile(&application)?;
+    let entry = application
+        .flattened
+        .item(application.entry.release, application.entry.item)?;
+    let Node::Function { parameters, .. } = application.flattened.snapshot.node(entry)? else {
+        return Err(LkError::new(
+            ErrorCode::CoreIrInvalid,
+            "stateful application entry is not a function after validation",
+        ));
+    };
+    let expected = parameter_type(&application.flattened.snapshot, parameters[0])?;
+    let value = to_runtime(&application.flattened, state)?;
+    interpret::validate_runtime_value(&application.flattened.snapshot, &value, expected, entry)
+        .map(|_| ())
+}
+
+/// Evaluates one exact external event without performing host work or publishing state.
+pub fn transition_event(
+    bytes: &[u8],
+    state: &ApplicationValue,
+    event: &ApplicationValue,
+) -> Result<StatefulTransition> {
+    let application = decode_application(bytes)?;
+    let profile = stateful_profile(&application)?;
+    run_stateful(
+        &application,
+        application.entry,
+        profile,
+        &[state.clone(), event.clone()],
+    )
+}
+
+/// Resumes one suspended transition from a recorded typed host outcome.
+pub fn transition_resume(
+    bytes: &[u8],
+    state: &ApplicationValue,
+    outcome: HostOutcomeKind,
+    evidence: &ByteString,
+) -> Result<StatefulTransition> {
+    let application = decode_application(bytes)?;
+    let profile = stateful_profile(&application)?;
+    run_stateful(
+        &application,
+        profile.resume,
+        profile,
+        &[
+            state.clone(),
+            ApplicationValue::I64(outcome.semantic_tag()),
+            ApplicationValue::Bytes(evidence.clone()),
+        ],
+    )
+}
+
+fn stateful_profile(application: &DecodedApplication) -> Result<StatefulApplicationProfile> {
+    match &application.profile {
+        InvocationProfile::Stateful(profile) => Ok(*profile),
+        _ => Err(LkError::new(
+            ErrorCode::RunArgumentMismatch,
+            "application does not declare the stateful invocation profile",
+        )),
+    }
+}
+
+fn run_stateful(
+    application: &DecodedApplication,
+    target: ApplicationTarget,
+    profile: StatefulApplicationProfile,
+    arguments: &[ApplicationValue],
+) -> Result<StatefulTransition> {
+    let target_node = application.flattened.item(target.release, target.item)?;
+    let arguments = arguments
+        .iter()
+        .map(|value| to_runtime(&application.flattened, value))
+        .collect::<Result<Vec<_>>>()?;
+    let result = interpret::compile_and_run(
+        &application.flattened.snapshot,
+        target_node,
+        &arguments,
+        application.policy,
+    )?;
+    decode_stateful_transition(
+        &application.flattened,
+        profile,
+        result.value,
+        result.compile_nanoseconds,
+        result.execute_nanoseconds,
+    )
+}
+
+fn decode_stateful_transition(
+    flattened: &FlattenedGraph,
+    profile: StatefulApplicationProfile,
+    value: RuntimeValue,
+    compile_nanoseconds: u64,
+    execute_nanoseconds: u64,
+) -> Result<StatefulTransition> {
+    let value = from_runtime(flattened, &value)?;
+    let ApplicationValue::Product { ty, fields } = value else {
+        return Err(LkError::new(
+            ErrorCode::CoreIrInvalid,
+            "stateful application returned a non-product transition",
+        ));
+    };
+    if ty != profile.decision || fields.len() != 4 {
+        return Err(LkError::new(
+            ErrorCode::CoreIrInvalid,
+            "stateful application returned the wrong transition product",
+        ));
+    }
+    let expected = [
+        profile.state_field,
+        profile.response_field,
+        profile.command_field,
+        profile.target_field,
+    ];
+    let mut values = Vec::with_capacity(4);
+    for (field, expected) in fields.into_iter().zip(expected) {
+        if field.field != expected {
+            return Err(LkError::new(
+                ErrorCode::CoreIrInvalid,
+                "stateful application returned transition fields out of contract order",
+            ));
+        }
+        values.push(field.value);
+    }
+    let mut values = values.into_iter();
+    let state = values
+        .next()
+        .ok_or_else(|| corrupt("transition state is absent"))?;
+    let response = match values.next() {
+        Some(ApplicationValue::Bytes(value)) => value,
+        _ => return Err(corrupt("transition response is not bytes")),
+    };
+    let command_tag = match values.next() {
+        Some(ApplicationValue::I64(value)) => value,
+        _ => return Err(corrupt("transition command tag is not i64")),
+    };
+    let target = match values.next() {
+        Some(ApplicationValue::Bytes(value)) => value,
+        _ => return Err(corrupt("transition command target is not bytes")),
+    };
+    let command_kind = StatefulCommandKind::from_semantic_tag(command_tag).ok_or_else(|| {
+        LkError::new(
+            ErrorCode::ProtocolMalformed,
+            "stateful application returned an unknown host-command tag",
+        )
+    })?;
+    let command = match command_kind {
+        None if target.is_empty() => None,
+        None => {
+            return Err(LkError::new(
+                ErrorCode::ProtocolMalformed,
+                "completed transition must carry an empty command target",
+            ));
+        }
+        Some(kind) => {
+            let application = <[u8; 32]>::try_from(target.as_slice()).map_err(|_| {
+                LkError::new(
+                    ErrorCode::ProtocolMalformed,
+                    "activation command target must be one exact 32-byte application digest",
+                )
+            })?;
+            Some(StatefulCommand {
+                kind,
+                application: ApplicationDigest::from_bytes(application),
+            })
+        }
+    };
+    Ok(StatefulTransition {
+        state,
+        response,
+        command,
+        compile_nanoseconds,
+        execute_nanoseconds,
+    })
 }
 
 pub fn read_file(path: &Path) -> Result<Vec<u8>> {
@@ -620,7 +894,7 @@ fn validate_manifest(
     graph: &ReleaseGraph,
     flattened: &FlattenedGraph,
     entry: ApplicationTarget,
-    profile: InvocationProfile,
+    profile: &InvocationProfile,
     policy: RunPolicy,
     tests: &[ApplicationTestCase],
 ) -> Result<()> {
@@ -633,11 +907,19 @@ fn validate_manifest(
     validate_exported_function(graph, entry)?;
     interpret::validate_policy(policy)?;
     let entry_node = flattened.item(entry.release, entry.item)?;
-    validate_profile(&flattened.snapshot, entry_node, profile)?;
+    validate_profile(graph, flattened, entry_node, profile)?;
     if !tests.iter().any(|test| test.target == entry) {
         return Err(LkError::new(
             ErrorCode::ApplicationTestFailed,
             "at least one application test must target the exact entry export",
+        ));
+    }
+    if let InvocationProfile::Stateful(stateful) = profile
+        && !tests.iter().any(|test| test.target == stateful.resume)
+    {
+        return Err(LkError::new(
+            ErrorCode::ApplicationTestFailed,
+            "a stateful application requires at least one exact resume-entry test",
         ));
     }
     let mut total_fuel = 0_u64;
@@ -701,10 +983,12 @@ fn validate_exported_function(graph: &ReleaseGraph, target: ApplicationTarget) -
 }
 
 fn validate_profile(
-    snapshot: &crate::graph::Snapshot,
+    graph: &ReleaseGraph,
+    flattened: &FlattenedGraph,
     entry: crate::ids::NodeId,
-    profile: InvocationProfile,
+    profile: &InvocationProfile,
 ) -> Result<()> {
+    let snapshot = &flattened.snapshot;
     let Node::Function {
         parameters, result, ..
     } = snapshot.node(entry)?
@@ -714,41 +998,159 @@ fn validate_profile(
             "application entry must be a function",
         ));
     };
-    if profile == InvocationProfile::Typed {
-        return Ok(());
+    match profile {
+        InvocationProfile::Typed => Ok(()),
+        InvocationProfile::BytesStream => {
+            if parameters.len() != 1 || *result != SemanticType::Bytes {
+                return Err(LkError::new(
+                    ErrorCode::RunArgumentMismatch,
+                    "bytes_stream entry must accept one bytes value and return bytes",
+                ));
+            }
+            let Node::Parameter { ty, .. } = snapshot.node(parameters[0])? else {
+                return Err(LkError::new(
+                    ErrorCode::InvalidContainment,
+                    "bytes_stream entry parameter is malformed",
+                ));
+            };
+            if *ty != SemanticType::Bytes {
+                return Err(LkError::new(
+                    ErrorCode::RunArgumentMismatch,
+                    "bytes_stream entry parameter must have bytes type",
+                ));
+            }
+            Ok(())
+        }
+        InvocationProfile::Stateful(stateful) => {
+            validate_stateful_profile(graph, flattened, parameters, *result, *stateful)
+        }
     }
-    if parameters.len() != 1 || *result != SemanticType::Bytes {
+}
+
+fn validate_stateful_profile(
+    graph: &ReleaseGraph,
+    flattened: &FlattenedGraph,
+    event_parameters: &[crate::ids::NodeId],
+    event_result: SemanticType,
+    profile: StatefulApplicationProfile,
+) -> Result<()> {
+    let snapshot = &flattened.snapshot;
+    if event_parameters.len() != 2 {
         return Err(LkError::new(
             ErrorCode::RunArgumentMismatch,
-            "bytes_stream entry must accept one bytes value and return bytes",
+            "stateful event entry must accept exact state and event values",
         ));
     }
-    let Node::Parameter { ty, .. } = snapshot.node(parameters[0])? else {
+    let state_type = parameter_type(snapshot, event_parameters[0])?;
+    let event_type = parameter_type(snapshot, event_parameters[1])?;
+    if !matches!(state_type, SemanticType::Nominal(_))
+        || !matches!(event_type, SemanticType::Nominal(_))
+    {
         return Err(LkError::new(
-            ErrorCode::InvalidContainment,
-            "bytes_stream entry parameter is malformed",
+            ErrorCode::TypeMismatch,
+            "stateful state and event types must be nominal",
+        ));
+    }
+
+    let decision = flattened.item(profile.decision.release, profile.decision.item)?;
+    if event_result != SemanticType::Nominal(decision) {
+        return Err(LkError::new(
+            ErrorCode::TypeMismatch,
+            "stateful event entry must return the declared transition product",
+        ));
+    }
+    let Node::ProductType { fields, .. } = snapshot.node(decision)? else {
+        return Err(LkError::new(
+            ErrorCode::WrongKind,
+            "stateful transition result must be a nominal product",
         ));
     };
-    if *ty != SemanticType::Bytes {
+    let declared_fields = [
+        profile.state_field,
+        profile.response_field,
+        profile.command_field,
+        profile.target_field,
+    ];
+    let mapped_fields = declared_fields
+        .iter()
+        .map(|target| flattened.item(target.release, target.item))
+        .collect::<Result<Vec<_>>>()?;
+    if fields.as_slice() != mapped_fields.as_slice() {
         return Err(LkError::new(
-            ErrorCode::RunArgumentMismatch,
-            "bytes_stream entry parameter must have bytes type",
+            ErrorCode::InvalidContainment,
+            "stateful transition fields must be declared once in state, response, command, target order",
+        ));
+    }
+    let expected_types = [
+        state_type,
+        SemanticType::Bytes,
+        SemanticType::I64,
+        SemanticType::Bytes,
+    ];
+    for (field, expected) in mapped_fields.iter().zip(expected_types) {
+        let Node::ProductField { owner, ty, .. } = snapshot.node(*field)? else {
+            return Err(LkError::new(
+                ErrorCode::WrongKind,
+                "stateful transition field mapping must target product fields",
+            ));
+        };
+        if *owner != decision || *ty != expected {
+            return Err(LkError::new(
+                ErrorCode::TypeMismatch,
+                "stateful transition field has the wrong owner or exact type",
+            ));
+        }
+    }
+
+    validate_exported_function(graph, profile.resume)?;
+    let resume = flattened.item(profile.resume.release, profile.resume.item)?;
+    let Node::Function {
+        parameters, result, ..
+    } = snapshot.node(resume)?
+    else {
+        return Err(LkError::new(
+            ErrorCode::WrongKind,
+            "stateful resume target must be a function",
+        ));
+    };
+    if parameters.len() != 3
+        || parameter_type(snapshot, parameters[0])? != state_type
+        || parameter_type(snapshot, parameters[1])? != SemanticType::I64
+        || parameter_type(snapshot, parameters[2])? != SemanticType::Bytes
+        || *result != SemanticType::Nominal(decision)
+    {
+        return Err(LkError::new(
+            ErrorCode::TypeMismatch,
+            "stateful resume entry must accept state, outcome i64, evidence bytes and return the transition product",
         ));
     }
     Ok(())
 }
 
+fn parameter_type(
+    snapshot: &crate::graph::Snapshot,
+    parameter: crate::ids::NodeId,
+) -> Result<SemanticType> {
+    let Node::Parameter { ty, .. } = snapshot.node(parameter)? else {
+        return Err(LkError::new(
+            ErrorCode::InvalidContainment,
+            "application function parameter is malformed",
+        ));
+    };
+    Ok(*ty)
+}
+
 fn encode_application(
     graph: &ReleaseGraph,
     entry: ApplicationTarget,
-    profile: InvocationProfile,
+    profile: &InvocationProfile,
     policy: RunPolicy,
     tests: &[ApplicationTestCase],
 ) -> Result<Vec<u8>> {
     let mut payload = Writer::new();
     payload.fixed(&graph.root().as_bytes());
     put_target(&mut payload, entry);
-    payload.u8(profile.stable_tag());
+    put_profile(&mut payload, profile);
     put_policy(&mut payload, policy);
     put_count(&mut payload, tests.len())?;
     for test in tests {
@@ -833,9 +1235,7 @@ fn decode_application(bytes: &[u8]) -> Result<DecodedApplication> {
     let mut payload_reader = Reader::new(payload);
     let root_release = ReleaseId::from_bytes(read_digest(&mut payload_reader)?);
     let entry = read_target(&mut payload_reader)?;
-    let profile =
-        InvocationProfile::from_stable_tag(payload_reader.u8().map_err(application_codec)?)
-            .ok_or_else(|| corrupt("application invocation profile tag is unknown"))?;
+    let profile = read_profile(&mut payload_reader)?;
     let policy = read_policy(&mut payload_reader)?;
     let test_count = payload_reader
         .count(MAXIMUM_APPLICATION_TESTS)
@@ -885,7 +1285,8 @@ fn decode_application(bytes: &[u8]) -> Result<DecodedApplication> {
     let root = decoded.remove(root_position);
     let graph = ReleaseGraph::new(root, decoded)?;
     let flattened = graph.flatten()?;
-    validate_manifest(&graph, &flattened, entry, profile, policy, &tests).map_err(decoded_error)?;
+    validate_manifest(&graph, &flattened, entry, &profile, policy, &tests)
+        .map_err(decoded_error)?;
     let application = DecodedApplication {
         bytes: bytes.to_vec(),
         graph,
@@ -899,7 +1300,7 @@ fn decode_application(bytes: &[u8]) -> Result<DecodedApplication> {
     if encode_application(
         &application.graph,
         application.entry,
-        application.profile,
+        &application.profile,
         application.policy,
         &application.tests,
     )? != bytes
@@ -1115,7 +1516,7 @@ fn inspection(application: &DecodedApplication) -> Result<ApplicationInspection>
         graph_digest: graph_digest(&application.graph),
         root_release: application.graph.root(),
         entry: application.entry,
-        profile: application.profile,
+        profile: application.profile.clone(),
         policy: application.policy,
         releases,
         graph_edges: u64::try_from(application.graph.edge_count()).unwrap_or(u64::MAX),
@@ -1369,6 +1770,34 @@ fn read_value(reader: &mut Reader<'_>) -> Result<ApplicationValue> {
 fn put_target(writer: &mut Writer, target: ApplicationTarget) {
     writer.fixed(&target.release.as_bytes());
     writer.u64(target.item.get());
+}
+
+fn put_profile(writer: &mut Writer, profile: &InvocationProfile) {
+    writer.u8(profile.stable_tag());
+    if let InvocationProfile::Stateful(stateful) = profile {
+        put_target(writer, stateful.resume);
+        put_target(writer, stateful.decision);
+        put_target(writer, stateful.state_field);
+        put_target(writer, stateful.response_field);
+        put_target(writer, stateful.command_field);
+        put_target(writer, stateful.target_field);
+    }
+}
+
+fn read_profile(reader: &mut Reader<'_>) -> Result<InvocationProfile> {
+    Ok(match reader.u8().map_err(application_codec)? {
+        1 => InvocationProfile::Typed,
+        2 => InvocationProfile::BytesStream,
+        3 => InvocationProfile::Stateful(StatefulApplicationProfile {
+            resume: read_target(reader)?,
+            decision: read_target(reader)?,
+            state_field: read_target(reader)?,
+            response_field: read_target(reader)?,
+            command_field: read_target(reader)?,
+            target_field: read_target(reader)?,
+        }),
+        _ => return Err(corrupt("application invocation profile tag is unknown")),
+    })
 }
 
 fn read_target(reader: &mut Reader<'_>) -> Result<ApplicationTarget> {

@@ -52,14 +52,6 @@ pub struct BoundaryError {
     pub message: String,
 }
 
-// The typed response remains direct; boxing only one transport arm would add allocation to every RPC.
-#[allow(clippy::large_enum_variant)]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum DaemonResponseEnvelope {
-    Response(ResponseEnvelope),
-    BoundaryError(BoundaryErrorEnvelope),
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BoundaryErrorKind {
@@ -181,46 +173,6 @@ pub fn decode_response(bytes: &[u8]) -> Result<ResponseEnvelope, MachineError> {
     let envelope: ResponseEnvelope = decode_response_json(bytes)?;
     require_response_version(envelope.version)?;
     Ok(envelope)
-}
-
-pub fn decode_daemon_response(
-    bytes: &[u8],
-    expected_request_id: RequestId,
-) -> Result<DaemonResponseEnvelope, MachineError> {
-    require_nonzero_request_id(expected_request_id)?;
-    #[allow(clippy::large_enum_variant)]
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum WireEnvelope {
-        Response(ResponseEnvelope),
-        BoundaryError(BoundaryErrorEnvelope),
-    }
-
-    match decode_response_json::<WireEnvelope>(bytes)? {
-        WireEnvelope::Response(envelope) => {
-            require_response_version(envelope.version)?;
-            if envelope.request_id != expected_request_id {
-                return Err(MachineError::new(
-                    BoundaryErrorKind::InvalidJson,
-                    "response request identity does not match request",
-                ));
-            }
-            Ok(DaemonResponseEnvelope::Response(envelope))
-        }
-        WireEnvelope::BoundaryError(envelope) => {
-            require_response_version(envelope.version)?;
-            if envelope
-                .request_id
-                .is_some_and(|request_id| request_id != expected_request_id)
-            {
-                return Err(MachineError::new(
-                    BoundaryErrorKind::InvalidJson,
-                    "boundary error request identity does not match request",
-                ));
-            }
-            Ok(DaemonResponseEnvelope::BoundaryError(envelope))
-        }
-    }
 }
 
 fn decode_response_json<T>(bytes: &[u8]) -> Result<T, MachineError>

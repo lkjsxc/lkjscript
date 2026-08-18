@@ -1,111 +1,131 @@
 # Application artifact, exact-graph test, and invocation contracts
 
-This specification owns the runnable application domain: exact release-graph selection, immutable
-application cases, canonical bytes, inspection, publication, and pure invocation. Reusable-release
-semantics are owned by [reusable-release.md](reusable-release.md). An application is not a
-workspace, release, resolver state, executable cache, provenance statement, or deployment.
+This specification owns immutable runnable applications: exact release-graph selection, entry
+interfaces, application cases, canonical bytes, inspection, publication, and pure invocation.
+Reusable releases are specified in [reusable-release.md](reusable-release.md); mutable operation is
+specified in [instance.md](instance.md). An application is not a workspace, release, instance,
+capability grant, deployment slot, resolver state, executable cache, or provenance statement.
 
 ## Authority and build
 
-Application command contract version 2 accepts an `ApplicationBuildRequest` containing:
+Application command contract version 3 accepts one strict `ApplicationBuildRequest` containing:
 
 - one exact root `ReleaseId`;
-- one exported function target as `(ReleaseId, ReleaseItemId)`;
-- `typed` or `bytes_stream` invocation profile;
+- one exported entry target as `(ReleaseId, ReleaseItemId)`;
+- one closed invocation profile;
 - one exact `RunPolicy`; and
-- one or more lexically named application invocation cases, including the entry.
+- one or more named exact application cases, including the entry.
 
-Every release in the complete exact graph is supplied explicitly as hostile artifact bytes.
-Application build never opens a workspace, consults HEAD, resolves a coordinate or user version,
-uses a mutable store, or fetches from a network. `ReleaseGraph` independently decodes every object,
-requires exactly the reachable closure, validates exact dependency slots and imports, rejects
-cycles, privately flattens the graph, compiles the entry through the verified Core-IR path, and runs
-every embedded release case and application case. Only an all-pass prepared object can publish.
+Every release in the complete graph is supplied explicitly as hostile artifact bytes. Build never
+opens a workspace, resolves a coordinate or user version, consults mutable HEAD, uses a store, or
+fetches from a network. `ReleaseGraph` independently decodes the exact reachable closure, validates
+imports and dependency slots, rejects cycles and private targets, flattens nominal identity, lowers
+through verified Core IR, and runs all embedded release and application cases. Only an all-pass
+prepared object may publish.
 
-Distinct exact releases remain distinct through flattening. One exact release reached through a
-diamond is decoded once and mapped once. Imported nominal proxy declarations redirect to the exact
-dependency release and item; compiler-dense IDs and runtime tags remain derived and never become
-artifact identity.
+Distinct releases remain distinct. A release reached twice through a diamond is decoded and mapped
+once. Compiler IDs, Core IDs, layout tags, and runtime handles are derived and absent from the
+artifact.
 
-## Canonical application artifact version 2
+## Invocation profiles
+
+The version-3 JSON profile is a closed tagged object:
+
+- `{"kind":"typed"}` permits exact typed invocation;
+- `{"kind":"bytes_stream"}` requires one `bytes -> bytes` entry; or
+- `{"kind":"stateful","data":{...}}` declares the stateful interface below.
+
+The stateful profile names one exported event entry, which is also the application entry, one
+exported resume entry, one nominal `Decision` product, and its exact four fields. The event entry
+has signature `(State, Event) -> Decision`; `State` and `Event` must be nominal. Resume has signature
+`(State, i64, bytes) -> Decision`. `Decision` has exactly these fields in declaration order:
+
+```text
+state: State
+response: bytes
+command: i64
+target: bytes
+```
+
+The command tag is `0` completed, `1` validate an exact application, `2` activate an exact
+application, or `3` reconcile activation. Tag zero requires an empty target. Every nonzero tag
+requires exactly one 32-byte application digest. Unknown tags and impossible tag/target
+combinations reject. The result is ordinary typed semantic data; evaluating either entry performs
+no host action and publishes no state. No stack, continuation, compiler ID, live handle, or
+capability is persisted.
+
+Host outcome tags and the durable suspension protocol are owned by
+[instance.md](instance.md). Application format 3 declares required semantic intent, not authority;
+an instance supplies the exact grant.
+
+## Canonical application artifact version 3
 
 The envelope contains, in order:
 
-- magic `LKJAPP\0\x02` and little-endian format `2`;
+- magic `LKJAPP\0\x03` and little-endian format `3`;
 - semantic schema `lkjscript-tsm006`;
 - a checked little-endian payload length;
 - one canonical payload; and
-- a 32-byte BLAKE3 digest derived under `lkjscript.application-artifact.v2`.
+- a 32-byte BLAKE3 digest derived under `lkjscript.application-artifact.v3`.
 
-The payload contains the root release ID, exact entry, profile, policy, canonical application
-cases, and every exact release artifact once in strict `ReleaseId` order. Embedded release bytes
-remain independently valid release authorities; the application container does not reinterpret
-their coordinate, exports, dependencies, tests, or nominal identities. The application graph
-digest uses the separate `lkjscript.application-release-graph.v1` domain.
+The payload contains the root release ID, entry, complete profile, run policy, canonical cases, and
+every exact release artifact once in strict `ReleaseId` order. The embedded release bytes remain
+independent release authorities. The graph digest uses
+`lkjscript.application-release-graph.v1`.
 
-An application artifact is limited to 256 MiB. The embedded graph retains the release limits of
-256 releases, 4,096 edges, depth 64, and 256 MiB aggregate release bytes. Application cases are
-limited to 256, 64-byte names matching `[a-z][a-z0-9_]*`, 1 MiB per encoded public value, and
-100,000,000 aggregate declared fuel. Runtime values, arguments, frames, fuel, and stream input have
-their independently reported interpreter limits.
+An application artifact is limited to 256 MiB. Its graph is limited to 256 releases, 4,096 edges,
+depth 64, and 256 MiB of aggregate release bytes. Cases are limited to 256, names to 64 bytes
+matching `[a-z][a-z0-9_]*`, public-value JSON to 1 MiB, and aggregate declared suite fuel to
+100,000,000. Runtime values, arguments, frames, fuel, and stream input have independent interpreter
+limits.
 
-The decoder checks sizes before allocation; rejects wrong magic, old format 1, wrong schema,
-unknown tags, invalid local IDs, duplicate or noncanonical ordering, missing or extra releases,
-cycles, private targets, malformed values, digest mismatch, truncation, and trailing bytes;
-reconstructs and validates the exact graph; and requires byte-identical re-encoding. Corruption is
-rejected before compilation or execution. There is no compatibility reader.
+The decoder checks length before allocation and rejects wrong magic, application format 2 and all
+other versions, wrong schema, unknown tags, invalid IDs, duplicate or noncanonical order, an
+incomplete or excessive graph, private targets, malformed public values, digest mismatch,
+truncation, trailing bytes, and non-byte-identical re-encoding. Corruption rejects before compile or
+execution. There is no compatibility reader.
 
-The payload excludes workspace identity and history, revision identity, mutable resolution input,
-filesystem paths, idempotency state, aliases, proposal text, caches, Core IR, ownership plans,
-runtime handles, timestamps, provenance, signatures, attestations, and provider data.
+The payload excludes workspace and revision identity, instance identity and state, filesystem
+paths, grants, event keys, mutable resolution, proposal text, Core IR, ownership plans, runtime
+handles, clocks, provider data, signatures, and attestations.
 
 ## Application cases
 
-Application cases are immutable typed data, not semantic declarations and not a second assertion
-language. Each has one canonical name, exact exported function target, ordered exact public-value
-arguments, one expected value or stable trap, and one policy. At least one case targets the entry.
-Only exact value or trap equality passes; skipped, invalid, incomplete, cancelled, exhausted, or
-engine-failed cases do not pass.
+Cases are immutable exact inputs and expected values or stable traps, not semantic declarations and
+not a second assertion language. At least one case targets the entry. A stateful application also
+requires a case targeting resume. Only exact value or trap equality passes; skipped, invalid,
+incomplete, cancelled, exhausted, and engine-failed cases do not pass.
 
-Public nominal values carry exact release/item pairs for their type, fields, and variants. A value
-from R2 does not satisfy an R1 type even when coordinate, user version, display names, local
-ordinals, and structure match. Two paths to the same exact release do satisfy one nominal type.
+Public nominal values carry exact release/item identities. Structurally equal types from distinct
+releases remain distinct. Test digests retain domain `lkjscript.application-test-case.v2` because
+the case representation did not change; they are bounded review keys, not durable identity.
+Application tests are pure and cannot execute production host actions.
 
-Application test digests use `lkjscript.application-test-case.v2`. They are bounded review keys,
-not durable identities. Test runs do not mutate semantic authority. The test report includes every
-embedded release case followed by application cases under closed status variants.
+## Pure invocation
 
-## Invocation
-
-`typed` accepts strict version-2 JSON:
+Typed invocation accepts strict version-3 JSON, for example:
 
 ```json
-{"version":2,"arguments":[{"kind":"bytes","data":"YWJj"}]}
+{"version":3,"arguments":[{"kind":"bytes","data":"YWJj"}]}
 ```
 
-Each value is checked against the exact flattened entry signature before execution. Output reports
-contract version 2, application digest, exact public value, and compile/execute observations.
+Arguments are validated against the exact flattened signature before execution. The response binds
+contract version 3, application digest, exact public value, and nonsemantic compile/execute
+observations. Invoking stateful entries this way is only pure evaluation; the returned `Decision`
+does not become instance authority.
 
-`bytes_stream` is legal only for an entry accepting one `bytes` and returning `bytes`. It reads at
-most 65,536 uninterpreted standard-input bytes and writes exactly the result bytes. It grants no
-filesystem, environment, network, clock, randomness, process, or signal authority. Both profiles
-use the artifact policy and the explicit-frame interpreter.
+`bytes_stream` reads at most 65,536 uninterpreted standard-input bytes and writes exactly the
+result bytes. It grants no filesystem, environment, network, clock, randomness, process, or signal
+authority. All profiles use the artifact policy and explicit-frame interpreter.
 
-## Files and publication
+## Files, publication, and commands
 
-Artifact paths are absolute lexically canonical Unix paths no longer than 4,096 bytes. Dot, parent,
-empty, repeated-separator, symlink-parent, symlink-input, and non-regular input forms reject.
-Publication uses a private mode-0600 temporary file in the destination directory, complete write,
-file synchronization, atomic no-replace hard link, temporary removal, and directory
-synchronization. It never overwrites.
-
-A failure before the public link is a known failure and leaves no destination. Any modeled failure
-after the link is `artifact_publication_outcome_unknown`; the caller must reconcile the exact path
-and must not silently retry. Deterministic tests inject every retained write/sync/link/cleanup edge.
-Concurrent hostile directory administration and the operating-system/filesystem implementation
-remain in the trusted local-host boundary; this is not a sandbox claim.
-
-## Public commands
+Artifact paths are bounded absolute lexically canonical Unix paths. Dot, parent, empty,
+repeated-separator, symlink-parent, symlink-input, and non-regular forms reject. Publication writes
+and synchronizes a private same-directory temporary, atomically creates the destination without
+replacement, removes the temporary, and synchronizes the directory. Failure before the public link
+is known no-change. Failure after the link is `artifact_publication_outcome_unknown`; callers must
+reconcile and must not silently repeat publication.
 
 ```text
 app build --release FILE [--release FILE ...] (--validate-only | --output FILE)
@@ -116,17 +136,17 @@ app run --artifact FILE
 app stream --artifact FILE
 ```
 
-Build and typed run consume strict bounded JSON. Validate and inspect never run code. Test executes
-the complete embedded suite. Artifact operations need only the one application file.
+Build and typed run consume bounded strict JSON. Validate and inspect never execute program code.
+Test executes the embedded pure suite. One application file is sufficient after every source
+workspace and standalone release artifact is removed.
 
-Exit classes are `0` success, `2` usage/JSON, `3` transport or filesystem I/O, `4` output failure,
-`5` corrupt artifact or unknown publication outcome, `6` application contract/profile rejection,
-`7` trap or failed test verdict, and `8` resource exhaustion. Diagnostics are bounded and
-terminal-safe.
+Exit classes are `0` success, `2` usage/JSON, `3` filesystem/authority I/O, `4` output failure,
+`5` corrupt artifact or unknown publication, `6` application contract/profile rejection, `7` trap
+or failed case, and `8` resource exhaustion.
 
 ## Explicit absences
 
-Application format 2 embeds a target-neutral semantic release graph. It contains no external-store
-dependency, resolver, lockfile, network registry, native code, bytecode, serialized Core IR,
-executable cache, platform ABI, host permission, external resource, signature, provenance, or
-deployment contract. Application format 1 and `LKJAPP\0\x01` reject directly.
+Application format 3 contains no dependency store, resolver, registry, native code, bytecode,
+serialized Core IR, executable cache, host permission, live resource, opaque continuation,
+scheduler, signature, or provenance. Application format 2 (`LKJAPP\0\x02`) and older forms reject
+directly.

@@ -1,89 +1,65 @@
 # lkjscript
 
-`lkjscript` is a local typed semantic programming system designed for coding agents. An agent can
-author immutable workspace revisions, publish one workspace-independent reusable semantic release,
-bind exact releases from other workspaces, and build a single-file application that remains
-valid, testable, and runnable after every source workspace is removed.
+`lkjscript` is a local typed semantic programming system designed for coding agents. Agents author
+immutable workspace revisions, publish workspace-independent reusable releases, build single-file
+applications, and operate exact durable application instances. Accepted meaning, durable state,
+host intent, and host authority remain separate typed domains.
 
-Accepted program meaning has one typed representation. Documents and JSON are proposals; context
-and review are bounded views; canonical release/application bytes are immutable distribution
-authorities; Core IR, ownership plans, compiler IDs, and runtime handles are derived. Deterministic
-Rust validators decide acceptance.
+The retained stateful model is deliberately small: a pure application transition returns the next
+typed state, a bounded response, and either completion or one typed command. The instance store
+publishes that state atomically. A separately granted host executor records success, known failure,
+or unknown visibility; only another pure transition can consume the result. Possibly visible work is
+never retried automatically.
 
-## Reusable-release proof
+## Durable controller proof
 
-The retained production workflow authors `shared-codec` with four exports, a nominal `Frame`, a
-private helper, and release cases. It builds canonical-equal R1 bytes from unrelated workspace and
-allocator histories, then builds a distinct R2 under the same human coordinate. Independent
-`consumer-normalizer` and `consumer-inspector` releases consume different R1 exports.
+The public `durable-controller` example authors a release controller through workspace RPC, builds
+release and application artifacts, deletes the source workspace and standalone release, and then
+operates two isolated instances after repeated process restart.
 
-The same example proves both versions coexist without nominal unification and constructs this exact
-diamond:
-
-```text
-release-diamond
-  -> consumer-normalizer -> shared-codec R1
-  -> consumer-inspector  -> shared-codec R1
-```
-
-R1 occurs once in the validated application graph. The driver rejects private access, corrupted,
-missing, and extra dependencies, and R2-for-R1 nominal substitution. It removes the complete state
-directory and then byte-identically rebuilds, validates, inspects, tests, typed-runs, and
-stream-runs four applications using immutable files only.
+The primary instance validates and atomically activates one exact application in one granted local
+slot using the production executor. The second is bound to the deterministic fake executor and
+proves denied cross-executor authority, unknown activation outcome, explicit reconciliation,
+known failure, retry, cancellation, duplicate delivery, stale-base rejection, bounded history,
+corruption rejection, tombstoned identity, and no reuse.
 
 ```sh
 cargo build --release --locked
-examples/reusable-release/run.sh
+examples/durable-controller/run.sh
 ```
 
-`examples/binary-canonicalizer/run.sh` remains the larger repair/history/runtime workload and now
-publishes its semantic program as a reusable release before building application format 2.
+The slot capability is not a general filesystem API or sandbox. It accepts one explicit regular
+application file below one granted source directory and can replace only one exact activation slot.
+The local OS account, executable, kernel, and POSIX-like filesystem remain trusted.
 
-## Exact release and application commands
+## Public artifacts and commands
 
-Release construction names an exact workspace and revision in strict contract-version-1 JSON:
+Reusable release format 1 is `LKJREL\0\x01`. Application format 3 is
+`LKJAPP\0\x03`; it embeds the complete exact release graph and may declare `typed`,
+`bytes_stream`, or `stateful` invocation. Both remain usable after all source workspaces are
+removed. Application format 2 and older forms reject directly.
 
 ```text
-lkjscript release build --state DIR [--dependency FILE ...] --validate-only
-lkjscript release build --state DIR [--dependency FILE ...] --output /absolute/release.lkjr
-lkjscript release validate --artifact /absolute/release.lkjr
-lkjscript release inspect --artifact /absolute/release.lkjr
-lkjscript release test --artifact /absolute/release.lkjr [--dependency FILE ...]
+lkjscript release build|validate|inspect|test ...
+lkjscript app build|validate|inspect|test|run|stream ...
+
+lkjscript instance create ...
+lkjscript instance validate-event|apply-event ...
+lkjscript instance validate-application|execute-activation|reconcile-activation ...
+lkjscript instance fake-outcome ...
+lkjscript instance validate-resume|resume ...
+lkjscript instance inspect|history|delete ...
 ```
 
-The canonical release format is `LKJREL\0\x01`, format 1, schema `lkjscript-tsm006`. Its exact
-`ReleaseId` is a domain-separated digest of the complete canonical payload. Coordinate and user
-version are immutable human metadata, not dependency or nominal identity. Exports and dependency
-slots are explicit; consumers can target only exports. Provenance and signatures are explicitly
-absent.
-
-Application build consumes a complete explicit exact-release graph in strict contract-version-2
-JSON. It never opens a workspace or resolves a name, version, HEAD, store, or network result:
-
-```text
-lkjscript app build --release FILE [--release FILE ...] --validate-only
-lkjscript app build --release FILE [--release FILE ...] --output /absolute/application.lkja
-lkjscript app validate --artifact /absolute/application.lkja
-lkjscript app inspect --artifact /absolute/application.lkja
-lkjscript app test --artifact /absolute/application.lkja
-lkjscript app run --artifact /absolute/application.lkja
-lkjscript app stream --artifact /absolute/application.lkja
-```
-
-Application format 2 (`LKJAPP\0\x02`) embeds every reachable release once plus one entry,
-invocation profile, policy, and application cases. Every build runs all release and application
-cases. Every load independently validates and canonically re-encodes the complete graph before
-compile or execution. Format 1 rejects; there is no compatibility reader.
-
-`typed` values carry exact release/item identity for nominal types and members. `bytes_stream`
-accepts exactly one `bytes -> bytes` export, reads at most 65,536 uninterpreted standard-input
-bytes, and writes exactly the semantic result. Neither profile grants filesystem, environment,
-network, clock, randomness, or process authority.
+Instance contract and durable format version 1 use full canonical typed state records, a validated
+HEAD, exact event-key receipts, and deterministic replay. State, event, history, response, command,
+evidence, retry, and replay work have independent bounds. An instance embeds its exact application,
+retains every revision and unresolved outcome, and never reuses a deleted identity.
 
 ## Agent authoring
 
-Normal development uses one `lkjscript` process under an exclusive local state lock; no background
-service is required.
+Normal development uses the one `lkjscript` binary under an exclusive local state lock. No daemon
+or background service is installed.
 
 ```sh
 STATE=$(mktemp -d)
@@ -96,36 +72,33 @@ target/release/lkjscript agent context \
 ```
 
 `agent view` and `agent diff` provide bounded deterministic review. `agent document`, `validate`,
-and `apply` use one exact-base, schema-bound editable document. `agent run` selects an exact
-revision and function. Normal authoring needs no global schema dump; exact context and schema
-digests support compact unchanged results.
-
-`lkjscript --state DIR session` amortizes Engine startup for line-delimited protocol-v10 requests.
-The optional `lkjscriptd` socket adapter remains only for its framed client, correlation, timeout,
-disconnect, shutdown, and authority-lock diagnostics; it calls the same Engine.
+and `apply` use one exact-base, schema-bound editable document. `agent run` selects an exact revision
+and function. A line-delimited `session` amortizes Engine startup without introducing an implicit
+current workspace, application, or instance. Release, application, and instance commands own small
+command-local contracts rather than expanding the global workspace schema.
 
 ## Semantic and runtime model
 
-Workspaces use durable IDs for continuity-bearing declarations, members, functions, parameters,
-and repairable holes, plus revision-bound function-local IDs for body structure. Release projection
-erases both domains and assigns canonical local IDs. Public release nominal identity is exactly
-`(ReleaseId, ReleaseItemId)`; compiler and runtime tags remain private derivatives.
+The language supports `unit`, `bool`, checked `i64`, immutable `bytes`, nominal immutable products
+and sums, calls, conditions, counted loops, exhaustive matching, construction/projection, typed
+holes, returns, and yields. Stateful operation added no direct host effect, capability value,
+collection, clock, randomness, thread, or opaque continuation. Expected workflow outcomes are
+ordinary nominal data; corruption, traps, resource exhaustion, and authority rejection remain
+distinct.
 
-The language supports `unit`, `bool`, checked `i64`, immutable `bytes`, immutable nominal records,
-fixed variants, calls, conditions, counted loops, exhaustive lazy matching, exact
-construction/projection, and typed holes. Only a complete selected closure enters independently
-verified Core IR. One explicit-frame interpreter is the correctness oracle.
+Only a complete selected closure enters independently verified Core IR. The explicit-frame
+interpreter is the correctness oracle. Managed immutable bytes retain an allocate-new differential
+oracle. Full workspace snapshots, full instance state snapshots, deterministic scans, and embedded
+application release graphs remain because current workloads do not cross their replacement gates.
 
-Managed immutable bytes retain a verified optimization and an allocate-new differential oracle.
-Full workspace snapshots and deterministic query scans remain because current reusable-release
-workloads have not crossed their replacement gates. There is no registry, resolver, lockfile,
-mutable semantic store, signature system, host effect, sandbox, bytecode, JIT, AOT, or native-code
-artifact.
+There is no registry, online resolver, mutable dependency store, network or process capability,
+general filesystem access, daemon, database, scheduler, secret store, encryption, bytecode, JIT,
+native application artifact, or hostile-host isolation.
 
 ## Verification
 
-The supported bootstrap is stable Rust edition 2024 on Linux x86-64. The crate forbids local unsafe
-Rust.
+The supported bootstrap is stable Rust edition 2024 on Linux x86-64. The crate contains no local
+unsafe Rust.
 
 ```sh
 cargo fmt --all -- --check
@@ -135,27 +108,18 @@ cargo build --workspace --release --locked
 git diff --check
 ```
 
-Run retained public workflows with:
-
-```sh
-for example in \
-  job-policy named-data release-channel release-manifest \
-  binary-canonicalizer reusable-release agent-maintenance
-do
-  "examples/$example/run.sh"
-done
-```
-
-This is not a formal proof, hostile-host sandbox, cross-platform claim, registry, or production
-deployment system. The trusted computing base includes Rust, Cargo, resolved dependencies, the
-operating system, filesystem, and CPU.
+Retained public workflows are under `examples/`; `durable-controller`, `reusable-release`, and
+`binary-canonicalizer` are the principal complete workloads. This repository does not claim formal
+verification, cross-platform operation, crash safety beyond its documented local-filesystem model,
+or a production multi-user deployment system.
 
 ## Current documentation
 
 - [typed semantic program and identity model](docs/spec/semantic-model.md)
 - [language](docs/spec/language.md)
 - [reusable semantic releases](docs/spec/reusable-release.md)
-- [application artifact and invocation](docs/spec/application.md)
+- [application artifacts](docs/spec/application.md)
+- [durable instances and activation](docs/spec/instance.md)
 - [protocol and editable documents](docs/spec/protocol.md)
 - [architecture](docs/architecture.md)
 - [implemented status](docs/status.md)

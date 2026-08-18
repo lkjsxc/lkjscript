@@ -11,12 +11,12 @@ mod codec;
 mod compile;
 mod contract;
 mod core_ir;
-pub mod daemon;
 pub mod diff;
 pub mod engine;
 pub mod error;
 pub mod graph;
 pub mod ids;
+pub mod instance;
 pub mod interpret;
 pub mod machine;
 mod machine_contract;
@@ -28,7 +28,6 @@ pub mod query;
 pub mod release;
 pub mod schema;
 pub mod transaction;
-pub mod transport;
 pub mod type_layout;
 mod validate;
 pub mod workbench;
@@ -42,13 +41,22 @@ pub use application::{
     ApplicationInvocation, ApplicationLimits, ApplicationReleaseInspection, ApplicationRunReceipt,
     ApplicationRunResult, ApplicationTarget, ApplicationTestCase, ApplicationTestDigest,
     ApplicationTestExpectation, ApplicationTestReport, ApplicationTestResult,
-    ApplicationTestStatus, ApplicationTrap, ApplicationTrapCode, ApplicationValue,
-    InvocationProfile,
+    ApplicationTestStatus, ApplicationTrap, ApplicationTrapCode, ApplicationValue, HostOutcomeKind,
+    InvocationProfile, StatefulApplicationProfile, StatefulCommand, StatefulCommandKind,
+    StatefulTransition,
 };
 pub use error::{ErrorCode, LkError, Result};
 pub use ids::{
     ChangeDigest, DraftSymbol, IdempotencyKey, NodeId, NodeIdentityClass, QueryId, RequestId,
     Revision, SnapshotHash, WorkspaceId,
+};
+pub use instance::{
+    ActivationGrant, ActivationGrantDigest, CommandId, HostExecutionReceipt, HostExecutorKind,
+    INSTANCE_CONTRACT_VERSION, INSTANCE_FORMAT_VERSION, InstanceCreateReceipt,
+    InstanceCreateRequest, InstanceDeleteRequest, InstanceEventRequest, InstanceFakeHostRequest,
+    InstanceHistoryItem, InstanceHistoryPage, InstanceHostRequest, InstanceId, InstanceInspection,
+    InstanceMode, InstancePolicy, InstanceResumeRequest, InstanceStore, InstanceTransitionReceipt,
+    InstanceTransitionStatus, PendingCommand, StateDigest,
 };
 pub use interpret::{RunPolicy, RuntimeFieldValue, RuntimeValue};
 pub use machine::{
@@ -78,4 +86,3 @@ pub use transaction::{
     Transaction, TransactionMode, TransactionOp, TransactionOpCode, TransactionReceipt,
     TransactionResponseSpec, YieldingBodyDraft,
 };
-pub use transport::Client;

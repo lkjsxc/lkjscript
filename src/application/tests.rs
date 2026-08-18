@@ -108,13 +108,13 @@ fn request(fixture: &DiamondFixture) -> ApplicationBuildRequest {
 }
 
 #[test]
-fn bundled_graph_application_is_canonical_offline_and_rejects_v1() {
+fn bundled_graph_application_is_canonical_offline_and_rejects_v2() {
     let fixture = diamond_fixture();
     let request = request(&fixture);
     let prepared = prepare(&request, &fixture.releases).expect("prepare application");
     let artifact = prepared.bytes().to_vec();
     let inspection = inspect(&artifact).expect("inspect application");
-    assert_eq!(inspection.format_version, 2);
+    assert_eq!(inspection.format_version, 3);
     assert_eq!(inspection.root_release, fixture.root);
     assert_eq!(inspection.releases.len(), 4);
     assert_eq!(inspection.graph_edges, 4);
@@ -154,9 +154,9 @@ fn bundled_graph_application_is_canonical_offline_and_rejects_v1() {
         artifact
     );
 
-    let old = b"LKJAPP\0\x01";
+    let old = b"LKJAPP\0\x02";
     assert_eq!(
-        validate(old).expect_err("application v1 rejection").code,
+        validate(old).expect_err("application v2 rejection").code,
         ErrorCode::ArtifactCorrupt
     );
     for end in 0..artifact.len() {
@@ -168,6 +168,22 @@ fn bundled_graph_application_is_canonical_offline_and_rejects_v1() {
         validate(&trailing).expect_err("trailing").code,
         ErrorCode::ArtifactCorrupt
     );
+}
+
+#[test]
+fn application_v3_profile_and_contract_json_reject_v2_shapes() {
+    assert_eq!(
+        validate_contract_version(2)
+            .expect_err("application contract v2 rejection")
+            .code,
+        ErrorCode::ProtocolVersion
+    );
+    assert!(serde_json::from_str::<InvocationProfile>(r#""typed""#).is_err());
+    assert_eq!(
+        serde_json::from_str::<InvocationProfile>(r#"{"kind":"typed"}"#).expect("tagged profile"),
+        InvocationProfile::Typed
+    );
+    assert!(serde_json::from_str::<InvocationProfile>(r#"{"kind":"typed","extra":0}"#).is_err());
 }
 
 #[test]

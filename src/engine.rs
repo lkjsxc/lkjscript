@@ -3,11 +3,11 @@
 use crate::error::{ErrorCode, LkError, Result};
 use crate::ids::{RequestId, WorkspaceId};
 use crate::interpret;
+use crate::machine;
 use crate::persistence::{self, DurableWorkspace};
 use crate::protocol::{Request, Response};
 use crate::query;
 use crate::release::{PreparedRelease, ReleaseBuildRequest};
-use crate::{machine, transport};
 use fs2::FileExt;
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
@@ -26,7 +26,6 @@ pub struct Engine {
 #[derive(Debug)]
 pub(crate) struct HandledResponse {
     pub(crate) response: Response,
-    pub(crate) bytes: Vec<u8>,
 }
 
 impl Engine {
@@ -120,11 +119,10 @@ impl Engine {
             Request::ApplyTransaction(request) => {
                 let fingerprint = machine::transaction_fingerprint(&request)?;
                 let workspace = self.workspace_mut(request.transaction.workspace)?;
-                let (receipt, bytes) =
+                let (receipt, _preflighted_bytes) =
                     workspace.apply_with_response(&request, fingerprint, request_id)?;
                 return Ok(HandledResponse {
                     response: Response::TransactionReceipt(receipt),
-                    bytes,
                 });
             }
             Request::QueryBatch(batch) => {
@@ -204,28 +202,13 @@ pub(crate) fn encode_handled(request_id: RequestId, response: Response) -> Resul
             format!("response could not satisfy JSON boundary policy: {error}"),
         )
     })?;
-    if bytes.len() > transport::MAXIMUM_RESPONSE_FRAME_BYTES {
+    if bytes.len() > machine::MAX_JSON_OUTPUT_BYTES {
         return Err(LkError::new(
             ErrorCode::PolicyExceeded,
-            "response exceeds the transport response policy",
+            "response exceeds the machine JSON output policy",
         ));
     }
-    Ok(HandledResponse { response, bytes })
-}
-
-pub(crate) fn encode_error_handled(
-    request_id: RequestId,
-    error: LkError,
-) -> Result<HandledResponse> {
-    encode_handled(request_id, Response::Error(error)).or_else(|_| {
-        encode_handled(
-            request_id,
-            Response::Error(LkError::new(
-                ErrorCode::PolicyExceeded,
-                "response could not satisfy JSON boundary policy",
-            )),
-        )
-    })
+    Ok(HandledResponse { response })
 }
 
 fn acquire_authority_lock(state_directory: &Path) -> Result<File> {

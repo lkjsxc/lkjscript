@@ -1,0 +1,506 @@
+{
+  "evidence_class": "controlled_observation",
+  "campaign": "stateful-application-instance",
+  "date_utc": "2026-08-18",
+  "starting_commit": "18740edc55bd31162085c027d9e965163f1e119f",
+  "implementation_commit": null,
+  "evidence_reconciliation": "Measurements and verification describe the uncommitted final worktree based on starting_commit; this file deliberately has no self-referential ending commit.",
+  "branch": "main",
+  "worktree": {
+    "checkout_relation_to_audited_baseline": "equal",
+    "preexisting": [
+      "modified AGENTS.md",
+      "untracked prompts/202608181036.md"
+    ],
+    "preexisting_disposition": "preserved without assistant edits",
+    "ending_clean": false,
+    "remote_state_changed": false,
+    "commit_created": false
+  },
+  "historical_repository_observation": {
+    "local_branches": 207,
+    "remote_tracking_branches": 2,
+    "open_pull_requests": [
+      {
+        "number": 2,
+        "state": "open draft",
+        "head": "agent/application-closure-campaign",
+        "title": "Plan application closure and complexity reversal"
+      },
+      {
+        "number": 1,
+        "state": "open draft",
+        "head": "agent/nominal-data-match-schema-202608151647",
+        "title": "Plan nominal immutable data and exhaustive matching"
+      }
+    ],
+    "disposition": "historical evidence only; no branch or pull request was altered"
+  },
+  "effective_instructions": {
+    "root_agents_sha256": "0ff2bf906987f31937c11d12e3e50e60f8e10f5dd814d0f381c777b7e432e501",
+    "root_agents_bytes": 21881,
+    "root_budget_bytes": 24576,
+    "campaign_sha256": "07bf119e52cbf3dbda5c638a30339075e17e82576058c21248b4a9556d26c2f2",
+    "campaign_bytes": 320321
+  },
+  "environment": {
+    "os": "Linux",
+    "kernel": "7.0.0-29-generic",
+    "architecture": "x86_64",
+    "filesystem": "ZFS",
+    "filesystem_record_size_bytes": 131072,
+    "processor": "AMD Ryzen 9 9955HX",
+    "logical_cpus": 32,
+    "memory_gib": 32,
+    "rustc": "1.96.0",
+    "cargo": "1.96.0",
+    "rust_edition": 2024,
+    "cargo_lock_sha256": "d23b75fc162e485b7149d92f1e3349f3cca39f00420a9fef68f8abea6c405620"
+  },
+  "selected_architecture": {
+    "application_model": "immutable application format 3 with exact stateful event and resume entries",
+    "state_model": "caller-supplied typed initial state and one full canonical state record per contiguous revision",
+    "transition_model": "pure one-command suspension and resume using ordinary nominal values",
+    "host_model": "separate trusted in-process production executor plus executor-disjoint deterministic fake",
+    "capability_model": "one immutable instance-bound activation grant for one source directory and one slot",
+    "persistence_model": "immutable records and outcomes plus checksummed HEAD under one store-wide lock",
+    "concurrency_model": "strict serial order; stale exact bases reject",
+    "unknown_outcome_model": "attempt marker prevents repeat; typed unknown outcome requires explicit reconciliation and semantic resume",
+    "deletion_model": "tombstone retains authority and evidence and permanently forbids identity reuse",
+    "simple_oracle": "explicit-frame interpreter, full-history semantic replay, and deterministic fake host"
+  },
+  "rejected_candidates": [
+    {
+      "candidate": "pure state transition without commands",
+      "reason": "validation, activation, retry, and reconciliation intent moved into host orchestration",
+      "residue": "none"
+    },
+    {
+      "candidate": "ordered command batch or dependency graph",
+      "reason": "the workload has one causal command and batching adds collection, cursor, ordering, and partial-completion contracts",
+      "residue": "none"
+    },
+    {
+      "candidate": "opaque suspended interpreter continuation",
+      "reason": "would persist compiler or runtime control state as authority",
+      "residue": "none"
+    },
+    {
+      "candidate": "typed algebraic effects or direct capability calls",
+      "reason": "does not solve crash publication or unknown visibility and would make pure evaluation host-dependent",
+      "residue": "none"
+    },
+    {
+      "candidate": "external orchestration as application meaning",
+      "reason": "creates split authority and makes Rust or Python the real state machine",
+      "residue": "only non-authoritative public driver and test oracle retained"
+    },
+    {
+      "candidate": "journal, embedded database, or workflow engine",
+      "reason": "current five- and nine-record histories do not pay for the added storage, scheduler, dependency, or trust surface",
+      "residue": "none"
+    },
+    {
+      "candidate": "worker, daemon, or sandbox process",
+      "reason": "no hostile native code or multi-client authority currently consumes the topology",
+      "residue": "daemon, client, transport, binary, tests, exports, and documentation deleted"
+    }
+  ],
+  "public_contracts": {
+    "application": {
+      "contract_version": 3,
+      "artifact_version": 3,
+      "magic": "LKJAPP\\0\\x03",
+      "legacy": "format and contract 2 reject"
+    },
+    "instance": {
+      "contract_version": 1,
+      "state_magic": "LKJINS\\0\\x01",
+      "outcome_magic": "LKJOUT\\0\\x01",
+      "attempt_magic": "LKJATT\\0\\x01",
+      "head_magic": "LKJIHEAD with lkjscript.instance-head.v1 domain",
+      "legacy": "no predecessor"
+    },
+    "release": {
+      "contract_version": 1,
+      "artifact_version": 1,
+      "change": "none; existing nominal products, sums, and functions express the stateful interface"
+    },
+    "language": {
+      "change": "none"
+    },
+    "cli": [
+      "instance create",
+      "instance validate-event",
+      "instance apply-event",
+      "instance validate-application",
+      "instance execute-activation",
+      "instance reconcile",
+      "instance fake-outcome",
+      "instance validate-resume",
+      "instance resume",
+      "instance inspect",
+      "instance history",
+      "instance delete"
+    ]
+  },
+  "identity_domains": {
+    "application_digest": "exact immutable application content identity",
+    "instance_id": "caller-chosen 128-bit continuity identity, never allocated or reused by the store",
+    "state_revision": "contiguous instance-local publication sequence",
+    "state_digest": "domain-bound immutable state equality and integrity observation, never authority",
+    "event_key": "instance-scoped caller receipt and replay key bound to exact canonical external input",
+    "command_key": "derived instance/revision-local correlation key, never authority",
+    "grant_digest": "integrity identity for one immutable instance-bound authority descriptor",
+    "paths": "locators within a separately validated grant, never semantic identity or authority"
+  },
+  "limits": {
+    "maximum_state_bytes": 1048576,
+    "maximum_event_bytes": 1048576,
+    "maximum_history_bytes": 67108864,
+    "maximum_transitions": 10000,
+    "maximum_replay_work": 10000,
+    "maximum_history_page": 256,
+    "maximum_event_key_bytes": 96,
+    "maximum_grant_name_bytes": 64,
+    "maximum_host_evidence_bytes": 65536,
+    "maximum_instance_path_bytes": 4096,
+    "maximum_instance_record_bytes": 4194304,
+    "maximum_application_artifact_bytes": 268435456
+  },
+  "representative_workload": {
+    "name": "durable release controller",
+    "public_entry": "examples/durable-controller/run.sh",
+    "application_bytes": 19669,
+    "activated_payload_application_bytes": 16479,
+    "primary_head_revision": 4,
+    "primary_records": 5,
+    "primary_record_bytes": 6312,
+    "secondary_head_revision_before_tombstone": 8,
+    "source_workspaces_deleted_before_instance_operation": true,
+    "standalone_release_deleted_before_instance_operation": true,
+    "process_restart_between_instance_commands": true,
+    "duplicate_delivery_exercised": true,
+    "stale_base_exercised": true,
+    "two_instances_exercised": true,
+    "production_activation_exercised": true,
+    "unknown_outcome_and_reconciliation_exercised": true,
+    "corruption_exercised": true,
+    "tombstone_no_reuse_exercised": true,
+    "slot_bytes_equal_validated_target": true,
+    "authoring_rpc_calls": 2,
+    "engine_opens": 1,
+    "processes": 41,
+    "action_bytes": 56595,
+    "observation_bytes": 26419,
+    "summed_boundary_elapsed_ns": 485881456,
+    "provider_telemetry": null
+  },
+  "crash_matrix": {
+    "state_immutable_object": "faults before/after write, file sync, link visibility, cleanup, and directory sync",
+    "head": "faults before and after rename visibility and directory sync preserve old authority or report explicit unknown/new visibility",
+    "instance_directory": "faults around staging-directory rename visibility",
+    "activation": "previsibility faults are known no-change; faults after slot visibility or directory sync are unknown",
+    "host_attempt": "durable attempt marker prevents repeating a possibly visible activation",
+    "model": "finite explicit Rust state-machine tests; no external formal-tool claim"
+  },
+  "corruption_matrix": {
+    "generic_envelopes": "every truncation point and deterministic one-bit mutation",
+    "additional": [
+      "wrong magic",
+      "wrong version",
+      "wrong domain digest",
+      "noncanonical JSON",
+      "duplicate JSON fields",
+      "trailing bytes",
+      "missing or noncontiguous revisions",
+      "foreign application, instance, grant, command, event, and result identities",
+      "static symlink substitution in source parents and instance authority directories",
+      "canonical recomputed host-outcome artifact with command-incompatible forged success evidence",
+      "exact and one-over policy, key, path, state, event, history, and replay limits"
+    ]
+  },
+  "source_cost": {
+    "starting_src_and_tests_bytes": 2474799,
+    "starting_src_and_tests_lines": 70489,
+    "ending_src_and_tests_bytes": 2562705,
+    "ending_src_and_tests_lines": 72900,
+    "ending_files": 58,
+    "ending_src_bytes": 2303117,
+    "ending_src_lines": 65738,
+    "ending_tests_bytes": 259588,
+    "ending_tests_lines": 7162,
+    "byte_change": 87906,
+    "line_change": 2411,
+    "contract_rs_bytes": 153227,
+    "instance_semantic_owner_bytes": 87510,
+    "instance_cli_owner_bytes": 18838
+  },
+  "artifact_cost": {
+    "starting_lkjscript_release_bytes": 7920072,
+    "starting_lkjscriptd_release_bytes": 4252144,
+    "starting_combined_release_bytes": 12172216,
+    "ending_lkjscript_release_bytes": 8312104,
+    "ending_binary_targets": 1,
+    "combined_installed_byte_change": -3860112
+  },
+  "build_cost": {
+    "incremental_release_lto_seconds": 112.389,
+    "all_target_all_feature_test_seconds": 17.391,
+    "sample_count": 1,
+    "clean_build_measured": false,
+    "maximum_rss": null,
+    "maximum_rss_reason": "/usr/bin/time unavailable"
+  },
+  "agent_economy": {
+    "global_full_schema_bytes": 136796,
+    "global_schema_manifest_bytes": 1245,
+    "instance_help_bytes": 1777,
+    "historical_prompt_lines_deleted": 13147,
+    "provider_trials_run": false,
+    "provider_input_tokens": null,
+    "provider_cached_input_tokens": null,
+    "provider_output_tokens": null,
+    "provider_reasoning_tokens": null,
+    "provider_calls": null,
+    "exact_cost": null,
+    "claim": "command-local operation avoids loading the global catalogue; no token, cost, prompt-cache, or weak-model success claim is made"
+  },
+  "architecture_compression": {
+    "daemon": "deleted completely; direct Engine/session tests own unique retained lifecycle checks",
+    "global_contract": "retained for current workspace consumers; instance contract is command-local and no generator was added",
+    "managed_bytes": "retained with allocate-new oracle; no stateful regression justified replacement",
+    "workspace_snapshots_and_scans": "retained pending measured thresholds",
+    "instance_storage": "full records and HEAD selected; journal/database/compaction rejected",
+    "application_bundle": "embedded exact graph retained at observed sub-20-KiB workload sizes",
+    "compiler_and_interpreter": "one lowering/Core-verification/explicit-frame route retained",
+    "prompts": "two superseded tracked prompts deleted; active untracked user prompt preserved"
+  },
+  "audit_card_dispositions": [
+    {
+      "cards": ["001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011"],
+      "status": "retained",
+      "evidence": "The public durable controller selects exact application/instance identity, typed state and entries, contiguous revisions, exact dedupe, a closed decision value, and one-command suspension."
+    },
+    {
+      "cards": ["012"],
+      "status": "rejected",
+      "evidence": "No current transition needs independent commands; no sequence, execution cursor, dependency graph, or batch failure path remains."
+    },
+    {
+      "cards": ["013", "014", "015", "016", "017", "018", "019", "020"],
+      "status": "retained",
+      "evidence": "Exact typed outcomes distinguish business values, traps, denial, known failure, timeout/cancellation classes, and unknown visibility; retry/cancel are semantic events and instance ordering is serial."
+    },
+    {
+      "cards": ["021", "022", "024", "025", "028"],
+      "status": "not applicable",
+      "evidence": "The retained workload needs no time, randomness, network, child process, or live external-resource value; ambient routes remain absent."
+    },
+    {
+      "cards": ["023", "026", "027", "029", "030", "032", "033", "034", "035", "036", "037", "038"],
+      "status": "retained",
+      "evidence": "One persisted already-narrow activation grant, explicit configuration, typed CLI requests, isolated instance namespaces, separate limits, full records, HEAD, retained history, replay, and fault-state tests close the workload."
+    },
+    {
+      "cards": ["031"],
+      "status": "rejected",
+      "evidence": "The trusted in-process executor is documented honestly; no worker or process boundary would provide a current security property."
+    },
+    {
+      "cards": ["039"],
+      "status": "deferred by explicit trigger",
+      "evidence": "Prototype compaction only after measured history bytes or replay work cross two recorded operational thresholds; unresolved outcomes and dedupe receipts must remain exact."
+    },
+    {
+      "cards": ["040", "041", "042"],
+      "status": "retained",
+      "evidence": "A store-wide lock and exact bases give deterministic competing-writer behavior; validate-only shares preparation; immutable records/outcomes provide bounded audit."
+    },
+    {
+      "cards": ["043"],
+      "status": "deferred by explicit trigger",
+      "evidence": "Application binding is immutable and incompatible state currently creates a new instance; reopen only for a concrete continuity-preserving migration consumer."
+    },
+    {
+      "cards": ["044", "046", "047", "048"],
+      "status": "retained",
+      "evidence": "Application format 3 directly cut over; a directory owns mutable instance authority and embeds exact validated application bytes, while immutable application graphs remain transferable without a mutable store."
+    },
+    {
+      "cards": ["045", "049", "050", "051", "052", "053", "054", "055", "056", "057", "058"],
+      "status": "not applicable",
+      "evidence": "Release format 1 and current nominal products/sums/functions suffice; no effect interface, registry, authenticity system, text, sequence, map, generics, recursive data, closures, or new package hierarchy has a current consumer."
+    },
+    {
+      "cards": ["059", "060", "061", "062", "063", "064"],
+      "status": "retained",
+      "evidence": "Existing strict public values, stable errors, explicit-frame interpreter, verified Core boundary, managed immutable bytes, and allocate-new oracle remain the complete semantic path."
+    },
+    {
+      "cards": ["065", "066"],
+      "status": "rejected",
+      "evidence": "No measured complete-operation bottleneck justifies executable caches, serialized IR, JIT, or native application code."
+    },
+    {
+      "cards": ["067", "068", "069", "070", "071", "072", "073", "074", "075"],
+      "status": "retained",
+      "evidence": "Workspace snapshots/scans, consumed global workspace catalogue, command-local instance contract, current document/context/apply surfaces, compact CLI, and direct session topology remain coherent; no second schema authority was introduced."
+    },
+    {
+      "cards": ["076"],
+      "status": "rejected",
+      "evidence": "No product consumer remained; daemon, transport, client, binary, tests, exports, and documentation were deleted together."
+    },
+    {
+      "cards": ["077", "078", "079", "081"],
+      "status": "retained",
+      "evidence": "One authoring session plus exact short-lived commands used 41 processes and one Engine; stable root policy stayed 21,881 bytes and instance-local work uses 1,777-byte help rather than the 136,796-byte global schema."
+    },
+    {
+      "cards": ["080", "082", "124"],
+      "status": "deferred by explicit trigger",
+      "evidence": "Reopen model routing, provider benchmark, and weak-model claims only with a stable harness exposing model identity, multiple attempts, token classes, corrections, and deterministic task oracles."
+    },
+    {
+      "cards": ["083", "084"],
+      "status": "retained",
+      "evidence": "Stateful applications require exact tests for event and resume entries; deterministic generators enumerate codec mutations, boundaries, and finite publication states without adding a property-test dependency."
+    },
+    {
+      "cards": ["085"],
+      "status": "deferred by explicit trigger",
+      "evidence": "cargo-fuzz was unavailable; add maintained targets only when coverage-guided runs are available or decoder complexity grows, and convert every finding to a deterministic regression."
+    },
+    {
+      "cards": ["086", "087"],
+      "status": "retained",
+      "evidence": "Nightly Miri passed the new instance unit/fault scope with filesystem isolation disabled; finite Rust model tests enumerate retained publication and activation boundaries. Sanitizers and external formal tools were not run."
+    },
+    {
+      "cards": ["088", "089"],
+      "status": "retained",
+      "evidence": "Support remains explicitly Linux x86-64 under a trusted local POSIX-like filesystem model; no portability, power-loss, hostile-admin, or sandbox claim is made."
+    },
+    {
+      "cards": ["090", "091", "092", "093", "094", "095", "096", "097", "098", "099", "100", "101"],
+      "status": "retained",
+      "evidence": "Deterministic artifacts, unchanged dependency set, curated public instance API, one binary, named module owners, generated agreement tests, bounded diagnostics/observations, one threat model, eight production examples, single documentation owners, and prompt cleanup form the retained direct cutover."
+    },
+    {
+      "cards": ["102"],
+      "status": "deferred by explicit trigger",
+      "evidence": "No external distribution operator exists; reopen packaging, signing, or update infrastructure only for a named installation consumer."
+    },
+    {
+      "cards": ["103", "104", "105", "106", "107", "108", "109", "110"],
+      "status": "retained",
+      "evidence": "Old application success rejects; safe Rust incremental cutover won; tombstone deletion, bounded inspect/history, immutable application binding, and immutable narrow grants are the one active lifecycle."
+    },
+    {
+      "cards": ["111", "112"],
+      "status": "not applicable",
+      "evidence": "The activation capability consumes no secrets and state confidentiality is explicitly absent beyond trusted local host permissions; no secret or encryption machinery remains."
+    },
+    {
+      "cards": ["113", "114", "115", "116", "117", "118", "119", "120", "121", "122", "123"],
+      "status": "retained",
+      "evidence": "The fake and production activation executors share exact typed contracts; reconciliation is explicit; no-ops publish, terminality is semantic, policy is instance-bound, digest/command roles are narrow, evidence is bounded, the local operator is trusted, and inspect/history are derived review surfaces."
+    },
+    {
+      "cards": ["125", "126", "127"],
+      "status": "retained",
+      "evidence": "The long campaign is not normative and two older prompts were deleted; existing Cargo profiles and focused-before-full test locality remain adequate."
+    },
+    {
+      "cards": ["128"],
+      "status": "deferred by explicit trigger",
+      "evidence": "No CI workflow currently exists; add fast and scheduled scopes only when repository collaboration or a remote execution consumer exists."
+    },
+    {
+      "cards": ["129", "130", "131", "132", "133", "134"],
+      "status": "retained",
+      "evidence": "Reusable release, binary canonicalizer, and durable controller own current workload evidence; this structured file owns campaign facts; roadmap, README, legacy searches, direct deletions, and the public verification matrix close acceptance."
+    }
+  ],
+  "verification": {
+    "test_inventory": {
+      "discovered": 235,
+      "passed": 230,
+      "ignored": 5,
+      "failed": 0
+    },
+    "required_commands": [
+      {
+        "command": "cargo fmt --all -- --check",
+        "result": "pass"
+      },
+      {
+        "command": "cargo clippy --workspace --all-targets --all-features --locked -- -D warnings",
+        "result": "pass"
+      },
+      {
+        "command": "cargo test --workspace --all-targets --all-features --locked",
+        "result": "230 passed, 5 explicitly ignored, 0 failed"
+      },
+      {
+        "command": "cargo build --workspace --release --locked",
+        "result": "pass"
+      },
+      {
+        "command": "git diff --check",
+        "result": "pass"
+      }
+    ],
+    "public_examples": [
+      "examples/job-policy/run.sh",
+      "examples/named-data/run.sh",
+      "examples/release-channel/run.sh",
+      "examples/release-manifest/run.sh",
+      "examples/binary-canonicalizer/run.sh",
+      "examples/reusable-release/run.sh",
+      "examples/agent-maintenance/run.sh",
+      "examples/durable-controller/run.sh"
+    ],
+    "public_examples_result": "all pass",
+    "miri": {
+      "tool": "nightly Miri 0.1.0",
+      "scope": "all 11 current instance unit and publication/activation fault tests",
+      "command_environment": "MIRIFLAGS=-Zmiri-disable-isolation",
+      "seconds": 9.84,
+      "result": "pass",
+      "initial_isolated_attempt": "unavailable because Miri isolation rejects mkdir; not counted as pass"
+    }
+  },
+  "unavailable_or_unrun": [
+    "coverage-guided fuzzing: cargo-fuzz not installed",
+    "sanitizers: not run",
+    "external model checker: not run; finite Rust model used",
+    "cross-platform workflow: not run",
+    "clean-build distribution: not measured",
+    "maximum RSS: /usr/bin/time unavailable",
+    "provider/model trials and token/cost telemetry: unavailable",
+    "power-loss testing: not run",
+    "formal verification: not claimed"
+  ],
+  "known_limits": [
+    "trusted local operator, process, OS, Rust dependencies, and POSIX-like filesystem remain in the trusted computing base",
+    "in-process host execution is not a sandbox and does not isolate a hostile host administrator",
+    "stale private staging files after a process crash may require trusted operator cleanup, but never become accepted authority",
+    "no compaction or purge; tombstones and complete histories grow until an explicit future cutover",
+    "one store-wide lock serializes all instances",
+    "one domain-specific activation capability only",
+    "no application rebinding, state migration, grant revocation, timer, scheduler, or automatic retry",
+    "Linux x86-64 is the only verified platform",
+    "filesystem testing does not prove power-loss durability on every filesystem or device"
+  ],
+  "reversal_gates": [
+    "add command collections only for measured independent commands whose serial cost is material",
+    "reopen storage after two measured state/history or replay thresholds cross",
+    "add migration only for a concrete continuity consumer with exact old/new application and state mapping",
+    "add revocation or scheduling only for a current long-lived unattended application",
+    "add worker isolation only for a named hostile-code or broader-capability threat",
+    "generalize activation only when a second current capability shares a strictly narrower verified abstraction",
+    "change agent surfaces only after frozen equal-task trials with deterministic oracles and actual provider telemetry"
+  ]
+}

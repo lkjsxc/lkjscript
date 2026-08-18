@@ -27,7 +27,7 @@ Commands:
   run --artifact FILE [--pretty]       # strict ApplicationInvocation JSON on stdin
   stream --artifact FILE               # raw bytes on stdin and stdout
 
-Application CLI JSON contract version 2 is required on inputs and reported on outputs. Application
+Application CLI JSON contract version 3 is required on inputs and reported on outputs. Application
 artifacts embed one exact immutable reusable-release graph. Build requires an exact root release,
 exported entry, invocation profile, policy, application tests, and every graph release as an
 explicit immutable input. Build runs all embedded release and application tests before no-overwrite
@@ -335,7 +335,7 @@ fn stream_error(error: LkError) -> ExitCode {
         error: &error,
     })
     .unwrap_or_else(|_| {
-        b"{\"contract_version\":2,\"error\":{\"code\":\"io\",\"related\":[],\"retryable\":false,\"message\":\"cannot encode application error\"}}".to_vec()
+        b"{\"contract_version\":3,\"error\":{\"code\":\"io\",\"related\":[],\"retryable\":false,\"message\":\"cannot encode application error\"}}".to_vec()
     });
     let mut stderr = std::io::stderr().lock();
     let _ = stderr.write_all(&encoded);

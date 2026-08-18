@@ -228,10 +228,13 @@ validation, root retention, interruption-safe garbage collection, and one recons
 The `.lkjscript` file is a workspace revision artifact. It includes development history contracts
 and is not a reusable dependency or distribution format. Release artifact version 1 is a canonical
 workspace-independent semantic unit with explicit exports, exact dependencies, and release-local
-identity. Application artifact version 2 embeds one exact validated release graph with entry,
-invocation contract, policy, and application cases. It contains no workspace identity. Core IR,
-ownership plans, runtime tags, and values remain derived executable state.
+identity. Application artifact version 3 embeds one exact validated release graph with entries,
+invocation contract, policy, and application cases. It contains no workspace identity. A durable
+instance separately binds exact application bytes to typed state revisions, event receipts, and a
+grant digest; instance continuity and mutable state never enter release or application authority.
+Core IR, ownership plans, runtime tags, and values remain derived executable state.
 
-Workspace, reusable release, application, bundle/container, and derived executable domains remain
-distinct. A digest acquires the narrow identity role stated by its owning specification and no
-provenance, authorization, signature, workspace continuity, or runtime meaning by implication.
+Workspace, reusable release, application, instance, host grant, deployment slot, bundle/container,
+and derived executable domains remain distinct. A digest acquires the narrow identity role stated
+by its owning specification and no provenance, authorization, signature, continuity outside its
+domain, or runtime meaning by implication.

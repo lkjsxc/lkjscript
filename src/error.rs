@@ -17,6 +17,7 @@ pub enum ErrorCode {
     ArtifactCorrupt,
     ArtifactPublicationOutcomeUnknown,
     ApplicationTestFailed,
+    CapabilityDenied,
     CommitOutcomeUnknown,
     CompileIncomplete,
     CoreIrInvalid,
@@ -24,6 +25,7 @@ pub enum ErrorCode {
     DuplicateDraftSymbol,
     DuplicateName,
     IdempotencyConflict,
+    HostOutcomeUnknown,
     InvalidContainment,
     InvalidDraftSymbol,
     InvalidOperand,
@@ -64,17 +66,19 @@ pub enum ErrorCode {
 }
 
 impl ErrorCode {
-    pub const ALL: [Self; 48] = [
+    pub const ALL: [Self; 50] = [
         Self::AuthorityBusy,
         Self::ArtifactCorrupt,
         Self::ArtifactPublicationOutcomeUnknown,
         Self::ApplicationTestFailed,
+        Self::CapabilityDenied,
         Self::CompileIncomplete,
         Self::CoreIrInvalid,
         Self::DeleteBlocked,
         Self::DuplicateDraftSymbol,
         Self::DuplicateName,
         Self::IdempotencyConflict,
+        Self::HostOutcomeUnknown,
         Self::InvalidContainment,
         Self::InvalidDraftSymbol,
         Self::InvalidOperand,
@@ -120,6 +124,7 @@ impl ErrorCode {
             Self::ArtifactCorrupt => "artifact_corrupt",
             Self::ArtifactPublicationOutcomeUnknown => "artifact_publication_outcome_unknown",
             Self::ApplicationTestFailed => "application_test_failed",
+            Self::CapabilityDenied => "capability_denied",
             Self::CommitOutcomeUnknown => "commit_outcome_unknown",
             Self::CompileIncomplete => "compile_incomplete",
             Self::CoreIrInvalid => "core_ir_invalid",
@@ -127,6 +132,7 @@ impl ErrorCode {
             Self::DuplicateDraftSymbol => "duplicate_draft_symbol",
             Self::DuplicateName => "duplicate_name",
             Self::IdempotencyConflict => "idempotency_conflict",
+            Self::HostOutcomeUnknown => "host_outcome_unknown",
             Self::InvalidContainment => "invalid_containment",
             Self::InvalidDraftSymbol => "invalid_draft_symbol",
             Self::InvalidOperand => "invalid_operand",

@@ -1,175 +1,133 @@
 # Implemented status
 
-This file describes the current checkout. Normative behavior belongs to `docs/spec/`; measurements
-and decisions belong to `docs/performance.md`; ownership and topology belong to
-`docs/architecture.md`.
+This file describes implemented reality at the current checkout. Normative behavior belongs under
+`docs/spec/`; measurements and reversal evidence belong in `docs/performance.md` and
+`docs/evidence/`.
 
 ## Product boundary
 
-`lkjscript` is a local typed semantic programming system for pure deterministic applications. A
-coding agent can create and revise a workspace, observe bounded exact context, publish an immutable
-workspace-independent reusable semantic release with explicit exports and dependencies, compose an
-exact release graph, and build one single-file application that can be validated, inspected,
-tested, typed-invoked, and stream-run after all workspaces are removed.
+`lkjscript` is a local typed semantic programming system for exact pure programs and durable
+stateful application instances. Coding agents can author semantic workspaces, publish immutable
+reusable releases, build transferable applications, create isolated instances, validate/apply typed
+events, execute one narrow granted activation action, resume from typed results, inspect bounded
+state/history, reconcile unknown visibility, and tombstone instances.
 
-The supported bootstrap is stable Rust edition 2024 on Linux x86-64. The repository forbids local
-unsafe Rust. The application runner is not a hostile-host sandbox, registry, package manager,
-native executable runtime, or deployment system.
+The durable release-controller example completes that lifecycle through public commands after its
+source workspace and standalone release are deleted. It uses the production activation executor for
+one instance and the exact deterministic fake executor for a second failure/recovery lifecycle.
 
-## Active versions
+## Active contracts
 
-| Contract | Active value | Older forms |
+| boundary | active identity | legacy behavior |
 |---|---|---|
-| workspace logical protocol / strict JSON | 10 | 9 and older reject |
-| machine contract | `lkjscript-machine-schema-v10` | v9 and older reject |
-| workbench | 2 | other versions reject |
-| context packet | 2 | packet 1 rejects |
-| editable semantic document | 1, root `document` | `plan` rejects |
-| reusable-release CLI JSON | 1 | other versions reject |
-| reusable-release artifact | 1, `LKJREL\0\x01` | other forms reject |
-| application CLI JSON | 2 | version 1 and others reject |
-| application artifact | 2, `LKJAPP\0\x02` | format 1 and others reject |
-| workspace semantic artifact | 6, `LKJTSM\0\x06` | format 5 rejects |
-| semantic schema | `lkjscript-tsm006` | older schemas reject |
-| workspace HEAD | `LKJHEAD8` | `LKJHEAD7` rejects |
+| workspace logical/JSON protocol | 10 | 9 and older reject |
+| machine contract | `lkjscript-machine-schema-v10` | v9 names reject |
+| workbench | 2 | older roots reject |
+| context packet | 2 | 1 rejects |
+| editable document | 1, root `document` | `plan` rejects |
+| reusable-release command/artifact | 1, `LKJREL\0\x01` | all other formats reject |
+| application command/artifact | 3, `LKJAPP\0\x03` | format/contract 2 and older reject |
+| instance command/artifacts | 1, `LKJINS\0\x01` and related v1 envelopes | no legacy form |
+| workspace semantic artifact | 6, `LKJTSM\0\x06` | older successful forms reject |
+| semantic schema | `lkjscript-tsm006` | older schema names reject |
+| workspace HEAD | `LKJHEAD8` | HEAD7 rejects |
 
-There is no compatibility reader, migration mode, edition split, fallback, or successful old-form
-alias.
+Release, application, and instance DTOs are command-local owners and deliberately absent from the
+global workspace machine catalogue.
 
-## Workspace and agent workflow
+## Semantic language and execution
 
-The primary CLI opens the topology-neutral `Engine` under one state-directory authority lock.
-`lkjscript session` retains one Engine for independent line-delimited requests. Agent commands are
-`orient`, `create`, `context`, `document`, `validate`, `apply`, `view`, `diff`, and exact-revision
-`run`. Context digest reuse returns `unchanged` only after exact reconstruction. Normal work does
-not require the full global schema.
+The closed value set is `unit`, `bool`, checked `i64`, immutable `bytes`, nominal immutable
+products, and nominal immutable sums. Operations cover constants, integer addition/comparison,
+direct calls, conditions, counted loops, products, exhaustive sum matching, byte operations, typed
+holes, returns, and yields. No new language primitive was needed for durable state: applications use
+nominal states/events and a four-field nominal decision product.
 
-One immutable `Snapshot` is workspace authority. Workspace-qualified durable IDs name continuity
-for packages/modules, declarations, members, functions, parameters, and explicit hole anchors.
-Regions, blocks, binders, ordinary operations, and terminators use revision-bound function-local
-IDs. Body replacement preserves function identity and rebuilds local IDs. Names are scoped lookup
-and display metadata, never inferred identity.
+Complete selected closure lowers through verified Core IR and runs on one explicit-frame
+interpreter. User-controlled graph and execution depth do not recurse on the native stack. Managed
+immutable bytes remain the production memory route with an allocate-new differential oracle.
+Expected workflow errors are ordinary semantic variants; traps, corruption, resource failure,
+authority denial, and unknown publication remain distinct.
 
-Workspace persistence stores one full canonical artifact per immutable revision plus compact HEAD.
-Restart decodes contiguous history. Validate-only and rejection publish nothing and consume no
-durable identity. Queries remain deterministic full scans with differential controls; there is no
-semantic index, delta log, object store, compactor, or garbage collector.
+## Immutable distribution
 
-## Reusable semantic releases
+Reusable release format 1 is workspace-independent canonical semantic authority with exact exports,
+dependencies, tests, nominal identities, and explicit absence of provenance/signatures. Application
+format 3 embeds one complete exact release graph, entry/profile/policy, and exact cases. It supports
+typed, bounded bytes-stream, and stateful profiles. Every load independently decodes, validates,
+re-encodes, compiles, and tests as applicable. No resolver, mutable store, or source workspace is
+consulted.
 
-Release build contract 1 names one exact workspace/revision/package root, explicit export set,
-coordinate, user version, exact dependency slots, import proxies, and release cases. It never
-infers HEAD. One preparation owner projects the export/test closure, erases workspace identity,
-assigns canonical release-local IDs, independently decodes and validates bytes and the complete
-graph, and runs every supplied release suite before validate-only success or publication.
+The stateful profile declares pure event and resume functions. It can request validation,
+activation, or reconciliation as ordinary typed data; it cannot perform host work directly.
 
-`ReleaseId` is the domain-separated 256-bit digest of the complete canonical release payload and is
-the exact dependency and nominal domain. `ReleaseContentDigest` uses a separate domain and carries
-integrity/equality meaning only. Coordinate and user version are immutable human metadata, not
-exact selectors. Provenance and signatures are explicitly absent.
+## Durable instances
 
-Format 1 supports explicit function, product-type, and sum-type exports; private reachable
-implementation; exact acyclic dependencies; bodyless local function/nominal import proxies; and
-primitive exact release cases. Consumers cannot reference private targets or undeclared transitive
-dependencies. Full signature validation precedes private graph flattening.
+Instance format 1 binds one caller-selected 128-bit continuity identity to exact embedded
+application bytes, typed full-state snapshots, monotonically contiguous revisions, an immutable
+policy, and one immutable grant digest. Revision zero is caller-supplied validated initial state.
+Every committed event or resume publishes exactly one next full-state record and then HEAD.
+Validate-only predicts the same transition and publishes nothing.
 
-Release files are limited to 64 MiB, 100,000 semantic items, 256 exports, 256 dependencies, 4,096
-imports, and 256 tests. Graphs are limited to 256 releases, 4,096 edges, depth 64, and 256 MiB
-aggregate release bytes. All collections are canonical; unknown, duplicate, malformed, foreign,
-noncanonical, truncated, oversized, digest-mismatched, or trailing content rejects.
+Committed operations require bounded instance-scoped event keys. Exact duplicate delivery replays
+the retained receipt; different input under the same key rejects. Stale bases reject. Restart
+revalidates and reexecutes the complete selected record chain without host actions. History is
+retained without compaction and queried by bounded revision ranges. Semantic no-op events publish a
+revision. Tombstone deletion retains all authority/evidence and permanently forbids identity reuse.
 
-There is no resolver, lockfile, mutable store, network fetch, registry, range selection, or
-automatic latest version. Every graph operation receives explicit exact artifact bytes.
+State publication precedes host execution. One pending command may suspend an instance. Host
+outcomes are immutable typed records; only resume can publish resulting semantic state. Attempt
+markers make a missing acknowledgement conservative: after any possible activation attempt, the
+runtime records unknown rather than repeating the action. Reconciliation produces present, absent,
+or indeterminate evidence and remains separate from semantic transition.
 
-## Application graph and invocation
+## Host authority
 
-Application contract 2 names an exact root release, exact exported entry, typed or bytes-stream
-profile, policy, and nonempty application cases. Build accepts every release through repeated
-`--release FILE`, validates exactly the reachable graph, rejects missing and unrelated objects,
-privately flattens exact identities, verifies Core IR, and runs all release and application cases.
-It opens no workspace and performs no resolution.
+The only production host capability is one activation grant bound to instance ID, exact executor,
+one source directory, and one slot. It validates an exact application artifact and can atomically
+replace only that slot. Paths locate resources but do not grant authority by themselves. Symlink and
+non-regular forms reject; the in-process executor and local OS/filesystem remain trusted and are not
+a sandbox.
 
-Format 2 embeds every exact release once in strict ID order. It contains one graph, entry, profile,
-policy, and application suite but no workspace/revision IDs, paths, caches, resolver state, Core IR,
-runtime handles, provenance, or signatures. Its 256-MiB decoder checks all release and graph limits,
-requires exact re-encoding, and rejects application format 1 directly.
+The deterministic fake executor is a distinct grant class. It accepts only command-compatible exact
+outcomes and digest evidence and cannot call production host operations. Production grants cannot
+inject fake outcomes. This closes application-owned success, known-failure, unknown,
+reconciliation, timeout/cancellation class, retry, and terminal tests without external effects.
 
-Typed public nominal values carry exact `(ReleaseId, ReleaseItemId)` types and member targets.
-Structurally identical R1/R2 values do not unify; a shared diamond R1 does. Bytes-stream remains a
-pure bounded `bytes -> bytes` adapter. Both use the same explicit-frame interpreter oracle.
+## Public topology and authoring
 
-Release and application publication share the no-overwrite artifact owner: absolute canonical
-non-symlink paths, private mode-0600 temporary file, complete write, file sync, atomic hard link,
-temporary cleanup, and directory sync. Before-link failure is known failure. Any after-link failure
-is `artifact_publication_outcome_unknown` and is never silently retried.
+One `lkjscript` binary provides direct RPC, line-delimited workspace session, agent workbench,
+release, application, and instance command families. The prior `lkjscriptd` binary, socket client,
+framing transport, exports, tests, and documentation are deleted because no product consumer
+remained. A process boundary is not presented as isolation.
 
-## Public command families
+Normal authoring uses task-scoped context packets and one editable semantic document. Application
+and instance inspection expose exact bounded interfaces; ordinary instance operation does not
+require the global machine schema or source inspection.
 
-```text
-release build --state DIR [--dependency FILE ...] (--validate-only | --output FILE)
-release validate|inspect|test --artifact FILE [--dependency FILE ... for test]
+## Retained implementation choices
 
-app build --release FILE [--release FILE ...] (--validate-only | --output FILE)
-app validate|inspect|test --artifact FILE
-app run|stream --artifact FILE
-```
+- Full workspace snapshots/scans remain the simplest verified workspace authority.
+- Full instance state records plus HEAD remain the simplest verified instance authority; the
+  current controller history does not justify a journal/database or compaction.
+- Exact release graphs remain embedded in applications because this closes offline transfer and
+  current bundle sizes are small.
+- Managed immutable bytes remain because the existing differential workload still demonstrates a
+  copy/peak-byte benefit and the stateful workload exposes no contrary dominant cost.
+- The large global contract owner remains for workspace RPC consumers, while release, application,
+  and instance contracts use strict command-local serde owners. No generator or proc-macro was added.
+- Safe stable Rust 2024 remains the only implementation language; the crate has no local unsafe
+  block and no build script.
 
-Release inspection exposes exact identity, content digest, metadata, export signatures/member IDs,
-dependencies, tests, counts, and limits. Application inspection exposes the exact graph, graph
-digest, entry/profile/policy, test digests, flattened item count, and aggregate limits. Receipts are
-bounded and do not echo large requests.
+## Explicit absences
 
-## Language, compiler, and runtime
+There is no backward compatibility, application rebinding/migration, instance compaction or purge,
+grant revocation, automatic retry, timer/scheduler, network, child process, ambient environment,
+general filesystem API, live external-resource value, secret store, state encryption, multi-user
+authorization, hostile-host sandbox, worker, daemon, database, registry, resolver, package manager,
+bytecode, serialized Core IR, JIT, AOT/native application backend, tracing collector, signature
+system, public plugin ABI, or cross-platform support claim.
 
-Implemented semantics include `unit`, `bool`, checked `i64`, immutable `bytes`, immutable nominal
-products and sums, calls, conditions, counted loops, exhaustive lazy matching, exact
-construction/projection, returns/yields, and typed holes. Compilation lowers only one complete
-entry closure and independently verifies target-neutral Core IR. Compiler IDs remain private.
-
-The explicit-frame interpreter bounds user depth without native recursion. Immutable bytes use
-generation-checked handles and an independently verified ownership plan; allocate-new execution is
-the differential oracle. Fuel, frames, cells, visible bytes, retained backing, objects,
-allocations, input, and result materialization are separate policies. Cleanup is tested after
-success and failure.
-
-No serialized Core IR, bytecode, JIT, AOT, native image, executable cache, host effect, external
-resource, concurrency, time, randomness, filesystem access, or network access exists in language
-semantics.
-
-## Process topology and contract ownership
-
-`lkjscriptd` remains an optional private Unix-socket diagnostic adapter because the exported framed
-`Client` and tests still consume correlation, deadlines, disconnect, shutdown, and competing-lock
-behavior. It is not required for authoring, release, application build, or execution and is not a
-sandbox.
-
-The global protocol-v10 machine catalogue remains manually owned in `contract.rs` because schema
-digest binding, workbench help, context/document contracts, root projections, and diagnostic clients
-consume it. Release and application DTOs deliberately use their Rust types/codecs and command-local
-help instead of duplicating them into the catalogue. No generator, IDL, or second catalogue is
-retained.
-
-## Retained public examples
-
-- `reusable-release` proves `shared-codec`, two independent consumers, R1/R2 coexistence, an exact
-  diamond, private rejection, nominal rejection, corruption/missing/extra rejection, complete state
-  deletion, and offline byte-identical application rebuild through production commands.
-- `binary-canonicalizer` exercises the larger authoring/repair/history/runtime workload, publishes
-  its reusable release, builds application format 2, deletes state, and validates/tests/runs the
-  retained artifacts.
-- `job-policy`, `named-data`, `release-channel`, `release-manifest`, and `agent-maintenance` retain
-  broader language, history, identity, repair, review, and diagnostic coverage.
-
-## Exact absences and evidence limits
-
-The checkout has no online or local resolver, lockfile, registry/index, mutable release store,
-dependency range, re-export, release cycle, provenance artifact, signature, attestation,
-authorization, revocation, transparency log, remote build, deployment, sandbox, or compatibility
-path. Release tests support primitive invocation values only; public nominal composition is tested
-at application level. Copy, vendor, fork, and import-into-workspace operations are not implemented.
-
-The mutation corpora are deterministic rather than coverage-guided. No fresh provider trial,
-provider token/pricing telemetry, cross-platform run, model checker, new long-running fuzz target,
-sanitizer run, or hostile concurrent-directory-administration proof was completed. Measurements are
-reported as bytes and processes, never inferred tokens. Current reproduced evidence is in
-[performance.md](performance.md).
+The supported verified bootstrap remains stable Rust on Linux x86-64. Filesystem durability claims
+are limited to the documented trusted local POSIX-like model; formal verification, power-loss proof,
+and hostile-administrator isolation are not claimed.
