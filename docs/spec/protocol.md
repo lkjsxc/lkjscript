@@ -22,16 +22,18 @@ command or session rejects with `authority_busy`. The engine never silently retr
 
 ## Process topologies
 
-The primary CLI opens `Engine` directly for one command and exits. This removes manual service
-lifecycle and socket setup from normal agent work. `lkjscript --state DIR session` holds one engine
-and accepts one compact protocol-v10 JSON request per line; each line has an independent publication
-boundary. EOF closes the session. A successful `shutdown` response is flushed before the session
-exits.
+The primary CLI opens `Engine` directly for one workspace command and exits.
+`lkjscript --state DIR session` holds one engine and accepts one compact protocol-v10 JSON request
+per line; each line has an independent publication boundary. EOF closes the session. A successful
+`shutdown` response is flushed before exit.
 
-There is one installed binary and no daemon, socket client, or transport protocol. Instance commands
-are short-lived processes serialized by the instance-store lock. Disconnect or stdout failure does
-not roll back a published workspace revision, instance revision, or host outcome. Exact idempotency
-receipts are the only retry route; no mutation or possibly visible host action is retried implicitly.
+Application and instance one-shot commands use the topology-neutral runtime kernel. The separate
+`lkjscript runtime session --store DIR` command retains that same kernel and store lock behind exact
+line-delimited runtime protocol version 1; its contract is specified in
+[runtime-kernel.md](runtime-kernel.md). There is one installed binary and no daemon, socket client,
+or background service. Disconnect or stdout failure does not roll back a published workspace
+revision, instance revision, or host outcome. Exact idempotency receipts are the retry route; no
+mutation or possibly visible host action is retried implicitly.
 
 ## Strict JSON projection
 
@@ -75,9 +77,10 @@ explicit command inputs. Its strict Rust records, canonical codec, and command-l
 fields.
 
 Application build, validate, inspect, test, typed run, and stream are command-local projections of
-the separate [application contract](application.md). Application JSON uses contract version 3 and
+the separate [application contract](application.md). Application JSON uses contract version 4 and
 build accepts only explicit release files. Durable-instance commands use command-local contract
-version 1 specified by [instance.md](instance.md). Release, application, and instance records are
+version 2 specified by [instance.md](instance.md). Runtime orientation, inspection, and session use
+command-local contract version 1. Release, application, instance, and runtime records are
 deliberately absent from the global workspace catalogue, avoiding duplicate schema owners and a
 mandatory global dump. Top-level parsing and operation errors return the applicable contract
 version.
@@ -162,6 +165,6 @@ gate if measured request savings justify response preflight and idempotency comp
 ## Version rejection
 
 Protocol/JSON 9 and older, machine schema v9 and older, context packet 1, release command contract
-0, application command contract 2 and older, application artifact format 2 and older, instance
-contract/format versions other than 1, release artifact formats other than 1, and the `plan` edit
+0, application command/artifact version 3 and older, instance command/artifact version 1 and older,
+runtime session versions other than 1, release artifact formats other than 1, and the `plan` edit
 root reject. No alias, fallback, compatibility reader, daemon transport, or migration mode remains.

@@ -10,8 +10,23 @@ use crate::query;
 use crate::schema::{DirectReference, Node, OperationKind, SemanticType, ValueRef};
 use crate::type_layout::{self, DerivedLayout, LayoutShape, ValueLayout};
 use std::collections::{BTreeMap, BTreeSet};
+use std::time::Instant;
 
 pub(crate) fn compile(snapshot: &Snapshot, entry: NodeId) -> Result<CoreProgram> {
+    compile_observed(snapshot, entry).map(|(program, _)| program)
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct CompileObservation {
+    pub lowering_nanoseconds: u64,
+    pub core_verification_nanoseconds: u64,
+}
+
+pub(crate) fn compile_observed(
+    snapshot: &Snapshot,
+    entry: NodeId,
+) -> Result<(CoreProgram, CompileObservation)> {
+    let lowering_started = Instant::now();
     let blockers = query::entry_blockers(snapshot, entry)?;
     if !blockers.is_empty() {
         return Err(LkError::new(
@@ -54,8 +69,21 @@ pub(crate) fn compile(snapshot: &Snapshot, entry: NodeId) -> Result<CoreProgram>
             .ok_or_else(|| invalid(entry, "entry function was not allocated"))?,
         functions,
     };
+    let lowering_nanoseconds = elapsed_nanoseconds(lowering_started);
+    let verification_started = Instant::now();
     core_ir::verify(&program)?;
-    Ok(program)
+    let core_verification_nanoseconds = elapsed_nanoseconds(verification_started);
+    Ok((
+        program,
+        CompileObservation {
+            lowering_nanoseconds,
+            core_verification_nanoseconds,
+        },
+    ))
+}
+
+fn elapsed_nanoseconds(started: Instant) -> u64 {
+    u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX)
 }
 
 fn reachable_nominal_types(snapshot: &Snapshot, reachable: &[NodeId]) -> Result<Vec<NodeId>> {

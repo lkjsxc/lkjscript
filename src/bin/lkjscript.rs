@@ -17,6 +17,8 @@ mod application;
 mod instance;
 #[path = "lkjscript/release.rs"]
 mod reusable_release;
+#[path = "lkjscript/runtime.rs"]
+mod runtime_cli;
 
 const EXIT_USAGE_OR_JSON: u8 = 2;
 const EXIT_TRANSPORT: u8 = 3;
@@ -31,6 +33,7 @@ fn main() -> ExitCode {
         Ok(Command::Session { state }) => return run_session(state),
         Ok(Command::Application(command)) => return application::run(command),
         Ok(Command::Instance(command)) => return instance::run(command),
+        Ok(Command::Runtime(command)) => return runtime_cli::run(command),
         Ok(Command::Release(command)) => return reusable_release::run(command),
         Ok(command) => run_command(command),
         Err(message) => failure(EXIT_USAGE_OR_JSON, BoundaryErrorKind::Usage, message, None),
@@ -90,6 +93,12 @@ fn run_command(command: Command) -> CliOutcome {
             EXIT_USAGE_OR_JSON,
             BoundaryErrorKind::Usage,
             usage("release command must own its input and output boundary"),
+            None,
+        ),
+        Command::Runtime(_) => failure(
+            EXIT_USAGE_OR_JSON,
+            BoundaryErrorKind::Usage,
+            usage("runtime command must own its input and output boundary"),
             None,
         ),
         Command::Help => success(usage_text().as_bytes().to_vec()),
@@ -315,6 +324,7 @@ enum Command {
     Agent(agent::AgentCommand),
     Application(application::ApplicationCommand),
     Instance(instance::InstanceCommand),
+    Runtime(runtime_cli::RuntimeCommand),
     Release(reusable_release::ReleaseCommand),
     Help,
     Rpc {
@@ -355,6 +365,11 @@ fn parse_command(mut arguments: impl Iterator<Item = String>) -> Result<Command,
         return Ok(Command::Release(
             reusable_release::parse(arguments)
                 .unwrap_or_else(reusable_release::ReleaseCommand::Invalid),
+        ));
+    }
+    if first == "runtime" {
+        return Ok(Command::Runtime(
+            runtime_cli::parse(arguments).unwrap_or_else(runtime_cli::RuntimeCommand::Invalid),
         ));
     }
     if first == "schema" {
@@ -443,7 +458,7 @@ fn usage(reason: &str) -> String {
 }
 
 fn usage_text() -> &'static str {
-    "usage: lkjscript agent [COMMAND] [OPTIONS]\n       lkjscript release COMMAND [OPTIONS]\n       lkjscript app COMMAND [OPTIONS]\n       lkjscript instance COMMAND [OPTIONS]\n       lkjscript --state DIRECTORY (rpc [--pretty] | session)\n       lkjscript schema [--root NAME ... | --full] [--known-digest HEX] [--pretty]\n\nRun `lkjscript agent` for semantic authoring, `lkjscript release help` for immutable reuse, `lkjscript app help` for exact offline applications, and `lkjscript instance help` for durable operation. Raw RPC and schema commands are exact low-level diagnostic surfaces."
+    "usage: lkjscript agent [COMMAND] [OPTIONS]\n       lkjscript release COMMAND [OPTIONS]\n       lkjscript app COMMAND [OPTIONS]\n       lkjscript instance COMMAND [OPTIONS]\n       lkjscript runtime COMMAND [OPTIONS]\n       lkjscript --state DIRECTORY (rpc [--pretty] | session)\n       lkjscript schema [--root NAME ... | --full] [--known-digest HEX] [--pretty]\n\nRun `lkjscript agent` for semantic authoring, `lkjscript release help` for immutable reuse, `lkjscript app help` for exact offline applications, `lkjscript instance help` for durable operation, and `lkjscript runtime help` for topology-neutral operation and its foreground session. Raw RPC and schema commands are exact low-level diagnostic surfaces."
 }
 
 #[cfg(test)]

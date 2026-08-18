@@ -1,150 +1,166 @@
 # Future evidence gates
 
-This file contains only unresolved, consumer-driven gates. Implemented reality is in
-`docs/status.md`; normative contracts are under `docs/spec/`; current measurements are in
+This file contains only unresolved consumer-driven gates. Implemented reality is in
+`docs/status.md`; normative contracts are under `docs/spec/`; measurements are in
 `docs/performance.md`. An absence below is not a permanent prohibition.
 
-## More than one host command
+## Additional host interfaces or reusable interface artifacts
 
-Trigger: a second retained useful application needs a host operation that cannot be expressed as
-exact activation validation, activation, or reconciliation.
+Trigger: a third independent production adapter/application cannot use the two closed built-in
+interfaces without runtime vocabulary growth or duplicated exact interface declarations.
 
-Compare an additional domain-specific grant, a shared attenuable directory subset, and direct typed
-effects. Freeze the application and threat model first. The oracle must retain pure transition
-replay, exact fake-host substitution, no ambient authority, explicit possible visibility, and
-cross-instance denial. Delete generic capability machinery if two narrow grants remain simpler.
+Compare another narrow built-in, exact release-export identity, and a dedicated immutable interface
+artifact. Preserve application-owned nominal commands/outcomes, exact slot routing, immutable grant
+binding, pure replay, fake/production disjointness, and no mutable registry. Delete an interface
+artifact or catalogue if it lacks independent distribution/binding consumers.
+
+## Grant rotation or revocation
+
+Trigger: a current long-lived instance must change authority without creating a replacement
+instance.
+
+Specify grant revision identity/publication, attenuation, revocation, execution versus
+reconciliation authority, pending commands, restart, audit, and unknown-outcome behavior. Compare a
+new instance, explicit immutable grant revision, and named external lookup. Never let mutable lookup
+silently broaden accepted authority.
 
 ## Parallel or unattended operation
 
-Trigger: a retained application proves serial one-command suspension or explicit operator retry is
-materially insufficient.
+Trigger: measured independent instances need concurrency, or a retained product needs durable work
+after the caller exits.
 
-Measure end-to-end latency and operator work before adding command batches, a scheduler, time, or
-concurrency. Compare one ordered bounded batch, independent commands, and an external trigger.
-Recorded time observations must replay exactly; non-idempotent unknown actions still require
-reconciliation. No general async runtime or worker pool enters without this evidence.
+First compare per-instance locks plus metadata lock, one bounded transition pool, and the current
+store-wide serial kernel. Per-instance order and cross-process exclusion remain exact. A durable job
+requires a separate durable authority; it must not be smuggled into an in-memory queue. Do not add
+mid-transition preemption, actors, async runtime, worker pool, or timers without a concrete
+workload and shutdown/replay contract.
+
+## Resident supervisor
+
+Trigger: a real multi-client deployment or aggregate admission requirement is not served by the
+caller-owned foreground session.
+
+Compare explicit foreground ownership, Unix socket under private permissions, and no supervisor.
+Require at least 35% additional complete-workflow benefit or an otherwise impossible current
+coordination need, plus exact framing, peer/deployment authorization, bounded connections,
+backpressure, stale socket/singleton recovery, shutdown, upgrade, and diagnostics. Peer UID is not
+an application grant and the process boundary is not a sandbox. Delete a losing socket prototype.
+
+## Application/Core cache
+
+Trigger: release-profile stage distributions show application decode, graph validation, flattening,
+lowering, or Core verification costs at least 20% of a complete repeated workflow and a bounded
+cache improves the whole workload by at least 20%.
+
+Compare no cache, a session-only independently validated application load, verified Core units, and
+only then persistent cache. Bind all correctness inputs and keep miss/eviction semantically
+invisible. Persistent storage additionally requires hostile decode, atomic publication, target/
+compiler/representation binding, bounded eviction, and restart benefit that repays lifecycle cost.
+No current cache format exists.
+
+## Execution tier
+
+Trigger: execution—not loading, replay, publication, or host blocking—dominates a representative
+application and an acceleration improves complete cold/warm work by at least 30% after compile cost.
+
+Compare interpreter dispatch improvements, compact verified bytecode, one baseline compiler, and no
+new tier. An optimizing JIT requires a stable hot workload beyond that gate. Preserve values, traps,
+fuel, frames, managed-byte semantics, diagnostics, and the explicit-frame differential oracle.
+Generated native code additionally needs platform/feature/ABI/trap/W^X/crash contracts and bounded
+code memory. Delete losing formats and dependencies.
 
 ## State/history compaction
 
-Trigger: at least two representative histories cross explicit retained-byte or restart/replay
-service thresholds, rather than merely accumulating synthetic revisions.
+Trigger: at least two representative histories cross explicit retained-byte or replay service
+thresholds; current small full records are insufficient evidence.
 
-Measure full-state size, history growth, replay work, corruption traversal, backup, and recovery.
-Compare checkpoints plus exact unresolved evidence, an append-only journal, and the current full
-snapshot chain. Compaction must preserve event-key behavior, unresolved outcomes, exact replay
-claims, and a differential against the current owner. Delete the losing format and recovery tools.
-
-## Instance grant changes
-
-Trigger: a long-lived current instance must revoke, rotate, or attenuate authority without changing
-application meaning.
-
-Specify grant revision identity, execution versus reconciliation authority, restart, audit, and
-unknown-outcome behavior. Compare immutable replacement instance, versioned named host grant, and
-explicit descriptor update. Dynamic host policy must never silently broaden accepted authority.
+Measure state size, history growth, replay, corruption traversal, backup, and recovery. Compare
+checkpoints plus exact unresolved evidence, append-only journal, content-addressed state, and full
+records. Preserve event-key behavior, pending attempts/outcomes, exact replay, and an independent
+oracle. Delete the losing format and recovery paths.
 
 ## Application state migration
 
-Trigger: a current operator needs one continuity identity to survive an incompatible exact
-application/state-type change.
+Trigger: one continuity identity must survive an incompatible exact application/state-type change.
 
-Compare creating a new instance, one explicit pure old/new migration artifact, and exact rebinding.
-Mutable `latest` resolution remains inadmissible. Any retained migration names exact old/new
-applications, state mapping, failure publication, and rollback; no compatibility reader survives
-cutover.
+Compare a replacement instance, explicit pure old/new migration artifact, and exact rebinding. Any
+retained migration names exact old/new applications, state mapping, failure publication, and
+rollback. Mutable `latest` resolution and compatibility readers remain inadmissible.
 
-## Host isolation
+## Host isolation and multi-user deployment
 
-Trigger: untrusted native code, a broader filesystem/network/process capability, or a multi-user
-deployment enters the product boundary.
+Trigger: untrusted native adapters, broad filesystem/network/process authority, or multiple OS users
+enter the supported boundary.
 
-Write the threat model before choosing a worker. Compare in-process validation, a minimal worker
-with enumerated descriptors/environment/mounts/signals/limits, WASI components, and Linux-specific
-isolation. Process separation alone is not a sandbox. Measure binary, startup, IPC, recovery, and
-residual trust.
+Write the threat model first. Compare in-process validation, a minimal worker with enumerated
+descriptors/environment/mounts/signals/limits, WASI components, containers, and Linux-specific
+controls. Process separation and containers are not automatically sandboxes. Specify deployment
+authentication separately from application grants and measure startup, IPC, recovery, and residual
+trust.
 
 ## Secrets and confidentiality
 
-Trigger: a retained host operation requires credentials or durable state contains data that local
-filesystem permissions do not adequately protect.
+Trigger: a retained adapter requires credentials or durable state exceeds local-filesystem
+confidentiality assumptions.
 
 Separate named secret grants, redaction, memory lifetime, state encryption, key management, backup,
-and semantic validation. No secret may enter release/application artifacts, retained prompts,
-diagnostics, or fake-host fixtures. Delete encryption or secret-store prototypes without a current
-consumer.
+and semantic validation. No secret may enter release/application artifacts, prompts, diagnostics,
+profiles, fake fixtures, or benchmark evidence. Delete secret/encryption prototypes without a
+current consumer.
+
+## Runtime resource expansion
+
+Trigger: a retained deployment needs exact aggregate memory, open-file, disk-temporary, CPU, or
+connection governance beyond current logical/synchronous admission.
+
+Name accounting unit, owner, reservation/release, peak/retained distinction, overload class,
+restart, and observation. RSS remains noisy observation unless an OS containment policy is selected;
+cgroups/service-manager limits cannot replace semantic fuel/state/history bounds. Do not add a
+resident process solely to make counters global.
 
 ## Contract ownership derivation
 
-Trigger: frozen equal changes to the global workspace catalogue repeatedly require broad source
-reads, duplicate facts, or correction depth beyond the command-local instance family.
+Trigger: frozen equal changes repeatedly require broad source reads or duplicate facts across the
+global workspace and command-local contract owners.
 
-Compare the current manual owner, table/macro derivation, a proc macro, and narrower local ownership.
-Measure source opened, expanded output, diagnostics, incremental/clean build, binary size, Miri cost,
-and deterministic task success. A generator loses if generated output becomes another mutable
-schema owner.
+Compare current manual owners, a table/macro, proc macro, and narrower local ownership. Measure
+source opened, diagnostics, expanded output, build cost, and deterministic task success. A generator
+loses if its output becomes another mutable authority.
 
 ## Managed immutable bytes
 
-Trigger: the durable workload or another representative application reverses the current absolute
-copy/peak-byte benefit, or planner/verifier maintenance dominates semantic changes.
+Trigger: a durable/compute workload reverses the current copy/peak-byte benefit or planner/verifier
+maintenance dominates semantic changes.
 
-Compare the current verified plan, allocate-new oracle, safe reference-counted immutable bytes, and
-a bounded invocation arena. Preserve identical values, traps, fuel, visible/retained byte accounting,
-and cleanup. Retain one production route and one simple oracle only.
-
-## Application bundle/store
-
-Trigger: repeated embedded exact graphs create material measured distribution or load cost for a
-current deployment consumer.
-
-Compare continued embedding, immutable object sharing, and an explicit independently validated
-distribution bundle. A mutable store cannot become hidden dependency resolution authority. Offline
-transfer, exact closure, missing-content failure, and source deletion remain required.
-
-## Compiler/executable cache
-
-Trigger: separated measurements show application decode, graph validation, lowering, or Core
-verification materially dominates complete instance operation across repeated exact applications.
-
-Optimize the measured term only. Any bytecode, serialized IR, or native image remains derived and
-version-bound; semantic application and interpreter stay the acceptance oracle. Delete cache
-prototypes that do not improve the complete workflow enough to pay verification and invalidation
-cost.
+Compare the verified plan, allocate-new oracle, safe reference-counted bytes, and a bounded arena.
+Preserve identical values, traps, fuel, visible/retained accounting, and cleanup. Retain one
+production route and one simple oracle.
 
 ## Provider-backed agent trials
 
 Trigger: the harness exposes stable model identity, attempts, token classes, cached-input telemetry,
-and pricing, or an authorized independent model runner becomes available.
+and pricing, or an authorized independent runner becomes available.
 
-Run the frozen create/change/diagnose/reconcile/review tasks recorded in campaign evidence. Compare
-the current document/context surface with at most two bounded alternatives. Deterministic validators
-decide success; never infer tokens or cost from bytes. Delete every losing syntax, tool, schema root,
-and example.
+Run frozen create-interface/import/application/grant and denied/unknown/reconcile/resource/cache
+diagnosis tasks. Deterministic validators decide correctness. Record actual provider telemetry only;
+never infer tokens or cost from UTF-8 bytes. Delete losing syntax/help/schema surfaces.
 
 ## Fuzzing, Miri, sanitizers, and model checking
 
-Trigger: the relevant tool is available in CI or locally, or a new decoder/concurrency/unsafe/native
-dependency raises risk.
+Trigger: the relevant tool is available in CI/local execution or a new unsafe/native/concurrent
+boundary raises risk.
 
-Keep deterministic mutation and explicit publication-state enumeration as baseline. Fuzz only
-hostile public decoders, turn each finding into a focused regression, and retain no stale corpus.
-Miri/sanitizers target the highest-risk ownership and filesystem models. An external formal model
-stays only if production mappings and counterexample regressions cannot drift.
+Keep deterministic mutation and publication-state enumeration as baseline. Fuzz hostile public
+decoders and turn findings into focused regressions. Miri/sanitizers target application value
+ownership, instance/adapters, and runtime/session framing. Retain no stale unlicensed corpus or model
+whose production mapping can drift.
 
-## Platform and filesystem expansion
+## Platform, CI, and distribution expansion
 
-Trigger: a concrete user needs macOS, Windows, another architecture, or a filesystem outside the
-tested Linux/ZFS POSIX-like model.
+Trigger: a concrete user needs another OS/architecture/filesystem, collaboration CI, or public
+installation.
 
 List rename, hard-link, permission, locking, sync, and path assumptions. Compile success is not
-support. A platform is supported only after public workflows and relevant crash/corruption tests run
-there; delete portability layers without an executed consumer.
-
-## CI and public distribution
-
-Trigger: collaboration, external users, or repeatable installation becomes current product scope.
-
-Establish fast deterministic merge checks and scheduled expensive checks from measured duration and
-failure quality. Separately specify tool binary provenance, installation, rollback, and format
-rejection. Do not add signing, packaging, release services, or network dependencies before naming
-the operator and target.
+support. Run public workflows and relevant crash/corruption tests on each claimed platform.
+Separately specify binary provenance, installation, rollback, and format rejection. Do not add
+signing, packaging, release services, or network dependencies before naming the consumer/operator.

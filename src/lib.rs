@@ -26,6 +26,8 @@ mod persistence;
 pub mod protocol;
 pub mod query;
 pub mod release;
+pub mod runtime;
+pub mod runtime_protocol;
 pub mod schema;
 pub mod transaction;
 pub mod type_layout;
@@ -37,13 +39,14 @@ mod generated_invariant_tests;
 
 pub use application::{
     APPLICATION_CONTRACT_VERSION, ApplicationBuildReceipt, ApplicationBuildRequest,
-    ApplicationDigest, ApplicationFieldValue, ApplicationGraphDigest, ApplicationInspection,
-    ApplicationInvocation, ApplicationLimits, ApplicationReleaseInspection, ApplicationRunReceipt,
-    ApplicationRunResult, ApplicationTarget, ApplicationTestCase, ApplicationTestDigest,
-    ApplicationTestExpectation, ApplicationTestReport, ApplicationTestResult,
-    ApplicationTestStatus, ApplicationTrap, ApplicationTrapCode, ApplicationValue, HostOutcomeKind,
-    InvocationProfile, StatefulApplicationProfile, StatefulCommand, StatefulCommandKind,
-    StatefulTransition,
+    ApplicationDigest, ApplicationFieldValue, ApplicationGraphDigest, ApplicationImport,
+    ApplicationInspection, ApplicationInvocation, ApplicationLimits, ApplicationLoadObservation,
+    ApplicationReleaseInspection, ApplicationRunReceipt, ApplicationRunResult, ApplicationTarget,
+    ApplicationTestCase, ApplicationTestDigest, ApplicationTestExpectation, ApplicationTestReport,
+    ApplicationTestResult, ApplicationTestStatus, ApplicationTrap, ApplicationTrapCode,
+    ApplicationValue, HostInterface, HostInterfaceId, HostOperation, HostOutcomeClass,
+    HostOutcomeRoute, HostRequestRoute, InvocationProfile, StatefulApplicationProfile,
+    StatefulCommand, StatefulTransition,
 };
 pub use error::{ErrorCode, LkError, Result};
 pub use ids::{
@@ -51,12 +54,13 @@ pub use ids::{
     Revision, SnapshotHash, WorkspaceId,
 };
 pub use instance::{
-    ActivationGrant, ActivationGrantDigest, CommandId, HostExecutionReceipt, HostExecutorKind,
-    INSTANCE_CONTRACT_VERSION, INSTANCE_FORMAT_VERSION, InstanceCreateReceipt,
-    InstanceCreateRequest, InstanceDeleteRequest, InstanceEventRequest, InstanceFakeHostRequest,
-    InstanceHistoryItem, InstanceHistoryPage, InstanceHostRequest, InstanceId, InstanceInspection,
-    InstanceMode, InstancePolicy, InstanceResumeRequest, InstanceStore, InstanceTransitionReceipt,
-    InstanceTransitionStatus, PendingCommand, StateDigest,
+    BlobDigest, CommandId, GrantBinding, HostAdapterInput, HostAdapterKind, HostExecutionReceipt,
+    HostGrant, HostGrantDescriptor, HostGrantDigest, INSTANCE_CONTRACT_VERSION,
+    INSTANCE_FORMAT_VERSION, InstanceCreateReceipt, InstanceCreateRequest, InstanceDeleteRequest,
+    InstanceEventRequest, InstanceFakeHostRequest, InstanceHistoryItem, InstanceHistoryPage,
+    InstanceHostRequest, InstanceId, InstanceInspection, InstanceMode,
+    InstanceOperationObservation, InstancePolicy, InstanceResumeRequest, InstanceStore,
+    InstanceTransitionReceipt, InstanceTransitionStatus, PendingCommand, StateDigest,
 };
 pub use interpret::{RunPolicy, RuntimeFieldValue, RuntimeValue};
 pub use machine::{
@@ -71,6 +75,15 @@ pub use release::{
     ReleaseSignatureInspection, ReleaseTestCase, ReleaseTestExpectation, ReleaseTestInspection,
     ReleaseTestReport, ReleaseTestResult, ReleaseTestStatus, ReleaseTrap, ReleaseTrapCode,
     ReleaseTypeRef, ReleaseVariantInspection,
+};
+pub use runtime::{
+    RUNTIME_CONTRACT_VERSION, RuntimeCounters, RuntimeInspection, RuntimeInterfaceOrientation,
+    RuntimeKernel, RuntimeOrientation, RuntimePolicy, RuntimeResourceState, RuntimeStage,
+    RuntimeStageEntry, RuntimeStageObservation,
+};
+pub use runtime_protocol::{
+    RuntimeErrorEnvelope, RuntimeRequest, RuntimeRequestEnvelope, RuntimeResponse,
+    RuntimeResponseEnvelope,
 };
 pub use schema::{
     BlockArgumentDescriptor, BlockArgumentRole, ByteString, DirectReference, LiteralField,

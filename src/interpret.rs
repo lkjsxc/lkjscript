@@ -123,6 +123,10 @@ pub struct RunPolicy {
 pub struct RunResult {
     pub value: RuntimeValue,
     pub compile_nanoseconds: u64,
+    #[serde(skip)]
+    pub lowering_nanoseconds: u64,
+    #[serde(skip)]
+    pub core_verification_nanoseconds: u64,
     pub execute_nanoseconds: u64,
 }
 
@@ -136,7 +140,7 @@ pub(crate) fn compile_and_run(
     let result_type = validate_invocation(snapshot, entry, arguments)?;
     preflight_result(snapshot, result_type, entry)?;
     let compile_started = Instant::now();
-    let program = compile::compile(snapshot, entry)?;
+    let (program, compile_observation) = compile::compile_observed(snapshot, entry)?;
     let compile_nanoseconds = nanos(compile_started.elapsed().as_nanos());
     let entry_function = program
         .functions
@@ -183,6 +187,8 @@ pub(crate) fn compile_and_run(
     Ok(RunResult {
         value,
         compile_nanoseconds,
+        lowering_nanoseconds: compile_observation.lowering_nanoseconds,
+        core_verification_nanoseconds: compile_observation.core_verification_nanoseconds,
         execute_nanoseconds,
     })
 }

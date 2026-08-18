@@ -14,14 +14,19 @@ fn instance_id_and_strict_json_are_canonical_and_closed() {
     }
 
     let canonical =
-        br#"{"version":1,"instance":"12121212121212121212121212121212","base_revision":7}"#;
+        br#"{"version":2,"instance":"12121212121212121212121212121212","base_revision":7}"#;
     let request = strict_json::<InstanceDeleteRequest>(canonical, "delete").expect("canonical");
+    validate_version(request.version).expect("active contract version");
     assert_eq!(request.instance, instance);
     assert_eq!(request.base_revision, 7);
+    assert_eq!(
+        validate_version(1).expect_err("old contract version").code,
+        ErrorCode::ProtocolVersion
+    );
     for malformed in [
-        br#"{"version":1,"version":1,"instance":"12121212121212121212121212121212","base_revision":7}"#.as_slice(),
-        br#"{"version":1,"instance":"12121212121212121212121212121212","base_revision":7,"extra":0}"#.as_slice(),
-        br#"{"version":1,"instance":"12121212121212121212121212121212","base_revision":7}x"#.as_slice(),
+        br#"{"version":2,"version":2,"instance":"12121212121212121212121212121212","base_revision":7}"#.as_slice(),
+        br#"{"version":2,"instance":"12121212121212121212121212121212","base_revision":7,"extra":0}"#.as_slice(),
+        br#"{"version":2,"instance":"12121212121212121212121212121212","base_revision":7}x"#.as_slice(),
     ] {
         assert!(strict_json::<InstanceDeleteRequest>(malformed, "delete").is_err());
     }
@@ -86,6 +91,9 @@ fn instance_envelope_rejects_every_truncation_mutation_old_version_and_trailing_
     let value = HostAttemptRecord {
         instance: InstanceId::from_bytes([0x34; 16]),
         command: CommandId::from_bytes([0x56; 32]),
+        interface: HostInterface::ImmutableBlob.identity(),
+        grant: HostGrantDigest::from_bytes([0x78; 32]),
+        adapter: HostAdapterKind::Production,
     };
     let (bytes, digest) =
         encode_envelope(ATTEMPT_MAGIC, ATTEMPT_DOMAIN, &value, 1024).expect("encode attempt");
@@ -122,7 +130,7 @@ fn instance_envelope_rejects_every_truncation_mutation_old_version_and_trailing_
         );
     }
     let mut old_version = bytes.clone();
-    old_version[8..10].copy_from_slice(&0_u16.to_le_bytes());
+    old_version[8..10].copy_from_slice(&1_u16.to_le_bytes());
     assert!(
         decode_envelope::<HostAttemptRecord>(ATTEMPT_MAGIC, ATTEMPT_DOMAIN, &old_version, 1024)
             .is_err()
@@ -136,68 +144,58 @@ fn instance_envelope_rejects_every_truncation_mutation_old_version_and_trailing_
 }
 
 #[test]
-fn host_outcomes_have_one_closed_nonzero_semantic_vocabulary() {
-    let outcomes = [
-        HostOutcomeKind::KnownSuccess,
-        HostOutcomeKind::KnownFailureBeforeVisibility,
-        HostOutcomeKind::OutcomeUnknown,
-        HostOutcomeKind::ReconciliationPresent,
-        HostOutcomeKind::ReconciliationAbsent,
-        HostOutcomeKind::ReconciliationIndeterminate,
-        HostOutcomeKind::CancelledBeforeAction,
-        HostOutcomeKind::TimeoutBeforeAction,
-        HostOutcomeKind::TimeoutAfterPossibleVisibility,
-        HostOutcomeKind::CleanupFailure,
-    ];
-    let tags = outcomes.map(HostOutcomeKind::semantic_tag);
-    assert_eq!(tags, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+fn host_interfaces_and_operation_outcomes_are_closed_and_disjoint() {
+    assert_ne!(
+        HostInterface::ApplicationActivation.identity(),
+        HostInterface::ImmutableBlob.identity()
+    );
+    assert!(application::host_outcome_is_compatible(
+        HostOperation::ActivateApplication,
+        HostOutcomeClass::OutcomeUnknown
+    ));
+    assert!(!application::host_outcome_is_compatible(
+        HostOperation::ActivateApplication,
+        HostOutcomeClass::AlreadyPresent
+    ));
+    assert!(application::host_outcome_is_compatible(
+        HostOperation::PutBlob,
+        HostOutcomeClass::AlreadyPresent
+    ));
+    assert!(!application::host_outcome_is_compatible(
+        HostOperation::InspectBlob,
+        HostOutcomeClass::Succeeded
+    ));
 }
 
 #[test]
-fn fake_host_outcomes_are_command_typed_and_evidence_bound() {
-    let digest = ApplicationDigest::from_bytes([0xA5; 32]);
-    let mut command = PendingCommand {
-        id: CommandId::from_bytes([0x11; 32]),
-        kind: StatefulCommandKind::ActivateApplication,
-        application: digest,
-        grant: ActivationGrantDigest::from_bytes([0x22; 32]),
-    };
-    let empty = ByteString::default();
-    let exact = ByteString::from_slice(&digest.as_bytes()).expect("digest evidence");
-    assert!(validate_host_outcome(&command, HostOutcomeKind::OutcomeUnknown, &empty).is_ok());
-    assert!(validate_host_outcome(&command, HostOutcomeKind::KnownSuccess, &exact).is_ok());
-    assert!(validate_host_outcome(&command, HostOutcomeKind::KnownSuccess, &empty).is_err());
-    assert!(
-        validate_host_outcome(&command, HostOutcomeKind::ReconciliationAbsent, &empty).is_err()
-    );
-
-    command.kind = StatefulCommandKind::ReconcileActivation;
-    assert!(validate_host_outcome(&command, HostOutcomeKind::ReconciliationAbsent, &empty).is_ok());
-    assert!(validate_host_outcome(&command, HostOutcomeKind::KnownSuccess, &exact).is_err());
-
-    command.kind = StatefulCommandKind::ActivateApplication;
+fn immutable_blob_adapter_is_content_addressed_bounded_and_idempotent() {
     let temporary = tempfile::tempdir().expect("temporary directory");
-    let root = temporary.path().join("store");
-    let store = InstanceStore::open(&root).expect("instance store");
-    let instance = InstanceId::from_bytes([0x33; 16]);
-    create_private_directory(&root.join(instance.to_string())).expect("instance directory");
-    create_private_directory(&root.join(instance.to_string()).join("outcomes"))
-        .expect("outcomes directory");
-    store
-        .publish_outcome(&HostOutcomeRecord {
-            instance,
-            command: command.id,
-            outcome: HostOutcomeKind::ReconciliationPresent,
-            evidence: exact,
-        })
-        .expect("canonical forged outcome artifact");
-    assert_eq!(
-        store
-            .read_outcome(instance, &command)
-            .expect_err("command-incompatible outcome must reject")
-            .code,
-        ErrorCode::ArtifactCorrupt
-    );
+    let namespace = temporary.path().join("objects");
+    create_private_directory(&namespace).expect("blob namespace");
+    let grant = HostGrant {
+        version: INSTANCE_CONTRACT_VERSION,
+        name: "objects".into(),
+        instance: InstanceId::from_bytes([0x33; 16]),
+        slot: "blob".into(),
+        interface: HostInterface::ImmutableBlob,
+        adapter: HostAdapterKind::Production,
+        descriptor: HostGrantDescriptor::ImmutableBlob {
+            namespace: namespace.to_string_lossy().into_owned(),
+            maximum_objects: 2,
+            maximum_bytes: 16,
+        },
+    };
+    validate_grant(&grant, grant.instance).expect("valid blob grant");
+    let content = ByteString::from_slice(b"exact").expect("content");
+    let input = HostAdapterInput::None;
+    let (first, digest) = put_blob_adapter(&grant, &input, &content).expect("first put");
+    assert_eq!(first, HostOutcomeClass::Succeeded);
+    let (second, repeated) = put_blob_adapter(&grant, &input, &content).expect("repeat put");
+    assert_eq!(second, HostOutcomeClass::AlreadyPresent);
+    assert_eq!(repeated, digest);
+    let (present, evidence) = inspect_blob_adapter(&grant, &input, &digest).expect("inspect");
+    assert_eq!(present, HostOutcomeClass::ReconciliationPresent);
+    assert_eq!(evidence, digest);
 }
 
 #[test]

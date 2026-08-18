@@ -152,7 +152,7 @@ current test pass.
 
 Release artifacts and one bundled application artifact are sufficient after every producer and
 consumer workspace is removed. Correctness never depends on a local immutable store, filename,
-ambient resolver state, or network. Application format 3 embeds the exact reachable graph once, so
+ambient resolver state, or network. Application format 4 embeds the exact reachable graph once, so
 execution needs no external release files.
 
 The implemented contract supplies content integrity and exact semantic identity. It supplies no

@@ -5,14 +5,13 @@ use super::{
     EXIT_RESOURCE, EXIT_TRANSPORT, EXIT_USAGE_OR_JSON, failure, read_stdin_bounded, success, usage,
     write_outcome,
 };
-use lkjscript::application;
 use lkjscript::error::{ErrorCode, LkError};
 use lkjscript::instance::{
     INSTANCE_CONTRACT_VERSION, InstanceCreateRequest, InstanceDeleteRequest, InstanceEventRequest,
-    InstanceFakeHostRequest, InstanceHostRequest, InstanceId, InstanceResumeRequest, InstanceStore,
-    strict_json,
+    InstanceFakeHostRequest, InstanceHostRequest, InstanceId, InstanceResumeRequest, strict_json,
 };
 use lkjscript::machine::MAX_JSON_OUTPUT_BYTES;
+use lkjscript::runtime::{RuntimeKernel, RuntimePolicy};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -26,11 +25,7 @@ Commands:
           # strict InstanceEventRequest JSON on stdin; mode must be validate_only
   apply-event --store DIRECTORY [--pretty]
           # strict InstanceEventRequest JSON on stdin; mode must be commit
-  validate-application --store DIRECTORY [--pretty]
-          # strict InstanceHostRequest JSON on stdin
-  execute-activation --store DIRECTORY [--pretty]
-          # strict InstanceHostRequest JSON on stdin
-  reconcile-activation --store DIRECTORY [--pretty]
+  execute-host --store DIRECTORY [--pretty]
           # strict InstanceHostRequest JSON on stdin
   fake-outcome --store DIRECTORY [--pretty]
           # strict InstanceFakeHostRequest JSON on stdin; fake-bound instances only
@@ -43,7 +38,7 @@ Commands:
   delete --store DIRECTORY [--pretty]
           # strict InstanceDeleteRequest JSON on stdin
 
-Instance CLI JSON contract version 1 is required. Store, application, activation-source, and slot
+Instance CLI JSON contract version 2 is required. Store, application, adapter, and grant paths
 paths are bounded canonical absolute paths. A committed event or resume requires an instance-scoped
 event key. Host execution records an exact typed outcome but never mutates semantic state; resume
 is the only path that lets a host outcome enter the next deterministic transition. A possibly
@@ -65,15 +60,7 @@ pub(super) enum InstanceCommand {
         store: PathBuf,
         pretty: bool,
     },
-    ValidateApplication {
-        store: PathBuf,
-        pretty: bool,
-    },
-    ExecuteActivation {
-        store: PathBuf,
-        pretty: bool,
-    },
-    ReconcileActivation {
+    ExecuteHost {
         store: PathBuf,
         pretty: bool,
     },
@@ -118,9 +105,7 @@ pub(super) fn parse(arguments: impl Iterator<Item = String>) -> Result<InstanceC
         "create" => parse_create(rest),
         "validate-event" => parse_store_action(rest, StoreAction::ValidateEvent),
         "apply-event" => parse_store_action(rest, StoreAction::ApplyEvent),
-        "validate-application" => parse_store_action(rest, StoreAction::ValidateApplication),
-        "execute-activation" => parse_store_action(rest, StoreAction::ExecuteActivation),
-        "reconcile-activation" => parse_store_action(rest, StoreAction::ReconcileActivation),
+        "execute-host" => parse_store_action(rest, StoreAction::ExecuteHost),
         "fake-outcome" => parse_store_action(rest, StoreAction::FakeOutcome),
         "validate-resume" => parse_store_action(rest, StoreAction::ValidateResume),
         "resume" => parse_store_action(rest, StoreAction::Resume),
@@ -154,46 +139,30 @@ fn run_json(command: InstanceCommand) -> CliOutcome {
                 Ok(request) => request,
                 Err(error) => return instance_error(error, pretty),
             };
-            let bytes = match application::read_file(&artifact) {
-                Ok(bytes) => bytes,
-                Err(error) => return instance_error(error, pretty),
-            };
-            with_store(&store, pretty, |store| store.create(&request, &bytes))
+            with_kernel(&store, pretty, |kernel| {
+                kernel.create_from_path(&request, &artifact)
+            })
         }
         InstanceCommand::ValidateEvent { store, pretty } => {
             let request = match read_request::<InstanceEventRequest>("instance event request") {
                 Ok(request) => request,
                 Err(error) => return instance_error(error, pretty),
             };
-            with_store(&store, pretty, |store| store.validate_event(&request))
+            with_kernel(&store, pretty, |kernel| kernel.validate_event(&request))
         }
         InstanceCommand::ApplyEvent { store, pretty } => {
             let request = match read_request::<InstanceEventRequest>("instance event request") {
                 Ok(request) => request,
                 Err(error) => return instance_error(error, pretty),
             };
-            with_store(&store, pretty, |store| store.apply_event(&request))
+            with_kernel(&store, pretty, |kernel| kernel.apply_event(&request))
         }
-        InstanceCommand::ValidateApplication { store, pretty } => {
+        InstanceCommand::ExecuteHost { store, pretty } => {
             let request = match read_request::<InstanceHostRequest>("instance host request") {
                 Ok(request) => request,
                 Err(error) => return instance_error(error, pretty),
             };
-            with_store(&store, pretty, |store| store.validate_application(&request))
-        }
-        InstanceCommand::ExecuteActivation { store, pretty } => {
-            let request = match read_request::<InstanceHostRequest>("instance host request") {
-                Ok(request) => request,
-                Err(error) => return instance_error(error, pretty),
-            };
-            with_store(&store, pretty, |store| store.execute_activation(&request))
-        }
-        InstanceCommand::ReconcileActivation { store, pretty } => {
-            let request = match read_request::<InstanceHostRequest>("instance host request") {
-                Ok(request) => request,
-                Err(error) => return instance_error(error, pretty),
-            };
-            with_store(&store, pretty, |store| store.reconcile_activation(&request))
+            with_kernel(&store, pretty, |kernel| kernel.execute_host(&request))
         }
         InstanceCommand::FakeOutcome { store, pretty } => {
             let request =
@@ -201,56 +170,58 @@ fn run_json(command: InstanceCommand) -> CliOutcome {
                     Ok(request) => request,
                     Err(error) => return instance_error(error, pretty),
                 };
-            with_store(&store, pretty, |store| store.record_fake_outcome(&request))
+            with_kernel(&store, pretty, |kernel| {
+                kernel.record_fake_outcome(&request)
+            })
         }
         InstanceCommand::ValidateResume { store, pretty } => {
             let request = match read_request::<InstanceResumeRequest>("instance resume request") {
                 Ok(request) => request,
                 Err(error) => return instance_error(error, pretty),
             };
-            with_store(&store, pretty, |store| store.validate_resume(&request))
+            with_kernel(&store, pretty, |kernel| kernel.validate_resume(&request))
         }
         InstanceCommand::Resume { store, pretty } => {
             let request = match read_request::<InstanceResumeRequest>("instance resume request") {
                 Ok(request) => request,
                 Err(error) => return instance_error(error, pretty),
             };
-            with_store(&store, pretty, |store| store.resume(&request))
+            with_kernel(&store, pretty, |kernel| kernel.resume(&request))
         }
         InstanceCommand::Inspect {
             store,
             instance,
             pretty,
-        } => with_store(&store, pretty, |store| store.inspect(instance)),
+        } => with_kernel(&store, pretty, |kernel| kernel.inspect_instance(instance)),
         InstanceCommand::History {
             store,
             instance,
             start,
             limit,
             pretty,
-        } => with_store(&store, pretty, |store| {
-            store.history(instance, start, limit)
+        } => with_kernel(&store, pretty, |kernel| {
+            kernel.history(instance, start, limit)
         }),
         InstanceCommand::Delete { store, pretty } => {
             let request = match read_request::<InstanceDeleteRequest>("instance delete request") {
                 Ok(request) => request,
                 Err(error) => return instance_error(error, pretty),
             };
-            with_store(&store, pretty, |store| store.delete(request))
+            with_kernel(&store, pretty, |kernel| kernel.delete(request))
         }
     }
 }
 
-fn with_store<T: Serialize>(
+fn with_kernel<T: Serialize>(
     path: &Path,
     pretty: bool,
-    operation: impl FnOnce(&InstanceStore) -> lkjscript::Result<T>,
+    operation: impl FnOnce(&mut RuntimeKernel) -> lkjscript::Result<T>,
 ) -> CliOutcome {
-    let store = match InstanceStore::open(path) {
-        Ok(store) => store,
+    let mut kernel = match RuntimeKernel::open_instance_store(path, RuntimePolicy::default()) {
+        Ok(kernel) => kernel,
         Err(error) => return instance_error(error, pretty),
     };
-    match operation(&store) {
+    match operation(&mut kernel) {
         Ok(value) => encode_json(&value, pretty),
         Err(error) => instance_error(error, pretty),
     }
@@ -359,9 +330,7 @@ fn parse_create(arguments: &[String]) -> Result<InstanceCommand, String> {
 enum StoreAction {
     ValidateEvent,
     ApplyEvent,
-    ValidateApplication,
-    ExecuteActivation,
-    ReconcileActivation,
+    ExecuteHost,
     FakeOutcome,
     ValidateResume,
     Resume,
@@ -376,9 +345,7 @@ fn parse_store_action(
     Ok(match action {
         StoreAction::ValidateEvent => InstanceCommand::ValidateEvent { store, pretty },
         StoreAction::ApplyEvent => InstanceCommand::ApplyEvent { store, pretty },
-        StoreAction::ValidateApplication => InstanceCommand::ValidateApplication { store, pretty },
-        StoreAction::ExecuteActivation => InstanceCommand::ExecuteActivation { store, pretty },
-        StoreAction::ReconcileActivation => InstanceCommand::ReconcileActivation { store, pretty },
+        StoreAction::ExecuteHost => InstanceCommand::ExecuteHost { store, pretty },
         StoreAction::FakeOutcome => InstanceCommand::FakeOutcome { store, pretty },
         StoreAction::ValidateResume => InstanceCommand::ValidateResume { store, pretty },
         StoreAction::Resume => InstanceCommand::Resume { store, pretty },

@@ -99,18 +99,24 @@ def command_decision(start, variant, payload, response, command):
     operations = [
         construct_state(start, variant, payload),
         expression(start + 1, "const_bytes", b64(response)),
-        expression(start + 2, "const_i64", command),
     ]
-    target = payload
     if command == 0:
-        operations.append(expression(start + 3, "const_bytes", b64(b"")))
-        target = result(start + 3)
-    operations.append(call(start + 4, 400, [result(start), result(start + 1), result(start + 2), target]))
+        operations.append(call(start + 4, 400, [result(start), result(start + 1)]))
+    else:
+        operations.extend([
+            expression(start + 2, "construct_variant", {
+                "variant": local({1: 301, 2: 302, 3: 303}[command]), "payload": payload,
+            }),
+            expression(start + 3, "construct_variant", {
+                "variant": local(341), "payload": result(start + 2),
+            }),
+            call(start + 4, 410, [result(start), result(start + 1), result(start + 3)]),
+        ])
     return yielding(operations, result(start + 4))
 
 
 def unchanged_decision(start, state_value, response):
-    operations = [expression(start, "const_bytes", b64(response)), call(start + 1, 410, [state_value, result(start)])]
+    operations = [expression(start, "const_bytes", b64(response)), call(start + 1, 400, [state_value, result(start)])]
     return yielding(operations, result(start + 1))
 
 
@@ -137,7 +143,7 @@ def event_function():
     begin_body = yielding([
         expression(530, "match_sum", {
             "scrutinee": parameter(501),
-            "result": nominal(300),
+            "result": nominal(380),
             "arms": state_match_arms(1000, begin_case),
         })
     ], result(530))
@@ -152,7 +158,7 @@ def event_function():
     retry_body = yielding([
         expression(560, "match_sum", {
             "scrutinee": parameter(501),
-            "result": nominal(300),
+            "result": nominal(380),
             "arms": state_match_arms(1300, retry_case),
         })
     ], result(560))
@@ -162,7 +168,7 @@ def event_function():
         expression(569, "const_bytes", b64(b"")),
         construct_state(570, 108, result(569)),
         expression(571, "const_bytes", b64(b"cancelled")),
-        call(572, 410, [result(570), result(571)]),
+        call(572, 400, [result(570), result(571)]),
     ], result(572))
     status_body = unchanged_decision(580, parameter(501), b"status")
     return function(
@@ -172,10 +178,10 @@ def event_function():
             {"symbol": 501, "name": "state", "ty": nominal(100)},
             {"symbol": 502, "name": "event", "ty": nominal(200)},
         ],
-        nominal(300),
+        nominal(380),
         [expression(510, "match_sum", {
             "scrutinee": parameter(502),
-            "result": nominal(300),
+            "result": nominal(380),
             "arms": [
                 arm(201, request_body, 511),
                 arm(202, begin_body),
@@ -188,97 +194,45 @@ def event_function():
     )
 
 
-def classify_validation(payload):
-    success = command_decision(2100, 104, block_argument(payload), b"validation_succeeded", 2)
-    failure = command_decision(2120, 106, block_argument(payload), b"validation_failed", 0)
-    terminal = command_decision(2140, 107, block_argument(payload), b"validation_outcome_invalid", 0)
-    return yielding([
-        expression(2090, "const_i64", 2),
-        expression(2091, "lt_i64", {"lhs": parameter(602), "rhs": result(2090)}),
-        expression(2092, "if", {
-            "condition": result(2091),
-            "result": nominal(300),
-            "then_body": success,
-            "else_body": yielding([
-                expression(2093, "const_i64", 3),
-                expression(2094, "lt_i64", {"lhs": parameter(602), "rhs": result(2093)}),
-                expression(2095, "if", {
-                    "condition": result(2094),
-                    "result": nominal(300),
-                    "then_body": failure,
-                    "else_body": terminal,
-                }),
-            ], result(2095)),
-        }),
-    ], result(2092))
-
-
-def classify_activation(payload):
-    success = command_decision(2200, 105, block_argument(payload), b"activation_succeeded", 0)
-    failure = command_decision(2220, 106, block_argument(payload), b"activation_failed_before_visibility", 0)
-    unknown = command_decision(2240, 109, block_argument(payload), b"activation_outcome_unknown", 3)
-    return yielding([
-        expression(2190, "const_i64", 2),
-        expression(2191, "lt_i64", {"lhs": parameter(602), "rhs": result(2190)}),
-        expression(2192, "if", {
-            "condition": result(2191), "result": nominal(300), "then_body": success,
-            "else_body": yielding([
-                expression(2193, "const_i64", 3),
-                expression(2194, "lt_i64", {"lhs": parameter(602), "rhs": result(2193)}),
-                expression(2195, "if", {
-                    "condition": result(2194), "result": nominal(300),
-                    "then_body": failure, "else_body": unknown,
-                }),
-            ], result(2195)),
-        }),
-    ], result(2192))
-
-
-def classify_reconciliation(payload):
-    present = command_decision(2300, 105, block_argument(payload), b"reconciliation_found_active", 0)
-    absent = command_decision(2320, 106, block_argument(payload), b"reconciliation_found_absent", 0)
-    indeterminate = command_decision(2340, 109, block_argument(payload), b"reconciliation_indeterminate", 0)
-    return yielding([
-        expression(2290, "const_i64", 5),
-        expression(2291, "lt_i64", {"lhs": parameter(602), "rhs": result(2290)}),
-        expression(2292, "if", {
-            "condition": result(2291), "result": nominal(300), "then_body": present,
-            "else_body": yielding([
-                expression(2293, "const_i64", 6),
-                expression(2294, "lt_i64", {"lhs": parameter(602), "rhs": result(2293)}),
-                expression(2295, "if", {
-                    "condition": result(2294), "result": nominal(300),
-                    "then_body": absent, "else_body": indeterminate,
-                }),
-            ], result(2295)),
-        }),
-    ], result(2292))
-
-
 def resume_function():
-    def resume_case(variant, payload, start):
-        del start
-        if variant == 103:
-            return classify_validation(payload)
-        if variant == 104:
-            return classify_activation(payload)
-        if variant == 109:
-            return classify_reconciliation(payload)
-        return unchanged_decision(2400 + variant * 2, parameter(601), b"unexpected_host_outcome")
+    outcomes = [
+        (321, 104, b"validation_succeeded", 2),
+        (322, 106, b"validation_failed", 0),
+        (323, 105, b"activation_succeeded", 0),
+        (324, 106, b"activation_failed_before_visibility", 0),
+        (325, 109, b"activation_outcome_unknown", 3),
+        (326, 105, b"reconciliation_found_active", 0),
+        (327, 106, b"reconciliation_found_absent", 0),
+        (328, 109, b"reconciliation_indeterminate", 0),
+    ]
+    outcome_arms = []
+    for offset, (outcome_variant, state_variant, response, command) in enumerate(outcomes):
+        payload = 620 + offset
+        outcome_arms.append(arm(
+            outcome_variant,
+            command_decision(3000 + offset * 20, state_variant, block_argument(payload), response, command),
+            payload,
+        ))
+    activation_body = yielding([
+        expression(615, "match_sum", {
+            "scrutinee": block_argument(611),
+            "result": nominal(380),
+            "arms": outcome_arms,
+        }),
+    ], result(615))
 
     return function(
         600,
         "transition_resume",
         [
             {"symbol": 601, "name": "state", "ty": nominal(100)},
-            {"symbol": 602, "name": "outcome", "ty": "i64"},
-            {"symbol": 603, "name": "evidence", "ty": "bytes"},
+            {"symbol": 602, "name": "outcome", "ty": nominal(350)},
         ],
-        nominal(300),
+        nominal(380),
         [expression(610, "match_sum", {
-            "scrutinee": parameter(601),
-            "result": nominal(300),
-            "arms": state_match_arms(10000, resume_case),
+            "scrutinee": parameter(602),
+            "result": nominal(380),
+            "arms": [arm(351, activation_body, 611)],
         })],
         result(610),
     )
@@ -312,48 +266,100 @@ def operations():
                 {"symbol": symbol(205), "name": "status_inspection"},
             ],
         }},
+        {"kind": "create_sum_type", "data": {
+            "symbol": symbol(300), "module": local(2), "name": "ActivationRequest",
+            "variants": [
+                {"symbol": symbol(301), "name": "validate", "payload": "bytes"},
+                {"symbol": symbol(302), "name": "activate", "payload": "bytes"},
+                {"symbol": symbol(303), "name": "reconcile", "payload": "bytes"},
+            ],
+        }},
+        {"kind": "create_sum_type", "data": {
+            "symbol": symbol(320), "module": local(2), "name": "ActivationOutcome",
+            "variants": [
+                {"symbol": symbol(321), "name": "validation_succeeded", "payload": "bytes"},
+                {"symbol": symbol(322), "name": "validation_failed", "payload": "bytes"},
+                {"symbol": symbol(323), "name": "activation_succeeded", "payload": "bytes"},
+                {"symbol": symbol(324), "name": "activation_failed", "payload": "bytes"},
+                {"symbol": symbol(325), "name": "activation_unknown", "payload": "bytes"},
+                {"symbol": symbol(326), "name": "reconciliation_present", "payload": "bytes"},
+                {"symbol": symbol(327), "name": "reconciliation_absent", "payload": "bytes"},
+                {"symbol": symbol(328), "name": "reconciliation_indeterminate", "payload": "bytes"},
+            ],
+        }},
+        {"kind": "create_sum_type", "data": {
+            "symbol": symbol(340), "module": local(2), "name": "ControllerCommand",
+            "variants": [
+                {"symbol": symbol(341), "name": "activation", "payload": nominal(300)},
+            ],
+        }},
+        {"kind": "create_sum_type", "data": {
+            "symbol": symbol(350), "module": local(2), "name": "ControllerOutcome",
+            "variants": [
+                {"symbol": symbol(351), "name": "activation", "payload": nominal(320)},
+            ],
+        }},
         {"kind": "create_product_type", "data": {
-            "symbol": symbol(300), "module": local(2), "name": "TransitionDecision",
+            "symbol": symbol(360), "module": local(2), "name": "CompletedTransition",
             "fields": [
-                {"symbol": symbol(301), "name": "state", "ty": nominal(100)},
-                {"symbol": symbol(302), "name": "response", "ty": "bytes"},
-                {"symbol": symbol(303), "name": "command", "ty": "i64"},
-                {"symbol": symbol(304), "name": "target", "ty": "bytes"},
+                {"symbol": symbol(361), "name": "state", "ty": nominal(100)},
+                {"symbol": symbol(362), "name": "response", "ty": "bytes"},
+            ],
+        }},
+        {"kind": "create_product_type", "data": {
+            "symbol": symbol(370), "module": local(2), "name": "SuspendedTransition",
+            "fields": [
+                {"symbol": symbol(371), "name": "state", "ty": nominal(100)},
+                {"symbol": symbol(372), "name": "response", "ty": "bytes"},
+                {"symbol": symbol(373), "name": "command", "ty": nominal(340)},
+            ],
+        }},
+        {"kind": "create_sum_type", "data": {
+            "symbol": symbol(380), "module": local(2), "name": "TransitionDecision",
+            "variants": [
+                {"symbol": symbol(381), "name": "completed", "payload": nominal(360)},
+                {"symbol": symbol(382), "name": "suspended", "payload": nominal(370)},
             ],
         }},
         function(
-            400, "make_decision",
+            400, "make_completed",
             [
                 {"symbol": 401, "name": "state", "ty": nominal(100)},
                 {"symbol": 402, "name": "response", "ty": "bytes"},
-                {"symbol": 403, "name": "command", "ty": "i64"},
-                {"symbol": 404, "name": "target", "ty": "bytes"},
             ],
-            nominal(300),
-            [expression(405, "construct_product", {
-                "product": local(300),
-                "fields": [
-                    {"field": local(301), "value": parameter(401)},
-                    {"field": local(302), "value": parameter(402)},
-                    {"field": local(303), "value": parameter(403)},
-                    {"field": local(304), "value": parameter(404)},
-                ],
-            })],
-            result(405),
+            nominal(380),
+            [
+                expression(405, "construct_product", {
+                    "product": local(360),
+                    "fields": [
+                        {"field": local(361), "value": parameter(401)},
+                        {"field": local(362), "value": parameter(402)},
+                    ],
+                }),
+                expression(406, "construct_variant", {"variant": local(381), "payload": result(405)}),
+            ],
+            result(406),
         ),
         function(
-            410, "done_decision",
+            410, "make_suspended",
             [
                 {"symbol": 411, "name": "state", "ty": nominal(100)},
                 {"symbol": 412, "name": "response", "ty": "bytes"},
+                {"symbol": 413, "name": "command", "ty": nominal(340)},
             ],
-            nominal(300),
+            nominal(380),
             [
-                expression(413, "const_i64", 0),
-                expression(414, "const_bytes", b64(b"")),
-                call(415, 400, [parameter(411), parameter(412), result(413), result(414)]),
+                expression(415, "construct_product", {
+                    "product": local(370),
+                    "fields": [
+                        {"field": local(371), "value": parameter(411)},
+                        {"field": local(372), "value": parameter(412)},
+                        {"field": local(373), "value": parameter(413)},
+                    ],
+                }),
+                expression(416, "construct_variant", {"variant": local(382), "payload": result(415)}),
             ],
-            result(415),
+            result(416),
         ),
         event_function(),
         resume_function(),
@@ -455,21 +461,6 @@ def workspace_value(ids, ty, variant, payload=None):
     return {"kind": "sum", "data": data}
 
 
-def workspace_decision(ids, state_variant, state_payload, response, command, target):
-    return {
-        "kind": "product",
-        "data": {
-            "ty": ids[300],
-            "fields": [
-                {"field": ids[301], "value": workspace_value(ids, 100, state_variant, state_payload)},
-                {"field": ids[302], "value": bytes_value(response)},
-                {"field": ids[303], "value": i64_value(command)},
-                {"field": ids[304], "value": bytes_value(target)},
-            ],
-        },
-    }
-
-
 def app_target(release, item):
     return {"release": release, "item": item}
 
@@ -483,21 +474,52 @@ def app_value(release, types, ty_name, variant_name, payload=None):
     return {"kind": "sum", "data": data}
 
 
-def app_decision(release, types, state_variant, state_payload, response, command, target):
-    decision = types["decision"]
-    fields = decision["fields"]
+def app_sum(release, types, ty_name, variant_name, payload=None):
+    ty = types[ty_name]
+    data = {
+        "ty": app_target(release, ty["target"]),
+        "variant": app_target(release, ty["variants"][variant_name]),
+    }
+    if payload is not None:
+        data["payload"] = payload
+    return {"kind": "sum", "data": data}
+
+
+def app_product(release, types, ty_name, fields):
+    ty = types[ty_name]
     return {
         "kind": "product",
         "data": {
-            "ty": app_target(release, decision["target"]),
+            "ty": app_target(release, ty["target"]),
             "fields": [
-                {"field": app_target(release, fields["state"]), "value": app_value(release, types, "state", state_variant, state_payload)},
-                {"field": app_target(release, fields["response"]), "value": bytes_value(response)},
-                {"field": app_target(release, fields["command"]), "value": i64_value(command)},
-                {"field": app_target(release, fields["target"]), "value": bytes_value(target)},
+                {"field": app_target(release, ty["fields"][name]), "value": value}
+                for name, value in fields
             ],
         },
     }
+
+
+def app_decision(release, types, state_variant, state_payload, response, command, target):
+    state = app_value(release, types, "state", state_variant, state_payload)
+    if command == 0:
+        payload = app_product(release, types, "completed_payload", [
+            ("state", state), ("response", bytes_value(response)),
+        ])
+        return app_sum(release, types, "decision", "completed", payload)
+    request_variant = {1: "validate", 2: "activate", 3: "reconcile"}[command]
+    request = app_value(release, types, "activation_request", request_variant, target)
+    application_command = app_sum(release, types, "command", "activation", request)
+    payload = app_product(release, types, "suspended_payload", [
+        ("state", state),
+        ("response", bytes_value(response)),
+        ("command", application_command),
+    ])
+    return app_sum(release, types, "decision", "suspended", payload)
+
+
+def app_outcome(release, types, variant, evidence):
+    interface_outcome = app_value(release, types, "activation_outcome", variant, evidence)
+    return app_sum(release, types, "outcome", "activation", interface_outcome)
 
 
 def export_map(receipt):
@@ -505,34 +527,31 @@ def export_map(receipt):
 
 
 def build_types(exports):
-    state = exports["state"]
-    event = exports["event"]
-    decision = exports["decision"]
-    return {
-        "state": {
-            "target": state["target"],
-            "variants": {item["name"]: item["target"] for item in state["signature"]["data"]["variants"]},
-        },
-        "event": {
-            "target": event["target"],
-            "variants": {item["name"]: item["target"] for item in event["signature"]["data"]["variants"]},
-        },
-        "decision": {
-            "target": decision["target"],
-            "fields": {item["name"]: item["target"] for item in decision["signature"]["data"]["fields"]},
-        },
-    }
+    types = {}
+    for name in [
+        "state", "event", "activation_request", "activation_outcome", "command", "outcome",
+        "completed_payload", "suspended_payload", "decision",
+    ]:
+        exported = exports[name]
+        data = exported["signature"]["data"]
+        item = {"target": exported["target"]}
+        if "variants" in data:
+            item["variants"] = {entry["name"]: entry["target"] for entry in data["variants"]}
+        if "fields" in data:
+            item["fields"] = {entry["name"]: entry["target"] for entry in data["fields"]}
+        types[name] = item
+    return types
 
 
 def instance_event(instance, revision, key, event, mode="commit"):
-    value = {"version": 1, "mode": mode, "instance": instance, "base_revision": revision, "event": event}
+    value = {"version": 2, "mode": mode, "instance": instance, "base_revision": revision, "event": event}
     if key is not None:
         value["event_key"] = key
     return value
 
 
 def resume_request(instance, revision, key, mode="commit"):
-    value = {"version": 1, "mode": mode, "instance": instance, "base_revision": revision}
+    value = {"version": 2, "mode": mode, "instance": instance, "base_revision": revision}
     if key is not None:
         value["event_key"] = key
     return value
@@ -547,14 +566,21 @@ def operate(root, controller_path, payload_path, release, types):
     other = "22222222222222222222222222222222"
     slot = slots / "active.lkja"
     grant = {
-        "version": 1, "name": "primary", "instance": instance,
-        "executor": "production",
-        "source_directory": str(root), "slot": str(slot),
+        "version": 2,
+        "name": "primary",
+        "instance": instance,
+        "slot": "activation",
+        "interface": "application_activation",
+        "adapter": "production",
+        "descriptor": {
+            "kind": "application_activation",
+            "data": {"source_directory": str(root), "activation_slot": str(slot)},
+        },
     }
     idle = app_value(release, types, "state", "idle", b"")
     create = {
-        "version": 1, "mode": "validate_only", "instance": instance,
-        "initial_state": idle, "grant": grant,
+        "version": 2, "mode": "validate_only", "instance": instance,
+        "initial_state": idle, "grants": [grant],
     }
     validated = json_command(["instance", "create", "--store", str(store), "--application", str(controller_path)], create)
     if validated["published"]:
@@ -587,25 +613,39 @@ def operate(root, controller_path, payload_path, release, types):
         instance_event(instance, 1, "begin-1", begin),
     )
     command = receipt["command"]
-    if command["kind"] != "validate_application":
+    if command["operation"] != "validate_application":
         raise RuntimeError("controller did not suspend for exact validation")
-    denied = dict(grant)
-    denied["slot"] = str(slots / "other.lkja")
-    host = {"version": 1, "instance": instance, "command": command["id"], "grant": denied, "source_application": str(payload_path)}
-    expect_error(["instance", "validate-application", "--store", str(store)], host, "capability_denied")
+    denied = {
+        **grant,
+        "descriptor": {
+            "kind": "application_activation",
+            "data": {
+                "source_directory": str(root),
+                "activation_slot": str(slots / "other.lkja"),
+            },
+        },
+    }
+    host = {
+        "version": 2,
+        "instance": instance,
+        "command": command["id"],
+        "grant": denied,
+        "input": {"kind": "application_source", "data": {"path": str(payload_path)}},
+    }
+    expect_error(["instance", "execute-host", "--store", str(store)], host, "capability_denied")
     host["grant"] = grant
     expect_error(
         ["instance", "fake-outcome", "--store", str(store)],
         {
-            "version": 1, "instance": instance, "command": command["id"], "grant": grant,
-            "outcome": "known_success", "evidence": b64(digest),
+            "version": 2, "instance": instance, "command": command["id"], "grant": grant,
+            "class": "succeeded", "evidence": b64(digest),
         },
         "capability_denied",
     )
-    validation = json_command(["instance", "validate-application", "--store", str(store)], host)
-    if validation["outcome"] != "known_success":
+    validation = json_command(["instance", "execute-host", "--store", str(store)], host)
+    if validation["class"] != "succeeded":
         raise RuntimeError("exact payload validation did not succeed")
-    if not json_command(["instance", "validate-application", "--store", str(store)], host)["replayed"]:
+    if not json_command(["instance", "execute-host", "--store", str(store)], host)["replayed"]:
         raise RuntimeError("host result replay was not exact")
     corrupt_outcome_store = root / "corrupt-outcome-instances"
     shutil.copytree(store, corrupt_outcome_store)
@@ -626,7 +666,7 @@ def operate(root, controller_path, payload_path, release, types):
         ["instance", "resume", "--store", str(store)],
         resume_request(instance, 2, "validation-1"),
     )
-    if predicted["state_digest"] != receipt["state_digest"] or receipt["command"]["kind"] != "activate_application":
+    if predicted["state_digest"] != receipt["state_digest"] or receipt["command"]["operation"] != "activate_application":
         raise RuntimeError("validation resume parity or activation suspension failed")
     replayed_resume = json_command(
         ["instance", "resume", "--store", str(store)],
@@ -634,9 +674,15 @@ def operate(root, controller_path, payload_path, release, types):
     )
     if not replayed_resume["replayed"] or replayed_resume["next_revision"] != 3:
         raise RuntimeError("duplicate resume did not replay the retained receipt")
-    activation_host = {"version": 1, "instance": instance, "command": receipt["command"]["id"], "grant": grant, "source_application": str(payload_path)}
-    activation = json_command(["instance", "execute-activation", "--store", str(store)], activation_host)
-    if activation["outcome"] != "known_success" or slot.read_bytes() != payload_path.read_bytes():
+    activation_host = {
+        "version": 2,
+        "instance": instance,
+        "command": receipt["command"]["id"],
+        "grant": grant,
+        "input": {"kind": "application_source", "data": {"path": str(payload_path)}},
+    }
+    activation = json_command(["instance", "execute-host", "--store", str(store)], activation_host)
+    if activation["class"] != "succeeded" or slot.read_bytes() != payload_path.read_bytes():
         raise RuntimeError("production activation did not make the exact application visible")
     receipt = json_command(
         ["instance", "resume", "--store", str(store)],
@@ -648,13 +694,19 @@ def operate(root, controller_path, payload_path, release, types):
     # A second instance has a distinct grant domain and cannot consume the first command or slot.
     other_slot = slots / "other-active.lkja"
     other_grant = {
-        **grant, "instance": other, "name": "secondary", "executor": "deterministic_fake",
-        "slot": str(other_slot),
+        **grant,
+        "instance": other,
+        "name": "secondary",
+        "adapter": "deterministic_fake",
+        "descriptor": {
+            "kind": "application_activation",
+            "data": {"source_directory": str(root), "activation_slot": str(other_slot)},
+        },
     }
-    other_create = {"version": 1, "mode": "commit", "instance": other, "initial_state": idle, "grant": other_grant}
+    other_create = {"version": 2, "mode": "commit", "instance": other, "initial_state": idle, "grants": [other_grant]}
     json_command(["instance", "create", "--store", str(store), "--application", str(controller_path)], other_create)
     expect_error(
-        ["instance", "execute-activation", "--store", str(store)],
+        ["instance", "execute-host", "--store", str(store)],
         {**activation_host, "instance": other, "grant": other_grant},
         "protocol_malformed",
     )
@@ -666,8 +718,8 @@ def operate(root, controller_path, payload_path, release, types):
     json_command(["instance", "apply-event", "--store", str(store)], instance_event(other, 0, "wrong-request", wrong_event))
     r2 = json_command(["instance", "apply-event", "--store", str(store)], instance_event(other, 1, "wrong-begin", begin))
     fake = {
-        "version": 1, "instance": other, "command": r2["command"]["id"], "grant": other_grant,
-        "outcome": "known_success", "evidence": b64(wrong_digest),
+        "version": 2, "instance": other, "command": r2["command"]["id"], "grant": other_grant,
+        "class": "succeeded", "evidence": b64(wrong_digest),
     }
     json_command(["instance", "fake-outcome", "--store", str(store)], fake)
     activation_request = json_command(
@@ -676,21 +728,21 @@ def operate(root, controller_path, payload_path, release, types):
     )
     fake.update({
         "command": activation_request["command"]["id"],
-        "outcome": "outcome_unknown",
-        "evidence": b64(b""),
+        "class": "outcome_unknown",
+        "evidence": b64(wrong_digest),
     })
     unknown = json_command(["instance", "fake-outcome", "--store", str(store)], fake)
-    if unknown["outcome"] != "outcome_unknown":
+    if unknown["class"] != "outcome_unknown":
         raise RuntimeError("fake activation did not retain an unknown outcome")
     reconcile_request = json_command(
         ["instance", "resume", "--store", str(store)],
         resume_request(other, 3, "fake-unknown"),
     )
-    if reconcile_request["command"]["kind"] != "reconcile_activation":
+    if reconcile_request["command"]["operation"] != "reconcile_activation":
         raise RuntimeError("unknown outcome did not suspend for reconciliation")
     fake.update({
         "command": reconcile_request["command"]["id"],
-        "outcome": "reconciliation_absent",
+        "class": "reconciliation_absent",
     })
     json_command(["instance", "fake-outcome", "--store", str(store)], fake)
     json_command(
@@ -701,7 +753,7 @@ def operate(root, controller_path, payload_path, release, types):
     retry_receipt = json_command(["instance", "apply-event", "--store", str(store)], instance_event(other, 5, "retry-1", retry))
     fake.update({
         "command": retry_receipt["command"]["id"],
-        "outcome": "known_failure_before_visibility",
+        "class": "known_failure_before_visibility",
     })
     json_command(["instance", "fake-outcome", "--store", str(store)], fake)
     json_command(["instance", "resume", "--store", str(store)], resume_request(other, 6, "retry-result"))
@@ -726,7 +778,7 @@ def operate(root, controller_path, payload_path, release, types):
 
     deleted = json_command(
         ["instance", "delete", "--store", str(store)],
-        {"version": 1, "instance": other, "base_revision": 8},
+        {"version": 2, "instance": other, "base_revision": 8},
     )
     if not deleted["deleted"]:
         raise RuntimeError("instance tombstone was not durable")
@@ -757,7 +809,16 @@ def execute():
         state.mkdir(mode=0o700)
         start_session()
         workspace = expect(rpc({"kind": "create_workspace"}), "workspace_created")["workspace"]
-        returned = [1, 100, *STATE_VARIANTS, 200, 201, 202, 203, 204, 205, 300, 301, 302, 303, 304, 500, 600, 700]
+        returned = [
+            1,
+            100, *STATE_VARIANTS,
+            200, 201, 202, 203, 204, 205,
+            300, 301, 302, 303,
+            320, 321, 322, 323, 324, 325, 326, 327, 328,
+            340, 341, 350, 351,
+            360, 361, 362, 370, 371, 372, 373, 380, 381, 382,
+            500, 600, 700,
+        ]
         response = expect(rpc({
             "kind": "apply_transaction",
             "data": {
@@ -775,7 +836,13 @@ def execute():
             "exports": [
                 {"name": "state", "target": ids[100]},
                 {"name": "event", "target": ids[200]},
-                {"name": "decision", "target": ids[300]},
+                {"name": "activation_request", "target": ids[300]},
+                {"name": "activation_outcome", "target": ids[320]},
+                {"name": "command", "target": ids[340]},
+                {"name": "outcome", "target": ids[350]},
+                {"name": "completed_payload", "target": ids[360]},
+                {"name": "suspended_payload", "target": ids[370]},
+                {"name": "decision", "target": ids[380]},
                 {"name": "transition_event", "target": ids[500]},
                 {"name": "transition_resume", "target": ids[600]},
                 {"name": "identity", "target": ids[700]},
@@ -798,14 +865,52 @@ def execute():
         resume_entry = app_target(release, exports["transition_resume"]["target"])
         target_bytes = bytes(range(32))
         controller_request = {
-            "version": 3, "root_release": release, "entry": event_entry,
+            "version": 4, "root_release": release, "entry": event_entry,
             "profile": {"kind": "stateful", "data": {
                 "resume": resume_entry,
+                "state": app_target(release, types["state"]["target"]),
+                "event": app_target(release, types["event"]["target"]),
+                "command": app_target(release, types["command"]["target"]),
+                "outcome": app_target(release, types["outcome"]["target"]),
                 "decision": app_target(release, types["decision"]["target"]),
-                "state_field": app_target(release, types["decision"]["fields"]["state"]),
-                "response_field": app_target(release, types["decision"]["fields"]["response"]),
-                "command_field": app_target(release, types["decision"]["fields"]["command"]),
-                "target_field": app_target(release, types["decision"]["fields"]["target"]),
+                "completed_variant": app_target(release, types["decision"]["variants"]["completed"]),
+                "completed_payload": app_target(release, types["completed_payload"]["target"]),
+                "completed_state_field": app_target(release, types["completed_payload"]["fields"]["state"]),
+                "completed_response_field": app_target(release, types["completed_payload"]["fields"]["response"]),
+                "suspended_variant": app_target(release, types["decision"]["variants"]["suspended"]),
+                "suspended_payload": app_target(release, types["suspended_payload"]["target"]),
+                "suspended_state_field": app_target(release, types["suspended_payload"]["fields"]["state"]),
+                "suspended_response_field": app_target(release, types["suspended_payload"]["fields"]["response"]),
+                "suspended_command_field": app_target(release, types["suspended_payload"]["fields"]["command"]),
+                "imports": [{
+                    "slot": "activation",
+                    "interface": "application_activation",
+                    "request": app_target(release, types["activation_request"]["target"]),
+                    "outcome": app_target(release, types["activation_outcome"]["target"]),
+                    "command_variant": app_target(release, types["command"]["variants"]["activation"]),
+                    "outcome_variant": app_target(release, types["outcome"]["variants"]["activation"]),
+                    "requests": [
+                        {"variant": app_target(release, types["activation_request"]["variants"]["validate"]), "operation": "validate_application"},
+                        {"variant": app_target(release, types["activation_request"]["variants"]["activate"]), "operation": "activate_application"},
+                        {"variant": app_target(release, types["activation_request"]["variants"]["reconcile"]), "operation": "reconcile_activation"},
+                    ],
+                    "outcomes": [
+                        {"operation": "validate_application", "class": "succeeded", "variant": app_target(release, types["activation_outcome"]["variants"]["validation_succeeded"])},
+                        {"operation": "validate_application", "class": "known_failure_before_visibility", "variant": app_target(release, types["activation_outcome"]["variants"]["validation_failed"])},
+                        {"operation": "validate_application", "class": "cancelled_before_action", "variant": app_target(release, types["activation_outcome"]["variants"]["validation_failed"])},
+                        {"operation": "validate_application", "class": "timeout_before_action", "variant": app_target(release, types["activation_outcome"]["variants"]["validation_failed"])},
+                        {"operation": "activate_application", "class": "succeeded", "variant": app_target(release, types["activation_outcome"]["variants"]["activation_succeeded"])},
+                        {"operation": "activate_application", "class": "known_failure_before_visibility", "variant": app_target(release, types["activation_outcome"]["variants"]["activation_failed"])},
+                        {"operation": "activate_application", "class": "outcome_unknown", "variant": app_target(release, types["activation_outcome"]["variants"]["activation_unknown"])},
+                        {"operation": "activate_application", "class": "cancelled_before_action", "variant": app_target(release, types["activation_outcome"]["variants"]["activation_failed"])},
+                        {"operation": "activate_application", "class": "timeout_before_action", "variant": app_target(release, types["activation_outcome"]["variants"]["activation_failed"])},
+                        {"operation": "activate_application", "class": "timeout_after_possible_visibility", "variant": app_target(release, types["activation_outcome"]["variants"]["activation_unknown"])},
+                        {"operation": "activate_application", "class": "cleanup_failure", "variant": app_target(release, types["activation_outcome"]["variants"]["activation_unknown"])},
+                        {"operation": "reconcile_activation", "class": "reconciliation_present", "variant": app_target(release, types["activation_outcome"]["variants"]["reconciliation_present"])},
+                        {"operation": "reconcile_activation", "class": "reconciliation_absent", "variant": app_target(release, types["activation_outcome"]["variants"]["reconciliation_absent"])},
+                        {"operation": "reconcile_activation", "class": "reconciliation_indeterminate", "variant": app_target(release, types["activation_outcome"]["variants"]["reconciliation_indeterminate"])},
+                    ],
+                }],
             }},
             "policy": {"fuel": 100000, "maximum_frames": 128},
             "tests": [
@@ -817,7 +922,10 @@ def execute():
                 },
                 {
                     "name": "validation_success", "target": resume_entry,
-                    "arguments": [app_value(release, types, "state", "validating", target_bytes), i64_value(1), bytes_value(target_bytes)],
+                    "arguments": [
+                        app_value(release, types, "state", "validating", target_bytes),
+                        app_outcome(release, types, "validation_succeeded", target_bytes),
+                    ],
                     "expected": {"kind": "value", "data": app_decision(release, types, "activating", target_bytes, b"validation_succeeded", 2, target_bytes)},
                     "policy": {"fuel": 100000, "maximum_frames": 128},
                 },
@@ -827,7 +935,7 @@ def execute():
         json_command(["app", "build", "--release", str(release_path), "--output", str(controller_path)], controller_request)
         identity = app_target(release, exports["identity"]["target"])
         payload_request = {
-            "version": 3, "root_release": release, "entry": identity,
+            "version": 4, "root_release": release, "entry": identity,
             "profile": {"kind": "bytes_stream"},
             "policy": {"fuel": 10000, "maximum_frames": 32},
             "tests": [{
@@ -842,7 +950,7 @@ def execute():
         release_path.unlink()
         proof = operate(root, controller_path, payload_path, release, types)
         return {
-            "contract_versions": {"workspace": 10, "release": 1, "application": 3, "instance": 1},
+            "contract_versions": {"workspace": 10, "release": 1, "application": 4, "instance": 2},
             "source_workspace_deleted": not state.exists(),
             "source_release_deleted": not release_path.exists(),
             "controller_application_bytes": controller_path.stat().st_size,

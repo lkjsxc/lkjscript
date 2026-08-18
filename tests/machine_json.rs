@@ -1065,6 +1065,8 @@ fn every_closed_machine_variant_round_trips() {
         Response::Run(RunResult {
             value: RuntimeValue::I64(42),
             compile_nanoseconds: 1,
+            lowering_nanoseconds: 0,
+            core_verification_nanoseconds: 0,
             execute_nanoseconds: 2,
         }),
         Response::Acknowledged,

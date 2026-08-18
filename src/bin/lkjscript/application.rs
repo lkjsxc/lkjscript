@@ -9,6 +9,7 @@ use lkjscript::application::{
 };
 use lkjscript::error::{ErrorCode, LkError};
 use lkjscript::machine::{MAX_JSON_INPUT_BYTES, MAX_JSON_OUTPUT_BYTES};
+use lkjscript::runtime::{RuntimeKernel, RuntimePolicy};
 use lkjscript::schema::MAXIMUM_BYTE_STRING_BYTES;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -27,7 +28,7 @@ Commands:
   run --artifact FILE [--pretty]       # strict ApplicationInvocation JSON on stdin
   stream --artifact FILE               # raw bytes on stdin and stdout
 
-Application CLI JSON contract version 3 is required on inputs and reported on outputs. Application
+Application CLI JSON contract version 4 is required on inputs and reported on outputs. Application
 artifacts embed one exact immutable reusable-release graph. Build requires an exact root release,
 exported entry, invocation profile, policy, application tests, and every graph release as an
 explicit immutable input. Build runs all embedded release and application tests before no-overwrite
@@ -105,11 +106,11 @@ fn run_json(command: ApplicationCommand) -> CliOutcome {
         } => run_build(&releases, output.as_deref(), pretty),
         ApplicationCommand::Validate { artifact, pretty }
         | ApplicationCommand::Inspect { artifact, pretty } => {
-            let bytes = match application::read_file(&artifact) {
-                Ok(bytes) => bytes,
+            let mut kernel = match RuntimeKernel::new(RuntimePolicy::default()) {
+                Ok(kernel) => kernel,
                 Err(error) => return application_error(error, pretty),
             };
-            match application::inspect(&bytes) {
+            match kernel.inspect_application_path(&artifact) {
                 Ok(inspection) => encode_json(&inspection, pretty),
                 Err(error) => application_error(error, pretty),
             }
@@ -255,15 +256,15 @@ fn run_build(releases: &[PathBuf], output: Option<&Path>, pretty: bool) -> CliOu
 }
 
 fn run_tests(path: &Path, pretty: bool) -> CliOutcome {
-    let bytes = match application::read_file(path) {
-        Ok(bytes) => bytes,
+    let mut kernel = match RuntimeKernel::new(RuntimePolicy::default()) {
+        Ok(kernel) => kernel,
         Err(error) => return application_error(error, pretty),
     };
-    let inspection = match application::inspect(&bytes) {
+    let inspection = match kernel.inspect_application_path(path) {
         Ok(inspection) => inspection,
         Err(error) => return application_error(error, pretty),
     };
-    let report = match application::test(&bytes) {
+    let report = match kernel.test_application_path(path) {
         Ok(report) => report,
         Err(error) => return application_error(error, pretty),
     };
@@ -291,10 +292,6 @@ fn run_tests(path: &Path, pretty: bool) -> CliOutcome {
 }
 
 fn run_typed(path: &Path, pretty: bool) -> CliOutcome {
-    let bytes = match application::read_file(path) {
-        Ok(bytes) => bytes,
-        Err(error) => return application_error(error, pretty),
-    };
     let input = match read_stdin(MAX_JSON_INPUT_BYTES, "application invocation") {
         Ok(input) => input,
         Err(error) => return application_error(error, pretty),
@@ -303,22 +300,26 @@ fn run_typed(path: &Path, pretty: bool) -> CliOutcome {
         Ok(invocation) => invocation,
         Err(error) => return application_error(error, pretty),
     };
-    match application::run(&bytes, &invocation) {
+    let mut kernel = match RuntimeKernel::new(RuntimePolicy::default()) {
+        Ok(kernel) => kernel,
+        Err(error) => return application_error(error, pretty),
+    };
+    match kernel.run_application_path(path, &invocation) {
         Ok(receipt) => encode_json(&receipt, pretty),
         Err(error) => application_error(error, pretty),
     }
 }
 
 fn run_stream(path: &Path) -> ExitCode {
-    let bytes = match application::read_file(path) {
-        Ok(bytes) => bytes,
-        Err(error) => return stream_error(error),
-    };
     let input = match read_stdin(MAXIMUM_BYTE_STRING_BYTES, "application stream input") {
         Ok(input) => input,
         Err(error) => return stream_error(error),
     };
-    let output = match application::run_stream(&bytes, &input) {
+    let mut kernel = match RuntimeKernel::new(RuntimePolicy::default()) {
+        Ok(kernel) => kernel,
+        Err(error) => return stream_error(error),
+    };
+    let output = match kernel.run_stream_application_path(path, &input) {
         Ok(output) => output,
         Err(error) => return stream_error(error),
     };
@@ -335,7 +336,7 @@ fn stream_error(error: LkError) -> ExitCode {
         error: &error,
     })
     .unwrap_or_else(|_| {
-        b"{\"contract_version\":3,\"error\":{\"code\":\"io\",\"related\":[],\"retryable\":false,\"message\":\"cannot encode application error\"}}".to_vec()
+        b"{\"contract_version\":4,\"error\":{\"code\":\"io\",\"related\":[],\"retryable\":false,\"message\":\"cannot encode application error\"}}".to_vec()
     });
     let mut stderr = std::io::stderr().lock();
     let _ = stderr.write_all(&encoded);

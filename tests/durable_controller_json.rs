@@ -25,7 +25,7 @@ fn public_controller_is_durable_exact_isolated_and_source_independent() {
     let summary: Value = serde_json::from_slice(&output.stdout).expect("controller summary JSON");
     assert_eq!(
         summary["contract_versions"],
-        json!({"workspace": 10, "release": 1, "application": 3, "instance": 1})
+        json!({"workspace": 10, "release": 1, "application": 4, "instance": 2})
     );
     assert_eq!(summary["source_workspace_deleted"], true);
     assert_eq!(summary["source_release_deleted"], true);

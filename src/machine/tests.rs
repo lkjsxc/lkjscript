@@ -2244,6 +2244,8 @@ fn every_advertised_public_variant_matches_strict_serde() {
     let run_result = RunResult {
         value: RuntimeValue::I64(1),
         compile_nanoseconds: 1,
+        lowering_nanoseconds: 0,
+        core_verification_nanoseconds: 0,
         execute_nanoseconds: 2,
     };
     let receipt = TransactionReceipt {

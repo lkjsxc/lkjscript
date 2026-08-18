@@ -114,7 +114,7 @@ fn bundled_graph_application_is_canonical_offline_and_rejects_v2() {
     let prepared = prepare(&request, &fixture.releases).expect("prepare application");
     let artifact = prepared.bytes().to_vec();
     let inspection = inspect(&artifact).expect("inspect application");
-    assert_eq!(inspection.format_version, 3);
+    assert_eq!(inspection.format_version, 4);
     assert_eq!(inspection.root_release, fixture.root);
     assert_eq!(inspection.releases.len(), 4);
     assert_eq!(inspection.graph_edges, 4);
@@ -154,11 +154,12 @@ fn bundled_graph_application_is_canonical_offline_and_rejects_v2() {
         artifact
     );
 
-    let old = b"LKJAPP\0\x02";
-    assert_eq!(
-        validate(old).expect_err("application v2 rejection").code,
-        ErrorCode::ArtifactCorrupt
-    );
+    for old in [b"LKJAPP\0\x02".as_slice(), b"LKJAPP\0\x03".as_slice()] {
+        assert_eq!(
+            validate(old).expect_err("old application rejection").code,
+            ErrorCode::ArtifactCorrupt
+        );
+    }
     for end in 0..artifact.len() {
         assert!(validate(&artifact[..end]).is_err(), "truncation {end}");
     }
@@ -171,10 +172,10 @@ fn bundled_graph_application_is_canonical_offline_and_rejects_v2() {
 }
 
 #[test]
-fn application_v3_profile_and_contract_json_reject_v2_shapes() {
+fn application_v4_profile_and_contract_json_reject_v3_shapes() {
     assert_eq!(
-        validate_contract_version(2)
-            .expect_err("application contract v2 rejection")
+        validate_contract_version(3)
+            .expect_err("application contract v3 rejection")
             .code,
         ErrorCode::ProtocolVersion
     );

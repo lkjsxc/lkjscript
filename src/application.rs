@@ -1,6 +1,6 @@
 //! Independently transferable exact-release-graph applications.
 //!
-//! Application format 3 embeds one canonical exact reusable-release graph, exact exported
+//! Application format 4 embeds one canonical exact reusable-release graph, exact exported
 //! entries, an invocation profile, resource policy, and typed application cases. Source workspace
 //! identity, mutable resolver state, proposal syntax, Core IR, and runtime handles are absent.
 
@@ -18,20 +18,25 @@ use crate::schema::{ByteString, MAXIMUM_BYTE_STRING_BYTES, Node, SemanticType};
 use serde::{Deserialize, Serialize, Serializer};
 use std::fmt;
 use std::path::Path;
+use std::time::Instant;
 
-pub const APPLICATION_MAGIC: [u8; 8] = *b"LKJAPP\0\x03";
-pub const APPLICATION_FORMAT_VERSION: u16 = 3;
-pub const APPLICATION_CONTRACT_VERSION: u16 = 3;
+pub const APPLICATION_MAGIC: [u8; 8] = *b"LKJAPP\0\x04";
+pub const APPLICATION_FORMAT_VERSION: u16 = 4;
+pub const APPLICATION_CONTRACT_VERSION: u16 = 4;
 pub const MAXIMUM_APPLICATION_ARTIFACT_BYTES: usize = 256 * 1024 * 1024;
 pub const MAXIMUM_APPLICATION_TESTS: usize = 256;
 pub const MAXIMUM_APPLICATION_TEST_NAME_BYTES: usize = 64;
 pub const MAXIMUM_APPLICATION_SUITE_FUEL: u64 = 100_000_000;
 pub const MAXIMUM_APPLICATION_PATH_BYTES: usize = artifact_io::MAXIMUM_ARTIFACT_PATH_BYTES;
 const MAXIMUM_APPLICATION_VALUE_JSON_BYTES: usize = 1024 * 1024;
-const APPLICATION_DIGEST_DOMAIN: &str = "lkjscript.application-artifact.v3";
+const APPLICATION_DIGEST_DOMAIN: &str = "lkjscript.application-artifact.v4";
 const APPLICATION_GRAPH_DIGEST_DOMAIN: &str = "lkjscript.application-release-graph.v1";
 const APPLICATION_TEST_DIGEST_DOMAIN: &str = "lkjscript.application-test-case.v2";
 const TEMPORARY_PREFIX: &str = ".lkjscript-application-";
+
+fn elapsed_nanoseconds(started: Instant) -> u64 {
+    u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX)
+}
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ApplicationDigest([u8; 32]);
@@ -157,15 +162,205 @@ pub enum ApplicationValue {
     },
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HostInterface {
+    ApplicationActivation,
+    ImmutableBlob,
+}
+
+impl HostInterface {
+    pub const fn contract_name(self) -> &'static str {
+        match self {
+            Self::ApplicationActivation => "application_activation_v1",
+            Self::ImmutableBlob => "immutable_blob_v1",
+        }
+    }
+
+    pub fn identity(self) -> HostInterfaceId {
+        let mut hasher = blake3::Hasher::new_derive_key("lkjscript.host-interface.identity.v1");
+        hasher.update(self.contract_name().as_bytes());
+        HostInterfaceId(*hasher.finalize().as_bytes())
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct HostInterfaceId([u8; 32]);
+
+impl HostInterfaceId {
+    pub const fn from_bytes(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    pub const fn as_bytes(self) -> [u8; 32] {
+        self.0
+    }
+}
+
+impl fmt::Display for HostInterfaceId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&release::hex(&self.0))
+    }
+}
+
+impl Serialize for HostInterfaceId {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for HostInterfaceId {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        ReleaseId::deserialize(deserializer).map(|digest| Self(digest.as_bytes()))
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HostOperation {
+    ValidateApplication,
+    ActivateApplication,
+    ReconcileActivation,
+    PutBlob,
+    InspectBlob,
+}
+
+impl HostOperation {
+    pub const fn interface(self) -> HostInterface {
+        match self {
+            Self::ValidateApplication | Self::ActivateApplication | Self::ReconcileActivation => {
+                HostInterface::ApplicationActivation
+            }
+            Self::PutBlob | Self::InspectBlob => HostInterface::ImmutableBlob,
+        }
+    }
+
+    const fn stable_tag(self) -> u8 {
+        match self {
+            Self::ValidateApplication => 1,
+            Self::ActivateApplication => 2,
+            Self::ReconcileActivation => 3,
+            Self::PutBlob => 4,
+            Self::InspectBlob => 5,
+        }
+    }
+
+    const fn from_stable_tag(tag: u8) -> Option<Self> {
+        match tag {
+            1 => Some(Self::ValidateApplication),
+            2 => Some(Self::ActivateApplication),
+            3 => Some(Self::ReconcileActivation),
+            4 => Some(Self::PutBlob),
+            5 => Some(Self::InspectBlob),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HostOutcomeClass {
+    Succeeded,
+    AlreadyPresent,
+    KnownFailureBeforeVisibility,
+    OutcomeUnknown,
+    ReconciliationPresent,
+    ReconciliationAbsent,
+    ReconciliationIndeterminate,
+    CancelledBeforeAction,
+    TimeoutBeforeAction,
+    TimeoutAfterPossibleVisibility,
+    CleanupFailure,
+}
+
+impl HostOutcomeClass {
+    const fn stable_tag(self) -> u8 {
+        match self {
+            Self::Succeeded => 1,
+            Self::AlreadyPresent => 2,
+            Self::KnownFailureBeforeVisibility => 3,
+            Self::OutcomeUnknown => 4,
+            Self::ReconciliationPresent => 5,
+            Self::ReconciliationAbsent => 6,
+            Self::ReconciliationIndeterminate => 7,
+            Self::CancelledBeforeAction => 8,
+            Self::TimeoutBeforeAction => 9,
+            Self::TimeoutAfterPossibleVisibility => 10,
+            Self::CleanupFailure => 11,
+        }
+    }
+
+    const fn from_stable_tag(tag: u8) -> Option<Self> {
+        match tag {
+            1 => Some(Self::Succeeded),
+            2 => Some(Self::AlreadyPresent),
+            3 => Some(Self::KnownFailureBeforeVisibility),
+            4 => Some(Self::OutcomeUnknown),
+            5 => Some(Self::ReconciliationPresent),
+            6 => Some(Self::ReconciliationAbsent),
+            7 => Some(Self::ReconciliationIndeterminate),
+            8 => Some(Self::CancelledBeforeAction),
+            9 => Some(Self::TimeoutBeforeAction),
+            10 => Some(Self::TimeoutAfterPossibleVisibility),
+            11 => Some(Self::CleanupFailure),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct HostRequestRoute {
+    pub variant: ApplicationTarget,
+    pub operation: HostOperation,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct HostOutcomeRoute {
+    pub operation: HostOperation,
+    pub class: HostOutcomeClass,
+    pub variant: ApplicationTarget,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ApplicationImport {
+    pub slot: String,
+    pub interface: HostInterface,
+    pub request: ApplicationTarget,
+    pub outcome: ApplicationTarget,
+    pub command_variant: ApplicationTarget,
+    pub outcome_variant: ApplicationTarget,
+    pub requests: Vec<HostRequestRoute>,
+    pub outcomes: Vec<HostOutcomeRoute>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct StatefulApplicationProfile {
     pub resume: ApplicationTarget,
+    pub state: ApplicationTarget,
+    pub event: ApplicationTarget,
+    pub command: ApplicationTarget,
+    pub outcome: ApplicationTarget,
     pub decision: ApplicationTarget,
-    pub state_field: ApplicationTarget,
-    pub response_field: ApplicationTarget,
-    pub command_field: ApplicationTarget,
-    pub target_field: ApplicationTarget,
+    pub completed_variant: ApplicationTarget,
+    pub completed_payload: ApplicationTarget,
+    pub completed_state_field: ApplicationTarget,
+    pub completed_response_field: ApplicationTarget,
+    pub suspended_variant: ApplicationTarget,
+    pub suspended_payload: ApplicationTarget,
+    pub suspended_state_field: ApplicationTarget,
+    pub suspended_response_field: ApplicationTarget,
+    pub suspended_command_field: ApplicationTarget,
+    pub imports: Vec<ApplicationImport>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -192,63 +387,14 @@ impl InvocationProfile {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum StatefulCommandKind {
-    ValidateApplication,
-    ActivateApplication,
-    ReconcileActivation,
-}
-
-impl StatefulCommandKind {
-    const fn from_semantic_tag(tag: i64) -> Option<Option<Self>> {
-        match tag {
-            0 => Some(None),
-            1 => Some(Some(Self::ValidateApplication)),
-            2 => Some(Some(Self::ActivateApplication)),
-            3 => Some(Some(Self::ReconcileActivation)),
-            _ => None,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum HostOutcomeKind {
-    KnownSuccess,
-    KnownFailureBeforeVisibility,
-    OutcomeUnknown,
-    ReconciliationPresent,
-    ReconciliationAbsent,
-    ReconciliationIndeterminate,
-    CancelledBeforeAction,
-    TimeoutBeforeAction,
-    TimeoutAfterPossibleVisibility,
-    CleanupFailure,
-}
-
-impl HostOutcomeKind {
-    pub const fn semantic_tag(self) -> i64 {
-        match self {
-            Self::KnownSuccess => 1,
-            Self::KnownFailureBeforeVisibility => 2,
-            Self::OutcomeUnknown => 3,
-            Self::ReconciliationPresent => 4,
-            Self::ReconciliationAbsent => 5,
-            Self::ReconciliationIndeterminate => 6,
-            Self::CancelledBeforeAction => 7,
-            Self::TimeoutBeforeAction => 8,
-            Self::TimeoutAfterPossibleVisibility => 9,
-            Self::CleanupFailure => 10,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct StatefulCommand {
-    pub kind: StatefulCommandKind,
-    pub application: ApplicationDigest,
+    pub slot: String,
+    pub interface: HostInterface,
+    pub interface_id: HostInterfaceId,
+    pub operation: HostOperation,
+    pub request: ApplicationValue,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -259,7 +405,25 @@ pub struct StatefulTransition {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command: Option<StatefulCommand>,
     pub compile_nanoseconds: u64,
+    pub lowering_nanoseconds: u64,
+    pub core_verification_nanoseconds: u64,
     pub execute_nanoseconds: u64,
+    pub public_value_nanoseconds: u64,
+}
+
+/// Operational application-load observation. It is derived, bounded, and never application
+/// identity, semantic state, or durable authority.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ApplicationLoadObservation {
+    pub application_bytes: u64,
+    pub release_count: u64,
+    pub flattened_semantic_items: u64,
+    pub envelope_decode_nanoseconds: u64,
+    pub release_graph_validation_nanoseconds: u64,
+    pub closure_flattening_nanoseconds: u64,
+    pub canonical_reencode_nanoseconds: u64,
+    pub release_tests_nanoseconds: u64,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -471,7 +635,10 @@ pub struct ApplicationBuildReceipt {
 pub struct ApplicationRunResult {
     pub value: ApplicationValue,
     pub compile_nanoseconds: u64,
+    pub lowering_nanoseconds: u64,
+    pub core_verification_nanoseconds: u64,
     pub execute_nanoseconds: u64,
+    pub public_value_nanoseconds: u64,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -533,24 +700,19 @@ pub fn prepare(
     validate_contract_version(request.version)?;
     let graph = decode_graph(request.root_release, supplied_release_bytes)?;
     let tests = normalize_tests(&request.tests)?;
+    let profile = normalize_profile(&request.profile)?;
     let flattened = graph.flatten()?;
     validate_manifest(
         &graph,
         &flattened,
         request.entry,
-        &request.profile,
+        &profile,
         request.policy,
         &tests,
     )?;
     let entry = flattened.item(request.entry.release, request.entry.item)?;
     compile::compile(&flattened.snapshot, entry)?;
-    let bytes = encode_application(
-        &graph,
-        request.entry,
-        &request.profile,
-        request.policy,
-        &tests,
-    )?;
+    let bytes = encode_application(&graph, request.entry, &profile, request.policy, &tests)?;
     let decoded = decode_application(&bytes)?;
     let report = run_all_tests(&decoded)?;
     if !report.all_passed() {
@@ -567,26 +729,77 @@ pub fn prepare(
     })
 }
 
+fn normalize_profile(profile: &InvocationProfile) -> Result<InvocationProfile> {
+    let InvocationProfile::Stateful(stateful) = profile else {
+        return Ok(profile.clone());
+    };
+    let mut stateful = stateful.clone();
+    stateful
+        .imports
+        .sort_by(|left, right| left.slot.cmp(&right.slot));
+    for import in &mut stateful.imports {
+        import.requests.sort_by_key(|route| route.variant);
+        import
+            .outcomes
+            .sort_by_key(|route| (route.operation, route.class, route.variant));
+    }
+    Ok(InvocationProfile::Stateful(stateful))
+}
+
 pub fn validate(bytes: &[u8]) -> Result<ApplicationInspection> {
-    inspection(&decode_application(bytes)?)
+    inspect_observed(bytes, &mut ApplicationLoadObservation::default())
 }
 
 pub fn inspect(bytes: &[u8]) -> Result<ApplicationInspection> {
     validate(bytes)
 }
 
+pub fn inspect_observed(
+    bytes: &[u8],
+    observation: &mut ApplicationLoadObservation,
+) -> Result<ApplicationInspection> {
+    inspection(&decode_application_observed(bytes, observation)?)
+}
+
 pub fn test(bytes: &[u8]) -> Result<ApplicationTestReport> {
-    run_all_tests(&decode_application(bytes)?)
+    test_observed(bytes, &mut ApplicationLoadObservation::default())
+}
+
+pub fn test_observed(
+    bytes: &[u8],
+    observation: &mut ApplicationLoadObservation,
+) -> Result<ApplicationTestReport> {
+    let application = decode_application_observed(bytes, observation)?;
+    let started = Instant::now();
+    let result = run_all_tests(&application);
+    observation.release_tests_nanoseconds = observation
+        .release_tests_nanoseconds
+        .saturating_add(elapsed_nanoseconds(started));
+    result
 }
 
 pub fn run(bytes: &[u8], invocation: &ApplicationInvocation) -> Result<ApplicationRunReceipt> {
+    run_observed(
+        bytes,
+        invocation,
+        &mut ApplicationLoadObservation::default(),
+    )
+}
+
+pub fn run_observed(
+    bytes: &[u8],
+    invocation: &ApplicationInvocation,
+    observation: &mut ApplicationLoadObservation,
+) -> Result<ApplicationRunReceipt> {
     validate_contract_version(invocation.version)?;
-    let application = decode_application(bytes)?;
+    let application = decode_application_observed(bytes, observation)?;
+    let public_value_started = Instant::now();
     let arguments = invocation
         .arguments
         .iter()
         .map(|value| to_runtime(&application.flattened, value))
         .collect::<Result<Vec<_>>>()?;
+    let mut public_value_nanoseconds = elapsed_nanoseconds(public_value_started);
     let entry = application
         .flattened
         .item(application.entry.release, application.entry.item)?;
@@ -596,13 +809,20 @@ pub fn run(bytes: &[u8], invocation: &ApplicationInvocation) -> Result<Applicati
         &arguments,
         application.policy,
     )?;
+    let public_value_started = Instant::now();
+    let value = from_runtime(&application.flattened, &result.value)?;
+    public_value_nanoseconds =
+        public_value_nanoseconds.saturating_add(elapsed_nanoseconds(public_value_started));
     Ok(ApplicationRunReceipt {
         contract_version: APPLICATION_CONTRACT_VERSION,
         digest: application.digest,
         result: ApplicationRunResult {
-            value: from_runtime(&application.flattened, &result.value)?,
+            value,
             compile_nanoseconds: result.compile_nanoseconds,
+            lowering_nanoseconds: result.lowering_nanoseconds,
+            core_verification_nanoseconds: result.core_verification_nanoseconds,
             execute_nanoseconds: result.execute_nanoseconds,
+            public_value_nanoseconds,
         },
     })
 }
@@ -664,7 +884,21 @@ pub fn transition_event(
     state: &ApplicationValue,
     event: &ApplicationValue,
 ) -> Result<StatefulTransition> {
-    let application = decode_application(bytes)?;
+    transition_event_observed(
+        bytes,
+        state,
+        event,
+        &mut ApplicationLoadObservation::default(),
+    )
+}
+
+pub fn transition_event_observed(
+    bytes: &[u8],
+    state: &ApplicationValue,
+    event: &ApplicationValue,
+    observation: &mut ApplicationLoadObservation,
+) -> Result<StatefulTransition> {
+    let application = decode_application_observed(bytes, observation)?;
     let profile = stateful_profile(&application)?;
     run_stateful(
         &application,
@@ -678,26 +912,35 @@ pub fn transition_event(
 pub fn transition_resume(
     bytes: &[u8],
     state: &ApplicationValue,
-    outcome: HostOutcomeKind,
-    evidence: &ByteString,
+    outcome: &ApplicationValue,
 ) -> Result<StatefulTransition> {
-    let application = decode_application(bytes)?;
+    transition_resume_observed(
+        bytes,
+        state,
+        outcome,
+        &mut ApplicationLoadObservation::default(),
+    )
+}
+
+pub fn transition_resume_observed(
+    bytes: &[u8],
+    state: &ApplicationValue,
+    outcome: &ApplicationValue,
+    observation: &mut ApplicationLoadObservation,
+) -> Result<StatefulTransition> {
+    let application = decode_application_observed(bytes, observation)?;
     let profile = stateful_profile(&application)?;
     run_stateful(
         &application,
         profile.resume,
         profile,
-        &[
-            state.clone(),
-            ApplicationValue::I64(outcome.semantic_tag()),
-            ApplicationValue::Bytes(evidence.clone()),
-        ],
+        &[state.clone(), outcome.clone()],
     )
 }
 
 fn stateful_profile(application: &DecodedApplication) -> Result<StatefulApplicationProfile> {
     match &application.profile {
-        InvocationProfile::Stateful(profile) => Ok(*profile),
+        InvocationProfile::Stateful(profile) => Ok(profile.clone()),
         _ => Err(LkError::new(
             ErrorCode::RunArgumentMismatch,
             "application does not declare the stateful invocation profile",
@@ -712,10 +955,12 @@ fn run_stateful(
     arguments: &[ApplicationValue],
 ) -> Result<StatefulTransition> {
     let target_node = application.flattened.item(target.release, target.item)?;
+    let public_value_started = Instant::now();
     let arguments = arguments
         .iter()
         .map(|value| to_runtime(&application.flattened, value))
         .collect::<Result<Vec<_>>>()?;
+    let public_value_nanoseconds = elapsed_nanoseconds(public_value_started);
     let result = interpret::compile_and_run(
         &application.flattened.snapshot,
         target_node,
@@ -725,98 +970,309 @@ fn run_stateful(
     decode_stateful_transition(
         &application.flattened,
         profile,
-        result.value,
-        result.compile_nanoseconds,
-        result.execute_nanoseconds,
+        result,
+        public_value_nanoseconds,
     )
 }
 
 fn decode_stateful_transition(
     flattened: &FlattenedGraph,
     profile: StatefulApplicationProfile,
-    value: RuntimeValue,
-    compile_nanoseconds: u64,
-    execute_nanoseconds: u64,
+    result: interpret::RunResult,
+    public_value_nanoseconds: u64,
 ) -> Result<StatefulTransition> {
+    let interpret::RunResult {
+        value,
+        compile_nanoseconds,
+        lowering_nanoseconds,
+        core_verification_nanoseconds,
+        execute_nanoseconds,
+    } = result;
+    let public_value_started = Instant::now();
     let value = from_runtime(flattened, &value)?;
-    let ApplicationValue::Product { ty, fields } = value else {
+    let ApplicationValue::Sum {
+        ty,
+        variant,
+        payload,
+    } = value
+    else {
         return Err(LkError::new(
             ErrorCode::CoreIrInvalid,
-            "stateful application returned a non-product transition",
+            "stateful application returned a non-sum decision",
         ));
     };
-    if ty != profile.decision || fields.len() != 4 {
+    if ty != profile.decision {
         return Err(LkError::new(
             ErrorCode::CoreIrInvalid,
-            "stateful application returned the wrong transition product",
+            "stateful application returned the wrong decision type",
         ));
     }
-    let expected = [
-        profile.state_field,
-        profile.response_field,
-        profile.command_field,
-        profile.target_field,
-    ];
-    let mut values = Vec::with_capacity(4);
-    for (field, expected) in fields.into_iter().zip(expected) {
+    let payload = payload.ok_or_else(|| corrupt("decision payload is absent"))?;
+    let ApplicationValue::Product {
+        ty: payload_type,
+        fields,
+    } = *payload
+    else {
+        return Err(corrupt("decision variant payload is not a product"));
+    };
+    let (expected_payload, expected_fields, suspended) = if variant == profile.completed_variant {
+        (
+            profile.completed_payload,
+            vec![
+                profile.completed_state_field,
+                profile.completed_response_field,
+            ],
+            false,
+        )
+    } else if variant == profile.suspended_variant {
+        (
+            profile.suspended_payload,
+            vec![
+                profile.suspended_state_field,
+                profile.suspended_response_field,
+                profile.suspended_command_field,
+            ],
+            true,
+        )
+    } else {
+        return Err(corrupt(
+            "decision uses an undeclared completed/suspended variant",
+        ));
+    };
+    if payload_type != expected_payload || fields.len() != expected_fields.len() {
+        return Err(corrupt("decision payload has the wrong exact product type"));
+    }
+    let mut values = Vec::with_capacity(fields.len());
+    for (field, expected) in fields.into_iter().zip(expected_fields) {
         if field.field != expected {
-            return Err(LkError::new(
-                ErrorCode::CoreIrInvalid,
-                "stateful application returned transition fields out of contract order",
-            ));
+            return Err(corrupt("decision payload fields are out of contract order"));
         }
         values.push(field.value);
     }
     let mut values = values.into_iter();
     let state = values
         .next()
-        .ok_or_else(|| corrupt("transition state is absent"))?;
+        .ok_or_else(|| corrupt("decision state is absent"))?;
     let response = match values.next() {
         Some(ApplicationValue::Bytes(value)) => value,
-        _ => return Err(corrupt("transition response is not bytes")),
+        _ => return Err(corrupt("decision response is not bytes")),
     };
-    let command_tag = match values.next() {
-        Some(ApplicationValue::I64(value)) => value,
-        _ => return Err(corrupt("transition command tag is not i64")),
+    let command = if suspended {
+        Some(decode_stateful_command(
+            &profile,
+            values
+                .next()
+                .ok_or_else(|| corrupt("suspended decision command is absent"))?,
+        )?)
+    } else {
+        None
     };
-    let target = match values.next() {
-        Some(ApplicationValue::Bytes(value)) => value,
-        _ => return Err(corrupt("transition command target is not bytes")),
-    };
-    let command_kind = StatefulCommandKind::from_semantic_tag(command_tag).ok_or_else(|| {
-        LkError::new(
-            ErrorCode::ProtocolMalformed,
-            "stateful application returned an unknown host-command tag",
-        )
-    })?;
-    let command = match command_kind {
-        None if target.is_empty() => None,
-        None => {
-            return Err(LkError::new(
-                ErrorCode::ProtocolMalformed,
-                "completed transition must carry an empty command target",
-            ));
-        }
-        Some(kind) => {
-            let application = <[u8; 32]>::try_from(target.as_slice()).map_err(|_| {
-                LkError::new(
-                    ErrorCode::ProtocolMalformed,
-                    "activation command target must be one exact 32-byte application digest",
-                )
-            })?;
-            Some(StatefulCommand {
-                kind,
-                application: ApplicationDigest::from_bytes(application),
-            })
-        }
-    };
+    let public_value_nanoseconds =
+        public_value_nanoseconds.saturating_add(elapsed_nanoseconds(public_value_started));
     Ok(StatefulTransition {
         state,
         response,
         command,
         compile_nanoseconds,
+        lowering_nanoseconds,
+        core_verification_nanoseconds,
         execute_nanoseconds,
+        public_value_nanoseconds,
     })
+}
+
+fn decode_stateful_command(
+    profile: &StatefulApplicationProfile,
+    value: ApplicationValue,
+) -> Result<StatefulCommand> {
+    let ApplicationValue::Sum {
+        ty,
+        variant,
+        payload,
+    } = value
+    else {
+        return Err(corrupt("suspended decision command is not a nominal sum"));
+    };
+    if ty != profile.command {
+        return Err(corrupt(
+            "suspended decision command has the wrong nominal type",
+        ));
+    }
+    let import = profile
+        .imports
+        .iter()
+        .find(|import| import.command_variant == variant)
+        .ok_or_else(|| corrupt("command variant does not route to a declared import slot"))?;
+    let request = payload.ok_or_else(|| corrupt("command wrapper request is absent"))?;
+    let ApplicationValue::Sum {
+        ty: request_type,
+        variant: request_variant,
+        payload: request_payload,
+    } = request.as_ref()
+    else {
+        return Err(corrupt("host-interface request is not a nominal sum"));
+    };
+    if *request_type != import.request {
+        return Err(corrupt("host-interface request has the wrong nominal type"));
+    }
+    let route = import
+        .requests
+        .iter()
+        .find(|route| route.variant == *request_variant)
+        .ok_or_else(|| corrupt("host-interface request variant has no exact route"))?;
+    validate_request_payload(route.operation, request_payload.as_deref())?;
+    Ok(StatefulCommand {
+        slot: import.slot.clone(),
+        interface: import.interface,
+        interface_id: import.interface.identity(),
+        operation: route.operation,
+        request: *request,
+    })
+}
+
+/// Returns the exact bounded byte payload carried by one validated interface request.
+pub fn host_request_bytes(command: &StatefulCommand) -> Result<&ByteString> {
+    let ApplicationValue::Sum { payload, .. } = &command.request else {
+        return Err(corrupt("validated host request lost its nominal sum shape"));
+    };
+    let Some(payload) = payload.as_deref() else {
+        return Err(corrupt("validated host request lost its byte payload"));
+    };
+    let ApplicationValue::Bytes(bytes) = payload else {
+        return Err(corrupt("validated host request payload is not bytes"));
+    };
+    Ok(bytes)
+}
+
+/// Constructs the exact application-visible nominal outcome for a retained host result.
+pub fn host_outcome_value(
+    bytes: &[u8],
+    command: &StatefulCommand,
+    class: HostOutcomeClass,
+    evidence: &ByteString,
+) -> Result<ApplicationValue> {
+    let application = decode_application(bytes)?;
+    let profile = stateful_profile(&application)?;
+    let import = profile
+        .imports
+        .iter()
+        .find(|import| {
+            import.slot == command.slot
+                && import.interface == command.interface
+                && import.interface.identity() == command.interface_id
+        })
+        .ok_or_else(|| {
+            LkError::new(
+                ErrorCode::CapabilityDenied,
+                "pending command does not name an exact application import",
+            )
+        })?;
+    let route = import
+        .outcomes
+        .iter()
+        .find(|route| route.operation == command.operation && route.class == class)
+        .ok_or_else(|| {
+            LkError::new(
+                ErrorCode::ProtocolMalformed,
+                "host outcome class is incompatible with the pending interface operation",
+            )
+        })?;
+    let payload = if outcome_requires_evidence(command.operation, class) {
+        if evidence.is_empty() {
+            return Err(LkError::new(
+                ErrorCode::ProtocolMalformed,
+                "host outcome requires exact evidence bytes",
+            ));
+        }
+        Some(Box::new(ApplicationValue::Bytes(evidence.clone())))
+    } else {
+        if !evidence.is_empty() {
+            return Err(LkError::new(
+                ErrorCode::ProtocolMalformed,
+                "host outcome class requires empty evidence",
+            ));
+        }
+        None
+    };
+    let interface_outcome = ApplicationValue::Sum {
+        ty: import.outcome,
+        variant: route.variant,
+        payload,
+    };
+    Ok(ApplicationValue::Sum {
+        ty: profile.outcome,
+        variant: import.outcome_variant,
+        payload: Some(Box::new(interface_outcome)),
+    })
+}
+
+pub const fn host_outcome_is_compatible(operation: HostOperation, class: HostOutcomeClass) -> bool {
+    match operation {
+        HostOperation::ValidateApplication => matches!(
+            class,
+            HostOutcomeClass::Succeeded
+                | HostOutcomeClass::KnownFailureBeforeVisibility
+                | HostOutcomeClass::CancelledBeforeAction
+                | HostOutcomeClass::TimeoutBeforeAction
+        ),
+        HostOperation::ActivateApplication => matches!(
+            class,
+            HostOutcomeClass::Succeeded
+                | HostOutcomeClass::KnownFailureBeforeVisibility
+                | HostOutcomeClass::OutcomeUnknown
+                | HostOutcomeClass::CancelledBeforeAction
+                | HostOutcomeClass::TimeoutBeforeAction
+                | HostOutcomeClass::TimeoutAfterPossibleVisibility
+                | HostOutcomeClass::CleanupFailure
+        ),
+        HostOperation::ReconcileActivation | HostOperation::InspectBlob => matches!(
+            class,
+            HostOutcomeClass::ReconciliationPresent
+                | HostOutcomeClass::ReconciliationAbsent
+                | HostOutcomeClass::ReconciliationIndeterminate
+        ),
+        HostOperation::PutBlob => matches!(
+            class,
+            HostOutcomeClass::Succeeded
+                | HostOutcomeClass::AlreadyPresent
+                | HostOutcomeClass::KnownFailureBeforeVisibility
+                | HostOutcomeClass::OutcomeUnknown
+                | HostOutcomeClass::CancelledBeforeAction
+                | HostOutcomeClass::TimeoutBeforeAction
+                | HostOutcomeClass::TimeoutAfterPossibleVisibility
+                | HostOutcomeClass::CleanupFailure
+        ),
+    }
+}
+
+const fn outcome_requires_evidence(operation: HostOperation, class: HostOutcomeClass) -> bool {
+    host_outcome_is_compatible(operation, class)
+}
+
+fn validate_request_payload(
+    operation: HostOperation,
+    payload: Option<&ApplicationValue>,
+) -> Result<()> {
+    let Some(ApplicationValue::Bytes(bytes)) = payload else {
+        return Err(LkError::new(
+            ErrorCode::ProtocolMalformed,
+            "host-interface request variant must carry exactly one bytes payload",
+        ));
+    };
+    if matches!(
+        operation,
+        HostOperation::ValidateApplication
+            | HostOperation::ActivateApplication
+            | HostOperation::ReconcileActivation
+            | HostOperation::InspectBlob
+    ) && bytes.len() != 32
+    {
+        return Err(LkError::new(
+            ErrorCode::ProtocolMalformed,
+            "exact application and blob inspection requests require a 32-byte identity",
+        ));
+    }
+    Ok(())
 }
 
 pub fn read_file(path: &Path) -> Result<Vec<u8>> {
@@ -1022,7 +1478,7 @@ fn validate_profile(
             Ok(())
         }
         InvocationProfile::Stateful(stateful) => {
-            validate_stateful_profile(graph, flattened, parameters, *result, *stateful)
+            validate_stateful_profile(graph, flattened, parameters, *result, stateful)
         }
     }
 }
@@ -1032,7 +1488,7 @@ fn validate_stateful_profile(
     flattened: &FlattenedGraph,
     event_parameters: &[crate::ids::NodeId],
     event_result: SemanticType,
-    profile: StatefulApplicationProfile,
+    profile: &StatefulApplicationProfile,
 ) -> Result<()> {
     let snapshot = &flattened.snapshot;
     if event_parameters.len() != 2 {
@@ -1041,66 +1497,106 @@ fn validate_stateful_profile(
             "stateful event entry must accept exact state and event values",
         ));
     }
+    let state = flattened.item(profile.state.release, profile.state.item)?;
+    let event = flattened.item(profile.event.release, profile.event.item)?;
+    let command = flattened.item(profile.command.release, profile.command.item)?;
+    let outcome = flattened.item(profile.outcome.release, profile.outcome.item)?;
+    let decision = flattened.item(profile.decision.release, profile.decision.item)?;
     let state_type = parameter_type(snapshot, event_parameters[0])?;
     let event_type = parameter_type(snapshot, event_parameters[1])?;
-    if !matches!(state_type, SemanticType::Nominal(_))
-        || !matches!(event_type, SemanticType::Nominal(_))
+    if state_type != SemanticType::Nominal(state)
+        || event_type != SemanticType::Nominal(event)
+        || !matches!(
+            snapshot.node(state)?,
+            Node::ProductType { .. } | Node::SumType { .. }
+        )
+        || !matches!(
+            snapshot.node(event)?,
+            Node::ProductType { .. } | Node::SumType { .. }
+        )
     {
         return Err(LkError::new(
             ErrorCode::TypeMismatch,
-            "stateful state and event types must be nominal",
+            "stateful event entry must accept the exact declared nominal state and event types",
         ));
     }
-
-    let decision = flattened.item(profile.decision.release, profile.decision.item)?;
     if event_result != SemanticType::Nominal(decision) {
         return Err(LkError::new(
             ErrorCode::TypeMismatch,
-            "stateful event entry must return the declared transition product",
+            "stateful event entry must return the declared decision sum",
         ));
     }
-    let Node::ProductType { fields, .. } = snapshot.node(decision)? else {
+    let Node::SumType { variants, .. } = snapshot.node(decision)? else {
         return Err(LkError::new(
             ErrorCode::WrongKind,
-            "stateful transition result must be a nominal product",
+            "stateful decision must be a nominal sum",
         ));
     };
-    let declared_fields = [
-        profile.state_field,
-        profile.response_field,
-        profile.command_field,
-        profile.target_field,
-    ];
-    let mapped_fields = declared_fields
-        .iter()
-        .map(|target| flattened.item(target.release, target.item))
-        .collect::<Result<Vec<_>>>()?;
-    if fields.as_slice() != mapped_fields.as_slice() {
+    let completed_variant = flattened.item(
+        profile.completed_variant.release,
+        profile.completed_variant.item,
+    )?;
+    let suspended_variant = flattened.item(
+        profile.suspended_variant.release,
+        profile.suspended_variant.item,
+    )?;
+    if variants.as_slice() != [completed_variant, suspended_variant] {
         return Err(LkError::new(
             ErrorCode::InvalidContainment,
-            "stateful transition fields must be declared once in state, response, command, target order",
+            "stateful decision must declare completed then suspended exactly once",
         ));
     }
-    let expected_types = [
-        state_type,
-        SemanticType::Bytes,
-        SemanticType::I64,
-        SemanticType::Bytes,
-    ];
-    for (field, expected) in mapped_fields.iter().zip(expected_types) {
-        let Node::ProductField { owner, ty, .. } = snapshot.node(*field)? else {
-            return Err(LkError::new(
-                ErrorCode::WrongKind,
-                "stateful transition field mapping must target product fields",
-            ));
-        };
-        if *owner != decision || *ty != expected {
-            return Err(LkError::new(
-                ErrorCode::TypeMismatch,
-                "stateful transition field has the wrong owner or exact type",
-            ));
-        }
-    }
+    validate_decision_variant(
+        flattened,
+        completed_variant,
+        profile.completed_payload,
+        &[
+            (profile.completed_state_field, SemanticType::Nominal(state)),
+            (profile.completed_response_field, SemanticType::Bytes),
+        ],
+    )?;
+    validate_decision_variant(
+        flattened,
+        suspended_variant,
+        profile.suspended_payload,
+        &[
+            (profile.suspended_state_field, SemanticType::Nominal(state)),
+            (profile.suspended_response_field, SemanticType::Bytes),
+            (
+                profile.suspended_command_field,
+                SemanticType::Nominal(command),
+            ),
+        ],
+    )?;
+
+    let Node::SumType {
+        variants: command_variants,
+        ..
+    } = snapshot.node(command)?
+    else {
+        return Err(LkError::new(
+            ErrorCode::WrongKind,
+            "stateful command type must be a nominal sum",
+        ));
+    };
+    let Node::SumType {
+        variants: outcome_variants,
+        ..
+    } = snapshot.node(outcome)?
+    else {
+        return Err(LkError::new(
+            ErrorCode::WrongKind,
+            "stateful outcome type must be a nominal sum",
+        ));
+    };
+    validate_imports(
+        flattened,
+        profile,
+        command,
+        command_variants,
+        outcome,
+        outcome_variants,
+    )?;
 
     validate_exported_function(graph, profile.resume)?;
     let resume = flattened.item(profile.resume.release, profile.resume.item)?;
@@ -1113,18 +1609,275 @@ fn validate_stateful_profile(
             "stateful resume target must be a function",
         ));
     };
-    if parameters.len() != 3
-        || parameter_type(snapshot, parameters[0])? != state_type
-        || parameter_type(snapshot, parameters[1])? != SemanticType::I64
-        || parameter_type(snapshot, parameters[2])? != SemanticType::Bytes
+    if parameters.len() != 2
+        || parameter_type(snapshot, parameters[0])? != SemanticType::Nominal(state)
+        || parameter_type(snapshot, parameters[1])? != SemanticType::Nominal(outcome)
         || *result != SemanticType::Nominal(decision)
     {
         return Err(LkError::new(
             ErrorCode::TypeMismatch,
-            "stateful resume entry must accept state, outcome i64, evidence bytes and return the transition product",
+            "stateful resume entry must accept exact state and outcome values and return the decision sum",
         ));
     }
     Ok(())
+}
+
+fn validate_decision_variant(
+    flattened: &FlattenedGraph,
+    variant: crate::ids::NodeId,
+    payload_target: ApplicationTarget,
+    expected_fields: &[(ApplicationTarget, SemanticType)],
+) -> Result<()> {
+    let snapshot = &flattened.snapshot;
+    let payload = flattened.item(payload_target.release, payload_target.item)?;
+    let Node::SumVariant {
+        payload: Some(variant_payload),
+        ..
+    } = snapshot.node(variant)?
+    else {
+        return Err(LkError::new(
+            ErrorCode::TypeMismatch,
+            "completed and suspended decision variants require product payloads",
+        ));
+    };
+    if *variant_payload != SemanticType::Nominal(payload) {
+        return Err(LkError::new(
+            ErrorCode::TypeMismatch,
+            "decision variant payload does not match its declared exact product",
+        ));
+    }
+    let Node::ProductType { fields, .. } = snapshot.node(payload)? else {
+        return Err(LkError::new(
+            ErrorCode::WrongKind,
+            "decision payload must be a nominal product",
+        ));
+    };
+    let mapped = expected_fields
+        .iter()
+        .map(|(target, _)| flattened.item(target.release, target.item))
+        .collect::<Result<Vec<_>>>()?;
+    if fields != &mapped {
+        return Err(LkError::new(
+            ErrorCode::InvalidContainment,
+            "decision payload fields are not in exact declared order",
+        ));
+    }
+    for ((_, expected), field) in expected_fields.iter().zip(mapped) {
+        let Node::ProductField { owner, ty, .. } = snapshot.node(field)? else {
+            return Err(LkError::new(
+                ErrorCode::WrongKind,
+                "decision field mapping does not target a product field",
+            ));
+        };
+        if *owner != payload || *ty != *expected {
+            return Err(LkError::new(
+                ErrorCode::TypeMismatch,
+                "decision field has the wrong owner or exact type",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_imports(
+    flattened: &FlattenedGraph,
+    profile: &StatefulApplicationProfile,
+    command: crate::ids::NodeId,
+    command_variants: &[crate::ids::NodeId],
+    outcome: crate::ids::NodeId,
+    outcome_variants: &[crate::ids::NodeId],
+) -> Result<()> {
+    let snapshot = &flattened.snapshot;
+    if profile.imports.len() > 64 {
+        return Err(LkError::new(
+            ErrorCode::PolicyExceeded,
+            "application import count exceeds policy",
+        ));
+    }
+    let mut prior_slot: Option<&str> = None;
+    let mut mapped_commands = Vec::new();
+    let mut mapped_outcomes = Vec::new();
+    for import in &profile.imports {
+        validate_slot_name(&import.slot)?;
+        if prior_slot.is_some_and(|prior| prior >= import.slot.as_str()) {
+            return Err(LkError::new(
+                ErrorCode::DuplicateName,
+                "application import slots must be in strict canonical order",
+            ));
+        }
+        prior_slot = Some(&import.slot);
+        let request = flattened.item(import.request.release, import.request.item)?;
+        let interface_outcome = flattened.item(import.outcome.release, import.outcome.item)?;
+        let command_variant =
+            flattened.item(import.command_variant.release, import.command_variant.item)?;
+        let outcome_variant =
+            flattened.item(import.outcome_variant.release, import.outcome_variant.item)?;
+        validate_wrapper_variant(snapshot, command_variant, command, request)?;
+        validate_wrapper_variant(snapshot, outcome_variant, outcome, interface_outcome)?;
+        mapped_commands.push(command_variant);
+        mapped_outcomes.push(outcome_variant);
+        let Node::SumType {
+            variants: request_variants,
+            ..
+        } = snapshot.node(request)?
+        else {
+            return Err(LkError::new(
+                ErrorCode::WrongKind,
+                "host-interface request type must be a nominal sum",
+            ));
+        };
+        let Node::SumType {
+            variants: interface_outcome_variants,
+            ..
+        } = snapshot.node(interface_outcome)?
+        else {
+            return Err(LkError::new(
+                ErrorCode::WrongKind,
+                "host-interface outcome type must be a nominal sum",
+            ));
+        };
+        if import.requests.len() != request_variants.len() || import.requests.is_empty() {
+            return Err(LkError::new(
+                ErrorCode::InvalidContainment,
+                "every interface request variant must have one route",
+            ));
+        }
+        let mut routed_requests = Vec::new();
+        for route in &import.requests {
+            if route.operation.interface() != import.interface {
+                return Err(LkError::new(
+                    ErrorCode::TypeMismatch,
+                    "request operation belongs to another host interface",
+                ));
+            }
+            let variant = flattened.item(route.variant.release, route.variant.item)?;
+            validate_bytes_variant(snapshot, variant, request)?;
+            routed_requests.push(variant);
+        }
+        if routed_requests != *request_variants {
+            return Err(LkError::new(
+                ErrorCode::InvalidContainment,
+                "interface request routes must cover variants in declaration order",
+            ));
+        }
+        let mut routed_outcomes = std::collections::BTreeSet::new();
+        let mut prior_outcome = None;
+        for route in &import.outcomes {
+            if route.operation.interface() != import.interface
+                || !host_outcome_is_compatible(route.operation, route.class)
+            {
+                return Err(LkError::new(
+                    ErrorCode::TypeMismatch,
+                    "outcome mapping is incompatible with its host interface operation",
+                ));
+            }
+            let order = (route.operation, route.class, route.variant);
+            if prior_outcome.is_some_and(|prior| prior >= order) {
+                return Err(LkError::new(
+                    ErrorCode::DuplicateName,
+                    "interface outcome routes must be in strict canonical order",
+                ));
+            }
+            prior_outcome = Some(order);
+            let variant = flattened.item(route.variant.release, route.variant.item)?;
+            if outcome_requires_evidence(route.operation, route.class) {
+                validate_bytes_variant(snapshot, variant, interface_outcome)?;
+            } else {
+                validate_empty_variant(snapshot, variant, interface_outcome)?;
+            }
+            routed_outcomes.insert(variant);
+        }
+        if routed_outcomes.len() != interface_outcome_variants.len()
+            || interface_outcome_variants
+                .iter()
+                .any(|variant| !routed_outcomes.contains(variant))
+        {
+            return Err(LkError::new(
+                ErrorCode::InvalidContainment,
+                "every interface outcome variant must be used by one or more exact class routes",
+            ));
+        }
+    }
+    if mapped_commands != command_variants || mapped_outcomes != outcome_variants {
+        return Err(LkError::new(
+            ErrorCode::InvalidContainment,
+            "command and outcome wrapper variants must match import-slot order exactly",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_slot_name(slot: &str) -> Result<()> {
+    let valid = !slot.is_empty()
+        && slot.len() <= 64
+        && slot.as_bytes()[0].is_ascii_lowercase()
+        && slot
+            .bytes()
+            .skip(1)
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_');
+    if valid {
+        Ok(())
+    } else {
+        Err(LkError::new(
+            ErrorCode::ProtocolMalformed,
+            "application import slot must match [a-z][a-z0-9_]* within 64 bytes",
+        ))
+    }
+}
+
+fn validate_wrapper_variant(
+    snapshot: &crate::graph::Snapshot,
+    variant: crate::ids::NodeId,
+    owner: crate::ids::NodeId,
+    payload: crate::ids::NodeId,
+) -> Result<()> {
+    match snapshot.node(variant)? {
+        Node::SumVariant {
+            owner: actual_owner,
+            payload: Some(SemanticType::Nominal(actual_payload)),
+            ..
+        } if *actual_owner == owner && *actual_payload == payload => Ok(()),
+        _ => Err(LkError::new(
+            ErrorCode::TypeMismatch,
+            "interface wrapper variant has the wrong owner or nominal payload",
+        )),
+    }
+}
+
+fn validate_bytes_variant(
+    snapshot: &crate::graph::Snapshot,
+    variant: crate::ids::NodeId,
+    owner: crate::ids::NodeId,
+) -> Result<()> {
+    match snapshot.node(variant)? {
+        Node::SumVariant {
+            owner: actual_owner,
+            payload: Some(SemanticType::Bytes),
+            ..
+        } if *actual_owner == owner => Ok(()),
+        _ => Err(LkError::new(
+            ErrorCode::TypeMismatch,
+            "interface variant must carry bytes evidence or request payload",
+        )),
+    }
+}
+
+fn validate_empty_variant(
+    snapshot: &crate::graph::Snapshot,
+    variant: crate::ids::NodeId,
+    owner: crate::ids::NodeId,
+) -> Result<()> {
+    match snapshot.node(variant)? {
+        Node::SumVariant {
+            owner: actual_owner,
+            payload: None,
+            ..
+        } if *actual_owner == owner => Ok(()),
+        _ => Err(LkError::new(
+            ErrorCode::TypeMismatch,
+            "interface outcome variant must carry no payload for this result class",
+        )),
+    }
 }
 
 fn parameter_type(
@@ -1150,7 +1903,7 @@ fn encode_application(
     let mut payload = Writer::new();
     payload.fixed(&graph.root().as_bytes());
     put_target(&mut payload, entry);
-    put_profile(&mut payload, profile);
+    put_profile(&mut payload, profile)?;
     put_policy(&mut payload, policy);
     put_count(&mut payload, tests.len())?;
     for test in tests {
@@ -1188,6 +1941,17 @@ fn encode_application(
 }
 
 fn decode_application(bytes: &[u8]) -> Result<DecodedApplication> {
+    decode_application_observed(bytes, &mut ApplicationLoadObservation::default())
+}
+
+fn decode_application_observed(
+    bytes: &[u8],
+    observation: &mut ApplicationLoadObservation,
+) -> Result<DecodedApplication> {
+    observation.application_bytes = observation
+        .application_bytes
+        .saturating_add(bytes.len() as u64);
+    let envelope_started = Instant::now();
     if bytes.len() > MAXIMUM_APPLICATION_ARTIFACT_BYTES {
         return Err(LkError::new(
             ErrorCode::PolicyExceeded,
@@ -1236,6 +2000,11 @@ fn decode_application(bytes: &[u8]) -> Result<DecodedApplication> {
     let root_release = ReleaseId::from_bytes(read_digest(&mut payload_reader)?);
     let entry = read_target(&mut payload_reader)?;
     let profile = read_profile(&mut payload_reader)?;
+    if normalize_profile(&profile).map_err(decoded_error)? != profile {
+        return Err(corrupt(
+            "application imports or routes are not in canonical order",
+        ));
+    }
     let policy = read_policy(&mut payload_reader)?;
     let test_count = payload_reader
         .count(MAXIMUM_APPLICATION_TESTS)
@@ -1278,15 +2047,36 @@ fn decode_application(bytes: &[u8]) -> Result<DecodedApplication> {
         decoded.push(release);
     }
     payload_reader.finish().map_err(application_codec)?;
+    observation.envelope_decode_nanoseconds = observation
+        .envelope_decode_nanoseconds
+        .saturating_add(elapsed_nanoseconds(envelope_started));
+    observation.release_count = observation
+        .release_count
+        .saturating_add(decoded.len() as u64);
+    let graph_validation_started = Instant::now();
     let root_position = decoded
         .iter()
         .position(|release| release.id == root_release)
         .ok_or_else(|| corrupt("application root release is absent"))?;
     let root = decoded.remove(root_position);
     let graph = ReleaseGraph::new(root, decoded)?;
+    observation.release_graph_validation_nanoseconds = observation
+        .release_graph_validation_nanoseconds
+        .saturating_add(elapsed_nanoseconds(graph_validation_started));
+    let flattening_started = Instant::now();
     let flattened = graph.flatten()?;
+    observation.closure_flattening_nanoseconds = observation
+        .closure_flattening_nanoseconds
+        .saturating_add(elapsed_nanoseconds(flattening_started));
+    observation.flattened_semantic_items = observation
+        .flattened_semantic_items
+        .saturating_add(u64::try_from(flattened.snapshot.node_count()).unwrap_or(u64::MAX));
+    let manifest_validation_started = Instant::now();
     validate_manifest(&graph, &flattened, entry, &profile, policy, &tests)
         .map_err(decoded_error)?;
+    observation.release_graph_validation_nanoseconds = observation
+        .release_graph_validation_nanoseconds
+        .saturating_add(elapsed_nanoseconds(manifest_validation_started));
     let application = DecodedApplication {
         bytes: bytes.to_vec(),
         graph,
@@ -1297,6 +2087,7 @@ fn decode_application(bytes: &[u8]) -> Result<DecodedApplication> {
         tests,
         digest,
     };
+    let canonical_reencode_started = Instant::now();
     if encode_application(
         &application.graph,
         application.entry,
@@ -1307,6 +2098,9 @@ fn decode_application(bytes: &[u8]) -> Result<DecodedApplication> {
     {
         return Err(corrupt("application artifact encoding is not canonical"));
     }
+    observation.canonical_reencode_nanoseconds = observation
+        .canonical_reencode_nanoseconds
+        .saturating_add(elapsed_nanoseconds(canonical_reencode_started));
     Ok(application)
 }
 
@@ -1772,30 +2566,138 @@ fn put_target(writer: &mut Writer, target: ApplicationTarget) {
     writer.u64(target.item.get());
 }
 
-fn put_profile(writer: &mut Writer, profile: &InvocationProfile) {
+fn put_profile(writer: &mut Writer, profile: &InvocationProfile) -> Result<()> {
     writer.u8(profile.stable_tag());
     if let InvocationProfile::Stateful(stateful) = profile {
         put_target(writer, stateful.resume);
+        put_target(writer, stateful.state);
+        put_target(writer, stateful.event);
+        put_target(writer, stateful.command);
+        put_target(writer, stateful.outcome);
         put_target(writer, stateful.decision);
-        put_target(writer, stateful.state_field);
-        put_target(writer, stateful.response_field);
-        put_target(writer, stateful.command_field);
-        put_target(writer, stateful.target_field);
+        put_target(writer, stateful.completed_variant);
+        put_target(writer, stateful.completed_payload);
+        put_target(writer, stateful.completed_state_field);
+        put_target(writer, stateful.completed_response_field);
+        put_target(writer, stateful.suspended_variant);
+        put_target(writer, stateful.suspended_payload);
+        put_target(writer, stateful.suspended_state_field);
+        put_target(writer, stateful.suspended_response_field);
+        put_target(writer, stateful.suspended_command_field);
+        put_count(writer, stateful.imports.len())?;
+        for import in &stateful.imports {
+            writer.string(&import.slot).map_err(application_codec)?;
+            writer.u8(match import.interface {
+                HostInterface::ApplicationActivation => 1,
+                HostInterface::ImmutableBlob => 2,
+            });
+            put_target(writer, import.request);
+            put_target(writer, import.outcome);
+            put_target(writer, import.command_variant);
+            put_target(writer, import.outcome_variant);
+            put_count(writer, import.requests.len())?;
+            for route in &import.requests {
+                put_target(writer, route.variant);
+                writer.u8(route.operation.stable_tag());
+            }
+            put_count(writer, import.outcomes.len())?;
+            for route in &import.outcomes {
+                writer.u8(route.operation.stable_tag());
+                writer.u8(route.class.stable_tag());
+                put_target(writer, route.variant);
+            }
+        }
     }
+    Ok(())
 }
 
 fn read_profile(reader: &mut Reader<'_>) -> Result<InvocationProfile> {
     Ok(match reader.u8().map_err(application_codec)? {
         1 => InvocationProfile::Typed,
         2 => InvocationProfile::BytesStream,
-        3 => InvocationProfile::Stateful(StatefulApplicationProfile {
-            resume: read_target(reader)?,
-            decision: read_target(reader)?,
-            state_field: read_target(reader)?,
-            response_field: read_target(reader)?,
-            command_field: read_target(reader)?,
-            target_field: read_target(reader)?,
-        }),
+        3 => {
+            let resume = read_target(reader)?;
+            let state = read_target(reader)?;
+            let event = read_target(reader)?;
+            let command = read_target(reader)?;
+            let outcome = read_target(reader)?;
+            let decision = read_target(reader)?;
+            let completed_variant = read_target(reader)?;
+            let completed_payload = read_target(reader)?;
+            let completed_state_field = read_target(reader)?;
+            let completed_response_field = read_target(reader)?;
+            let suspended_variant = read_target(reader)?;
+            let suspended_payload = read_target(reader)?;
+            let suspended_state_field = read_target(reader)?;
+            let suspended_response_field = read_target(reader)?;
+            let suspended_command_field = read_target(reader)?;
+            let import_count = reader.count(64).map_err(application_codec)?;
+            let mut imports = Vec::with_capacity(import_count);
+            for _ in 0..import_count {
+                let slot = reader.string(64).map_err(application_codec)?;
+                let interface = match reader.u8().map_err(application_codec)? {
+                    1 => HostInterface::ApplicationActivation,
+                    2 => HostInterface::ImmutableBlob,
+                    _ => return Err(corrupt("host-interface identity tag is unknown")),
+                };
+                let request = read_target(reader)?;
+                let interface_outcome = read_target(reader)?;
+                let command_variant = read_target(reader)?;
+                let outcome_variant = read_target(reader)?;
+                let request_count = reader.count(64).map_err(application_codec)?;
+                let mut requests = Vec::with_capacity(request_count);
+                for _ in 0..request_count {
+                    let variant = read_target(reader)?;
+                    let operation =
+                        HostOperation::from_stable_tag(reader.u8().map_err(application_codec)?)
+                            .ok_or_else(|| corrupt("host operation tag is unknown"))?;
+                    requests.push(HostRequestRoute { variant, operation });
+                }
+                let outcome_count = reader.count(128).map_err(application_codec)?;
+                let mut outcomes = Vec::with_capacity(outcome_count);
+                for _ in 0..outcome_count {
+                    let operation =
+                        HostOperation::from_stable_tag(reader.u8().map_err(application_codec)?)
+                            .ok_or_else(|| corrupt("host outcome operation tag is unknown"))?;
+                    let class =
+                        HostOutcomeClass::from_stable_tag(reader.u8().map_err(application_codec)?)
+                            .ok_or_else(|| corrupt("host outcome class tag is unknown"))?;
+                    outcomes.push(HostOutcomeRoute {
+                        operation,
+                        class,
+                        variant: read_target(reader)?,
+                    });
+                }
+                imports.push(ApplicationImport {
+                    slot,
+                    interface,
+                    request,
+                    outcome: interface_outcome,
+                    command_variant,
+                    outcome_variant,
+                    requests,
+                    outcomes,
+                });
+            }
+            InvocationProfile::Stateful(StatefulApplicationProfile {
+                resume,
+                state,
+                event,
+                command,
+                outcome,
+                decision,
+                completed_variant,
+                completed_payload,
+                completed_state_field,
+                completed_response_field,
+                suspended_variant,
+                suspended_payload,
+                suspended_state_field,
+                suspended_response_field,
+                suspended_command_field,
+                imports,
+            })
+        }
         _ => return Err(corrupt("application invocation profile tag is unknown")),
     })
 }
