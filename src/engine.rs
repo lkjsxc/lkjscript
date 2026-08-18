@@ -1,12 +1,12 @@
 //! Topology-neutral semantic engine and single-writer authority.
 
-use crate::application::{ApplicationBuildRequest, PreparedApplication};
 use crate::error::{ErrorCode, LkError, Result};
 use crate::ids::{RequestId, WorkspaceId};
 use crate::interpret;
 use crate::persistence::{self, DurableWorkspace};
 use crate::protocol::{Request, Response};
 use crate::query;
+use crate::release::{PreparedRelease, ReleaseBuildRequest};
 use crate::{machine, transport};
 use fs2::FileExt;
 use std::collections::BTreeMap;
@@ -54,16 +54,18 @@ impl Engine {
         }
     }
 
-    /// Prepares one independently validated application artifact from an exact immutable revision.
-    /// The returned bytes have passed the embedded release tests but have not been published.
-    pub fn prepare_application(
+    /// Prepares one canonical reusable release from an exact immutable workspace revision and an
+    /// explicitly supplied exact dependency closure. No mutable resolver or workspace HEAD is
+    /// consulted and the returned bytes have not yet been published.
+    pub fn prepare_release(
         &self,
-        request: &ApplicationBuildRequest,
-    ) -> Result<PreparedApplication> {
+        request: &ReleaseBuildRequest,
+        supplied_dependency_bytes: &[Vec<u8>],
+    ) -> Result<PreparedRelease> {
         let snapshot = self
             .workspace(request.workspace)?
             .snapshot(request.revision)?;
-        crate::application::prepare(snapshot, request)
+        crate::release::prepare(snapshot, request, supplied_dependency_bytes)
     }
 
     pub(crate) fn handle(

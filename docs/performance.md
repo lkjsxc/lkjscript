@@ -1,217 +1,225 @@
-# Current evidence and decisions
+# Current evidence and architecture decisions
 
-This file owns reproduced measurements, controlled observations, selected architecture, limits,
-and reversal conditions for the current checkout. It is not a campaign diary. Exact structured
-values are retained in
-[`evidence/20260818-application-closure.json`](evidence/20260818-application-closure.json); prior
-semantic-core evidence remains a historical baseline, not current authority.
+This file owns reproduced measurements, selected alternatives, current complexity decisions, and
+reversal conditions. Exact structured values are retained in
+[`evidence/20260818-reusable-release.json`](evidence/20260818-reusable-release.json). Earlier
+evidence files are historical baselines, not current authority.
 
 ## Measurement boundary
 
-The application-closure work started from commit
-`da62ef361c6b5fd5a43ed440d1da45733614c5d7` on branch `main`. Measurements were made on Linux
-7.0.0-29-generic x86-64, AMD Ryzen 9 9955HX, 32 logical CPUs, 32 GiB RAM, and ZFS with a 131,072-byte
-block size. The active stable toolchain was rustc/cargo 1.96.0; `Cargo.lock` SHA-256 was
+The campaign started and remains uncommitted on branch `main` at
+`e465cc3b7d12353aa4c6fba13dc02de41d381346`, the audited standalone-application baseline. The
+pre-existing worktree changes were `AGENTS.md` and the untracked campaign prompt; both were
+preserved. The active root policy's Git blob ID was
+`6384d5384c373080a02a89c9e96eb85932524cc8`.
+
+The environment is Linux x86-64 with rustc/cargo 1.96.0 and stable Rust edition 2024.
+`Cargo.lock` SHA-256 is
 `d23b75fc162e485b7149d92f1e3349f3cca39f00420a9fef68f8abea6c405620`.
+`/usr/bin/time` is unavailable, so no maximum-RSS result exists. Times are single observations
+unless a sample count is stated and are not benchmark distributions. Provider tokens, cached
+tokens, reasoning tokens, calls, and prices are unavailable; bytes are not labelled as tokens.
 
-The unchanged starting checkout passed formatting, all-target/all-feature Clippy, all tests, release
-build, and all six production examples. It contained 218 tests, of which four were ignored by the
-ordinary boundary. Times below are single observations unless a sample count is explicit; they are
-not benchmark distributions. `/usr/bin/time` was unavailable, so no process maximum-RSS result is
-reported. One shell-timed release build after the contract cutover took 110.223 seconds; this was an
-incremental LTO build, not a clean-build distribution.
+Before edits, formatting, all-target/all-feature Clippy, 218 tests (214 pass, four ignored), release
+build, and all six retained examples passed. The baseline had 2,287,367 bytes / 64,768 lines under
+`src/` and `tests/`; documentation had 99,572 bytes / 1,903 lines. Release binaries were 7,261,216
+bytes for `lkjscript` and 4,252,144 bytes for `lkjscriptd`.
 
-## Application-closure observation
+## Selected architecture
 
-The retained `binary-canonicalizer` driver creates an incomplete program, repairs it, runs semantic
-controls, renames one field, reopens history, and then performs the application lifecycle using only
-production commands. One final run observed:
+One selected workspace package produces one canonical reusable semantic release. Release-local
+IDs erase workspace lineage; the exact `ReleaseId` is the domain-separated digest of the complete
+canonical payload. Dependencies are exact external release graphs with explicit local proxies.
+Graph boundaries survive release and application inspection; application format 2 embeds every
+exact release once and privately flattens only for the existing compiler/interpreter.
+
+This is the combined candidate E + H + I + J from the campaign: release content digest plus local
+IDs, external exact graph, application-time flattening, and a bundled graph application. Build uses
+explicit artifact paths; there is no resolver, lock record, registry, or immutable store. The
+application bundle is the offline transfer unit.
+
+### Serious alternatives
+
+| Candidate | Correctness result | Cost/result | Decision and reversal |
+|---|---|---|---|
+| duplicated application closure | Could run two apps, but cannot independently publish/test one shared authority or prove one diamond nominal identity | smallest format surface; duplicates semantic/test work and does not satisfy the reuse workload | rejected; reconsider only if release graph maintenance repeatedly exceeds duplicated end-to-end work |
+| workspace-lineage release | preserves existing IDs | equal semantics from unrelated workspaces produce unequal bytes and leak allocator/history into transfer | rejected; no product consumer requires producer lineage as semantic identity |
+| canonical release-local IDs + whole-release digest | passes unrelated-history equality, private visibility, R1/R2, diamond, offline transfer | whole-release changes intentionally churn exact identity; one bounded canonicalizer/codec/graph | selected; reopen if fine-grained updates dominate real workloads |
+| definition/SCC content identity | could deduplicate below release | creates a much larger semantic hash surface, recursive-group canonicalization, provenance confusion, and diagnostics cost for no current consumer | boundedly rejected without retained prototype; reopen for measured sub-release sharing |
+| assigned release ID + content digest | separates lineage/content | needs an allocator/publication namespace and makes equal offline reconstruction ambiguous; no continuity consumer | rejected; add only with a concrete lineage or external-targeting operation |
+| deterministic vendoring | reuses existing workspace tools | mutates consumer authority and creates copy/update/fork/nominal rules while losing one exact graph | rejected; add an explicit adapt/copy operation only for a real editing consumer |
+| manifest + immutable store | deduplicates bytes across applications | adds mutable directory/recovery/availability state; retained bundles are only 2.9–6.2 KiB | rejected; prototype after aggregate bundle duplication becomes material |
+| flattened semantic application authority | simple runtime | erases reviewable graph boundaries and risks nominal/version confusion | rejected as authority; retained only as a private verified compiler projection |
+
+Losing candidates left no format, reader, flag, resolver, store, allocator, compatibility path, or
+prototype in the active tree.
+
+## Identity, boundary, and composition decisions
+
+- **Reusable unit:** one existing workspace package is one release root. Modules remain internal
+  namespace/containment. A workspace may construct several releases in separate requests.
+- **Exact identity:** `ReleaseId` is the digest of all canonical payload content, including
+  coordinate and user version. `ReleaseContentDigest` is a separate integrity domain. Provenance,
+  signature, authorization, and freshness are absent.
+- **Canonical IDs:** modules and definitions are deterministically ordered; member/parameter/body
+  order follows accepted semantics. All selected definitions are assigned before references are
+  remapped, which handles mutual recursion without definition hashes or graph-isomorphism code.
+- **Exports:** one explicit flat symbolic namespace exports functions and nominal declarations.
+  Exact consumers ultimately bind item IDs. Dependency proxies cannot be re-exported in format 1.
+- **Private implementation:** reachable private content and private tests travel and affect exact
+  identity; unrelated private declarations are omitted. Private imports reject.
+- **Dependencies:** every slot binds an exact immutable release. Resolution and lock records are
+  absent. Direct proxy references cannot escape to transitive/private items.
+- **Versions:** coordinate and user version support bounded human review only. R1 and R2 can coexist;
+  aliases/slots disambiguate local intent and exact pairs define nominal equality.
+- **Diamond:** a `BTreeMap<ReleaseId, DecodedRelease>` owns graph nodes. Equal exact R1 is validated,
+  embedded, and flattened once; conflicting bytes and extra inputs reject.
+- **Import:** accepted workspace semantics use deliberately bodyless/type-shape proxies plus an
+  exact release request binding. Vendoring, copy, fork, and import-into-workspace are absent.
+- **Tests:** producer-owned primitive invocation cases remain inside each release; public nominal
+  cases live in the application. Every dependency suite runs before dependent publication.
+- **Application:** v2 bundles graph authorities and application facts without workspace identity.
+  v1 reader/writer/magic success paths were deleted and format 1 rejects.
+- **Agent surface:** release/app contracts are command-local and inspections provide bounded exact
+  summaries; they do not enlarge the global workspace schema or require a schema dump.
+
+Reversal for the overall architecture: reopen when a representative workload needs independently
+updatable sub-release definitions, graph bundles exceed 64 MiB or repeatedly duplicate more than
+50% of deployment bytes across at least ten retained applications, explicit file provision causes
+measured correction failures, or an authenticity/provenance consumer cannot remain a separate
+artifact.
+
+## Representative reusable-release observation
+
+`examples/reusable-release/run.sh` uses only production protocol-v10 transactions and public
+release/application commands. One run produced these deterministic artifacts:
+
+| Release | Exact ID | Bytes |
+|---|---|---:|
+| shared-codec R1 | `cbb4ec4d4362fc24d486fcdbd0fbcd5890a88158940d90aea94950b805854b91` | 1,694 |
+| shared-codec R2 | `adfd2e30c8628fe1ed6fa0b0b80a1fda747e8e0124a4ed0c9f1f5feeb2789a5d` | 1,744 |
+| consumer-normalizer | `c8d5286c36190cfe6ba59cd5e89063ea824436464763b3e1d1256c5e5a5680b7` | 1,473 |
+| consumer-inspector | `05190135b304282509254cc9599631304480a12f2ebc8b9284b7fcce8aec3871` | 889 |
+| release-version-coexistence | `602c8019e2ed85eb901699d36217965805380d06f5c8b2396ccff5f34472ff6f` | 1,665 |
+| release-diamond | `a39ad1bfd9b3a706a7600a87841e5b0e57f0353c7bd8d36ad4f4bc736992eed7` | 1,111 |
+
+| Application | Bytes | Nodes / edges / depth |
+|---|---:|---:|
+| consumer-normalizer | 3,507 | 2 / 1 / 2 |
+| consumer-inspector | 2,916 | 2 / 1 / 2 |
+| version coexistence | 6,203 | 3 / 2 / 2 |
+| exact diamond | 5,523 | 4 / 4 / 3 |
+
+R1 bytes were equal from two unrelated workspace IDs, different durable serial histories, reversed
+function/export order, unrelated extra content, and different function-local numbering. R2 has the
+same coordinate but different exact ID and behavior. The diamond inspection contains one R1.
+Private import, R2-for-R1 nominal value, corrupt dependency, missing dependency, extra dependency,
+and release-order-sensitive application output all follow their promised reject/equality behavior.
+
+The complete state directory containing all seven workspaces was removed. Six release artifacts
+then validated/inspected/tested, and four applications validated/inspected/tested and rebuilt
+byte-identically. Normalizer and diamond stream runs returned `abc`; inspector typed run returned
+`3`; coexistence returned an exact R1 nominal value and rejected the structurally identical R2
+substitution. No network or ambient store was used.
+
+The workload used 15 authoring RPC calls in one direct session, 56 total processes, nine Engine
+opens, 33,370 action bytes, 84,802 observation bytes, 501 diagnostic bytes, and a summed command/RPC
+boundary of 273,462,995 ns. These are complete
+workflow byte/process observations, not provider tokens or monetary cost.
+
+## Existing application/runtime observation
+
+The updated `binary-canonicalizer` retained the full repair/history/runtime workload and observed:
 
 | Measure | Result |
 |---|---:|
-| application artifact | 3,207 B |
-| semantic nodes | 69 |
-| immutable release cases | 3 |
-| validate-only / published digest equality | pass |
-| repeated-build byte equality | pass |
-| failed release blocked before output | pass |
-| source workspace removed | pass |
-| standalone validate / inspect / test / typed run / stream | pass |
-| corrupt artifact rejected | pass |
-| application CLI processes | 10 |
-| application input bytes | 3,547 |
-| application output bytes | 12,155 |
-| application diagnostic bytes | 133 |
-| application process wall boundary | 30,933,533 ns |
-| intentionally failing processes | 2 |
+| reusable release | 4,979 B, 5 exports, 3 cases |
+| application-v2 bundle | 5,568 B, 1 release, 105 flattened items, 6 total cases |
+| release command boundary | 5 processes, 3,813 input / 8,017 output bytes |
+| application command boundary | 10 processes, 4,447 input / 14,345 output / 150 diagnostic bytes |
+| workspace authoring | 43 calls, 5 Engine opens, 56,625 request / 131,567 response bytes |
+| deterministic release/application rebuild | pass |
+| workspace deletion and offline validate/test/typed/stream | pass |
 
-The observed application digest was
-`1f46d25de8e87b47c6b7f2c53e756d97dfd9474315a4d2b69448b2e6a0954b45` and the reconstructed semantic
-digest was `4de752e7748ddce75be2796e8888030e94598ffbb8992cbd2d691b17330da6a9`.
-These are one run's exact values, not checked-in release coordinates: each fresh example creates a
-random workspace identity. Determinism is demonstrated by the two equal builds from the same exact
-workspace revision.
+The managed-byte dense boundary still accepts 1,445 input payload bytes and rejects 1,446 under the
+visible-byte policy. The representative 512-octet append control retains 1,024 copied backing bytes
+and 513 peak backing bytes versus 131,840 copied and 1,024 peak for allocate-new. The optimization
+still materially wins this shared-release application; the allocate-new route remains the oracle.
 
-The preceding author/repair/history workload used 43 version-10 RPC calls in two direct sessions,
-four total Engine opens, zero socket connections, 56,615 request bytes, and 131,520 response bytes.
-Its summed request boundary was 104,742,017 ns. The dependency-closed schema projection was 87,342
-JSON bytes. Its dense payload boundary accepted 1,445 bytes and rejected 1,446 with
-`managed_visible_byte_policy_exceeded`.
+## Contract, daemon, storage, and build decisions
 
-The workload's independent oracle remains the driver: exact sparse/dense canonical bytes, expected
-typed traps, historical results, artifact equality, source-state removal, and corrupt-byte
-rejection. The artifact implementation cannot make that external oracle pass by changing expected
-runtime behavior.
+| Domain | Retained result | Evidence and reversal |
+|---|---|---|
+| manual workspace catalogue | retained; release/app fields are command-local | schema digest, agent help, packet/document binding, diagnostic root projection, and strict clients still consume it; re-run a complete derive candidate before deleting the 153,227-byte owner |
+| optional daemon | retained only for exported framed client tests | no release/app consumer; delete binary/client/transport/tests/docs together when correlation/deadline/disconnect/shutdown/lock coverage moves to direct Engine/session |
+| full workspace snapshots | retained | reusable release removes no workspace history and current restart/retained bytes are not dominant; prototype object/delta storage only after two measured thresholds cross |
+| deterministic full scans | retained | no shared-release workflow exposed a scan bottleneck; any index remains disposable and differential against scans |
+| Core IR cache | absent | compile/run observations do not justify a second verified format; require material gains in at least two of startup, compile, dispatch, or transfer |
+| managed bytes | retained | application-scale copy/peak reduction remains material; delete planner/verifier/handles if a broader distribution removes that benefit |
+| dependencies/build tooling | unchanged | no crate, feature, build script, proc macro, unsafe Rust, resolver library, database, or network client was added |
 
-## Application architecture decision
+One post-cutover optimized LTO build took 1 minute 57 seconds after source changes; this is a single
+incremental build observation, not clean-build evidence. Consistent clean/incremental distributions
+and maximum RSS remain unavailable.
 
-Serious candidates were a renamed workspace snapshot, semantic closure, serialized Core IR only,
-semantic plus executable cache, and editable text as distribution authority. The selected artifact
-is a target-neutral dependency-closed semantic projection with one exact manifest and release-case
-set.
+## External design comparison
 
-It wins because it can independently validate, inspect, test, recompile, and run without history or
-private compiler state. Renaming a snapshot would retain unrelated development state; IR-only would
-create a second untrusted executable format and weaken inspectability; a combined cache would couple
-independent versions without measured startup value; editable text would promote a proposal view.
+Primary sources were refreshed on 2026-08-18. They informed dimensions and failure cases, not an
+ecosystem copy:
 
-Direct-cutover effects:
-
-- application magic/version/hash domain are independent from workspace artifacts;
-- package entry is removed from application semantics, leaving one manifest entry;
-- workspace history, HEAD, idempotency, aliases, caches, paths, unrelated declarations, and Core IR
-  are absent;
-- source workspace/revision IDs are retained for exact nominal equality and local diagnostics;
-- the artifact is explicitly run-only and makes no import/package-continuity promise; and
-- application content digest remains integrity/reuse, not release or entity identity.
-
-Reversal: replace the run-only closure only when a real independently released reusable component
-requires exports, dependency identity, provenance, import/remapping, or when measured repeated
-compile/startup cost justifies a separately verified executable cache.
-
-## Release-test and invocation decision
-
-The selected test form is application-local immutable data: canonical name, exact function target,
-typed arguments, expected value or stable trap, and exact Run policy. No durable test entity,
-assertion language, mocking hook, skipped state, or test-only operation was added. All cases run in
-lexical order and must pass before build publication. The application digest binds the complete
-test set; validate-only receipts and inspection provide bounded deterministic review.
-
-This is weaker identity than a semantic test entity but sufficient for current selection, review,
-artifact inclusion, and transfer. Reversal: add durable identity only when independent rename,
-repair targeting, cross-artifact reference, or workspace history consumes it. Add richer test
-semantics only for an effectful/property-testing workload that exact invocation cases cannot express.
-
-Both exact typed invocation and pure `bytes -> bytes` process invocation are retained. The stream
-profile closes a useful command-line lifecycle with no accepted host authority, permissions,
-partial external action, or resource-owning value. Reversal: add a narrow effect only for a retained
-application whose complete interaction cannot cross an explicit value/byte boundary.
-
-## Runtime complexity decision
-
-The current planner, verifier, and managed store were compared with the allocate-new oracle and a
-forced-shared fallback on a 512-octet loop-carried append shape used by the canonicalizer:
-
-| Measure | Allocate new | Ownership/reuse | Forced shared |
-|---|---:|---:|---:|
-| cumulative visible bytes | 131,840 | 131,840 | 131,840 |
-| cumulative allocated backing | 131,840 | 1,528 | 131,840 |
-| peak live backing | 1,024 | 513 | 1,024 |
-| cumulative managed objects | 2,050 | 1,026 | 2,050 |
-| copied backing bytes | 131,840 | 1,024 | 131,840 |
-| reuse attempts / hits | 0 / 0 | 512 / 512 | 512 / 0 |
-
-The existing small concat control also reports 32 copied/peak bytes for allocate-new versus 23 for
-the optimized route, with one hit. Results, traps, fuel, logical resource charging, and cleanup stay
-differentially checked.
-
-The planner therefore remains: the absolute 130,816-byte copy reduction on the representative
-append shape is material, while simple sharing reproduced the allocate-new cost. This is not a claim
-that the current route wins every workload or that managed handles are language ownership. The
-production cost remains 46,639 bytes in `ownership.rs`, 44,259 bytes in `managed.rs`, plus compiler,
-interpreter, and verification integration.
-
-Reversal: delete the planner/verifier/handles when broader application distributions show marginal
-end-to-end benefit, or when a simpler safe representation matches logical limits with substantially
-less source and verification. Any future fast route keeps a simple differential oracle.
-
-## Contract-ownership decision
-
-The manual `contract.rs` owner remains 153,227 source bytes. Current production consumers are the
-machine-schema digest, agent help, context/document schema binding, command-local authoring facts,
-strict RPC diagnostics, and dependency-closed schema projection. Current output sizes are 1,245
-bytes for the compact manifest, 87,342 bytes for the canonicalizer's selected roots, and 136,735
-bytes for the full projection.
-
-Application records were not copied into this catalogue. `application.rs` owns their Rust types,
-semantic validation, binary layout, and inspection projection; the CLI derives JSON directly from
-those closed serde records and has command-local help. This narrows the catalogue to its existing
-workspace-RPC consumers.
-
-No macro-rules, proc-macro, build-script IDL, or generic JSON Schema candidate was retained. A
-complete single-field-owner cutover was not implemented; existing workspace DTO/descriptor field
-duplication remains. A partial generator would have created two active catalogues. Reversal: run
-disposable representative additions through declarative/manual alternatives and delete the manual
-catalogue only when one reviewable owner preserves strict codecs and materially lowers total source,
-build, debugging, and Miri cost.
-
-## Package, grammar, topology, storage, and executable decisions
-
-| Domain | Selected decision | Current evidence | Reversal gate |
-|---|---|---|---|
-| package/module | Retain workspace containment and durable ownership; do not call it distribution. Strip package entry in application closure. | Validators, owner-scoped lookup, documents, review, examples, and nominal/function containment consume it; no second independently released component exists. | Implement exports/dependencies/import identity only for real reuse; collapse hierarchy only through a complete semantic cutover. |
-| proposal grammar | Retain the sole bracketed editable document v1. | Exact-base/schema/scope/packet binding and parser oracles pass; no equal-capability source parser was completed. | Reopen only with an isolated bounded parser and equal-task correction/byte evidence; delete the loser. |
-| direct Engine | Retain direct CLI primary and line session. | All production examples need no service lifecycle; application preparation is one typed Engine method. | Change only when measured open/restart dominates a retained workload. |
-| optional daemon | Retain only as a diagnostic integration. | Exported `Client` plus socket framing/correlation/deadline/disconnect/shutdown/lock tests consume 32,936 production bytes, 77,569 integration-test bytes, and a 4,252,144-byte release binary. | Delete binary, client, transport, tests, and docs together when those consumers move or cease to matter. |
-| workspace storage | Retain full canonical snapshots and one writer. | Prior body churn remains 443 B/revision; application work did not make restart or retained history dominant. | Prototype one replacement only after scaled application history crosses retained-byte and restart thresholds. |
-| queries | Retain full scans and differential controls. | Application closure did not expose a measured scan bottleneck. | Add one narrow disposable index for a measured shared hotspot. |
-| Core IR | Keep derived in memory and independently verified. | Standalone semantic compile is sufficient on the retained artifact; no cache/startup distribution shows need. | Serialize only when at least two of startup, repeated compile, dispatch, or artifact-size dimensions improve materially. |
-
-## Source, binary, and context cost
-
-Rust under `src/` and `tests/` grew from the audited 2,193,899 bytes / 62,103 lines to 2,287,367
-bytes / 64,768 lines: +93,468 bytes and +2,665 lines. The two new application owner files occupy
-90,664 bytes total; their production prefixes occupy 76,552 bytes and their inline unit-test
-suffixes 14,112 bytes. No dependency, build script, proc-macro crate, unsafe Rust, or extra binary
-was added.
-
-| Release binary | Starting bytes | Current bytes | Change |
-|---|---:|---:|---:|
-| `lkjscript` | 7,011,520 | 7,261,216 | +249,696 |
-| `lkjscriptd` | 4,260,656 | 4,252,144 | -8,512 |
-
-The direct application vertical pays a visible source and main-binary cost. It earns that cost by
-closing validate-only/test/build/inspect/transfer/run through public boundaries; it does not claim
-source reduction. The active machine digest is
-`e4257d3657752f3f3f0bfae148cec38610e9002c4a749205c846efb3368ba5e1`.
-
-The final application observation uses 10 processes and 3,547 input / 12,155 output bytes for the
-application portion. No provider call was made. These are byte/process proxies, not tokens or money.
-The previous controlled provider observation is not reused to claim a benefit for this changed
-surface.
+- [Unison's big idea](https://www.unison-lang.org/docs/the-big-idea/) separates names from
+  definition identity; lkjscript keeps that lesson but chooses one bounded release identity instead
+  of definition hashes.
+- [Nix store objects](https://nix.dev/manual/nix/latest/store/store-object/) distinguish immutable
+  store objects and closures; lkjscript needs no ambient store because explicit files and embedded
+  graph bundles close the current offline workload.
+- [Cargo resolution](https://doc.rust-lang.org/cargo/reference/resolver.html) distinguishes human
+  dependency intent, exact selected packages, lockfiles, and multi-version graphs; lkjscript begins
+  after selection and encodes only exact release IDs.
+- The [WebAssembly Component Model explainer](https://github.com/WebAssembly/component-model/blob/main/design/mvp/Explainer.md)
+  reinforces explicit imports/exports and composition boundaries; lkjscript has no ABI, host
+  interface, or component linker surface.
+- [OCI descriptors](https://github.com/opencontainers/image-spec/blob/main/descriptor.md) separate
+  media type, digest, size, and graph transfer; lkjscript uses strict domain-specific release bytes
+  rather than a general blob manifest.
+- [TUF](https://theupdateframework.github.io/specification/latest/),
+  [in-toto](https://in-toto.io/), and
+  [SLSA provenance](https://slsa.dev/spec/v1.2/provenance) separate content from freshness, roles,
+  authorization, and build evidence; those domains are explicitly absent rather than overloaded
+  onto `ReleaseId`.
+- [Git objects](https://git-scm.com/book/en/v2/Git-Internals-Git-Objects) and
+  [IPFS CIDs](https://docs.ipfs.tech/concepts/content-addressing/) demonstrate immutable graph
+  addressing and mutable names, but lkjscript does not inherit their object graph, transport,
+  multicodec, or trust model.
+- [Leroy's applicative-functor work](https://caml.inria.fr/pub/papers/xleroy-applicative_functors-toplas.pdf)
+  highlights nominal identity and repeated application. lkjscript uses exact release/item pairs and
+  rejects release cycles instead of implementing a general module calculus.
 
 ## Adversarial and tool evidence
 
-- Application unit tests cover exact round-trip, unrelated-node exclusion, standalone execution,
-  failing release gates, old command/artifact versions, corruption, trailing bytes, no-overwrite
-  publication, and injected failures before write, after write, after file sync, after link, after
-  temporary cleanup, and after directory sync.
-- Seed `0x1a11cafe20260818` drives 10,000 deterministic one-bit mutations across canonical
-  application bytes; all reject. This is deterministic mutation coverage, not coverage-guided
-  fuzzing.
-- Workspace mutation smoke and prior focused Miri/AddressSanitizer evidence remain applicable to
-  unchanged owners. Final current-tool results are recorded in structured evidence and the handoff.
-- `cargo-fuzz` is unavailable and no stable fuzz target exists. No model checker or cross-platform
-  application run was available. Provider telemetry and price are unavailable.
+- Both release and application decoders reject every truncation point and 10,000 deterministic
+  one-bit mutations. This is deterministic mutation, not coverage-guided fuzzing.
+- Release coordinate, version, name, slot, and declared-payload policies accept their exact
+  boundaries and reject one-over. Exact graph node, edge, depth, and aggregate-byte arithmetic
+  policies likewise cover boundary, one-over, and byte-count overflow. Equal duplicate exact
+  bytes deduplicate; conflicting bytes for one ID, self-dependencies, and two-release cycles reject.
+- Release tests cover unrelated-history canonical equality, private rejection, two consumers,
+  multi-version nominal distinction, exact diamond deduplication, no-overwrite publication,
+  symlink/non-regular paths, and all before/after write-sync-link-cleanup-directory-sync outcomes.
+- Application tests cover old-v1 rejection, graph permutation, missing/extra/corrupt releases,
+  exact nominal values, offline typed/stream execution, no-overwrite, and the same publication
+  transitions.
+- Nightly Miri 0.1.0 passed the exact graph limit/duplicate/cycle test in 573.83 seconds and the
+  exact application nominal-value test in 166.12 seconds. Existing Core-IR verification, runtime
+  differential, and workspace mutation smoke also remain applicable.
+- `cargo-fuzz`, model checking, cross-platform execution, a sanitizer run, and provider telemetry
+  were unavailable or not run. No claim of formal verification follows.
 
-## Known limits and next evidence gate
+## Next evidence gate
 
-The first artifact is run-only, holds one entry, contains public release cases, recompiles on every
-run, and is verified only on Linux x86-64. It retains workspace identity and therefore is unsuitable
-for import. Application context is command-local rather than a new context-packet purpose. The
-manual workspace contract catalogue, broad integration suite, daemon adapter, and managed runtime
-remain substantial complexity with explicit consumers and reversal gates.
-
-The next gate is a second independently released application consuming one shared semantic unit.
-Only that workload can establish whether reusable package artifacts, exports, dependency identity,
-private test separation, or application-local identity remapping pay for their contracts.
+The highest-value next gate is weak-model/application-authoring economy for the now-complete release
+surface: freeze equal create/bind/update/inspect/corrupt tasks, compare the current exact
+command-local JSON plus task-scoped inspection against one bounded typed action candidate, and
+measure semantic success, corrections, action/observation bytes, processes, Engine opens, files
+opened, and actual provider telemetry when exposed. Delete the candidate if it does not improve the
+complete task.

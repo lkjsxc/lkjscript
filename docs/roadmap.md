@@ -1,144 +1,138 @@
 # Evidence-gated roadmap
 
-This roadmap contains only future gates. Current behavior belongs to `docs/status.md`; accepted
-contracts belong to `docs/spec/`; measurements and reversals belong to `docs/performance.md`.
+This file contains only future gates. Current behavior belongs to `docs/status.md`, contracts to
+`docs/spec/`, and decisions/evidence to `docs/performance.md`.
 
-## 1. Prove or reject reusable package artifacts
+## 1. Measure weak-model release authoring economy
 
-Problem: application artifact v1 closes one run-only lifecycle but deliberately does not support
-independently released reuse, imports, private tests, or multiple exports.
-
-Gate:
-
-- retain a second application that consumes one shared semantic unit released independently;
-- compare one duplicated application closure with an exact immutable package graph;
-- define package coordinate, content identity, user version, exports, dependency constraints,
-  provenance, import/remap, copy, fork, vendoring, and conflict behavior as separate domains;
-- preserve nominal identity without inference from paths, names, hashes, or structure;
-- keep workspace history, application entry/profile, idempotency, aliases, and caches out of package
-  bytes;
-- decode package and graph bytes under exact limits and corruption tests; and
-- delete package scaffolding if reuse does not beat duplicated closure on product and maintenance
-  cost.
-
-Oracle: the two applications and their independent behavior cases pass from transferred immutable
-content while workspace, application, and package facts remain distinct. Reversal: retain run-only
-applications until real reuse pays for package identity and resolution.
-
-## 2. Derive or narrow the workspace machine contract
-
-Problem: the workspace catalogue still occupies 153,227 source bytes and manually duplicates DTO
-field facts, although its digest, workbench help, context/document binding, and diagnostic clients
-remain active consumers.
+Problem: exact reusable releases now work through command-local JSON and bounded inspection, but no
+fresh weak-model/provider trial measures dependency binding, private-target diagnosis, R1/R2
+selection, or diamond repair.
 
 Gate:
 
-- implement the same representative request, response, structured error, and nested variant with
-  local manual metadata, `macro_rules!`, and a disposable derive/IDL candidate;
-- preserve strict duplicate/unknown rejection and explicit cross-field validators;
+- freeze equal create, bind, update, inspect, corrupt, missing-dependency, nominal-confusion, and
+  offline rebuild tasks with independent semantic oracles;
+- compare current release/app requests plus inspection with at most one narrow typed action or
+  task-scoped context candidate;
+- reuse unchanged exact interfaces by release/inspection digest where that removes repeated bytes;
+- record success, unintended semantic changes, corrections/depth, calls, processes, Engine opens,
+  files opened, action/observation bytes, elapsed boundaries, and actual provider token classes only
+  when exposed; and
+- retain one surface and delete every losing grammar/action/help path.
+
+Oracle: equal exact release IDs, application bytes, graph, tests, results, and bounded errors.
+Reversal: current command-local contracts remain when a new surface does not improve complete-task
+success or correction depth.
+
+## 2. Derive or narrow the workspace machine catalogue
+
+Problem: `contract.rs` remains a large manual owner, while release and application facts proved that
+command-local contracts can avoid global catalogue growth.
+
+Gate:
+
+- implement one representative request/response/error/nested variant with current metadata,
+  `macro_rules!`, and one disposable derive/IDL candidate;
+- preserve strict duplicate/unknown rejection and explicit cross-field validation;
 - measure duplicate facts, source opened, expanded review, diagnostics, clean/incremental build,
-  binary size, and focused Miri time;
-- compare global projection with command-local help and dependency-closed roots; and
-- delete the displaced catalogue or every losing generator completely.
+  binary size, and focused Miri cost;
+- compare global roots with command-local help and dependency-closed projection; and
+- delete either the displaced manual owner or every generator completely.
 
-Oracle: exhaustive strict-codec samples and help/schema agreement. Reversal: keep manual local
-ownership when generation obscures invariants or saves less total cost than it adds.
+Oracle: exhaustive strict-codec samples and help/schema agreement. Reversal: retain explicit manual
+ownership when generation obscures invariants or raises total build/debug/review cost.
 
-## 3. Re-evaluate application authoring economy
+## 3. Revalidate managed bytes across both shared-release applications
 
-Problem: application build cases are exact but supplied as versioned JSON, and only one application
-workflow has deterministic byte/process measurements. No fresh provider trial covers the combined
-document-and-application surface.
-
-Gate:
-
-- freeze create, test-add, failing-test repair, body refactor, declaration replacement, build,
-  inspect, transfer, run, and corrupt-artifact tasks with independent outcomes;
-- compare current bracketed document plus application JSON with one isolated equal-capability
-  source-like proposal and, if repeated edits justify it, one narrow typed application action;
-- add application/test context summaries only when repeated discovery or repair calls require them;
-- compare one-shot processes with the existing direct session before designing script batching;
-- record action/observation bytes, processes, failures, corrections, files/source opened, elapsed
-  time, and provider telemetry only when exposed; and
-- keep one grammar and delete every losing parser/help path.
-
-Oracle: equal revisions, test set, artifact logical content, results, and corruption diagnosis.
-Reversal: retain current exact surfaces when compact alternatives do not improve semantic success or
-correction depth.
-
-## 4. Revalidate managed bytes across distributions
-
-Problem: the ownership route has a large absolute win on the retained 512-octet append shape but
-still costs planner, verifier, handle-store, compiler, interpreter, Miri, and failure-state surface.
+Problem: the planner materially wins the retained append workload, but its planner, verifier,
+generation handles, compiler integration, interpreter paths, and Miri surface remain substantial.
 
 Gate:
 
-- generate application inputs across empty, tiny, typical, maximum, concat, slice, sharing, call,
-  loop, trap, and result-materialization shapes;
-- compare current planning, allocate-new owned bytes, safe shared immutable values, and an invocation
-  arena only where each is serious;
-- keep logical fuel, frames, cells, visible/retained bytes, objects, and output limits identical;
-- measure allocations, copies, peaks, RSS where supported, compile/plan/verify/run/materialize time,
-  source, tests, Miri, sanitizer scope, and binary size; and
-- leave one production route, deleting planner/handles/modes if a simpler route matches application
-  bounds.
+- generate empty, tiny, typical, maximum, concat, slice, sharing, call, loop, trap, nominal, and
+  result-materialization cases across both reusable applications;
+- compare current planning, allocate-new, safe shared immutable values, and an invocation arena only
+  where each is serious;
+- preserve identical fuel, frames, cells, visible/retained bytes, objects, and result limits;
+- measure allocations, copies, peaks, compile/plan/verify/run/materialize time, source, tests, Miri,
+  sanitizer scope, binary size, and RSS when available; and
+- leave one production route, keeping a simple oracle and deleting losing modes.
 
-Oracle: exact result/trap/fuel/resource differential. Reversal: current complexity survives only
-while repeatable absolute application benefit remains material.
+Oracle: exact result/trap/resource differential. Reversal: delete managed planning when broader
+end-to-end benefit is marginal or a simpler representation matches it.
 
-## 5. Measure executable caching before adding a format
+## 4. Measure application executable caching before adding a format
 
-Problem: standalone application run validates and recompiles semantic content on every invocation,
-but current startup and compile observations do not justify serialized IR or bytecode.
+Problem: application format 2 validates release bytes and recompiles on each process invocation,
+but present 2.9–6.2 KiB bundles do not establish a compile/startup bottleneck.
 
 Gate:
 
-- measure process startup, artifact read/decode, semantic validation, closure, lowering, IR
-  verification, and first instruction separately across repeated short-lived invocations;
-- prototype at most one target-neutral verified Core IR cache or compact bytecode only after compile
-  or dispatch dominates;
-- bind it to exact semantic digest, compiler/backend identity, target, policy, and runtime contract;
-- reverify every untrusted load and keep semantic compile plus interpreter as differential oracle;
-  and
+- separate process startup, file read, release decode, graph validation, flattening, lowering, Core
+  verification, and first instruction across short-lived runs;
+- prototype at most one target-neutral verified Core-IR cache only after compile dominates;
+- bind it to exact graph digest, compiler/backend identity, target, policy, and runtime contract;
+- reverify hostile cache bytes and keep semantic compile/interpreter differential; and
 - require material improvement in at least two of startup, repeated compile, dispatch, or transfer
   size before retaining a second executable format.
 
-Oracle: deterministic semantic results, traps, resources, and origins. Reversal: delete the cache
-when semantic compile remains negligible or verifier/version cost dominates.
+Oracle: identical semantic results, traps, origins, and resources. Reversal: delete the cache if
+semantic compilation remains negligible or verifier/version surface dominates.
 
-## 6. Scale storage and queries with application history
+## 5. Scale workspace storage, release bundles, and queries
 
-Problem: full snapshots and full scans remain simple and correct, but no large application/test
-history distribution establishes their long-term cost.
+Problem: full snapshots/scans and embedded application graphs are simplest, but no large history or
+many-application distribution establishes their long-term storage and restart cost.
 
 Gate:
 
-- vary durable entities, function bytes, release cases, application closure, history length, and
-  repeated builds;
-- measure workspace/application bytes separately, duplicate semantic bytes, transaction and decode
-  peaks, cold restart, history validation, query visits, closure discovery, and corruption traversal;
-- prototype only the strongest delta/checkpoint, immutable-object, database, or narrow-index
-  candidate after at least two thresholds are crossed;
-- specify atomic publication, reconstruction, retention, interruption-safe compaction/GC,
-  digest-domain separation, and filesystem attacks; and
-- preserve full snapshot/scan reconstruction as the oracle until direct cutover.
+- vary durable entities, body bytes, releases, graph width/depth/diamonds, application count,
+  history length, and repeated builds;
+- measure workspace bytes, embedded duplicate release bytes, decode peaks, cold restart, history and
+  graph validation, query visits, closure work, and corruption traversal;
+- prototype an immutable object store, delta/checkpoint store, or one narrow index only after at
+  least two recorded thresholds cross;
+- specify atomic publication, reconstruction, retention, interruption-safe compaction/GC, exact
+  object keys, store-path mismatch, and symlink/path-race behavior; and
+- preserve full snapshots/scans and explicit bundles as independent oracles until direct cutover.
 
-Oracle: byte-canonical reconstruction and identical accepted semantics. Reversal: retain snapshots
-and scans if added recovery/trust cost exceeds measured application benefit.
+Oracle: byte-canonical reconstruction and identical accepted semantics. Reversal: retain current
+forms if recovery/trust/operational cost exceeds measured savings.
+
+## 6. Add resolution, provenance, or authenticity only for a real consumer
+
+Problem: exact local composition deliberately begins after selection and provides integrity but no
+human constraint resolution, registry, freshness, provenance, authorization, or signatures.
+
+Gate:
+
+- name a retained consumer that cannot supply exact release artifacts directly;
+- keep intent, candidate view, selected exact bindings, lock evidence, content identity,
+  provenance, signature, roles, freshness, revocation, and authorization as distinct domains;
+- make resolution finish before accepted release/application authority and remain reproducible
+  offline from immutable results;
+- threat-model mirrors, rollback, freeze, key compromise, ambiguous publication, and metadata
+  expiry using TUF/in-toto/SLSA lessons without importing unnecessary ecosystem scale; and
+- delete the resolver/trust prototype if explicit exact inputs remain simpler or trust cannot be
+  independently verified.
+
+Oracle: immutable exact builds ignore mutable latest state; adversarial metadata cannot change an
+accepted graph. Reversal: no registry or signing infrastructure remains without that consumer.
 
 ## 7. Introduce one capability-secure effect only for a real application
 
 Problem: pure typed and byte-stream invocation cannot perform partial external actions, while the
-current runner is deliberately not a sandbox.
+current process boundary is deliberately not a sandbox.
 
 Gate:
 
 - select a retained application that cannot externalize interaction through complete input/output;
-- define explicit typed permission, order, timeout, cancellation, partial-action, idempotency,
-  retry, audit, crash, serialization, and deterministic fake-host behavior;
-- model external resource consume/close separately from immutable managed memory;
-- establish worker isolation and denial-of-service boundaries before untrusted host effects; and
-- delete the effect if authority or cleanup cannot be made exact.
+- define explicit typed permission, acquire/use/consume/close, order, timeout, cancellation,
+  partial action, idempotency, retry, audit, crash, and deterministic fake-host contracts;
+- keep affine external-resource cleanup separate from immutable managed memory;
+- establish worker isolation and denial-of-service boundaries before untrusted effects; and
+- delete the effect if authority, failure recovery, or cleanup cannot be exact.
 
-Oracle: fake deterministic host plus failure injection at every lifecycle edge. Reversal: pure
-application adapters remain the default and ambient host access remains forbidden.
+Oracle: deterministic fake host plus failure injection at every lifecycle edge. Reversal: pure
+application adapters remain default and ambient host access remains forbidden.

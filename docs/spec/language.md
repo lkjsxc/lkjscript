@@ -18,6 +18,8 @@ The closed type set is:
 Product values contain exactly one value for every declared field in declaration order. Sum values
 contain exactly one declared variant and a payload exactly when that variant declares one. Nominal
 equality requires the same declaration and member identities; equal shape or names are insufficient.
+Inside a workspace those are workspace-qualified IDs. In a reusable graph they are exact
+`(ReleaseId, ReleaseItemId)` pairs. Private compiler/runtime remapping preserves that equality.
 
 Bytes are ordered octets. Public JSON uses one strict unpadded URL-safe base64 spelling. Backing
 allocation, sharing, views, handles, and reuse are not observable language state. Bytes are not an
@@ -98,9 +100,11 @@ or cycles triggers revalidation of this strategy.
 
 ## Public values and failures
 
-Run inputs and outputs use exact typed public values. Nominal values name durable declaration/member
-IDs. Every value is validated for type, shape, depth, counts, bytes, and foreign-domain references
-before flattening or materialization.
+Run inputs and outputs use exact typed public values. Workspace invocation nominal values name
+workspace declaration/member IDs; application invocation nominal values name exact release and
+item pairs. Every value is validated for type, shape, depth, counts, bytes, and foreign-domain
+references before flattening or materialization. A structurally identical value from another exact
+release rejects before execution.
 
 Failures distinguish proposal/semantic rejection, incomplete compilation, invalid derived IR,
 runtime traps, fuel/frame/resource policy, I/O, and unknown publication outcome. Diagnostics name a

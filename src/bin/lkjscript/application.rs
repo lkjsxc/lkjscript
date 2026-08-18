@@ -7,7 +7,6 @@ use lkjscript::application::{
     self, APPLICATION_CONTRACT_VERSION, ApplicationBuildRequest, ApplicationInvocation,
     ApplicationTestReport,
 };
-use lkjscript::engine::Engine;
 use lkjscript::error::{ErrorCode, LkError};
 use lkjscript::machine::{MAX_JSON_INPUT_BYTES, MAX_JSON_OUTPUT_BYTES};
 use lkjscript::schema::MAXIMUM_BYTE_STRING_BYTES;
@@ -20,7 +19,7 @@ use std::process::ExitCode;
 const HELP: &str = "usage: lkjscript app COMMAND [OPTIONS]
 
 Commands:
-  build --state DIR (--output FILE | --validate-only) [--pretty]
+  build --release FILE [--release FILE ...] (--output FILE | --validate-only) [--pretty]
         # strict ApplicationBuildRequest JSON on stdin
   validate --artifact FILE [--pretty]
   inspect --artifact FILE [--pretty]
@@ -28,17 +27,18 @@ Commands:
   run --artifact FILE [--pretty]       # strict ApplicationInvocation JSON on stdin
   stream --artifact FILE               # raw bytes on stdin and stdout
 
-Application CLI JSON contract version 1 is required on inputs and reported on outputs. Application
-artifacts are immutable run-only semantic closures. Build requires an exact workspace,
-revision, entry, invocation profile, policy, and at least one entry-targeting release test. Build
-runs all declared tests before no-overwrite atomic publication. Artifact commands never resolve
-workspace HEAD and never require source state. Artifact paths must be absolute.";
+Application CLI JSON contract version 2 is required on inputs and reported on outputs. Application
+artifacts embed one exact immutable reusable-release graph. Build requires an exact root release,
+exported entry, invocation profile, policy, application tests, and every graph release as an
+explicit immutable input. Build runs all embedded release and application tests before no-overwrite
+atomic publication. No command resolves workspace HEAD, coordinate, user version, or mutable store
+state. Artifact paths must be absolute.";
 
 pub(super) enum ApplicationCommand {
     Invalid(String),
     Help,
     Build {
-        state: PathBuf,
+        releases: Vec<PathBuf>,
         output: Option<PathBuf>,
         pretty: bool,
     },
@@ -99,10 +99,10 @@ fn run_json(command: ApplicationCommand) -> CliOutcome {
         ),
         ApplicationCommand::Help => success(HELP.as_bytes().to_vec()),
         ApplicationCommand::Build {
-            state,
+            releases,
             output,
             pretty,
-        } => run_build(&state, output.as_deref(), pretty),
+        } => run_build(&releases, output.as_deref(), pretty),
         ApplicationCommand::Validate { artifact, pretty }
         | ApplicationCommand::Inspect { artifact, pretty } => {
             let bytes = match application::read_file(&artifact) {
@@ -126,16 +126,18 @@ fn run_json(command: ApplicationCommand) -> CliOutcome {
 }
 
 fn parse_build(arguments: &[String]) -> Result<ApplicationCommand, String> {
-    let mut state = None;
+    let mut releases = Vec::new();
     let mut output = None;
     let mut validate_only = false;
     let mut pretty = false;
     let mut index = 0;
     while index < arguments.len() {
         match arguments[index].as_str() {
-            "--state" if state.is_none() => {
-                state = Some(PathBuf::from(value_after(
-                    arguments, &mut index, "--state",
+            "--release" => {
+                releases.push(PathBuf::from(value_after(
+                    arguments,
+                    &mut index,
+                    "--release",
                 )?));
             }
             "--output" if output.is_none() && !validate_only => {
@@ -149,14 +151,16 @@ fn parse_build(arguments: &[String]) -> Result<ApplicationCommand, String> {
         }
         index += 1;
     }
-    let state = state.ok_or_else(|| app_usage("build requires --state"))?;
+    if releases.is_empty() {
+        return Err(app_usage("build requires at least one --release FILE"));
+    }
     if output.is_none() && !validate_only {
         return Err(app_usage(
             "build requires exactly one of --output FILE or --validate-only",
         ));
     }
     Ok(ApplicationCommand::Build {
-        state,
+        releases,
         output,
         pretty,
     })
@@ -214,7 +218,8 @@ fn value_after<'a>(
         .ok_or_else(|| app_usage(&format!("{flag} requires a value")))
 }
 
-fn run_build(state: &Path, output: Option<&Path>, pretty: bool) -> CliOutcome {
+#[allow(clippy::result_large_err)]
+fn run_build(releases: &[PathBuf], output: Option<&Path>, pretty: bool) -> CliOutcome {
     let input = match read_stdin(MAX_JSON_INPUT_BYTES, "application build request") {
         Ok(input) => input,
         Err(error) => return application_error(error, pretty),
@@ -224,15 +229,18 @@ fn run_build(state: &Path, output: Option<&Path>, pretty: bool) -> CliOutcome {
         Ok(request) => request,
         Err(error) => return application_error(error, pretty),
     };
-    let engine = match Engine::open(state) {
-        Ok(engine) => engine,
-        Err(error) => return application_error_with_exit(error, pretty, EXIT_TRANSPORT),
+    let release_bytes = match releases
+        .iter()
+        .map(|path| lkjscript::release::read_file(path))
+        .collect::<Result<Vec<_>, _>>()
+    {
+        Ok(bytes) => bytes,
+        Err(error) => return application_error(error, pretty),
     };
-    let prepared = match engine.prepare_application(&request) {
+    let prepared = match application::prepare(&request, &release_bytes) {
         Ok(prepared) => prepared,
         Err(error) => return application_error(error, pretty),
     };
-    drop(engine);
     let published = output.is_some();
     let preflighted = encode_json(&prepared.receipt(published), pretty);
     if preflighted.exit != 0 {
@@ -327,7 +335,7 @@ fn stream_error(error: LkError) -> ExitCode {
         error: &error,
     })
     .unwrap_or_else(|_| {
-        b"{\"contract_version\":1,\"error\":{\"code\":\"io\",\"related\":[],\"retryable\":false,\"message\":\"cannot encode application error\"}}".to_vec()
+        b"{\"contract_version\":2,\"error\":{\"code\":\"io\",\"related\":[],\"retryable\":false,\"message\":\"cannot encode application error\"}}".to_vec()
     });
     let mut stderr = std::io::stderr().lock();
     let _ = stderr.write_all(&encoded);

@@ -13,6 +13,8 @@ use std::process::ExitCode;
 mod agent;
 #[path = "lkjscript/application.rs"]
 mod application;
+#[path = "lkjscript/release.rs"]
+mod reusable_release;
 
 const EXIT_USAGE_OR_JSON: u8 = 2;
 const EXIT_TRANSPORT: u8 = 3;
@@ -26,6 +28,7 @@ fn main() -> ExitCode {
     let outcome = match parse_command(std::env::args().skip(1)) {
         Ok(Command::Session { state }) => return run_session(state),
         Ok(Command::Application(command)) => return application::run(command),
+        Ok(Command::Release(command)) => return reusable_release::run(command),
         Ok(command) => run_command(command),
         Err(message) => failure(EXIT_USAGE_OR_JSON, BoundaryErrorKind::Usage, message, None),
     };
@@ -72,6 +75,12 @@ fn run_command(command: Command) -> CliOutcome {
             EXIT_USAGE_OR_JSON,
             BoundaryErrorKind::Usage,
             usage("application command must own its input and output boundary"),
+            None,
+        ),
+        Command::Release(_) => failure(
+            EXIT_USAGE_OR_JSON,
+            BoundaryErrorKind::Usage,
+            usage("release command must own its input and output boundary"),
             None,
         ),
         Command::Help => success(usage_text().as_bytes().to_vec()),
@@ -296,6 +305,7 @@ fn failure(
 enum Command {
     Agent(agent::AgentCommand),
     Application(application::ApplicationCommand),
+    Release(reusable_release::ReleaseCommand),
     Help,
     Rpc {
         state: PathBuf,
@@ -324,6 +334,12 @@ fn parse_command(mut arguments: impl Iterator<Item = String>) -> Result<Command,
     if first == "app" {
         return Ok(Command::Application(
             application::parse(arguments).unwrap_or_else(application::ApplicationCommand::Invalid),
+        ));
+    }
+    if first == "release" {
+        return Ok(Command::Release(
+            reusable_release::parse(arguments)
+                .unwrap_or_else(reusable_release::ReleaseCommand::Invalid),
         ));
     }
     if first == "schema" {
@@ -412,7 +428,7 @@ fn usage(reason: &str) -> String {
 }
 
 fn usage_text() -> &'static str {
-    "usage: lkjscript agent [COMMAND] [OPTIONS]\n       lkjscript app COMMAND [OPTIONS]\n       lkjscript --state DIRECTORY (rpc [--pretty] | session)\n       lkjscript schema [--root NAME ... | --full] [--known-digest HEX] [--pretty]\n\nRun `lkjscript agent` for semantic authoring and `lkjscript app help` for the standalone application lifecycle. Raw RPC and schema commands are exact low-level diagnostic surfaces."
+    "usage: lkjscript agent [COMMAND] [OPTIONS]\n       lkjscript release COMMAND [OPTIONS]\n       lkjscript app COMMAND [OPTIONS]\n       lkjscript --state DIRECTORY (rpc [--pretty] | session)\n       lkjscript schema [--root NAME ... | --full] [--known-digest HEX] [--pretty]\n\nRun `lkjscript agent` for semantic authoring, `lkjscript release help` for immutable reuse, and `lkjscript app help` for exact offline applications. Raw RPC and schema commands are exact low-level diagnostic surfaces."
 }
 
 #[cfg(test)]

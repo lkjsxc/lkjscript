@@ -91,6 +91,29 @@ domains.
 `DraftSymbol` is a transaction-local label. A context alias is packet-local and digest-bound. A
 snapshot hash identifies canonical immutable snapshot bytes. None is a semantic entity ID.
 
+### Reusable-release identity
+
+A reusable release is a different immutable authority domain. Workspace construction projects one
+exact package closure into canonical release-local IDs and erases `WorkspaceId`, `Revision`,
+workspace durable serials, function-local numbering, allocator frontier, and tombstones. A
+`ReleaseItemId` has meaning only with its exact `ReleaseId`.
+
+`ReleaseId` is deliberately the domain-separated digest of the complete validated canonical
+release payload. In this closed immutable domain, full digest equality is exact release equality;
+the collision and second-preimage assumptions and conflicting-byte rejection are part of the
+contract. `ReleaseContentDigest` uses a second domain and is integrity evidence only. Coordinate,
+user version, dependency slot, export name, local alias, file path, compiler ID, and runtime handle
+are never substitutes for exact release/item identity.
+
+Nominal equality across release boundaries is equality of `(ReleaseId, ReleaseItemId)`. Therefore
+two structurally identical declarations in distinct releases do not unify, while two paths through
+a diamond to the same exact release do. Local import proxies preserve the foreign pair; they do not
+turn a dependency nominal into a workspace-local or consumer-release nominal. Compiler flattening
+derives private dense IDs from these pairs without changing public equality.
+
+The complete release and composition contract is owned by
+[reusable-release.md](reusable-release.md).
+
 ## Function bodies and anchors
 
 A function body is an immutable typed structure represented by function-local items. Terms use
@@ -200,15 +223,15 @@ bytes per revision. Reconsider delta/checkpoint or immutable-object storage when
 bytes become material on a representative larger corpus. Such a cutover must define object
 validation, root retention, interruption-safe garbage collection, and one reconstruction oracle.
 
-## Workspace versus application and package artifacts
+## Workspace, release, application, and executable domains
 
 The `.lkjscript` file is a workspace revision artifact. It includes development history contracts
-and is not a package, dependency, or distribution format. Application artifact version 1 is a
-separate target-neutral run-only semantic closure with one exact entry, invocation profile, and
-immutable release cases; its contract is owned by [application.md](application.md). It retains
-workspace-qualified identities but contains no workspace history, HEAD, idempotency, aliases,
-caches, or unrelated declarations.
+and is not a reusable dependency or distribution format. Release artifact version 1 is a canonical
+workspace-independent semantic unit with explicit exports, exact dependencies, and release-local
+identity. Application artifact version 2 embeds one exact validated release graph with entry,
+invocation contract, policy, and application cases. It contains no workspace identity. Core IR,
+ownership plans, runtime tags, and values remain derived executable state.
 
-No reusable package graph or executable cache exists. Workspace, application, package, and derived
-executable domains remain distinct. Their content digests do not become package, application,
-release, or entity identity by implication.
+Workspace, reusable release, application, bundle/container, and derived executable domains remain
+distinct. A digest acquires the narrow identity role stated by its owning specification and no
+provenance, authorization, signature, workspace continuity, or runtime meaning by implication.

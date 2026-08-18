@@ -6,9 +6,11 @@ packets, editable documents, caching, limits, rejection, and exit behavior.
 ## Logical engine boundary
 
 `Engine` owns workspace create/open, transaction preparation and publication, query, compilation,
-run, and exact application preparation. Workspace RPC accepts closed typed `Request` values and
-returns closed typed `Response` values. Application preparation uses its own closed typed method and
-artifact contract. Engine semantics do not depend on JSON, terminal rendering, or Unix sockets.
+run, and exact reusable-release preparation. Workspace RPC accepts closed typed `Request` values
+and returns closed typed `Response` values. Release preparation uses one exact immutable workspace
+revision plus explicit dependency bytes through its own typed method. Application composition uses
+only explicit immutable release bytes and needs no Engine. Semantics do not depend on JSON,
+terminal rendering, or Unix sockets.
 
 The logical request families are workspace creation, transaction application, query batch, run,
 schema description, and adapter shutdown. Semantic failures are `Response::Error`; inability to open
@@ -71,11 +73,17 @@ agent binary and printed by `agent orient`. Diagnostic clients may request:
 Unknown, duplicate, empty, or excessive roots reject. Normal agent work does not require schema
 discovery.
 
+Reusable-release build, validate, inspect, and test are command-local projections of the separate
+[release contract](reusable-release.md), not additions to workspace RPC. Release build JSON uses
+contract version 1 and names exact workspace/revision authority; all dependency artifact paths are
+explicit command inputs. Its strict Rust records, canonical codec, and command-local help own the
+fields.
+
 Application build, validate, inspect, test, typed run, and stream are command-local projections of
-the separate [application contract](application.md), not additions to workspace RPC. Their Rust
-records, canonical artifact codec, and command-local help own their fields. This avoids copying an
-application manifest into the global workspace catalogue. Application JSON uses contract version 1;
-top-level application parsing and operation errors return that versioned typed envelope.
+the separate [application contract](application.md). Application JSON uses contract version 2 and
+build accepts only explicit release files. Release and application records are deliberately absent
+from the global workspace catalogue, avoiding a duplicate schema owner and a mandatory global
+schema dump. Top-level parsing and operation errors return the applicable contract version.
 
 ## Context packets
 
@@ -156,6 +164,7 @@ gate if measured request savings justify response preflight and idempotency comp
 
 ## Version rejection
 
-Protocol/JSON 9 and older, machine schema v9 and older, context packet 1, application command
-contract 0, application artifact 0, and the `plan` edit root reject. No alias, fallback,
-compatibility reader, or migration mode remains.
+Protocol/JSON 9 and older, machine schema v9 and older, context packet 1, release command contract
+0, application command contract 1 and older, release artifact formats other than 1, application
+artifact format 1 and older, and the `plan` edit root reject. No alias, fallback, compatibility
+reader, or migration mode remains.

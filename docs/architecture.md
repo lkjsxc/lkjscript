@@ -1,250 +1,197 @@
 # Architecture
 
-`lkjscript` is a typed semantic programming system. The accepted program is an immutable
-`Snapshot`; JSON, editable documents, context packets, review text, Core IR, ownership plans, and
-runtime values are proposals or derived projections. Only the typed transaction and validator can
-publish program meaning.
+`lkjscript` is a typed semantic programming system. An immutable `Snapshot` owns accepted workspace
+meaning; one canonical reusable-release payload owns independently distributed semantic meaning;
+one application-v2 artifact owns an exact runnable release graph. JSON, editable documents, context,
+review text, compiler IR, memory plans, runtime tags, and caches are proposals, views, or derived
+state.
 
-Normative semantics belong to the [semantic model](spec/semantic-model.md), [language](spec/language.md),
-the [application contract](spec/application.md), and [protocol](spec/protocol.md) specifications.
-This document owns components, dependency direction, process topology, storage shape, and trust
-boundaries.
+Normative behavior belongs to the [semantic model](spec/semantic-model.md),
+[language](spec/language.md), [reusable release](spec/reusable-release.md),
+[application](spec/application.md), and [protocol](spec/protocol.md) specifications. This document
+owns components, dependency direction, process topology, storage, and trust boundaries.
 
-## Primary path
+## Primary paths
 
-```text
-task-scoped context packet
-    -> bounded editable semantic document
-    -> closed typed transaction
-    -> topology-neutral Engine under one authority lock
-    -> staged immutable Snapshot
-    -> semantic and history validation
-    -> response, artifact, and HEAD preflight
-    -> one durable immutable revision
-    -> query/review or dependency-closed Core IR lowering
-    -> Core IR verifier
-    -> derived ownership plan and independent verifier
-    -> explicit-frame managed-value interpreter
-```
-
-An exact accepted revision has a separate distribution path:
+Workspace authoring remains:
 
 ```text
-exact workspace + revision + entry + profile + immutable release cases
-    -> one shared semantic dependency-closure walk
-    -> projected run-only Snapshot with no unrelated declarations or package entry
-    -> independent encode/decode and semantic validation
-    -> verified Core IR entry compile + complete release-case execution
-    -> validate-only receipt or no-overwrite atomic application publication
-    -> standalone validate / inspect / test / typed run / bytes stream
+task-scoped context / editable document / strict JSON
+  -> closed typed transaction
+  -> Engine under one state-directory authority lock
+  -> staged immutable Snapshot and history validation
+  -> artifact + HEAD + response preflight
+  -> one durable immutable workspace revision
 ```
 
-The primary CLI opens `Engine` directly; users do not manage a background process. A line-delimited
-direct session amortizes engine startup for batches. `lkjscriptd` is an optional private Unix-socket
-adapter over the same engine, retained for boundary diagnostics rather than as a second semantic
-implementation.
-
-## Semantic authority and identities
-
-`graph.rs` owns immutable snapshots. Their current physical representation remains a canonical
-ordered map of typed semantic nodes, but that storage shape does not define the product model.
-`schema.rs` owns the closed entity and operation vocabulary. `validate.rs` owns whole-model
-acceptance and exact history transitions.
-
-Identity has two active strata:
-
-- durable workspace-qualified IDs name continuity-bearing entities, members, parameters, and
-  explicit repairable hole anchors;
-- function-local IDs name regions, blocks, arguments, ordinary operations, and implied control
-  scaffolding only within one function body and exact revision.
-
-The high bit of the current 64-bit serial encoding separates the domains. Local IDs encode the
-durable function serial plus a body-local ordinal. Validation rejects cross-function local
-references, and local IDs never advance the durable allocator or enter tombstones. A function body
-replacement preserves its durable function identity while deterministically rebuilding local terms.
-Compiler IDs, runtime handles, packet aliases, draft symbols, and storage digests remain separate
-private domains.
-
-`transaction.rs` owns public edit forms, deterministic draft normalization, candidate application,
-allocation, and receipt construction. Its large test body is physically separated in
-`transaction/tests.rs`; a later ownership split may separate these production concerns when it can
-do so without duplicating invariants. `diff.rs` classifies durable entity changes separately from
-function-body replacement.
-
-## Editable documents and observations
-
-`workbench/document.rs` owns editable semantic document version 1. The parser is strict, bounded,
-location-aware, and uses explicit frames. A document binds schema digest, workspace, base revision,
-editable scope, and optional context-packet digest. It normalizes into the same `Transaction` used
-by JSON, and its syntax is discarded. Omitted and packet-provided content is not editable.
-
-`workbench/context.rs` composes purpose-specific observations from pure queries. Packet aliases are
-valid only with the exact packet digest. A caller may send a known digest and receive a compact
-unchanged response, but packets and caches never become authority. `workbench/view.rs` owns bounded,
-terminal-safe review output; `workbench/help.rs` projects compact authoring facts from the executable
-contract.
-
-`query.rs` owns exact revision-bound scans, pagination, completeness blockers, legal constructors,
-dependencies, repair context, and semantic diff composition. Full scans remain the production
-implementation and differential oracle because current workloads do not justify persistent indexes.
-
-## Engine and publication
-
-`engine.rs` is the logical authority owner. It owns workspace create/open, transaction, query,
-compile, run, and exact application preparation regardless of presentation. One
-`lkjscript.engine.lock` protects a state directory. A competing engine rejects; it does not wait
-indefinitely or silently retry.
-
-Publication is synchronous:
-
-1. validate the exact base and proposal;
-2. construct and validate the candidate snapshot and history transition;
-3. preflight the canonical artifact, compact HEAD, and bounded response;
-4. write, flush, rename, and sync the revision artifact;
-5. write, flush, atomically replace, and sync HEAD;
-6. publish in-memory state and acknowledge.
-
-A failure before authoritative HEAD leaves the old head authoritative. If rollback cannot establish
-whether the old or new head won, the engine returns `commit_outcome_unknown` and stops accepting
-work. Validate-only performs applicable semantic and byte preflight without writing, publishing, or
-consuming durable identity.
-
-`persistence.rs` owns path checks, locking, artifact inventory, publication, recovery, idempotency,
-and failure injection. `artifact.rs` owns canonical snapshot bytes. The active store keeps a complete
-artifact for every revision and decodes contiguous retained history when reopened. Identity
-stratification made current body churn sufficiently small that an object store, delta log, or
-database did not justify its additional recovery, retention, garbage-collection, and dependency
-surface. That decision is explicitly reversible after a larger scaling corpus.
-
-Workspace artifacts are development authority. `application.rs` owns a distinct immutable run-only
-semantic closure, release-case execution, canonical application codec, standalone validation, and
-no-replace filesystem publication. It retains source workspace identity to preserve nominal values
-but excludes history, HEAD, idempotency, aliases, caches, unrelated semantics, and derived IR.
-
-Application publication writes a private file in the destination directory, synchronizes it,
-establishes one no-replace hard link, removes the private name, and synchronizes the directory.
-Failures before the link leave no destination; failures after the link report
-`artifact_publication_outcome_unknown`. Application artifacts are not package or executable-cache
-artifacts. There is no reusable package graph, dependency resolver, registry, or native deployment
-image.
-
-## Contract and boundaries
-
-`protocol.rs` owns closed logical requests and responses. `machine.rs` owns only strict JSON
-envelopes/codecs and a small facade. `contract.rs` owns the executable machine-description
-catalogue, while `machine_contract.rs` owns its descriptor value model. Agreement tests compare the
-catalogue with actual strict codecs and executable samples. The catalogue is now local to its fact
-domain, but remains manually assembled; deriving field metadata from authoritative Rust types is a
-future evidence gate.
-
-`bin/lkjscript.rs` and `bin/lkjscript/agent.rs` are presentation and lifecycle adapters. The direct
-CLI and session call `Engine`. `bin/lkjscript/application.rs` is a thin versioned JSON/raw-stream
-adapter over `Engine::prepare_application` and `application.rs`; it does not reimplement closure,
-tests, codecs, or execution. `daemon.rs` and `transport.rs` own only the optional private socket
-adapter and framing.
-
-The manual workspace machine catalogue remains because agent help/schema digest binding, context
-and document contracts, strict RPC clients, and dependency-closed schema projections consume it.
-Application records deliberately do not enter that catalogue: their Rust types, artifact codec,
-and command-local help are one narrower contract owner. A generator/proc-macro/IDL prototype was
-not retained because no candidate was completed with lower total debugging and build cost.
-
-JSON is limited to 8 MiB input and 32 MiB output. Documents are limited to 8 MiB, 32 parser frames,
-65,536 items, and 512-byte diagnostics. Context and review outputs are independently limited to
-4 MiB. All observable collections use canonical order.
-
-## Compiler and runtime
-
-`compile.rs` discovers the complete selected-entry function and nominal-type closure, lowers typed
-bodies, and maps revision-local semantic origins into private dense Core IDs. `core_ir.rs` owns the
-target-independent executable contract and independent verifier. Unreachable incomplete code does
-not enter lowering; reachable incompleteness rejects.
-
-`ownership.rs` derives managed-reference maps, liveness, cleanup, and uniqueness actions. Its
-verifier independently recomputes those facts. `managed.rs` owns checked generation-tagged byte
-handles and an allocate-new differential mode. `interpret.rs` owns public-value validation,
-explicit frames, flat cells, traps, resource accounting, cleanup, and result materialization.
-
-The production immutable-byte route retains early reclamation and verified unique-left concat
-reuse. On the 512-octet loop-carried append control it reduces copied backing bytes from 131,840 to
-1,024, allocated backing bytes from 131,840 to 1,528, peak backing from 1,024 to 513, and cumulative
-managed objects from 2,050 to 1,026. This is an implementation strategy, not language-visible
-ownership. A simpler allocate-new mode remains the correctness oracle. A second managed value
-class, values escaping one invocation, cycles, or loss of material representative benefit reopens
-the decision.
-
-Compilation and interpretation remain iterative for user-scalable control. Fuel, frames, live
-cells, visible managed bytes, retained backing, managed objects, allocations, and result
-materialization are distinct policies.
-
-## Source ownership
-
-The intended dependency direction is:
+Distribution and composition are separate:
 
 ```text
-IDs and semantic contracts
-    -> immutable model and validation
-    -> transactions and diff
-    -> engine and publication
-    -> queries and agent projections
-    -> application closure / canonical distribution artifact
-    -> compiler and runtime
-    -> JSON, stream, socket, and terminal adapters
+exact workspace revision + package + exports + tests + exact dependency artifacts
+  -> release closure and canonical workspace-ID erasure
+  -> canonical release-local semantic model
+  -> encode -> hostile decode -> semantic revalidation -> exact re-encode
+  -> exact graph validation and all release tests
+  -> validate-only receipt or no-overwrite release publication
+
+explicit exact release artifacts + entry + profile + policy + application cases
+  -> exact reachable graph validation (missing/extra/cycle/private rejection)
+  -> compiler-private deterministic graph flattening
+  -> Core IR compile and independent verification
+  -> all release and application cases
+  -> canonical application-v2 bundle publication
+  -> workspace-free validate / inspect / test / typed run / bytes stream
 ```
 
-Current major owners are:
+The application embeds every exact release once. A mutable store, resolver, daemon, workspace HEAD,
+or network is not on the build or run path.
+
+## Semantic authority and identity
+
+`graph.rs`, `schema.rs`, and `validate.rs` own workspace snapshots and acceptance. Workspace
+identity has durable continuity IDs plus revision-bound function-local body IDs. `transaction.rs`
+owns proposal normalization and allocation; `diff.rs` owns change facts.
+
+`release/canonical.rs` projects one package closure into a release-local namespace. It assigns all
+selected definition IDs before rewriting references, so recursion does not require content hashes
+per definition. It canonicalizes modules/definitions and preserves semantic child/body order. The
+projection erases workspace/revision IDs, allocator history, tombstones, unrelated declarations,
+aliases, and paths.
+
+`release/codec.rs` owns exact `ReleaseId` and `ReleaseContentDigest` domains and canonical release
+bytes. `ReleaseId` equality deliberately means complete immutable release equality; public nominal
+identity is `(ReleaseId, ReleaseItemId)`. Coordinate, user version, export names, and dependency
+slots remain separate metadata/lookup roles.
+
+`release/graph.rs` owns the exact acyclic graph, direct-slot import validation, diamond
+deduplication, multi-version coexistence, graph limits, and the sole compiler-private flattening.
+Imported proxies redirect to exact dependency items and are omitted from the flattened ownership
+tree. Distinct release pairs never collide even when local ordinals and structure match.
+
+## Release and application ownership
+
+The release domain is split by invariant:
 
 | Owner | Responsibility |
 |---|---|
-| `ids.rs`, `schema.rs`, `graph.rs` | identity domains, semantic vocabulary, immutable state |
-| `transaction.rs`, `validate.rs`, `diff.rs` | proposal normalization, acceptance, change facts |
-| `engine.rs`, `persistence.rs`, `artifact.rs` | dispatch, locking, publication, recovery, bytes |
-| `application.rs` | application closure, release cases, canonical artifact, standalone execution |
-| `query.rs`, `workbench/` | exact observations, documents, help, and review |
-| `contract.rs`, `machine.rs`, `protocol.rs` | executable contract, strict JSON, logical boundary |
-| `compile.rs`, `core_ir.rs` | closure, lowering, origins, executable verification |
-| `ownership.rs`, `managed.rs`, `interpret.rs` | derived memory plan, managed values, execution |
-| `daemon.rs`, `transport.rs`, `bin/` | optional socket and thin user-facing adapters |
+| `release/mod.rs` | public release DTOs, identity types, preparation, inspection, tests, limits |
+| `release/canonical.rs` | workspace closure, canonical local IDs, remapping, release validation |
+| `release/codec.rs` | strict canonical binary envelope and hostile decode |
+| `release/graph.rs` | exact dependency graph, proxy signatures, cycles/diamonds, flattening |
+| `release/tests.rs` | canonical equality, two consumers, versions, diamond, mutation/publication |
 
-Large invariant suites now live beside their production owners rather than at the end of production
-files. `generated_invariant_tests.rs` retains deterministic generated cross-boundary sequences.
-`tests/agent_repair_json.rs` remains a broad integration concentration and is a known locality debt.
+`application.rs` owns application contract 2, exact graph bundle encoding, entry/profile/policy,
+public exact nominal values, application cases, inspection, execution, and publication.
+`application/tests.rs` owns format rejection, offline typed/stream behavior, nominal values,
+missing/corrupt/extra graph objects, 10,000 mutations, and publication edges. The application owner
+uses `release::graph`; it does not duplicate release validation or closure logic.
+
+`artifact_io.rs` owns the shared strict regular-file reader and immutable no-overwrite publisher for
+release and application artifacts. Workspace persistence remains separately owned by
+`persistence.rs` because HEAD history has a different authority transition.
+
+## Engine, storage, and publication
+
+`engine.rs` owns workspace create/open, transactions, queries, compile/run, and release preparation
+from an exact revision. Application build is a pure operation over immutable release bytes and does
+not open Engine. One `lkjscript.engine.lock` protects a state directory. A competing engine rejects
+with `authority_busy`; no mutation is silently retried.
+
+Workspace publication stages and validates the candidate, preflights bytes/response, synchronizes
+the revision artifact, atomically advances and synchronizes HEAD, then publishes in memory. An
+ambiguous HEAD transition is `commit_outcome_unknown` and poisons the Engine instance.
+
+Release and application publication have no mutable namespace allocator. Their caller selects one
+explicit absolute destination. The shared publisher creates a private same-directory file, writes
+and synchronizes complete canonical bytes, creates one atomic no-replace hard link, removes the
+private name, and synchronizes the directory. Failure before the link is known failure; after the
+link it is `artifact_publication_outcome_unknown`. No automatic retry occurs.
+
+Workspace storage retains complete canonical artifacts per revision and compact HEAD. Full scans
+remain the query oracle. The reusable workload does not require a content store: application bundles
+are 2.9–6.2 KiB in the retained proof and explicit release files are enough for build. There is no
+mutable index, store recovery mode, object garbage collection, or lockfile.
+
+## Agent and command boundaries
+
+`protocol.rs` owns workspace logical requests. `contract.rs` owns the manually assembled
+machine-schema-v10 catalogue and `machine.rs` owns strict JSON. `workbench/` owns exact context,
+documents, review, and compact help. Normal agent work uses task-scoped roots and exact digest reuse,
+not a global schema dump.
+
+Release and application commands are deliberately command-local contracts. Their authoritative
+Rust types and validators live with their semantic owners; `bin/lkjscript/release.rs` and
+`bin/lkjscript/application.rs` only parse options, strict JSON/raw input, map exit classes, and
+render bounded output. They do not enter a second catalogue.
+
+The primary CLI opens Engine directly. A line-delimited session amortizes Engine startup across
+workspace operations. `lkjscriptd`, `daemon.rs`, and `transport.rs` remain an optional private
+socket diagnostic path over the same Engine for the exported framed client and its unique timeout,
+correlation, disconnect, shutdown, and lock tests. Release/application work neither requires nor
+uses the daemon.
+
+## Compiler and runtime
+
+`compile.rs` discovers the selected flattened entry closure and lowers to private dense Core IDs.
+`core_ir.rs` independently verifies type tables, nominal closure, control, results, calls, and
+origins. No serialized Core IR is trusted or distributed.
+
+`ownership.rs` derives and independently verifies managed-reference liveness and uniqueness.
+`managed.rs` owns checked generation-tagged immutable-byte handles and the allocate-new differential
+mode. `interpret.rs` owns public-value validation, explicit frames, flat cells, traps, policy,
+cleanup, and materialization. Runtime nominal tags derive from exact flattened release/item pairs;
+they are never semantic or artifact identity.
+
+Compilation and execution remain iterative for user-scalable control. Fuel, frames, live cells,
+visible bytes, retained backing, objects, allocations, decoded input, and result output are distinct
+policies. Release cases and application cases use the same compiler/interpreter oracle.
+
+## Dependency direction
+
+```text
+IDs + closed language schema
+  -> immutable workspace model + validation
+  -> transactions / history / workspace persistence
+  -> release canonical model + codec
+  -> exact release graph + private flattening
+  -> application graph bundle
+  -> compiler / Core verifier / ownership / interpreter
+  -> JSON, raw stream, terminal, and optional socket adapters
+```
+
+Queries and workbench observations depend on workspace authority but cannot mutate it. Codecs depend
+on semantic owners and do not become alternate validators. Adapters depend on all relevant owners;
+semantic owners do not depend on adapters.
 
 ## Trust boundaries
 
-All model output, JSON, documents, packets, workspace artifacts, application artifacts, filesystem
-metadata, and public runtime values are untrusted. Decoders reject unknown, malformed, oversized,
-noncanonical, foreign-domain, or trailing data. State and application paths must be explicit
-absolute paths with no symbolic-link components; inputs are bounded regular files and outputs never
-overwrite an existing destination.
+Model output, JSON, documents, packets, workspace/release/application bytes, explicit dependency
+sets, filesystem metadata, and public runtime values are untrusted. Structural decode is followed by
+semantic validation and exact re-encoding. Unknown, malformed, oversized, duplicate,
+noncanonical, foreign-domain, corrupt, truncated, or trailing forms reject before compile/run.
 
-The package forbids local unsafe Rust. The trusted computing base nevertheless includes the Rust
-toolchain, standard library, Cargo, resolved dependencies, operating system, filesystem, and CPU.
-`blake3`, `fs2`, and `getrandom` include platform or native-facing implementation below the crate's
-safe interface. The repository has no project build script and introduced no dependency in this
-campaign.
+Artifact paths are absolute and lexically canonical; observed symlink parents/inputs and
+non-regular inputs reject. The operating system, filesystem, and concurrent directory
+administration remain trusted; process separation and these path checks are not a sandbox. The
+trusted computing base includes stable Rust, standard library, Cargo dependencies, OS, filesystem,
+and CPU. The crate contains no local unsafe Rust and no project build script.
 
-The local engine, application runner, and optional process boundary are not sandboxes. Programs
-currently have no host effects or ambient authority. The bytes-stream adapter converts explicit
-standard input/output to semantic values and does not add effects. Future effects require explicit
-typed permissions, partial-action and retry rules, cancellation, audit, and deterministic resource
-cleanup. Ordinary immutable-value reclamation must remain separate from affine external-resource
-semantics.
+Programs have no ambient host effects or external-resource values. Future effects require explicit
+typed authority, acquisition/use/close, timeout, cancellation, partial-action, retry/idempotency,
+audit, crash, and cleanup contracts. Immutable-value reclamation remains separate.
 
 ## Deliberate absences and reversal gates
 
-- No reusable package artifact exists; add one only for independent reuse with exact exports,
-  dependencies, identity, provenance, import, and untrusted-decoding contracts.
-- No serialized Core IR or executable cache exists; add one only if measured standalone startup or
-  repeated compile cost exceeds its verifier and version surface.
-- No semantic index exists; add a narrow derived index only after a scan-dominated workload and keep
-  a full-scan differential oracle.
-- No incremental store exists; reopen when retained bytes, restart, branching, or package reuse are
-  materially constrained by full snapshots.
-- No network service, sandbox, branch/merge UI, JIT, general heap, tracing collector, host effect,
-  or resource finalizer exists.
-- No alternate editable grammar remains. Reopen syntax only through equal-task evidence against
-  document version 1.
-- The optional daemon is retained only for the exported framed `Client` integration and its unique
-  correlation, deadline, disconnect, shutdown, and authority-lock coverage. Delete it when those
-  consumers move to Engine/session tests or cease to be public value.
+- No resolver, lockfile, registry, range, mutable release store, signature, provenance, revocation,
+  or trust metadata exists. Add each only for a concrete consumer and keep it outside semantic
+  identity.
+- No release re-export, release cycle, definition-level content identity, vendoring, or workspace
+  import exists. Reopen only for an application the exact external graph cannot express locally.
+- No executable cache exists. Prototype one only when measured decode/compile dominates repeated
+  application startup and retain semantic compile/interpreter as oracle.
+- No semantic index or incremental workspace store exists. Reopen only after scan/restart/retained
+  bytes cross recorded thresholds.
+- The daemon remains only while the framed client tests are current public value; delete binary,
+  client, transport, docs, and tests together when they are not.
+- The managed-byte route remains only while representative absolute copy/peak savings justify its
+  planner, verifier, handles, and tests.

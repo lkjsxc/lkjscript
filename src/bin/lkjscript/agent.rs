@@ -16,7 +16,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-const ORIENTATION: &str = "A coding agent edits a typed, versioned program model through a directly opened local engine. The engine validates proposed changes, saves immutable revisions, and can seal an exact tested semantic closure as a standalone application artifact.\n\
+const ORIENTATION: &str = "A coding agent edits a typed, versioned program model through a directly opened local engine. The engine validates proposed changes, saves immutable revisions, and can project one exact workspace-independent reusable semantic release. Applications bundle exact validated release graphs.\n\
 \n\
 Preferred workflow:\n\
   agent create   create an empty authoritative workspace\n\
@@ -27,15 +27,17 @@ Preferred workflow:\n\
   agent apply    parse and atomically commit a bounded editable semantic document\n\
   agent diff     render exact semantic changes carried by a review packet\n\
   agent run      run an exact revision from a compact run document\n\
-  app build      test and atomically seal an exact revision and entry\n\
-  app inspect    inspect a validated artifact without source state\n\
+  release build  project, test, and publish an exact reusable release\n\
+  release inspect inspect exports, exact dependencies, tests, identity, and limits\n\
+  app build      test and atomically bundle an exact release graph and entry\n\
+  app inspect    inspect a validated exact graph without workspace state\n\
   app test       rerun the artifact's immutable invocation cases\n\
-  app run        invoke exact typed values from standalone artifact bytes\n\
+  app run        invoke exact typed values from application artifact bytes\n\
   app stream     invoke a compatible pure bytes -> bytes process profile\n\
 \n\
 Documents are revision-, schema-, and scope-bound proposals. They normalize into the same typed transaction used by raw JSON and never become authority. Packet aliases use @n1 spelling, require the packet digest in the document, and never become persistent identity.\n\
 \n\
-Run `lkjscript agent help` for authoring details and `lkjscript app help` for the standalone lifecycle.";
+Run `lkjscript agent help` for authoring details, `lkjscript release help` for reusable publication, and `lkjscript app help` for exact composition.";
 
 const HELP_PREFIX: &str = "usage: lkjscript agent COMMAND [OPTIONS]\n\
 \n\

@@ -22,6 +22,7 @@ measurements = []
 run_timings = []
 session_processes = 0
 application_measurements = []
+release_measurements = []
 
 
 def symbol(number):
@@ -313,7 +314,7 @@ def application_operations():
 
 
 def selected_symbols():
-    return [10, 11, 20, 21, 22, 100, 200, 214, 300, 400, 500]
+    return [1, 10, 11, 20, 21, 22, 100, 200, 214, 300, 400, 500]
 
 
 def application_command(arguments, input_value=None, expected_returncode=0):
@@ -340,6 +341,35 @@ def application_command(arguments, input_value=None, expected_returncode=0):
     if completed.returncode != expected_returncode:
         raise RuntimeError(
             f"application command {arguments} returned {completed.returncode}: "
+            f"stdout={completed.stdout!r} stderr={completed.stderr!r}"
+        )
+    return completed
+
+
+def release_command(arguments, input_value=None, expected_returncode=0):
+    encoded = None
+    if input_value is not None:
+        encoded = json.dumps(input_value, separators=(",", ":")).encode()
+    started = time.monotonic_ns()
+    completed = subprocess.run(
+        [str(CLI), "release", *arguments],
+        input=encoded,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=30,
+        check=False,
+    )
+    release_measurements.append({
+        "command": arguments[0],
+        "elapsed_nanoseconds": time.monotonic_ns() - started,
+        "input_bytes": len(encoded or b""),
+        "output_bytes": len(completed.stdout),
+        "diagnostic_bytes": len(completed.stderr),
+        "exit": completed.returncode,
+    })
+    if completed.returncode != expected_returncode:
+        raise RuntimeError(
+            f"release command {arguments} returned {completed.returncode}: "
             f"stdout={completed.stdout!r} stderr={completed.stderr!r}"
         )
     return completed
@@ -729,13 +759,22 @@ def workflow():
                  canonical_value(ids, bytes([7, 8])))
         stop_stack()
 
-        application_request = {
+        release_request = {
             "version": 1,
             "workspace": workspace,
             "revision": 3,
-            "entry": ids[500],
-            "profile": "bytes_stream",
-            "policy": {"fuel": 10_000_000, "maximum_frames": 2_000},
+            "root": ids[1],
+            "coordinate": "examples/binary-canonicalizer",
+            "user_version": "1.0.0",
+            "exports": [
+                {"name": "canonical_bytes", "target": ids[10]},
+                {"name": "canonical_result", "target": ids[20]},
+                {"name": "canonicalize", "target": ids[300]},
+                {"name": "bounds_probe", "target": ids[400]},
+                {"name": "canonicalize_stream", "target": ids[500]},
+            ],
+            "dependencies": [],
+            "imports": [],
             "tests": [
                 {
                     "name": "empty",
@@ -763,22 +802,81 @@ def workflow():
                 },
             ],
         }
+        release_path = root / "binary-canonicalizer.lkjr"
+        release_preflight = json.loads(release_command([
+            "build", "--state", str(state), "--validate-only",
+        ], release_request).stdout)
+        release_build = json.loads(release_command([
+            "build", "--state", str(state), "--output", str(release_path),
+        ], release_request).stdout)
+        repeated_release_path = root / "binary-canonicalizer-repeated.lkjr"
+        repeated_release = json.loads(release_command([
+            "build", "--state", str(state), "--output", str(repeated_release_path),
+        ], release_request).stdout)
+        if (release_preflight["published"]
+                or not release_build["published"]
+                or release_build["tests"]["passed"] != 3
+                or release_path.read_bytes() != repeated_release_path.read_bytes()
+                or repeated_release["inspection"]["release"]
+                != release_build["inspection"]["release"]):
+            raise RuntimeError("reusable release validate/build determinism failed")
+        release_id = release_build["inspection"]["release"]
+        release_exports = {
+            item["name"]: item["target"]
+            for item in release_build["inspection"]["exports"]
+        }
+        stream_target = {"release": release_id, "item": release_exports["canonicalize_stream"]}
+        bounds_target = {"release": release_id, "item": release_exports["bounds_probe"]}
+
+        application_request = {
+            "version": 2,
+            "root_release": release_id,
+            "entry": stream_target,
+            "profile": "bytes_stream",
+            "policy": {"fuel": 10_000_000, "maximum_frames": 2_000},
+            "tests": [
+                {
+                    "name": "empty",
+                    "target": stream_target,
+                    "arguments": [bytes_value(b"")],
+                    "expected": {"kind": "value", "data": bytes_value(b"")},
+                    "policy": {"fuel": 1_000, "maximum_frames": 2_000},
+                },
+                {
+                    "name": "sparse",
+                    "target": stream_target,
+                    "arguments": [bytes_value(bytes([0xA5, 0, 1, 0, 2]))],
+                    "expected": {"kind": "value", "data": bytes_value(bytes([1, 2]))},
+                    "policy": {"fuel": 100_000, "maximum_frames": 2_000},
+                },
+                {
+                    "name": "bounds_trap",
+                    "target": bounds_target,
+                    "arguments": [bytes_value(bytes([0xA5, 1]))],
+                    "expected": {
+                        "kind": "trap",
+                        "data": {"code": "byte_index_out_of_bounds"},
+                    },
+                    "policy": {"fuel": 1_000, "maximum_frames": 2_000},
+                },
+            ],
+        }
         application_path = root / "binary-canonicalizer.lkja"
         preflight = json.loads(application_command([
-            "build", "--state", str(state), "--validate-only",
+            "build", "--release", str(release_path), "--validate-only",
         ], application_request).stdout)
-        if preflight["published"] or preflight["tests"]["passed"] != 3:
+        if preflight["published"] or preflight["tests"]["passed"] != 6:
             raise RuntimeError(f"application validate-only receipt is malformed: {preflight}")
         build = json.loads(application_command([
-            "build", "--state", str(state), "--output", str(application_path),
+            "build", "--release", str(release_path), "--output", str(application_path),
         ], application_request).stdout)
-        if (not build["published"] or build["tests"]["passed"] != 3
+        if (not build["published"] or build["tests"]["passed"] != 6
                 or build["inspection"]["profile"] != "bytes_stream"
                 or build["inspection"]["digest"] != preflight["inspection"]["digest"]):
             raise RuntimeError(f"application build receipt is malformed: {build}")
         repeated_path = root / "binary-canonicalizer-repeated.lkja"
         repeated = json.loads(application_command([
-            "build", "--state", str(state), "--output", str(repeated_path),
+            "build", "--release", str(release_path), "--output", str(repeated_path),
         ], application_request).stdout)
         if (application_path.read_bytes() != repeated_path.read_bytes()
                 or repeated["inspection"]["digest"] != build["inspection"]["digest"]):
@@ -792,10 +890,10 @@ def workflow():
         }
         blocked_path = root / "blocked.lkja"
         blocked = application_command([
-            "build", "--state", str(state), "--output", str(blocked_path),
+            "build", "--release", str(release_path), "--output", str(blocked_path),
         ], failing_request, expected_returncode=7)
         blocked_error = json.loads(blocked.stdout)
-        if (blocked_error.get("contract_version") != 1
+        if (blocked_error.get("contract_version") != 2
                 or blocked_error.get("error", {}).get("code") != "application_test_failed"
                 or blocked_path.exists()):
             raise RuntimeError(f"failing release test did not block publication: {blocked_error}")
@@ -823,6 +921,12 @@ def workflow():
             raise RuntimeError("corrupt authority did not reject on restart")
 
         shutil.rmtree(state)
+        release_validation = json.loads(release_command([
+            "validate", "--artifact", str(release_path),
+        ]).stdout)
+        release_tests = json.loads(release_command([
+            "test", "--artifact", str(release_path),
+        ]).stdout)
         validation = json.loads(application_command([
             "validate", "--artifact", str(application_path),
         ]).stdout)
@@ -834,7 +938,7 @@ def workflow():
         ]).stdout)
         typed = json.loads(application_command([
             "run", "--artifact", str(application_path),
-        ], {"version": 1, "arguments": [bytes_value(bytes([0xA5, 3, 0, 4]))]}).stdout)
+        ], {"version": 2, "arguments": [bytes_value(bytes([0xA5, 3, 0, 4]))]}).stdout)
         stream_input = bytes([0xA5, 5, 0, 6])
         stream_started = time.monotonic_ns()
         streamed = subprocess.run(
@@ -853,13 +957,15 @@ def workflow():
             "diagnostic_bytes": len(streamed.stderr),
             "exit": streamed.returncode,
         })
-        if (validation["digest"] != build["inspection"]["digest"]
+        if (release_validation["release"] != release_id
+                or release_tests["report"]["passed"] != 3
+                or validation["digest"] != build["inspection"]["digest"]
                 or inspection != validation
-                or artifact_tests["report"]["passed"] != 3
+                or artifact_tests["report"]["passed"] != 6
                 or typed["result"]["value"] != bytes_value(bytes([3, 4]))
                 or streamed.returncode != 0 or streamed.stdout != bytes([5, 6])
                 or streamed.stderr):
-            raise RuntimeError("standalone application validate, inspect, test, run, or stream failed")
+            raise RuntimeError("offline application validate, inspect, test, run, or stream failed")
 
         corrupt_application_path = root / "corrupt.lkja"
         corrupt_application = bytearray(application_path.read_bytes())
@@ -869,7 +975,7 @@ def workflow():
             "validate", "--artifact", str(corrupt_application_path),
         ], expected_returncode=5)
         if json.loads(corrupt_application_result.stdout).get("error", {}).get("code") != "artifact_corrupt":
-            raise RuntimeError("corrupt standalone application did not reject")
+            raise RuntimeError("corrupt application bundle did not reject")
 
         counted = [item for item in measurements if item["counted"]]
         restart_timings = [
@@ -882,7 +988,7 @@ def workflow():
             "task_schema_json_bytes": len(json.dumps(task, separators=(",", ":")).encode()),
             "calls": len(counted),
             "session_processes": session_processes,
-            "engine_opens": session_processes + 2,
+            "engine_opens": session_processes + 3,
             "connections": 0,
             "request_bytes": sum(item["json_request_bytes"] for item in counted),
             "response_bytes": sum(item["json_response_bytes"] for item in counted),
@@ -906,17 +1012,42 @@ def workflow():
             "dense_boundary": boundary,
             "revisions": {"incomplete": 1, "repaired": 2, "renamed": 3},
             "corrupt_restart_rejected": True,
+            "reusable_release": {
+                "bytes": len(release_path.read_bytes()),
+                "release": release_id,
+                "content_digest": release_build["inspection"]["content_digest"],
+                "exports": len(release_build["inspection"]["exports"]),
+                "private_durable_items": release_build["inspection"]["private_durable_items"],
+                "tests": release_build["tests"]["passed"],
+                "deterministic_rebuild": True,
+                "workspace_independent_validation_and_test": True,
+            },
             "application_artifact": {
                 "bytes": len(application_path.read_bytes()),
                 "digest": build["inspection"]["digest"],
-                "semantic_digest": build["inspection"]["semantic_digest"],
-                "nodes": build["inspection"]["node_count"],
+                "graph_digest": build["inspection"]["graph_digest"],
+                "nodes": build["inspection"]["flattened_semantic_items"],
+                "releases": len(build["inspection"]["releases"]),
                 "tests": build["tests"]["passed"],
                 "deterministic_rebuild": True,
-                "failing_release_blocked": True,
+                "failing_application_test_blocked": True,
                 "source_workspace_removed": True,
-                "standalone_validate_inspect_test_typed_run_stream": True,
+                "offline_validate_inspect_test_typed_run_stream": True,
                 "corrupt_rejected": True,
+            },
+            "release_workflow": {
+                "processes": len(release_measurements),
+                "input_bytes": sum(item["input_bytes"] for item in release_measurements),
+                "output_bytes": sum(item["output_bytes"] for item in release_measurements),
+                "diagnostic_bytes": sum(
+                    item["diagnostic_bytes"] for item in release_measurements
+                ),
+                "elapsed_nanoseconds": sum(
+                    item["elapsed_nanoseconds"] for item in release_measurements
+                ),
+                "failed_processes": sum(
+                    item["exit"] != 0 for item in release_measurements
+                ),
             },
             "application_workflow": {
                 "processes": len(application_measurements),

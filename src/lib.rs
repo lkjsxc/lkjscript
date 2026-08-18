@@ -6,6 +6,7 @@
 
 pub mod application;
 pub mod artifact;
+mod artifact_io;
 mod codec;
 mod compile;
 mod contract;
@@ -24,6 +25,7 @@ mod ownership;
 mod persistence;
 pub mod protocol;
 pub mod query;
+pub mod release;
 pub mod schema;
 pub mod transaction;
 pub mod transport;
@@ -36,10 +38,12 @@ mod generated_invariant_tests;
 
 pub use application::{
     APPLICATION_CONTRACT_VERSION, ApplicationBuildReceipt, ApplicationBuildRequest,
-    ApplicationDigest, ApplicationInspection, ApplicationInvocation, ApplicationLimits,
-    ApplicationRunReceipt, ApplicationTestCase, ApplicationTestDigest, ApplicationTestExpectation,
-    ApplicationTestReport, ApplicationTestResult, ApplicationTestStatus, ApplicationTrap,
-    ApplicationTrapCode, InvocationProfile,
+    ApplicationDigest, ApplicationFieldValue, ApplicationGraphDigest, ApplicationInspection,
+    ApplicationInvocation, ApplicationLimits, ApplicationReleaseInspection, ApplicationRunReceipt,
+    ApplicationRunResult, ApplicationTarget, ApplicationTestCase, ApplicationTestDigest,
+    ApplicationTestExpectation, ApplicationTestReport, ApplicationTestResult,
+    ApplicationTestStatus, ApplicationTrap, ApplicationTrapCode, ApplicationValue,
+    InvocationProfile,
 };
 pub use error::{ErrorCode, LkError, Result};
 pub use ids::{
@@ -51,6 +55,15 @@ pub use machine::{
     DescribeSchemaRequest, DescribeSchemaResult, MachineSchemaDigest, SchemaProjection, SchemaRoot,
 };
 pub use protocol::{Request, RequestCode, Response, ResponseCode};
+pub use release::{
+    PreparedRelease, RELEASE_CONTRACT_VERSION, ReleaseBuildReceipt, ReleaseBuildRequest,
+    ReleaseContentDigest, ReleaseDependencyInspection, ReleaseDependencyRequest,
+    ReleaseExportInspection, ReleaseExportKind, ReleaseExportRequest, ReleaseFieldInspection,
+    ReleaseId, ReleaseImportRequest, ReleaseInspection, ReleaseItemId, ReleaseLimits,
+    ReleaseSignatureInspection, ReleaseTestCase, ReleaseTestExpectation, ReleaseTestInspection,
+    ReleaseTestReport, ReleaseTestResult, ReleaseTestStatus, ReleaseTrap, ReleaseTrapCode,
+    ReleaseTypeRef, ReleaseVariantInspection,
+};
 pub use schema::{
     BlockArgumentDescriptor, BlockArgumentRole, ByteString, DirectReference, LiteralField,
     MatchArm, MatchArmOperationDraft, Node, NodeKind, OperandArity, OperandDescriptor, OperandUse,
