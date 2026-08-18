@@ -7,10 +7,13 @@ evidence files are historical baselines, not current authority.
 
 ## Measurement boundary
 
-The campaign started and remains uncommitted on branch `main` at
+The campaign started on branch `main` at
 `e465cc3b7d12353aa4c6fba13dc02de41d381346`, the audited standalone-application baseline. The
-pre-existing worktree changes were `AGENTS.md` and the untracked campaign prompt; both were
-preserved. The active root policy's Git blob ID was
+implementation, policy, and campaign prompt were committed locally as
+`46d382d70090ca26a2ad1b2a7629f7eac8c07585`; the evidence metadata was reconciled in a separate
+follow-up commit so it does not attempt to record its own Git hash. The pre-existing worktree
+changes were `AGENTS.md` and the untracked campaign prompt; both were preserved and included. The
+active root policy's Git blob ID was
 `6384d5384c373080a02a89c9e96eb85932524cc8`.
 
 The environment is Linux x86-64 with rustc/cargo 1.96.0 and stable Rust edition 2024.
