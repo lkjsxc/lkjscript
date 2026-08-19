@@ -386,6 +386,65 @@ fn complete_mutation_vocabulary_has_exact_publication_and_lifecycle_behavior() {
 }
 
 #[test]
+fn why_is_typed_human_machine_agreed_and_strictly_read_only() {
+    let temporary = tempfile::tempdir().expect("temporary product directory");
+    let project = temporary.path().join("why");
+    let binary = binary();
+    machine(
+        &binary,
+        &[
+            "--json",
+            "init",
+            project.to_str().expect("project path"),
+            "--name",
+            "why",
+        ],
+        0,
+    );
+    project_machine(&binary, &project, &["add", "first"], 0);
+    project_machine(&binary, &project, &["add", "second"], 0);
+    project_machine(&binary, &project, &["depend", "#2", "--on", "#1"], 0);
+    project_machine(&binary, &project, &["hold", "#2", "--reason", "waiting"], 0);
+
+    let authority = project.join(".lkjwork");
+    let before = snapshot_tree(&authority);
+    let explanation = project_machine(&binary, &project, &["why", "#2"], 0);
+    assert_eq!(explanation["operation"], "why");
+    assert_eq!(explanation["result"]["published"], false);
+    assert_eq!(result_value(&explanation)["kind"], "why");
+    assert_eq!(result_value(&explanation)["task"], 2);
+    assert_eq!(result_value(&explanation)["phase"], "planned");
+    assert_eq!(result_value(&explanation)["archived"], false);
+    assert_eq!(result_value(&explanation)["manual_hold"], "waiting");
+    assert_eq!(result_value(&explanation)["actionable"], false);
+    assert_eq!(
+        result_value(&explanation)["blockers"],
+        serde_json::json!([1])
+    );
+
+    let human = invoke(
+        &binary,
+        &[
+            "--project",
+            project.to_str().expect("project path"),
+            "why",
+            "#2",
+        ],
+    );
+    assert!(human.status.success());
+    let human = String::from_utf8(human.stdout).expect("human output");
+    assert!(human.contains("Task #2: phase=planned"));
+    assert!(human.contains("manual_hold=waiting"));
+    assert!(human.contains("actionable=false"));
+    assert!(human.contains("blockers=#1"));
+
+    let missing = project_machine(&binary, &project, &["why", "#99"], EXIT_DOMAIN_CONFLICT);
+    assert_eq!(result_value(&missing)["kind"], "not_found");
+    assert_eq!(result_value(&missing)["task"], 99);
+    assert_eq!(before, snapshot_tree(&authority));
+}
+
+#[test]
 fn pagination_priority_and_context_omissions_match_the_complete_candidate_set() {
     let temporary = tempfile::tempdir().expect("temporary product directory");
     let project = temporary.path().join("pagination");
@@ -799,6 +858,7 @@ fn public_product_story_is_pure_restartable_backed_up_and_source_independent() {
         vec!["context", "--maximum-tasks", "5", "--maximum-notes", "5"],
         vec!["export", "--limit", "20"],
         vec!["history", "--limit", "20"],
+        vec!["why", "#5"],
     ] {
         query_results.push(project_machine(&binary, &project, &arguments, 0));
     }
@@ -809,6 +869,13 @@ fn public_product_story_is_pure_restartable_backed_up_and_source_independent() {
             .all(|result| result["result"]["published"] == false)
     );
     assert_eq!(query_results[5]["result"]["export_version"], 1);
+    assert_eq!(result_value(&query_results[7])["kind"], "why");
+    assert_eq!(result_value(&query_results[7])["task"], 5);
+    assert_eq!(result_value(&query_results[7])["actionable"], false);
+    assert_eq!(
+        result_value(&query_results[7])["blockers"],
+        serde_json::json!([2, 3, 4])
+    );
     let digest = query_results[1]["result"]["result_digest"]
         .as_str()
         .expect("query digest");

@@ -26,6 +26,7 @@ impl Snapshot {
             root,
             Node::WorkspaceRoot {
                 packages: Vec::new(),
+                targets: Vec::new(),
             },
         );
         Self::from_parts(
@@ -206,6 +207,41 @@ impl Workspace {
             id,
             head,
             snapshots,
+        })
+    }
+
+    /// Opens the current semantic authority without eagerly materializing retained history.
+    /// Historical snapshots remain owned by the durable repository and are loaded through its
+    /// exact revision paths when selected. `from_snapshots` remains the complete reconstruction
+    /// oracle used by deep verification.
+    pub(crate) fn from_head_snapshot(
+        id: WorkspaceId,
+        head: Revision,
+        snapshot: Arc<Snapshot>,
+    ) -> Result<Self> {
+        if snapshot.workspace() != id || snapshot.revision() != head {
+            return Err(LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "workspace head snapshot identity is inconsistent",
+            )
+            .for_workspace(id)
+            .at_revision(head));
+        }
+        if head == Revision::INITIAL
+            && (snapshot.node_count() != 1
+                || snapshot.next_serial() != 2
+                || snapshot.tombstones().next().is_some())
+        {
+            return Err(history_error(
+                id,
+                head,
+                "revision zero is not the canonical empty workspace",
+            ));
+        }
+        Ok(Self {
+            id,
+            head,
+            snapshots: BTreeMap::from([(head, snapshot)]),
         })
     }
 
@@ -402,6 +438,14 @@ fn identity_shape_is_stable(
 ) -> bool {
     match (old, new) {
         (Node::Package { entry: Some(_), .. }, Node::Package { entry: None, .. }) => false,
+        (
+            Node::BuildTarget {
+                definition: old, ..
+            },
+            Node::BuildTarget {
+                definition: new, ..
+            },
+        ) => old.kind() == new.kind(),
         (Node::ProductType { fields: old, .. }, Node::ProductType { fields: new, .. }) => {
             old == new
         }
@@ -666,6 +710,7 @@ mod tests {
                 root,
                 Node::WorkspaceRoot {
                     packages: vec![first, second],
+                    targets: Vec::new(),
                 },
             ),
             (first, package("first")),
@@ -681,7 +726,8 @@ mod tests {
         )
         .expect("ordered snapshot");
         let mut reordered = nodes;
-        let Node::WorkspaceRoot { packages } = reordered.get_mut(&root).expect("workspace root")
+        let Node::WorkspaceRoot { packages, .. } =
+            reordered.get_mut(&root).expect("workspace root")
         else {
             panic!("root kind");
         };
@@ -717,6 +763,7 @@ mod tests {
                 root,
                 Node::WorkspaceRoot {
                     packages: vec![package],
+                    targets: Vec::new(),
                 },
             ),
             (
@@ -804,6 +851,7 @@ mod tests {
             root,
             Node::WorkspaceRoot {
                 packages: vec![package],
+                targets: Vec::new(),
             },
         );
         live_nodes.insert(
@@ -832,6 +880,7 @@ mod tests {
             root,
             Node::WorkspaceRoot {
                 packages: Vec::new(),
+                targets: Vec::new(),
             },
         );
         let revision_two = Arc::new(

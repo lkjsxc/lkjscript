@@ -1,9 +1,12 @@
 # Performance and design evidence
 
-Measurements here are observations, not semantic authority. Canonical raw corpus receipts are
-[`20260819-lkjwork-functional.json`](evidence/20260819-lkjwork-functional.json) and
-[`20260819-lkjwork-representative.json`](evidence/20260819-lkjwork-representative.json). The campaign
-summary is `docs/evidence/20260819-lkjwork-campaign.json`.
+Measurements here are observations, not semantic authority. The current post-migration raw receipts
+are [`20260819-semantic-development-acceptance.json`](evidence/20260819-semantic-development-acceptance.json),
+[`20260819-semantic-development-functional.json`](evidence/20260819-semantic-development-functional.json),
+and [`20260819-semantic-development-representative.json`](evidence/20260819-semantic-development-representative.json).
+The predecessor product-campaign receipts remain separately under the `20260819-lkjwork-*` names;
+the current campaign summary is
+[`20260819-semantic-development.json`](evidence/20260819-semantic-development.json).
 
 ## Observation environment
 
@@ -18,6 +21,58 @@ Page cache was not dropped and these are not cold-machine results. Timing uses m
 `perf_counter_ns`; stage counters use Rust monotonic durations. Process RSS, provider tokens, and
 provider prices were unavailable.
 
+## Semantic-development repository workload
+
+The retained development workload started from the migrated `lkjwork` revision 7 project and used
+one public foreground project session to apply 100 alternating package-name changes. Every request
+was an accepted exact-base mutation, every mutation produced one revision and record, and restart
+occurred after the workload. The final authority is revision 107 with snapshot
+`7a5ebff8328f3236d224625afe174fad332f51cd7b8bd884d6849e6a9e981c2b` and record
+`a1a02f7891ac017e4bed11f5aac57d5f982d3f895a36f692183fd6deb50c85ce`.
+
+These are single sequential observations from the unoptimized development binary on a warm host;
+they are not release-build, cold-cache, physical-write, or statistical latency claims.
+
+| observation | exact result |
+|---|---:|
+| starting revision-7 authority | 18 files / 1,322,155 bytes |
+| ending revision-107 authority | 218 files / 21,580,665 bytes |
+| 108 canonical snapshots | 21,460,753 bytes |
+| 108 canonical revision records | 119,554 bytes |
+| 100 session apply responses | 169,517 bytes |
+| 100 accepted applies | 755.428 s elapsed / 739.781 s user / 0.540 s system |
+| eager all-history current open, before correction | approximately 114.47 s elapsed |
+| current open after lazy historical decode | 3.224 s elapsed / 3.166 s user / 0.010 s system |
+| latest five-record log page | 3.159 s elapsed |
+| adjacent revision 106-to-107 diff | 4.333 s elapsed |
+| current product-target build | 3.691 s elapsed |
+| current product-target test, seven cases | 3.688 s elapsed |
+| no-replace portable backup | 6.824 s elapsed / 218 files / 21,580,665 bytes |
+| complete 108-snapshot deep doctor | 332.369 s elapsed / 325.596 s user / 0.293 s system |
+
+The current-open correction preserves full snapshots but scans historical paths and decodes the
+complete compact record chain without decoding unrelated historical graphs. A selected historical
+read validates its graph against its record. Deep doctor remains the independent oracle: it decodes
+all graphs, validates every adjacent identity/tombstone/allocation transition, and recomputes every
+record's semantic diff and entity/target facts. A focused test truncates an unselected old snapshot:
+shallow current open succeeds, while historical selection and deep doctor both classify corruption.
+
+### Development-history alternatives
+
+| design | result |
+|---|---|
+| full canonical snapshot plus compact record per revision | selected: simplest immutable publication, exact arbitrary revision reads, portable copy, and independent reconstruction; shallow loading keeps ordinary service bounded |
+| canonical edit journal plus periodic snapshots | rejected for now: reduces retained bytes but adds replay/checkpoint/compaction authority without improving the completed 100-change workflow |
+| immutable content-addressed graph objects | rejected for now: requires collision-conflict, reachability, packing, and garbage-collection contracts without a current storage-limit failure |
+| Merkle structural sharing | rejected for now: complicates canonical traversal and backup while representation sharing has no semantic consumer |
+| append-only packed objects plus index | rejected for now: index rebuilding and interruption-safe pack publication add complexity; current path count and backup remain acceptable |
+
+Reopen persistence design if a representative maintained project exceeds 256 MiB before 1,000
+revisions, ordinary current open exceeds 5 seconds in an optimized build, or deep doctor exceeds 10
+minutes at 100 revisions. A candidate must beat full snapshots on the same final graph while retaining
+validate/apply parity, exact diff/history, hostile decoding, crash classification, portable backup,
+and an independent reconstruction oracle.
+
 ## Frozen product corpora
 
 | profile | tasks | core mutation requests | edges | notes | attachments | pure queries | final revision |
@@ -25,10 +80,12 @@ provider prices were unavailable.
 | functional | 25 | 75 | 30 | 50 | 5 | 100 | 85 |
 | representative | 500 | 2,500 | 1,000 | 1,000 | 100 | 2,000 | 2,700 |
 
-Both use seed `lkjwork-corpus-v1` and the independent Rust reference-model tests. Final semantic
-digests are stable across runs: functional
-`c69cedb5b247818f4ab1490fe289ee7f6f97600d5f032ea4ba48cfde1fd8b27e` and representative
-`1c0004ff62a19423f0ce564ce3688b1d61ccb04f9c50c35400b9d23c8261d9e2`.
+Both use seed `lkjwork-corpus-v1` and the independent Rust reference-model tests. The fresh-copy
+post-migration final semantic digests are functional
+`2bb4b8069beb70ef3da69d5efc3229a458158e3b90adbf08f62458fdb85f4602` and representative
+`81d4261ee1d74eb4750ecef9c7aabd5af8293da62ed4669a199ae23103d14c7a`.
+They deliberately differ from the separately retained predecessor receipts because the exact
+application identity and public query interface changed at direct cutover.
 
 The retained stress shape is 2,000 tasks / 10,000 mutations. It was not executed; no stress service
 claim is made.
@@ -40,20 +97,20 @@ are five samples after warm-up.
 
 | operation | session | one-shot |
 |---|---:|---:|
-| publishing mutation | 53.8 / 106.1 | 69.8 / 75.1 on five explicit post-corpus publications |
-| unchanged mutation | — | 44.5 / 49.7 |
-| show | 51.7 / 54.8 | 31.1 / 32.5 |
-| list (20, priority) | 222.4 / 234.7 | 193.1 / 194.4 |
-| next (10) | 65.6 / 68.9 | 42.4 / 43.0 |
-| summary | 70.2 / 74.1 | 47.9 / 49.6 |
-| context (10 tasks) | 82.8 / 87.2 | 59.0 / 59.7 |
-| export page (20) | 59.1 / 62.0 | 33.9 / 34.7 |
-| retained history page | 94.8 / 98.8 | 73.1 / 73.9 |
+| publishing mutation | 52.6 / 107.3 | — |
+| unchanged mutation | — | 47.4 / 49.8 |
+| show | 51.6 / 54.0 | 32.0 / 35.2 |
+| list (20, priority) | 212.3 / 223.1 | 192.1 / 194.0 |
+| next (10) | 65.7 / 69.2 | 44.7 / 45.8 |
+| summary | 70.6 / 73.7 | 49.5 / 50.9 |
+| context (10 tasks) | 82.9 / 86.6 | 61.7 / 62.5 |
+| export page (20) | 59.1 / 61.8 | 35.0 / 37.8 |
+| retained history page | 95.2 / 98.3 | 76.2 / 95.5 |
 
-Initialization was 44.1 ms. One complete genesis replay/deep audit of 2,701 records took 33.8 s in
-the frozen corpus; an independent post-corpus audit of revision 2,705 took 32.8 s and reproduced its
-exact state. Attachments, including semantic suspend, host publication, and resume, were 258.0 / 275.8
-ms median/p95. All ordinary query and mutation targets are met.
+Initialization was 51.4 ms. One complete genesis replay/deep audit of all 2,701 records took
+34.176 s and reproduced the exact final state. Attachments, including semantic suspend, host
+publication, and resume, were 260.7 / 279.5 ms median/p95. All ordinary query and mutation targets
+are met.
 
 Before the product-open correction, representative one-shot application queries took 1.65–1.88 s:
 the product locator performed a complete instance inspection before invoking the exact query owner.
@@ -70,16 +127,16 @@ Representative authority contains 2,701 journal records:
 | immutable record chain | 102,841,790 |
 | records carrying 64-revision checkpoints | 96,203,455 |
 | HEAD-bound current manifest | 1,588,695 |
-| application | 163,670 |
+| application | 167,848 |
 | attempts / outcomes | 35,100 / 107,000 |
 | blob objects | 5,000 |
-| complete project files | 104,741,804 |
+| complete project files | 104,745,982 |
 
-A copied revision-2,700 representative project received one non-checkpoint label mutation. Revision
-2,701 published a 2,254-byte journal record, a 1,589,052-byte replacement current manifest, and a
-308-byte HEAD: 1,591,614 logical file-payload bytes. The retained tree grew by 2,611 bytes, giving a
-609.58x logical-payload/retained-growth ratio. This is a canonical file-payload observation, not a
-claim about physical ZFS blocks, device writes, or power-loss amplification.
+The predecessor product campaign separately measured one post-corpus non-checkpoint label mutation;
+that historical write-amplification observation remains in its own evidence and is not presented as
+a fresh post-migration result. Current storage totals above come directly from the retained
+post-migration revision-2,700 receipt. They are logical file-payload observations, not claims about
+physical ZFS blocks, device writes, or power-loss amplification.
 
 The current public state is large enough that checkpoints dominate retained bytes, but the complete
 project remains below the 256 MiB journal ceiling. There is no semantic-history deletion or
@@ -143,12 +200,17 @@ as verified by complete tree comparison and fault tests.
 
 ## Packaging, source, CLI, and topology decisions
 
-- Embedded validated application bytes plus checked-in public-command recipe won over runtime
-  generation, mutable artifact lookup, and required user paths. The product remains operable without
-  development authority.
-- The deterministic Python recipe issues only public `lkjscript` commands and uses named local
-  symbols. A new textual language and private Rust builder lost because the existing transaction /
-  editable-document path already provides validation and reproducibility.
+- A checked semantic development repository plus first-class product target now owns `lkjwork`.
+  Embedded validated application bytes remain the installed distribution form, so the product runs
+  without development authority; public target build reproduces those bytes.
+- The former 255,704-byte Python construction recipe was a useful migration input but lost as
+  maintained source. It and its generated binding manifest were deleted. An evolved exact JSON /
+  semantic-document proposal surface won over narrow one-command-per-node forms and a conventional
+  source language because it already supports proposal-local symbols, multi-owner atomicity,
+  incremental function replacement, targets, validate/apply parity, and bounded context.
+- Artifact self-description won over generated native bindings. The Rust product resolves and
+  validates exported types, fields, variants, and functions from the exact embedded artifact; stale
+  hand-maintained IDs cannot silently compile into the client.
 - Manual standard-library CLI parsing was retained. No parser dependency was needed to deliver closed
   grammar, help examples, strict machine mode, and bounded errors; JSON-only lost the human product
   requirement.
@@ -165,26 +227,44 @@ as verified by complete tree comparison and fault tests.
 
 ## Agent-cost observation
 
-`lkjwork context` selects active/actionable work and exact blockers under task/note/dependency/text
-bounds, reporting omissions and an exact result digest. The representative run used one product
-session for 2,000 query observations and recorded 796,923 request bytes and 7,717,826 response bytes.
-The five measured one-shot query/mutation groups used 48 fresh processes; the corpus itself used two.
-Exact known-result digests eliminate unchanged result serialization without persistent handles.
+The dogfood `why` feature used three accepted public project changes and no rejected correction
+proposal: an identity-preserving rename revision, an atomic type/function creation revision, and a
+query/target/case cutover revision. The three canonical change inputs totalled 13,796 bytes (387,
+9,420, and 3,989 bytes). The following bounded one-shot observations at revision 7 were retained:
 
-The maintained application is split into one recipe, one artifact, one binding manifest, and bounded
-Rust product owners. Current maintained source/artifact fixtures under `src`, `tests`, `applications`,
-and `examples` comprise 95 files / 3,804,716 bytes at measurement time. No provider token classes or
-prices were exposed; bytes are not reported as tokens or money.
+| observation | response bytes |
+|---|---:|
+| orientation | 1,228 |
+| unchanged orientation | 252 |
+| one function summary | 658 |
+| targeted refactor context | 53,811 |
+| latest four revision records | 2,397 |
+| migration-to-dogfood diff | 3,334 |
+
+The feature required three apply processes/engine opens, one target build, and one target test; its
+semantic proposal correction depth was zero. The predecessor baseline was a 255,704-byte,
+4,869-line procedural source that emitted one 3,232-item transaction and separately constructed
+release/application requests and generated bindings. Exact baseline files-opened, request/response,
+token, and provider-price telemetry were not exposed, so no invented byte-to-token or monetary
+savings claim is made. The exact outcome claim is narrower: ongoing graph maintenance no longer
+requires reading, modifying, or executing that builder, and unchanged orientation is 252 bytes.
+
+The current product-runtime benchmark is separate: one product session handled 2,000 query
+observations using 730,308 request bytes and 7,717,826 response bytes. That measures installed
+application interaction, not semantic development authoring.
 
 ## Build observations and reversal gates
 
-The observed optimized rebuild after central semantic changes took 2m10s; a later product-only
-incremental optimized rebuild took 14.39s. A detached worktree at the baseline with the exact tracked
-patch and new files applied built into an empty target directory in 132.84s wall time (Cargo reported
-2m12s), then passed the complete public acceptance story and reproduced byte-identical application
-and binding artifacts. The page and compiler caches were still host-warm; this is an isolated-target
-build, not a cold-machine claim.
-The final release binaries are 2,795,368 bytes (`lkjwork`) and 9,706,336 bytes (`lkjscript`).
+The predecessor product campaign observed a 130-second optimized workspace rebuild and a
+132.84-second isolated-target build on a warm host; those measurements predate the semantic-project
+cutover and remain historical baseline. The current uncommitted tree was copied without `.git`,
+`target`, or local caches and built with an initially absent isolated Cargo target directory on the
+same warm host. The locked release build took 184.784 seconds elapsed (201.487 user, 3.441 system).
+The resulting `lkjscript` binary is 13,263,608 bytes with SHA-256
+`634ba9c4647b6fa2d0c16768d3f5ebe8fe9aa0dd78d1b22d41f133304cefc679`; `lkjwork` is
+3,553,056 bytes with SHA-256
+`b786ec1b22aff29a44e55178b0f0ba313d2168499ac9803272a207ce7ca5927b`.
+This is an empty-target, warm-host build, not a cold compiler/download measurement.
 
 Reopen design only when a complete current consumer crosses a gate:
 

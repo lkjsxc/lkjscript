@@ -581,6 +581,53 @@ impl<'de> Deserialize<'de> for ChangeDigest {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct RevisionRecordDigest([u8; 32]);
+
+impl RevisionRecordDigest {
+    pub const BYTE_LEN: usize = 32;
+
+    pub const fn from_bytes(bytes: [u8; Self::BYTE_LEN]) -> Self {
+        Self(bytes)
+    }
+
+    pub const fn as_bytes(self) -> [u8; Self::BYTE_LEN] {
+        self.0
+    }
+}
+
+impl fmt::Display for RevisionRecordDigest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&encode_hex(&self.0))
+    }
+}
+
+impl FromStr for RevisionRecordDigest {
+    type Err = IdentityError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Ok(Self(decode_hex::<32>(value)?))
+    }
+}
+
+impl Serialize for RevisionRecordDigest {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for RevisionRecordDigest {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserialize_canonical_string(deserializer, "revision record digest")
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ArtifactVersion(pub u16);
 

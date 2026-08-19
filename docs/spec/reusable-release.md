@@ -33,9 +33,11 @@ and runtime handles are different domains.
 
 ## Construction and canonical projection
 
-Release build contract version 2 names one exact workspace, revision, package root, coordinate,
-user version, explicit exports, exact dependency slots, import proxies, and immutable release
-cases. The engine loads the named revision; it never infers HEAD.
+Release build contract version 2 is the typed lowering boundary. In maintained development, a
+contract-1 release target owns its package root, coordinate, user version, exports, exact dependency
+target edges, import proxies, and immutable cases. `target build` first selects one exact project
+revision and mechanically lowers that accepted target to the build contract; it never infers a
+mutable dependency, reads an external build request, or accepts host construction callbacks.
 
 Construction starts from exports and case targets, iteratively traverses owned content and typed
 definition references, includes reachable private implementation and nominal signatures, and
@@ -100,17 +102,17 @@ stable trap expectations, and exact policies. Text and nominal sequence values u
 resource validators as execution. Cases can reach private local functions but not dependency-private
 items; application cases cover cross-release public nominal composition.
 
-Only exact pass counts as pass. A dependent release build validates the entire supplied graph and
-runs every release suite before publication. `release test` runs the selected root suite from an
-independently validated exact graph. Cases are not semantic entities, property tests, tags, mocks,
-or a second assertion language.
+Only exact pass counts as pass. A dependent release target validates the entire selected target
+graph and runs every release suite before publication. `target test` exercises accepted project
+cases; `release test` independently exercises an immutable distribution artifact. Cases are target
+meaning and release payload facts, not property tests, tags, mocks, or a second assertion language.
 
 ## Canonical artifact version 2
 
 The release envelope contains:
 
 - magic `LKJREL\0\x02` and little-endian format `2`;
-- semantic schema `lkjscript-tsm007` from the workspace artifact owner;
+- semantic schema `lkjscript-tsm008` from the workspace artifact owner;
 - checked little-endian payload length;
 - canonical payload;
 - exact `ReleaseId`; and
@@ -129,20 +131,27 @@ coordinate bytes, 64 user-version bytes, and 64 dependency-slot bytes. Exact gra
 256 release nodes, 4,096 edges, depth 64, and 256 MiB aggregate release bytes. These maxima are
 reported by inspection.
 
-## Publication and commands
+## Target derivation, publication, and distribution commands
 
-Validate-only and publication share one prepared, independently decoded, graph-validated,
-release-tested object. Validate-only writes nothing and allocates no durable identity. Publication
-uses the same absolute canonical path, private temporary file, sync, atomic no-replace link,
-cleanup, directory sync, and known/unknown outcome contract as application publication. It never
-overwrites and never silently retries an unknown outcome.
+An accepted target change already validates and prepares the exact release closure. `target test`
+prepares and tests without artifact publication. `target build` prepares the same release,
+preflights its bounded project receipt, then uses a private temporary file, synchronization, atomic
+no-replace link, cleanup, and parent-directory synchronization. A relative output is resolved against
+the command working directory before canonical path checks. It never overwrites and never silently
+retries an unknown output outcome. Target derivation publishes no development revision.
 
 ```text
-release build --state DIR [--dependency FILE ...] (--validate-only | --output FILE)
+target show TARGET [--project PROJECT] [--at REVISION]
+target test TARGET [--project PROJECT] [--at REVISION]
+target build TARGET [--project PROJECT] [--at REVISION] --output FILE
 release validate --artifact FILE
 release inspect --artifact FILE
 release test --artifact FILE [--dependency FILE ...]
 ```
+
+The command-local `release build --state` predecessor rejects. External exact release artifacts are
+still explicit immutable dependency bytes for artifact-only validation/testing, but project target
+edges refer to exact target IDs and lower their complete dependency closure directly.
 
 Inspection is bounded and exposes exact identity, content digest, coordinate, user version, root,
 exports with signatures/member IDs, exact dependencies, test summaries, counts, limits, and the

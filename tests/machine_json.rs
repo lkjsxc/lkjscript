@@ -633,6 +633,56 @@ fn every_closed_machine_variant_round_trips() {
             name: "Sequence".to_owned(),
             element: TypeDraft::Text,
         },
+        TransactionOp::CreateBuildTarget {
+            symbol: DraftSymbol::new("s17"),
+            name: "target".to_owned(),
+            definition: BuildTargetDefinition::Product(ProductTargetDefinition {
+                application: first,
+            }),
+        },
+        TransactionOp::ReplaceBuildTarget {
+            target: first,
+            definition: BuildTargetDefinition::Product(ProductTargetDefinition {
+                application: second,
+            }),
+        },
+        TransactionOp::AddReleaseTargetExport {
+            target: first,
+            name: "legacy".to_owned(),
+            item: second,
+        },
+        TransactionOp::SetReleaseTargetExport {
+            target: first,
+            name: "entry".to_owned(),
+            item: second,
+        },
+        TransactionOp::SetApplicationQueryBoundary {
+            target: first,
+            query_entry: TargetItem {
+                release_target: first,
+                item: second,
+            },
+            query: TargetItem {
+                release_target: first,
+                item: second,
+            },
+        },
+        TransactionOp::AddApplicationTargetTest {
+            target: first,
+            case: TargetApplicationTestCase {
+                name: "query".to_owned(),
+                target: TargetItem {
+                    release_target: first,
+                    item: second,
+                },
+                arguments: vec![TargetValue::I64(1)],
+                expected: TargetTestExpectation::Value(TargetValue::I64(1)),
+                policy: RunPolicy {
+                    fuel: 1,
+                    maximum_frames: 1,
+                },
+            },
+        },
     ];
     for type_draft in [
         TypeDraft::Unit,
@@ -820,6 +870,7 @@ fn every_closed_machine_variant_round_trips() {
     let nodes = vec![
         Node::WorkspaceRoot {
             packages: vec![first],
+            targets: Vec::new(),
         },
         Node::Package {
             owner: first,
@@ -1289,11 +1340,11 @@ fn strict_json_rejects_malformed_shapes_values_and_limits() {
     }
     let workspace = WorkspaceId::from_bytes([0xab; 16]);
     let valid = format!(
-        "{{\"version\":11,\"request_id\":1,\"request\":{{\"kind\":\"query_batch\",\"data\":{{\"workspace\":\"{workspace}\",\"revision\":0,\"queries\":[{{\"id\":1,\"query\":{{\"kind\":\"blockers\",\"data\":{{\"page\":{{\"limit\":1}}}}}}}}]}}}}}}"
+        "{{\"version\":12,\"request_id\":1,\"request\":{{\"kind\":\"query_batch\",\"data\":{{\"workspace\":\"{workspace}\",\"revision\":0,\"queries\":[{{\"id\":1,\"query\":{{\"kind\":\"blockers\",\"data\":{{\"page\":{{\"limit\":1}}}}}}}}]}}}}}}"
     );
     assert!(decode_request(valid.as_bytes()).is_ok());
     let invalid = [
-        valid.replacen("\"version\":11", "\"version\":10", 1),
+        valid.replacen("\"version\":12", "\"version\":11", 1),
         valid.replacen("\"request_id\":1", "\"request_id\":0", 1),
         valid.replacen("\"request_id\":1", "\"request_id\":-1", 1),
         valid.replacen("\"request_id\":1", "\"request_id\":18446744073709551616", 1),

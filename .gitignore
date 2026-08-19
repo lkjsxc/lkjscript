@@ -10,3 +10,6 @@ __pycache__/
 # Agent-local state
 /.pi/
 /.pi-subagents/
+
+# Semantic project operational state
+/applications/lkjwork/.lkjscript/repository/lkjscript.engine.lock

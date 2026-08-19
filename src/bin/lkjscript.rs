@@ -9,12 +9,12 @@ use std::io::{BufRead, Read, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-#[path = "lkjscript/agent.rs"]
-mod agent;
 #[path = "lkjscript/application.rs"]
 mod application;
 #[path = "lkjscript/instance.rs"]
 mod instance;
+#[path = "lkjscript/project.rs"]
+mod project_cli;
 #[path = "lkjscript/release.rs"]
 mod reusable_release;
 #[path = "lkjscript/runtime.rs"]
@@ -31,6 +31,9 @@ const EXIT_RESOURCE: u8 = 8;
 fn main() -> ExitCode {
     let outcome = match parse_command(std::env::args().skip(1)) {
         Ok(Command::Session { state }) => return run_session(state),
+        Ok(Command::Project(project_cli::ProjectCommand::Session { project })) => {
+            return project_cli::run_session(project.as_deref());
+        }
         Ok(Command::Application(command)) => return application::run(command),
         Ok(Command::Instance(command)) => return instance::run(command),
         Ok(Command::Runtime(command)) => return runtime_cli::run(command),
@@ -76,7 +79,7 @@ fn run_command(command: Command) -> CliOutcome {
             ),
         },
         Command::Rpc { state, pretty } => run_rpc(state, pretty),
-        Command::Agent(command) => agent::run(command),
+        Command::Project(command) => project_cli::run(command),
         Command::Application(_) => failure(
             EXIT_USAGE_OR_JSON,
             BoundaryErrorKind::Usage,
@@ -321,7 +324,7 @@ fn failure(
 }
 
 enum Command {
-    Agent(agent::AgentCommand),
+    Project(project_cli::ProjectCommand),
     Application(application::ApplicationCommand),
     Instance(instance::InstanceCommand),
     Runtime(runtime_cli::RuntimeCommand),
@@ -348,8 +351,8 @@ fn parse_command(mut arguments: impl Iterator<Item = String>) -> Result<Command,
         }
         return Ok(Command::Help);
     }
-    if first == "agent" {
-        return agent::parse(arguments).map(Command::Agent);
+    if project_cli::is_project_command(&first) {
+        return project_cli::parse(&first, arguments).map(Command::Project);
     }
     if first == "app" {
         return Ok(Command::Application(
@@ -458,7 +461,7 @@ fn usage(reason: &str) -> String {
 }
 
 fn usage_text() -> &'static str {
-    "usage: lkjscript agent [COMMAND] [OPTIONS]\n       lkjscript release COMMAND [OPTIONS]\n       lkjscript app COMMAND [OPTIONS]\n       lkjscript instance COMMAND [OPTIONS]\n       lkjscript runtime COMMAND [OPTIONS]\n       lkjscript --state DIRECTORY (rpc [--pretty] | session)\n       lkjscript schema [--root NAME ... | --full] [--known-digest HEX] [--pretty]\n\nRun `lkjscript agent` for semantic authoring, `lkjscript release help` for immutable reuse, `lkjscript app help` for exact offline applications, `lkjscript instance help` for durable operation, and `lkjscript runtime help` for topology-neutral operation and its foreground session. Raw RPC and schema commands are exact low-level diagnostic surfaces."
+    "usage: lkjscript init [PROJECT] [--pretty]\n       lkjscript orient|status [--project PROJECT] [--pretty]\n       lkjscript inspect SELECTOR [--project PROJECT] [--at REVISION] [--summary]\n       lkjscript context --purpose PURPOSE [--target SELECTOR ...] [--project PROJECT]\n       lkjscript change validate|apply [--project PROJECT] [--pretty] < CHANGE.json\n       lkjscript log|show|diff [OPTIONS]\n       lkjscript restore REVISION [--validate] [--project PROJECT]\n       lkjscript target list|show|build|test|run [OPTIONS]\n       lkjscript doctor [--project PROJECT] [--deep]\n       lkjscript backup DESTINATION [--project PROJECT]\n       lkjscript session [--project PROJECT]\n       lkjscript app|instance|runtime|release COMMAND [OPTIONS]\n       lkjscript --state DIRECTORY (rpc [--pretty] | session)\n       lkjscript schema [--root NAME ... | --full] [--known-digest HEX] [--pretty]\n\nProject commands are the semantic-development surface and discover one strict .lkjscript authority from the current directory. Raw RPC is a distinct engine-conformance and embedding transport. Release, application, instance, and runtime commands consume immutable distribution or instance authority; they do not author semantic projects."
 }
 
 #[cfg(test)]

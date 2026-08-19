@@ -1430,6 +1430,58 @@ fn request_corpus() -> Vec<Request> {
             name: "sequence".to_owned(),
             element: TypeDraft::I64,
         },
+        TransactionOp::CreateBuildTarget {
+            symbol: DraftSymbol::generated(13),
+            name: "target".to_owned(),
+            definition: crate::target::BuildTargetDefinition::Product(
+                crate::target::ProductTargetDefinition { application: node },
+            ),
+        },
+        TransactionOp::ReplaceBuildTarget {
+            target: node,
+            definition: crate::target::BuildTargetDefinition::Product(
+                crate::target::ProductTargetDefinition { application: node },
+            ),
+        },
+        TransactionOp::AddReleaseTargetExport {
+            target: node,
+            name: "legacy".to_owned(),
+            item: node,
+        },
+        TransactionOp::SetReleaseTargetExport {
+            target: node,
+            name: "entry".to_owned(),
+            item: node,
+        },
+        TransactionOp::SetApplicationQueryBoundary {
+            target: node,
+            query_entry: crate::target::TargetItem {
+                release_target: node,
+                item: node,
+            },
+            query: crate::target::TargetItem {
+                release_target: node,
+                item: node,
+            },
+        },
+        TransactionOp::AddApplicationTargetTest {
+            target: node,
+            case: crate::target::TargetApplicationTestCase {
+                name: "case".to_owned(),
+                target: crate::target::TargetItem {
+                    release_target: node,
+                    item: node,
+                },
+                arguments: vec![crate::target::TargetValue::I64(1)],
+                expected: crate::target::TargetTestExpectation::Value(
+                    crate::target::TargetValue::I64(1),
+                ),
+                policy: crate::interpret::RunPolicy {
+                    fuel: 1,
+                    maximum_frames: 1,
+                },
+            },
+        },
     ];
     assert_eq!(
         transaction_operations
@@ -1531,7 +1583,7 @@ fn mutate_json(source: &[u8], seed: u64, case: u64) -> Vec<u8> {
     match case % 10 {
         0 => text.replacen("{", "{\"unknown\":0,", 1).into_bytes(),
         1 => text
-            .replacen("\"version\":11", "\"version\":11,\"version\":11", 1)
+            .replacen("\"version\":12", "\"version\":12,\"version\":12", 1)
             .into_bytes(),
         2 => text
             .replacen("\"request_id\":1", "\"request_id\":-1", 1)
@@ -1733,7 +1785,7 @@ fn targeted_json_mutations(requests: &[Request]) -> Vec<NamedMutation> {
         &mut mutations,
         "json-duplicate-field",
         query,
-        replace_json(query, "\"version\":11", "\"version\":11,\"version\":11"),
+        replace_json(query, "\"version\":12", "\"version\":12,\"version\":12"),
     );
     push_mutation(
         &mut mutations,

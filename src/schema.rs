@@ -374,6 +374,7 @@ impl From<SemanticType> for TypeDraft {
 #[serde(rename_all = "snake_case")]
 pub enum NodeKind {
     WorkspaceRoot,
+    BuildTarget,
     Package,
     Module,
     Function,
@@ -390,8 +391,9 @@ pub enum NodeKind {
 }
 
 impl NodeKind {
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::WorkspaceRoot,
+        Self::BuildTarget,
         Self::Package,
         Self::Module,
         Self::Function,
@@ -409,6 +411,7 @@ impl NodeKind {
     pub const fn machine_name(self) -> &'static str {
         match self {
             Self::WorkspaceRoot => "workspace_root",
+            Self::BuildTarget => "build_target",
             Self::Package => "package",
             Self::Module => "module",
             Self::Function => "function",
@@ -428,6 +431,7 @@ impl NodeKind {
     pub const fn stable_tag(self) -> u8 {
         match self {
             Self::WorkspaceRoot => 1,
+            Self::BuildTarget => 15,
             Self::Package => 2,
             Self::Module => 3,
             Self::Function => 4,
@@ -447,6 +451,7 @@ impl NodeKind {
     pub const fn from_stable_tag(tag: u8) -> Option<Self> {
         match tag {
             1 => Some(Self::WorkspaceRoot),
+            15 => Some(Self::BuildTarget),
             2 => Some(Self::Package),
             3 => Some(Self::Module),
             4 => Some(Self::Function),
@@ -470,6 +475,7 @@ pub const MINIMUM_NAME_UTF8_BYTES: usize = 1;
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum NameUniquenessGroup {
     WorkspacePackages,
+    WorkspaceTargets,
     PackageModules,
     ModuleTypes,
     ModuleFunctions,
@@ -479,8 +485,9 @@ pub enum NameUniquenessGroup {
 }
 
 impl NameUniquenessGroup {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::WorkspacePackages,
+        Self::WorkspaceTargets,
         Self::PackageModules,
         Self::ModuleTypes,
         Self::ModuleFunctions,
@@ -492,6 +499,7 @@ impl NameUniquenessGroup {
     pub const fn machine_name(self) -> &'static str {
         match self {
             Self::WorkspacePackages => "workspace.packages",
+            Self::WorkspaceTargets => "workspace.targets",
             Self::PackageModules => "package.modules",
             Self::ModuleTypes => "module.types",
             Self::ModuleFunctions => "module.functions",
@@ -503,7 +511,7 @@ impl NameUniquenessGroup {
 
     pub const fn owner_kind(self) -> NodeKind {
         match self {
-            Self::WorkspacePackages => NodeKind::WorkspaceRoot,
+            Self::WorkspacePackages | Self::WorkspaceTargets => NodeKind::WorkspaceRoot,
             Self::PackageModules => NodeKind::Package,
             Self::ModuleTypes | Self::ModuleFunctions => NodeKind::Module,
             Self::ProductFields => NodeKind::ProductType,
@@ -515,6 +523,7 @@ impl NameUniquenessGroup {
     pub const fn member_kinds(self) -> &'static [NodeKind] {
         match self {
             Self::WorkspacePackages => &[NodeKind::Package],
+            Self::WorkspaceTargets => &[NodeKind::BuildTarget],
             Self::PackageModules => &[NodeKind::Module],
             Self::ModuleTypes => &[
                 NodeKind::ProductType,
@@ -2341,6 +2350,12 @@ impl DirectReference {
 pub enum Node {
     WorkspaceRoot {
         packages: Vec<NodeId>,
+        targets: Vec<NodeId>,
+    },
+    BuildTarget {
+        owner: NodeId,
+        name: String,
+        definition: crate::target::BuildTargetDefinition,
     },
     Package {
         owner: NodeId,
@@ -2418,7 +2433,8 @@ pub enum Node {
 impl NameUniquenessGroup {
     pub fn children(self, owner: &Node) -> Option<&[NodeId]> {
         match (self, owner) {
-            (Self::WorkspacePackages, Node::WorkspaceRoot { packages }) => Some(packages),
+            (Self::WorkspacePackages, Node::WorkspaceRoot { packages, .. }) => Some(packages),
+            (Self::WorkspaceTargets, Node::WorkspaceRoot { targets, .. }) => Some(targets),
             (Self::PackageModules, Node::Package { modules, .. }) => Some(modules),
             (Self::ModuleTypes, Node::Module { types, .. }) => Some(types),
             (Self::ModuleFunctions, Node::Module { functions, .. }) => Some(functions),
@@ -2434,6 +2450,7 @@ impl Node {
     pub const fn kind(&self) -> NodeKind {
         match self {
             Self::WorkspaceRoot { .. } => NodeKind::WorkspaceRoot,
+            Self::BuildTarget { .. } => NodeKind::BuildTarget,
             Self::Package { .. } => NodeKind::Package,
             Self::Module { .. } => NodeKind::Module,
             Self::ProductType { .. } => NodeKind::ProductType,
@@ -2453,7 +2470,8 @@ impl Node {
     pub const fn owner(&self) -> Option<NodeId> {
         match self {
             Self::WorkspaceRoot { .. } => None,
-            Self::Package { owner, .. }
+            Self::BuildTarget { owner, .. }
+            | Self::Package { owner, .. }
             | Self::Module { owner, .. }
             | Self::ProductType { owner, .. }
             | Self::ProductField { owner, .. }
@@ -2471,7 +2489,8 @@ impl Node {
 
     pub fn name(&self) -> Option<&str> {
         match self {
-            Self::Package { name, .. }
+            Self::BuildTarget { name, .. }
+            | Self::Package { name, .. }
             | Self::Module { name, .. }
             | Self::ProductType { name, .. }
             | Self::ProductField { name, .. }
@@ -2486,7 +2505,8 @@ impl Node {
 
     pub fn set_name(&mut self, replacement: String) -> bool {
         match self {
-            Self::Package { name, .. }
+            Self::BuildTarget { name, .. }
+            | Self::Package { name, .. }
             | Self::Module { name, .. }
             | Self::ProductType { name, .. }
             | Self::ProductField { name, .. }
@@ -2504,7 +2524,8 @@ impl Node {
 
     pub fn owned_child_count(&self) -> usize {
         match self {
-            Self::WorkspaceRoot { packages } => packages.len(),
+            Self::WorkspaceRoot { packages, targets } => packages.len() + targets.len(),
+            Self::BuildTarget { .. } => 0,
             Self::Package { modules, .. } => modules.len(),
             Self::Module {
                 types, functions, ..
@@ -2529,7 +2550,11 @@ impl Node {
 
     pub fn owned_child(&self, index: usize) -> Option<NodeId> {
         match self {
-            Self::WorkspaceRoot { packages } => packages.get(index).copied(),
+            Self::WorkspaceRoot { packages, targets } => packages
+                .get(index)
+                .copied()
+                .or_else(|| targets.get(index.saturating_sub(packages.len())).copied()),
+            Self::BuildTarget { .. } => None,
             Self::Package { modules, .. } => modules.get(index).copied(),
             Self::Module {
                 types, functions, ..
@@ -2650,7 +2675,7 @@ impl Node {
 pub const fn expected_owner_kind(kind: NodeKind) -> Option<NodeKind> {
     match kind {
         NodeKind::WorkspaceRoot => None,
-        NodeKind::Package => Some(NodeKind::WorkspaceRoot),
+        NodeKind::Package | NodeKind::BuildTarget => Some(NodeKind::WorkspaceRoot),
         NodeKind::Module => Some(NodeKind::Package),
         NodeKind::ProductType | NodeKind::SumType | NodeKind::SequenceType | NodeKind::Function => {
             Some(NodeKind::Module)

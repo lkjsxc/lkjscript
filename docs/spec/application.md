@@ -7,15 +7,17 @@ profiles, embedded cases, and application-declared host requirements. Release id
 
 ## Authority and contract
 
-Application contract version 5 builds one artifact from an exact root release, an exact exported
-entry, one closed invocation profile, one `RunPolicy`, and at most 256 immutable cases. The artifact
-embeds the complete exact release graph. Coordinates, paths, workspaces, mutable resolvers, grants,
-deployment state, caches, and compiled code are not application authority.
+Application contract version 5 owns one artifact formed from an exact root release, an exact
+exported entry, one closed invocation profile, one `RunPolicy`, and at most 256 immutable cases. In a
+semantic project these inputs are accepted contract-1 application-target meaning and are lowered
+mechanically from one exact revision. The artifact embeds the complete exact release graph.
+Coordinates, paths, workspaces, mutable resolvers, grants, deployment state, caches, and compiled
+code are not application authority.
 
 Preparation validates every release, exact dependency, export, type, profile target, import route,
 case, resource bound, flattened closure, lowering, and Core program before bytes can publish. Every
-embedded release case and application case must pass. Validate-only and publication consume the same
-prepared bytes and report.
+embedded release case and application case must pass. Target testing and target publication consume
+the same prepared bytes and report; neither changes project history.
 
 ## Public values
 
@@ -102,7 +104,7 @@ case does not pass.
 The sole successful application encoding is:
 
 - magic `LKJAPP\0\x05` and little-endian format `5`;
-- semantic schema `lkjscript-tsm007` from the workspace artifact owner;
+- semantic schema `lkjscript-tsm008` from the workspace artifact owner;
 - bounded canonical release graph, exact root/entry/profile/policy/cases; and
 - a domain-separated digest over the canonical payload.
 
@@ -111,12 +113,22 @@ validates the exact graph/profile, compiles every required entry, and runs the i
 Application format 4 and every predecessor reject directly; no reader, migration, edition, alias, or
 fallback remains.
 
-## Execution and inspection
+## Derivation, self-description, execution, and inspection
 
-Contract-version-5 build, inspect, test, and run commands accept one strict command-local JSON value.
+`target show|test|build|run` selects accepted target meaning at one exact project revision. Target
+build preflights its receipt, publishes one no-overwrite artifact, and publishes no development
+revision. The command-local `app build` predecessor rejects. `app validate|inspect|test|run|stream`
+remains an independent immutable-distribution consumer.
+
+Interface-description contract 1 is derived directly from validated artifact bytes. It exposes the
+exact root release, entry, profile, imports, and release export descriptors needed by a native
+client. A client resolves names only inside that exact artifact, checks kinds and complete nominal
+shapes, and retains the application digest. Generated binding constants are neither required nor
+trusted; a stale or foreign view cannot silently authorize execution.
+
 Inspection exposes exact digest, graph/release facts, profile, cases, policy, limits, and explicit
-absence of signatures/provenance. Run receipts contain the exact typed result plus bounded operational
-stage observations. Observations are neither semantic values nor authority.
+absence of signatures/provenance. Run receipts contain the exact typed result plus bounded
+operational stage observations. Observations are neither semantic values nor authority.
 
 Application execution is deterministic for exact bytes, entry, arguments, and policy. It publishes
 nothing. Output failure has no rollback meaning. Artifact publication uses no-replace immutable file

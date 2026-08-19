@@ -1066,6 +1066,7 @@ fn mandatory_deep_nominal_result_rejects_before_compile_or_execution() {
             id(1),
             Node::WorkspaceRoot {
                 packages: vec![id(2)],
+                targets: Vec::new(),
             },
         ),
         (

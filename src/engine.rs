@@ -184,7 +184,7 @@ impl Engine {
         })
     }
 
-    fn workspace_mut(&mut self, id: WorkspaceId) -> Result<&mut DurableWorkspace> {
+    pub(crate) fn workspace_mut(&mut self, id: WorkspaceId) -> Result<&mut DurableWorkspace> {
         self.workspaces.get_mut(&id).ok_or_else(|| {
             LkError::new(
                 ErrorCode::WorkspaceNotFound,

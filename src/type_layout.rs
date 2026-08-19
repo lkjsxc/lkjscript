@@ -549,6 +549,7 @@ mod tests {
                 id(1),
                 Node::WorkspaceRoot {
                     packages: vec![id(2)],
+                    targets: Vec::new(),
                 },
             ),
             (
@@ -720,6 +721,7 @@ mod tests {
             id(1),
             Node::WorkspaceRoot {
                 packages: vec![id(2)],
+                targets: Vec::new(),
             },
         );
         nodes.insert(
@@ -816,6 +818,7 @@ mod tests {
                 id(1),
                 Node::WorkspaceRoot {
                     packages: vec![id(2)],
+                    targets: Vec::new(),
                 },
             ),
             (

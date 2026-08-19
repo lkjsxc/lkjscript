@@ -23,7 +23,7 @@ pub(super) fn project(
     source: &Snapshot,
     request: &ReleaseBuildRequest,
     supplied: &[DecodedRelease],
-) -> Result<DecodedRelease> {
+) -> Result<(DecodedRelease, BTreeMap<NodeId, ReleaseItemId>)> {
     super::validate_coordinate(&request.coordinate)?;
     super::validate_user_version(&request.user_version)?;
     validate_counts(request)?;
@@ -110,7 +110,12 @@ pub(super) fn project(
         snapshot,
     };
     validate_release_model(&release, false)?;
-    Ok(release)
+    let source_items = map
+        .into_iter()
+        .filter(|(source, _)| source.is_durable())
+        .map(|(source, local)| Ok((source, release_item(local)?)))
+        .collect::<Result<BTreeMap<_, _>>>()?;
+    Ok((release, source_items))
 }
 
 fn validate_counts(request: &ReleaseBuildRequest) -> Result<()> {
@@ -733,7 +738,8 @@ fn remap_snapshot(
     )?;
     let expected_package = map_id(map, package)?;
     match snapshot.node(snapshot.root())? {
-        Node::WorkspaceRoot { packages } if packages == &[expected_package] => {}
+        Node::WorkspaceRoot { packages, targets }
+            if packages == &[expected_package] && targets.is_empty() => {}
         _ => {
             return Err(LkError::new(
                 ErrorCode::ArtifactCorrupt,
@@ -750,8 +756,15 @@ fn normalize_and_remap(
     map: &BTreeMap<NodeId, NodeId>,
 ) -> Result<Node> {
     match &mut node {
-        Node::WorkspaceRoot { packages } => {
+        Node::WorkspaceRoot { packages, targets } => {
             retain_and_map(packages, selected, map)?;
+            targets.clear();
+        }
+        Node::BuildTarget { .. } => {
+            return Err(LkError::new(
+                ErrorCode::InvalidContainment,
+                "build targets cannot enter reusable release meaning",
+            ));
         }
         Node::Package {
             owner,
@@ -1093,12 +1106,19 @@ pub(super) fn remap_node_with(
         })
     }
     Ok(match node {
-        Node::WorkspaceRoot { packages } => Node::WorkspaceRoot {
+        Node::WorkspaceRoot { packages, .. } => Node::WorkspaceRoot {
             packages: packages
                 .into_iter()
                 .map(&mut remap)
                 .collect::<Result<_>>()?,
+            targets: Vec::new(),
         },
+        Node::BuildTarget { .. } => {
+            return Err(LkError::new(
+                ErrorCode::InvalidContainment,
+                "build targets cannot enter reusable release meaning",
+            ));
+        }
         Node::Package {
             owner,
             name,

@@ -1605,7 +1605,27 @@ fn real_authority_executes_repaired_structured_program_across_restart() {
     let mut corrupt = fs::read(&repaired_revision).expect("read repaired structured revision");
     *corrupt.last_mut().expect("structured revision hash byte") ^= 1;
     fs::write(&repaired_revision, corrupt).expect("corrupt repaired structured revision");
-    assert_engine_open_rejects(temporary.path(), "ArtifactCorrupt");
+    let mut reopened = Engine::open(temporary.path())
+        .expect("shallow open defers an unselected historical snapshot");
+    assert!(matches!(
+        reopened
+            .request(
+                RequestId::new(508),
+                query_request(workspace, Revision::new(3), Query::WorkspaceSummary),
+            )
+            .expect("current summary after shallow reopen"),
+        Response::QueryBatchResult(_)
+    ));
+    let Response::Error(error) = reopened
+        .request(
+            RequestId::new(509),
+            query_request(workspace, Revision::new(2), Query::WorkspaceSummary),
+        )
+        .expect("historical corruption response")
+    else {
+        panic!("corrupt historical selection must reject")
+    };
+    assert_eq!(error.code, ErrorCode::ArtifactCorrupt);
 }
 
 fn bootstrap_transaction(workspace: WorkspaceId, hole: bool) -> Transaction {

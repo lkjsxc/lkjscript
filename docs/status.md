@@ -1,125 +1,132 @@
 # Implemented status
 
-This file records the current checkout, not intended future work. Normative behavior is owned under
-[`docs/spec/`](spec/); product use is owned by
-[`applications/lkjwork/README.md`](../applications/lkjwork/README.md).
+This file records the current checkout. Normative behavior is owned by `docs/spec/`; product use is
+owned by `applications/lkjwork/README.md`.
 
-## Supported public product
+## Semantic development projects
 
-`lkjwork` is an installed local CLI product backed by one exact embedded lkjscript application and
-one durable instance per project. It supports:
+A semantic project is a strict `.lkjscript` authority containing one project marker, one existing
+workspace identity, immutable full graph revisions, immutable canonical revision records, and one
+HEAD. Project paths are locators only. Explicit selection and bounded ancestor discovery reject
+parent traversal, symlinked or nonregular components, malformed markers, nested ambiguity, foreign
+workspace bindings, missing closure, and corrupt history.
 
-- private project initialization and parent-directory discovery;
-- task create/edit, priority, lifecycle, hold, archive, labels, dependencies, notes, and activity;
-- exact DAG cycle rejection and application-derived readiness/actionable ordering;
-- pure show/list/next/summary/context/export queries with bounded pages and omission facts;
-- immutable file attachments through the built-in blob interface, including unknown-outcome
-  reconciliation without repeating a possibly visible put;
-- deterministic human output, strict one-shot JSON, and a bounded caller-owned product session;
-- exact backup, new-instance restore with explicit grant rebinding, shallow/deep doctor, history,
-  and deterministic export version 1.
+The public project CLI implements initialization, orientation with known-digest reuse, status,
+historical inspect, targeted context, JSON or semantic-document validation/application, bounded log,
+record show, arbitrary semantic diff, forward restoration, target list/show/build/test/run, shallow
+or deep doctor, no-replace backup, and a correlated foreground session. Ordinary commands discover
+the project and do not require a state directory, workspace ID, or revision. Machine responses are
+closed version-1 envelopes; `--pretty` is the deterministic bounded human-readable JSON projection.
 
-Task policy, identity allocation, lifecycle, dependencies, readiness, filtering, ordering, context
-selection, notes, labels, attachments, typed conflicts, and typed query results live in the embedded
-application. The Rust client owns arguments, locator validation, bounded explicit file reads,
-terminal-safe rendering, exact host routing, backup transport, and process lifecycle. It has no task
-database and does not decode private instance state to answer product queries.
+Every accepted change publishes exactly one revision and one revision record. Validate-only,
+malformed, foreign, excessive, stale, invalid, and no-change requests publish nothing. Commit
+requests bind the exact project workspace/base, and optional idempotency replays the retained exact
+receipt across restart. Restoration validates a candidate and publishes forward; it never rewinds
+HEAD or resurrects a tombstoned durable identity.
 
-The checked application artifact is 163,670 bytes with digest
-`9d5ebe527719aa4c68b471cc10f9113df421385997113a08fbd1a6eae4650c4d`. The public-command build
-recipe and generated bindings reproduce and check that artifact. The installed binary validates the
-embedded artifact before use; development workspaces and standalone release files are not runtime
-dependencies.
+The current repository stores one canonical full snapshot and one compact record per revision.
+Ordinary open checks every retained path and compact record, validates the complete record chain,
+then decodes the exact HEAD snapshot plus any snapshots needed by the retained idempotency receipt.
+Historical selection decodes and validates the selected snapshot on demand. `doctor --deep` decodes
+every snapshot, validates every adjacent identity transition, and recomputes every revision-record
+diff fact. Derived indexes and caches are absent. All project operations conservatively hold the one
+engine lock; concurrent snapshot readers are not yet exposed.
 
-## Active contract identities
+## First-class build targets
+
+Build targets are durable graph nodes with exact identity, presentation name, kind, and typed
+definition. Active kinds are reusable release, application, and native product distribution. Release
+targets own the exact root package, metadata, exports, exact target dependencies/imports, and cases.
+Application targets own exact release edges, entry/profile mappings, host requirements, policies,
+and cases. Product targets select one exact application target. Target cycles, missing/foreign
+references, nominal mismatches, incomplete closures, and failing cases reject accepted changes.
+
+`target build` lowers one exact revision deterministically, preflights its response, runs all cases,
+and publishes an immutable artifact at an explicit no-overwrite path. Relative output paths resolve
+against the command working directory before path validation. Build/test/run never publish a
+development revision. There is no arbitrary hook, mutable registry lookup, ambient filesystem input,
+or derived build cache.
+
+The former `agent` command, procedural example builders, `release build`, and `app build` were
+deleted. The raw `--state … rpc|session` transport remains only as the strict engine-conformance and
+embedding boundary; it is not a second project authoring model. Immutable release/application
+validate, inspect, test, run, instance, and runtime commands remain distinct distribution/runtime
+consumers.
+
+## Migrated lkjwork product
+
+`applications/lkjwork/.lkjscript` is the maintained semantic development authority. Its revision 4
+target reproduced the audited pre-migration application byte-for-byte. Revisions 5–7 are the public
+CLI dogfood history for the cross-cutting `why TASK` query: rename replaced owners, create the new
+types/functions, then update release/application target meaning and cases. Revision 7 has 3,339 graph
+nodes, 546 durable identities, three targets, seven passing semantic cases, and no blockers.
+
+`applications/lkjwork/build.py` and generated `bindings.json` are deleted. The checked application
+is 167,848 bytes, has file SHA-256
+`f9b335db22fbecdacdf7047f8a8e8aa7711d030eccaf3ed42d3eb2783b3cc184`, semantic application digest
+`4eb891dc2f400e070d8feaf3ff8aa14e35420010d2ded3ace1a107cec8e45092`, and root release
+`67c30ef33a26b53b98c7ded1a89ac6f0f9f961eef103f399bd70c963dca115bf`.
+
+The native binary discovers the complete interface from validated application self-description.
+`why` returns task ID, phase, archive state, optional manual hold, actionability, and ordered blocker
+IDs as application-owned typed data. Missing task is a typed product outcome. Human and JSON output
+agree, and filesystem-tree comparison proves successful and missing-task queries publish no instance
+revision, event, command, attempt, outcome, checkpoint, manifest, HEAD, or blob.
+
+The complete product still provides task lifecycle/editing, exact DAG dependencies, labels, notes,
+attachments, activity/history, list/show/next/summary/context/export/why pure queries, strict JSON,
+foreground session, backup/restore, and shallow/deep doctor. The Rust client owns only boundary and
+host-adapter duties; task policy remains application meaning.
+
+## Active identities
 
 | boundary | active identity | direct rejected predecessor |
 |---|---|---|
-| workspace protocol / machine schema | 11 / `lkjscript-machine-schema-v11` | 10 and older |
-| semantic workbench / edit document | 2 / 1 | context packet 1 / `plan` root |
-| workspace semantic artifact | 7, `LKJTSM\0\x07`, `lkjscript-tsm007` | format 6 and older |
-| workspace HEAD | `LKJHEAD9` | `LKJHEAD8` and older |
-| reusable release | contract/format 2, `LKJREL\0\x02` | format 1 and older |
-| application world | contract/format 5, `LKJAPP\0\x05` | format 4 and older |
-| durable instance | contract/format 3, `LKJINS\0\x03` | format 2 and older |
+| workspace protocol / machine schema | 12 / `lkjscript-machine-schema-v12` | 11 and older |
+| semantic project / marker / change / session | 1 / `LKJPROJ1` / 1 / 1 | every other version |
+| development revision record | 1 / `LKJREC01` | every other version |
+| semantic workbench / context / edit document | 2 / 2 / 1 | context 1, `plan`, every other document version |
+| workspace semantic artifact | 8 / `LKJTSM\0\x08` / `lkjscript-tsm008` | format 7 and older |
+| workspace HEAD | `LKJHDA10` | `LKJHEAD9` and older |
+| build target | 1 | every other version/kind |
+| reusable release | contract/format 2 / `LKJREL\0\x02` | format 1 and older |
+| application / interface view | contract/format 5 / interface 1 / `LKJAPP\0\x05` | format 4 and older |
+| durable instance | contract/format 3 / `LKJINS\0\x03` | format 2 and older |
 | runtime session | 2 | every other version |
 | lkjwork machine / export | 1 / 1 | every other version |
 
-There are no editions, compatibility readers, aliases, migration-only paths, or silent format
-fallbacks.
+There are no editions, compatibility readers, aliases, silent migration, or builder fallbacks.
 
-## Language and execution
+## Language, execution, and product runtime
 
 The language implements `unit`, `bool`, checked `i64`, immutable bytes, validated UTF-8 text,
-nominal products, nominal sums, and nominal homogeneous ordered sequences. Text has exact UTF-8 byte
-equality and no normalization promise. Sequences support canonical empty, length, checked access,
-append, and replace. Public JSON uses strings and ordered arrays; exact release-local nominal identity
-is preserved.
+nominal products, sums, and homogeneous ordered sequences. Text has byte equality and no Unicode
+normalization promise. Sequences support empty, length, checked access, append, and replace. One
+explicit-frame interpreter is the execution oracle; safe managed bytes/text and immutable `Arc`
+sequence elements have exact canonical retained accounting and independent differentials. No local
+unsafe Rust exists.
 
-The minimal retained algebra adds exact integer equality and boolean not/and/or. One explicit-frame
-interpreter remains the execution oracle. Managed bytes/text use the safe generation-checked store;
-sequences use safe immutable `Arc` elements with exact canonical retained accounting and an
-allocate-new differential. No local unsafe Rust exists.
+Stateful application format 5 separates mutations and pure queries. Declined/unchanged operations
+publish no instance revision; completed/suspended operations publish exactly one. Instance format 3
+uses a hash-linked journal, full checkpoints at genesis and every 64 revisions, and a HEAD-bound
+current manifest. Missing/corrupt acceleration falls back to full replay without query writes.
+`doctor --deep` reexecutes every transition. The representative 2,700-revision product retains
+104,745,982 total project bytes below the 256 MiB journal policy.
 
-## Applications and instances
-
-Stateful application format 5 owns exact mutation response, query/query-result, state, event,
-command, outcome, and four-variant decision types. The only built-in interface is
-`immutable_blob_v1`; the activation interface and its examples were deleted for lack of a current
-consumer.
-
-Instance format 3 publishes declined/unchanged decisions without a revision and completed/suspended
-decisions with exactly one revision. Published idempotency receipts replay exactly; no-publication
-results are reevaluated only while their exact base remains current. Pure query receipts bind exact
-application/instance/revision/record/state/input/result facts and publish nothing.
-
-History is an immutable hash-linked event/host journal with full semantic checkpoints at genesis and
-every 64 revisions. HEAD binds cumulative history bytes and a current-manifest digest. The bounded
-manifest contains current state and the published event-key index, enabling ordinary queries and
-mutations without replaying thousands of transitions. Missing or corrupt acceleration falls back to
-the full chain without query writes. `doctor --deep` reexecutes every transition and compares every
-checkpoint.
-
-The representative 2,700-revision project retains 102,841,790 record bytes and 104,741,804 total
-project bytes, below the 256 MiB journal policy. Its HEAD-bound current manifest is 1,588,695 bytes.
-The stress profile is retained but was not executed; 10,000 transitions and 256 MiB journal bytes are
-the documented hard ceilings, not a claimed stress result.
-
-## Runtime and topology
-
-The topology-neutral runtime contract implements one-shot and foreground line sessions, strict
-request correlation, query routing, bounded admission, exact stage observations, and one synchronous
-store lock. The generic runtime has no queue, worker, persistent cache, compiled-unit cache, profile,
+The only built-in host interface is `immutable_blob_v1`. Applications declare requirements;
+instances bind exact grants. Visibility-capable puts record attempts first, and possible visibility
+is reconciled without automatic retry. Generic runtime one-shot and caller-owned foreground-session
+topologies share one synchronous instance owner; there is no daemon, queue, worker, scheduler,
 bytecode, JIT, or native tier.
 
-`lkjwork session` retains one product-local prepared application/current-state object keyed by exact
-HEAD. It revalidates HEAD on hits, updates only after publication, and remains correct on miss,
-corruption, eviction, or restart. This is disposable acceleration, not authority or a daemon.
+## Explicit absences and trust
 
-## Verification surfaces
+The verified deployment is Linux x86-64 under one trusted local operator and OS account. Native code
+and the blob adapter are trusted. Paths remain deployment facts, never semantic identity.
 
-The checkout contains:
-
-- independent product reference-model differential tests;
-- exact text/sequence/compiler/interpreter/release/application/instance/runtime tests;
-- complete product vocabulary, lifecycle, cycle, readiness, pagination, context, export, attachment,
-  locator, backup/restore, corruption, restart, idempotency, and session tests;
-- deterministic public acceptance and functional/representative workload scripts; and
-- structured evidence under `docs/evidence/`.
-
-The retained examples are workspace/release/authoring verification consumers. The old durable
-controller and durable blob-publisher drivers were deleted because `lkjwork` now owns the complete
-stateful/blob product vertical and focused platform tests retain their invariants.
-
-## Explicit absences and trust boundary
-
-The verified deployment is Linux x86-64 under one trusted local operator and OS account. The client
-and immutable-blob adapter are trusted native code. Paths remain locators and deployment facts, not
-semantic authority.
-
-There is no network service, cloud sync, account/multi-user model, encryption, signature,
-provenance, hostile-administrator isolation, native-code sandbox, broad filesystem grant, secret
-store, child process interface, wall-clock semantics, background daemon, scheduler, worker pool,
-database, persistent query cache, full-text index, import/migration contract, GUI/TUI, or
-cross-platform support claim. Logical resource accounting is not exact RSS enforcement. Provider
-tokens and monetary cost are unavailable and are not inferred from bytes.
+There is no network, cloud sync, multi-user authorization, encryption, signature/provenance,
+hostile-native-code sandbox, broad filesystem grant, secret store, child-process interface,
+wall-clock semantics, database, persistent project index, build cache, automatic merge, branch,
+remote, GUI, production TUI, or cross-platform support claim. Logical resource accounting is not
+exact RSS enforcement. Provider token classes and monetary cost are unavailable and are not inferred
+from bytes.

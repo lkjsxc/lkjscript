@@ -1,175 +1,208 @@
-# Protocol, context, and editable-document contracts
+# Project CLI, protocol, context, and document contracts
 
-This specification owns logical requests/responses, strict JSON, process adapters, agent context
-packets, editable documents, caching, limits, rejection, and exit behavior.
+This specification owns public project commands, strict machine framing, the retained low-level
+engine protocol, context capsules, editable proposals, sessions, limits, rejection, and exit
+behavior.
 
-## Logical engine boundary
+## Logical owners
 
-`Engine` owns workspace create/open, transaction preparation and publication, query, compilation,
-run, and exact reusable-release preparation. Workspace RPC accepts closed typed `Request` values
-and returns closed typed `Response` values. Release preparation uses one exact immutable workspace
-revision plus explicit dependency bytes through its own typed method. Application composition uses
-only explicit immutable release bytes; instance operation uses a separate exact local store.
-Semantics do not depend on JSON or terminal rendering.
+`Project` owns discovery, exact authority selection, project reads, change publication/history,
+target derivation, doctor, and backup. It delegates candidate construction to `Transaction`, durable
+publication to the single-workspace persistence owner, context/documents to the workbench owner, and
+target lowering to release/application owners. Command parsing and JSON rendering do not define
+semantics.
 
-The logical request families are workspace creation, transaction application, query batch, run,
-schema description, and adapter shutdown. Semantic failures are `Response::Error`; inability to open
-the authority or a publication outcome that may be unknown is a transport/fatal engine failure.
+`Engine` remains the lower-level typed boundary for create/open, transaction, query batch, run, and
+schema description. Its raw RPC is retained as an independent conformance/embedding transport and
+for implementation differential tests. It requires an explicit repository state directory and is
+not the normal project authoring interface. Release/application/instance/runtime distribution
+commands consume their own immutable or mutable authority domains; they do not modify projects.
 
-One engine holds an exclusive `lkjscript.engine.lock` for the state directory. A competing direct
-command or session rejects with `authority_busy`. The engine never silently retries a mutation.
-`commit_outcome_unknown` permanently stops that engine object.
+One open engine holds one exclusive `lkjscript.engine.lock`. A competitor receives
+`authority_busy`; there is no hidden queue. No mutation is silently retried. A
+`commit_outcome_unknown` stops unsafe further mutation in that engine/session.
 
-## Process topologies
+## Public project command surface
 
-The primary CLI opens `Engine` directly for one workspace command and exits.
-`lkjscript --state DIR session` holds one engine and accepts one compact protocol-v11 JSON request
-per line; each line has an independent publication boundary. EOF closes the session. A successful
-`shutdown` response is flushed before exit.
+Project commands are:
 
-Application and instance one-shot commands use the topology-neutral runtime kernel. The separate
-`lkjscript runtime session --store DIR` command retains that same kernel and store lock behind exact
-line-delimited runtime protocol version 2; its contract is specified in
-[runtime-kernel.md](runtime-kernel.md). There is one installed binary and no daemon, socket client,
-or background service. Disconnect or stdout failure does not roll back a published workspace
-revision, instance revision, or host outcome. Exact idempotency receipts are the retry route; no
-mutation or possibly visible host action is retried implicitly.
-
-`lkjwork --json` and `lkjwork session` use independent product contract version 1. Product fields and
-rendering remain application-specific and are intentionally absent from the global workspace machine
-catalogue. The product session is caller-owned, line-delimited, bounded, and recovers after malformed
-independent lines; it is not a daemon or authority.
-
-## Strict JSON projection
-
-Protocol and JSON envelope version is 11. A request envelope is exactly:
-
-```json
-{"version":11,"request_id":1,"request":{"kind":"create_workspace"}}
+```text
+init [PROJECT]
+orient [--project PROJECT] [--known-digest DIGEST]
+status [--project PROJECT]
+inspect SELECTOR [--project PROJECT] [--at REVISION] [--summary]
+context --purpose PURPOSE [--target SELECTOR ...] [--at REVISION]
+change validate|apply [--project PROJECT] [--document] [--context FILE]
+log [--project PROJECT] [--before REVISION] [--limit COUNT]
+show REVISION [--project PROJECT]
+diff --from REVISION --to REVISION [--offset N] [--limit N]
+restore REVISION [--validate] [--project PROJECT]
+target list|show|build|test|run ...
+doctor [--project PROJECT] [--deep]
+backup DESTINATION [--project PROJECT]
+session [--project PROJECT]
 ```
 
-Response envelopes carry the same nonzero request ID. Unknown fields and variants, duplicate fields,
-invalid canonical IDs, wrong version, trailing JSON, excessive input, invalid UTF-8, and a second
-request reject. JSON input is limited to 8 MiB and output to 32 MiB.
+An explicit `--project` overrides ambient discovery and no facts are read from an ambient project.
+Otherwise ordinary commands discover exactly one marker above the current directory. Reads default
+to exact HEAD but accept `--at` where defined. Mutations carry exact workspace/base facts in their
+input and reject stale or foreign requests. Build output and backup destination paths may be
+relative; they resolve against the command working directory, reject lexical parent traversal and
+symlink/nonregular parents, and remain deployment facts.
 
-The protocol uses stable typed error codes and structured targets. Process exit distinguishes CLI
-usage/JSON/document error, authority/transport failure, and output failure. A semantic rejection is
-a successfully delivered logical `error` response rather than a transport failure.
+The one-shot project machine envelope is contract version 1:
 
-## Executable machine contract
+```json
+{"version":1,"result":{"kind":"status","data":{"contract_version":1}}}
+```
 
-`src/contract.rs` owns the closed executable contract description. `src/machine.rs` owns only strict
-wire encoding/decoding and re-exports the public contract entry points. `src/machine_contract.rs`
-contains the shared descriptor value model. Agreement tests compare every advertised request,
-response, record, variant, scalar domain, error, operation, query, and limit with strict serde and
-executable samples.
+Each command writes exactly one JSON value plus newline to stdout. `--pretty` selects the equivalent
+indented, deterministic, terminal-safe human-readable JSON projection. Progress never contaminates
+stdout. Semantic/project input errors exit 2, transport/authority failures 3, output failures 4,
+artifact publication/validation failures 5, and resource exhaustion 8. Errors remain typed inside
+the same project envelope; stderr contains one bounded diagnostic. Broken output after publication
+does not roll back authority.
 
-The active identity is `lkjscript-machine-schema-v11`. Its canonical BLAKE3 digest is embedded in the
-agent binary and printed by `agent orient`. Diagnostic clients may request:
+Project response serialization is bounded by the 32 MiB machine policy. Any mutation or target build
+whose compact or pretty receipt cannot fit rejects before semantic or artifact publication. Query
+responses are bounded at construction or paginated.
 
-- a compact manifest;
-- at most 16 named roots and their deterministic dependency closure;
-- the explicit full contract;
-- `unchanged` for an exact known schema digest.
+## Project foreground session
 
-Unknown, duplicate, empty, or excessive roots reject. Normal agent work does not require schema
-discovery.
+`lkjscript session` holds one selected project/engine in the caller-owned foreground process and
+accepts one project-session-v1 JSON request per line:
 
-Reusable-release build, validate, inspect, and test are command-local projections of the separate
-[release contract](reusable-release.md), not additions to workspace RPC. Release build JSON uses
-contract version 2 and names exact workspace/revision authority; all dependency artifact paths are
-explicit command inputs. Its strict Rust records, canonical codec, and command-local help own the
-fields.
+```json
+{"version":1,"request_id":1,"request":{"kind":"status"}}
+```
 
-Application build, validate, inspect, test, typed run, and stream are command-local projections of
-the separate [application contract](application.md). Application JSON uses contract version 5 and
-build accepts only explicit release files. Durable-instance commands use command-local contract
-version 3 specified by [instance.md](instance.md). Runtime orientation, inspection, and session use
-command-local contract version 2. Release, application, instance, and runtime records are
-deliberately absent from the global workspace catalogue, avoiding duplicate schema owners and a
-mandatory global dump. Top-level parsing and operation errors return the applicable contract
-version.
+Responses carry the same unique nonzero request ID. The closed request variants cover orient,
+status, inspect, context, JSON/document validate/apply, log, show, diff, restore, target operations,
+doctor, backup, and shutdown. At most 65,536 request IDs and one 8 MiB request line are admitted.
+Duplicate fields, unknown fields/variants, wrong versions, duplicate/zero IDs, invalid UTF-8,
+trailing values, and oversized lines reject.
 
-## Context packets
+A malformed complete line produces one bounded uncorrelated error and the next line is processed.
+EOF closes the session. Shutdown returns current status and flushes before exit. A commit/output
+publication-unknown condition is fatal. Session-local context aliases are bound to the exact project
+and revision and reject after same-session or external HEAD advance. Restart discards aliases and
+recovers all authority from durable project state. Session reuse is disposable acceleration, not a
+daemon, scheduler, queue, lock file, or semantic identity.
 
-Context packet version 2 is a disposable exact observation. Its digest binds:
+## Raw engine protocol and machine schema
 
-- workspace and revision;
-- machine-schema digest;
-- purpose and target set;
-- optional comparison revision;
-- requested bounds;
-- every included fact and explicit omission.
+Raw protocol and JSON envelope version is 12:
 
-Purposes are `orient`, `create`, `repair`, `refactor`, `debug`, `extend`, `delete`, and `review`.
-Targeted purposes require targets. A packet contains at most eight targets, at most 256 expanded
-nodes, bounded query pages, exact aliases, legal edit/expression codes, typed observations,
-completeness blockers, and explicit truncation flags. Total encoded size is at most 4 MiB.
+```json
+{"version":12,"request_id":1,"request":{"kind":"create_workspace"}}
+```
 
-Aliases use `@n1`, `@n2`, and so on. They are valid only with the exact supplied packet and never
-persist. Packet reads revalidate version, digest, schema, identity domains, canonical ordering,
-limits, and all alias targets.
+Responses carry the same nonzero ID. Unknown/duplicate fields or variants, invalid IDs, wrong
+version, invalid UTF-8, trailing JSON, excessive input/output, and a second one-shot request reject.
+Input is limited to 8 MiB and output to 32 MiB. A semantic failure is a successfully delivered typed
+`error` response; inability to open authority or an indeterminate commit is transport/fatal.
 
-`agent context --known-digest DIGEST` rebuilds the requested capsule and returns exactly
-`{"version":2,"digest":"...","unchanged":true}` when the digest matches. A stale, corrupt,
-foreign, cross-purpose, or differently bounded digest cannot produce unchanged. This saves output
-bytes but is not authority or a semantic cache.
+`src/contract.rs` is the one executable schema owner. `src/machine.rs` owns strict JSON and
+fingerprinting only; `src/machine_contract.rs` owns shared descriptors. The active schema identity is
+`lkjscript-machine-schema-v12`. Schema requests return a compact manifest, at most 16 named roots
+with deterministic dependency closure, the explicit full contract, or an exact `unchanged` result
+for a known digest. Unknown, duplicate, empty, or excessive roots reject. Ordinary project work gets
+the active schema digest from orientation and does not need a global schema dump.
+
+The raw `--state DIR rpc|session` grammar is intentionally distinct from project commands. Its
+session accepts one protocol-v12 envelope per line and shares exact one-shot semantics. It has no
+project locator, target build configuration, or automatic friendly selector resolution. The former
+`agent` adapter was removed rather than retained as an alias.
+
+## Orientation
+
+Project orientation binds contract, workspace, revision, snapshot, revision-record digest, active
+machine-schema digest, bounded target summaries, command roots, and explicit omissions into one
+domain-separated digest. It omits full graph, bodies, history, schema, target definitions, and
+artifacts. Supplying the exact digest returns `unchanged` only for the same project/revision/content;
+a foreign or stale digest returns changed facts. Status independently reports current exact
+authority, graph summary, target count, and health without building or testing.
+
+## Context capsules
+
+Context/workbench version 2 is a disposable exact observation. Its digest binds workspace,
+revision, schema, purpose, target set, optional comparison revision, requested bounds, all included
+facts, aliases, and omissions. Purposes are `orient`, `create`, `repair`, `refactor`, `debug`,
+`extend`, `delete`, and `review`; targeted purposes require exact targets.
+
+A capsule contains at most eight targets, at most 256 expanded nodes, bounded query pages, legal
+edit/expression codes, typed observations, completeness blockers, and explicit truncation. Encoded
+size is at most 4 MiB. Aliases are `@n1`, `@n2`, … and valid only with the exact capsule. Decode
+revalidates version, digest, schema, domains, ordering, limits, and every target. A known context
+digest returns `unchanged` only when all these facts agree.
+
+Project `context` can select current or historical revision and returns a project envelope around
+the capsule. `change --document --context FILE` accepts either raw capsule JSON or the exact saved
+project context envelope and extracts only a validated changed capsule. A stale/foreign/malformed or
+unchanged envelope cannot authorize aliases.
 
 ## Editable semantic documents
 
-Editable semantic document version 1 is the preferred proposal surface. Its root is `document`; the
-old `plan` root is invalid. Required fields are:
+Editable semantic document version 1 is one proposal surface. The required root is `document`; old
+`plan` rejects:
 
 ```text
 document {
   version 1
-  schema DIGEST
-  workspace WORKSPACE
+  schema "DIGEST"
+  packet "DIGEST"
+  workspace "WORKSPACE"
   base_revision REVISION
-  scope (workspace) | (function NODE)
+  scope (workspace)
   edits [ ... ]
   return_symbols [ ... ]
 }
 ```
 
-`packet DIGEST` is required when aliases or packet-bound scope are used. Commit documents may carry
-one idempotency key; validate-only documents may not. Function scope accepts exactly one
-`replace_function_body` targeting the durable function included in the packet. Workspace scope
-accepts the closed transaction vocabulary.
+`packet` is required when aliases or packet-bound scope are used. Commit may carry one idempotency
+key; validation may not. Function scope accepts one complete body replacement for the exact packet
+target. Workspace scope accepts the closed transaction vocabulary, including build-target edits.
 
-The grammar uses `{ field value ... }`, `[ value ... ]`, tagged `(kind payload)` or `(kind)`, JSON
-strings, booleans, null, canonical integers, bare identifier strings, and packet aliases. Commas,
-semicolons, equals signs, comments, duplicate fields, unknown fields, multiple roots, and trailing
-input reject.
+The grammar uses `{ field value ... }`, `[ value ... ]`, tagged `(kind payload)` / `(kind)`, JSON
+strings, booleans, null, canonical integers, bare identifiers, and aliases. Commas, comments,
+semicolons, equals, duplicate/unknown fields, parser recovery, multiple roots, and trailing input
+reject. Limits are 8 MiB, 32 nesting frames, 65,536 parsed items, and 512 diagnostic bytes, checked
+before corresponding work. Deterministic byte/line/column diagnostics name the exact owner and legal
+alternatives where available.
 
-The parser is limited to 8 MiB, 32 nesting frames, 65,536 parsed items, and 512-byte diagnostics. It
-tracks deterministic byte/line/column locations, uses explicit parser frames, and checks size before
-unbounded allocation. Parsing produces a closed typed proposal; formatting and syntax are discarded.
+Parsing discards syntax and produces typed transaction operations. The document declares every
+edit; context is read-only; omission never deletes. Stale base/schema/packet, foreign alias, local
+escape, wrong scope, implicit durable-hole deletion, invalid target reference, and response overflow
+reject before publication. Formatting or selector spelling that normalizes to current meaning is
+semantic no-change.
 
-The document declares all editable content. Packet context is read-only. Omission never implies
-deletion. Stale base, stale schema, packet mismatch, foreign alias, local-reference escape, wrong
-scope, and implicit deletion of a durable hole anchor reject before publication.
+## History and review projections
 
-`agent document --packet FILE` renders one complete function target. Render-parse without edits is a
-semantic no-op. The renderer refuses a whole-body replacement when the body contains a durable hole
-anchor, because omission cannot erase continuity.
+`log` returns descending compact revision summaries and an exact `next_before` continuation.
+`show` expands one canonical record. `diff` binds both endpoint snapshots, direction, exact digest,
+total count, offset/limit, changes, and continuation offset. `inspect` returns selector spelling,
+resolved durable ID, qualified name, typed facts/summary, and exact selected revision. Friendly
+ambiguity is `invalid_query` with bounded canonical candidates; no first-match fallback exists.
 
-Run uses a separate `run { ... }` document naming exact workspace, revision, entry, arguments, and
-policy. It never implies current HEAD.
+Project apply returns the full semantic diff and target impact needed for immediate review. It does
+not return a context delta. Known-digest context reuse and one persistent foreground session are the
+retained economy mechanisms; apply-and-context-delta remains deferred until equal-task evidence
+shows enough benefit to justify its response/idempotency complexity.
 
-## Review and output policy
+## Distribution and runtime command families
 
-`agent view` renders a deterministic read-only semantic review. `agent diff` renders the exact
-change set carried by a review packet. Durable and function-local identities are labelled
-separately; full IDs are optional. Output is terminal-safe and bounded to 4 MiB.
-
-Successful apply returns the compact transaction receipt. It does not yet return a context delta;
-the exact known-digest mechanism avoids unchanged serialization. Apply-and-refresh remains a future
-gate if measured request savings justify response preflight and idempotency complexity.
+`release validate|inspect|test` consumes immutable release-format-2 artifacts. `app
+validate|inspect|test|run|stream` consumes immutable application-format-5 artifacts. Release and
+application construction occurs only through project targets; removed command-local `build`
+predecessors reject. Instance contract 3 and runtime contract 2 are specified separately. These
+records remain absent from the global workspace catalogue where they have an independent typed
+owner.
 
 ## Version rejection
 
-Protocol/JSON 10 and older, machine schema v10 and older, context packet 1, release command/artifact
-version 1 and older, application command/artifact version 4 and older, instance command/artifact
-version 2 and older, runtime session versions other than 2, and the `plan` edit root reject. No
-alias, fallback, compatibility reader, daemon transport, or migration mode remains.
+Protocol 11 and older, machine schema v11 and older, project/marker/change/session versions other
+than 1, revision-record versions other than 1, context packet 1, workspace format 7,
+`lkjscript-tsm007`, `LKJHEAD9`, release format 1, application format 4, instance format 2, runtime
+session versions other than 2, the `agent` command, command-local release/application build commands,
+and the `plan` document root reject. There is no alias, fallback, edition, migration mode, or daemon
+transport.

@@ -42,6 +42,7 @@ pub(crate) fn producer_fixture(
             d(1),
             Node::WorkspaceRoot {
                 packages: vec![d(2)],
+                targets: Vec::new(),
             },
         ),
         (
@@ -329,6 +330,7 @@ pub(crate) fn consumer_fixture(
             d(1),
             Node::WorkspaceRoot {
                 packages: vec![d(2)],
+                targets: Vec::new(),
             },
         ),
         (
@@ -557,6 +559,7 @@ pub(crate) fn pair_consumer_fixture(
             d(1),
             Node::WorkspaceRoot {
                 packages: vec![d(2)],
+                targets: Vec::new(),
             },
         ),
         (

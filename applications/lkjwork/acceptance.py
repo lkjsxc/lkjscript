@@ -262,6 +262,7 @@ def execute(binary):
             ["context", "--maximum-tasks", "5", "--maximum-notes", "5"],
             ["export", "--limit", "20"],
             ["history", "--limit", "20"],
+            ["why", "#5"],
         ]
         query_results = [
             project_machine(installed, root, project, arguments) for arguments in queries
@@ -271,6 +272,34 @@ def execute(binary):
             "a read-only product operation reported publication",
         )
         require(authority_digest(project) == before_queries, "a pure query changed authority bytes")
+        why = result_value(query_results[7])
+        require(
+            why
+            == {
+                "kind": "why",
+                "task": 5,
+                "phase": "planned",
+                "archived": False,
+                "manual_hold": None,
+                "actionable": False,
+                "blockers": [2, 3, 4],
+            },
+            "why did not return the exact application-owned explanation",
+        )
+        missing_why = project_machine(
+            installed, root, project, ["why", "#999"], DOMAIN_CONFLICT
+        )
+        require(
+            result_value(missing_why)
+            == {"kind": "not_found", "task": 999, "code": "task_not_found"},
+            "why missing-task outcome is not typed",
+        )
+        human_why = run(
+            [installed, "--project", project, "why", "#5"], cwd=root
+        ).stdout.decode("utf-8")
+        require("actionable=false" in human_why, "human why omitted actionability")
+        require("blockers=#2, #3, #4" in human_why, "human why omitted blockers")
+        require(authority_digest(project) == before_queries, "why changed authority bytes")
         known_digest = query_results[1]["result"]["result_digest"]
         unchanged = project_machine(
             installed,
@@ -398,6 +427,7 @@ def execute(binary):
             "dogfood_result": result_value(dogfood),
             "query_result_digest": known_digest,
             "query_authority_digest": before_queries,
+            "why_result": why,
             "attachment_host_operations": attached["result"]["host"],
             "unknown_attachment_host_operations": host,
             "backup": backup_summary,

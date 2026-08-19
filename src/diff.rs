@@ -86,6 +86,12 @@ pub enum ChangeKind {
         removed_items: u64,
         modified_items: u64,
     },
+    BuildTargetChanged {
+        before_kind: crate::target::BuildTargetKind,
+        after_kind: crate::target::BuildTargetKind,
+        before_digest: String,
+        after_digest: String,
+    },
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
@@ -118,6 +124,7 @@ impl ChangeKind {
             Self::OperationRefined { .. } => 10,
             Self::AllocatedAndTombstoned => 11,
             Self::FunctionBodyChanged { .. } => 12,
+            Self::BuildTargetChanged { .. } => 13,
         }
     }
 }
@@ -318,6 +325,16 @@ fn hash_change_kind(hasher: &mut blake3::Hasher, kind: &ChangeKind) {
             hasher.update(&added_items.to_le_bytes());
             hasher.update(&removed_items.to_le_bytes());
             hasher.update(&modified_items.to_le_bytes());
+        }
+        ChangeKind::BuildTargetChanged {
+            before_kind,
+            after_kind,
+            before_digest,
+            after_digest,
+        } => {
+            hasher.update(&[before_kind.stable_tag(), after_kind.stable_tag()]);
+            hash_bytes(hasher, before_digest.as_bytes());
+            hash_bytes(hasher, after_digest.as_bytes());
         }
     }
 }
@@ -585,6 +602,30 @@ fn classify_change(id: NodeId, old: &Node, new: &Node, changes: &mut Vec<Change>
             kind: ChangeKind::ContainmentChanged {
                 before_count: u64::try_from(old.owned_child_count()).unwrap_or(u64::MAX),
                 after_count: u64::try_from(new.owned_child_count()).unwrap_or(u64::MAX),
+            },
+        });
+    }
+    if let (
+        Node::BuildTarget {
+            definition: before, ..
+        },
+        Node::BuildTarget {
+            definition: after, ..
+        },
+    ) = (old, new)
+        && before != after
+        && let (Ok(before_digest), Ok(after_digest)) = (
+            crate::target::definition_digest(before),
+            crate::target::definition_digest(after),
+        )
+    {
+        changes.push(Change {
+            node: id,
+            kind: ChangeKind::BuildTargetChanged {
+                before_kind: before.kind(),
+                after_kind: after.kind(),
+                before_digest,
+                after_digest,
             },
         });
     }

@@ -12,6 +12,7 @@ use crate::interpret::{RunPolicy, RuntimeValue};
 use crate::schema::Node;
 use serde::de::{self, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::fmt;
 use std::path::Path;
@@ -519,6 +520,7 @@ pub struct PreparedRelease {
     decoded: DecodedRelease,
     inspection: ReleaseInspection,
     tests: ReleaseTestReport,
+    source_items: BTreeMap<NodeId, ReleaseItemId>,
 }
 
 impl PreparedRelease {
@@ -528,6 +530,16 @@ impl PreparedRelease {
 
     pub const fn release_id(&self) -> ReleaseId {
         self.decoded.id
+    }
+
+    pub fn source_item(&self, source: NodeId) -> Result<ReleaseItemId> {
+        self.source_items.get(&source).copied().ok_or_else(|| {
+            LkError::new(
+                ErrorCode::NodeNotFound,
+                "source item is outside the exact release target closure",
+            )
+            .for_node(source)
+        })
     }
 
     pub fn receipt(&self, published: bool) -> ReleaseBuildReceipt {
@@ -573,7 +585,7 @@ pub(crate) fn prepare(
         .at_revision(request.revision));
     }
     let dependencies = decode_supplied(supplied_dependency_bytes)?;
-    let projected = canonical::project(source, request, &dependencies)?;
+    let (projected, source_items) = canonical::project(source, request, &dependencies)?;
     let bytes = codec::encode(&projected)?;
     let decoded = codec::decode(&bytes)?;
     let graph = graph::ReleaseGraph::new(decoded.clone(), dependencies)?;
@@ -604,6 +616,7 @@ pub(crate) fn prepare(
         decoded,
         inspection,
         tests,
+        source_items,
     })
 }
 
@@ -638,7 +651,7 @@ fn decode_supplied(bytes: &[Vec<u8>]) -> Result<Vec<DecodedRelease>> {
     bytes.iter().map(|bytes| codec::decode(bytes)).collect()
 }
 
-fn inspection(release: &DecodedRelease) -> Result<ReleaseInspection> {
+pub(crate) fn inspection(release: &DecodedRelease) -> Result<ReleaseInspection> {
     let exports = release
         .exports
         .iter()

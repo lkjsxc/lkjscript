@@ -1,54 +1,83 @@
 use lkjscript::application::{
     self, ApplicationDigest, ApplicationFieldValue, ApplicationTarget, ApplicationValue,
 };
-use lkjscript::release::{ReleaseId, ReleaseItemId};
+use lkjscript::release::{ReleaseId, ReleaseItemId, ReleaseSignatureInspection};
 use lkjscript::schema::{ByteString, MAXIMUM_BYTE_STRING_BYTES, MAXIMUM_TEXT_BYTES, TextString};
-use serde::Deserialize;
 use std::collections::BTreeMap;
 
 pub const APPLICATION_BYTES: &[u8] = include_bytes!("../../../applications/lkjwork/lkjwork.lkja");
-const BINDINGS_BYTES: &[u8] = include_bytes!("../../../applications/lkjwork/bindings.json");
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct BindingFile {
-    contract_version: u16,
+#[derive(Clone, Debug)]
+struct ArtifactInterface {
     application_digest: ApplicationDigest,
     release: ReleaseId,
     types: BTreeMap<String, TypeBinding>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug)]
 struct TypeBinding {
-    target: u64,
-    #[serde(default)]
-    fields: BTreeMap<String, u64>,
-    #[serde(default)]
-    variants: BTreeMap<String, u64>,
+    target: ReleaseItemId,
+    fields: BTreeMap<String, ReleaseItemId>,
+    variants: BTreeMap<String, ReleaseItemId>,
 }
 
 #[derive(Clone, Debug)]
 pub struct Bindings {
-    file: BindingFile,
+    interface: ArtifactInterface,
 }
 
 impl Bindings {
     pub fn load() -> Result<Self, String> {
-        let file: BindingFile =
-            lkjscript::instance::strict_json(BINDINGS_BYTES, "lkjwork bindings")
-                .map_err(|error| error.to_string())?;
-        if file.contract_version != 1 {
-            return Err(
-                "embedded lkjwork bindings have an unsupported contract version".to_owned(),
-            );
-        }
         let inspection =
-            application::inspect(APPLICATION_BYTES).map_err(|error| error.to_string())?;
-        if inspection.digest != file.application_digest || inspection.root_release != file.release {
-            return Err("embedded lkjwork application and generated bindings disagree".to_owned());
+            application::inspect_interface(APPLICATION_BYTES).map_err(|error| error.to_string())?;
+        let release = inspection.root_release.release;
+        let mut types = BTreeMap::new();
+        for export in inspection.root_release.exports {
+            let mut fields = BTreeMap::new();
+            let mut variants = BTreeMap::new();
+            match export.signature {
+                ReleaseSignatureInspection::ProductType {
+                    fields: exported_fields,
+                } => {
+                    fields.extend(
+                        exported_fields
+                            .into_iter()
+                            .map(|field| (field.name, field.target)),
+                    );
+                }
+                ReleaseSignatureInspection::SumType {
+                    variants: exported_variants,
+                } => {
+                    variants.extend(
+                        exported_variants
+                            .into_iter()
+                            .map(|variant| (variant.name, variant.target)),
+                    );
+                }
+                ReleaseSignatureInspection::Function { .. }
+                | ReleaseSignatureInspection::SequenceType { .. } => {}
+            }
+            if types
+                .insert(
+                    export.name,
+                    TypeBinding {
+                        target: export.target,
+                        fields,
+                        variants,
+                    },
+                )
+                .is_some()
+            {
+                return Err("embedded lkjwork application has duplicate export names".to_owned());
+            }
         }
-        Ok(Self { file })
+        Ok(Self {
+            interface: ArtifactInterface {
+                application_digest: inspection.application,
+                release,
+                types,
+            },
+        })
     }
 
     pub const fn application_bytes(&self) -> &'static [u8] {
@@ -56,16 +85,16 @@ impl Bindings {
     }
 
     pub fn application_digest(&self) -> ApplicationDigest {
-        self.file.application_digest
+        self.interface.application_digest
     }
 
     pub fn release(&self) -> ReleaseId {
-        self.file.release
+        self.interface.release
     }
 
     pub fn target(&self, name: &str) -> Result<ApplicationTarget, String> {
         let item = self
-            .file
+            .interface
             .types
             .get(name)
             .ok_or_else(|| format!("lkjwork binding type {name} is missing"))?
@@ -75,7 +104,7 @@ impl Bindings {
 
     pub fn field(&self, owner: &str, name: &str) -> Result<ApplicationTarget, String> {
         let item = self
-            .file
+            .interface
             .types
             .get(owner)
             .and_then(|binding| binding.fields.get(name))
@@ -86,7 +115,7 @@ impl Bindings {
 
     pub fn variant(&self, owner: &str, name: &str) -> Result<ApplicationTarget, String> {
         let item = self
-            .file
+            .interface
             .types
             .get(owner)
             .and_then(|binding| binding.variants.get(name))
@@ -96,27 +125,27 @@ impl Bindings {
     }
 
     pub fn variant_name(&self, owner: &str, target: ApplicationTarget) -> Option<&str> {
-        if target.release != self.file.release {
+        if target.release != self.interface.release {
             return None;
         }
-        self.file
+        self.interface
             .types
             .get(owner)?
             .variants
             .iter()
-            .find_map(|(name, item)| (target.item.get() == *item).then_some(name.as_str()))
+            .find_map(|(name, item)| (target.item == *item).then_some(name.as_str()))
     }
 
     pub fn field_name(&self, owner: &str, target: ApplicationTarget) -> Option<&str> {
-        if target.release != self.file.release {
+        if target.release != self.interface.release {
             return None;
         }
-        self.file
+        self.interface
             .types
             .get(owner)?
             .fields
             .iter()
-            .find_map(|(name, item)| (target.item.get() == *item).then_some(name.as_str()))
+            .find_map(|(name, item)| (target.item == *item).then_some(name.as_str()))
     }
 
     pub fn text(&self, value: &str) -> Result<ApplicationValue, String> {
@@ -222,7 +251,7 @@ impl Bindings {
         }
         if result.len()
             != self
-                .file
+                .interface
                 .types
                 .get(owner)
                 .map_or(0, |binding| binding.fields.len())
@@ -274,10 +303,10 @@ impl Bindings {
         Ok(elements)
     }
 
-    fn application_target(&self, item: u64) -> Result<ApplicationTarget, String> {
+    fn application_target(&self, item: ReleaseItemId) -> Result<ApplicationTarget, String> {
         Ok(ApplicationTarget {
-            release: self.file.release,
-            item: ReleaseItemId::new(item).map_err(|error| error.to_string())?,
+            release: self.interface.release,
+            item,
         })
     }
 }

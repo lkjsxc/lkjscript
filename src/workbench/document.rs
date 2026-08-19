@@ -38,6 +38,26 @@ pub enum DocumentErrorCode {
     Shape,
 }
 
+impl DocumentErrorCode {
+    pub const fn machine_name(self) -> &'static str {
+        match self {
+            Self::InvalidUtf8 => "invalid_utf8",
+            Self::InputTooLarge => "input_too_large",
+            Self::Syntax => "syntax",
+            Self::DepthExceeded => "depth_exceeded",
+            Self::ItemLimitExceeded => "item_limit_exceeded",
+            Self::DuplicateField => "duplicate_field",
+            Self::UnknownAlias => "unknown_alias",
+            Self::PacketRequired => "packet_required",
+            Self::PacketMismatch => "packet_mismatch",
+            Self::UnsupportedVersion => "unsupported_version",
+            Self::StaleSchema => "stale_schema",
+            Self::ScopeMismatch => "scope_mismatch",
+            Self::Shape => "shape",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct DocumentError {

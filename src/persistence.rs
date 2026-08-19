@@ -3,22 +3,29 @@ use crate::codec::{Reader, Writer};
 use crate::diff;
 use crate::error::{ErrorCode, LkError, Result};
 use crate::graph::{Snapshot, Workspace};
+use crate::history::{
+    HistoryPage, RestorationReceipt, RevisionPublicationOutcome, RevisionRecord,
+    RevisionRecordInspection,
+};
 use crate::ids::{
-    ChangeDigest, DraftSymbol, IdempotencyKey, NodeId, Revision, SnapshotHash, WorkspaceId,
+    ChangeDigest, DraftSymbol, IdempotencyKey, NodeId, Revision, RevisionRecordDigest,
+    SnapshotHash, WorkspaceId,
 };
 use crate::machine;
 use crate::query;
-use crate::transaction::{ApplyTransactionRequest, TransactionMode, TransactionReceipt};
+use crate::transaction::{
+    ApplyTransactionRequest, PreparedTransaction, TransactionMode, TransactionReceipt,
+};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
-use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, OnceLock};
 
-const HEAD_MAGIC: [u8; 8] = *b"LKJHEAD9";
-const HEAD_CHECKSUM_DOMAIN: &str = "lkjscript.workspace-head.checksum.v9";
+const HEAD_MAGIC: [u8; 8] = *b"LKJHDA10";
+const HEAD_CHECKSUM_DOMAIN: &str = "lkjscript.workspace-head.checksum.v10";
 pub const MAXIMUM_HEAD_BYTES: usize = 16 * 1024;
 static TEMP_SERIAL: AtomicU64 = AtomicU64::new(1);
 
@@ -31,12 +38,16 @@ pub(crate) struct IdempotencyRecord {
 
 struct PreparedPublication {
     artifact_bytes: Vec<u8>,
+    record_bytes: Vec<u8>,
+    record_digest: RevisionRecordDigest,
     head_bytes: Vec<u8>,
 }
 
 pub(crate) struct DurableWorkspace {
     directory: PathBuf,
     workspace: Workspace,
+    retained_snapshots: BTreeMap<Revision, OnceLock<Arc<Snapshot>>>,
+    records: BTreeMap<Revision, RevisionRecordInspection>,
     idempotency: Option<IdempotencyRecord>,
 }
 
@@ -74,17 +85,40 @@ impl DurableWorkspace {
             let _ = fs::remove_dir_all(&staging_directory);
             return Err(error);
         }
-        let mut durable = Self {
-            directory: staging_directory.clone(),
-            workspace,
-            idempotency: None,
-        };
-        if let Err(error) =
-            durable.publish_snapshot(durable.workspace.head()?, None, PublicationStep::None)
-        {
+        if let Err(error) = create_private_directory(&staging_directory.join("records")) {
             let _ = fs::remove_dir_all(&staging_directory);
             return Err(error);
         }
+        let genesis = RevisionRecord::genesis(workspace.head()?);
+        let genesis_digest = crate::history::digest(&genesis)?;
+        let genesis_snapshot = Arc::clone(workspace.head()?);
+        let retained_snapshots = BTreeMap::from([(
+            Revision::INITIAL,
+            initialized_snapshot_slot(genesis_snapshot),
+        )]);
+        let mut durable = Self {
+            directory: staging_directory.clone(),
+            workspace,
+            retained_snapshots,
+            records: BTreeMap::new(),
+            idempotency: None,
+        };
+        if let Err(error) = durable.publish_snapshot(
+            durable.workspace.head()?,
+            &genesis,
+            None,
+            PublicationStep::None,
+        ) {
+            let _ = fs::remove_dir_all(&staging_directory);
+            return Err(error);
+        }
+        durable.records.insert(
+            Revision::INITIAL,
+            RevisionRecordInspection {
+                digest: genesis_digest,
+                record: genesis,
+            },
+        );
         if let Err(error) = fs::rename(&staging_directory, &final_directory) {
             let _ = fs::remove_dir_all(&staging_directory);
             return Err(error.into());
@@ -143,136 +177,9 @@ impl DurableWorkspace {
             error.workspace = Some(id);
             error
         })?;
-        let (head_revision, head_hash, idempotency) = decode_head(&head_bytes)?;
-        let revisions_directory = directory.join("revisions");
-        reject_symlink(&revisions_directory)?;
-        let mut snapshots = BTreeMap::new();
-        let mut removed_orphans = false;
-        for entry in fs::read_dir(&revisions_directory)? {
-            let entry = entry?;
-            let file_type = entry.file_type()?;
-            if file_type.is_symlink() {
-                return Err(LkError::new(
-                    ErrorCode::ArtifactCorrupt,
-                    "workspace revisions directory contains a symlink",
-                )
-                .for_workspace(id));
-            }
-            if !file_type.is_file() {
-                return Err(LkError::new(
-                    ErrorCode::ArtifactCorrupt,
-                    "workspace revisions directory contains a non-file entry",
-                )
-                .for_workspace(id));
-            }
-            let file_name = entry.file_name();
-            let Some(file_name) = file_name.to_str() else {
-                return Err(LkError::new(
-                    ErrorCode::ArtifactCorrupt,
-                    "workspace revision has a non-UTF-8 file name",
-                )
-                .for_workspace(id));
-            };
-            if is_temporary_file_name(file_name) {
-                fs::remove_file(entry.path())?;
-                removed_orphans = true;
-                continue;
-            }
-            let Some(stem) = file_name.strip_suffix(".lkjscript") else {
-                return Err(LkError::new(
-                    ErrorCode::ArtifactCorrupt,
-                    "workspace revisions directory contains an unknown file",
-                )
-                .for_workspace(id));
-            };
-            let revision_value = stem.parse::<u64>().map_err(|_| {
-                LkError::new(
-                    ErrorCode::ArtifactCorrupt,
-                    "workspace revision file name is invalid",
-                )
-                .for_workspace(id)
-            })?;
-            let revision = Revision::new(revision_value);
-            if file_name != revision_file_name(revision) {
-                return Err(LkError::new(
-                    ErrorCode::ArtifactCorrupt,
-                    "workspace revision file name is not canonical",
-                )
-                .for_workspace(id)
-                .at_revision(revision));
-            }
-            if revision > head_revision {
-                fs::remove_file(entry.path())?;
-                removed_orphans = true;
-                continue;
-            }
-            let maximum_artifact_bytes =
-                u64::try_from(artifact::DecodePolicy::default().maximum_artifact_bytes)
-                    .unwrap_or(u64::MAX);
-            if entry.metadata()?.len() > maximum_artifact_bytes {
-                return Err(LkError::new(
-                    ErrorCode::PolicyExceeded,
-                    "revision artifact exceeds decoder byte policy",
-                )
-                .for_workspace(id)
-                .at_revision(revision));
-            }
-            let bytes = read_bounded_regular_file(
-                &entry.path(),
-                artifact::DecodePolicy::default().maximum_artifact_bytes,
-                "revision artifact exceeds decoder byte policy",
-            )?;
-            let snapshot = artifact::decode(&bytes)?;
-            if snapshot.workspace() != id || snapshot.revision() != revision {
-                return Err(LkError::new(
-                    ErrorCode::ArtifactCorrupt,
-                    "revision artifact identity disagrees with its durable path",
-                )
-                .for_workspace(id)
-                .at_revision(revision));
-            }
-            if snapshots.insert(revision, Arc::new(snapshot)).is_some() {
-                return Err(LkError::new(
-                    ErrorCode::ArtifactCorrupt,
-                    "workspace contains duplicate revision artifacts",
-                )
-                .for_workspace(id)
-                .at_revision(revision));
-            }
-        }
-        if removed_orphans {
-            sync_directory(&revisions_directory)?;
-        }
-        let expected_count = head_revision.get().checked_add(1).ok_or_else(|| {
-            LkError::new(
-                ErrorCode::ArtifactCorrupt,
-                "workspace head revision cannot form a retained history length",
-            )
-            .for_workspace(id)
-        })?;
-        let actual_count = u64::try_from(snapshots.len()).map_err(|_| {
-            LkError::new(
-                ErrorCode::ArtifactCorrupt,
-                "retained snapshot count overflows canonical representation",
-            )
-            .for_workspace(id)
-        })?;
-        if actual_count != expected_count {
-            return Err(LkError::new(
-                ErrorCode::ArtifactCorrupt,
-                "workspace retained revision history has a gap",
-            )
-            .for_workspace(id)
-            .at_revision(head_revision));
-        }
-        let head_snapshot = snapshots.get(&head_revision).ok_or_else(|| {
-            LkError::new(
-                ErrorCode::ArtifactCorrupt,
-                "workspace HEAD names a missing revision artifact",
-            )
-            .for_workspace(id)
-            .at_revision(head_revision)
-        })?;
+        let (head_revision, head_hash, head_record, idempotency) = decode_head(&head_bytes)?;
+        let retained_snapshots = scan_revision_artifacts(&directory, id, head_revision)?;
+        let head_snapshot = load_snapshot_file(&directory, id, head_revision)?;
         if head_snapshot.hash() != head_hash {
             return Err(LkError::new(
                 ErrorCode::ArtifactCorrupt,
@@ -281,15 +188,50 @@ impl DurableWorkspace {
             .for_workspace(id)
             .at_revision(head_revision));
         }
-        if let Some(record) = &idempotency {
-            validate_idempotency_record(record, id, head_revision, &snapshots)?;
+        retained_snapshots
+            .get(&head_revision)
+            .ok_or_else(|| {
+                LkError::new(
+                    ErrorCode::ArtifactCorrupt,
+                    "workspace HEAD names a missing revision artifact",
+                )
+                .for_workspace(id)
+                .at_revision(head_revision)
+            })?
+            .set(Arc::clone(&head_snapshot))
+            .map_err(|_| {
+                LkError::new(
+                    ErrorCode::ArtifactCorrupt,
+                    "workspace HEAD snapshot was initialized more than once",
+                )
+                .for_workspace(id)
+                .at_revision(head_revision)
+            })?;
+        let records = load_revision_records(&directory, id, head_revision)?;
+        if records.get(&head_revision).is_none_or(|record| {
+            record.digest != head_record || record.record.result_snapshot != head_hash
+        }) {
+            return Err(LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "workspace HEAD record digest disagrees with immutable history",
+            )
+            .for_workspace(id)
+            .at_revision(head_revision));
         }
-        let workspace = Workspace::from_snapshots(id, head_revision, snapshots)?;
-        Ok(Self {
+        let workspace = Workspace::from_head_snapshot(id, head_revision, head_snapshot)?;
+        let durable = Self {
             directory,
             workspace,
+            retained_snapshots,
+            records,
             idempotency,
-        })
+        };
+        if let Some(record) = &durable.idempotency {
+            let base = durable.snapshot(record.receipt.base_revision)?;
+            let published = durable.snapshot(record.receipt.revision)?;
+            validate_idempotency_record(record, id, head_revision, base, published)?;
+        }
+        Ok(durable)
     }
 
     pub(crate) const fn id(&self) -> WorkspaceId {
@@ -297,10 +239,247 @@ impl DurableWorkspace {
     }
 
     pub(crate) fn snapshot(&self, revision: Revision) -> Result<&Arc<Snapshot>> {
-        self.workspace.snapshot(revision)
+        let slot = self.retained_snapshots.get(&revision).ok_or_else(|| {
+            LkError::new(
+                ErrorCode::RevisionNotFound,
+                "requested revision is not retained",
+            )
+            .for_workspace(self.id())
+            .at_revision(revision)
+        })?;
+        if slot.get().is_none() {
+            let snapshot = load_snapshot_file(&self.directory, self.id(), revision)?;
+            let expected = self.record(revision)?.record.result_snapshot;
+            if snapshot.hash() != expected {
+                return Err(LkError::new(
+                    ErrorCode::ArtifactCorrupt,
+                    "revision record snapshot digest disagrees with its artifact",
+                )
+                .for_workspace(self.id())
+                .at_revision(revision));
+            }
+            let _ = slot.set(snapshot);
+        }
+        slot.get().ok_or_else(|| {
+            LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "retained snapshot could not be initialized",
+            )
+            .for_workspace(self.id())
+            .at_revision(revision)
+        })
     }
 
-    #[cfg(test)]
+    pub(crate) fn record(&self, revision: Revision) -> Result<&RevisionRecordInspection> {
+        self.records.get(&revision).ok_or_else(|| {
+            LkError::new(
+                ErrorCode::RevisionNotFound,
+                "requested revision record is not retained",
+            )
+            .for_workspace(self.id())
+            .at_revision(revision)
+        })
+    }
+
+    /// Reconstructs and validates every retained semantic revision and every revision record.
+    /// Ordinary open validates the selected snapshot plus the complete compact record chain; this
+    /// method is the explicit full-history oracle used by deep doctor.
+    pub(crate) fn deep_verify(&self) -> Result<()> {
+        self.verify_live_head()?;
+        let mut snapshots = BTreeMap::new();
+        for revision in self.retained_snapshots.keys().copied() {
+            snapshots.insert(revision, Arc::clone(self.snapshot(revision)?));
+        }
+        let reconstructed =
+            Workspace::from_snapshots(self.id(), self.workspace.head_revision(), snapshots)?;
+        let mut prior_snapshot = None;
+        let mut prior_record = None;
+        for revision in self.retained_snapshots.keys() {
+            let snapshot = reconstructed.snapshot(*revision)?;
+            let inspection = self.record(*revision)?;
+            inspection
+                .record
+                .validate_against(prior_snapshot, snapshot, prior_record)?;
+            prior_snapshot = Some(snapshot.as_ref());
+            prior_record = Some(inspection.digest);
+        }
+        if let Some(record) = &self.idempotency {
+            let base = reconstructed.snapshot(record.receipt.base_revision)?;
+            let published = reconstructed.snapshot(record.receipt.revision)?;
+            validate_idempotency_record(
+                record,
+                self.id(),
+                self.workspace.head_revision(),
+                base,
+                published,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Prepares an exact candidate against the live selected HEAD without publishing it. This is
+    /// used by the project surface to return the same semantic preview as validation.
+    pub(crate) fn prepare_transaction(
+        &self,
+        request: &ApplyTransactionRequest,
+    ) -> Result<PreparedTransaction> {
+        self.verify_live_head()?;
+        self.workspace.prepare_transaction(request)
+    }
+
+    pub(crate) fn history_page(&self, before: Option<Revision>, limit: u32) -> Result<HistoryPage> {
+        if limit == 0 || limit > crate::query::MAX_PAGE_ITEMS {
+            return Err(LkError::new(
+                ErrorCode::PolicyExceeded,
+                "history page limit must be within the public page policy",
+            )
+            .for_workspace(self.id()));
+        }
+        let head = self.workspace.head_revision();
+        let start = before.unwrap_or_else(|| head.next().unwrap_or(head));
+        if start > head.next().unwrap_or(head) {
+            return Err(LkError::new(
+                ErrorCode::RevisionNotFound,
+                "history page starts beyond the current revision",
+            )
+            .for_workspace(self.id())
+            .at_revision(start));
+        }
+        let records = self
+            .records
+            .range(..start)
+            .rev()
+            .take(limit as usize)
+            .map(|(_, record)| crate::history::RevisionRecordSummary::from(record))
+            .collect::<Vec<_>>();
+        let next_before = records
+            .last()
+            .and_then(|record| (record.revision != Revision::INITIAL).then_some(record.revision));
+        Ok(HistoryPage {
+            workspace: self.id(),
+            head,
+            records,
+            next_before,
+        })
+    }
+
+    pub(crate) fn restore(
+        &mut self,
+        source_revision: Revision,
+        validate_only: bool,
+    ) -> Result<RestorationReceipt> {
+        self.verify_live_head()?;
+        let current = Arc::clone(self.workspace.head()?);
+        let source = Arc::clone(self.snapshot(source_revision)?);
+        if source.revision() == current.revision() {
+            return Err(LkError::new(
+                ErrorCode::NoChange,
+                "selected restoration revision is already current",
+            )
+            .for_workspace(self.id())
+            .at_revision(source_revision));
+        }
+        for (id, _) in source.nodes().filter(|(id, _)| id.is_durable()) {
+            if current.node(id).is_err() {
+                return Err(LkError::new(
+                    ErrorCode::DeleteBlocked,
+                    "restoration would resurrect a deleted durable identity",
+                )
+                .for_workspace(self.id())
+                .at_revision(source_revision)
+                .for_node(id));
+            }
+        }
+        let revision = current.revision().next().ok_or_else(|| {
+            LkError::new(
+                ErrorCode::PolicyExceeded,
+                "development revision sequence is exhausted",
+            )
+            .for_workspace(self.id())
+        })?;
+        let mut tombstones = current.tombstones.clone();
+        for (id, _) in current.nodes().filter(|(id, _)| id.is_durable()) {
+            if source.node(id).is_err() {
+                tombstones.insert(id.serial());
+            }
+        }
+        let candidate = Arc::new(Snapshot::from_parts(
+            self.id(),
+            revision,
+            current.root(),
+            current.next_serial(),
+            tombstones,
+            source.nodes.clone(),
+        )?);
+        let semantic_diff = diff::between(&current, &candidate);
+        if semantic_diff.changes.is_empty() {
+            return Err(LkError::new(
+                ErrorCode::NoChange,
+                "restoration would not change accepted semantic meaning",
+            )
+            .for_workspace(self.id())
+            .at_revision(source_revision));
+        }
+        let parent_record = self.record(current.revision())?.digest;
+        let accepted_change_set = restoration_change_digest(
+            self.id(),
+            source_revision,
+            current.revision(),
+            semantic_diff.digest,
+        );
+        let record = RevisionRecord::transition(
+            &current,
+            &candidate,
+            parent_record,
+            accepted_change_set,
+            RevisionPublicationOutcome::Restoration,
+        )?;
+        let publication =
+            self.preflight_publication(&candidate, &record, self.idempotency.as_ref())?;
+        let record_inspection = RevisionRecordInspection {
+            digest: publication.record_digest,
+            record,
+        };
+        let receipt = RestorationReceipt {
+            contract_version: crate::history::REVISION_RECORD_VERSION,
+            workspace: self.id(),
+            source_revision,
+            base_revision: current.revision(),
+            revision,
+            snapshot: candidate.hash(),
+            published: !validate_only,
+            semantic_diff,
+            revision_record: (!validate_only).then_some(record_inspection.clone()),
+        };
+        for response in [
+            serde_json::to_vec(&receipt),
+            serde_json::to_vec_pretty(&receipt),
+        ] {
+            let response = response.map_err(|error| {
+                LkError::new(
+                    ErrorCode::PolicyExceeded,
+                    format!("restoration receipt cannot be encoded: {error}"),
+                )
+            })?;
+            if response.len() > crate::machine::MAX_JSON_OUTPUT_BYTES.saturating_sub(1024) {
+                return Err(LkError::new(
+                    ErrorCode::PolicyExceeded,
+                    "restoration receipt exceeds project response policy",
+                ));
+            }
+        }
+        if validate_only {
+            return Ok(receipt);
+        }
+        self.publish_preflighted(&candidate, &publication, PublicationStep::None)?;
+        let retained_candidate = Arc::clone(&candidate);
+        self.workspace.publish(candidate)?;
+        self.retained_snapshots
+            .insert(revision, initialized_snapshot_slot(retained_candidate));
+        self.records.insert(revision, record_inspection);
+        Ok(receipt)
+    }
+
     pub(crate) fn head(&self) -> Result<&Arc<Snapshot>> {
         self.workspace.head()
     }
@@ -371,9 +550,22 @@ impl DurableWorkspace {
             .for_workspace(self.id()));
         }
         let prepared = self.workspace.prepare_transaction(request)?;
+        let base = self.workspace.snapshot(transaction.base_revision)?;
+        let parent_record = self.record(transaction.base_revision)?.digest;
+        let revision_record = RevisionRecord::transition(
+            base,
+            &prepared.snapshot,
+            parent_record,
+            ChangeDigest::from_bytes(fingerprint),
+            RevisionPublicationOutcome::Accepted,
+        )?;
         let response_bytes = preflight_receipt_response(request_id, &prepared.receipt)?;
         if transaction.mode == TransactionMode::ValidateOnly {
-            self.preflight_publication(&prepared.snapshot, self.idempotency.as_ref())?;
+            self.preflight_publication(
+                &prepared.snapshot,
+                &revision_record,
+                self.idempotency.as_ref(),
+            )?;
             return Ok((prepared.receipt, response_bytes));
         }
         let next_idempotency = transaction.idempotency_key.map(|key| IdempotencyRecord {
@@ -384,10 +576,23 @@ impl DurableWorkspace {
         let retained_idempotency = next_idempotency
             .clone()
             .or_else(|| self.idempotency.clone());
-        let publication =
-            self.preflight_publication(&prepared.snapshot, retained_idempotency.as_ref())?;
+        let publication = self.preflight_publication(
+            &prepared.snapshot,
+            &revision_record,
+            retained_idempotency.as_ref(),
+        )?;
         self.publish_preflighted(&prepared.snapshot, &publication, fault)?;
+        let record_inspection = RevisionRecordInspection {
+            digest: publication.record_digest,
+            record: revision_record,
+        };
+        let revision = prepared.snapshot.revision();
+        let retained_snapshot = Arc::clone(&prepared.snapshot);
         self.workspace.publish(prepared.snapshot)?;
+        self.retained_snapshots
+            .insert(revision, initialized_snapshot_slot(retained_snapshot));
+        self.records
+            .insert(record_inspection.record.revision, record_inspection);
         self.idempotency = retained_idempotency;
         Ok((prepared.receipt, response_bytes))
     }
@@ -397,13 +602,16 @@ impl DurableWorkspace {
             read_head_before_publication(&self.directory, Revision::new(1))?.ok_or_else(|| {
                 LkError::new(ErrorCode::ArtifactCorrupt, "live workspace HEAD is missing")
             })?;
-        let (revision, hash, idempotency) = decode_head(&bytes).map_err(|mut error| {
-            error.workspace = Some(self.id());
-            error
-        })?;
+        let (revision, hash, record_digest, idempotency) =
+            decode_head(&bytes).map_err(|mut error| {
+                error.workspace = Some(self.id());
+                error
+            })?;
         let expected = self.workspace.head()?;
+        let expected_record = self.record(expected.revision())?;
         if revision != expected.revision()
             || hash != expected.hash()
+            || record_digest != expected_record.digest
             || idempotency != self.idempotency
         {
             return Err(LkError::new(
@@ -419,6 +627,7 @@ impl DurableWorkspace {
     fn preflight_publication(
         &self,
         snapshot: &Snapshot,
+        record: &RevisionRecord,
         idempotency: Option<&IdempotencyRecord>,
     ) -> Result<PreparedPublication> {
         let artifact_bytes = artifact::encode(snapshot)?;
@@ -439,9 +648,26 @@ impl DurableWorkspace {
             .for_workspace(snapshot.workspace())
             .at_revision(snapshot.revision()));
         }
-        let head_bytes = encode_head(snapshot.revision(), snapshot.hash(), idempotency)?;
+        let record_bytes = crate::history::encode(record)?;
+        let (decoded_record, record_digest) = crate::history::decode(&record_bytes)?;
+        if decoded_record != *record {
+            return Err(LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "encoded revision record failed persistence round-trip preflight",
+            )
+            .for_workspace(snapshot.workspace())
+            .at_revision(snapshot.revision()));
+        }
+        let head_bytes = encode_head(
+            snapshot.revision(),
+            snapshot.hash(),
+            record_digest,
+            idempotency,
+        )?;
         Ok(PreparedPublication {
             artifact_bytes,
+            record_bytes,
+            record_digest,
             head_bytes,
         })
     }
@@ -449,10 +675,11 @@ impl DurableWorkspace {
     fn publish_snapshot(
         &self,
         snapshot: &Snapshot,
+        record: &RevisionRecord,
         idempotency: Option<&IdempotencyRecord>,
         fault: PublicationStep,
     ) -> Result<()> {
-        let publication = self.preflight_publication(snapshot, idempotency)?;
+        let publication = self.preflight_publication(snapshot, record, idempotency)?;
         self.publish_preflighted(snapshot, &publication, fault)
     }
 
@@ -463,9 +690,12 @@ impl DurableWorkspace {
         fault: PublicationStep,
     ) -> Result<()> {
         let bytes = &publication.artifact_bytes;
+        let record_bytes = &publication.record_bytes;
         let head_bytes = &publication.head_bytes;
         let revisions = self.directory.join("revisions");
+        let records = self.directory.join("records");
         let revision_path = revision_path(&revisions, snapshot.revision());
+        let record_path = record_path(&records, snapshot.revision());
         let old_head = read_head_before_publication(&self.directory, snapshot.revision())?;
         if old_head.is_some() {
             self.verify_live_head()?;
@@ -536,9 +766,85 @@ impl DurableWorkspace {
             }
         }
 
+        let record_existed = match fs::symlink_metadata(&record_path) {
+            Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
+                if !revision_existed {
+                    cleanup_revision(&revision_path, &revisions)?;
+                }
+                return Err(LkError::new(
+                    ErrorCode::ArtifactCorrupt,
+                    "immutable revision-record path is not a regular file",
+                )
+                .for_workspace(snapshot.workspace())
+                .at_revision(snapshot.revision()));
+            }
+            Ok(metadata) => {
+                if metadata.len() > u64::try_from(record_bytes.len()).unwrap_or(u64::MAX) {
+                    if !revision_existed {
+                        cleanup_revision(&revision_path, &revisions)?;
+                    }
+                    return Err(LkError::new(
+                        ErrorCode::ArtifactCorrupt,
+                        "immutable revision-record length disagrees with canonical bytes",
+                    )
+                    .for_workspace(snapshot.workspace())
+                    .at_revision(snapshot.revision()));
+                }
+                true
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+            Err(error) => return Err(error.into()),
+        };
+        if record_existed {
+            if read_bounded_regular_file(
+                &record_path,
+                record_bytes.len(),
+                "immutable revision-record path exceeds canonical byte length",
+            )? != record_bytes.as_slice()
+            {
+                if !revision_existed {
+                    cleanup_revision(&revision_path, &revisions)?;
+                }
+                return Err(LkError::new(
+                    ErrorCode::ArtifactCorrupt,
+                    "immutable revision-record path already contains different bytes",
+                )
+                .for_workspace(snapshot.workspace())
+                .at_revision(snapshot.revision()));
+            }
+        } else {
+            let temporary = match write_temporary(&records, record_bytes) {
+                Ok(path) => path,
+                Err(error) => {
+                    if !revision_existed {
+                        cleanup_revision(&revision_path, &revisions)?;
+                    }
+                    return Err(error);
+                }
+            };
+            if let Err(error) = fs::rename(&temporary, &record_path) {
+                fs::remove_file(&temporary)?;
+                sync_directory(&records)?;
+                if !revision_existed {
+                    cleanup_revision(&revision_path, &revisions)?;
+                }
+                return Err(error.into());
+            }
+            if let Err(error) = sync_directory(&records) {
+                cleanup_revision(&record_path, &records)?;
+                if !revision_existed {
+                    cleanup_revision(&revision_path, &revisions)?;
+                }
+                return Err(error);
+            }
+        }
+
         let head_temporary = match write_temporary(&self.directory, head_bytes) {
             Ok(path) => path,
             Err(error) => {
+                if !record_existed {
+                    cleanup_revision(&record_path, &records)?;
+                }
                 if !revision_existed {
                     cleanup_revision(&revision_path, &revisions)?;
                 }
@@ -548,6 +854,9 @@ impl DurableWorkspace {
         if let Err(error) = inject(fault, PublicationStep::AfterHeadSync) {
             fs::remove_file(&head_temporary)?;
             sync_directory(&self.directory)?;
+            if !record_existed {
+                cleanup_revision(&record_path, &records)?;
+            }
             if !revision_existed {
                 cleanup_revision(&revision_path, &revisions)?;
             }
@@ -557,6 +866,9 @@ impl DurableWorkspace {
         if let Err(error) = fs::rename(&head_temporary, &head_path) {
             fs::remove_file(&head_temporary)?;
             sync_directory(&self.directory)?;
+            if !record_existed {
+                cleanup_revision(&record_path, &records)?;
+            }
             if !revision_existed {
                 cleanup_revision(&revision_path, &revisions)?;
             }
@@ -578,6 +890,9 @@ impl DurableWorkspace {
             if !revision_existed {
                 cleanup_revision(&revision_path, &revisions)?;
             }
+            if !record_existed {
+                cleanup_revision(&record_path, &records)?;
+            }
             return Err(error);
         }
         Ok(())
@@ -593,6 +908,20 @@ impl DurableWorkspace {
         self.apply_at_step(request, fingerprint, crate::ids::RequestId::new(1), fault)
             .map(|(receipt, _)| receipt)
     }
+}
+
+fn restoration_change_digest(
+    workspace: WorkspaceId,
+    source: Revision,
+    base: Revision,
+    semantic_diff: ChangeDigest,
+) -> ChangeDigest {
+    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.restoration-change.v1");
+    hasher.update(&workspace.as_bytes());
+    hasher.update(&source.get().to_le_bytes());
+    hasher.update(&base.get().to_le_bytes());
+    hasher.update(&semantic_diff.as_bytes());
+    ChangeDigest::from_bytes(*hasher.finalize().as_bytes())
 }
 
 fn preflight_receipt_response(
@@ -616,7 +945,8 @@ fn validate_idempotency_record(
     record: &IdempotencyRecord,
     workspace: WorkspaceId,
     head: Revision,
-    snapshots: &BTreeMap<Revision, Arc<Snapshot>>,
+    base: &Snapshot,
+    published: &Snapshot,
 ) -> Result<()> {
     let receipt = &record.receipt;
     let expected_revision = receipt.base_revision.next();
@@ -631,22 +961,18 @@ fn validate_idempotency_record(
         )
         .for_workspace(workspace));
     }
-    let base = snapshots.get(&receipt.base_revision).ok_or_else(|| {
-        LkError::new(
+    if base.workspace() != workspace
+        || base.revision() != receipt.base_revision
+        || published.workspace() != workspace
+        || published.revision() != receipt.revision
+    {
+        return Err(LkError::new(
             ErrorCode::ArtifactCorrupt,
-            "persisted idempotency base revision is not retained",
+            "persisted idempotency snapshots have invalid publication identity",
         )
         .for_workspace(workspace)
-        .at_revision(receipt.base_revision)
-    })?;
-    let published = snapshots.get(&receipt.revision).ok_or_else(|| {
-        LkError::new(
-            ErrorCode::ArtifactCorrupt,
-            "persisted idempotency result revision is not retained",
-        )
-        .for_workspace(workspace)
-        .at_revision(receipt.revision)
-    })?;
+        .at_revision(receipt.revision));
+    }
     let semantic_diff = diff::between(base, published);
     let blockers_before = query::workspace_blockers(base);
     let blockers_after = query::workspace_blockers(published);
@@ -784,7 +1110,9 @@ fn cleanup_workspace_temporary_files(directory: &Path) -> Result<()> {
                 "workspace directory has a non-UTF-8 entry",
             )
         })?;
-        if (name == "HEAD" && file_type.is_file()) || (name == "revisions" && file_type.is_dir()) {
+        if (name == "HEAD" && file_type.is_file())
+            || ((name == "revisions" || name == "records") && file_type.is_dir())
+        {
             continue;
         }
         if is_temporary_file_name(name) && file_type.is_file() {
@@ -905,7 +1233,7 @@ fn put_transaction_receipt(writer: &mut Writer, receipt: &TransactionReceipt) ->
     writer.u64(u64::try_from(receipt.returned_bindings.len()).map_err(|_| {
         LkError::new(
             ErrorCode::PolicyExceeded,
-            "transaction receipt binding count exceeds HEAD9 encoding",
+            "transaction receipt binding count exceeds HEAD10 encoding",
         )
     })?);
     for (symbol, node) in &receipt.returned_bindings {
@@ -986,12 +1314,14 @@ fn read_transaction_receipt(reader: &mut Reader<'_>) -> Result<TransactionReceip
 fn encode_head(
     revision: Revision,
     hash: SnapshotHash,
+    record: RevisionRecordDigest,
     idempotency: Option<&IdempotencyRecord>,
 ) -> Result<Vec<u8>> {
     let mut writer = Writer::new();
     writer.fixed(&HEAD_MAGIC);
     writer.u64(revision.get());
     writer.fixed(&hash.as_bytes());
+    writer.fixed(&record.as_bytes());
     writer.bool(idempotency.is_some());
     if let Some(record) = idempotency {
         writer.fixed(&record.key.as_bytes());
@@ -1012,7 +1342,14 @@ fn encode_head(
     Ok(bytes)
 }
 
-fn decode_head(bytes: &[u8]) -> Result<(Revision, SnapshotHash, Option<IdempotencyRecord>)> {
+fn decode_head(
+    bytes: &[u8],
+) -> Result<(
+    Revision,
+    SnapshotHash,
+    RevisionRecordDigest,
+    Option<IdempotencyRecord>,
+)> {
     if bytes.len() < SnapshotHash::BYTE_LEN {
         return Err(LkError::new(
             ErrorCode::ArtifactCorrupt,
@@ -1038,6 +1375,13 @@ fn decode_head(bytes: &[u8]) -> Result<(Revision, SnapshotHash, Option<Idempoten
     let mut hash = [0_u8; SnapshotHash::BYTE_LEN];
     hash.copy_from_slice(reader.fixed(SnapshotHash::BYTE_LEN).map_err(head_codec)?);
     let hash = SnapshotHash::from_bytes(hash);
+    let mut record = [0_u8; RevisionRecordDigest::BYTE_LEN];
+    record.copy_from_slice(
+        reader
+            .fixed(RevisionRecordDigest::BYTE_LEN)
+            .map_err(head_codec)?,
+    );
+    let record = RevisionRecordDigest::from_bytes(record);
     let idempotency = if reader.bool().map_err(head_codec)? {
         let mut key = [0_u8; 16];
         key.copy_from_slice(reader.fixed(16).map_err(head_codec)?);
@@ -1053,7 +1397,7 @@ fn decode_head(bytes: &[u8]) -> Result<(Revision, SnapshotHash, Option<Idempoten
         None
     };
     reader.finish().map_err(head_codec)?;
-    Ok((revision, hash, idempotency))
+    Ok((revision, hash, record, idempotency))
 }
 
 fn head_checksum(body: &[u8]) -> [u8; 32] {
@@ -1125,13 +1469,415 @@ fn revision_path(directory: &Path, revision: Revision) -> PathBuf {
     directory.join(revision_file_name(revision))
 }
 
+fn record_file_name(revision: Revision) -> String {
+    format!("{:020}.lkjrecord", revision.get())
+}
+
+fn record_path(directory: &Path, revision: Revision) -> PathBuf {
+    directory.join(record_file_name(revision))
+}
+
+fn initialized_snapshot_slot(snapshot: Arc<Snapshot>) -> OnceLock<Arc<Snapshot>> {
+    OnceLock::from(snapshot)
+}
+
+fn scan_revision_artifacts(
+    workspace_directory: &Path,
+    workspace: WorkspaceId,
+    head: Revision,
+) -> Result<BTreeMap<Revision, OnceLock<Arc<Snapshot>>>> {
+    let directory = workspace_directory.join("revisions");
+    reject_symlink(&directory)?;
+    let maximum_artifact_bytes =
+        u64::try_from(artifact::DecodePolicy::default().maximum_artifact_bytes).unwrap_or(u64::MAX);
+    let mut snapshots = BTreeMap::new();
+    let mut removed_orphans = false;
+    for entry in fs::read_dir(&directory)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        if file_type.is_symlink() || !file_type.is_file() {
+            return Err(LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "workspace revisions directory contains a nonregular entry",
+            )
+            .for_workspace(workspace));
+        }
+        let name = entry.file_name();
+        let name = name.to_str().ok_or_else(|| {
+            LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "workspace revision has a non-UTF-8 file name",
+            )
+            .for_workspace(workspace)
+        })?;
+        if is_temporary_file_name(name) {
+            fs::remove_file(entry.path())?;
+            removed_orphans = true;
+            continue;
+        }
+        let stem = name.strip_suffix(".lkjscript").ok_or_else(|| {
+            LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "workspace revisions directory contains an unknown file",
+            )
+            .for_workspace(workspace)
+        })?;
+        let revision = Revision::new(stem.parse::<u64>().map_err(|_| {
+            LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "workspace revision file name is invalid",
+            )
+            .for_workspace(workspace)
+        })?);
+        if name != revision_file_name(revision) {
+            return Err(LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "workspace revision file name is not canonical",
+            )
+            .for_workspace(workspace)
+            .at_revision(revision));
+        }
+        if revision > head {
+            fs::remove_file(entry.path())?;
+            removed_orphans = true;
+            continue;
+        }
+        let metadata = fs::symlink_metadata(entry.path())?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err(LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "workspace revision path is not a regular file",
+            )
+            .for_workspace(workspace)
+            .at_revision(revision));
+        }
+        if metadata.len() > maximum_artifact_bytes {
+            return Err(LkError::new(
+                ErrorCode::PolicyExceeded,
+                "revision artifact exceeds decoder byte policy",
+            )
+            .for_workspace(workspace)
+            .at_revision(revision));
+        }
+        if snapshots.insert(revision, OnceLock::new()).is_some() {
+            return Err(LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "workspace contains duplicate revision artifacts",
+            )
+            .for_workspace(workspace)
+            .at_revision(revision));
+        }
+    }
+    if removed_orphans {
+        sync_directory(&directory)?;
+    }
+    let expected_count = head.get().checked_add(1).ok_or_else(|| {
+        LkError::new(
+            ErrorCode::ArtifactCorrupt,
+            "workspace head revision cannot form a retained history length",
+        )
+        .for_workspace(workspace)
+    })?;
+    if u64::try_from(snapshots.len()).ok() != Some(expected_count) {
+        return Err(LkError::new(
+            ErrorCode::ArtifactCorrupt,
+            "workspace retained revision history has a gap",
+        )
+        .for_workspace(workspace)
+        .at_revision(head));
+    }
+    for (expected, revision) in (0..expected_count).map(Revision::new).zip(snapshots.keys()) {
+        if expected != *revision {
+            return Err(LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "workspace retained revision history is not contiguous",
+            )
+            .for_workspace(workspace)
+            .at_revision(expected));
+        }
+    }
+    Ok(snapshots)
+}
+
+fn load_snapshot_file(
+    workspace_directory: &Path,
+    workspace: WorkspaceId,
+    revision: Revision,
+) -> Result<Arc<Snapshot>> {
+    let bytes = read_bounded_regular_file(
+        &revision_path(&workspace_directory.join("revisions"), revision),
+        artifact::DecodePolicy::default().maximum_artifact_bytes,
+        "revision artifact exceeds decoder byte policy",
+    )
+    .map_err(|mut error| {
+        error.workspace = Some(workspace);
+        error.revision = Some(revision);
+        error
+    })?;
+    let snapshot = artifact::decode(&bytes).map_err(|mut error| {
+        error.workspace = Some(workspace);
+        error.revision = Some(revision);
+        error
+    })?;
+    if snapshot.workspace() != workspace || snapshot.revision() != revision {
+        return Err(LkError::new(
+            ErrorCode::ArtifactCorrupt,
+            "revision artifact identity disagrees with its durable path",
+        )
+        .for_workspace(workspace)
+        .at_revision(revision));
+    }
+    Ok(Arc::new(snapshot))
+}
+
+fn load_revision_records(
+    workspace_directory: &Path,
+    workspace: WorkspaceId,
+    head: Revision,
+) -> Result<BTreeMap<Revision, RevisionRecordInspection>> {
+    let directory = workspace_directory.join("records");
+    reject_symlink(&directory)?;
+    let mut records = BTreeMap::new();
+    let mut removed_orphans = false;
+    for entry in fs::read_dir(&directory)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        if file_type.is_symlink() || !file_type.is_file() {
+            return Err(LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "workspace records directory contains a nonregular entry",
+            )
+            .for_workspace(workspace));
+        }
+        let name = entry.file_name();
+        let name = name.to_str().ok_or_else(|| {
+            LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "workspace revision record has a non-UTF-8 file name",
+            )
+            .for_workspace(workspace)
+        })?;
+        if is_temporary_file_name(name) {
+            fs::remove_file(entry.path())?;
+            removed_orphans = true;
+            continue;
+        }
+        let stem = name.strip_suffix(".lkjrecord").ok_or_else(|| {
+            LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "workspace records directory contains an unknown file",
+            )
+            .for_workspace(workspace)
+        })?;
+        let revision = Revision::new(stem.parse::<u64>().map_err(|_| {
+            LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "workspace revision-record file name is invalid",
+            )
+            .for_workspace(workspace)
+        })?);
+        if name != record_file_name(revision) {
+            return Err(LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "workspace revision-record file name is not canonical",
+            )
+            .for_workspace(workspace)
+            .at_revision(revision));
+        }
+        if revision > head {
+            fs::remove_file(entry.path())?;
+            removed_orphans = true;
+            continue;
+        }
+        let bytes = read_bounded_regular_file(
+            &entry.path(),
+            crate::history::MAXIMUM_REVISION_RECORD_BYTES,
+            "revision record exceeds decoder byte policy",
+        )?;
+        let (record, digest) = crate::history::decode(&bytes)?;
+        if record.workspace != workspace || record.revision != revision {
+            return Err(LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "revision-record identity disagrees with its durable path",
+            )
+            .for_workspace(workspace)
+            .at_revision(revision));
+        }
+        if records
+            .insert(revision, RevisionRecordInspection { digest, record })
+            .is_some()
+        {
+            return Err(LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "workspace contains duplicate revision records",
+            )
+            .for_workspace(workspace)
+            .at_revision(revision));
+        }
+    }
+    if removed_orphans {
+        sync_directory(&directory)?;
+    }
+    let expected_count = head.get().checked_add(1).ok_or_else(|| {
+        LkError::new(
+            ErrorCode::ArtifactCorrupt,
+            "workspace head revision cannot form a retained history length",
+        )
+        .for_workspace(workspace)
+    })?;
+    if u64::try_from(records.len()).ok() != Some(expected_count) {
+        return Err(LkError::new(
+            ErrorCode::ArtifactCorrupt,
+            "workspace revision-record history has a gap",
+        )
+        .for_workspace(workspace)
+        .at_revision(head));
+    }
+    validate_revision_record_chain(workspace, head, &records)?;
+    Ok(records)
+}
+
+fn validate_revision_record_chain(
+    workspace: WorkspaceId,
+    head: Revision,
+    records: &BTreeMap<Revision, RevisionRecordInspection>,
+) -> Result<()> {
+    let root = NodeId::new(workspace, 1).map_err(|error| {
+        LkError::new(
+            ErrorCode::ArtifactCorrupt,
+            format!("canonical workspace root identity is invalid: {error}"),
+        )
+        .for_workspace(workspace)
+    })?;
+    let mut prior: Option<&RevisionRecordInspection> = None;
+    for (expected_value, (revision, inspection)) in (0..=head.get()).zip(records) {
+        let expected = Revision::new(expected_value);
+        let record = &inspection.record;
+        if *revision != expected
+            || record.version != crate::history::REVISION_RECORD_VERSION
+            || record.workspace != workspace
+            || record.revision != expected
+        {
+            return Err(LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "revision-record identity or order is inconsistent",
+            )
+            .for_workspace(workspace)
+            .at_revision(expected));
+        }
+        match prior {
+            None => {
+                if expected != Revision::INITIAL
+                    || record.parent_revision.is_some()
+                    || record.parent_snapshot.is_some()
+                    || record.parent_record.is_some()
+                    || record.outcome != RevisionPublicationOutcome::Genesis
+                    || record.change_count != 0
+                    || record.created.as_slice() != [root]
+                    || !record.deleted.is_empty()
+                    || !record.modified.is_empty()
+                    || !record.function_bodies_changed.is_empty()
+                    || !record.target_definitions_changed.is_empty()
+                    || !record.affected_targets.is_empty()
+                    || record.accepted_change_set != record.semantic_diff
+                {
+                    return Err(LkError::new(
+                        ErrorCode::ArtifactCorrupt,
+                        "genesis revision-record facts are not canonical",
+                    )
+                    .for_workspace(workspace)
+                    .at_revision(expected));
+                }
+            }
+            Some(previous) => {
+                if record.parent_revision != Some(previous.record.revision)
+                    || record.parent_snapshot != Some(previous.record.result_snapshot)
+                    || record.parent_record != Some(previous.digest)
+                    || record.outcome == RevisionPublicationOutcome::Genesis
+                    || record.change_count == 0
+                {
+                    return Err(LkError::new(
+                        ErrorCode::ArtifactCorrupt,
+                        "revision-record parent chain is inconsistent",
+                    )
+                    .for_workspace(workspace)
+                    .at_revision(expected));
+                }
+            }
+        }
+        for nodes in [
+            &record.created,
+            &record.deleted,
+            &record.modified,
+            &record.function_bodies_changed,
+            &record.target_definitions_changed,
+            &record.affected_targets,
+        ] {
+            if nodes.windows(2).any(|pair| pair[0] >= pair[1])
+                || nodes
+                    .iter()
+                    .any(|node| node.workspace() != workspace || node.is_function_local())
+            {
+                return Err(LkError::new(
+                    ErrorCode::ArtifactCorrupt,
+                    "revision-record entity facts are not canonical",
+                )
+                .for_workspace(workspace)
+                .at_revision(expected));
+            }
+        }
+        let created = record.created.iter().copied().collect::<BTreeSet<_>>();
+        let deleted = record.deleted.iter().copied().collect::<BTreeSet<_>>();
+        let modified = record.modified.iter().copied().collect::<BTreeSet<_>>();
+        if !created.is_disjoint(&deleted)
+            || !created.is_disjoint(&modified)
+            || !deleted.is_disjoint(&modified)
+            || !record
+                .function_bodies_changed
+                .iter()
+                .all(|node| created.contains(node) || modified.contains(node))
+            || !record.target_definitions_changed.iter().all(|node| {
+                created.contains(node) || deleted.contains(node) || modified.contains(node)
+            })
+            || (expected != Revision::INITIAL
+                && u64::try_from(created.len() + deleted.len() + modified.len())
+                    .ok()
+                    .is_none_or(|count| count > record.change_count))
+        {
+            return Err(LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "revision-record change sets are inconsistent",
+            )
+            .for_workspace(workspace)
+            .at_revision(expected));
+        }
+        prior = Some(inspection);
+    }
+    Ok(())
+}
+
 fn read_bounded_regular_file(path: &Path, maximum: usize, policy_message: &str) -> Result<Vec<u8>> {
-    let file = File::open(path)?;
-    let metadata = file.metadata()?;
-    if !metadata.is_file() {
+    let path_metadata = fs::symlink_metadata(path)?;
+    if path_metadata.file_type().is_symlink() || !path_metadata.is_file() {
         return Err(LkError::new(
             ErrorCode::ArtifactCorrupt,
             "durable path is not a regular file",
+        ));
+    }
+    let file = File::open(path)?;
+    let metadata = file.metadata()?;
+    let current_path_metadata = fs::symlink_metadata(path)?;
+    if !metadata.is_file()
+        || current_path_metadata.file_type().is_symlink()
+        || !current_path_metadata.is_file()
+        || metadata.dev() != path_metadata.dev()
+        || metadata.ino() != path_metadata.ino()
+        || metadata.dev() != current_path_metadata.dev()
+        || metadata.ino() != current_path_metadata.ino()
+    {
+        return Err(LkError::new(
+            ErrorCode::ArtifactCorrupt,
+            "durable regular file changed during validated open",
         ));
     }
     if metadata.len() > u64::try_from(maximum).unwrap_or(u64::MAX) {

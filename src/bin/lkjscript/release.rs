@@ -3,40 +3,27 @@ use super::{
     EXIT_PROGRAM, EXIT_RESOURCE, EXIT_TRANSPORT, EXIT_USAGE_OR_JSON, failure, success, usage,
     write_outcome,
 };
-use lkjscript::engine::Engine;
 use lkjscript::error::{ErrorCode, LkError};
-use lkjscript::machine::{MAX_JSON_INPUT_BYTES, MAX_JSON_OUTPUT_BYTES};
-use lkjscript::release::{self, RELEASE_CONTRACT_VERSION, ReleaseBuildRequest, ReleaseTestReport};
+use lkjscript::machine::MAX_JSON_OUTPUT_BYTES;
+use lkjscript::release::{self, RELEASE_CONTRACT_VERSION, ReleaseTestReport};
 use serde::Serialize;
-use serde::de::DeserializeOwned;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 const HELP: &str = "usage: lkjscript release COMMAND [OPTIONS]
 
 Commands:
-  build --state DIR [--dependency FILE ...] (--output FILE | --validate-only) [--pretty]
-        # strict ReleaseBuildRequest JSON on stdin
   validate --artifact FILE [--pretty]
   inspect --artifact FILE [--pretty]
   test --artifact FILE [--dependency FILE ...] [--pretty]
 
-Reusable-release CLI JSON contract version 2 is required. Build selects one exact workspace and
-revision from the state directory; it never infers HEAD. Every exact dependency and its transitive
-closure is supplied explicitly by immutable artifact path. Validate-only and publication share one
-prepared object and run all release tests. Publication is atomic no-overwrite and may report an
-unknown outcome only after public authority may have changed. Artifact paths must be absolute.";
+Reusable-release CLI JSON contract version 2 is required. These commands consume immutable release
+distribution authority. Semantic projects create releases through `lkjscript target build`; the
+removed command-local build predecessor is rejected. Artifact paths must be absolute.";
 
 pub(super) enum ReleaseCommand {
     Invalid(String),
     Help,
-    Build {
-        state: PathBuf,
-        dependencies: Vec<PathBuf>,
-        output: Option<PathBuf>,
-        pretty: bool,
-    },
     Validate {
         artifact: PathBuf,
         pretty: bool,
@@ -60,7 +47,6 @@ pub(super) fn parse(arguments: impl Iterator<Item = String>) -> Result<ReleaseCo
     let rest = &arguments[1..];
     match command {
         "help" | "--help" if rest.is_empty() => Ok(ReleaseCommand::Help),
-        "build" => parse_build(rest),
         "validate" => parse_artifact(rest, ArtifactAction::Validate),
         "inspect" => parse_artifact(rest, ArtifactAction::Inspect),
         "test" => parse_artifact(rest, ArtifactAction::Test),
@@ -82,12 +68,6 @@ fn run_json(command: ReleaseCommand) -> CliOutcome {
             EXIT_USAGE_OR_JSON,
         ),
         ReleaseCommand::Help => success(HELP.as_bytes().to_vec()),
-        ReleaseCommand::Build {
-            state,
-            dependencies,
-            output,
-            pretty,
-        } => run_build(&state, &dependencies, output.as_deref(), pretty),
         ReleaseCommand::Validate { artifact, pretty }
         | ReleaseCommand::Inspect { artifact, pretty } => {
             let bytes = match release::read_file(&artifact) {
@@ -105,50 +85,6 @@ fn run_json(command: ReleaseCommand) -> CliOutcome {
             pretty,
         } => run_tests(&artifact, &dependencies, pretty),
     }
-}
-
-fn parse_build(arguments: &[String]) -> Result<ReleaseCommand, String> {
-    let mut state = None;
-    let mut dependencies = Vec::new();
-    let mut output = None;
-    let mut validate_only = false;
-    let mut pretty = false;
-    let mut index = 0;
-    while index < arguments.len() {
-        match arguments[index].as_str() {
-            "--state" if state.is_none() => {
-                state = Some(PathBuf::from(value_after(
-                    arguments, &mut index, "--state",
-                )?));
-            }
-            "--dependency" => dependencies.push(PathBuf::from(value_after(
-                arguments,
-                &mut index,
-                "--dependency",
-            )?)),
-            "--output" if output.is_none() && !validate_only => {
-                output = Some(PathBuf::from(value_after(
-                    arguments, &mut index, "--output",
-                )?));
-            }
-            "--validate-only" if !validate_only && output.is_none() => validate_only = true,
-            "--pretty" if !pretty => pretty = true,
-            _ => return Err(release_usage("invalid or duplicate build option")),
-        }
-        index += 1;
-    }
-    let state = state.ok_or_else(|| release_usage("release build requires --state DIR"))?;
-    if output.is_none() && !validate_only {
-        return Err(release_usage(
-            "release build requires exactly one of --output FILE or --validate-only",
-        ));
-    }
-    Ok(ReleaseCommand::Build {
-        state,
-        dependencies,
-        output,
-        pretty,
-    })
 }
 
 #[derive(Clone, Copy)]
@@ -208,46 +144,6 @@ fn value_after<'a>(
         .ok_or_else(|| release_usage(&format!("{flag} requires a value")))
 }
 
-fn run_build(
-    state: &Path,
-    dependencies: &[PathBuf],
-    output: Option<&Path>,
-    pretty: bool,
-) -> CliOutcome {
-    let input = match read_stdin(MAX_JSON_INPUT_BYTES, "release build request") {
-        Ok(input) => input,
-        Err(error) => return release_error(error, pretty),
-    };
-    let request = match decode_json::<ReleaseBuildRequest>(&input, "release build request") {
-        Ok(request) => request,
-        Err(error) => return release_error(error, pretty),
-    };
-    let dependency_bytes = match read_dependencies(dependencies) {
-        Ok(bytes) => bytes,
-        Err(error) => return release_error(error, pretty),
-    };
-    let engine = match Engine::open(state) {
-        Ok(engine) => engine,
-        Err(error) => return release_error_with_exit(error, pretty, EXIT_TRANSPORT),
-    };
-    let prepared = match engine.prepare_release(&request, &dependency_bytes) {
-        Ok(prepared) => prepared,
-        Err(error) => return release_error(error, pretty),
-    };
-    drop(engine);
-    let published = output.is_some();
-    let preflighted = encode_json(&prepared.receipt(published), pretty);
-    if preflighted.exit != 0 {
-        return preflighted;
-    }
-    if let Some(output) = output
-        && let Err(error) = prepared.publish(output)
-    {
-        return release_error(error, pretty);
-    }
-    preflighted
-}
-
 fn run_tests(artifact: &Path, dependencies: &[PathBuf], pretty: bool) -> CliOutcome {
     let bytes = match release::read_file(artifact) {
         Ok(bytes) => bytes,
@@ -291,34 +187,6 @@ fn run_tests(artifact: &Path, dependencies: &[PathBuf], pretty: bool) -> CliOutc
 #[allow(clippy::result_large_err)]
 fn read_dependencies(paths: &[PathBuf]) -> Result<Vec<Vec<u8>>, LkError> {
     paths.iter().map(|path| release::read_file(path)).collect()
-}
-
-#[allow(clippy::result_large_err)]
-fn decode_json<T: DeserializeOwned>(bytes: &[u8], label: &str) -> Result<T, LkError> {
-    serde_json::from_slice(bytes).map_err(|error| {
-        LkError::new(
-            ErrorCode::ProtocolMalformed,
-            format!("cannot decode {label} JSON: {error}"),
-        )
-    })
-}
-
-#[allow(clippy::result_large_err)]
-fn read_stdin(maximum: usize, label: &str) -> Result<Vec<u8>, LkError> {
-    let limit = u64::try_from(maximum).unwrap_or(u64::MAX).saturating_add(1);
-    let mut bytes = Vec::new();
-    std::io::stdin()
-        .lock()
-        .take(limit)
-        .read_to_end(&mut bytes)
-        .map_err(|error| LkError::new(ErrorCode::Io, format!("cannot read {label}: {error}")))?;
-    if bytes.len() > maximum {
-        return Err(LkError::new(
-            ErrorCode::PolicyExceeded,
-            format!("{label} exceeds byte policy"),
-        ));
-    }
-    Ok(bytes)
 }
 
 fn encode_json<T: Serialize>(value: &T, pretty: bool) -> CliOutcome {

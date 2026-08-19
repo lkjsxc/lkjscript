@@ -81,6 +81,28 @@ pub fn query_result(bindings: &Bindings, value: &ApplicationValue) -> Result<Val
     }
 }
 
+pub fn why_result(result: &Value) -> Result<Value, String> {
+    match result.get("kind").and_then(Value::as_str) {
+        Some("task") => {
+            let task = result
+                .get("task")
+                .ok_or_else(|| "why result omitted its task".to_owned())?;
+            Ok(json!({
+                "kind": "why",
+                "task": task.get("id").and_then(Value::as_i64).ok_or_else(|| "why result omitted its task identity".to_owned())?,
+                "phase": task.get("phase").and_then(Value::as_str).ok_or_else(|| "why result omitted its phase".to_owned())?,
+                "archived": task.get("archived").and_then(Value::as_bool).ok_or_else(|| "why result omitted its archive state".to_owned())?,
+                "manual_hold": task.get("hold").cloned().ok_or_else(|| "why result omitted its hold state".to_owned())?,
+                "actionable": task.get("ready").and_then(Value::as_bool).ok_or_else(|| "why result omitted its actionability".to_owned())?,
+                "blockers": task.get("blockers").cloned().ok_or_else(|| "why result omitted its blockers".to_owned())?,
+            }))
+        }
+        Some("not_found" | "error") => Ok(result.clone()),
+        Some(kind) => Err(format!("why query returned unsupported result {kind}")),
+        None => Err("why query result omitted its kind".to_owned()),
+    }
+}
+
 pub fn human_mutation(result: &Value, revision: u64, published: bool) -> String {
     let kind = result
         .get("kind")
@@ -111,6 +133,44 @@ pub fn human_mutation(result: &Value, revision: u64, published: bool) -> String 
 
 pub fn human_query(result: &Value, revision: u64) -> String {
     match result.get("kind").and_then(Value::as_str) {
+        Some("why") => {
+            let task = result.get("task").and_then(Value::as_i64).unwrap_or(0);
+            let phase = terminal_text(
+                result
+                    .get("phase")
+                    .and_then(Value::as_str)
+                    .unwrap_or("unknown"),
+            );
+            let actionable = result
+                .get("actionable")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let archived = result
+                .get("archived")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let hold = result
+                .get("manual_hold")
+                .and_then(Value::as_str)
+                .map(terminal_text)
+                .unwrap_or_else(|| "none".to_owned());
+            let blockers = result
+                .get("blockers")
+                .and_then(Value::as_array)
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(Value::as_i64)
+                        .map(|item| format!("#{item}"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                })
+                .filter(|items| !items.is_empty())
+                .unwrap_or_else(|| "none".to_owned());
+            format!(
+                "Task #{task}: phase={phase} archived={archived} manual_hold={hold} actionable={actionable} blockers={blockers}\nrevision {revision}"
+            )
+        }
         Some("task") => result
             .get("task")
             .map(|task| human_task(task, revision))

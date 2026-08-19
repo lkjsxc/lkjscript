@@ -79,9 +79,15 @@ pub enum TransactionOpCode {
     CreateProductType,
     CreateSumType,
     CreateSequenceType,
+    CreateBuildTarget,
+    ReplaceBuildTarget,
+    AddReleaseTargetExport,
+    SetReleaseTargetExport,
+    SetApplicationQueryBoundary,
+    AddApplicationTargetTest,
 }
 impl TransactionOpCode {
-    pub const ALL: [Self; 15] = [
+    pub const ALL: [Self; 21] = [
         Self::CreatePackage,
         Self::CreateModule,
         Self::CreateFunction,
@@ -97,6 +103,12 @@ impl TransactionOpCode {
         Self::CreateProductType,
         Self::CreateSumType,
         Self::CreateSequenceType,
+        Self::CreateBuildTarget,
+        Self::ReplaceBuildTarget,
+        Self::AddReleaseTargetExport,
+        Self::SetReleaseTargetExport,
+        Self::SetApplicationQueryBoundary,
+        Self::AddApplicationTargetTest,
     ];
     pub const fn machine_name(self) -> &'static str {
         match self {
@@ -115,6 +127,12 @@ impl TransactionOpCode {
             Self::CreateProductType => "create_product_type",
             Self::CreateSumType => "create_sum_type",
             Self::CreateSequenceType => "create_sequence_type",
+            Self::CreateBuildTarget => "create_build_target",
+            Self::ReplaceBuildTarget => "replace_build_target",
+            Self::AddReleaseTargetExport => "add_release_target_export",
+            Self::SetReleaseTargetExport => "set_release_target_export",
+            Self::SetApplicationQueryBoundary => "set_application_query_boundary",
+            Self::AddApplicationTargetTest => "add_application_target_test",
         }
     }
 }
@@ -592,6 +610,34 @@ pub enum TransactionOp {
         result: TypeDraft,
         body: Option<FunctionBodyDraft>,
     },
+    CreateBuildTarget {
+        symbol: DraftSymbol,
+        name: String,
+        definition: crate::target::BuildTargetDefinition,
+    },
+    ReplaceBuildTarget {
+        target: NodeId,
+        definition: crate::target::BuildTargetDefinition,
+    },
+    AddReleaseTargetExport {
+        target: NodeId,
+        name: String,
+        item: NodeId,
+    },
+    SetReleaseTargetExport {
+        target: NodeId,
+        name: String,
+        item: NodeId,
+    },
+    SetApplicationQueryBoundary {
+        target: NodeId,
+        query_entry: crate::target::TargetItem,
+        query: crate::target::TargetItem,
+    },
+    AddApplicationTargetTest {
+        target: NodeId,
+        case: crate::target::TargetApplicationTestCase,
+    },
     DefineFunctionBody {
         function: NodeId,
         body: FunctionBodyDraft,
@@ -640,6 +686,14 @@ impl TransactionOp {
             Self::CreateSumType { .. } => TransactionOpCode::CreateSumType,
             Self::CreateSequenceType { .. } => TransactionOpCode::CreateSequenceType,
             Self::CreateFunction { .. } => TransactionOpCode::CreateFunction,
+            Self::CreateBuildTarget { .. } => TransactionOpCode::CreateBuildTarget,
+            Self::ReplaceBuildTarget { .. } => TransactionOpCode::ReplaceBuildTarget,
+            Self::AddReleaseTargetExport { .. } => TransactionOpCode::AddReleaseTargetExport,
+            Self::SetReleaseTargetExport { .. } => TransactionOpCode::SetReleaseTargetExport,
+            Self::SetApplicationQueryBoundary { .. } => {
+                TransactionOpCode::SetApplicationQueryBoundary
+            }
+            Self::AddApplicationTargetTest { .. } => TransactionOpCode::AddApplicationTargetTest,
             Self::DefineFunctionBody { .. } => TransactionOpCode::DefineFunctionBody,
             Self::ReplaceFunctionBody { .. } => TransactionOpCode::ReplaceFunctionBody,
             Self::InsertExpression { .. } => TransactionOpCode::InsertExpression,
@@ -658,7 +712,8 @@ impl TransactionOp {
             | Self::CreateProductType { symbol, .. }
             | Self::CreateSumType { symbol, .. }
             | Self::CreateSequenceType { symbol, .. }
-            | Self::CreateFunction { symbol, .. } => Some(*symbol),
+            | Self::CreateFunction { symbol, .. }
+            | Self::CreateBuildTarget { symbol, .. } => Some(*symbol),
             Self::InsertExpression { expression, .. } => expression.symbol,
             _ => None,
         }
@@ -670,6 +725,34 @@ enum CanonicalEdit {
     CreatePackage {
         symbol: DraftSymbol,
         name: String,
+    },
+    CreateBuildTarget {
+        symbol: DraftSymbol,
+        name: String,
+        definition: crate::target::BuildTargetDefinition,
+    },
+    ReplaceBuildTarget {
+        target: NodeId,
+        definition: crate::target::BuildTargetDefinition,
+    },
+    AddReleaseTargetExport {
+        target: NodeId,
+        name: String,
+        item: NodeId,
+    },
+    SetReleaseTargetExport {
+        target: NodeId,
+        name: String,
+        item: NodeId,
+    },
+    SetApplicationQueryBoundary {
+        target: NodeId,
+        query_entry: crate::target::TargetItem,
+        query: crate::target::TargetItem,
+    },
+    AddApplicationTargetTest {
+        target: NodeId,
+        case: crate::target::TargetApplicationTestCase,
     },
     CreateModule {
         symbol: DraftSymbol,
@@ -1082,6 +1165,52 @@ fn expand_transaction(
                 events.push(ExpandEvent::Edit(CanonicalEdit::CreatePackage {
                     symbol: *symbol,
                     name: name.clone(),
+                }))
+            }
+            TransactionOp::CreateBuildTarget {
+                symbol,
+                name,
+                definition,
+            } => events.push(ExpandEvent::Edit(CanonicalEdit::CreateBuildTarget {
+                symbol: *symbol,
+                name: name.clone(),
+                definition: definition.clone(),
+            })),
+            TransactionOp::ReplaceBuildTarget { target, definition } => {
+                events.push(ExpandEvent::Edit(CanonicalEdit::ReplaceBuildTarget {
+                    target: *target,
+                    definition: definition.clone(),
+                }))
+            }
+            TransactionOp::AddReleaseTargetExport { target, name, item } => {
+                events.push(ExpandEvent::Edit(CanonicalEdit::AddReleaseTargetExport {
+                    target: *target,
+                    name: name.clone(),
+                    item: *item,
+                }))
+            }
+            TransactionOp::SetReleaseTargetExport { target, name, item } => {
+                events.push(ExpandEvent::Edit(CanonicalEdit::SetReleaseTargetExport {
+                    target: *target,
+                    name: name.clone(),
+                    item: *item,
+                }))
+            }
+            TransactionOp::SetApplicationQueryBoundary {
+                target,
+                query_entry,
+                query,
+            } => events.push(ExpandEvent::Edit(
+                CanonicalEdit::SetApplicationQueryBoundary {
+                    target: *target,
+                    query_entry: *query_entry,
+                    query: *query,
+                },
+            )),
+            TransactionOp::AddApplicationTargetTest { target, case } => {
+                events.push(ExpandEvent::Edit(CanonicalEdit::AddApplicationTargetTest {
+                    target: *target,
+                    case: case.clone(),
                 }))
             }
             TransactionOp::CreateModule {
@@ -2054,6 +2183,7 @@ pub(crate) fn validate_structured_request(operations: &[TransactionOp]) -> Resul
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum DraftSymbolKind {
     Package,
+    BuildTarget,
     Module,
     ProductType,
     ProductField,
@@ -2514,6 +2644,18 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
                 DraftSymbolKind::Package,
                 source,
             )?,
+            TransactionOp::CreateBuildTarget { symbol, .. } => declare(
+                &mut symbols,
+                &mut kinds,
+                *symbol,
+                DraftSymbolKind::BuildTarget,
+                source,
+            )?,
+            TransactionOp::ReplaceBuildTarget { .. }
+            | TransactionOp::AddReleaseTargetExport { .. }
+            | TransactionOp::SetReleaseTargetExport { .. }
+            | TransactionOp::SetApplicationQueryBoundary { .. }
+            | TransactionOp::AddApplicationTargetTest { .. } => {}
             TransactionOp::CreateModule {
                 symbol, package, ..
             } => {
@@ -3406,6 +3548,7 @@ fn record_edit_provenance(
             anonymous_paths.get(symbol).cloned(),
         ),
         CanonicalEdit::CreatePackage { symbol, .. }
+        | CanonicalEdit::CreateBuildTarget { symbol, .. }
         | CanonicalEdit::CreateModule { symbol, .. }
         | CanonicalEdit::CreateProductType { symbol, .. }
         | CanonicalEdit::CreateProductField { symbol, .. }
@@ -3451,6 +3594,11 @@ fn record_edit_provenance(
             false,
             None,
         ),
+        CanonicalEdit::ReplaceBuildTarget { target, .. }
+        | CanonicalEdit::AddReleaseTargetExport { target, .. }
+        | CanonicalEdit::SetReleaseTargetExport { target, .. }
+        | CanonicalEdit::SetApplicationQueryBoundary { target, .. }
+        | CanonicalEdit::AddApplicationTargetTest { target, .. } => (Some(*target), false, None),
         CanonicalEdit::DeleteOwnedSubtree { root } => (
             Some(resolve_for_provenance(*root, allocations)?),
             false,
@@ -3839,6 +3987,7 @@ fn owning_function_in_snapshot(snapshot: &Snapshot, start: NodeId) -> Result<Nod
 fn canonical_created_symbol(operation: &CanonicalEdit) -> Option<DraftSymbol> {
     match operation {
         CanonicalEdit::CreatePackage { symbol, .. }
+        | CanonicalEdit::CreateBuildTarget { symbol, .. }
         | CanonicalEdit::CreateModule { symbol, .. }
         | CanonicalEdit::CreateProductType { symbol, .. }
         | CanonicalEdit::CreateProductField { symbol, .. }
@@ -3878,10 +4027,153 @@ fn apply_operation(
                 },
             )?;
             let root = require_kind_mut(nodes, base.root, NodeKind::WorkspaceRoot)?;
-            let Node::WorkspaceRoot { packages } = root else {
+            let Node::WorkspaceRoot { packages, .. } = root else {
                 return Err(invariant("workspace root kind changed during staging"));
             };
             packages.push(id);
+        }
+        CanonicalEdit::CreateBuildTarget {
+            symbol,
+            name,
+            definition,
+        } => {
+            let id = allocated(allocations, *symbol)?;
+            insert_new(
+                nodes,
+                id,
+                Node::BuildTarget {
+                    owner: base.root,
+                    name: name.clone(),
+                    definition: definition.clone(),
+                },
+            )?;
+            let root = require_kind_mut(nodes, base.root, NodeKind::WorkspaceRoot)?;
+            let Node::WorkspaceRoot { targets, .. } = root else {
+                return Err(invariant("workspace root kind changed during staging"));
+            };
+            targets.push(id);
+        }
+        CanonicalEdit::ReplaceBuildTarget { target, definition } => {
+            let Node::BuildTarget {
+                definition: current,
+                ..
+            } = require_kind_mut(nodes, *target, NodeKind::BuildTarget)?
+            else {
+                return Err(invariant("build target kind changed during staging"));
+            };
+            if current.kind() != definition.kind() {
+                return Err(LkError::new(
+                    ErrorCode::InvalidOperand,
+                    "build-target replacement cannot change target kind",
+                )
+                .for_node(*target));
+            }
+            *current = definition.clone();
+        }
+        CanonicalEdit::AddReleaseTargetExport { target, name, item } => {
+            let Node::BuildTarget { definition, .. } =
+                require_kind_mut(nodes, *target, NodeKind::BuildTarget)?
+            else {
+                return Err(invariant("build target kind changed during staging"));
+            };
+            let crate::target::BuildTargetDefinition::Release(release) = definition else {
+                return Err(LkError::new(
+                    ErrorCode::WrongKind,
+                    "release export edit requires a release target",
+                )
+                .for_node(*target));
+            };
+            if release.exports.iter().any(|export| export.name == *name) {
+                return Err(LkError::new(
+                    ErrorCode::InvalidOperand,
+                    "release target already contains the named export",
+                )
+                .for_node(*target));
+            }
+            release.exports.push(crate::release::ReleaseExportRequest {
+                name: name.clone(),
+                target: *item,
+            });
+        }
+        CanonicalEdit::SetReleaseTargetExport { target, name, item } => {
+            let Node::BuildTarget { definition, .. } =
+                require_kind_mut(nodes, *target, NodeKind::BuildTarget)?
+            else {
+                return Err(invariant("build target kind changed during staging"));
+            };
+            let crate::target::BuildTargetDefinition::Release(release) = definition else {
+                return Err(LkError::new(
+                    ErrorCode::WrongKind,
+                    "release export edit requires a release target",
+                )
+                .for_node(*target));
+            };
+            let mut matches = release
+                .exports
+                .iter_mut()
+                .filter(|export| export.name == *name);
+            let export = matches.next().ok_or_else(|| {
+                LkError::new(
+                    ErrorCode::NodeNotFound,
+                    "release target does not contain the named export",
+                )
+                .for_node(*target)
+            })?;
+            if matches.next().is_some() {
+                return Err(invariant("release target contains duplicate export names"));
+            }
+            export.target = *item;
+        }
+        CanonicalEdit::SetApplicationQueryBoundary {
+            target,
+            query_entry,
+            query,
+        } => {
+            let Node::BuildTarget { definition, .. } =
+                require_kind_mut(nodes, *target, NodeKind::BuildTarget)?
+            else {
+                return Err(invariant("build target kind changed during staging"));
+            };
+            let crate::target::BuildTargetDefinition::Application(application) = definition else {
+                return Err(LkError::new(
+                    ErrorCode::WrongKind,
+                    "query-boundary edit requires an application target",
+                )
+                .for_node(*target));
+            };
+            let crate::target::TargetInvocationProfile::Stateful(profile) =
+                &mut application.profile
+            else {
+                return Err(LkError::new(
+                    ErrorCode::WrongKind,
+                    "query-boundary edit requires a stateful application target",
+                )
+                .for_node(*target));
+            };
+            profile.query_entry = *query_entry;
+            profile.query = *query;
+        }
+        CanonicalEdit::AddApplicationTargetTest { target, case } => {
+            let Node::BuildTarget { definition, .. } =
+                require_kind_mut(nodes, *target, NodeKind::BuildTarget)?
+            else {
+                return Err(invariant("build target kind changed during staging"));
+            };
+            let crate::target::BuildTargetDefinition::Application(application) = definition else {
+                return Err(LkError::new(
+                    ErrorCode::WrongKind,
+                    "application-case edit requires an application target",
+                )
+                .for_node(*target));
+            };
+            if application.tests.iter().any(|test| test.name == case.name) {
+                return Err(LkError::new(
+                    ErrorCode::InvalidOperand,
+                    "application target already contains the named case",
+                )
+                .for_node(*target));
+            }
+            application.tests.push(case.clone());
         }
         CanonicalEdit::CreateModule {
             symbol,
@@ -4996,7 +5288,10 @@ fn delete_subtree(
 fn detach_child(nodes: &mut BTreeMap<NodeId, Node>, owner: NodeId, child: NodeId) -> Result<()> {
     let owner_node = nodes.get_mut(&owner).ok_or_else(|| missing(owner))?;
     let removed = match owner_node {
-        Node::WorkspaceRoot { packages } => remove_one(packages, child),
+        Node::WorkspaceRoot { packages, targets } => {
+            remove_one(packages, child) || remove_one(targets, child)
+        }
+        Node::BuildTarget { .. } => false,
         Node::Package { modules, .. } => remove_one(modules, child),
         Node::Module {
             types, functions, ..

@@ -206,6 +206,18 @@ pub fn render_semantic_diff(packet: &ContextPacket, include_full_ids: bool) -> R
             } => format!(
                 "function_body_changed items {before_items}->{after_items} added={added_items} removed={removed_items} modified={modified_items}"
             ),
+            ChangeKind::BuildTargetChanged {
+                before_kind,
+                after_kind,
+                before_digest,
+                after_digest,
+            } => format!(
+                "build_target_changed {}:{} -> {}:{}",
+                before_kind.machine_name(),
+                before_digest,
+                after_kind.machine_name(),
+                after_digest
+            ),
         };
         push_line(&mut output, &format!("{node} {description}"))?;
     }
@@ -266,7 +278,14 @@ fn render_tree(
 
 fn render_node(node: &Node, aliases: &BTreeMap<NodeId, &str>, include_full_ids: bool) -> String {
     match node {
-        Node::WorkspaceRoot { packages } => format!("workspace packages={}", packages.len()),
+        Node::WorkspaceRoot { packages, targets } => format!(
+            "workspace packages={} targets={}",
+            packages.len(),
+            targets.len()
+        ),
+        Node::BuildTarget { definition, .. } => {
+            format!("build_target kind={}", definition.kind().machine_name())
+        }
         Node::Package {
             name,
             modules,

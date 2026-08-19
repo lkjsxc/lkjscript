@@ -4,8 +4,7 @@ use super::{
     write_outcome,
 };
 use lkjscript::application::{
-    self, APPLICATION_CONTRACT_VERSION, ApplicationBuildRequest, ApplicationInvocation,
-    ApplicationTestReport,
+    APPLICATION_CONTRACT_VERSION, ApplicationInvocation, ApplicationTestReport,
 };
 use lkjscript::error::{ErrorCode, LkError};
 use lkjscript::machine::{MAX_JSON_INPUT_BYTES, MAX_JSON_OUTPUT_BYTES};
@@ -20,48 +19,25 @@ use std::process::ExitCode;
 const HELP: &str = "usage: lkjscript app COMMAND [OPTIONS]
 
 Commands:
-  build --release FILE [--release FILE ...] (--output FILE | --validate-only) [--pretty]
-        # strict ApplicationBuildRequest JSON on stdin
   validate --artifact FILE [--pretty]
   inspect --artifact FILE [--pretty]
   test --artifact FILE [--pretty]
   run --artifact FILE [--pretty]       # strict ApplicationInvocation JSON on stdin
   stream --artifact FILE               # raw bytes on stdin and stdout
 
-Application CLI JSON contract version 5 is required on inputs and reported on outputs. Application
-artifacts embed one exact immutable reusable-release graph. Build requires an exact root release,
-exported entry, invocation profile, policy, application tests, and every graph release as an
-explicit immutable input. Build runs all embedded release and application tests before no-overwrite
-atomic publication. No command resolves workspace HEAD, coordinate, user version, or mutable store
-state. Artifact paths must be absolute.";
+Application CLI JSON contract version 5 is required on inputs and reported on outputs. These
+commands consume immutable application distribution authority. Semantic projects create
+applications through `lkjscript target build`; the removed command-local build predecessor is
+rejected. Artifact paths must be absolute.";
 
 pub(super) enum ApplicationCommand {
     Invalid(String),
     Help,
-    Build {
-        releases: Vec<PathBuf>,
-        output: Option<PathBuf>,
-        pretty: bool,
-    },
-    Validate {
-        artifact: PathBuf,
-        pretty: bool,
-    },
-    Inspect {
-        artifact: PathBuf,
-        pretty: bool,
-    },
-    Test {
-        artifact: PathBuf,
-        pretty: bool,
-    },
-    Run {
-        artifact: PathBuf,
-        pretty: bool,
-    },
-    Stream {
-        artifact: PathBuf,
-    },
+    Validate { artifact: PathBuf, pretty: bool },
+    Inspect { artifact: PathBuf, pretty: bool },
+    Test { artifact: PathBuf, pretty: bool },
+    Run { artifact: PathBuf, pretty: bool },
+    Stream { artifact: PathBuf },
 }
 
 pub(super) fn parse(arguments: impl Iterator<Item = String>) -> Result<ApplicationCommand, String> {
@@ -72,7 +48,6 @@ pub(super) fn parse(arguments: impl Iterator<Item = String>) -> Result<Applicati
     let rest = &arguments[1..];
     match command {
         "help" | "--help" if rest.is_empty() => Ok(ApplicationCommand::Help),
-        "build" => parse_build(rest),
         "validate" => parse_artifact_action(rest, ArtifactAction::Validate),
         "inspect" => parse_artifact_action(rest, ArtifactAction::Inspect),
         "test" => parse_artifact_action(rest, ArtifactAction::Test),
@@ -99,11 +74,6 @@ fn run_json(command: ApplicationCommand) -> CliOutcome {
             EXIT_USAGE_OR_JSON,
         ),
         ApplicationCommand::Help => success(HELP.as_bytes().to_vec()),
-        ApplicationCommand::Build {
-            releases,
-            output,
-            pretty,
-        } => run_build(&releases, output.as_deref(), pretty),
         ApplicationCommand::Validate { artifact, pretty }
         | ApplicationCommand::Inspect { artifact, pretty } => {
             let mut kernel = match RuntimeKernel::new(RuntimePolicy::default()) {
@@ -124,47 +94,6 @@ fn run_json(command: ApplicationCommand) -> CliOutcome {
             None,
         ),
     }
-}
-
-fn parse_build(arguments: &[String]) -> Result<ApplicationCommand, String> {
-    let mut releases = Vec::new();
-    let mut output = None;
-    let mut validate_only = false;
-    let mut pretty = false;
-    let mut index = 0;
-    while index < arguments.len() {
-        match arguments[index].as_str() {
-            "--release" => {
-                releases.push(PathBuf::from(value_after(
-                    arguments,
-                    &mut index,
-                    "--release",
-                )?));
-            }
-            "--output" if output.is_none() && !validate_only => {
-                output = Some(PathBuf::from(value_after(
-                    arguments, &mut index, "--output",
-                )?));
-            }
-            "--validate-only" if !validate_only && output.is_none() => validate_only = true,
-            "--pretty" if !pretty => pretty = true,
-            _ => return Err(app_usage("invalid or duplicate build option")),
-        }
-        index += 1;
-    }
-    if releases.is_empty() {
-        return Err(app_usage("build requires at least one --release FILE"));
-    }
-    if output.is_none() && !validate_only {
-        return Err(app_usage(
-            "build requires exactly one of --output FILE or --validate-only",
-        ));
-    }
-    Ok(ApplicationCommand::Build {
-        releases,
-        output,
-        pretty,
-    })
 }
 
 #[derive(Clone, Copy)]
@@ -217,42 +146,6 @@ fn value_after<'a>(
         .get(*index)
         .map(String::as_str)
         .ok_or_else(|| app_usage(&format!("{flag} requires a value")))
-}
-
-#[allow(clippy::result_large_err)]
-fn run_build(releases: &[PathBuf], output: Option<&Path>, pretty: bool) -> CliOutcome {
-    let input = match read_stdin(MAX_JSON_INPUT_BYTES, "application build request") {
-        Ok(input) => input,
-        Err(error) => return application_error(error, pretty),
-    };
-    let request = match decode_json::<ApplicationBuildRequest>(&input, "application build request")
-    {
-        Ok(request) => request,
-        Err(error) => return application_error(error, pretty),
-    };
-    let release_bytes = match releases
-        .iter()
-        .map(|path| lkjscript::release::read_file(path))
-        .collect::<Result<Vec<_>, _>>()
-    {
-        Ok(bytes) => bytes,
-        Err(error) => return application_error(error, pretty),
-    };
-    let prepared = match application::prepare(&request, &release_bytes) {
-        Ok(prepared) => prepared,
-        Err(error) => return application_error(error, pretty),
-    };
-    let published = output.is_some();
-    let preflighted = encode_json(&prepared.receipt(published), pretty);
-    if preflighted.exit != 0 {
-        return preflighted;
-    }
-    if let Some(output) = output
-        && let Err(error) = prepared.publish(output)
-    {
-        return application_error(error, pretty);
-    }
-    preflighted
 }
 
 fn run_tests(path: &Path, pretty: bool) -> CliOutcome {

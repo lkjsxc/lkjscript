@@ -16,6 +16,7 @@ target/release/lkjwork init ./work --name product-next
 target/release/lkjwork --project ./work add "Implement query" --priority 20 --label runtime
 target/release/lkjwork --project ./work add "Ship client" --depends '#1'
 target/release/lkjwork --project ./work next
+target/release/lkjwork --project ./work why '#2'
 target/release/lkjwork --project ./work start '#1'
 target/release/lkjwork --project ./work note '#1' add "Focused tests pass" --actor agent
 target/release/lkjwork --project ./work finish '#1'
@@ -57,9 +58,15 @@ application evaluation and is never silently retried.
 
 ## Pure observations
 
-`show`, `list`, `next`, `summary`, `context`, and `export` invoke the application-declared pure query
-entry. `history` reads bounded retained semantic history. None publishes a state revision, event key,
-command, host attempt, outcome, checkpoint, or HEAD change.
+`show`, `list`, `next`, `why`, `summary`, `context`, and `export` invoke the
+application-declared pure query entry. `history` reads bounded retained semantic history. None
+publishes a state revision, event key, command, host attempt, outcome, checkpoint, manifest, blob, or
+HEAD change.
+
+`why TASK` returns the task ID, phase, archive state, optional manual hold, derived actionable state,
+and prerequisite task IDs that currently block action, in deterministic task-ID order. Missing task
+is a typed product outcome. All readiness/explanation policy is application meaning; the Rust client
+only constructs the typed query value, decodes the exact public result shape, and renders it.
 
 Pages use a zero-based `after` offset, a positive limit of at most 100, filters before pagination,
 and explicit `total`, `omitted`, and `next_after` facts. `context` selects active tasks first,
@@ -150,17 +157,31 @@ an existing project and does not claim old-instance continuity.
 attachment contents, paths, grants, runtime handles, and storage records. It is not restorable
 authority and no import contract exists.
 
-## Reproducibility and acceptance
+## Semantic development, reproducibility, and acceptance
 
-The installed executable embeds `lkjwork.lkja` and validates it at startup. The checked-in application
-artifact is distribution authority; `build.py` is a reviewable public-command recipe, not runtime
-authority. Reproduce both the artifact and generated bindings with:
+`applications/lkjwork/.lkjscript` is the maintained development authority. Its typed graph owns the
+complete program, release/application/product targets, and immutable cases. Its automatic history
+records the migration and the three-revision `why` dogfood change. `build.py` and generated bindings
+are absent; the native client discovers exact artifact-owned interface identities through validated
+self-description.
+
+The installed executable embeds `lkjwork.lkja` and validates it at startup. Reproduce that checked
+distribution artifact through the public project target only:
 
 ```sh
 cargo build --release --locked --bin lkjscript
-python3 applications/lkjwork/build.py target/release/lkjscript
+target/release/lkjscript doctor --project applications/lkjwork --deep
+target/release/lkjscript target test lkjwork --project applications/lkjwork
+target/release/lkjscript target build lkjwork \
+  --project applications/lkjwork --output /tmp/lkjwork.lkja
+cmp /tmp/lkjwork.lkja applications/lkjwork/lkjwork.lkja
+cargo build --release --locked --bin lkjwork
 target/release/lkjwork version
 ```
+
+Target building reads no Python, generated semantic request, private Rust graph builder, mutable
+registry, or ambient project file. Once packaged, the product operates without the semantic
+development project.
 
 Run the complete public acceptance story and frozen product corpora with:
 

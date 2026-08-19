@@ -307,6 +307,7 @@ impl ReleaseGraph {
             root,
             Node::WorkspaceRoot {
                 packages: package_nodes,
+                targets: Vec::new(),
             },
         );
         for release in self.releases.values() {
@@ -422,6 +423,7 @@ fn strip_imported_children(
             functions.retain(|id| !imported(id));
         }
         Node::WorkspaceRoot { .. }
+        | Node::BuildTarget { .. }
         | Node::Package { .. }
         | Node::ProductType { .. }
         | Node::ProductField { .. }

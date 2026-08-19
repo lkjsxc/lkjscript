@@ -26,6 +26,7 @@ use std::time::Instant;
 pub const APPLICATION_MAGIC: [u8; 8] = *b"LKJAPP\0\x05";
 pub const APPLICATION_FORMAT_VERSION: u16 = 5;
 pub const APPLICATION_CONTRACT_VERSION: u16 = 5;
+pub const APPLICATION_INTERFACE_CONTRACT_VERSION: u16 = 1;
 pub const MAXIMUM_APPLICATION_ARTIFACT_BYTES: usize = 256 * 1024 * 1024;
 pub const MAXIMUM_APPLICATION_TESTS: usize = 256;
 pub const MAXIMUM_APPLICATION_TEST_NAME_BYTES: usize = 64;
@@ -647,6 +648,18 @@ pub struct ApplicationInspection {
     pub limits: ApplicationLimits,
 }
 
+/// Artifact-owned public interface facts for a native product boundary.
+///
+/// This descriptor is derived directly from the validated embedded root release. It is not a
+/// binding source, an editable manifest, or a development-workspace identity.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ApplicationInterfaceInspection {
+    pub contract_version: u16,
+    pub application: ApplicationDigest,
+    pub root_release: release::ReleaseInspection,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ApplicationBuildReceipt {
@@ -950,6 +963,17 @@ pub fn validate(bytes: &[u8]) -> Result<ApplicationInspection> {
 
 pub fn inspect(bytes: &[u8]) -> Result<ApplicationInspection> {
     validate(bytes)
+}
+
+pub fn inspect_interface(bytes: &[u8]) -> Result<ApplicationInterfaceInspection> {
+    let application =
+        decode_application_observed(bytes, &mut ApplicationLoadObservation::default())?;
+    let root = application.graph.release(application.graph.root())?;
+    Ok(ApplicationInterfaceInspection {
+        contract_version: APPLICATION_INTERFACE_CONTRACT_VERSION,
+        application: application.digest,
+        root_release: release::inspection(root)?,
+    })
 }
 
 pub fn inspect_observed(

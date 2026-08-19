@@ -15,6 +15,7 @@ pub mod diff;
 pub mod engine;
 pub mod error;
 pub mod graph;
+pub mod history;
 pub mod ids;
 pub mod instance;
 pub mod interpret;
@@ -23,12 +24,14 @@ mod machine_contract;
 mod managed;
 mod ownership;
 mod persistence;
+pub mod project;
 pub mod protocol;
 pub mod query;
 pub mod release;
 pub mod runtime;
 pub mod runtime_protocol;
 pub mod schema;
+pub mod target;
 pub mod transaction;
 pub mod type_layout;
 mod validate;
@@ -49,9 +52,13 @@ pub use application::{
     StatefulCommand, StatefulTransition,
 };
 pub use error::{ErrorCode, LkError, Result};
+pub use history::{
+    HistoryPage, REVISION_RECORD_VERSION, RestorationReceipt, RevisionPublicationOutcome,
+    RevisionRecord, RevisionRecordInspection, RevisionRecordSummary,
+};
 pub use ids::{
     ChangeDigest, DraftSymbol, IdempotencyKey, NodeId, NodeIdentityClass, QueryId, RequestId,
-    Revision, SnapshotHash, WorkspaceId,
+    Revision, RevisionRecordDigest, SnapshotHash, WorkspaceId,
 };
 pub use instance::{
     BlobDigest, CommandId, GrantBinding, HostAdapterInput, HostAdapterKind, HostExecutionReceipt,
@@ -65,6 +72,13 @@ pub use instance::{
 pub use interpret::{RunPolicy, RuntimeFieldValue, RuntimeValue};
 pub use machine::{
     DescribeSchemaRequest, DescribeSchemaResult, MachineSchemaDigest, SchemaProjection, SchemaRoot,
+};
+pub use project::{
+    PROJECT_CHANGE_VERSION, PROJECT_CONTRACT_VERSION, Project, ProjectBackupReceipt,
+    ProjectChangeReceipt, ProjectChangeRequest, ProjectContextResult, ProjectDiffPage,
+    ProjectHealth, ProjectInitReceipt, ProjectLocatorFacts, ProjectNodeInspection,
+    ProjectOrientation, ProjectOrientationResult, ProjectStatus, ProjectTargetReceipt,
+    TargetArtifactReceipt, TargetInspection,
 };
 pub use protocol::{Request, RequestCode, Response, ResponseCode};
 pub use release::{
@@ -91,6 +105,13 @@ pub use schema::{
     OperationCode, OperationDescriptor, OperationDraft, OperationKind, ProductFieldValue,
     ProductFieldValueDraft, RegionArity, RegionDescriptor, RegionRole, SemanticType, TypeDraft,
     TypeReferenceSlot, TypeRule, ValueDraft, ValueRef,
+};
+pub use target::{
+    ApplicationTargetDefinition, BuildTargetDefinition, BuildTargetKind, ProductTargetDefinition,
+    ReleaseTargetDefinition, TARGET_CONTRACT_VERSION, TargetApplicationImport,
+    TargetApplicationTestCase, TargetFieldValue, TargetHostOutcomeRoute, TargetHostRequestRoute,
+    TargetInvocationProfile, TargetItem, TargetReleaseDependency, TargetStatefulApplicationProfile,
+    TargetSummary, TargetTestExpectation, TargetTrap, TargetValue,
 };
 pub use transaction::{
     ApplyTransactionRequest, ExpressionDraft, ExpressionKindDraft, FunctionBodyDraft,

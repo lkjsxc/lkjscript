@@ -34,7 +34,7 @@ fn request(transaction: &Transaction) -> ApplyTransactionRequest {
 }
 
 #[test]
-fn nominal_declarations_survive_format_seven_restart_and_rederive_layout() {
+fn nominal_declarations_survive_format_eight_restart_and_rederive_layout() {
     let temporary = tempfile::tempdir().expect("state");
     ensure_state_directory(temporary.path()).expect("state directory");
     let id = WorkspaceId::from_bytes([0x94; 16]);
@@ -89,7 +89,7 @@ fn nominal_declarations_survive_format_seven_restart_and_rederive_layout() {
 }
 
 #[test]
-fn nominal_operation_and_match_graph_survives_format_seven_restart_and_retained_query() {
+fn nominal_operation_and_match_graph_survives_format_eight_restart_and_retained_query() {
     let temporary = tempfile::tempdir().expect("state");
     ensure_state_directory(temporary.path()).expect("state directory");
     let id = WorkspaceId::from_bytes([0x96; 16]);
@@ -406,7 +406,13 @@ fn restart_rejects_history_that_clears_a_surviving_package_entry() {
     .expect("write forged revision");
     fs::write(
         directory.join("HEAD"),
-        encode_head(forged.revision(), forged.hash(), None).expect("forged HEAD"),
+        encode_head(
+            forged.revision(),
+            forged.hash(),
+            RevisionRecordDigest::from_bytes([0x91; RevisionRecordDigest::BYTE_LEN]),
+            None,
+        )
+        .expect("forged HEAD"),
     )
     .expect("write forged HEAD");
     drop(workspace);
@@ -414,6 +420,72 @@ fn restart_rejects_history_that_clears_a_surviving_package_entry() {
         DurableWorkspace::open(temporary.path(), id)
             .err()
             .expect("restart must reject cleared entry history")
+            .code,
+        ErrorCode::ArtifactCorrupt
+    );
+}
+
+#[test]
+fn shallow_open_defers_historical_snapshot_decode_and_deep_verify_finds_corruption() {
+    let temporary = tempfile::tempdir().expect("temporary directory");
+    ensure_state_directory(temporary.path()).expect("state directory");
+    let id = WorkspaceId::from_bytes([0x46; 16]);
+    let mut workspace = DurableWorkspace::create(temporary.path(), id).expect("workspace");
+    let first_request = request(&create_package(id));
+    let first_fingerprint =
+        machine::transaction_fingerprint(&first_request).expect("first fingerprint");
+    let first = workspace
+        .apply(&first_request, first_fingerprint)
+        .expect("first revision");
+    let package = first.returned_bindings[0].1;
+    let second_request = request(&Transaction {
+        workspace: id,
+        base_revision: Revision::new(1),
+        idempotency_key: None,
+        mode: TransactionMode::Commit,
+        operations: vec![TransactionOp::RenameNode {
+            node: NodeTarget::Existing(package),
+            name: "renamed".to_owned(),
+        }],
+    });
+    let second_fingerprint =
+        machine::transaction_fingerprint(&second_request).expect("second fingerprint");
+    workspace
+        .apply(&second_request, second_fingerprint)
+        .expect("second revision");
+    drop(workspace);
+
+    let historical = revision_path(
+        &workspace_directory(temporary.path(), id).join("revisions"),
+        Revision::new(1),
+    );
+    let length = fs::metadata(&historical)
+        .expect("historical metadata")
+        .len();
+    OpenOptions::new()
+        .write(true)
+        .open(&historical)
+        .expect("historical snapshot")
+        .set_len(length - 1)
+        .expect("truncate historical snapshot");
+
+    let reopened = DurableWorkspace::open(temporary.path(), id)
+        .expect("shallow open validates current authority and compact history");
+    assert_eq!(
+        reopened.head().expect("current head").revision(),
+        Revision::new(2)
+    );
+    assert_eq!(
+        reopened
+            .snapshot(Revision::new(1))
+            .expect_err("selected corrupt history must reject")
+            .code,
+        ErrorCode::ArtifactCorrupt
+    );
+    assert_eq!(
+        reopened
+            .deep_verify()
+            .expect_err("deep verification must decode every retained snapshot")
             .code,
         ErrorCode::ArtifactCorrupt
     );
@@ -520,11 +592,12 @@ fn maximum_compact_receipt_keeps_head_below_explicit_policy() {
     let bytes = encode_head(
         Revision::new(2),
         SnapshotHash::from_bytes([0x34; 32]),
+        RevisionRecordDigest::from_bytes([0x35; RevisionRecordDigest::BYTE_LEN]),
         Some(&record),
     )
     .expect("maximum compact HEAD");
     assert!(bytes.len() < MAXIMUM_HEAD_BYTES);
-    let (_, _, decoded) = decode_head(&bytes).expect("decode compact HEAD");
+    let (_, _, _, decoded) = decode_head(&bytes).expect("decode compact HEAD");
     assert_eq!(decoded.expect("idempotency").receipt, record.receipt);
 }
 
@@ -535,8 +608,14 @@ fn publication_rejects_live_head_tampering_before_replacement() {
     let id = WorkspaceId::from_bytes([0x19; 16]);
     let mut workspace = DurableWorkspace::create(temporary.path(), id).expect("workspace");
     let head = workspace.head().expect("head");
-    let forged = encode_head(head.revision(), SnapshotHash::from_bytes([0x55; 32]), None)
-        .expect("forged but decodable HEAD");
+    let record_digest = workspace.record(head.revision()).expect("record").digest;
+    let forged = encode_head(
+        head.revision(),
+        SnapshotHash::from_bytes([0x55; 32]),
+        record_digest,
+        None,
+    )
+    .expect("forged but decodable HEAD");
     let head_path = workspace_directory(temporary.path(), id).join("HEAD");
     fs::write(&head_path, &forged).expect("tamper live HEAD");
     let revision_before = fs::read_dir(workspace_directory(temporary.path(), id).join("revisions"))
@@ -597,9 +676,11 @@ fn every_apply_path_verifies_live_head_before_replay_or_validation() {
         .apply(&first_request, first_fingerprint)
         .expect("keyed commit");
     let head = conflict.head().expect("head");
+    let record_digest = conflict.record(head.revision()).expect("record").digest;
     let forged = encode_head(
         head.revision(),
         SnapshotHash::from_bytes([0x77; 32]),
+        record_digest,
         conflict.idempotency.as_ref(),
     )
     .expect("forged HEAD");
@@ -652,19 +733,21 @@ fn every_apply_path_verifies_live_head_before_replay_or_validation() {
 }
 
 #[test]
-fn head9_domain_separated_grammar_remains_fixed_and_deterministic() {
+fn head10_domain_separated_grammar_remains_fixed_and_deterministic() {
     let revision = Revision::new(7);
     let hash = SnapshotHash::from_bytes([0xa5; SnapshotHash::BYTE_LEN]);
-    let first = encode_head(revision, hash, None).expect("HEAD9 encode");
+    let record = RevisionRecordDigest::from_bytes([0xb6; RevisionRecordDigest::BYTE_LEN]);
+    let first = encode_head(revision, hash, record, None).expect("HEAD10 encode");
     assert_eq!(
         first,
-        encode_head(revision, hash, None).expect("deterministic HEAD9")
+        encode_head(revision, hash, record, None).expect("deterministic HEAD10")
     );
 
     let mut expected_body = Vec::new();
-    expected_body.extend_from_slice(b"LKJHEAD9");
+    expected_body.extend_from_slice(b"LKJHDA10");
     expected_body.extend_from_slice(&7_u64.to_le_bytes());
     expected_body.extend_from_slice(&[0xa5; SnapshotHash::BYTE_LEN]);
+    expected_body.extend_from_slice(&[0xb6; RevisionRecordDigest::BYTE_LEN]);
     expected_body.push(0);
     assert_eq!(&first[..expected_body.len()], expected_body.as_slice());
     assert_eq!(first.len(), expected_body.len() + SnapshotHash::BYTE_LEN);
@@ -672,9 +755,10 @@ fn head9_domain_separated_grammar_remains_fixed_and_deterministic() {
         &first[expected_body.len()..],
         head_checksum(&expected_body).as_slice()
     );
-    let (decoded_revision, decoded_hash, decoded_record) =
-        decode_head(&first).expect("HEAD9 decode");
+    let (decoded_revision, decoded_hash, decoded_record_digest, decoded_record) =
+        decode_head(&first).expect("HEAD10 decode");
     assert_eq!((decoded_revision, decoded_hash), (revision, hash));
+    assert_eq!(decoded_record_digest, record);
     assert!(decoded_record.is_none());
 }
 
@@ -717,14 +801,14 @@ fn exact_commit_response_preflight_uses_real_id_and_fails_before_publication() {
 }
 
 #[test]
-fn head_version_eight_magic_is_rejected_without_compatibility_reader() {
+fn head_version_nine_magic_is_rejected_without_compatibility_reader() {
     let temporary = tempfile::tempdir().expect("temporary directory");
     ensure_state_directory(temporary.path()).expect("state directory");
     let id = WorkspaceId::from_bytes([0x18; 16]);
     DurableWorkspace::create(temporary.path(), id).expect("workspace");
     let head_path = workspace_directory(temporary.path(), id).join("HEAD");
     let mut bytes = fs::read(&head_path).expect("head bytes");
-    bytes[..8].copy_from_slice(b"LKJHEAD8");
+    bytes[..8].copy_from_slice(b"LKJHEAD9");
     let body_length = bytes.len() - SnapshotHash::BYTE_LEN;
     let checksum = head_checksum(&bytes[..body_length]);
     bytes[body_length..].copy_from_slice(&checksum);
@@ -732,7 +816,7 @@ fn head_version_eight_magic_is_rejected_without_compatibility_reader() {
     assert_eq!(
         DurableWorkspace::open(temporary.path(), id)
             .err()
-            .expect("HEAD8 must reject")
+            .expect("HEAD9 must reject")
             .code,
         ErrorCode::ArtifactCorrupt
     );
@@ -772,12 +856,22 @@ fn persisted_idempotency_receipt_is_semantically_validated() {
     let head = workspace.head().expect("head");
     let head_revision = head.revision();
     let head_hash = head.hash();
+    let head_record_digest = workspace
+        .record(head_revision)
+        .expect("revision record")
+        .digest;
     let root = head.root();
     let head_path = workspace.directory.join("HEAD");
 
     let mut unpublished = valid_record.clone();
     unpublished.receipt.published = false;
-    let forged = encode_head(head_revision, head_hash, Some(&unpublished)).expect("forged HEAD");
+    let forged = encode_head(
+        head_revision,
+        head_hash,
+        head_record_digest,
+        Some(&unpublished),
+    )
+    .expect("forged HEAD");
     fs::write(&head_path, forged).expect("write forged HEAD");
     assert_eq!(
         DurableWorkspace::open(temporary.path(), id)
@@ -789,7 +883,8 @@ fn persisted_idempotency_receipt_is_semantically_validated() {
 
     let mut missing = valid_record.clone();
     missing.receipt.created_count = 0;
-    let forged = encode_head(head_revision, head_hash, Some(&missing)).expect("forged HEAD");
+    let forged = encode_head(head_revision, head_hash, head_record_digest, Some(&missing))
+        .expect("forged HEAD");
     fs::write(&head_path, forged).expect("write forged HEAD");
     assert_eq!(
         DurableWorkspace::open(temporary.path(), id)
@@ -801,7 +896,13 @@ fn persisted_idempotency_receipt_is_semantically_validated() {
 
     let mut wrong_digest = valid_record.clone();
     wrong_digest.receipt.change_digest = crate::ids::ChangeDigest::from_bytes([0xff; 32]);
-    let forged = encode_head(head_revision, head_hash, Some(&wrong_digest)).expect("forged HEAD");
+    let forged = encode_head(
+        head_revision,
+        head_hash,
+        head_record_digest,
+        Some(&wrong_digest),
+    )
+    .expect("forged HEAD");
     fs::write(&head_path, forged).expect("write forged HEAD");
     assert_eq!(
         DurableWorkspace::open(temporary.path(), id)
@@ -813,7 +914,8 @@ fn persisted_idempotency_receipt_is_semantically_validated() {
 
     let mut prior = valid_record;
     prior.receipt.returned_bindings[0].1 = root;
-    let forged = encode_head(head_revision, head_hash, Some(&prior)).expect("forged HEAD");
+    let forged = encode_head(head_revision, head_hash, head_record_digest, Some(&prior))
+        .expect("forged HEAD");
     fs::write(head_path, forged).expect("write forged HEAD");
     assert_eq!(
         DurableWorkspace::open(temporary.path(), id)
@@ -874,7 +976,7 @@ fn validate_only_and_commit_share_persistence_policy_preflight() {
 }
 
 #[test]
-fn keyed_head9_publication_faults_preserve_prior_replay_and_allocator() {
+fn keyed_head10_publication_faults_preserve_prior_replay_and_allocator() {
     let temporary = tempfile::tempdir().expect("temporary state directory");
     ensure_state_directory(temporary.path()).expect("state directory");
     let id = WorkspaceId::from_bytes([5; 16]);

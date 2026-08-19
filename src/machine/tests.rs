@@ -48,9 +48,9 @@ fn strict_envelope_and_canonical_id_rejections() {
     assert_eq!(decode_request(&bytes).expect("decode"), request);
     let text = String::from_utf8(bytes).expect("UTF-8");
     for invalid in [
-        text.replacen("\"version\":11", "\"version\":10", 1),
+        text.replacen("\"version\":12", "\"version\":11", 1),
         text.replacen("\"request_id\":1", "\"request_id\":0", 1),
-        text.replacen("{\"version\":11", "{\"unknown\":0,\"version\":11", 1),
+        text.replacen("{\"version\":12", "{\"unknown\":0,\"version\":12", 1),
         format!("{text} {{}}"),
         text.replacen(
             &workspace.to_string(),
@@ -292,12 +292,20 @@ fn semantic_transaction_and_query_variant_samples_are_exhaustive() {
     let nodes = vec![
         Node::WorkspaceRoot {
             packages: vec![node],
+            targets: Vec::new(),
         },
         Node::Package {
             owner: node,
             name: "p".into(),
             modules: vec![other],
             entry: Some(other),
+        },
+        Node::BuildTarget {
+            owner: node,
+            name: "target".into(),
+            definition: crate::target::BuildTargetDefinition::Product(
+                crate::target::ProductTargetDefinition { application: other },
+            ),
         },
         Node::Module {
             owner: node,
@@ -1384,6 +1392,14 @@ fn every_advertised_public_variant_matches_strict_serde() {
         symbol: Some(DraftSymbol::generated(20)),
         operation: ExpressionKindDraft::ConstI64(1),
     };
+    let target_item = crate::target::TargetItem {
+        release_target: node,
+        item: other,
+    };
+    let product_target =
+        crate::target::BuildTargetDefinition::Product(crate::target::ProductTargetDefinition {
+            application: node,
+        });
     let transaction_samples = vec![
         TransactionOp::CreatePackage {
             symbol: DraftSymbol::generated(1),
@@ -1466,6 +1482,45 @@ fn every_advertised_public_variant_matches_strict_serde() {
             module: target,
             name: "items".into(),
             element: TypeDraft::I64,
+        },
+        TransactionOp::CreateBuildTarget {
+            symbol: DraftSymbol::generated(10),
+            name: "target".into(),
+            definition: product_target.clone(),
+        },
+        TransactionOp::ReplaceBuildTarget {
+            target: node,
+            definition: product_target,
+        },
+        TransactionOp::AddReleaseTargetExport {
+            target: node,
+            name: "legacy".into(),
+            item: other,
+        },
+        TransactionOp::SetReleaseTargetExport {
+            target: node,
+            name: "entry".into(),
+            item: other,
+        },
+        TransactionOp::SetApplicationQueryBoundary {
+            target: node,
+            query_entry: target_item,
+            query: target_item,
+        },
+        TransactionOp::AddApplicationTargetTest {
+            target: node,
+            case: crate::target::TargetApplicationTestCase {
+                name: "case".into(),
+                target: target_item,
+                arguments: vec![crate::target::TargetValue::I64(1)],
+                expected: crate::target::TargetTestExpectation::Value(
+                    crate::target::TargetValue::I64(1),
+                ),
+                policy: crate::interpret::RunPolicy {
+                    fuel: 1,
+                    maximum_frames: 1,
+                },
+            },
         },
     ];
     assert_eq!(transaction_samples.len(), TransactionOpCode::ALL.len());
@@ -2452,6 +2507,84 @@ fn every_advertised_public_variant_matches_strict_serde() {
             ))),
         }],
     };
+    let target_item = crate::target::TargetItem {
+        release_target: node,
+        item: other,
+    };
+    let release_export = crate::release::ReleaseExportRequest {
+        name: "entry".into(),
+        target: node,
+    };
+    let release_import = crate::release::ReleaseImportRequest {
+        local: node,
+        dependency_slot: "dependency".into(),
+        export: "entry".into(),
+    };
+    let release_trap = crate::release::ReleaseTrap {
+        code: crate::release::ReleaseTrapCode::RuntimeTrap,
+        target: Some(node),
+    };
+    let release_test = crate::release::ReleaseTestCase {
+        name: "release_case".into(),
+        target: node,
+        arguments: vec![RuntimeValue::I64(1)],
+        expected: crate::release::ReleaseTestExpectation::Value(RuntimeValue::I64(1)),
+        policy: run_policy,
+    };
+    let target_request_route = crate::target::TargetHostRequestRoute {
+        variant: target_item,
+        operation: crate::application::HostOperation::PutBlob,
+    };
+    let target_outcome_route = crate::target::TargetHostOutcomeRoute {
+        operation: crate::application::HostOperation::PutBlob,
+        class: crate::application::HostOutcomeClass::Succeeded,
+        variant: target_item,
+    };
+    let target_import = crate::target::TargetApplicationImport {
+        slot: "blob".into(),
+        interface: crate::application::HostInterface::ImmutableBlob,
+        request: target_item,
+        outcome: target_item,
+        command_variant: target_item,
+        outcome_variant: target_item,
+        requests: vec![target_request_route],
+        outcomes: vec![target_outcome_route],
+    };
+    let target_profile = crate::target::TargetStatefulApplicationProfile {
+        resume: target_item,
+        query_entry: target_item,
+        state: target_item,
+        event: target_item,
+        response: target_item,
+        query: target_item,
+        query_result: target_item,
+        command: target_item,
+        outcome: target_item,
+        decision: target_item,
+        declined_variant: target_item,
+        declined_payload: target_item,
+        declined_response_field: target_item,
+        unchanged_variant: target_item,
+        unchanged_payload: target_item,
+        unchanged_response_field: target_item,
+        completed_variant: target_item,
+        completed_payload: target_item,
+        completed_state_field: target_item,
+        completed_response_field: target_item,
+        suspended_variant: target_item,
+        suspended_payload: target_item,
+        suspended_state_field: target_item,
+        suspended_response_field: target_item,
+        suspended_command_field: target_item,
+        imports: vec![target_import.clone()],
+    };
+    let target_case = crate::target::TargetApplicationTestCase {
+        name: "application_case".into(),
+        target: target_item,
+        arguments: vec![crate::target::TargetValue::I64(1)],
+        expected: crate::target::TargetTestExpectation::Value(crate::target::TargetValue::I64(1)),
+        policy: run_policy,
+    };
     macro_rules! check_named_records {
             ($catalog:expr; $($name:literal => $sample:expr),+ $(,)?) => {{
                 let mut count = 0_usize;
@@ -2474,6 +2607,36 @@ fn every_advertised_public_variant_matches_strict_serde() {
         "transaction" => transaction.clone(),
         "transaction_response_spec" => response_spec.clone(),
         "transaction_receipt" => receipt.clone(),
+        "target_release_dependency" => crate::target::TargetReleaseDependency { slot: "dependency".into(), target: node },
+        "release_export_request" => release_export.clone(),
+        "release_import_request" => release_import.clone(),
+        "release_trap" => release_trap,
+        "release_test_case" => release_test.clone(),
+        "release_target_definition" => crate::target::ReleaseTargetDefinition {
+            root: node,
+            coordinate: "example/package".into(),
+            user_version: "1.0.0".into(),
+            exports: vec![release_export],
+            dependencies: vec![crate::target::TargetReleaseDependency { slot: "dependency".into(), target: other }],
+            imports: vec![release_import],
+            tests: vec![release_test],
+        },
+        "target_item" => target_item,
+        "target_field_value" => crate::target::TargetFieldValue { field: target_item, value: crate::target::TargetValue::I64(1) },
+        "target_host_request_route" => target_request_route,
+        "target_host_outcome_route" => target_outcome_route,
+        "target_application_import" => target_import,
+        "target_stateful_application_profile" => target_profile,
+        "target_trap" => crate::target::TargetTrap { code: crate::application::ApplicationTrapCode::RuntimeTrap, target: Some(target_item) },
+        "target_application_test_case" => target_case.clone(),
+        "application_target_definition" => crate::target::ApplicationTargetDefinition {
+            root_release: node,
+            entry: target_item,
+            profile: crate::target::TargetInvocationProfile::Typed,
+            policy: run_policy,
+            tests: vec![target_case],
+        },
+        "product_target_definition" => crate::target::ProductTargetDefinition { application: node },
     );
     assert_eq!(transaction_record_count, schema.transaction_records.len());
     let run_record_count = check_named_records!(
@@ -2539,7 +2702,7 @@ fn every_advertised_public_variant_matches_strict_serde() {
         "function_signature_summary" => signature,
         "name_preview" => name.clone(),
         "node_summary" => node_summary.clone(),
-        "node_view" => NodeView { summary: node_summary.clone(), record: Some(crate::schema::Node::WorkspaceRoot { packages: vec![node] }) },
+        "node_view" => NodeView { summary: node_summary.clone(), record: Some(crate::schema::Node::WorkspaceRoot { packages: vec![node], targets: Vec::new() }) },
         "completeness_blocker" => blocker.clone(),
         "owner_fact" => owner.clone(),
         "owned_region_summary" => OwnedRegionSummary { region: other, role: RegionRole::IfThen },
@@ -4414,6 +4577,7 @@ fn name_and_artifact_policies_are_exact_and_validator_derived() {
         schema.name_contract.named_node_kinds,
         vec![
             NodeKind::Package,
+            NodeKind::BuildTarget,
             NodeKind::Module,
             NodeKind::ProductType,
             NodeKind::SumType,
@@ -4491,6 +4655,16 @@ fn schema_is_deterministic_complete_and_unique() {
         &[
             ("transaction_operation", TransactionOpCode::ALL.len()),
             ("node_target", 2),
+            ("build_target_definition", 3),
+            ("release_test_expectation", 2),
+            ("release_trap_code", 3),
+            ("target_value", 8),
+            ("target_invocation_profile", 3),
+            ("target_test_expectation", 2),
+            ("host_interface", 1),
+            ("host_operation", 2),
+            ("host_outcome_class", 11),
+            ("application_trap_code", 3),
             ("transaction_mode", 2),
         ],
     );
@@ -5327,12 +5501,12 @@ fn schema_projection_byte_measurements_are_retained() {
         sizes,
         vec![
             ("manifest", None, 1_244, 1_323),
-            ("selected_agent_task_roots", Some(114), 98_639, 98_718),
-            ("full", None, 152_964, 153_043),
+            ("selected_agent_task_roots", Some(140), 114_888, 114_967),
+            ("full", None, 167_618, 167_697),
             ("unchanged", None, 105, 184),
         ]
     );
-    assert!(sizes[1].2 < 98_700);
+    assert!(sizes[1].2 < 115_000);
 }
 
 fn assert_variant_payloads<const N: usize>(

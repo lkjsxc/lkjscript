@@ -13,7 +13,7 @@ use crate::schema::{NodeKind, OperationCode, SemanticType};
 use crate::transaction::{MAX_RETURNED_BINDINGS, TransactionOpCode};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-pub const MACHINE_SCHEMA_IDENTITY: &str = "lkjscript-machine-schema-v11";
+pub const MACHINE_SCHEMA_IDENTITY: &str = "lkjscript-machine-schema-v12";
 const MACHINE_SCHEMA_DIGEST_DOMAIN: &str = "lkjscript.machine-schema.digest.v2";
 
 fn scalar_types() -> Vec<MachineScalarDescription> {
@@ -960,7 +960,10 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
             vec![
                 variant_payload(
                     "workspace_root",
-                    record_payload(&[("packages", "list<node_id>", true)]),
+                    record_payload(&[
+                        ("packages", "list<node_id>", true),
+                        ("targets", "list<node_id>", true),
+                    ]),
                 ),
                 variant_payload(
                     "package",
@@ -1072,6 +1075,14 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
                         ("operation", "operation_kind", true),
                     ]),
                 ),
+                variant_payload(
+                    "build_target",
+                    record_payload(&[
+                        ("owner", "node_id", true),
+                        ("name", "string", true),
+                        ("definition", "build_target_definition", true),
+                    ]),
+                ),
             ],
         ),
     ]
@@ -1122,6 +1133,155 @@ fn transaction_records() -> Vec<NamedPayloadDescription> {
                 ("blocker_count_after", "u64", true),
             ],
         ),
+        named_record(
+            "target_release_dependency",
+            &[("slot", "string", true), ("target", "node_id", true)],
+        ),
+        named_record(
+            "release_export_request",
+            &[("name", "string", true), ("target", "node_id", true)],
+        ),
+        named_record(
+            "release_import_request",
+            &[
+                ("local", "node_id", true),
+                ("dependency_slot", "string", true),
+                ("export", "string", true),
+            ],
+        ),
+        named_record(
+            "release_trap",
+            &[
+                ("code", "release_trap_code", true),
+                ("target", "node_id", false),
+            ],
+        ),
+        named_record(
+            "release_test_case",
+            &[
+                ("name", "string", true),
+                ("target", "node_id", true),
+                ("arguments", "list<runtime_value>", true),
+                ("expected", "release_test_expectation", true),
+                ("policy", "run_policy", true),
+            ],
+        ),
+        named_record(
+            "release_target_definition",
+            &[
+                ("root", "node_id", true),
+                ("coordinate", "string", true),
+                ("user_version", "string", true),
+                ("exports", "list<release_export_request>", true),
+                ("dependencies", "list<target_release_dependency>", true),
+                ("imports", "list<release_import_request>", true),
+                ("tests", "list<release_test_case>", true),
+            ],
+        ),
+        named_record(
+            "target_item",
+            &[
+                ("release_target", "node_id", true),
+                ("item", "node_id", true),
+            ],
+        ),
+        named_record(
+            "target_field_value",
+            &[
+                ("field", "target_item", true),
+                ("value", "target_value", true),
+            ],
+        ),
+        named_record(
+            "target_host_request_route",
+            &[
+                ("variant", "target_item", true),
+                ("operation", "host_operation", true),
+            ],
+        ),
+        named_record(
+            "target_host_outcome_route",
+            &[
+                ("operation", "host_operation", true),
+                ("class", "host_outcome_class", true),
+                ("variant", "target_item", true),
+            ],
+        ),
+        named_record(
+            "target_application_import",
+            &[
+                ("slot", "string", true),
+                ("interface", "host_interface", true),
+                ("request", "target_item", true),
+                ("outcome", "target_item", true),
+                ("command_variant", "target_item", true),
+                ("outcome_variant", "target_item", true),
+                ("requests", "list<target_host_request_route>", true),
+                ("outcomes", "list<target_host_outcome_route>", true),
+            ],
+        ),
+        named_record(
+            "target_stateful_application_profile",
+            &[
+                ("resume", "target_item", true),
+                ("query_entry", "target_item", true),
+                ("state", "target_item", true),
+                ("event", "target_item", true),
+                ("response", "target_item", true),
+                ("query", "target_item", true),
+                ("query_result", "target_item", true),
+                ("command", "target_item", true),
+                ("outcome", "target_item", true),
+                ("decision", "target_item", true),
+                ("declined_variant", "target_item", true),
+                ("declined_payload", "target_item", true),
+                ("declined_response_field", "target_item", true),
+                ("unchanged_variant", "target_item", true),
+                ("unchanged_payload", "target_item", true),
+                ("unchanged_response_field", "target_item", true),
+                ("completed_variant", "target_item", true),
+                ("completed_payload", "target_item", true),
+                ("completed_state_field", "target_item", true),
+                ("completed_response_field", "target_item", true),
+                ("suspended_variant", "target_item", true),
+                ("suspended_payload", "target_item", true),
+                ("suspended_state_field", "target_item", true),
+                ("suspended_response_field", "target_item", true),
+                ("suspended_command_field", "target_item", true),
+                ("imports", "list<target_application_import>", true),
+            ],
+        ),
+        named_record(
+            "target_trap",
+            &[
+                ("code", "application_trap_code", true),
+                ("target", "target_item", false),
+            ],
+        ),
+        named_record(
+            "target_application_test_case",
+            &[
+                ("name", "string", true),
+                ("target", "target_item", true),
+                ("arguments", "list<target_value>", true),
+                ("expected", "target_test_expectation", true),
+                ("policy", "run_policy", true),
+            ],
+        ),
+        named_record(
+            "application_target_definition",
+            &[
+                ("root_release", "node_id", true),
+                ("entry", "target_item", true),
+                ("profile", "target_invocation_profile", true),
+                ("policy", "run_policy", true),
+                ("tests", "list<target_application_test_case>", true),
+            ],
+        ),
+        named_record(
+            "product_target_definition",
+            &[("application", "node_id", true)],
+        ),
     ]
 }
 
@@ -1139,6 +1299,108 @@ fn transaction_variants() -> Vec<NamedVariantDescription> {
             vec![
                 variant_payload("existing", newtype_payload("node_id")),
                 variant_payload("draft", newtype_payload("draft_symbol")),
+            ],
+        ),
+        named_variant(
+            "build_target_definition",
+            vec![
+                variant_payload("release", newtype_payload("release_target_definition")),
+                variant_payload(
+                    "application",
+                    newtype_payload("application_target_definition"),
+                ),
+                variant_payload("product", newtype_payload("product_target_definition")),
+            ],
+        ),
+        named_variant(
+            "release_test_expectation",
+            vec![
+                variant_payload("value", newtype_payload("runtime_value")),
+                variant_payload("trap", newtype_payload("release_trap")),
+            ],
+        ),
+        unit_variants(
+            "release_trap_code",
+            [
+                ("runtime_trap", 1),
+                ("byte_index_out_of_bounds", 2),
+                ("byte_slice_out_of_bounds", 3),
+            ],
+        ),
+        named_variant(
+            "target_value",
+            vec![
+                variant_payload("unit", unit_payload()),
+                variant_payload("bool", newtype_payload("bool")),
+                variant_payload("i64", newtype_payload("i64")),
+                variant_payload("bytes", newtype_payload("bytes_string")),
+                variant_payload("text", newtype_payload("string")),
+                variant_payload(
+                    "product",
+                    record_payload(&[
+                        ("ty", "target_item", true),
+                        ("fields", "list<target_field_value>", true),
+                    ]),
+                ),
+                variant_payload(
+                    "sum",
+                    record_payload(&[
+                        ("ty", "target_item", true),
+                        ("variant", "target_item", true),
+                        ("payload", "target_value", false),
+                    ]),
+                ),
+                variant_payload(
+                    "sequence",
+                    record_payload(&[
+                        ("ty", "target_item", true),
+                        ("elements", "list<target_value>", true),
+                    ]),
+                ),
+            ],
+        ),
+        named_variant(
+            "target_invocation_profile",
+            vec![
+                variant_payload("typed", unit_payload()),
+                variant_payload("bytes_stream", unit_payload()),
+                variant_payload(
+                    "stateful",
+                    newtype_payload("target_stateful_application_profile"),
+                ),
+            ],
+        ),
+        named_variant(
+            "target_test_expectation",
+            vec![
+                variant_payload("value", newtype_payload("target_value")),
+                variant_payload("trap", newtype_payload("target_trap")),
+            ],
+        ),
+        unit_variants("host_interface", [("immutable_blob", 1)]),
+        unit_variants("host_operation", [("put_blob", 1), ("inspect_blob", 2)]),
+        unit_variants(
+            "host_outcome_class",
+            [
+                ("succeeded", 1),
+                ("already_present", 2),
+                ("known_failure_before_visibility", 3),
+                ("outcome_unknown", 4),
+                ("reconciliation_present", 5),
+                ("reconciliation_absent", 6),
+                ("reconciliation_indeterminate", 7),
+                ("cancelled_before_action", 8),
+                ("timeout_before_action", 9),
+                ("timeout_after_possible_visibility", 10),
+                ("cleanup_failure", 11),
+            ],
+        ),
+        unit_variants(
+            "application_trap_code",
+            [
+                ("runtime_trap", 1),
+                ("byte_index_out_of_bounds", 2),
+                ("byte_slice_out_of_bounds", 3),
             ],
         ),
         unit_variants("transaction_mode", [("commit", 1), ("validate_only", 2)]),
@@ -1278,6 +1540,34 @@ fn transaction_payload(code: TransactionOpCode) -> VariantPayloadDescription {
         TransactionOpCode::CreatePackage => {
             record_payload(&[("symbol", "draft_symbol", true), ("name", "string", true)])
         }
+        TransactionOpCode::CreateBuildTarget => record_payload(&[
+            ("symbol", "draft_symbol", true),
+            ("name", "string", true),
+            ("definition", "build_target_definition", true),
+        ]),
+        TransactionOpCode::ReplaceBuildTarget => record_payload(&[
+            ("target", "node_id", true),
+            ("definition", "build_target_definition", true),
+        ]),
+        TransactionOpCode::AddReleaseTargetExport => record_payload(&[
+            ("target", "node_id", true),
+            ("name", "string", true),
+            ("item", "node_id", true),
+        ]),
+        TransactionOpCode::SetReleaseTargetExport => record_payload(&[
+            ("target", "node_id", true),
+            ("name", "string", true),
+            ("item", "node_id", true),
+        ]),
+        TransactionOpCode::SetApplicationQueryBoundary => record_payload(&[
+            ("target", "node_id", true),
+            ("query_entry", "target_item", true),
+            ("query", "target_item", true),
+        ]),
+        TransactionOpCode::AddApplicationTargetTest => record_payload(&[
+            ("target", "node_id", true),
+            ("case", "target_application_test_case", true),
+        ]),
         TransactionOpCode::CreateModule => record_payload(&[
             ("symbol", "draft_symbol", true),
             ("package", "node_target", true),

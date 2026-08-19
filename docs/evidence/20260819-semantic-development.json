@@ -1,0 +1,382 @@
+{
+  "schema": "lkjscript-semantic-development-evidence-v1",
+  "campaign": {
+    "identifier": "202608191427-semantic-development",
+    "date": "2026-08-19",
+    "timezone": "Etc/UTC",
+    "prompt": "prompts/202608191427.md",
+    "branch": "main",
+    "starting_commit": "d9f2993d7335c9e177b5f0ed34247bf6a49595ea",
+    "ending_commit": "d9f2993d7335c9e177b5f0ed34247bf6a49595ea",
+    "commit_created": false,
+    "remote_actions": "none",
+    "initial_worktree": [
+      "modified AGENTS.md delivered by the user",
+      "untracked prompts/202608191427.md delivered by the user"
+    ],
+    "preservation": "Initial user-delivered changes were preserved and are not attributed to the implementation."
+  },
+  "effective_instructions": {
+    "root_policy": {
+      "path": "AGENTS.md",
+      "sha256": "7e9c40d1bc29b4528ef7c8fe67ee5b70c2c941016f9bbed6434a276ba0309733",
+      "utf8_bytes": 41634,
+      "lines": 1030
+    },
+    "campaign_prompt": {
+      "path": "prompts/202608191427.md",
+      "sha256": "1f88a6da6723eb6dcb9e5562834b6ad5028a0b12706cc6d2f41f6fec0a55dc2a",
+      "utf8_bytes": 241205,
+      "lines": 5793
+    },
+    "deeper_instruction_files": []
+  },
+  "baseline_reproduction": {
+    "relation_to_audited_baseline": "exact",
+    "baseline_commit": "d9f2993d7335c9e177b5f0ed34247bf6a49595ea",
+    "predecessor_implementation_commit": "2af914ac8d338879264b96378fe84630848390b9",
+    "repository_gate": "passed before implementation",
+    "lkjwork_builder": {
+      "path": "applications/lkjwork/build.py",
+      "bytes": 255704,
+      "lines": 4869,
+      "semantic_transaction_items": 3232,
+      "byte_identical_checked_artifact_reproduction": true
+    },
+    "lkjwork_artifact": {
+      "bytes": 163670,
+      "file_sha256": "52b8f9a5961b7a978832fa32ae28021223162d5acbdaeb660d04e326c69370b6",
+      "application_digest": "9d5ebe527719aa4c68b471cc10f9113df421385997113a08fbd1a6eae4650c4d",
+      "root_release": "7f8fac0efd12aac9562a4498bdc0c3cbb42c68838b09f824623a0d7455194c43",
+      "immutable_cases": 5
+    },
+    "public_product": {
+      "acceptance_final_revision": 30,
+      "functional_final_revision": 85,
+      "representative_final_revision": 2700,
+      "acceptance": "passed",
+      "functional": "passed",
+      "representative": "passed"
+    }
+  },
+  "authority_and_format_decisions": {
+    "active": {
+      "protocol": 12,
+      "machine_schema": "lkjscript-machine-schema-v12",
+      "project_contract": 1,
+      "project_marker": "LKJPROJ1",
+      "project_change": 1,
+      "project_session": 1,
+      "revision_record": "1 / LKJREC01",
+      "workspace_artifact": "8 / LKJTSM\\u0000\\u0008 / lkjscript-tsm008",
+      "workspace_head": "LKJHDA10",
+      "build_target": 1,
+      "release": "2 / LKJREL\\u0000\\u0002",
+      "application": "5 / LKJAPP\\u0000\\u0005",
+      "instance": "3 / LKJINS\\u0000\\u0003",
+      "runtime_session": 2,
+      "lkjwork_machine": 1,
+      "lkjwork_export": 1
+    },
+    "direct_predecessor_rejection": [
+      "protocol and machine schema 11 and older",
+      "workspace artifact 7 and older",
+      "workspace HEAD LKJHEAD9 and older",
+      "context packet 1 and plan document root",
+      "release format 1 and older",
+      "application format 4 and older",
+      "instance format 2 and older",
+      "agent command",
+      "command-local release build",
+      "command-local application build"
+    ],
+    "compatibility_paths": []
+  },
+  "project_and_history_contract": {
+    "layout": "PROJECT/.lkjscript/project plus repository/workspaces/WORKSPACE/{HEAD,revisions,records}",
+    "identity": "The existing WorkspaceId is project identity; paths and marker are locators.",
+    "discovery": "Explicit relative/absolute root or bounded ancestor discovery; nested authority is ambiguous; symlink, nonregular, traversal, malformed, and foreign bindings reject.",
+    "mutation": "One exact-base proposal publishes exactly one immutable snapshot, one canonical record, and HEAD; validate-only, no-change, stale, rejected, and response-preflight failure publish nothing.",
+    "history": "Contiguous revisions from zero; compact record chain; bounded log/show; exact endpoint semantic diff; restoration publishes forward and rejects identity resurrection.",
+    "ordinary_open": "Scans every retained path, decodes every compact record, validates the record chain and HEAD, and decodes the current/idempotency snapshots without decoding unrelated historical graphs.",
+    "historical_open": "The selected historical artifact is decoded on demand and checked against its record result digest.",
+    "deep_doctor": "Decodes all snapshots, checks all adjacent history transitions, and recomputes every record diff/entity/target fact.",
+    "backup": "No-replace staged copy followed by independent project open; paths do not enter semantic identity."
+  },
+  "authoring_workflow": {
+    "selected_surface": "Closed project JSON change envelope plus existing semantic document and function-scoped document forms, all normalized by the transaction owner.",
+    "alternatives": {
+      "closed_json_only": "insufficient for compact human function maintenance alone",
+      "narrow_cli_operations": "rejected as a second schema and poor multi-entity atomic surface",
+      "conventional_source_language": "rejected because current documents and typed operations completed the migrated product"
+    },
+    "properties": [
+      "exact workspace and base revision",
+      "proposal-local symbols independent of host allocation values",
+      "exact durable and qualified-name selectors",
+      "session aliases bound to project/revision/context",
+      "validate/apply candidate parity",
+      "response preflight before publication",
+      "returned bindings, semantic diff, revision record, and target impact",
+      "known-digest context reuse",
+      "no omission-implies-deletion",
+      "no separate semantic commit step"
+    ],
+    "dogfood_change_inputs_bytes": [387, 9420, 3989],
+    "dogfood_change_inputs_total_bytes": 13796,
+    "accepted_proposals": 3,
+    "rejected_corrections": 0,
+    "maximum_correction_depth": 0
+  },
+  "target_graph_and_artifact_derivation": {
+    "target_kinds": ["release", "application", "product"],
+    "identity_edges": "exact durable target IDs",
+    "validation": "Every accepted candidate validates and prepares all target closures and immutable cases.",
+    "release_target_owns": ["root package", "coordinate", "user version", "exports", "exact dependencies", "imports", "cases", "policy"],
+    "application_target_owns": ["root release target", "entry/profile mappings", "requirements", "limits", "cases"],
+    "product_target_owns": ["exact application target"],
+    "build": "Exact revision lowering through release/application owners; explicit no-replace output; no hooks, ambient files, grants, mutable registry, or development revision.",
+    "cache": "none; fresh derivation is the only route",
+    "native_integration": "Validated application self-description; no generated binding authority.",
+    "lkjwork_target": "6894b57786a7e1ef14370d2da3a3cf33:531",
+    "artifact_bytes": 167848,
+    "artifact_file_sha256": "f9b335db22fbecdacdf7047f8a8e8aa7711d030eccaf3ed42d3eb2783b3cc184",
+    "target_artifact_digest": "30a3a14a19413e140845a4c7e8586e43c1033f2801bd0614aa7c31f86d37079a",
+    "application_digest": "4eb891dc2f400e070d8feaf3ff8aa14e35420010d2ded3ace1a107cec8e45092",
+    "root_release": "67c30ef33a26b53b98c7ded1a89ac6f0f9f961eef103f399bd70c963dca115bf",
+    "semantic_cases": {"total": 7, "passed": 7, "release": 1, "application": 6},
+    "byte_identical_checked_artifact_reproduction": true,
+    "isolated_fresh_copy_build": {
+      "source": "current uncommitted tree copied without .git, target, or local caches",
+      "cargo_target_initially_absent": true,
+      "host_cache": "warm",
+      "elapsed_seconds": 184.784,
+      "user_cpu_seconds": 201.487,
+      "system_cpu_seconds": 3.441,
+      "lkjscript_binary": {"bytes": 13263608, "sha256": "634ba9c4647b6fa2d0c16768d3f5ebe8fe9aa0dd78d1b22d41f133304cefc679"},
+      "lkjwork_binary": {"bytes": 3553056, "sha256": "b786ec1b22aff29a44e55178b0f0ba313d2168499ac9803272a207ce7ca5927b"},
+      "two_target_builds_byte_identical": true,
+      "checked_artifact_byte_identical": true
+    }
+  },
+  "lkjwork_migration_equivalence": {
+    "development_authority": "applications/lkjwork/.lkjscript",
+    "workspace": "6894b57786a7e1ef14370d2da3a3cf33",
+    "migration_complete_revision": 4,
+    "revision_4_snapshot": "4d002b3d0833002ef4aeb31a513e8e5f825604301d504a5546f8e784de38ff00",
+    "current_revision": 7,
+    "current_snapshot": "346b634f111f2e44f78d00d92869b442f2178f57bb27dc59a65e43d9d1487e01",
+    "current_record": "fca34a0b75c75be765e3844fdf9a0fa3bb4f304ff173f8fa0df2dd58ef69b5d9",
+    "current_graph_nodes": 3339,
+    "current_durable_identities": 546,
+    "current_targets": 3,
+    "current_blockers": 0,
+    "repository_files": 18,
+    "repository_bytes": 1322155,
+    "temporary_importer_retained": false,
+    "procedural_builder_retained": false,
+    "generated_bindings_retained": false,
+    "product_tests": "9 passed",
+    "acceptance": {
+      "passed": true,
+      "raw_receipt": "docs/evidence/20260819-semantic-development-acceptance.json",
+      "final_instance_revision": 30,
+      "final_state_digest": "5b90b58b24938161480a72c6b0e334d6cba527a23064af5a2cae43cf88d20749",
+      "backup_restore_equal": true,
+      "corrupt_copy_rejected": true,
+      "installed_binary_operated_outside_repository": true,
+      "unknown_attachment_reconciled_without_repeat": true
+    },
+    "functional_corpus": {
+      "passed": true,
+      "raw_receipt": "docs/evidence/20260819-semantic-development-functional.json",
+      "final_instance_revision": 85,
+      "final_state_digest": "2bb4b8069beb70ef3da69d5efc3229a458158e3b90adbf08f62458fdb85f4602",
+      "history_records": 86,
+      "project_bytes": 586630
+    },
+    "representative_corpus": {
+      "passed": true,
+      "raw_receipt": "docs/evidence/20260819-semantic-development-representative.json",
+      "final_instance_revision": 2700,
+      "final_state_digest": "81d4261ee1d74eb4750ecef9c7aabd5af8293da62ed4669a199ae23103d14c7a",
+      "history_records": 2701,
+      "project_bytes": 104745982,
+      "deep_audit_seconds": 34.176201658
+    }
+  },
+  "dogfood_feature_revisions_and_diffs": {
+    "feature": "lkjwork why TASK",
+    "revision_5": {
+      "record": "fdb5435b33f859e8ea79f21068811c2882df51f1af52dd998c318153efe1cca8",
+      "snapshot": "fc8b486e07714799949878d08504cd35d461dc2759eb5a3e80ef66d34ca38cda",
+      "change_count": 2,
+      "meaning": "rename predecessor query type and query entry without changing durable identities"
+    },
+    "revision_6": {
+      "record": "38c6f864bfab7a2788da096dbc2399e28d334475e877f5bb904f9bff8fafb327",
+      "snapshot": "f111f5d35bbbe1c2c2f916f5ef529407456f06437cc74042f0991a1bea54de18",
+      "change_count": 18,
+      "created_durable": 15,
+      "function_bodies_changed": 2,
+      "meaning": "create expanded query sum, why result variant, blocker helper, and replacement query entry"
+    },
+    "revision_7": {
+      "record": "fca34a0b75c75be765e3844fdf9a0fa3bb4f304ff173f8fa0df2dd58ef69b5d9",
+      "snapshot": "346b634f111f2e44f78d00d92869b442f2178f57bb27dc59a65e43d9d1487e01",
+      "change_count": 2,
+      "target_definitions_changed": 2,
+      "affected_targets": 3,
+      "meaning": "cut release/application targets to replacement query interface and add immutable why case"
+    },
+    "revision_4_to_7": {
+      "diff_digest": "5ef14cf8b44e9dbf8d22723f29eadb975b61c2250bf79d8f482c3de821cfc860",
+      "change_count": 22
+    },
+    "typed_result": ["task", "phase", "archived", "manual_hold", "actionable", "ordered blocker task IDs"],
+    "missing_task": "typed not_found outcome",
+    "acceptance_example": {"task": 5, "phase": "planned", "archived": false, "manual_hold": null, "actionable": false, "blockers": [2, 3, 4]},
+    "pure_no_write": "Complete .lkjwork authority-tree comparison is equal after successful, missing-task, known-digest, one-shot, and session query paths."
+  },
+  "storage_and_restart_measurements": {
+    "sample_class": "single sequential warm-host observations using the unoptimized development binary",
+    "workload": "100 alternating package renames through one foreground project session from revision 7",
+    "accepted_changes": 100,
+    "result_revision": 107,
+    "result_snapshot": "7a5ebff8328f3236d224625afe174fad332f51cd7b8bd884d6849e6a9e981c2b",
+    "result_record": "a1a02f7891ac017e4bed11f5aac57d5f982d3f895a36f692183fd6deb50c85ce",
+    "elapsed_seconds": 755.428,
+    "user_cpu_seconds": 739.781,
+    "system_cpu_seconds": 0.540,
+    "session_output_bytes": 169517,
+    "start": {"revision": 7, "files": 18, "bytes": 1322155},
+    "end": {"revision": 107, "files": 218, "bytes": 21580665},
+    "snapshots": {"count": 108, "bytes": 21460753},
+    "records": {"count": 108, "bytes": 119554},
+    "service_seconds": {
+      "eager_current_open_before_lazy_fix_approximate": 114.47,
+      "shallow_current_open": 3.224,
+      "latest_five_record_log": 3.159,
+      "adjacent_diff": 4.333,
+      "target_build": 3.691,
+      "target_test": 3.688,
+      "backup": 6.824,
+      "deep_doctor": 332.369
+    },
+    "deep_doctor_cpu_seconds": {"user": 325.596, "system": 0.293},
+    "backup": {"files": 218, "bytes": 21580665, "independently_opened": true},
+    "corruption_localization": "A focused test proves unselected historical corruption is deferred by shallow open and rejected by selection and deep doctor.",
+    "physical_disk_writes": "unavailable"
+  },
+  "agent_economy_measurements": {
+    "task": "author complete lkjwork why query and cut targets",
+    "baseline": {
+      "procedural_source_bytes": 255704,
+      "procedural_source_lines": 4869,
+      "transaction_items": 3232,
+      "files_opened": "unavailable",
+      "request_response_bytes": "unavailable",
+      "correction_depth": "unavailable"
+    },
+    "candidate": {
+      "proposal_count": 3,
+      "correction_depth": 0,
+      "change_request_bytes": 13796,
+      "apply_processes_and_engine_opens": 3,
+      "target_builds": 1,
+      "target_tests": 1,
+      "orientation_response_bytes": 1228,
+      "unchanged_orientation_response_bytes": 252,
+      "function_summary_response_bytes": 658,
+      "targeted_context_response_bytes": 53811,
+      "four_record_log_response_bytes": 2397,
+      "feature_diff_response_bytes": 3334,
+      "orientation_digest": "624df3ba4e736c3b270dcac6fbe5a886a8ec405464df3eae4a0e7e047f4a3be4"
+    },
+    "semantic_success": true,
+    "unintended_semantic_changes": 0,
+    "provider_telemetry": {
+      "available": false,
+      "provider": "unavailable",
+      "model": "unavailable",
+      "input_tokens": "unavailable",
+      "cached_input_tokens": "unavailable",
+      "output_tokens": "unavailable",
+      "reasoning_tokens": "unavailable",
+      "price": "unavailable",
+      "monetary_cost": "unavailable"
+    },
+    "claim_boundary": "Bytes, calls, processes, and correction depth are reported directly; no token or monetary savings are inferred."
+  },
+  "tui_readiness_matrix": {
+    "overall": "partial: deterministic pure logic, durable state, exact project queries, and agent-native authoring are supported; production terminal/filesystem/live-resource authority is absent",
+    "full_matrix": "docs/roadmap.md#rich-tui-editor-and-explorer-readiness",
+    "supported": ["bounded pure state values", "nominal application identity", "durable instance state", "semantic project list/inspect/context/log/diff data", "agent-authored semantic changes and target rebuild", "bounded terminal-safe current CLI/product rendering"],
+    "model_only": ["editor state", "buffer identity", "undo/redo", "static keymap", "internal clipboard", "persistent path-free settings", "crash-restored semantic state", "multiple buffers", "pane layout", "typed diagnostics"],
+    "absent": ["efficient localized large-text edits", "cursor/selection contract", "file listing/read/write/conflict authority", "terminal events/resize/render/session lifecycle", "buffer/project search", "derived text index", "background work", "cancellation", "desktop clipboard", "child process execution", "cross-platform terminal contract"],
+    "retained_probe": "none; no named TUI consumer justified delaying the completed migration"
+  },
+  "security_and_trust_assumptions": {
+    "deployment": "Linux x86-64, one trusted local operator and OS account",
+    "trusted": ["Rust implementation", "native lkjwork client", "immutable-blob adapter"],
+    "hostile_inputs": ["project locators", "paths", "HEAD", "snapshots", "revision records", "JSON", "semantic documents", "artifacts", "instance files", "text", "adapter outcomes"],
+    "path_controls": "Relative paths resolve under command-local rules; lexical traversal, symlinks, nonregular authority files, identity mismatch, and validated-file replacement reject.",
+    "build_controls": "No arbitrary hook, shell, ambient repository input, grant, secret, mutable registry, or target-owned output path.",
+    "publication": "One lock; immutable objects before HEAD; known failure versus unknown visibility; no silent retry.",
+    "nonclaims": ["digest provenance", "signature", "authorization", "freshness", "native sandbox", "multi-user isolation", "power-loss guarantee beyond named synchronization assumptions", "cross-platform support", "exact RSS enforcement"]
+  },
+  "decision_cards": [
+    {"id": 1, "topic": "project identity", "consumer": "ordinary semantic project commands", "baseline": "explicit WorkspaceId and state path", "alternatives": ["new ProjectId layer", "reuse WorkspaceId"], "selected": "reuse WorkspaceId", "obligations": "marker only locates exactly one workspace", "deleted": "duplicate project identity concept", "reversal": "only a real multi-workspace project composition consumer"},
+    {"id": 2, "topic": "project marker", "consumer": "root and descendant discovery", "baseline": "absolute state directory", "alternatives": ["global registry", "directory-name identity", "checksummed marker"], "selected": ".lkjscript/project checksummed locator", "obligations": "bounded parent walk and path revalidation", "deleted": "mandatory ordinary absolute state path", "reversal": "only a deployment that cannot transport the checked repository tree"},
+    {"id": 3, "topic": "persistence", "consumer": "100-change lkjwork history", "baseline": "full snapshots eagerly decoded", "alternatives": ["journal", "object graph", "Merkle sharing", "packed objects"], "selected": "full snapshots with lazy history and compact records", "obligations": "deep reconstruction oracle", "deleted": "eager historical decode on every open", "reversal": "256 MiB/1000 revisions, optimized open over 5 s, or 100-revision deep doctor over 10 min"},
+    {"id": 4, "topic": "revision records", "consumer": "log/show/diff/recovery", "baseline": "snapshots without canonical development records", "alternatives": ["derive from snapshots", "store raw request", "canonical fact record"], "selected": "LKJREC01 exact fact record", "obligations": "record chain and deep diff recomputation", "deleted": "manual commit message requirement", "reversal": "only if bounded log cannot scale with compact records"},
+    {"id": 5, "topic": "revert", "consumer": "semantic recovery", "baseline": "no project-level restoration", "alternatives": ["rewind HEAD", "blind inverse", "forward restoration"], "selected": "new validated forward revision", "obligations": "preserve tombstones and reject resurrection", "deleted": "HEAD rewind semantics", "reversal": "explicit recreate-and-map consumer with new identities"},
+    {"id": 6, "topic": "change surface", "consumer": "large migrated application", "baseline": "procedural Python transaction", "alternatives": ["closed JSON", "semantic document", "narrow commands", "source language"], "selected": "JSON envelope plus semantic document through one transaction owner", "obligations": "atomic symbols, exact base, validate/apply parity", "deleted": "procedural builders", "reversal": "measured complete task failure across both retained proposal forms"},
+    {"id": 7, "topic": "selectors", "consumer": "bounded inspection and edits", "baseline": "raw IDs in broad agent requests", "alternatives": ["names as identity", "exact IDs only", "revision-bound names and session aliases"], "selected": "exact IDs plus unambiguous revision-bound names and aliases", "obligations": "ambiguity/staleness/foreign rejection", "deleted": "first-match lookup", "reversal": "only if exact bounded context cannot support a current workflow"},
+    {"id": 8, "topic": "apply continuation", "consumer": "multi-step agent change", "baseline": "explicit new context request", "alternatives": ["always full context", "apply delta", "known-digest explicit context"], "selected": "compact receipt plus explicit known-digest context", "obligations": "response preflight and idempotency projection", "deleted": "implicit global reorientation", "reversal": "same-task evidence that delta reduces calls/corrections"},
+    {"id": 9, "topic": "release target", "consumer": "reusable release derivation", "baseline": "command-local build request", "alternatives": ["ordinary nominal metadata", "opaque manifest", "dedicated typed target"], "selected": "dedicated durable BuildTargetDefinition::Release", "obligations": "exact exports/dependencies/imports/cases", "deleted": "command-local release build", "reversal": "only if a second target consumer requires shared generic target fields"},
+    {"id": 10, "topic": "application target", "consumer": "lkjwork application", "baseline": "Python-owned composition request", "alternatives": ["opaque bytes", "ordinary nominal record", "dedicated typed target"], "selected": "dedicated durable BuildTargetDefinition::Application", "obligations": "closed profile/mappings/requirements/cases", "deleted": "command-local application build", "reversal": "new application kind that cannot fit the closed target schema"},
+    {"id": 11, "topic": "target dependencies", "consumer": "release/application/product closure", "baseline": "host construction order", "alternatives": ["name/latest", "artifact path", "exact target ID"], "selected": "exact target identity edges", "obligations": "cycle and foreign-domain rejection", "deleted": "mutable lookup", "reversal": "explicit cross-project immutable artifact consumer"},
+    {"id": 12, "topic": "target validation timing", "consumer": "always-buildable lkjwork", "baseline": "validate only during external build", "alternatives": ["build-time only", "explicit blocked state", "eager candidate validation"], "selected": "eager validation/preparation for every accepted target", "obligations": "case and response bounds before publication", "deleted": "silently invalid accepted target", "reversal": "measured need for reviewable incomplete revisions"},
+    {"id": 13, "topic": "native integration", "consumer": "lkjwork Rust client", "baseline": "generated bindings.json", "alternatives": ["hand constants", "generated descriptor", "artifact self-description"], "selected": "artifact self-description", "obligations": "unique exact interface resolution at startup", "deleted": "bindings.json and generator", "reversal": "native compiler requires constants that runtime discovery cannot provide"},
+    {"id": 14, "topic": "distribution artifact", "consumer": "installed lkjwork binary", "baseline": "checked embedded artifact", "alternatives": ["build on every native compile", "runtime development-project dependency", "checked derived artifact"], "selected": "checked byte-reproducible application artifact", "obligations": "public target reproduction and startup validation", "deleted": "runtime builder dependency", "reversal": "packaging system can consume exact target output directly without losing offline operation"},
+    {"id": 15, "topic": "lkjwork project location", "consumer": "fresh checkout and product developers", "baseline": "build.py beside product", "alternatives": ["repository root global state", "generated fixture", "applications/lkjwork/.lkjscript"], "selected": "applications/lkjwork/.lkjscript", "obligations": "portable tracked authority", "deleted": "external construction state", "reversal": "multi-product repository layout with a stricter genuine ownership boundary"},
+    {"id": 16, "topic": "agent command", "consumer": "ordinary authoring", "baseline": "separate agent family", "alternatives": ["retain alias", "distinct role", "delete"], "selected": "delete equivalent agent family", "obligations": "project commands cover retained operations", "deleted": "src/bin/lkjscript/agent.rs and agent-only tests", "reversal": "none without a distinct nonproject consumer"},
+    {"id": 17, "topic": "raw protocol", "consumer": "engine conformance and embedding", "baseline": "raw RPC plus agent", "alternatives": ["delete all raw access", "make raw ordinary authoring", "retain distinct transport"], "selected": "retain --state rpc/session as distinct transport", "obligations": "no discovery fallback or duplicate build surface", "deleted": "raw release/application construction commands", "reversal": "delete when no independent conformance/embedding tests remain"},
+    {"id": 18, "topic": "foreground session", "consumer": "multi-step coding-agent workflow", "baseline": "one process per command", "alternatives": ["daemon", "one-shot only", "caller-owned session"], "selected": "caller-owned correlated session", "obligations": "stale aliases, malformed-line recovery, restart equality", "deleted": "daemon/queue assumptions", "reversal": "measured multi-client unattended workflow"},
+    {"id": 19, "topic": "derived artifact cache", "consumer": "target build", "baseline": "fresh derivation", "alternatives": ["persistent cache", "session cache", "none"], "selected": "none", "obligations": "build remains deterministic from authority", "deleted": "no cache format", "reversal": "at least 20 percent complete restart-heavy build improvement"},
+    {"id": 20, "topic": "history scaling", "consumer": "100-change lkjwork repository", "baseline": "114 s eager open", "alternatives": ["new storage", "lazy historical decode"], "selected": "lazy decode with explicit deep doctor", "obligations": "path and compact chain validation on open", "deleted": "all-history decode from normal commands", "reversal": "storage thresholds in docs/roadmap.md"},
+    {"id": 21, "topic": "large functions", "consumer": "why helpers and query entry", "baseline": "whole-function document replacement and holes", "alternatives": ["stable local IDs", "regions", "subfunction extraction"], "selected": "retain current whole-function oracle and extract semantic helpers", "obligations": "local IDs remain function/revision bound", "deleted": "no speculative anchor model", "reversal": "measured correction/context failure in a real large function"},
+    {"id": 22, "topic": "language operations", "consumer": "migrated lkjwork and why", "baseline": "existing text/sequence/bool/i64 operations", "alternatives": ["maps", "sets", "iterators", "new text operators", "none"], "selected": "none added", "obligations": "current semantics own blocker ordering", "deleted": "no productless language mechanism", "reversal": "complete current application blocker"},
+    {"id": 23, "topic": "TUI text representation", "consumer": "future editor probe", "baseline": "immutable UTF-8 text and nominal sequences", "alternatives": ["line sequence", "piece table", "rope-like value"], "selected": "defer", "obligations": "byte/scalar indexing and 1000-edit differential before retention", "deleted": "no speculative rope", "reversal": "material complete editor-workload win"},
+    {"id": 24, "topic": "filesystem and terminal interfaces", "consumer": "future production TUI", "baseline": "immutable blob interface only", "alternatives": ["ambient process access", "broad path grant", "narrow typed interfaces", "defer"], "selected": "defer", "obligations": "threat model, lifecycle, conflict, unknown visibility, cancellation", "deleted": "no ambient escape", "reversal": "one complete editor/explorer consumer"},
+    {"id": 25, "topic": "instruction size and routing", "consumer": "all repository agents", "baseline": "fixed 24 KiB ceiling", "alternatives": ["fixed ceiling", "unbounded repetition", "consumer-routed durable policy"], "selected": "larger root policy with volatile facts in status/evidence and targeted specs", "obligations": "state durable principles once and stop rereading campaign prose", "deleted": "arbitrary byte ceiling", "reversal": "measured repeated context/correction cost attributable to the root policy"}
+  ],
+  "verification": {
+    "focused_project_unit_tests": "passed",
+    "focused_persistence_lazy_history_test": "passed",
+    "project_cli_integration": "4 passed",
+    "checked_target_reproduction": "passed",
+    "cargo_fmt_check": "passed",
+    "cargo_clippy_all_targets_all_features_locked_deny_warnings": "passed",
+    "cargo_test_all_targets_all_features_locked": "250 passed, 3 explicitly ignored, 0 failed",
+    "cargo_build_workspace_release_locked": "passed in 3m 01s on the final main checkout",
+    "fresh_copied_checkout": "deep doctor, seven target cases, two byte-identical target builds, isolated Cargo release build, installed binary version, acceptance, functional corpus, and representative corpus passed",
+    "lkjwork_acceptance": "passed at instance revision 30",
+    "functional_corpus": "passed at instance revision 85",
+    "representative_corpus": "passed at instance revision 2700 with complete deep audit",
+    "git_diff_check": "passed"
+  },
+  "unperformed_and_limits": [
+    "No commit, push, pull request, release, merge, or remote mutation was authorized or performed.",
+    "No provider/model/token-class/price telemetry was available; no cost estimate is made.",
+    "Measurements used a warm host and mostly an unoptimized development binary; no cold or statistical performance claim is made.",
+    "Physical filesystem write volume and exact peak RSS were unavailable.",
+    "Linux x86-64 is the only exercised platform.",
+    "Miri, sanitizers, model checking, long-running fuzzing, hardware power-loss injection, and cross-platform execution were not run.",
+    "A production TUI, terminal interface, filesystem interface, background scheduler, cancellation, network, secrets, and multi-user authorization were deliberately not implemented.",
+    "No incomplete accepted target state, external cross-project target dependency, branch/merge model, database, build cache, daemon, bytecode, JIT, or native tier was implemented.",
+    "The 2,000-task / 10,000-mutation product stress profile was not run; the retained 500-task representative profile remains the product scale evidence.",
+    "The appendices contain more exhaustive fault combinations than were individually rerun in this campaign; retained focused invariant tests and the final full gate define the verified subset."
+  ]
+}

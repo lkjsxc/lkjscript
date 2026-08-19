@@ -14,6 +14,7 @@ pub(crate) fn validate_snapshot(snapshot: &Snapshot) -> Result<()> {
     validate_names(snapshot)?;
     validate_semantics(snapshot)?;
     crate::type_layout::validate_acyclic(snapshot)?;
+    crate::target::validate_snapshot_targets(snapshot)?;
     Ok(())
 }
 
@@ -319,9 +320,11 @@ fn validate_containment(snapshot: &Snapshot) -> Result<()> {
 
 fn validate_slot_targets(snapshot: &Snapshot, id: NodeId, node: &Node) -> Result<()> {
     match node {
-        Node::WorkspaceRoot { packages } => {
-            require_children(snapshot, id, packages, NodeKind::Package)?
+        Node::WorkspaceRoot { packages, targets } => {
+            require_children(snapshot, id, packages, NodeKind::Package)?;
+            require_children(snapshot, id, targets, NodeKind::BuildTarget)?;
         }
+        Node::BuildTarget { .. } => {}
         Node::Package { modules, entry, .. } => {
             require_children(snapshot, id, modules, NodeKind::Module)?;
             if let Some(entry) = entry {
@@ -1525,6 +1528,7 @@ mod tests {
             id(1),
             Node::WorkspaceRoot {
                 packages: vec![id(2)],
+                targets: Vec::new(),
             },
         );
         nodes.insert(
@@ -1720,6 +1724,7 @@ mod tests {
             root,
             Node::WorkspaceRoot {
                 packages: Vec::new(),
+                targets: Vec::new(),
             },
         )]);
         assert_eq!(
@@ -1764,6 +1769,7 @@ mod tests {
                 id(1),
                 Node::WorkspaceRoot {
                     packages: vec![id(2)],
+                    targets: Vec::new(),
                 },
             ),
             (
@@ -2056,6 +2062,7 @@ mod tests {
                 id(1),
                 Node::WorkspaceRoot {
                     packages: vec![id(2)],
+                    targets: Vec::new(),
                 },
             ),
             (

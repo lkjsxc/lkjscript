@@ -8,11 +8,11 @@ use crate::schema::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const MAGIC: [u8; 8] = *b"LKJTSM\0\x07";
-pub const FORMAT_VERSION: ArtifactVersion = ArtifactVersion(7);
-pub const SCHEMA_NAME: &str = "lkjscript-tsm007";
-pub const SCHEMA_ID: SchemaId = SchemaId(*b"lkjscript-tsm007");
-const SNAPSHOT_HASH_DOMAIN: &str = "lkjscript.typed-semantic-model.snapshot.v7";
+pub const MAGIC: [u8; 8] = *b"LKJTSM\0\x08";
+pub const FORMAT_VERSION: ArtifactVersion = ArtifactVersion(8);
+pub const SCHEMA_NAME: &str = "lkjscript-tsm008";
+pub const SCHEMA_ID: SchemaId = SchemaId(*b"lkjscript-tsm008");
+const SNAPSHOT_HASH_DOMAIN: &str = "lkjscript.typed-semantic-model.snapshot.v8";
 pub const MAXIMUM_ARTIFACT_BYTES: usize = 64 * 1024 * 1024;
 pub const MAXIMUM_ARTIFACT_NAME_BYTES: usize = 1024 * 1024;
 const ENCODED_COUNT_BYTES: usize = 8;
@@ -218,7 +218,20 @@ fn decode_payload(payload: &[u8], policy: DecodePolicy) -> Result<Snapshot> {
 pub(crate) fn put_node(writer: &mut Writer, node: &Node) -> Result<()> {
     writer.u8(node.kind().stable_tag());
     match node {
-        Node::WorkspaceRoot { packages } => put_node_ids(writer, packages),
+        Node::WorkspaceRoot { packages, targets } => {
+            put_node_ids(writer, packages)?;
+            put_node_ids(writer, targets)
+        }
+        Node::BuildTarget {
+            owner,
+            name,
+            definition,
+        } => {
+            put_node_id(writer, *owner);
+            writer.string(name).map_err(artifact_codec)?;
+            let bytes = crate::target::encode_definition(definition)?;
+            writer.bytes(&bytes).map_err(artifact_codec)
+        }
         Node::Package {
             owner,
             name,
@@ -359,6 +372,18 @@ pub(crate) fn read_node(
     Ok(match kind {
         crate::schema::NodeKind::WorkspaceRoot => Node::WorkspaceRoot {
             packages: read_node_ids(reader, workspace)?,
+            targets: read_node_ids(reader, workspace)?,
+        },
+        crate::schema::NodeKind::BuildTarget => Node::BuildTarget {
+            owner: read_node_id(reader, workspace)?,
+            name: reader
+                .string(policy.maximum_name_bytes)
+                .map_err(artifact_codec)?,
+            definition: crate::target::decode_definition(
+                reader
+                    .bytes(crate::target::MAXIMUM_TARGET_BYTES)
+                    .map_err(artifact_codec)?,
+            )?,
         },
         crate::schema::NodeKind::Package => Node::Package {
             owner: read_node_id(reader, workspace)?,
@@ -964,6 +989,7 @@ mod tests {
                 id(1),
                 Node::WorkspaceRoot {
                     packages: vec![id(2)],
+                    targets: Vec::new(),
                 },
             ),
             (
@@ -1291,12 +1317,12 @@ mod tests {
     }
 
     #[test]
-    fn artifact_format_six_rejects_without_compatibility_reader() {
-        let mut bytes = encode(&initial()).expect("format seven artifact");
-        bytes[..MAGIC.len()].copy_from_slice(b"LKJTSM\0\x06");
-        bytes[MAGIC.len()..MAGIC.len() + 2].copy_from_slice(&6_u16.to_le_bytes());
+    fn artifact_format_seven_rejects_without_compatibility_reader() {
+        let mut bytes = encode(&initial()).expect("format eight artifact");
+        bytes[..MAGIC.len()].copy_from_slice(b"LKJTSM\0\x07");
+        bytes[MAGIC.len()..MAGIC.len() + 2].copy_from_slice(&7_u16.to_le_bytes());
         assert_eq!(
-            decode(&bytes).expect_err("format six must reject").code,
+            decode(&bytes).expect_err("format seven must reject").code,
             ErrorCode::ArtifactCorrupt
         );
     }

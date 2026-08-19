@@ -52,6 +52,8 @@ Core commands:
       Patch task fields. Example: lkjwork edit #1 --priority 20
   show TASK
       Show one task. Example: lkjwork show #1
+  why TASK
+      Explain exact actionability facts. Example: lkjwork why #1
   list [--after N] [--limit N] [--phase PHASE] [--label TEXT]
       [--readiness any|ready|blocked] [--archive default|archived|all]
       [--order id|priority]
@@ -378,6 +380,7 @@ fn session_requires_project(command: &str) -> bool {
             | "archive"
             | "unarchive"
             | "show"
+            | "why"
             | "list"
             | "next"
             | "summary"
@@ -483,6 +486,7 @@ fn execute(options: &GlobalOptions, bindings: &Bindings) -> Result<Output, Produ
         "archive" => id_mutation(options, arguments, bindings, "archive", "archive_task"),
         "unarchive" => id_mutation(options, arguments, bindings, "unarchive", "unarchive_task"),
         "show" => show(options, arguments, bindings),
+        "why" => why(options, arguments, bindings),
         "list" => list(options, arguments, bindings, "list_tasks", "list"),
         "next" => next(options, arguments, bindings),
         "summary" if arguments.is_empty() => {
@@ -1045,6 +1049,19 @@ fn show(options: &GlobalOptions, arguments: &[String], bindings: &Bindings) -> C
     )
 }
 
+fn why(options: &GlobalOptions, arguments: &[String], bindings: &Bindings) -> CommandResult {
+    if arguments.len() != 1 {
+        return usage_error("why requires exactly one TASK");
+    }
+    simple_query(
+        options,
+        bindings,
+        "why",
+        Some(bindings.integer(parse_task_id(&arguments[0])?)),
+        "why",
+    )
+}
+
 fn list(
     options: &GlobalOptions,
     arguments: &[String],
@@ -1277,6 +1294,12 @@ fn simple_query(
     }
     let result = render::query_result(bindings, &receipt.result)
         .map_err(|message| infrastructure("application_result", message))?;
+    let result = if operation == "why" {
+        render::why_result(&result)
+            .map_err(|message| infrastructure("application_result", message))?
+    } else {
+        result
+    };
     let exit = if matches!(
         result.get("kind").and_then(Value::as_str),
         Some("not_found" | "error")
