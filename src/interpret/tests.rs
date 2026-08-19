@@ -11,48 +11,14 @@ fn node(serial: u64) -> NodeId {
     NodeId::new(WorkspaceId::from_bytes([0x51; 16]), serial).expect("node")
 }
 fn primitives() -> Vec<CoreType> {
-    vec![
-        CoreType {
+    crate::schema::SemanticType::PRIMITIVES
+        .into_iter()
+        .map(|semantic| CoreType {
             origin: None,
-            kind: CoreTypeKind::Unit,
-            layout: ValueLayout {
-                size: 0,
-                align: 1,
-                cells: 0,
-                shape: LayoutShape::Primitive,
-            },
-        },
-        CoreType {
-            origin: None,
-            kind: CoreTypeKind::Bool,
-            layout: ValueLayout {
-                size: 1,
-                align: 1,
-                cells: 1,
-                shape: LayoutShape::Primitive,
-            },
-        },
-        CoreType {
-            origin: None,
-            kind: CoreTypeKind::I64,
-            layout: ValueLayout {
-                size: 8,
-                align: 8,
-                cells: 1,
-                shape: LayoutShape::Primitive,
-            },
-        },
-        CoreType {
-            origin: None,
-            kind: CoreTypeKind::Bytes,
-            layout: ValueLayout {
-                size: 8,
-                align: 8,
-                cells: 1,
-                shape: LayoutShape::Primitive,
-            },
-        },
-    ]
+            kind: CoreTypeKind::from_semantic_primitive(semantic).expect("primitive kind"),
+            layout: crate::type_layout::primitive_layout(semantic).expect("primitive layout"),
+        })
+        .collect()
 }
 const PRODUCT_TYPE: CoreTypeId = CoreTypeId(PRIMITIVE_TYPE_COUNT as u32);
 const SUM_TYPE: CoreTypeId = CoreTypeId(PRIMITIVE_TYPE_COUNT as u32 + 1);
@@ -398,6 +364,52 @@ fn run_core_value_with_mode(
     preflight_flat_output(program, &managed, &flat, program.functions[0].origin)?;
     let value = from_flat(program, &managed, &flat, 1, program.functions[0].origin)?;
     Ok((value, managed.metrics()))
+}
+
+#[test]
+fn managed_sequence_objects_match_the_canonical_allocate_new_oracle() {
+    let origin = node(400);
+    let elements = vec![
+        RuntimeValue::I64(7),
+        RuntimeValue::Text(TextString::try_from_str("ok").unwrap()),
+        RuntimeValue::Sequence {
+            ty: node(401),
+            elements: vec![RuntimeValue::Bool(true)],
+        },
+    ];
+    let mut managed = InvocationStore::default();
+    let handle = managed
+        .allocate_sequence(elements.clone(), origin)
+        .expect("allocate managed sequence");
+    assert_eq!(
+        managed.materialize_sequence(handle, origin).unwrap(),
+        elements
+    );
+    let canonical = encode_sequence(&elements, origin).unwrap();
+    assert_eq!(decode_sequence(&canonical, origin).unwrap(), elements);
+    assert_eq!(
+        managed
+            .sequence_object(handle, origin)
+            .unwrap()
+            .retained_bytes,
+        canonical.len()
+    );
+    assert_eq!(managed.metrics().cumulative_visible_bytes, 2);
+
+    managed.share(handle, origin).unwrap();
+    managed.drop_claim(handle, origin).unwrap();
+    assert_eq!(
+        managed.materialize_sequence(handle, origin).unwrap(),
+        elements
+    );
+    managed.drop_claim(handle, origin).unwrap();
+    assert_eq!(
+        managed
+            .materialize_sequence(handle, origin)
+            .unwrap_err()
+            .code,
+        ErrorCode::InvalidManagedHandle
+    );
 }
 
 #[test]
@@ -1025,9 +1037,15 @@ fn managed_store_drops_on_success_trap_fuel_frame_and_output_failures() {
             .expect("pure product construction");
         assert_eq!(store.metrics().live_backing_bytes, 40 * 1024);
         assert_eq!(
-            preflight_flat_output(&program, &store, &flat, program.functions[0].origin)
-                .unwrap_err()
-                .code,
+            preflight_flat_output_with_limit(
+                &program,
+                &store,
+                &flat,
+                program.functions[0].origin,
+                MAXIMUM_BYTE_STRING_BYTES,
+            )
+            .unwrap_err()
+            .code,
             ErrorCode::ResultBytePolicyExceeded
         );
     }

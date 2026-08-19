@@ -81,6 +81,15 @@ pub fn primitive_layout(ty: SemanticType) -> Option<ValueLayout> {
     })
 }
 
+pub(crate) fn managed_handle_layout() -> ValueLayout {
+    ValueLayout {
+        size: 8,
+        align: 8,
+        cells: 1,
+        shape: LayoutShape::Primitive,
+    }
+}
+
 pub(crate) fn validate_acyclic(snapshot: &Snapshot) -> Result<()> {
     let (_, remaining) = dependency_order(snapshot)?;
     if remaining.is_empty() {
@@ -151,7 +160,11 @@ fn dependency_order(snapshot: &Snapshot) -> Result<(Vec<NodeId>, BTreeSet<NodeId
         .nodes
         .iter()
         .filter_map(|(id, node)| {
-            matches!(node, Node::ProductType { .. } | Node::SumType { .. }).then_some(*id)
+            matches!(
+                node,
+                Node::ProductType { .. } | Node::SumType { .. } | Node::SequenceType { .. }
+            )
+            .then_some(*id)
         })
         .collect::<BTreeSet<_>>();
     let mut pending = BTreeMap::<NodeId, BTreeSet<NodeId>>::new();
@@ -311,6 +324,7 @@ fn declaration_dependencies(snapshot: &Snapshot, declaration: NodeId) -> Result<
                 }
             }
         }
+        Node::SequenceType { .. } => {}
         node => {
             return Err(LkError::new(
                 ErrorCode::WrongKind,
@@ -331,6 +345,7 @@ fn derive_declaration(
     match snapshot.node(declaration)? {
         Node::ProductType { fields, .. } => derive_product(snapshot, fields, layouts),
         Node::SumType { variants, .. } => derive_sum(snapshot, variants, layouts),
+        Node::SequenceType { .. } => Ok(DerivedLayout::Representable(managed_handle_layout())),
         _ => Err(LkError::new(
             ErrorCode::WrongKind,
             "layout target is not a nominal declaration",

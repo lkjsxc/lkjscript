@@ -17,7 +17,7 @@ use std::fmt;
 use std::path::Path;
 use std::str::FromStr;
 
-pub const RELEASE_CONTRACT_VERSION: u16 = 1;
+pub const RELEASE_CONTRACT_VERSION: u16 = 2;
 pub const MAXIMUM_RELEASE_ARTIFACT_BYTES: usize = 64 * 1024 * 1024;
 pub const MAXIMUM_RELEASE_ITEMS: usize = 100_000;
 pub const MAXIMUM_RELEASE_EXPORTS: usize = 256;
@@ -174,6 +174,7 @@ pub enum ReleaseExportKind {
     Function,
     ProductType,
     SumType,
+    SequenceType,
 }
 
 impl ReleaseExportKind {
@@ -182,6 +183,7 @@ impl ReleaseExportKind {
             Self::Function => 1,
             Self::ProductType => 2,
             Self::SumType => 3,
+            Self::SequenceType => 4,
         }
     }
 
@@ -190,6 +192,7 @@ impl ReleaseExportKind {
             1 => Some(Self::Function),
             2 => Some(Self::ProductType),
             3 => Some(Self::SumType),
+            4 => Some(Self::SequenceType),
             _ => None,
         }
     }
@@ -199,6 +202,7 @@ impl ReleaseExportKind {
             Node::Function { .. } => Some(Self::Function),
             Node::ProductType { .. } => Some(Self::ProductType),
             Node::SumType { .. } => Some(Self::SumType),
+            Node::SequenceType { .. } => Some(Self::SequenceType),
             _ => None,
         }
     }
@@ -360,6 +364,7 @@ pub enum ReleaseTypeRef {
     Bool,
     I64,
     Bytes,
+    Text,
     Local(ReleaseItemId),
     Dependency { slot: String, target: ReleaseItemId },
 }
@@ -393,6 +398,9 @@ pub enum ReleaseSignatureInspection {
     },
     SumType {
         variants: Vec<ReleaseVariantInspection>,
+    },
+    SequenceType {
+        element: ReleaseTypeRef,
     },
 }
 
@@ -649,7 +657,7 @@ fn inspection(release: &DecodedRelease) -> Result<ReleaseInspection> {
     Ok(ReleaseInspection {
         contract_version: RELEASE_CONTRACT_VERSION,
         format_version: codec::RELEASE_FORMAT_VERSION,
-        semantic_schema: "lkjscript-tsm006",
+        semantic_schema: crate::artifact::SCHEMA_NAME,
         release: release.id,
         content_digest: release.content_digest,
         coordinate: release.coordinate.clone(),
@@ -736,6 +744,9 @@ fn export_inspection(
                 })
                 .collect::<Result<Vec<_>>>()?,
         },
+        Node::SequenceType { element, .. } => ReleaseSignatureInspection::SequenceType {
+            element: release_type(release, *element)?,
+        },
         _ => {
             return Err(LkError::new(
                 ErrorCode::ArtifactCorrupt,
@@ -760,6 +771,7 @@ fn release_type(
         SemanticType::Bool => ReleaseTypeRef::Bool,
         SemanticType::I64 => ReleaseTypeRef::I64,
         SemanticType::Bytes => ReleaseTypeRef::Bytes,
+        SemanticType::Text => ReleaseTypeRef::Text,
         SemanticType::Nominal(target) => {
             let local = ReleaseItemId::from_local_node(target)?;
             if let Some(import) = release.imports.iter().find(|import| import.local == local) {
@@ -847,7 +859,11 @@ pub(crate) fn validate_release_test_name(value: &str) -> Result<()> {
 pub(crate) fn primitive_runtime_value(value: &RuntimeValue) -> bool {
     matches!(
         value,
-        RuntimeValue::Unit | RuntimeValue::Bool(_) | RuntimeValue::I64(_) | RuntimeValue::Bytes(_)
+        RuntimeValue::Unit
+            | RuntimeValue::Bool(_)
+            | RuntimeValue::I64(_)
+            | RuntimeValue::Bytes(_)
+            | RuntimeValue::Text(_)
     )
 }
 

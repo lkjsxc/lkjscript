@@ -10,7 +10,8 @@ use crate::instance::{
     HostExecutionReceipt, INSTANCE_CONTRACT_VERSION, InstanceCreateReceipt, InstanceCreateRequest,
     InstanceDeleteRequest, InstanceEventRequest, InstanceFakeHostRequest, InstanceHistoryPage,
     InstanceHostRequest, InstanceId, InstanceInspection, InstanceOperationObservation,
-    InstanceResumeRequest, InstanceStore, InstanceTransitionReceipt,
+    InstanceQueryReceipt, InstanceQueryRequest, InstanceResumeRequest, InstanceStore,
+    InstanceTransitionReceipt,
 };
 use crate::machine::{MAX_JSON_INPUT_BYTES, MAX_JSON_OUTPUT_BYTES};
 use serde::{Deserialize, Serialize};
@@ -18,7 +19,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-pub const RUNTIME_CONTRACT_VERSION: u16 = 1;
+pub const RUNTIME_CONTRACT_VERSION: u16 = 2;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -412,6 +413,13 @@ impl RuntimeKernel {
         })
     }
 
+    pub fn query(&mut self, request: &InstanceQueryRequest) -> Result<InstanceQueryReceipt> {
+        self.admit(request)?;
+        self.simple_instance_operation(|store, observation| {
+            store.query_observed(request, observation)
+        })
+    }
+
     pub fn validate_resume(
         &mut self,
         request: &InstanceResumeRequest,
@@ -497,8 +505,6 @@ impl RuntimeKernel {
                 .collect(),
             supported_topologies: vec!["one_shot", "foreground_session"],
             supported_adapters: vec![
-                "application_activation.production",
-                "application_activation.deterministic_fake",
                 "immutable_blob.production",
                 "immutable_blob.deterministic_fake",
             ],
@@ -518,20 +524,15 @@ impl RuntimeKernel {
             runtime_contract_version: RUNTIME_CONTRACT_VERSION,
             application_contract_version: APPLICATION_CONTRACT_VERSION,
             instance_contract_version: INSTANCE_CONTRACT_VERSION,
-            interfaces: [
-                HostInterface::ApplicationActivation,
-                HostInterface::ImmutableBlob,
-            ]
-            .into_iter()
-            .map(|interface| RuntimeInterfaceOrientation {
-                interface,
-                identity: interface.identity(),
-            })
-            .collect(),
+            interfaces: [HostInterface::ImmutableBlob]
+                .into_iter()
+                .map(|interface| RuntimeInterfaceOrientation {
+                    interface,
+                    identity: interface.identity(),
+                })
+                .collect(),
             topologies: vec!["one_shot", "foreground_session"],
             adapters: vec![
-                "application_activation.production",
-                "application_activation.deterministic_fake",
                 "immutable_blob.production",
                 "immutable_blob.deterministic_fake",
             ],
@@ -730,6 +731,16 @@ impl RuntimeKernel {
             .counters
             .history_bytes_read
             .saturating_add(observation.history_bytes);
+        self.counters.cache_hits = self.counters.cache_hits.saturating_add(
+            observation
+                .session_cache_hits
+                .saturating_add(observation.application_cache_hits),
+        );
+        self.counters.cache_misses = self.counters.cache_misses.saturating_add(
+            observation
+                .session_cache_misses
+                .saturating_add(observation.application_cache_misses),
+        );
         self.record_observed_nanoseconds(
             RuntimeStage::InstanceOpen,
             observation.instance_open_nanoseconds,

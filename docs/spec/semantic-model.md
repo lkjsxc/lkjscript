@@ -28,6 +28,7 @@ workspace root
     -> module
       -> product declaration -> product field
       -> sum declaration -> sum variant
+      -> sequence declaration
       -> function -> parameter / function body
 
 function body
@@ -57,7 +58,7 @@ Durable identity is assigned to:
 
 - the workspace root;
 - packages and modules in the current model;
-- product and sum declarations;
+- product, sum, and homogeneous sequence declarations;
 - product fields and sum variants;
 - functions and function parameters;
 - explicit `Hole` operations, because repair targets them across revisions.
@@ -173,7 +174,7 @@ The receipt includes exact base/result revision, canonical snapshot hash, public
 created count, selected bindings, semantic change count/digest, and completeness facts. Local body
 churn is summarized as `FunctionBodyChanged`; durable entity changes remain individually visible.
 
-Idempotency binds canonical protocol-v10 transaction bytes, including the requested receipt
+Idempotency binds canonical protocol-v11 transaction bytes, including the requested receipt
 projection. Exact replay returns the retained receipt. Reuse with different bytes rejects.
 
 ## History
@@ -195,22 +196,23 @@ counts and exact revision-local modifications, but similarity never creates sema
 
 Each revision is one full canonical artifact:
 
-- magic `LKJTSM\0\x06`;
-- artifact version 6;
-- semantic schema `lkjscript-tsm006`;
+- magic `LKJTSM\0\x07`;
+- artifact version 7;
+- semantic schema `lkjscript-tsm007`;
 - fixed little-endian checked fields and lengths;
 - canonical item order;
 - domain-separated BLAKE3 snapshot hash;
 - strict trailing-byte rejection.
 
-`LKJHEAD8` binds the current workspace, head revision/hash, and retained idempotency receipt under a
+`LKJHEAD9` binds the current workspace, head revision/hash, and retained idempotency receipt under a
 domain-separated BLAKE3 checksum. Data is written and synchronized before atomic HEAD replacement.
 Failure injection covers every publication step; ambiguous durable outcome stops the engine with
 `commit_outcome_unknown`.
 
 Restart decodes every contiguous retained snapshot and validates every adjacent transition. Missing,
 truncated, oversized, noncanonical, wrong-schema, hash-mismatched, foreign-workspace, or inconsistent
-history rejects. Format 5 / `LKJSPG\0\x05`, `lkjscript-spg005`, and `LKJHEAD7` reject directly.
+history rejects. Format 6 / `LKJTSM\0\x06`, `lkjscript-tsm006`, `LKJHEAD8`, and every predecessor
+reject directly.
 
 Integrity checks rely on collision and second-preimage resistance of full 256-bit BLAKE3 outputs.
 Every stored artifact payload and HEAD body is rehashed on load. A digest collision or an existing
@@ -226,12 +228,13 @@ validation, root retention, interruption-safe garbage collection, and one recons
 ## Workspace, release, application, and executable domains
 
 The `.lkjscript` file is a workspace revision artifact. It includes development history contracts
-and is not a reusable dependency or distribution format. Release artifact version 1 is a canonical
+and is not a reusable dependency or distribution format. Release artifact version 2 is a canonical
 workspace-independent semantic unit with explicit exports, exact dependencies, and release-local
-identity. Application artifact version 4 embeds one exact validated release graph with exports,
-typed complete/suspended stateful decisions, imported host-interface requirements, routing, policy,
-and pure application cases. It contains no workspace identity or grant. Durable instance format 2
-separately binds exact application bytes to typed state revisions, event receipts, immutable
+identity. Application artifact version 5 embeds one exact validated release graph with exports,
+typed mutation responses and four publication decisions, pure query entry/result types, imported
+host-interface requirements, routing, policy, and immutable cases. It contains no workspace identity
+or grant. Durable instance format 3 separately binds exact application bytes to a hash-linked journal,
+periodic semantic checkpoints, typed state revisions and responses, pure queries, immutable
 instance-bound grants, pending commands, and typed host outcomes. Instance continuity, mutable
 state, and authority never enter release or application meaning. The topology-neutral runtime
 kernel coordinates these owners but is not semantic or durable authority. Core IR, ownership plans,

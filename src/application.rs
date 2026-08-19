@@ -1,6 +1,6 @@
 //! Independently transferable exact-release-graph applications.
 //!
-//! Application format 4 embeds one canonical exact reusable-release graph, exact exported
+//! Application format 5 embeds one canonical exact reusable-release graph, exact exported
 //! entries, an invocation profile, resource policy, and typed application cases. Source workspace
 //! identity, mutable resolver state, proposal syntax, Core IR, and runtime handles are absent.
 
@@ -14,22 +14,25 @@ use crate::error::{ErrorCode, LkError, Result};
 use crate::interpret::{self, RunPolicy, RuntimeFieldValue, RuntimeValue};
 use crate::release::graph::{FlattenedGraph, ReleaseGraph};
 use crate::release::{self, ReleaseId, ReleaseItemId};
-use crate::schema::{ByteString, MAXIMUM_BYTE_STRING_BYTES, Node, SemanticType};
+use crate::schema::{
+    ByteString, MAXIMUM_BYTE_STRING_BYTES, MAXIMUM_SEQUENCE_ELEMENTS, Node, SemanticType,
+    TextString,
+};
 use serde::{Deserialize, Serialize, Serializer};
 use std::fmt;
 use std::path::Path;
 use std::time::Instant;
 
-pub const APPLICATION_MAGIC: [u8; 8] = *b"LKJAPP\0\x04";
-pub const APPLICATION_FORMAT_VERSION: u16 = 4;
-pub const APPLICATION_CONTRACT_VERSION: u16 = 4;
+pub const APPLICATION_MAGIC: [u8; 8] = *b"LKJAPP\0\x05";
+pub const APPLICATION_FORMAT_VERSION: u16 = 5;
+pub const APPLICATION_CONTRACT_VERSION: u16 = 5;
 pub const MAXIMUM_APPLICATION_ARTIFACT_BYTES: usize = 256 * 1024 * 1024;
 pub const MAXIMUM_APPLICATION_TESTS: usize = 256;
 pub const MAXIMUM_APPLICATION_TEST_NAME_BYTES: usize = 64;
 pub const MAXIMUM_APPLICATION_SUITE_FUEL: u64 = 100_000_000;
 pub const MAXIMUM_APPLICATION_PATH_BYTES: usize = artifact_io::MAXIMUM_ARTIFACT_PATH_BYTES;
-const MAXIMUM_APPLICATION_VALUE_JSON_BYTES: usize = 1024 * 1024;
-const APPLICATION_DIGEST_DOMAIN: &str = "lkjscript.application-artifact.v4";
+const MAXIMUM_APPLICATION_VALUE_JSON_BYTES: usize = 64 * 1024 * 1024;
+const APPLICATION_DIGEST_DOMAIN: &str = "lkjscript.application-artifact.v5";
 const APPLICATION_GRAPH_DIGEST_DOMAIN: &str = "lkjscript.application-release-graph.v1";
 const APPLICATION_TEST_DIGEST_DOMAIN: &str = "lkjscript.application-test-case.v2";
 const TEMPORARY_PREFIX: &str = ".lkjscript-application-";
@@ -150,6 +153,7 @@ pub enum ApplicationValue {
     Bool(bool),
     I64(i64),
     Bytes(ByteString),
+    Text(TextString),
     Product {
         ty: ApplicationTarget,
         fields: Vec<ApplicationFieldValue>,
@@ -160,19 +164,21 @@ pub enum ApplicationValue {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         payload: Option<Box<ApplicationValue>>,
     },
+    Sequence {
+        ty: ApplicationTarget,
+        elements: Vec<ApplicationValue>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HostInterface {
-    ApplicationActivation,
     ImmutableBlob,
 }
 
 impl HostInterface {
     pub const fn contract_name(self) -> &'static str {
         match self {
-            Self::ApplicationActivation => "application_activation_v1",
             Self::ImmutableBlob => "immutable_blob_v1",
         }
     }
@@ -224,9 +230,6 @@ impl<'de> Deserialize<'de> for HostInterfaceId {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HostOperation {
-    ValidateApplication,
-    ActivateApplication,
-    ReconcileActivation,
     PutBlob,
     InspectBlob,
 }
@@ -234,18 +237,12 @@ pub enum HostOperation {
 impl HostOperation {
     pub const fn interface(self) -> HostInterface {
         match self {
-            Self::ValidateApplication | Self::ActivateApplication | Self::ReconcileActivation => {
-                HostInterface::ApplicationActivation
-            }
             Self::PutBlob | Self::InspectBlob => HostInterface::ImmutableBlob,
         }
     }
 
     const fn stable_tag(self) -> u8 {
         match self {
-            Self::ValidateApplication => 1,
-            Self::ActivateApplication => 2,
-            Self::ReconcileActivation => 3,
             Self::PutBlob => 4,
             Self::InspectBlob => 5,
         }
@@ -253,9 +250,6 @@ impl HostOperation {
 
     const fn from_stable_tag(tag: u8) -> Option<Self> {
         match tag {
-            1 => Some(Self::ValidateApplication),
-            2 => Some(Self::ActivateApplication),
-            3 => Some(Self::ReconcileActivation),
             4 => Some(Self::PutBlob),
             5 => Some(Self::InspectBlob),
             _ => None,
@@ -346,11 +340,21 @@ pub struct ApplicationImport {
 #[serde(deny_unknown_fields)]
 pub struct StatefulApplicationProfile {
     pub resume: ApplicationTarget,
+    pub query_entry: ApplicationTarget,
     pub state: ApplicationTarget,
     pub event: ApplicationTarget,
+    pub response: ApplicationTarget,
+    pub query: ApplicationTarget,
+    pub query_result: ApplicationTarget,
     pub command: ApplicationTarget,
     pub outcome: ApplicationTarget,
     pub decision: ApplicationTarget,
+    pub declined_variant: ApplicationTarget,
+    pub declined_payload: ApplicationTarget,
+    pub declined_response_field: ApplicationTarget,
+    pub unchanged_variant: ApplicationTarget,
+    pub unchanged_payload: ApplicationTarget,
+    pub unchanged_response_field: ApplicationTarget,
     pub completed_variant: ApplicationTarget,
     pub completed_payload: ApplicationTarget,
     pub completed_state_field: ApplicationTarget,
@@ -397,13 +401,35 @@ pub struct StatefulCommand {
     pub request: ApplicationValue,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StatefulDecisionStatus {
+    Declined,
+    Unchanged,
+    Completed,
+    Suspended,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct StatefulTransition {
-    pub state: ApplicationValue,
-    pub response: ByteString,
+    pub status: StatefulDecisionStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<ApplicationValue>,
+    pub response: ApplicationValue,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command: Option<StatefulCommand>,
+    pub compile_nanoseconds: u64,
+    pub lowering_nanoseconds: u64,
+    pub core_verification_nanoseconds: u64,
+    pub execute_nanoseconds: u64,
+    pub public_value_nanoseconds: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct StatefulQueryResult {
+    pub result: ApplicationValue,
     pub compile_nanoseconds: u64,
     pub lowering_nanoseconds: u64,
     pub core_verification_nanoseconds: u64,
@@ -693,6 +719,178 @@ struct DecodedApplication {
     digest: ApplicationDigest,
 }
 
+pub(crate) struct StatefulReplayApplication {
+    application: DecodedApplication,
+    profile: StatefulApplicationProfile,
+    event_entry: crate::ids::NodeId,
+    resume_entry: crate::ids::NodeId,
+    query_entry: crate::ids::NodeId,
+    event_program: crate::core_ir::CoreProgram,
+    resume_program: crate::core_ir::CoreProgram,
+    query_program: crate::core_ir::CoreProgram,
+}
+
+impl StatefulReplayApplication {
+    pub(crate) fn transition_event(
+        &self,
+        state: &ApplicationValue,
+        event: &ApplicationValue,
+    ) -> Result<StatefulTransition> {
+        self.run(
+            self.event_entry,
+            &self.event_program,
+            &[state.clone(), event.clone()],
+        )
+    }
+
+    pub(crate) fn transition_resume(
+        &self,
+        state: &ApplicationValue,
+        outcome: &ApplicationValue,
+    ) -> Result<StatefulTransition> {
+        self.run(
+            self.resume_entry,
+            &self.resume_program,
+            &[state.clone(), outcome.clone()],
+        )
+    }
+
+    pub(crate) fn host_outcome_value(
+        &self,
+        command: &StatefulCommand,
+        class: HostOutcomeClass,
+        evidence: &ByteString,
+    ) -> Result<ApplicationValue> {
+        host_outcome_value_with_profile(&self.profile, command, class, evidence)
+    }
+
+    pub(crate) fn query_state(
+        &self,
+        state: &ApplicationValue,
+        query: &ApplicationValue,
+    ) -> Result<StatefulQueryResult> {
+        let public_value_started = Instant::now();
+        let arguments = [state, query]
+            .into_iter()
+            .map(|value| to_runtime(&self.application.flattened, value))
+            .collect::<Result<Vec<_>>>()?;
+        let argument_nanoseconds = elapsed_nanoseconds(public_value_started);
+        let interpret::RunResult {
+            value,
+            compile_nanoseconds,
+            lowering_nanoseconds,
+            core_verification_nanoseconds,
+            execute_nanoseconds,
+        } = interpret::run_compiled(
+            &self.application.flattened.snapshot,
+            self.query_entry,
+            &self.query_program,
+            &arguments,
+            self.application.policy,
+        )?;
+        let result_started = Instant::now();
+        let result = from_runtime(&self.application.flattened, &value)?;
+        Ok(StatefulQueryResult {
+            result,
+            compile_nanoseconds,
+            lowering_nanoseconds,
+            core_verification_nanoseconds,
+            execute_nanoseconds,
+            public_value_nanoseconds: argument_nanoseconds
+                .saturating_add(elapsed_nanoseconds(result_started)),
+        })
+    }
+
+    pub(crate) fn validate_state(&self, state: &ApplicationValue) -> Result<()> {
+        let Node::Function { parameters, .. } =
+            self.application.flattened.snapshot.node(self.event_entry)?
+        else {
+            return Err(LkError::new(
+                ErrorCode::CoreIrInvalid,
+                "stateful application entry is not a function after validation",
+            ));
+        };
+        let expected = parameter_type(&self.application.flattened.snapshot, parameters[0])?;
+        let value = to_runtime(&self.application.flattened, state)?;
+        interpret::validate_runtime_value(
+            &self.application.flattened.snapshot,
+            &value,
+            expected,
+            self.event_entry,
+        )
+        .map(|_| ())
+    }
+
+    pub(crate) fn digest(&self) -> ApplicationDigest {
+        self.application.digest
+    }
+
+    pub(crate) fn has_exact_bytes(&self, bytes: &[u8]) -> bool {
+        self.application.bytes == bytes
+    }
+
+    fn run(
+        &self,
+        entry: crate::ids::NodeId,
+        program: &crate::core_ir::CoreProgram,
+        arguments: &[ApplicationValue],
+    ) -> Result<StatefulTransition> {
+        let public_value_started = Instant::now();
+        let arguments = arguments
+            .iter()
+            .map(|value| to_runtime(&self.application.flattened, value))
+            .collect::<Result<Vec<_>>>()?;
+        let public_value_nanoseconds = elapsed_nanoseconds(public_value_started);
+        let result = interpret::run_compiled(
+            &self.application.flattened.snapshot,
+            entry,
+            program,
+            &arguments,
+            self.application.policy,
+        )?;
+        decode_stateful_transition(
+            &self.application.flattened,
+            self.profile.clone(),
+            result,
+            public_value_nanoseconds,
+        )
+    }
+}
+
+pub(crate) fn prepare_stateful_replay(bytes: &[u8]) -> Result<StatefulReplayApplication> {
+    prepare_stateful_replay_observed(bytes, &mut ApplicationLoadObservation::default())
+}
+
+pub(crate) fn prepare_stateful_replay_observed(
+    bytes: &[u8],
+    observation: &mut ApplicationLoadObservation,
+) -> Result<StatefulReplayApplication> {
+    let application = decode_application_observed(bytes, observation)?;
+    let profile = stateful_profile(&application)?;
+    let event_entry = application
+        .flattened
+        .item(application.entry.release, application.entry.item)?;
+    let resume_entry = application
+        .flattened
+        .item(profile.resume.release, profile.resume.item)?;
+    let query_entry = application
+        .flattened
+        .item(profile.query_entry.release, profile.query_entry.item)?;
+    let event_program = interpret::compile_entry(&application.flattened.snapshot, event_entry)?.0;
+    let resume_program = interpret::compile_entry(&application.flattened.snapshot, resume_entry)?.0;
+    let query_program = interpret::compile_entry(&application.flattened.snapshot, query_entry)?.0;
+    Ok(StatefulReplayApplication {
+        application,
+        profile,
+        event_entry,
+        resume_entry,
+        query_entry,
+        event_program,
+        resume_program,
+        query_program,
+    })
+}
+
 pub fn prepare(
     request: &ApplicationBuildRequest,
     supplied_release_bytes: &[Vec<u8>],
@@ -938,6 +1136,63 @@ pub fn transition_resume_observed(
     )
 }
 
+/// Evaluates one exact pure application query against an already selected state value.
+/// This function performs no instance, host, or application publication.
+pub fn query_state(
+    bytes: &[u8],
+    state: &ApplicationValue,
+    query: &ApplicationValue,
+) -> Result<StatefulQueryResult> {
+    query_state_observed(
+        bytes,
+        state,
+        query,
+        &mut ApplicationLoadObservation::default(),
+    )
+}
+
+pub fn query_state_observed(
+    bytes: &[u8],
+    state: &ApplicationValue,
+    query: &ApplicationValue,
+    observation: &mut ApplicationLoadObservation,
+) -> Result<StatefulQueryResult> {
+    let application = decode_application_observed(bytes, observation)?;
+    let profile = stateful_profile(&application)?;
+    let target = application
+        .flattened
+        .item(profile.query_entry.release, profile.query_entry.item)?;
+    let public_value_started = Instant::now();
+    let arguments = [state, query]
+        .into_iter()
+        .map(|value| to_runtime(&application.flattened, value))
+        .collect::<Result<Vec<_>>>()?;
+    let argument_nanoseconds = elapsed_nanoseconds(public_value_started);
+    let interpret::RunResult {
+        value,
+        compile_nanoseconds,
+        lowering_nanoseconds,
+        core_verification_nanoseconds,
+        execute_nanoseconds,
+    } = interpret::compile_and_run(
+        &application.flattened.snapshot,
+        target,
+        &arguments,
+        application.policy,
+    )?;
+    let result_started = Instant::now();
+    let result = from_runtime(&application.flattened, &value)?;
+    Ok(StatefulQueryResult {
+        result,
+        compile_nanoseconds,
+        lowering_nanoseconds,
+        core_verification_nanoseconds,
+        execute_nanoseconds,
+        public_value_nanoseconds: argument_nanoseconds
+            .saturating_add(elapsed_nanoseconds(result_started)),
+    })
+}
+
 fn stateful_profile(application: &DecodedApplication) -> Result<StatefulApplicationProfile> {
     match &application.profile {
         InvocationProfile::Stateful(profile) => Ok(profile.clone()),
@@ -1015,28 +1270,40 @@ fn decode_stateful_transition(
     else {
         return Err(corrupt("decision variant payload is not a product"));
     };
-    let (expected_payload, expected_fields, suspended) = if variant == profile.completed_variant {
+    let (status, expected_payload, expected_fields) = if variant == profile.declined_variant {
         (
+            StatefulDecisionStatus::Declined,
+            profile.declined_payload,
+            vec![profile.declined_response_field],
+        )
+    } else if variant == profile.unchanged_variant {
+        (
+            StatefulDecisionStatus::Unchanged,
+            profile.unchanged_payload,
+            vec![profile.unchanged_response_field],
+        )
+    } else if variant == profile.completed_variant {
+        (
+            StatefulDecisionStatus::Completed,
             profile.completed_payload,
             vec![
                 profile.completed_state_field,
                 profile.completed_response_field,
             ],
-            false,
         )
     } else if variant == profile.suspended_variant {
         (
+            StatefulDecisionStatus::Suspended,
             profile.suspended_payload,
             vec![
                 profile.suspended_state_field,
                 profile.suspended_response_field,
                 profile.suspended_command_field,
             ],
-            true,
         )
     } else {
         return Err(corrupt(
-            "decision uses an undeclared completed/suspended variant",
+            "decision uses an undeclared declined/unchanged/completed/suspended variant",
         ));
     };
     if payload_type != expected_payload || fields.len() != expected_fields.len() {
@@ -1050,14 +1317,22 @@ fn decode_stateful_transition(
         values.push(field.value);
     }
     let mut values = values.into_iter();
-    let state = values
-        .next()
-        .ok_or_else(|| corrupt("decision state is absent"))?;
-    let response = match values.next() {
-        Some(ApplicationValue::Bytes(value)) => value,
-        _ => return Err(corrupt("decision response is not bytes")),
+    let state = if matches!(
+        status,
+        StatefulDecisionStatus::Completed | StatefulDecisionStatus::Suspended
+    ) {
+        Some(
+            values
+                .next()
+                .ok_or_else(|| corrupt("publishing decision state is absent"))?,
+        )
+    } else {
+        None
     };
-    let command = if suspended {
+    let response = values
+        .next()
+        .ok_or_else(|| corrupt("decision response is absent"))?;
+    let command = if status == StatefulDecisionStatus::Suspended {
         Some(decode_stateful_command(
             &profile,
             values
@@ -1070,6 +1345,7 @@ fn decode_stateful_transition(
     let public_value_nanoseconds =
         public_value_nanoseconds.saturating_add(elapsed_nanoseconds(public_value_started));
     Ok(StatefulTransition {
+        status,
         state,
         response,
         command,
@@ -1153,6 +1429,15 @@ pub fn host_outcome_value(
 ) -> Result<ApplicationValue> {
     let application = decode_application(bytes)?;
     let profile = stateful_profile(&application)?;
+    host_outcome_value_with_profile(&profile, command, class, evidence)
+}
+
+fn host_outcome_value_with_profile(
+    profile: &StatefulApplicationProfile,
+    command: &StatefulCommand,
+    class: HostOutcomeClass,
+    evidence: &ByteString,
+) -> Result<ApplicationValue> {
     let import = profile
         .imports
         .iter()
@@ -1208,24 +1493,7 @@ pub fn host_outcome_value(
 
 pub const fn host_outcome_is_compatible(operation: HostOperation, class: HostOutcomeClass) -> bool {
     match operation {
-        HostOperation::ValidateApplication => matches!(
-            class,
-            HostOutcomeClass::Succeeded
-                | HostOutcomeClass::KnownFailureBeforeVisibility
-                | HostOutcomeClass::CancelledBeforeAction
-                | HostOutcomeClass::TimeoutBeforeAction
-        ),
-        HostOperation::ActivateApplication => matches!(
-            class,
-            HostOutcomeClass::Succeeded
-                | HostOutcomeClass::KnownFailureBeforeVisibility
-                | HostOutcomeClass::OutcomeUnknown
-                | HostOutcomeClass::CancelledBeforeAction
-                | HostOutcomeClass::TimeoutBeforeAction
-                | HostOutcomeClass::TimeoutAfterPossibleVisibility
-                | HostOutcomeClass::CleanupFailure
-        ),
-        HostOperation::ReconcileActivation | HostOperation::InspectBlob => matches!(
+        HostOperation::InspectBlob => matches!(
             class,
             HostOutcomeClass::ReconciliationPresent
                 | HostOutcomeClass::ReconciliationAbsent
@@ -1259,17 +1527,10 @@ fn validate_request_payload(
             "host-interface request variant must carry exactly one bytes payload",
         ));
     };
-    if matches!(
-        operation,
-        HostOperation::ValidateApplication
-            | HostOperation::ActivateApplication
-            | HostOperation::ReconcileActivation
-            | HostOperation::InspectBlob
-    ) && bytes.len() != 32
-    {
+    if operation == HostOperation::InspectBlob && bytes.len() != 32 {
         return Err(LkError::new(
             ErrorCode::ProtocolMalformed,
-            "exact application and blob inspection requests require a 32-byte identity",
+            "blob inspection requests require a 32-byte identity",
         ));
     }
     Ok(())
@@ -1370,13 +1631,48 @@ fn validate_manifest(
             "at least one application test must target the exact entry export",
         ));
     }
-    if let InvocationProfile::Stateful(stateful) = profile
-        && !tests.iter().any(|test| test.target == stateful.resume)
-    {
-        return Err(LkError::new(
-            ErrorCode::ApplicationTestFailed,
-            "a stateful application requires at least one exact resume-entry test",
-        ));
+    if let InvocationProfile::Stateful(stateful) = profile {
+        if !tests.iter().any(|test| test.target == stateful.resume) {
+            return Err(LkError::new(
+                ErrorCode::ApplicationTestFailed,
+                "a stateful application requires at least one exact resume-entry test",
+            ));
+        }
+        if !tests.iter().any(|test| test.target == stateful.query_entry) {
+            return Err(LkError::new(
+                ErrorCode::ApplicationTestFailed,
+                "a stateful application requires at least one exact query-entry test",
+            ));
+        }
+        let mut covered_decisions = [false; 4];
+        for test in tests
+            .iter()
+            .filter(|test| test.target == entry || test.target == stateful.resume)
+        {
+            let ApplicationTestExpectation::Value(ApplicationValue::Sum { ty, variant, .. }) =
+                &test.expected
+            else {
+                continue;
+            };
+            if *ty != stateful.decision {
+                continue;
+            }
+            if *variant == stateful.declined_variant {
+                covered_decisions[0] = true;
+            } else if *variant == stateful.unchanged_variant {
+                covered_decisions[1] = true;
+            } else if *variant == stateful.completed_variant {
+                covered_decisions[2] = true;
+            } else if *variant == stateful.suspended_variant {
+                covered_decisions[3] = true;
+            }
+        }
+        if covered_decisions.iter().any(|covered| !covered) {
+            return Err(LkError::new(
+                ErrorCode::ApplicationTestFailed,
+                "a stateful application requires exact declined, unchanged, completed, and suspended decision tests",
+            ));
+        }
     }
     let mut total_fuel = 0_u64;
     for test in tests {
@@ -1499,6 +1795,9 @@ fn validate_stateful_profile(
     }
     let state = flattened.item(profile.state.release, profile.state.item)?;
     let event = flattened.item(profile.event.release, profile.event.item)?;
+    let response = flattened.item(profile.response.release, profile.response.item)?;
+    let query = flattened.item(profile.query.release, profile.query.item)?;
+    let query_result = flattened.item(profile.query_result.release, profile.query_result.item)?;
     let command = flattened.item(profile.command.release, profile.command.item)?;
     let outcome = flattened.item(profile.outcome.release, profile.outcome.item)?;
     let decision = flattened.item(profile.decision.release, profile.decision.item)?;
@@ -1512,7 +1811,7 @@ fn validate_stateful_profile(
         )
         || !matches!(
             snapshot.node(event)?,
-            Node::ProductType { .. } | Node::SumType { .. }
+            Node::ProductType { .. } | Node::SumType { .. } | Node::SequenceType { .. }
         )
     {
         return Err(LkError::new(
@@ -1532,6 +1831,25 @@ fn validate_stateful_profile(
             "stateful decision must be a nominal sum",
         ));
     };
+    for target in [response, query, query_result] {
+        if !matches!(
+            snapshot.node(target)?,
+            Node::ProductType { .. } | Node::SumType { .. } | Node::SequenceType { .. }
+        ) {
+            return Err(LkError::new(
+                ErrorCode::WrongKind,
+                "stateful response, query, and query-result targets must be nominal declarations",
+            ));
+        }
+    }
+    let declined_variant = flattened.item(
+        profile.declined_variant.release,
+        profile.declined_variant.item,
+    )?;
+    let unchanged_variant = flattened.item(
+        profile.unchanged_variant.release,
+        profile.unchanged_variant.item,
+    )?;
     let completed_variant = flattened.item(
         profile.completed_variant.release,
         profile.completed_variant.item,
@@ -1540,19 +1858,47 @@ fn validate_stateful_profile(
         profile.suspended_variant.release,
         profile.suspended_variant.item,
     )?;
-    if variants.as_slice() != [completed_variant, suspended_variant] {
+    if variants.as_slice()
+        != [
+            declined_variant,
+            unchanged_variant,
+            completed_variant,
+            suspended_variant,
+        ]
+    {
         return Err(LkError::new(
             ErrorCode::InvalidContainment,
-            "stateful decision must declare completed then suspended exactly once",
+            "stateful decision must declare declined, unchanged, completed, then suspended exactly once",
         ));
     }
+    validate_decision_variant(
+        flattened,
+        declined_variant,
+        profile.declined_payload,
+        &[(
+            profile.declined_response_field,
+            SemanticType::Nominal(response),
+        )],
+    )?;
+    validate_decision_variant(
+        flattened,
+        unchanged_variant,
+        profile.unchanged_payload,
+        &[(
+            profile.unchanged_response_field,
+            SemanticType::Nominal(response),
+        )],
+    )?;
     validate_decision_variant(
         flattened,
         completed_variant,
         profile.completed_payload,
         &[
             (profile.completed_state_field, SemanticType::Nominal(state)),
-            (profile.completed_response_field, SemanticType::Bytes),
+            (
+                profile.completed_response_field,
+                SemanticType::Nominal(response),
+            ),
         ],
     )?;
     validate_decision_variant(
@@ -1561,7 +1907,10 @@ fn validate_stateful_profile(
         profile.suspended_payload,
         &[
             (profile.suspended_state_field, SemanticType::Nominal(state)),
-            (profile.suspended_response_field, SemanticType::Bytes),
+            (
+                profile.suspended_response_field,
+                SemanticType::Nominal(response),
+            ),
             (
                 profile.suspended_command_field,
                 SemanticType::Nominal(command),
@@ -1617,6 +1966,28 @@ fn validate_stateful_profile(
         return Err(LkError::new(
             ErrorCode::TypeMismatch,
             "stateful resume entry must accept exact state and outcome values and return the decision sum",
+        ));
+    }
+
+    validate_exported_function(graph, profile.query_entry)?;
+    let query_entry = flattened.item(profile.query_entry.release, profile.query_entry.item)?;
+    let Node::Function {
+        parameters, result, ..
+    } = snapshot.node(query_entry)?
+    else {
+        return Err(LkError::new(
+            ErrorCode::WrongKind,
+            "stateful query target must be a function",
+        ));
+    };
+    if parameters.len() != 2
+        || parameter_type(snapshot, parameters[0])? != SemanticType::Nominal(state)
+        || parameter_type(snapshot, parameters[1])? != SemanticType::Nominal(query)
+        || *result != SemanticType::Nominal(query_result)
+    {
+        return Err(LkError::new(
+            ErrorCode::TypeMismatch,
+            "stateful query entry must accept exact state and query values and return the exact query-result type",
         ));
     }
     Ok(())
@@ -2305,7 +2676,7 @@ fn inspection(application: &DecodedApplication) -> Result<ApplicationInspection>
     Ok(ApplicationInspection {
         contract_version: APPLICATION_CONTRACT_VERSION,
         format_version: APPLICATION_FORMAT_VERSION,
-        semantic_schema: "lkjscript-tsm006",
+        semantic_schema: crate::artifact::SCHEMA_NAME,
         digest: application.digest,
         graph_digest: graph_digest(&application.graph),
         root_release: application.graph.root(),
@@ -2355,6 +2726,7 @@ fn to_runtime_bounded(
         ApplicationValue::Bool(value) => RuntimeValue::Bool(*value),
         ApplicationValue::I64(value) => RuntimeValue::I64(*value),
         ApplicationValue::Bytes(value) => RuntimeValue::Bytes(value.clone()),
+        ApplicationValue::Text(value) => RuntimeValue::Text(value.clone()),
         ApplicationValue::Product { ty, fields } => RuntimeValue::Product {
             ty: flattened.item(ty.release, ty.item)?,
             fields: fields
@@ -2386,6 +2758,13 @@ fn to_runtime_bounded(
                         .map(Box::new)
                 })
                 .transpose()?,
+        },
+        ApplicationValue::Sequence { ty, elements } => RuntimeValue::Sequence {
+            ty: flattened.item(ty.release, ty.item)?,
+            elements: elements
+                .iter()
+                .map(|value| to_runtime_bounded(flattened, value, depth.saturating_add(1), items))
+                .collect::<Result<Vec<_>>>()?,
         },
     })
 }
@@ -2433,6 +2812,7 @@ fn from_runtime_bounded(
         RuntimeValue::Bool(value) => ApplicationValue::Bool(*value),
         RuntimeValue::I64(value) => ApplicationValue::I64(*value),
         RuntimeValue::Bytes(value) => ApplicationValue::Bytes(value.clone()),
+        RuntimeValue::Text(value) => ApplicationValue::Text(value.clone()),
         RuntimeValue::Product { ty, fields } => ApplicationValue::Product {
             ty: target(*ty)?,
             fields: fields
@@ -2464,6 +2844,13 @@ fn from_runtime_bounded(
                         .map(Box::new)
                 })
                 .transpose()?,
+        },
+        RuntimeValue::Sequence { ty, elements } => ApplicationValue::Sequence {
+            ty: target(*ty)?,
+            elements: elements
+                .iter()
+                .map(|value| from_runtime_bounded(flattened, value, depth.saturating_add(1), items))
+                .collect::<Result<Vec<_>>>()?,
         },
     })
 }
@@ -2531,18 +2918,7 @@ fn read_test(reader: &mut Reader<'_>) -> Result<ApplicationTestCase> {
 }
 
 fn put_value(writer: &mut Writer, value: &ApplicationValue) -> Result<()> {
-    let encoded = serde_json::to_vec(value).map_err(|error| {
-        LkError::new(
-            ErrorCode::ProtocolMalformed,
-            format!("cannot encode application value: {error}"),
-        )
-    })?;
-    if encoded.len() > MAXIMUM_APPLICATION_VALUE_JSON_BYTES {
-        return Err(LkError::new(
-            ErrorCode::PolicyExceeded,
-            "application value encoding exceeds byte policy",
-        ));
-    }
+    let encoded = encode_application_value_binary(value, MAXIMUM_APPLICATION_VALUE_JSON_BYTES)?;
     writer.bytes(&encoded).map_err(application_codec)
 }
 
@@ -2550,15 +2926,285 @@ fn read_value(reader: &mut Reader<'_>) -> Result<ApplicationValue> {
     let encoded = reader
         .bytes(MAXIMUM_APPLICATION_VALUE_JSON_BYTES)
         .map_err(application_codec)?;
-    let value = serde_json::from_slice::<ApplicationValue>(encoded)
-        .map_err(|error| corrupt(&format!("application value JSON is malformed: {error}")))?;
-    if serde_json::to_vec(&value)
-        .map_err(|error| corrupt(&format!("application value cannot be encoded: {error}")))?
-        != encoded
-    {
-        return Err(corrupt("application value JSON is not canonical"));
+    decode_application_value_binary(encoded, MAXIMUM_APPLICATION_VALUE_JSON_BYTES)
+}
+
+pub(crate) fn encode_application_value_binary(
+    value: &ApplicationValue,
+    maximum_bytes: usize,
+) -> Result<Vec<u8>> {
+    let mut items = 0_usize;
+    let size = application_value_binary_size(value, 1, &mut items)?;
+    if size > maximum_bytes {
+        return Err(LkError::new(
+            ErrorCode::PolicyExceeded,
+            "application value binary encoding exceeds byte policy",
+        ));
     }
+    let mut writer = Writer::with_capacity(size);
+    put_application_value_binary(&mut writer, value)?;
+    let encoded = writer.finish();
+    debug_assert_eq!(encoded.len(), size);
+    Ok(encoded)
+}
+
+pub(crate) fn decode_application_value_binary(
+    bytes: &[u8],
+    maximum_bytes: usize,
+) -> Result<ApplicationValue> {
+    if bytes.len() > maximum_bytes {
+        return Err(LkError::new(
+            ErrorCode::PolicyExceeded,
+            "application value binary input exceeds byte policy",
+        ));
+    }
+    let mut reader = Reader::new(bytes);
+    let mut items = 0_usize;
+    let value = read_application_value_binary(&mut reader, 1, &mut items)?;
+    reader.finish().map_err(application_codec)?;
     Ok(value)
+}
+
+fn application_value_binary_size(
+    value: &ApplicationValue,
+    depth: usize,
+    items: &mut usize,
+) -> Result<usize> {
+    if depth > interpret::MAX_RUNTIME_VALUE_DEPTH {
+        return Err(LkError::new(
+            ErrorCode::PolicyExceeded,
+            "application value binary nesting exceeds policy",
+        ));
+    }
+    *items = items.checked_add(1).ok_or_else(|| {
+        LkError::new(
+            ErrorCode::PolicyExceeded,
+            "application value binary item count overflows",
+        )
+    })?;
+    if *items > interpret::MAX_RUNTIME_VALUE_ITEMS {
+        return Err(LkError::new(
+            ErrorCode::PolicyExceeded,
+            "application value binary item count exceeds policy",
+        ));
+    }
+    let add = |left: usize, right: usize| {
+        left.checked_add(right).ok_or_else(|| {
+            LkError::new(
+                ErrorCode::PolicyExceeded,
+                "application value binary size overflows",
+            )
+        })
+    };
+    match value {
+        ApplicationValue::Unit => Ok(1),
+        ApplicationValue::Bool(_) => Ok(2),
+        ApplicationValue::I64(_) => Ok(9),
+        ApplicationValue::Bytes(value) => add(9, value.len()),
+        ApplicationValue::Text(value) => add(9, value.len_bytes()),
+        ApplicationValue::Product { fields, .. } => {
+            let mut size = 49_usize;
+            for field in fields {
+                size = add(size, 40)?;
+                size = add(
+                    size,
+                    application_value_binary_size(&field.value, depth.saturating_add(1), items)?,
+                )?;
+            }
+            Ok(size)
+        }
+        ApplicationValue::Sum { payload, .. } => {
+            let mut size = 82_usize;
+            if let Some(payload) = payload {
+                size = add(
+                    size,
+                    application_value_binary_size(payload, depth.saturating_add(1), items)?,
+                )?;
+            }
+            Ok(size)
+        }
+        ApplicationValue::Sequence { elements, .. } => {
+            if elements.len() > MAXIMUM_SEQUENCE_ELEMENTS {
+                return Err(LkError::new(
+                    ErrorCode::PolicyExceeded,
+                    "application value binary sequence length exceeds policy",
+                ));
+            }
+            let mut size = 49_usize;
+            for element in elements {
+                size = add(
+                    size,
+                    application_value_binary_size(element, depth.saturating_add(1), items)?,
+                )?;
+            }
+            Ok(size)
+        }
+    }
+}
+
+fn put_application_value_binary(writer: &mut Writer, value: &ApplicationValue) -> Result<()> {
+    match value {
+        ApplicationValue::Unit => writer.u8(1),
+        ApplicationValue::Bool(value) => {
+            writer.u8(2);
+            writer.bool(*value);
+        }
+        ApplicationValue::I64(value) => {
+            writer.u8(3);
+            writer.i64(*value);
+        }
+        ApplicationValue::Bytes(value) => {
+            writer.u8(4);
+            writer.bytes(value.as_slice()).map_err(application_codec)?;
+        }
+        ApplicationValue::Text(value) => {
+            writer.u8(5);
+            writer.string(value.as_str()).map_err(application_codec)?;
+        }
+        ApplicationValue::Product { ty, fields } => {
+            writer.u8(6);
+            put_target(writer, *ty);
+            put_count(writer, fields.len())?;
+            for field in fields {
+                put_target(writer, field.field);
+                put_application_value_binary(writer, &field.value)?;
+            }
+        }
+        ApplicationValue::Sum {
+            ty,
+            variant,
+            payload,
+        } => {
+            writer.u8(7);
+            put_target(writer, *ty);
+            put_target(writer, *variant);
+            writer.bool(payload.is_some());
+            if let Some(payload) = payload {
+                put_application_value_binary(writer, payload)?;
+            }
+        }
+        ApplicationValue::Sequence { ty, elements } => {
+            writer.u8(8);
+            put_target(writer, *ty);
+            put_count(writer, elements.len())?;
+            for element in elements {
+                put_application_value_binary(writer, element)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn read_application_value_binary(
+    reader: &mut Reader<'_>,
+    depth: usize,
+    items: &mut usize,
+) -> Result<ApplicationValue> {
+    if depth > interpret::MAX_RUNTIME_VALUE_DEPTH {
+        return Err(LkError::new(
+            ErrorCode::PolicyExceeded,
+            "application value binary nesting exceeds policy",
+        ));
+    }
+    *items = items.checked_add(1).ok_or_else(|| {
+        LkError::new(
+            ErrorCode::PolicyExceeded,
+            "application value binary item count overflows",
+        )
+    })?;
+    if *items > interpret::MAX_RUNTIME_VALUE_ITEMS {
+        return Err(LkError::new(
+            ErrorCode::PolicyExceeded,
+            "application value binary item count exceeds policy",
+        ));
+    }
+    let tag = reader.u8().map_err(application_codec)?;
+    Ok(match tag {
+        1 => ApplicationValue::Unit,
+        2 => ApplicationValue::Bool(reader.bool().map_err(application_codec)?),
+        3 => ApplicationValue::I64(reader.i64().map_err(application_codec)?),
+        4 => ApplicationValue::Bytes(
+            ByteString::from_slice(
+                reader
+                    .bytes(MAXIMUM_BYTE_STRING_BYTES)
+                    .map_err(application_codec)?,
+            )
+            .map_err(|_| {
+                LkError::new(
+                    ErrorCode::PolicyExceeded,
+                    "application binary byte value exceeds policy",
+                )
+            })?,
+        ),
+        5 => ApplicationValue::Text(
+            TextString::try_from_str(
+                &reader
+                    .string(crate::schema::MAXIMUM_TEXT_BYTES)
+                    .map_err(application_codec)?,
+            )
+            .map_err(|_| {
+                LkError::new(
+                    ErrorCode::PolicyExceeded,
+                    "application binary text value exceeds policy",
+                )
+            })?,
+        ),
+        6 => {
+            let ty = read_target(reader)?;
+            let count = reader
+                .count(interpret::MAX_RUNTIME_VALUE_ITEMS.saturating_sub(*items))
+                .map_err(application_codec)?;
+            let mut fields = Vec::with_capacity(count);
+            for _ in 0..count {
+                fields.push(ApplicationFieldValue {
+                    field: read_target(reader)?,
+                    value: read_application_value_binary(reader, depth.saturating_add(1), items)?,
+                });
+            }
+            ApplicationValue::Product { ty, fields }
+        }
+        7 => {
+            let ty = read_target(reader)?;
+            let variant = read_target(reader)?;
+            let payload = if reader.bool().map_err(application_codec)? {
+                Some(Box::new(read_application_value_binary(
+                    reader,
+                    depth.saturating_add(1),
+                    items,
+                )?))
+            } else {
+                None
+            };
+            ApplicationValue::Sum {
+                ty,
+                variant,
+                payload,
+            }
+        }
+        8 => {
+            let ty = read_target(reader)?;
+            let count = reader
+                .count(
+                    MAXIMUM_SEQUENCE_ELEMENTS
+                        .min(interpret::MAX_RUNTIME_VALUE_ITEMS.saturating_sub(*items)),
+                )
+                .map_err(application_codec)?;
+            let mut elements = Vec::with_capacity(count);
+            for _ in 0..count {
+                elements.push(read_application_value_binary(
+                    reader,
+                    depth.saturating_add(1),
+                    items,
+                )?);
+            }
+            ApplicationValue::Sequence { ty, elements }
+        }
+        _ => {
+            return Err(application_codec(
+                reader.unknown_tag(crate::codec::TagDomain::Value, tag),
+            ));
+        }
+    })
 }
 
 fn put_target(writer: &mut Writer, target: ApplicationTarget) {
@@ -2570,11 +3216,21 @@ fn put_profile(writer: &mut Writer, profile: &InvocationProfile) -> Result<()> {
     writer.u8(profile.stable_tag());
     if let InvocationProfile::Stateful(stateful) = profile {
         put_target(writer, stateful.resume);
+        put_target(writer, stateful.query_entry);
         put_target(writer, stateful.state);
         put_target(writer, stateful.event);
+        put_target(writer, stateful.response);
+        put_target(writer, stateful.query);
+        put_target(writer, stateful.query_result);
         put_target(writer, stateful.command);
         put_target(writer, stateful.outcome);
         put_target(writer, stateful.decision);
+        put_target(writer, stateful.declined_variant);
+        put_target(writer, stateful.declined_payload);
+        put_target(writer, stateful.declined_response_field);
+        put_target(writer, stateful.unchanged_variant);
+        put_target(writer, stateful.unchanged_payload);
+        put_target(writer, stateful.unchanged_response_field);
         put_target(writer, stateful.completed_variant);
         put_target(writer, stateful.completed_payload);
         put_target(writer, stateful.completed_state_field);
@@ -2588,7 +3244,6 @@ fn put_profile(writer: &mut Writer, profile: &InvocationProfile) -> Result<()> {
         for import in &stateful.imports {
             writer.string(&import.slot).map_err(application_codec)?;
             writer.u8(match import.interface {
-                HostInterface::ApplicationActivation => 1,
                 HostInterface::ImmutableBlob => 2,
             });
             put_target(writer, import.request);
@@ -2617,11 +3272,21 @@ fn read_profile(reader: &mut Reader<'_>) -> Result<InvocationProfile> {
         2 => InvocationProfile::BytesStream,
         3 => {
             let resume = read_target(reader)?;
+            let query_entry = read_target(reader)?;
             let state = read_target(reader)?;
             let event = read_target(reader)?;
+            let response = read_target(reader)?;
+            let query = read_target(reader)?;
+            let query_result = read_target(reader)?;
             let command = read_target(reader)?;
             let outcome = read_target(reader)?;
             let decision = read_target(reader)?;
+            let declined_variant = read_target(reader)?;
+            let declined_payload = read_target(reader)?;
+            let declined_response_field = read_target(reader)?;
+            let unchanged_variant = read_target(reader)?;
+            let unchanged_payload = read_target(reader)?;
+            let unchanged_response_field = read_target(reader)?;
             let completed_variant = read_target(reader)?;
             let completed_payload = read_target(reader)?;
             let completed_state_field = read_target(reader)?;
@@ -2636,7 +3301,6 @@ fn read_profile(reader: &mut Reader<'_>) -> Result<InvocationProfile> {
             for _ in 0..import_count {
                 let slot = reader.string(64).map_err(application_codec)?;
                 let interface = match reader.u8().map_err(application_codec)? {
-                    1 => HostInterface::ApplicationActivation,
                     2 => HostInterface::ImmutableBlob,
                     _ => return Err(corrupt("host-interface identity tag is unknown")),
                 };
@@ -2681,11 +3345,21 @@ fn read_profile(reader: &mut Reader<'_>) -> Result<InvocationProfile> {
             }
             InvocationProfile::Stateful(StatefulApplicationProfile {
                 resume,
+                query_entry,
                 state,
                 event,
+                response,
+                query,
+                query_result,
                 command,
                 outcome,
                 decision,
+                declined_variant,
+                declined_payload,
+                declined_response_field,
+                unchanged_variant,
+                unchanged_payload,
+                unchanged_response_field,
                 completed_variant,
                 completed_payload,
                 completed_state_field,

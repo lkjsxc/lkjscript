@@ -7,11 +7,11 @@ const INDEX_MASK: u32 = (1_u32 << INDEX_BITS) - 1;
 const VIEW_KIND: u32 = 1;
 const BACKING_KIND: u32 = 2;
 
-pub const MAX_RUN_MANAGED_VISIBLE_BYTES: usize = 1024 * 1024;
-pub const MAX_RUN_RETAINED_BACKING_BYTES: usize = 256 * 1024;
-pub const MAX_RUN_MANAGED_OBJECTS: usize = 4_096;
+pub const MAX_RUN_MANAGED_VISIBLE_BYTES: usize = 512 * 1024 * 1024;
+pub const MAX_RUN_RETAINED_BACKING_BYTES: usize = 128 * 1024 * 1024;
+pub const MAX_RUN_MANAGED_OBJECTS: usize = 131_072;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) struct ByteHandle(NonZeroU64);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -168,6 +168,15 @@ impl ManagedStore {
     }
 
     pub(crate) fn allocate_backing(&mut self, bytes: &[u8], origin: NodeId) -> Result<ByteHandle> {
+        self.allocate_backing_with_visible_bytes(bytes, bytes.len(), origin)
+    }
+
+    pub(crate) fn allocate_backing_with_visible_bytes(
+        &mut self,
+        bytes: &[u8],
+        visible: usize,
+        origin: NodeId,
+    ) -> Result<ByteHandle> {
         let mut owned = Vec::new();
         owned
             .try_reserve_exact(bytes.len())
@@ -178,7 +187,61 @@ impl ManagedStore {
             .copied_bytes
             .checked_add(bytes.len())
             .ok_or_else(|| internal("managed copied-byte metric overflowed"))?;
-        self.allocate_owned(owned, bytes.len(), origin)
+        self.allocate_owned(owned, visible, origin)
+    }
+
+    /// Accounts a safe typed managed object whose production representation is owned by
+    /// the interpreter rather than the byte-backing store. The byte count is the exact
+    /// canonical allocate-new representation used by the differential oracle.
+    pub(crate) fn reserve_external_backing(
+        &mut self,
+        retained: usize,
+        visible: usize,
+        origin: NodeId,
+    ) -> Result<()> {
+        self.preflight_visible(visible, origin)?;
+        self.preflight_live_backing(retained, 0, origin)?;
+        self.metrics.cumulative_visible_bytes = self
+            .metrics
+            .cumulative_visible_bytes
+            .checked_add(visible)
+            .ok_or_else(|| internal("managed visible-byte metric overflowed"))?;
+        self.metrics.cumulative_allocated_bytes = self
+            .metrics
+            .cumulative_allocated_bytes
+            .checked_add(retained)
+            .ok_or_else(|| internal("managed allocation metric overflowed"))?;
+        self.metrics.live_backing_bytes = self
+            .metrics
+            .live_backing_bytes
+            .checked_add(retained)
+            .ok_or_else(|| internal("managed live-byte metric overflowed"))?;
+        self.metrics.peak_live_backing_bytes = self
+            .metrics
+            .peak_live_backing_bytes
+            .max(self.metrics.live_backing_bytes);
+        self.metrics.peak_capacity_bytes = self.metrics.peak_capacity_bytes.max(retained);
+        self.metrics.copied_bytes = self
+            .metrics
+            .copied_bytes
+            .checked_add(retained)
+            .ok_or_else(|| internal("managed copied-byte metric overflowed"))?;
+        Ok(())
+    }
+
+    pub(crate) fn release_external_backing(
+        &mut self,
+        retained: usize,
+        origin: NodeId,
+    ) -> Result<()> {
+        self.metrics.live_backing_bytes = self
+            .metrics
+            .live_backing_bytes
+            .checked_sub(retained)
+            .ok_or_else(|| {
+                invalid_handle(origin, "external managed backing accounting underflowed")
+            })?;
+        self.refresh_retained_by_views()
     }
 
     fn allocate_owned(

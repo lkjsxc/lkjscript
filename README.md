@@ -1,125 +1,115 @@
 # lkjscript
 
-`lkjscript` is a local typed semantic application platform designed for coding agents. Agents
-author immutable workspace revisions, publish workspace-independent releases, build exact
-single-file application worlds, and operate durable application instances. Accepted meaning,
-mutable state, host intent, host authority, execution, and operational observations remain separate
-typed domains.
+`lkjscript` is an agent-native typed semantic application platform. It stores accepted program
+meaning as exact immutable revisions, projects reusable releases, composes validated application
+worlds, and runs durable stateful instances with explicit host authority. The repository also ships
+`lkjwork`, a complete local durable work ledger for humans and coding agents.
 
-A stateful application is pure. Its transition returns either:
+The verified bootstrap target is stable Rust 2024 on Linux x86-64. There is no network service,
+daemon, database, package registry, unsafe Rust, or backward-compatibility layer.
 
-```text
-completed { state, response }
-suspended { state, response, command }
-```
+## Use lkjwork
 
-Commands and outcomes are application-owned nominal sums routed through explicitly imported host
-interfaces. Application bytes declare requirements but contain no grants. An instance publishes
-state and a pending command before a separately granted adapter acts. The adapter records one typed
-known, failed, unknown, or reconciled outcome; only a later pure transition can consume it. Possibly
-visible non-idempotent work is never silently retried.
-
-## Complete durable applications
-
-Two public examples exercise independent interfaces and authority shapes:
+Build the release binaries and initialize a private project:
 
 ```sh
-examples/durable-controller/run.sh
-examples/durable-blob-publisher/run.sh
+cargo build --release --locked
+target/release/lkjwork init ./work --name product-next
+target/release/lkjwork --project ./work add "Implement pure query" --priority 20 --label runtime
+target/release/lkjwork --project ./work add "Ship product" --depends '#1'
+target/release/lkjwork --project ./work next
+target/release/lkjwork --project ./work context --maximum-tasks 5
 ```
 
-The durable controller validates, activates, and reconciles one exact application in one granted
-local slot. The blob publisher creates content-addressed immutable objects in an independently
-bounded private namespace and reconciles unknown publication by exact digest. Both applications:
+`lkjwork` supports task editing and lifecycle, holds, priorities, labels, exact DAG dependencies,
+append-only notes, immutable evidence attachments, activity/history, pure queries, deterministic
+agent context, semantic export, exact backup/new-instance restore, corruption diagnosis, strict JSON,
+and a bounded foreground session.
 
-- own their workflow state machine in lkjscript semantics;
-- run after source workspaces and standalone releases are deleted;
-- survive process restart and deterministic history replay;
-- exercise production and disjoint deterministic-fake adapters;
-- reject stale bases, duplicate-key conflicts, foreign grants, corrupt retained bytes, and
-  identity reuse; and
-- expose bounded state/history inspection and explicit unknown visibility.
+All task policy lives in the embedded lkjscript application. The native client owns only command
+parsing, strict project discovery, bounded explicit attachment reads, host routing, terminal-safe
+rendering, backup transport, and process lifecycle. It has no hidden JSON/SQLite/filesystem task
+database and does not compute readiness or next work.
 
-These grants are narrow trusted local capabilities, not general filesystem APIs. A content digest
-is not provenance or authority. The in-process adapters, local OS account, executable, kernel, and
-POSIX-like filesystem remain trusted; a process boundary is not a sandbox.
+See [`applications/lkjwork/README.md`](applications/lkjwork/README.md) for the complete product
+contract, workflows, recovery model, machine session, and reproducibility commands. Run
+`target/release/lkjwork --help` for the command grammar.
 
-## Public contracts and commands
+## Platform model
 
-Reusable release format 1 is `LKJREL\0\x01`. Application-world format/contract 4 is
-`LKJAPP\0\x04`; instance format/contract 2 uses `LKJINS\0\x02` records. Runtime session contract
-version 1 is line-delimited strict JSON. Superseded application v3 and instance v1 inputs reject
-directly; there are no compatibility readers or migrations.
+The active semantic vocabulary includes validated UTF-8 text, nominal immutable homogeneous
+sequences, products, sums, checked integers, booleans, bytes, direct calls, structured control, and
+deterministic resource accounting. One explicit-frame interpreter and independently verified Core IR
+remain the correctness route.
 
-```text
-lkjscript release build|validate|inspect|test ...
-lkjscript app build|validate|inspect|test|run|stream ...
+The artifact domains are deliberately separate:
 
-lkjscript instance create ...
-lkjscript instance validate-event|apply-event ...
-lkjscript instance execute-host|fake-outcome ...
-lkjscript instance validate-resume|resume ...
-lkjscript instance inspect|history|delete ...
+- a workspace owns development identity and immutable revision history;
+- a release owns one exact reusable workspace-independent semantic closure;
+- an application owns one exact runnable release graph, typed entries/results/cases, and host
+  requirements;
+- an instance owns durable state continuity, mutation/query history, checkpoints, grants, commands,
+  attempts, and outcomes; and
+- a deployment owns paths, processes, local accounts, and resource placement.
 
-lkjscript runtime orientation
-lkjscript runtime inspect --store DIRECTORY
-lkjscript runtime session --store DIRECTORY
-```
+Stateful applications return application-owned typed responses and distinguish declined, unchanged,
+completed, and suspended decisions. Declined/unchanged publish no revision. Pure application queries
+publish nothing. Instances retain a hash-linked journal with periodic full checkpoints and a
+HEAD-bound current manifest; ordinary operations avoid full replay while `doctor --deep` remains the
+genesis reconstruction oracle.
 
-One-shot application/instance commands and the caller-owned foreground runtime session use the same
-topology-neutral runtime kernel. The session amortizes process lifecycle while every request still
-names exact authority and retains an independent publication boundary. It keeps bounded stage and
-resource counters, but no application/Core cache, queue, worker, scheduler, profile, or hidden
-current application/instance. There is no resident daemon or socket supervisor.
+The sole built-in host interface is a bounded immutable blob namespace. A visibility-capable put
+records an attempt first; possible visibility is reconciled and never silently retried. Applications
+declare requirements, instances bind exact grants, and adapters cannot invent semantic state.
 
-## Agent authoring
+Current format and protocol identities, direct rejected predecessors, implemented limits, and exact
+absences are maintained in [`docs/status.md`](docs/status.md). Normative contracts live under
+[`docs/spec/`](docs/spec/).
 
-Normal semantic development uses one `lkjscript` binary and task-scoped bounded context:
+## Platform CLI orientation
+
+Create and inspect a semantic workspace:
 
 ```sh
-STATE=$(mktemp -d)
-chmod 700 "$STATE"
-
-target/release/lkjscript agent orient
-target/release/lkjscript agent create --state "$STATE"
-target/release/lkjscript agent context \
-  --state "$STATE" --workspace WORKSPACE --revision 0 --purpose orient
+target/release/lkjscript --state /absolute/state create
+target/release/lkjscript --state /absolute/state inspect
+target/release/lkjscript --state /absolute/state agent orient
 ```
 
-`agent view` and `agent diff` provide deterministic review. `agent document`, `validate`, and
-`apply` use one exact-base, schema-bound editable document. `agent run` selects an exact revision
-and function. The workspace line session retains one `Engine` for dependent authoring calls without
-an implicit current workspace. Release, application, instance, and runtime commands own compact
-command-local contracts instead of expanding the global workspace schema.
+The workspace protocol is strict versioned JSON. Agent context packets and editable semantic
+documents are bounded proposals/views that normalize through the same typed transaction validator.
+Reusable release, application, instance, and runtime commands use their own command-local closed
+contracts so application/product schemas do not inflate the global workspace catalogue.
 
-## Language, execution, and resources
+Use command help for exact syntax:
 
-The language supports `unit`, `bool`, checked `i64`, immutable `bytes`, nominal immutable products
-and sums, direct calls, conditions, counted loops, exhaustive matching, construction/projection,
-typed holes, returns, and yields. Stateful host interfaces required no direct effect primitive,
-collection, clock, randomness, thread, or opaque continuation. Expected workflow outcomes are
-ordinary nominal data; corruption, traps, resource exhaustion, authority rejection, and unknown
-host visibility remain distinguishable.
+```sh
+target/release/lkjscript help
+target/release/lkjscript release help
+target/release/lkjscript app help
+target/release/lkjscript instance help
+target/release/lkjscript runtime help
+```
 
-Only a complete selected closure enters independently verified Core IR. The explicit-frame
-interpreter is the sole execution route and correctness oracle. Runtime telemetry separates
-application decode, graph validation, flattening, lowering, Core verification, execution, instance
-open/replay, publication, grant validation, adapter work, and response encoding. These are bounded
-observations, never semantic values.
+## Reproduce product evidence
 
-Semantic fuel, frames, cells, values, state, events, responses, evidence, history, and replay work
-have exact owners. Runtime request/response bytes and active transition/adapter/compilation/store
-slots have separate deployment admission. Current cache, profile, compiled-unit, and queue budgets
-are exactly zero. Logical accounting is not claimed as exact process RSS enforcement.
+The installed `lkjwork` binary embeds and independently validates one exact checked-in application
+artifact. Reproduce the artifact through public platform commands and run the complete product story:
 
-There is no registry, mutable resolver, network or child-process capability, general filesystem
-access, secret store, encryption, multi-user authorization, hostile-host sandbox, worker, daemon,
-database, compaction, bytecode, JIT, native application image, or dynamic plugin ABI.
+```sh
+python3 applications/lkjwork/build.py target/release/lkjscript
+python3 applications/lkjwork/acceptance.py --binary target/release/lkjwork
+python3 applications/lkjwork/workload.py target/release/lkjwork --profile functional
+python3 applications/lkjwork/workload.py target/release/lkjwork --profile representative
+```
 
-## Verification and documentation
+The representative retained corpus has 500 tasks, 2,500 core mutation requests, 1,000 dependency
+edges, 1,000 notes, 100 attachments, and 2,000 queries. Exact measurements and selected/rejected
+alternatives are in [`docs/performance.md`](docs/performance.md) and `docs/evidence/`.
 
-The verified bootstrap is stable Rust edition 2024 on Linux x86-64. The crate contains no local
-unsafe Rust.
+## Develop and verify
+
+The full repository gate is:
 
 ```sh
 cargo fmt --all -- --check
@@ -129,14 +119,18 @@ cargo build --workspace --release --locked
 git diff --check
 ```
 
-- [semantic model](docs/spec/semantic-model.md)
-- [language](docs/spec/language.md)
-- [reusable releases](docs/spec/reusable-release.md)
-- [application worlds](docs/spec/application.md)
-- [durable instances and adapters](docs/spec/instance.md)
-- [runtime kernel and session](docs/spec/runtime-kernel.md)
-- [protocol and editable documents](docs/spec/protocol.md)
-- [architecture](docs/architecture.md)
-- [implemented status](docs/status.md)
-- [measurements and decisions](docs/performance.md)
-- [future evidence gates](docs/roadmap.md)
+Read the root `AGENTS.md` before changing the repository. Specifications own accepted contracts;
+status owns implemented reality; architecture owns components/trust; performance and structured
+evidence own measurements; roadmap contains only evidence-gated reversal conditions.
+
+## Trust and nonclaims
+
+The bootstrap deployment assumes one trusted local operator and OS account. Native code and the
+narrow immutable-blob adapter are trusted. Artifacts, text, JSON, paths, locators, records,
+checkpoints, manifests, outcomes, backups, and blobs are hostile inputs and fail closed on malformed,
+foreign, excessive, symlinked, noncanonical, or digest-mismatched forms.
+
+The project does not claim a hostile-native-code sandbox, hostile-administrator isolation,
+multi-user authorization, encryption, authenticity, provenance, power-loss proof, exact RSS
+enforcement, provider-token savings, monetary savings, or cross-platform support beyond exercised
+Linux x86-64 workflows.

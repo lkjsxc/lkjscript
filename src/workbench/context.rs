@@ -767,7 +767,10 @@ fn enqueue_related(
     if scope != ExpansionScope::Owner {
         for index in 0..node.owned_child_count() {
             let signature_only = scope == ExpansionScope::Dependency
-                && !matches!(node, Node::ProductType { .. } | Node::SumType { .. })
+                && !matches!(
+                    node,
+                    Node::ProductType { .. } | Node::SumType { .. } | Node::SequenceType { .. }
+                )
                 && !matches!(node, Node::Function { parameters, .. } if index < parameters.len());
             let skip_body = matches!(purpose, ContextPurpose::Orient | ContextPurpose::Create)
                 && matches!(node, Node::Function { parameters, .. } if index >= parameters.len());

@@ -425,6 +425,8 @@ fn pages_uses_visibility_constructors_and_context_are_exact() {
             OperationCode::ForI64,
             OperationCode::BytesLen,
             OperationCode::BytesAt,
+            OperationCode::TextLen,
+            OperationCode::SequenceLen,
         ]
     );
     assert_eq!(
@@ -439,6 +441,11 @@ fn pages_uses_visibility_constructors_and_context_are_exact() {
             OperationCode::If,
             OperationCode::ForI64,
             OperationCode::BytesEqual,
+            OperationCode::EqualI64,
+            OperationCode::NotBool,
+            OperationCode::AndBool,
+            OperationCode::OrBool,
+            OperationCode::TextEqual,
         ]
     );
     assert_eq!(
@@ -785,7 +792,7 @@ fn legal_call_candidates_are_exact_and_paginated() {
         },
     )
     .expect("first constructor page");
-    assert_eq!(first.total, Some(77));
+    assert_eq!(first.total, Some(79));
     assert_eq!(first.items.len(), 64);
     let second = legal_constructor_page(
         snapshot,
@@ -797,7 +804,7 @@ fn legal_call_candidates_are_exact_and_paginated() {
         },
     )
     .expect("second constructor page");
-    assert_eq!(second.items.len(), 13);
+    assert_eq!(second.items.len(), 15);
     assert!(second.next.is_none());
     let mut all = first.items;
     all.extend(second.items);

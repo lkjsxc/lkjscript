@@ -114,7 +114,7 @@ fn bundled_graph_application_is_canonical_offline_and_rejects_v2() {
     let prepared = prepare(&request, &fixture.releases).expect("prepare application");
     let artifact = prepared.bytes().to_vec();
     let inspection = inspect(&artifact).expect("inspect application");
-    assert_eq!(inspection.format_version, 4);
+    assert_eq!(inspection.format_version, 5);
     assert_eq!(inspection.root_release, fixture.root);
     assert_eq!(inspection.releases.len(), 4);
     assert_eq!(inspection.graph_edges, 4);
@@ -154,7 +154,11 @@ fn bundled_graph_application_is_canonical_offline_and_rejects_v2() {
         artifact
     );
 
-    for old in [b"LKJAPP\0\x02".as_slice(), b"LKJAPP\0\x03".as_slice()] {
+    for old in [
+        b"LKJAPP\0\x02".as_slice(),
+        b"LKJAPP\0\x03".as_slice(),
+        b"LKJAPP\0\x04".as_slice(),
+    ] {
         assert_eq!(
             validate(old).expect_err("old application rejection").code,
             ErrorCode::ArtifactCorrupt
@@ -172,10 +176,10 @@ fn bundled_graph_application_is_canonical_offline_and_rejects_v2() {
 }
 
 #[test]
-fn application_v4_profile_and_contract_json_reject_v3_shapes() {
+fn application_v5_profile_and_contract_json_reject_v4_shapes() {
     assert_eq!(
-        validate_contract_version(3)
-            .expect_err("application contract v3 rejection")
+        validate_contract_version(4)
+            .expect_err("application contract v4 rejection")
             .code,
         ErrorCode::ProtocolVersion
     );
@@ -185,6 +189,42 @@ fn application_v4_profile_and_contract_json_reject_v3_shapes() {
         InvocationProfile::Typed
     );
     assert!(serde_json::from_str::<InvocationProfile>(r#"{"kind":"typed","extra":0}"#).is_err());
+}
+
+#[test]
+fn application_value_binary_is_canonical_bounded_and_strict() {
+    let fixture = diamond_fixture();
+    let target = ApplicationTarget {
+        release: fixture.root,
+        item: fixture.entry,
+    };
+    let value = ApplicationValue::Sequence {
+        ty: target,
+        elements: vec![
+            ApplicationValue::Text(TextString::try_from_str("exact text").expect("text")),
+            bytes(b"exact bytes"),
+            ApplicationValue::Sum {
+                ty: target,
+                variant: target,
+                payload: Some(Box::new(ApplicationValue::I64(-7))),
+            },
+        ],
+    };
+    let encoded = encode_application_value_binary(&value, 4096).expect("binary value");
+    assert_eq!(
+        decode_application_value_binary(&encoded, encoded.len()).expect("decode"),
+        value
+    );
+    assert!(encode_application_value_binary(&value, encoded.len() - 1).is_err());
+    assert!(decode_application_value_binary(&encoded, encoded.len() - 1).is_err());
+    for end in 0..encoded.len() {
+        assert!(decode_application_value_binary(&encoded[..end], 4096).is_err());
+    }
+    let mut trailing = encoded.clone();
+    trailing.push(0);
+    assert!(decode_application_value_binary(&trailing, 4096).is_err());
+    assert!(decode_application_value_binary(&[0xff], 4096).is_err());
+    assert!(decode_application_value_binary(&[2, 2], 4096).is_err());
 }
 
 #[test]

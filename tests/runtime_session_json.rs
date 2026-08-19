@@ -1,5 +1,6 @@
 #![allow(clippy::expect_used, clippy::panic)]
 
+use lkjscript::runtime::RUNTIME_CONTRACT_VERSION;
 use serde_json::Value;
 use std::fs;
 use std::io::Write;
@@ -51,12 +52,32 @@ fn runtime_session_recovers_by_line_correlates_and_releases_its_store_lock() {
     {
         let stdin = child.stdin.as_mut().expect("runtime stdin");
         writeln!(stdin, "{{").expect("malformed request");
-        writeln!(stdin, "{}", request(0, 11, "inspect_runtime")).expect("old version");
-        writeln!(stdin, "{}", request(1, 0, "inspect_runtime")).expect("zero ID");
-        writeln!(stdin, "{{\"version\":1,\"request_id\":12,\"request_id\":12,\"request\":{{\"kind\":\"inspect_runtime\"}}}}")
+        writeln!(
+            stdin,
+            "{}",
+            request(RUNTIME_CONTRACT_VERSION - 1, 11, "inspect_runtime")
+        )
+        .expect("old version");
+        writeln!(
+            stdin,
+            "{}",
+            request(RUNTIME_CONTRACT_VERSION, 0, "inspect_runtime")
+        )
+        .expect("zero ID");
+        writeln!(stdin, "{{\"version\":{RUNTIME_CONTRACT_VERSION},\"request_id\":12,\"request_id\":12,\"request\":{{\"kind\":\"inspect_runtime\"}}}}")
             .expect("duplicate field");
-        writeln!(stdin, "{}", request(1, 13, "inspect_runtime")).expect("inspection");
-        writeln!(stdin, "{}", request(1, 14, "shutdown")).expect("shutdown");
+        writeln!(
+            stdin,
+            "{}",
+            request(RUNTIME_CONTRACT_VERSION, 13, "inspect_runtime")
+        )
+        .expect("inspection");
+        writeln!(
+            stdin,
+            "{}",
+            request(RUNTIME_CONTRACT_VERSION, 14, "shutdown")
+        )
+        .expect("shutdown");
     }
     drop(child.stdin.take());
     let output = child.wait_with_output().expect("wait for runtime session");

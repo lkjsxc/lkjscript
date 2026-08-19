@@ -15,12 +15,12 @@ allocator history survives as release authority.
 A reusable semantic release is one immutable independently transferable artifact. Its canonical
 payload is authoritative after strict decode and semantic validation. `ReleaseId` is the
 domain-separated BLAKE3 digest of that complete canonical payload under
-`lkjscript.reusable-release.identity.v1`. Equality of this full digest is exact release equality and
+`lkjscript.reusable-release.identity.v2`. Equality of this full digest is exact release equality and
 therefore participates in dependency and nominal identity. The collision contract relies on full
 256-bit collision and second-preimage resistance; conflicting bytes claiming one ID are corruption.
 
 `ReleaseContentDigest` hashes the same payload under
-`lkjscript.reusable-release.content.v1`. It is an integrity/equality observation only. Coordinate
+`lkjscript.reusable-release.content.v2`. It is an integrity/equality observation only. Coordinate
 and user version are bounded identity-bearing release metadata, so changing either changes payload
 and `ReleaseId`; neither can select an exact dependency or establish nominal equality. Provenance,
 signature, authorization, yanking, freshness, and publisher identity are absent and cannot be
@@ -33,7 +33,7 @@ and runtime handles are different domains.
 
 ## Construction and canonical projection
 
-Release build contract version 1 names one exact workspace, revision, package root, coordinate,
+Release build contract version 2 names one exact workspace, revision, package root, coordinate,
 user version, explicit exports, exact dependency slots, import proxies, and immutable release
 cases. The engine loads the named revision; it never infers HEAD.
 
@@ -59,15 +59,16 @@ private helper factoring. Its work is bounded by release item and edge policies.
 
 ## Exports and private implementation
 
-Format 1 exports functions, nominal product types, and nominal sum types in one flat canonical
-release namespace. Export selection is explicit. Names are bounded lowercase ASCII symbols,
+Format 2 exports functions, nominal product types, nominal sum types, and nominal homogeneous
+sequence types in one flat canonical release namespace. Text is a primitive signature type and a
+sequence signature preserves its exact element type. Export selection is explicit. Names are bounded lowercase ASCII symbols,
 lexically ordered, and unique. Fields and variants travel with an exported nominal type; their
 exact item IDs are available in inspection.
 
 An exported function signature may use primitives, exported local nominal types, or exact imported
 nominal types. A private local nominal type cannot leak through a public signature. Private
 functions may be reachable implementation and are validated and encoded, but consumers cannot
-target them. Dependency proxies cannot be re-exported in format 1. Private names are retained for
+target them. Dependency proxies cannot be re-exported in format 2. Private names are retained for
 deterministic inspection and diagnostics; artifacts do not provide source confidentiality.
 
 Changing exports, retained private implementation, tests, dependencies, coordinate, or user
@@ -94,22 +95,22 @@ must finish before release construction and cannot change an accepted exact bind
 ## Release tests
 
 Release cases are producer-owned immutable typed invocation data in the release payload. They use
-canonical unique names, exact local function targets, ordered primitive arguments, primitive result
-or stable trap expectations, and exact policies. They can reach private local functions but not
-dependency-private items. Format 1 deliberately excludes nominal case values; application cases
-cover public nominal composition.
+canonical unique names, exact local function targets, ordered validated arguments, exact result or
+stable trap expectations, and exact policies. Text and nominal sequence values use the same type and
+resource validators as execution. Cases can reach private local functions but not dependency-private
+items; application cases cover cross-release public nominal composition.
 
 Only exact pass counts as pass. A dependent release build validates the entire supplied graph and
 runs every release suite before publication. `release test` runs the selected root suite from an
 independently validated exact graph. Cases are not semantic entities, property tests, tags, mocks,
 or a second assertion language.
 
-## Canonical artifact version 1
+## Canonical artifact version 2
 
 The release envelope contains:
 
-- magic `LKJREL\0\x01` and little-endian format `1`;
-- semantic schema `lkjscript-tsm006`;
+- magic `LKJREL\0\x02` and little-endian format `2`;
+- semantic schema `lkjscript-tsm007` from the workspace artifact owner;
 - checked little-endian payload length;
 - canonical payload;
 - exact `ReleaseId`; and
@@ -152,8 +153,11 @@ current test pass.
 
 Release artifacts and one bundled application artifact are sufficient after every producer and
 consumer workspace is removed. Correctness never depends on a local immutable store, filename,
-ambient resolver state, or network. Application format 4 embeds the exact reachable graph once, so
+ambient resolver state, or network. Application format 5 embeds the exact reachable graph once, so
 execution needs no external release files.
+
+Release format 1 and every predecessor reject directly. No compatibility reader or migration path
+remains.
 
 The implemented contract supplies content integrity and exact semantic identity. It supplies no
 authenticity, publisher authorization, provenance, freshness, revocation, signing, attestation,

@@ -427,6 +427,7 @@ fn strip_imported_children(
         | Node::ProductField { .. }
         | Node::SumType { .. }
         | Node::SumVariant { .. }
+        | Node::SequenceType { .. }
         | Node::Function { .. }
         | Node::Parameter { .. }
         | Node::Region { .. }
@@ -727,6 +728,9 @@ fn validate_proxy(
             }
             Ok(())
         }
+        (Node::SequenceType { element: left, .. }, Node::SequenceType { element: right, .. }) => {
+            compare_type(releases, local_release, *left, target_release, *right)
+        }
         _ => Err(proxy_mismatch("declaration kind")),
     }
 }
@@ -753,6 +757,7 @@ enum TypeKey {
     Bool,
     I64,
     Bytes,
+    Text,
     Nominal(GlobalItem),
 }
 
@@ -766,6 +771,7 @@ fn type_key(
         SemanticType::Bool => TypeKey::Bool,
         SemanticType::I64 => TypeKey::I64,
         SemanticType::Bytes => TypeKey::Bytes,
+        SemanticType::Text => TypeKey::Text,
         SemanticType::Nominal(target) => {
             let local = ReleaseItemId::from_local_node(target)?;
             if let Some(import) = release.imports.iter().find(|import| import.local == local) {

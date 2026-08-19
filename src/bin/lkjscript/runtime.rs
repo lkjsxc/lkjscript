@@ -25,7 +25,7 @@ Commands:
   inspect --store DIRECTORY [--pretty]
   session --store DIRECTORY
 
-Runtime command and foreground-session contract version 1 is required. A session retains one
+Runtime command and foreground-session contract version 2 is required. A session retains one
 topology-neutral kernel and one exact store lock for its caller-owned lifetime. Every request names
 its exact application, instance, command, and grant; no current application or instance exists.
 The stream is canonical one-line JSON, remains synchronized after a malformed bounded line, and

@@ -22,7 +22,7 @@ Commands:
   inspect --artifact FILE [--pretty]
   test --artifact FILE [--dependency FILE ...] [--pretty]
 
-Reusable-release CLI JSON contract version 1 is required. Build selects one exact workspace and
+Reusable-release CLI JSON contract version 2 is required. Build selects one exact workspace and
 revision from the state directory; it never infers HEAD. Every exact dependency and its transitive
 closure is supplied explicitly by immutable artifact path. Validate-only and publication share one
 prepared object and run all release tests. Publication is atomic no-overwrite and may report an

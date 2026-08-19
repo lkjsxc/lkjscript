@@ -316,6 +316,11 @@ fn render_node(node: &Node, aliases: &BTreeMap<NodeId, &str>, include_full_ids: 
                 .map(|ty| format!("({})", render_type(ty, aliases, include_full_ids)))
                 .unwrap_or_default()
         ),
+        Node::SequenceType { name, element, .. } => format!(
+            "sequence {} element={}",
+            quoted(name),
+            render_type(*element, aliases, include_full_ids)
+        ),
         Node::Function {
             name,
             parameters,
@@ -383,8 +388,22 @@ fn render_operation(
             "const_bytes({})",
             serde_json::to_string(bytes).unwrap_or_else(|_| "\"<unavailable>\"".to_owned())
         ),
+        OperationKind::ConstText(text) => format!(
+            "const_text({})",
+            serde_json::to_string(text).unwrap_or_else(|_| "\"<unavailable>\"".to_owned())
+        ),
         OperationKind::AddI64 { lhs, rhs } => format!("add_i64({}, {})", value(*lhs), value(*rhs)),
         OperationKind::LtI64 { lhs, rhs } => format!("lt_i64({}, {})", value(*lhs), value(*rhs)),
+        OperationKind::EqualI64 { lhs, rhs } => {
+            format!("equal_i64({}, {})", value(*lhs), value(*rhs))
+        }
+        OperationKind::NotBool { value: operand } => format!("not_bool({})", value(*operand)),
+        OperationKind::AndBool { lhs, rhs } => {
+            format!("and_bool({}, {})", value(*lhs), value(*rhs))
+        }
+        OperationKind::OrBool { lhs, rhs } => {
+            format!("or_bool({}, {})", value(*lhs), value(*rhs))
+        }
         OperationKind::BytesLen { value: operand } => format!("bytes_len({})", value(*operand)),
         OperationKind::BytesAt {
             value: operand,
@@ -406,6 +425,50 @@ fn render_operation(
         OperationKind::BytesConcat { lhs, rhs } => {
             format!("bytes_concat({}, {})", value(*lhs), value(*rhs))
         }
+        OperationKind::TextLen { value: operand } => format!("text_len({})", value(*operand)),
+        OperationKind::TextEqual { lhs, rhs } => {
+            format!("text_equal({}, {})", value(*lhs), value(*rhs))
+        }
+        OperationKind::TextConcat { lhs, rhs } => {
+            format!("text_concat({}, {})", value(*lhs), value(*rhs))
+        }
+        OperationKind::SequenceEmpty { sequence } => format!("sequence_empty({})", node(*sequence)),
+        OperationKind::SequenceLen {
+            sequence,
+            value: operand,
+        } => format!("sequence_len({}, {})", node(*sequence), value(*operand)),
+        OperationKind::SequenceGet {
+            sequence,
+            value: operand,
+            index,
+        } => format!(
+            "sequence_get({}, {}, {})",
+            node(*sequence),
+            value(*operand),
+            value(*index)
+        ),
+        OperationKind::SequenceAppend {
+            sequence,
+            value: operand,
+            element,
+        } => format!(
+            "sequence_append({}, {}, {})",
+            node(*sequence),
+            value(*operand),
+            value(*element)
+        ),
+        OperationKind::SequenceReplace {
+            sequence,
+            value: operand,
+            index,
+            element,
+        } => format!(
+            "sequence_replace({}, {}, {}, {})",
+            node(*sequence),
+            value(*operand),
+            value(*index),
+            value(*element)
+        ),
         OperationKind::Call {
             function,
             arguments,
@@ -514,6 +577,7 @@ fn render_type(
         SemanticType::Bool => "bool".to_owned(),
         SemanticType::I64 => "i64".to_owned(),
         SemanticType::Bytes => "bytes".to_owned(),
+        SemanticType::Text => "text".to_owned(),
         SemanticType::Nominal(node) => anchor(node, aliases, include_full_ids),
     }
 }
@@ -528,6 +592,9 @@ fn render_scalar(
         ScalarValue::Bool(value) => value.to_string(),
         ScalarValue::Type(value) => render_type(*value, aliases, include_full_ids),
         ScalarValue::Bytes(value) => {
+            serde_json::to_string(value).unwrap_or_else(|_| "\"<unavailable>\"".to_owned())
+        }
+        ScalarValue::Text(value) => {
             serde_json::to_string(value).unwrap_or_else(|_| "\"<unavailable>\"".to_owned())
         }
     }

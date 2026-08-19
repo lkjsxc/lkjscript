@@ -6,10 +6,11 @@ use crate::ids::{
 };
 use crate::query;
 use crate::schema::{
-    ByteString, MAXIMUM_BYTE_LITERAL_BYTES, MAXIMUM_TRANSACTION_BYTE_LITERAL_BYTES, MatchArm,
+    ByteString, MAXIMUM_BYTE_LITERAL_BYTES, MAXIMUM_TEXT_LITERAL_BYTES,
+    MAXIMUM_TRANSACTION_BYTE_LITERAL_BYTES, MAXIMUM_TRANSACTION_TEXT_LITERAL_BYTES, MatchArm,
     MatchArmOperationDraft, Node, NodeKind, OperationCode, OperationDraft, OperationKind,
-    ProductFieldValue, ProductFieldValueDraft, RegionArity, SemanticType, TypeDraft, ValueDraft,
-    ValueRef,
+    ProductFieldValue, ProductFieldValueDraft, RegionArity, SemanticType, TextString, TypeDraft,
+    ValueDraft, ValueRef,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -77,9 +78,10 @@ pub enum TransactionOpCode {
     RefineHole,
     CreateProductType,
     CreateSumType,
+    CreateSequenceType,
 }
 impl TransactionOpCode {
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::CreatePackage,
         Self::CreateModule,
         Self::CreateFunction,
@@ -94,6 +96,7 @@ impl TransactionOpCode {
         Self::RefineHole,
         Self::CreateProductType,
         Self::CreateSumType,
+        Self::CreateSequenceType,
     ];
     pub const fn machine_name(self) -> &'static str {
         match self {
@@ -111,6 +114,7 @@ impl TransactionOpCode {
             Self::DeleteOwnedSubtree => "delete_owned_subtree",
             Self::CreateProductType => "create_product_type",
             Self::CreateSumType => "create_sum_type",
+            Self::CreateSequenceType => "create_sequence_type",
         }
     }
 }
@@ -139,9 +143,22 @@ pub enum ExpressionDraftCode {
     BytesSlice,
     BytesEqual,
     BytesConcat,
+    ConstText,
+    EqualI64,
+    NotBool,
+    AndBool,
+    OrBool,
+    TextLen,
+    TextEqual,
+    TextConcat,
+    SequenceEmpty,
+    SequenceLen,
+    SequenceGet,
+    SequenceAppend,
+    SequenceReplace,
 }
 impl ExpressionDraftCode {
-    pub const ALL: [Self; 19] = [
+    pub const ALL: [Self; 32] = [
         Self::ConstUnit,
         Self::ConstBool,
         Self::ConstI64,
@@ -161,6 +178,19 @@ impl ExpressionDraftCode {
         Self::BytesSlice,
         Self::BytesEqual,
         Self::BytesConcat,
+        Self::ConstText,
+        Self::EqualI64,
+        Self::NotBool,
+        Self::AndBool,
+        Self::OrBool,
+        Self::TextLen,
+        Self::TextEqual,
+        Self::TextConcat,
+        Self::SequenceEmpty,
+        Self::SequenceLen,
+        Self::SequenceGet,
+        Self::SequenceAppend,
+        Self::SequenceReplace,
     ];
     pub const fn machine_name(self) -> &'static str {
         match self {
@@ -183,6 +213,19 @@ impl ExpressionDraftCode {
             Self::BytesSlice => "bytes_slice",
             Self::BytesEqual => "bytes_equal",
             Self::BytesConcat => "bytes_concat",
+            Self::ConstText => "const_text",
+            Self::EqualI64 => "equal_i64",
+            Self::NotBool => "not_bool",
+            Self::AndBool => "and_bool",
+            Self::OrBool => "or_bool",
+            Self::TextLen => "text_len",
+            Self::TextEqual => "text_equal",
+            Self::TextConcat => "text_concat",
+            Self::SequenceEmpty => "sequence_empty",
+            Self::SequenceLen => "sequence_len",
+            Self::SequenceGet => "sequence_get",
+            Self::SequenceAppend => "sequence_append",
+            Self::SequenceReplace => "sequence_replace",
         }
     }
 
@@ -207,6 +250,19 @@ impl ExpressionDraftCode {
             Self::BytesSlice => OperationCode::BytesSlice,
             Self::BytesEqual => OperationCode::BytesEqual,
             Self::BytesConcat => OperationCode::BytesConcat,
+            Self::ConstText => OperationCode::ConstText,
+            Self::EqualI64 => OperationCode::EqualI64,
+            Self::NotBool => OperationCode::NotBool,
+            Self::AndBool => OperationCode::AndBool,
+            Self::OrBool => OperationCode::OrBool,
+            Self::TextLen => OperationCode::TextLen,
+            Self::TextEqual => OperationCode::TextEqual,
+            Self::TextConcat => OperationCode::TextConcat,
+            Self::SequenceEmpty => OperationCode::SequenceEmpty,
+            Self::SequenceLen => OperationCode::SequenceLen,
+            Self::SequenceGet => OperationCode::SequenceGet,
+            Self::SequenceAppend => OperationCode::SequenceAppend,
+            Self::SequenceReplace => OperationCode::SequenceReplace,
         }
     }
 
@@ -271,6 +327,19 @@ impl ExpressionKindDraft {
             Self::ConstructVariant { .. } => ExpressionDraftCode::ConstructVariant,
             Self::MatchSum { .. } => ExpressionDraftCode::MatchSum,
             Self::ConstBytes(_) => ExpressionDraftCode::ConstBytes,
+            Self::ConstText(_) => ExpressionDraftCode::ConstText,
+            Self::EqualI64 { .. } => ExpressionDraftCode::EqualI64,
+            Self::NotBool { .. } => ExpressionDraftCode::NotBool,
+            Self::AndBool { .. } => ExpressionDraftCode::AndBool,
+            Self::OrBool { .. } => ExpressionDraftCode::OrBool,
+            Self::TextLen { .. } => ExpressionDraftCode::TextLen,
+            Self::TextEqual { .. } => ExpressionDraftCode::TextEqual,
+            Self::TextConcat { .. } => ExpressionDraftCode::TextConcat,
+            Self::SequenceEmpty { .. } => ExpressionDraftCode::SequenceEmpty,
+            Self::SequenceLen { .. } => ExpressionDraftCode::SequenceLen,
+            Self::SequenceGet { .. } => ExpressionDraftCode::SequenceGet,
+            Self::SequenceAppend { .. } => ExpressionDraftCode::SequenceAppend,
+            Self::SequenceReplace { .. } => ExpressionDraftCode::SequenceReplace,
             Self::BytesLen { .. } => ExpressionDraftCode::BytesLen,
             Self::BytesAt { .. } => ExpressionDraftCode::BytesAt,
             Self::BytesSlice { .. } => ExpressionDraftCode::BytesSlice,
@@ -356,11 +425,27 @@ pub enum ExpressionKindDraft {
     ConstBool(bool),
     ConstI64(i64),
     ConstBytes(ByteString),
+    ConstText(TextString),
     AddI64 {
         lhs: ValueDraft,
         rhs: ValueDraft,
     },
     LtI64 {
+        lhs: ValueDraft,
+        rhs: ValueDraft,
+    },
+    EqualI64 {
+        lhs: ValueDraft,
+        rhs: ValueDraft,
+    },
+    NotBool {
+        value: ValueDraft,
+    },
+    AndBool {
+        lhs: ValueDraft,
+        rhs: ValueDraft,
+    },
+    OrBool {
         lhs: ValueDraft,
         rhs: ValueDraft,
     },
@@ -383,6 +468,40 @@ pub enum ExpressionKindDraft {
     BytesConcat {
         lhs: ValueDraft,
         rhs: ValueDraft,
+    },
+    TextLen {
+        value: ValueDraft,
+    },
+    TextEqual {
+        lhs: ValueDraft,
+        rhs: ValueDraft,
+    },
+    TextConcat {
+        lhs: ValueDraft,
+        rhs: ValueDraft,
+    },
+    SequenceEmpty {
+        sequence: NodeTarget,
+    },
+    SequenceLen {
+        sequence: NodeTarget,
+        value: ValueDraft,
+    },
+    SequenceGet {
+        sequence: NodeTarget,
+        value: ValueDraft,
+        index: ValueDraft,
+    },
+    SequenceAppend {
+        sequence: NodeTarget,
+        value: ValueDraft,
+        element: ValueDraft,
+    },
+    SequenceReplace {
+        sequence: NodeTarget,
+        value: ValueDraft,
+        index: ValueDraft,
+        element: ValueDraft,
     },
     Call {
         function: NodeTarget,
@@ -459,6 +578,12 @@ pub enum TransactionOp {
         name: String,
         variants: Vec<SumVariantDraft>,
     },
+    CreateSequenceType {
+        symbol: DraftSymbol,
+        module: NodeTarget,
+        name: String,
+        element: TypeDraft,
+    },
     CreateFunction {
         symbol: DraftSymbol,
         module: NodeTarget,
@@ -513,6 +638,7 @@ impl TransactionOp {
             Self::CreateModule { .. } => TransactionOpCode::CreateModule,
             Self::CreateProductType { .. } => TransactionOpCode::CreateProductType,
             Self::CreateSumType { .. } => TransactionOpCode::CreateSumType,
+            Self::CreateSequenceType { .. } => TransactionOpCode::CreateSequenceType,
             Self::CreateFunction { .. } => TransactionOpCode::CreateFunction,
             Self::DefineFunctionBody { .. } => TransactionOpCode::DefineFunctionBody,
             Self::ReplaceFunctionBody { .. } => TransactionOpCode::ReplaceFunctionBody,
@@ -531,6 +657,7 @@ impl TransactionOp {
             | Self::CreateModule { symbol, .. }
             | Self::CreateProductType { symbol, .. }
             | Self::CreateSumType { symbol, .. }
+            | Self::CreateSequenceType { symbol, .. }
             | Self::CreateFunction { symbol, .. } => Some(*symbol),
             Self::InsertExpression { expression, .. } => expression.symbol,
             _ => None,
@@ -564,6 +691,12 @@ enum CanonicalEdit {
         symbol: DraftSymbol,
         module: NodeTarget,
         name: String,
+    },
+    CreateSequenceType {
+        symbol: DraftSymbol,
+        module: NodeTarget,
+        name: String,
+        element: TypeDraft,
     },
     CreateSumVariant {
         symbol: DraftSymbol,
@@ -1000,6 +1133,17 @@ fn expand_transaction(
                     name: name.clone(),
                 }));
             }
+            TransactionOp::CreateSequenceType {
+                symbol,
+                module,
+                name,
+                element,
+            } => events.push(ExpandEvent::Edit(CanonicalEdit::CreateSequenceType {
+                symbol: *symbol,
+                module: *module,
+                name: name.clone(),
+                element: *element,
+            })),
             TransactionOp::CreateFunction {
                 symbol,
                 module,
@@ -1375,6 +1519,14 @@ fn expand_transaction(
                         operation: OperationDraft::ConstBytes(value),
                     })
                 }
+                ExpressionKindDraft::ConstText(value) => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::ConstText(value),
+                    })
+                }
                 ExpressionKindDraft::AddI64 { lhs, rhs } => {
                     edits.push(CanonicalEdit::CreateOperation {
                         symbol: expression_symbol,
@@ -1389,6 +1541,38 @@ fn expand_transaction(
                         block,
                         before,
                         operation: OperationDraft::LtI64 { lhs, rhs },
+                    })
+                }
+                ExpressionKindDraft::EqualI64 { lhs, rhs } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::EqualI64 { lhs, rhs },
+                    })
+                }
+                ExpressionKindDraft::NotBool { value } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::NotBool { value },
+                    })
+                }
+                ExpressionKindDraft::AndBool { lhs, rhs } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::AndBool { lhs, rhs },
+                    })
+                }
+                ExpressionKindDraft::OrBool { lhs, rhs } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::OrBool { lhs, rhs },
                     })
                 }
                 ExpressionKindDraft::BytesLen { value } => {
@@ -1437,6 +1621,90 @@ fn expand_transaction(
                         operation: OperationDraft::BytesConcat { lhs, rhs },
                     })
                 }
+                ExpressionKindDraft::TextLen { value } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::TextLen { value },
+                    })
+                }
+                ExpressionKindDraft::TextEqual { lhs, rhs } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::TextEqual { lhs, rhs },
+                    })
+                }
+                ExpressionKindDraft::TextConcat { lhs, rhs } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::TextConcat { lhs, rhs },
+                    })
+                }
+                ExpressionKindDraft::SequenceEmpty { sequence } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::SequenceEmpty { sequence },
+                    })
+                }
+                ExpressionKindDraft::SequenceLen { sequence, value } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::SequenceLen { sequence, value },
+                    })
+                }
+                ExpressionKindDraft::SequenceGet {
+                    sequence,
+                    value,
+                    index,
+                } => edits.push(CanonicalEdit::CreateOperation {
+                    symbol: expression_symbol,
+                    block,
+                    before,
+                    operation: OperationDraft::SequenceGet {
+                        sequence,
+                        value,
+                        index,
+                    },
+                }),
+                ExpressionKindDraft::SequenceAppend {
+                    sequence,
+                    value,
+                    element,
+                } => edits.push(CanonicalEdit::CreateOperation {
+                    symbol: expression_symbol,
+                    block,
+                    before,
+                    operation: OperationDraft::SequenceAppend {
+                        sequence,
+                        value,
+                        element,
+                    },
+                }),
+                ExpressionKindDraft::SequenceReplace {
+                    sequence,
+                    value,
+                    index,
+                    element,
+                } => edits.push(CanonicalEdit::CreateOperation {
+                    symbol: expression_symbol,
+                    block,
+                    before,
+                    operation: OperationDraft::SequenceReplace {
+                        sequence,
+                        value,
+                        index,
+                        element,
+                    },
+                }),
                 ExpressionKindDraft::Call {
                     function,
                     arguments,
@@ -1668,15 +1936,25 @@ fn extract_inline_children(
         | ExpressionKindDraft::ConstBool(_)
         | ExpressionKindDraft::ConstI64(_)
         | ExpressionKindDraft::ConstBytes(_)
+        | ExpressionKindDraft::ConstText(_)
+        | ExpressionKindDraft::SequenceEmpty { .. }
         | ExpressionKindDraft::Hole { .. } => {}
         ExpressionKindDraft::AddI64 { lhs, rhs }
         | ExpressionKindDraft::LtI64 { lhs, rhs }
+        | ExpressionKindDraft::EqualI64 { lhs, rhs }
+        | ExpressionKindDraft::AndBool { lhs, rhs }
+        | ExpressionKindDraft::OrBool { lhs, rhs }
         | ExpressionKindDraft::BytesEqual { lhs, rhs }
-        | ExpressionKindDraft::BytesConcat { lhs, rhs } => {
+        | ExpressionKindDraft::BytesConcat { lhs, rhs }
+        | ExpressionKindDraft::TextEqual { lhs, rhs }
+        | ExpressionKindDraft::TextConcat { lhs, rhs } => {
             extract(lhs, "lhs".to_owned())?;
             extract(rhs, "rhs".to_owned())?;
         }
-        ExpressionKindDraft::BytesLen { value } => extract(value, "value".to_owned())?,
+        ExpressionKindDraft::NotBool { value }
+        | ExpressionKindDraft::BytesLen { value }
+        | ExpressionKindDraft::TextLen { value }
+        | ExpressionKindDraft::SequenceLen { value, .. } => extract(value, "value".to_owned())?,
         ExpressionKindDraft::BytesAt { value, index } => {
             extract(value, "value".to_owned())?;
             extract(index, "index".to_owned())?;
@@ -1689,6 +1967,24 @@ fn extract_inline_children(
             extract(value, "value".to_owned())?;
             extract(start, "start".to_owned())?;
             extract(length, "length".to_owned())?;
+        }
+        ExpressionKindDraft::SequenceGet { value, index, .. } => {
+            extract(value, "value".to_owned())?;
+            extract(index, "index".to_owned())?;
+        }
+        ExpressionKindDraft::SequenceAppend { value, element, .. } => {
+            extract(value, "value".to_owned())?;
+            extract(element, "element".to_owned())?;
+        }
+        ExpressionKindDraft::SequenceReplace {
+            value,
+            index,
+            element,
+            ..
+        } => {
+            extract(value, "value".to_owned())?;
+            extract(index, "index".to_owned())?;
+            extract(element, "element".to_owned())?;
         }
         ExpressionKindDraft::Call { arguments, .. } => {
             for (index, value) in arguments.iter_mut().enumerate() {
@@ -1763,6 +2059,7 @@ enum DraftSymbolKind {
     ProductField,
     SumType,
     SumVariant,
+    SequenceType,
     Function,
     Parameter,
     Region,
@@ -1779,6 +2076,7 @@ enum DraftReferenceKind {
     ProductType,
     ProductField,
     SumVariant,
+    SequenceType,
     Function,
     Parameter,
     Region,
@@ -1792,13 +2090,16 @@ impl DraftReferenceKind {
             Self::Any => true,
             Self::NominalType => matches!(
                 actual,
-                DraftSymbolKind::ProductType | DraftSymbolKind::SumType
+                DraftSymbolKind::ProductType
+                    | DraftSymbolKind::SumType
+                    | DraftSymbolKind::SequenceType
             ),
             Self::Package => actual == DraftSymbolKind::Package,
             Self::Module => actual == DraftSymbolKind::Module,
             Self::ProductType => actual == DraftSymbolKind::ProductType,
             Self::ProductField => actual == DraftSymbolKind::ProductField,
             Self::SumVariant => actual == DraftSymbolKind::SumVariant,
+            Self::SequenceType => actual == DraftSymbolKind::SequenceType,
             Self::Function => actual == DraftSymbolKind::Function,
             Self::Parameter => actual == DraftSymbolKind::Parameter,
             Self::Region => actual == DraftSymbolKind::Region,
@@ -1818,6 +2119,7 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
     struct DraftBudget {
         items: usize,
         byte_literals: usize,
+        text_literals: usize,
     }
     impl DraftBudget {
         fn add(&mut self, count: usize, source: usize) -> Result<()> {
@@ -1857,6 +2159,34 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
                 return Err(LkError::new(
                     ErrorCode::ByteLiteralTooLarge,
                     "transaction exceeds the aggregate byte literal policy",
+                )
+                .at_operation(source));
+            }
+            Ok(())
+        }
+
+        fn add_text_literal(&mut self, value: &TextString, source: usize) -> Result<()> {
+            if value.len_bytes() > MAXIMUM_TEXT_LITERAL_BYTES {
+                return Err(LkError::new(
+                    ErrorCode::PolicyExceeded,
+                    "text literal exceeds the per-literal policy",
+                )
+                .at_operation(source));
+            }
+            self.text_literals = self
+                .text_literals
+                .checked_add(value.len_bytes())
+                .ok_or_else(|| {
+                    LkError::new(
+                        ErrorCode::PolicyExceeded,
+                        "aggregate text literal size overflows",
+                    )
+                    .at_operation(source)
+                })?;
+            if self.text_literals > MAXIMUM_TRANSACTION_TEXT_LITERAL_BYTES {
+                return Err(LkError::new(
+                    ErrorCode::PolicyExceeded,
+                    "transaction exceeds the aggregate text literal policy",
                 )
                 .at_operation(source));
             }
@@ -1988,14 +2318,22 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
             | OperationDraft::ConstI64(_)
             | OperationDraft::ConstBool(_) => {}
             OperationDraft::ConstBytes(value) => budget.add_byte_literal(value, source)?,
+            OperationDraft::ConstText(value) => budget.add_text_literal(value, source)?,
             OperationDraft::AddI64 { lhs, rhs }
             | OperationDraft::LtI64 { lhs, rhs }
+            | OperationDraft::EqualI64 { lhs, rhs }
+            | OperationDraft::AndBool { lhs, rhs }
+            | OperationDraft::OrBool { lhs, rhs }
             | OperationDraft::BytesEqual { lhs, rhs }
-            | OperationDraft::BytesConcat { lhs, rhs } => {
+            | OperationDraft::BytesConcat { lhs, rhs }
+            | OperationDraft::TextEqual { lhs, rhs }
+            | OperationDraft::TextConcat { lhs, rhs } => {
                 value_reference(lhs, source, references)?;
                 value_reference(rhs, source, references)?;
             }
-            OperationDraft::BytesLen { value } => {
+            OperationDraft::NotBool { value }
+            | OperationDraft::BytesLen { value }
+            | OperationDraft::TextLen { value } => {
                 value_reference(value, source, references)?;
             }
             OperationDraft::BytesAt { value, index } => {
@@ -2010,6 +2348,67 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
                 value_reference(value, source, references)?;
                 value_reference(start, source, references)?;
                 value_reference(length, source, references)?;
+            }
+            OperationDraft::SequenceEmpty { sequence } => {
+                reference(
+                    *sequence,
+                    DraftReferenceKind::SequenceType,
+                    source,
+                    references,
+                );
+            }
+            OperationDraft::SequenceLen { sequence, value } => {
+                reference(
+                    *sequence,
+                    DraftReferenceKind::SequenceType,
+                    source,
+                    references,
+                );
+                value_reference(value, source, references)?;
+            }
+            OperationDraft::SequenceGet {
+                sequence,
+                value,
+                index,
+            } => {
+                reference(
+                    *sequence,
+                    DraftReferenceKind::SequenceType,
+                    source,
+                    references,
+                );
+                value_reference(value, source, references)?;
+                value_reference(index, source, references)?;
+            }
+            OperationDraft::SequenceAppend {
+                sequence,
+                value,
+                element,
+            } => {
+                reference(
+                    *sequence,
+                    DraftReferenceKind::SequenceType,
+                    source,
+                    references,
+                );
+                value_reference(value, source, references)?;
+                value_reference(element, source, references)?;
+            }
+            OperationDraft::SequenceReplace {
+                sequence,
+                value,
+                index,
+                element,
+            } => {
+                reference(
+                    *sequence,
+                    DraftReferenceKind::SequenceType,
+                    source,
+                    references,
+                );
+                value_reference(value, source, references)?;
+                value_reference(index, source, references)?;
+                value_reference(element, source, references)?;
             }
             OperationDraft::Call {
                 function,
@@ -2194,6 +2593,22 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
                     }
                 }
             }
+            TransactionOp::CreateSequenceType {
+                symbol,
+                module,
+                element,
+                ..
+            } => {
+                declare(
+                    &mut symbols,
+                    &mut kinds,
+                    *symbol,
+                    DraftSymbolKind::SequenceType,
+                    source,
+                )?;
+                reference(*module, DraftReferenceKind::Module, source, &mut references);
+                type_reference(*element, source, &mut references);
+            }
             TransactionOp::CreateFunction {
                 symbol,
                 module,
@@ -2365,10 +2780,18 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
             ExpressionKindDraft::ConstBytes(value) => {
                 budget.add_byte_literal(value, source)?;
             }
+            ExpressionKindDraft::ConstText(value) => {
+                budget.add_text_literal(value, source)?;
+            }
             ExpressionKindDraft::AddI64 { lhs, rhs }
             | ExpressionKindDraft::LtI64 { lhs, rhs }
+            | ExpressionKindDraft::EqualI64 { lhs, rhs }
+            | ExpressionKindDraft::AndBool { lhs, rhs }
+            | ExpressionKindDraft::OrBool { lhs, rhs }
             | ExpressionKindDraft::BytesEqual { lhs, rhs }
-            | ExpressionKindDraft::BytesConcat { lhs, rhs } => {
+            | ExpressionKindDraft::BytesConcat { lhs, rhs }
+            | ExpressionKindDraft::TextEqual { lhs, rhs }
+            | ExpressionKindDraft::TextConcat { lhs, rhs } => {
                 structured_value(
                     rhs,
                     depth,
@@ -2386,7 +2809,10 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
                     &mut references,
                 )?;
             }
-            ExpressionKindDraft::BytesLen { value } => {
+            ExpressionKindDraft::NotBool { value }
+            | ExpressionKindDraft::BytesLen { value }
+            | ExpressionKindDraft::TextLen { value }
+            | ExpressionKindDraft::SequenceLen { value, .. } => {
                 structured_value(
                     value,
                     depth,
@@ -2414,6 +2840,79 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
                 length,
             } => {
                 for (value, segment) in [(length, "length"), (start, "start"), (value, "value")] {
+                    structured_value(
+                        value,
+                        depth,
+                        source,
+                        child_draft_path(&path, segment, source)?,
+                        &mut stack,
+                        &mut references,
+                    )?;
+                }
+            }
+            ExpressionKindDraft::SequenceEmpty { sequence } => reference(
+                *sequence,
+                DraftReferenceKind::SequenceType,
+                source,
+                &mut references,
+            ),
+            ExpressionKindDraft::SequenceGet {
+                sequence,
+                value,
+                index,
+            } => {
+                reference(
+                    *sequence,
+                    DraftReferenceKind::SequenceType,
+                    source,
+                    &mut references,
+                );
+                for (value, segment) in [(index, "index"), (value, "value")] {
+                    structured_value(
+                        value,
+                        depth,
+                        source,
+                        child_draft_path(&path, segment, source)?,
+                        &mut stack,
+                        &mut references,
+                    )?;
+                }
+            }
+            ExpressionKindDraft::SequenceAppend {
+                sequence,
+                value,
+                element,
+            } => {
+                reference(
+                    *sequence,
+                    DraftReferenceKind::SequenceType,
+                    source,
+                    &mut references,
+                );
+                for (value, segment) in [(element, "element"), (value, "value")] {
+                    structured_value(
+                        value,
+                        depth,
+                        source,
+                        child_draft_path(&path, segment, source)?,
+                        &mut stack,
+                        &mut references,
+                    )?;
+                }
+            }
+            ExpressionKindDraft::SequenceReplace {
+                sequence,
+                value,
+                index,
+                element,
+            } => {
+                reference(
+                    *sequence,
+                    DraftReferenceKind::SequenceType,
+                    source,
+                    &mut references,
+                );
+                for (value, segment) in [(element, "element"), (index, "index"), (value, "value")] {
                     structured_value(
                         value,
                         depth,
@@ -2911,6 +3410,7 @@ fn record_edit_provenance(
         | CanonicalEdit::CreateProductType { symbol, .. }
         | CanonicalEdit::CreateProductField { symbol, .. }
         | CanonicalEdit::CreateSumType { symbol, .. }
+        | CanonicalEdit::CreateSequenceType { symbol, .. }
         | CanonicalEdit::CreateSumVariant { symbol, .. }
         | CanonicalEdit::CreateFunction { symbol, .. }
         | CanonicalEdit::CreateParameter { symbol, .. }
@@ -3343,6 +3843,7 @@ fn canonical_created_symbol(operation: &CanonicalEdit) -> Option<DraftSymbol> {
         | CanonicalEdit::CreateProductType { symbol, .. }
         | CanonicalEdit::CreateProductField { symbol, .. }
         | CanonicalEdit::CreateSumType { symbol, .. }
+        | CanonicalEdit::CreateSequenceType { symbol, .. }
         | CanonicalEdit::CreateSumVariant { symbol, .. }
         | CanonicalEdit::CreateFunction { symbol, .. }
         | CanonicalEdit::CreateParameter { symbol, .. }
@@ -3481,6 +3982,31 @@ fn apply_operation(
                     owner: module,
                     name: name.clone(),
                     variants: Vec::new(),
+                },
+            )?;
+            let Node::Module { types, .. } = require_kind_mut(nodes, module, NodeKind::Module)?
+            else {
+                return Err(invariant("module kind changed during staging"));
+            };
+            types.push(id);
+        }
+        CanonicalEdit::CreateSequenceType {
+            symbol,
+            module,
+            name,
+            element,
+        } => {
+            let id = allocated(allocations, *symbol)?;
+            let module = resolve(*module, allocations, base.workspace())?;
+            require_kind(nodes, module, NodeKind::Module)?;
+            let element = resolve_type_draft(*element, allocations, base.workspace())?;
+            insert_new(
+                nodes,
+                id,
+                Node::SequenceType {
+                    owner: module,
+                    name: name.clone(),
+                    element,
                 },
             )?;
             let Node::Module { types, .. } = require_kind_mut(nodes, module, NodeKind::Module)?
@@ -3986,11 +4512,27 @@ fn resolve_operation(
         OperationDraft::ConstI64(value) => OperationKind::ConstI64(*value),
         OperationDraft::ConstBool(value) => OperationKind::ConstBool(*value),
         OperationDraft::ConstBytes(value) => OperationKind::ConstBytes(value.clone()),
+        OperationDraft::ConstText(value) => OperationKind::ConstText(value.clone()),
         OperationDraft::AddI64 { lhs, rhs } => OperationKind::AddI64 {
             lhs: resolve_value(lhs, allocations, workspace)?,
             rhs: resolve_value(rhs, allocations, workspace)?,
         },
         OperationDraft::LtI64 { lhs, rhs } => OperationKind::LtI64 {
+            lhs: resolve_value(lhs, allocations, workspace)?,
+            rhs: resolve_value(rhs, allocations, workspace)?,
+        },
+        OperationDraft::EqualI64 { lhs, rhs } => OperationKind::EqualI64 {
+            lhs: resolve_value(lhs, allocations, workspace)?,
+            rhs: resolve_value(rhs, allocations, workspace)?,
+        },
+        OperationDraft::NotBool { value } => OperationKind::NotBool {
+            value: resolve_value(value, allocations, workspace)?,
+        },
+        OperationDraft::AndBool { lhs, rhs } => OperationKind::AndBool {
+            lhs: resolve_value(lhs, allocations, workspace)?,
+            rhs: resolve_value(rhs, allocations, workspace)?,
+        },
+        OperationDraft::OrBool { lhs, rhs } => OperationKind::OrBool {
             lhs: resolve_value(lhs, allocations, workspace)?,
             rhs: resolve_value(rhs, allocations, workspace)?,
         },
@@ -4017,6 +4559,53 @@ fn resolve_operation(
         OperationDraft::BytesConcat { lhs, rhs } => OperationKind::BytesConcat {
             lhs: resolve_value(lhs, allocations, workspace)?,
             rhs: resolve_value(rhs, allocations, workspace)?,
+        },
+        OperationDraft::TextLen { value } => OperationKind::TextLen {
+            value: resolve_value(value, allocations, workspace)?,
+        },
+        OperationDraft::TextEqual { lhs, rhs } => OperationKind::TextEqual {
+            lhs: resolve_value(lhs, allocations, workspace)?,
+            rhs: resolve_value(rhs, allocations, workspace)?,
+        },
+        OperationDraft::TextConcat { lhs, rhs } => OperationKind::TextConcat {
+            lhs: resolve_value(lhs, allocations, workspace)?,
+            rhs: resolve_value(rhs, allocations, workspace)?,
+        },
+        OperationDraft::SequenceEmpty { sequence } => OperationKind::SequenceEmpty {
+            sequence: resolve(*sequence, allocations, workspace)?,
+        },
+        OperationDraft::SequenceLen { sequence, value } => OperationKind::SequenceLen {
+            sequence: resolve(*sequence, allocations, workspace)?,
+            value: resolve_value(value, allocations, workspace)?,
+        },
+        OperationDraft::SequenceGet {
+            sequence,
+            value,
+            index,
+        } => OperationKind::SequenceGet {
+            sequence: resolve(*sequence, allocations, workspace)?,
+            value: resolve_value(value, allocations, workspace)?,
+            index: resolve_value(index, allocations, workspace)?,
+        },
+        OperationDraft::SequenceAppend {
+            sequence,
+            value,
+            element,
+        } => OperationKind::SequenceAppend {
+            sequence: resolve(*sequence, allocations, workspace)?,
+            value: resolve_value(value, allocations, workspace)?,
+            element: resolve_value(element, allocations, workspace)?,
+        },
+        OperationDraft::SequenceReplace {
+            sequence,
+            value,
+            index,
+            element,
+        } => OperationKind::SequenceReplace {
+            sequence: resolve(*sequence, allocations, workspace)?,
+            value: resolve_value(value, allocations, workspace)?,
+            index: resolve_value(index, allocations, workspace)?,
+            element: resolve_value(element, allocations, workspace)?,
         },
         OperationDraft::Call {
             function,
@@ -4171,6 +4760,7 @@ fn resolve_type_draft(
         TypeDraft::Bool => SemanticType::Bool,
         TypeDraft::I64 => SemanticType::I64,
         TypeDraft::Bytes => SemanticType::Bytes,
+        TypeDraft::Text => SemanticType::Text,
         TypeDraft::Nominal(target) => {
             SemanticType::Nominal(resolve(target, allocations, workspace)?)
         }
@@ -4226,6 +4816,20 @@ fn operation_result_types_in_nodes(
                 }
             }
             OperationKind::MatchSum { result, .. } if index == 0 => Some(*result),
+            OperationKind::SequenceEmpty { sequence }
+            | OperationKind::SequenceAppend { sequence, .. }
+            | OperationKind::SequenceReplace { sequence, .. }
+                if index == 0 =>
+            {
+                matches!(nodes.get(sequence), Some(Node::SequenceType { .. }))
+                    .then_some(SemanticType::Nominal(*sequence))
+            }
+            OperationKind::SequenceGet { sequence, .. } if index == 0 => {
+                match nodes.get(sequence) {
+                    Some(Node::SequenceType { element, .. }) => Some(*element),
+                    _ => None,
+                }
+            }
             _ => operation.result_type(index, None),
         })
         .collect()
@@ -4425,6 +5029,7 @@ fn detach_child(nodes: &mut BTreeMap<NodeId, Node>, owner: NodeId, child: NodeId
         }
         Node::ProductField { .. }
         | Node::SumVariant { .. }
+        | Node::SequenceType { .. }
         | Node::Parameter { .. }
         | Node::BlockArgument { .. }
         | Node::Operation { .. } => false,

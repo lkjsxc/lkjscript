@@ -229,6 +229,7 @@ pub enum LiteralValue {
     Bool(bool),
     ExpectedType(SemanticType),
     Bytes(ByteString),
+    Text(crate::schema::TextString),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
@@ -303,12 +304,14 @@ pub enum DefinitionSlot {
     ParameterType,
     ProductFieldType,
     SumVariantPayloadType,
+    SequenceElementType,
     BlockArgumentType,
     OperationType,
     ProductDeclaration,
     ProductField,
     SumVariant,
     MatchVariant,
+    SequenceDeclaration,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
@@ -1000,10 +1003,16 @@ fn nominal_type_result(
             variants,
             ..
         } => (name.clone(), NodeKind::SumType, *owner, variants.as_slice()),
+        Node::SequenceType { owner, name, .. } => (
+            name.clone(),
+            NodeKind::SequenceType,
+            *owner,
+            &[] as &[NodeId],
+        ),
         node => {
             return Err(LkError::new(
                 ErrorCode::WrongKind,
-                "nominal type query requires a product or sum declaration",
+                "nominal type query requires a product, sum, or sequence declaration",
             )
             .for_node(declaration)
             .with_kinds(NodeKind::ProductType, node.kind()));
@@ -1093,7 +1102,7 @@ fn nominal_type_result(
                     });
                 }
             }
-            LayoutShape::Primitive => unreachable!(),
+            LayoutShape::Primitive => {}
         },
         DerivedLayout::Unrepresentable(_) => {
             for member in member_ids {
@@ -1231,6 +1240,7 @@ fn body_item(snapshot: &Snapshot, id: NodeId, ordinal: u64, terminator: bool) ->
         OperationKind::ConstI64(v) => Some(LiteralValue::I64(*v)),
         OperationKind::ConstBool(v) => Some(LiteralValue::Bool(*v)),
         OperationKind::ConstBytes(v) => Some(LiteralValue::Bytes(v.clone())),
+        OperationKind::ConstText(v) => Some(LiteralValue::Text(v.clone())),
         OperationKind::Hole { expected } => Some(LiteralValue::ExpectedType(*expected)),
         _ => None,
     };
@@ -1632,6 +1642,11 @@ fn operation_definition_slot(operation: &OperationKind, target: NodeId) -> Optio
         }
         OperationKind::ConstructVariant { .. } => DefinitionSlot::SumVariant,
         OperationKind::MatchSum { .. } => DefinitionSlot::MatchVariant,
+        OperationKind::SequenceEmpty { .. }
+        | OperationKind::SequenceLen { .. }
+        | OperationKind::SequenceGet { .. }
+        | OperationKind::SequenceAppend { .. }
+        | OperationKind::SequenceReplace { .. } => DefinitionSlot::SequenceDeclaration,
         _ => return None,
     })
 }
@@ -1688,6 +1703,7 @@ fn definition_page(
                     TypeReferenceSlot::ParameterType => DefinitionSlot::ParameterType,
                     TypeReferenceSlot::ProductFieldType => DefinitionSlot::ProductFieldType,
                     TypeReferenceSlot::SumVariantPayload => DefinitionSlot::SumVariantPayloadType,
+                    TypeReferenceSlot::SequenceElementType => DefinitionSlot::SequenceElementType,
                     TypeReferenceSlot::BlockArgumentType => DefinitionSlot::BlockArgumentType,
                     TypeReferenceSlot::OperationType => DefinitionSlot::OperationType,
                 },
@@ -1746,6 +1762,7 @@ fn dependencies(snapshot: &Snapshot, id: NodeId) -> Result<Vec<DependencyFact>> 
                     TypeReferenceSlot::ParameterType => DefinitionSlot::ParameterType,
                     TypeReferenceSlot::ProductFieldType => DefinitionSlot::ProductFieldType,
                     TypeReferenceSlot::SumVariantPayload => DefinitionSlot::SumVariantPayloadType,
+                    TypeReferenceSlot::SequenceElementType => DefinitionSlot::SequenceElementType,
                     TypeReferenceSlot::BlockArgumentType => DefinitionSlot::BlockArgumentType,
                     TypeReferenceSlot::OperationType => DefinitionSlot::OperationType,
                 };

@@ -13,7 +13,7 @@ use crate::schema::{NodeKind, OperationCode, SemanticType};
 use crate::transaction::{MAX_RETURNED_BINDINGS, TransactionOpCode};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-pub const MACHINE_SCHEMA_IDENTITY: &str = "lkjscript-machine-schema-v10";
+pub const MACHINE_SCHEMA_IDENTITY: &str = "lkjscript-machine-schema-v11";
 const MACHINE_SCHEMA_DIGEST_DOMAIN: &str = "lkjscript.machine-schema.digest.v2";
 
 fn scalar_types() -> Vec<MachineScalarDescription> {
@@ -226,6 +226,15 @@ fn structured_records() -> Vec<DraftRecordDescription> {
             ],
         },
         DraftRecordDescription {
+            name: "create_sequence_type".into(),
+            fields: vec![
+                draft_field("symbol", T::DraftSymbol, true, true),
+                draft_field("module", T::NodeTarget, true, false),
+                draft_field("name", T::String, true, false),
+                draft_field("element", T::TypeDraft, true, false),
+            ],
+        },
+        DraftRecordDescription {
             name: "sum_variant".into(),
             fields: vec![
                 draft_field("symbol", T::DraftSymbol, true, true),
@@ -321,7 +330,8 @@ fn expression_variant(code: crate::transaction::ExpressionDraftCode) -> DraftVar
         C::ConstBool => (PayloadShapeKind::Newtype, Some(T::Bool), vec![]),
         C::ConstI64 => (PayloadShapeKind::Newtype, Some(T::I64), vec![]),
         C::ConstBytes => (PayloadShapeKind::Newtype, Some(T::Bytes), vec![]),
-        C::AddI64 | C::LtI64 => (
+        C::ConstText => (PayloadShapeKind::Newtype, Some(T::String), vec![]),
+        C::AddI64 | C::LtI64 | C::EqualI64 | C::AndBool | C::OrBool => (
             PayloadShapeKind::Record,
             None,
             vec![
@@ -335,6 +345,60 @@ fn expression_variant(code: crate::transaction::ExpressionDraftCode) -> DraftVar
             vec![
                 draft_field("lhs", T::Value, true, false),
                 draft_field("rhs", T::Value, true, false),
+            ],
+        ),
+        C::TextEqual | C::TextConcat => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("lhs", T::Value, true, false),
+                draft_field("rhs", T::Value, true, false),
+            ],
+        ),
+        C::NotBool | C::TextLen => (
+            PayloadShapeKind::Record,
+            None,
+            vec![draft_field("value", T::Value, true, false)],
+        ),
+        C::SequenceEmpty => (
+            PayloadShapeKind::Record,
+            None,
+            vec![draft_field("sequence", T::NodeTarget, true, false)],
+        ),
+        C::SequenceLen => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("sequence", T::NodeTarget, true, false),
+                draft_field("value", T::Value, true, false),
+            ],
+        ),
+        C::SequenceGet => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("sequence", T::NodeTarget, true, false),
+                draft_field("value", T::Value, true, false),
+                draft_field("index", T::Value, true, false),
+            ],
+        ),
+        C::SequenceAppend => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("sequence", T::NodeTarget, true, false),
+                draft_field("value", T::Value, true, false),
+                draft_field("element", T::Value, true, false),
+            ],
+        ),
+        C::SequenceReplace => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("sequence", T::NodeTarget, true, false),
+                draft_field("value", T::Value, true, false),
+                draft_field("index", T::Value, true, false),
+                draft_field("element", T::Value, true, false),
             ],
         ),
         C::BytesLen => (
@@ -446,7 +510,8 @@ fn operation_variant(code: OperationCode) -> DraftVariantDescription {
         C::ConstI64 => (PayloadShapeKind::Newtype, Some(T::I64), vec![]),
         C::ConstBool => (PayloadShapeKind::Newtype, Some(T::Bool), vec![]),
         C::ConstBytes => (PayloadShapeKind::Newtype, Some(T::Bytes), vec![]),
-        C::AddI64 | C::LtI64 => (
+        C::ConstText => (PayloadShapeKind::Newtype, Some(T::String), vec![]),
+        C::AddI64 | C::LtI64 | C::EqualI64 | C::AndBool | C::OrBool => (
             PayloadShapeKind::Record,
             None,
             vec![
@@ -460,6 +525,60 @@ fn operation_variant(code: OperationCode) -> DraftVariantDescription {
             vec![
                 draft_field("lhs", T::Value, true, false),
                 draft_field("rhs", T::Value, true, false),
+            ],
+        ),
+        C::TextEqual | C::TextConcat => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("lhs", T::Value, true, false),
+                draft_field("rhs", T::Value, true, false),
+            ],
+        ),
+        C::NotBool | C::TextLen => (
+            PayloadShapeKind::Record,
+            None,
+            vec![draft_field("value", T::Value, true, false)],
+        ),
+        C::SequenceEmpty => (
+            PayloadShapeKind::Record,
+            None,
+            vec![draft_field("sequence", T::NodeTarget, true, false)],
+        ),
+        C::SequenceLen => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("sequence", T::NodeTarget, true, false),
+                draft_field("value", T::Value, true, false),
+            ],
+        ),
+        C::SequenceGet => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("sequence", T::NodeTarget, true, false),
+                draft_field("value", T::Value, true, false),
+                draft_field("index", T::Value, true, false),
+            ],
+        ),
+        C::SequenceAppend => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("sequence", T::NodeTarget, true, false),
+                draft_field("value", T::Value, true, false),
+                draft_field("element", T::Value, true, false),
+            ],
+        ),
+        C::SequenceReplace => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("sequence", T::NodeTarget, true, false),
+                draft_field("value", T::Value, true, false),
+                draft_field("index", T::Value, true, false),
+                draft_field("element", T::Value, true, false),
             ],
         ),
         C::BytesLen => (
@@ -594,6 +713,12 @@ fn type_variants() -> Vec<DraftVariantDescription> {
             fields: Vec::new(),
         },
         DraftVariantDescription {
+            name: "text".into(),
+            shape: PayloadShapeKind::Unit,
+            newtype: None,
+            fields: Vec::new(),
+        },
+        DraftVariantDescription {
             name: "nominal".into(),
             shape: PayloadShapeKind::Newtype,
             newtype: Some(T::NodeTarget),
@@ -653,6 +778,7 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
                 variant_payload("bool", unit_payload()),
                 variant_payload("i64", unit_payload()),
                 variant_payload("bytes", unit_payload()),
+                variant_payload("text", unit_payload()),
                 variant_payload("nominal", newtype_payload("node_id")),
             ],
         ),
@@ -771,6 +897,62 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
                     "bytes_concat",
                     record_payload(&[("lhs", "value_ref", true), ("rhs", "value_ref", true)]),
                 ),
+                variant_payload(
+                    "equal_i64",
+                    record_payload(&[("lhs", "value_ref", true), ("rhs", "value_ref", true)]),
+                ),
+                variant_payload("not_bool", record_payload(&[("value", "value_ref", true)])),
+                variant_payload(
+                    "and_bool",
+                    record_payload(&[("lhs", "value_ref", true), ("rhs", "value_ref", true)]),
+                ),
+                variant_payload(
+                    "or_bool",
+                    record_payload(&[("lhs", "value_ref", true), ("rhs", "value_ref", true)]),
+                ),
+                variant_payload("const_text", newtype_payload("string")),
+                variant_payload("text_len", record_payload(&[("value", "value_ref", true)])),
+                variant_payload(
+                    "text_equal",
+                    record_payload(&[("lhs", "value_ref", true), ("rhs", "value_ref", true)]),
+                ),
+                variant_payload(
+                    "text_concat",
+                    record_payload(&[("lhs", "value_ref", true), ("rhs", "value_ref", true)]),
+                ),
+                variant_payload(
+                    "sequence_empty",
+                    record_payload(&[("sequence", "node_id", true)]),
+                ),
+                variant_payload(
+                    "sequence_len",
+                    record_payload(&[("sequence", "node_id", true), ("value", "value_ref", true)]),
+                ),
+                variant_payload(
+                    "sequence_get",
+                    record_payload(&[
+                        ("sequence", "node_id", true),
+                        ("value", "value_ref", true),
+                        ("index", "value_ref", true),
+                    ]),
+                ),
+                variant_payload(
+                    "sequence_append",
+                    record_payload(&[
+                        ("sequence", "node_id", true),
+                        ("value", "value_ref", true),
+                        ("element", "value_ref", true),
+                    ]),
+                ),
+                variant_payload(
+                    "sequence_replace",
+                    record_payload(&[
+                        ("sequence", "node_id", true),
+                        ("value", "value_ref", true),
+                        ("index", "value_ref", true),
+                        ("element", "value_ref", true),
+                    ]),
+                ),
             ],
         ),
         named_variant(
@@ -830,6 +1012,14 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
                         ("ordinal", "u32", true),
                         ("name", "string", true),
                         ("payload", "semantic_type", false),
+                    ]),
+                ),
+                variant_payload(
+                    "sequence_type",
+                    record_payload(&[
+                        ("owner", "node_id", true),
+                        ("name", "string", true),
+                        ("element", "semantic_type", true),
                     ]),
                 ),
                 variant_payload(
@@ -988,6 +1178,13 @@ fn run_records() -> Vec<NamedPayloadDescription> {
                 ("payload", "runtime_value", false),
             ],
         ),
+        named_record(
+            "runtime_sequence_data",
+            &[
+                ("ty", "node_id", true),
+                ("elements", "list<runtime_value>", true),
+            ],
+        ),
     ]
 }
 
@@ -999,8 +1196,10 @@ fn run_variants() -> Vec<NamedVariantDescription> {
             variant_payload("bool", newtype_payload("bool")),
             variant_payload("i64", newtype_payload("i64")),
             variant_payload("bytes", newtype_payload("bytes_string")),
+            variant_payload("text", newtype_payload("string")),
             variant_payload("product", newtype_payload("runtime_product_data")),
             variant_payload("sum", newtype_payload("runtime_sum_data")),
+            variant_payload("sequence", newtype_payload("runtime_sequence_data")),
         ],
     )]
 }
@@ -1095,6 +1294,12 @@ fn transaction_payload(code: TransactionOpCode) -> VariantPayloadDescription {
             ("module", "node_target", true),
             ("name", "string", true),
             ("variants", "list<sum_variant>", true),
+        ]),
+        TransactionOpCode::CreateSequenceType => record_payload(&[
+            ("symbol", "draft_symbol", true),
+            ("module", "node_target", true),
+            ("name", "string", true),
+            ("element", "type_draft", true),
         ]),
         TransactionOpCode::CreateFunction => record_payload(&[
             ("symbol", "draft_symbol", true),
@@ -1574,12 +1779,14 @@ fn query_variants() -> Vec<NamedVariantDescription> {
                 ("parameter_type", 4),
                 ("product_field_type", 5),
                 ("sum_variant_payload_type", 6),
-                ("block_argument_type", 7),
-                ("operation_type", 8),
-                ("product_declaration", 9),
-                ("product_field", 10),
-                ("sum_variant", 11),
-                ("match_variant", 12),
+                ("sequence_element_type", 7),
+                ("block_argument_type", 8),
+                ("operation_type", 9),
+                ("product_declaration", 10),
+                ("product_field", 11),
+                ("sum_variant", 12),
+                ("match_variant", 13),
+                ("sequence_declaration", 14),
             ],
         ),
         named_variant(
@@ -1589,6 +1796,7 @@ fn query_variants() -> Vec<NamedVariantDescription> {
                 variant_payload("bool", newtype_payload("bool")),
                 variant_payload("expected_type", newtype_payload("semantic_type")),
                 variant_payload("bytes", newtype_payload("bytes_string")),
+                variant_payload("text", newtype_payload("string")),
             ],
         ),
         named_variant(
@@ -1614,6 +1822,7 @@ fn query_variants() -> Vec<NamedVariantDescription> {
                 variant_payload("bool", newtype_payload("bool")),
                 variant_payload("type", newtype_payload("semantic_type")),
                 variant_payload("bytes", newtype_payload("bytes_string")),
+                variant_payload("text", newtype_payload("string")),
             ],
         ),
         named_variant(
@@ -2434,8 +2643,10 @@ fn schema_discovery_variants(
                 ("bool", 2),
                 ("i64", 3),
                 ("bytes", 4),
-                ("product", 5),
-                ("sum", 6),
+                ("text", 5),
+                ("product", 6),
+                ("sum", 7),
+                ("sequence", 8),
             ],
         ),
         unit_variants(
@@ -2478,6 +2689,7 @@ fn schema_discovery_variants(
                 ("carried_type", 5),
                 ("positive_step", 6),
                 ("bytes_value", 7),
+                ("text_value", 8),
             ],
         ),
         unit_variants(
@@ -2503,6 +2715,9 @@ fn schema_discovery_variants(
                 variant_payload("variant_owner_result", unit_payload()),
                 variant_payload("match_scrutinee", unit_payload()),
                 variant_payload("match_result", unit_payload()),
+                variant_payload("sequence_declaration_result", unit_payload()),
+                variant_payload("sequence_owner", unit_payload()),
+                variant_payload("sequence_element", unit_payload()),
             ],
         ),
     ]
@@ -2756,16 +2971,20 @@ pub fn schema_description() -> SchemaDescription {
                         crate::interpret::RuntimeValueCode::Bool => RuntimeValuePayload::Bool,
                         crate::interpret::RuntimeValueCode::I64 => RuntimeValuePayload::I64,
                         crate::interpret::RuntimeValueCode::Bytes => RuntimeValuePayload::Bytes,
+                        crate::interpret::RuntimeValueCode::Text => RuntimeValuePayload::Text,
                         crate::interpret::RuntimeValueCode::Product => RuntimeValuePayload::Product,
                         crate::interpret::RuntimeValueCode::Sum => RuntimeValuePayload::Sum,
+                        crate::interpret::RuntimeValueCode::Sequence => RuntimeValuePayload::Sequence,
                     },
                     fields: match code {
                         crate::interpret::RuntimeValueCode::Unit => vec![],
                         crate::interpret::RuntimeValueCode::Bool => vec![MachineFieldDescription { name: "data".into(), type_expression: "bool".into(), required: true }],
                         crate::interpret::RuntimeValueCode::I64 => vec![MachineFieldDescription { name: "data".into(), type_expression: "i64".into(), required: true }],
                         crate::interpret::RuntimeValueCode::Bytes => vec![MachineFieldDescription { name: "data".into(), type_expression: "bytes_string".into(), required: true }],
+                        crate::interpret::RuntimeValueCode::Text => vec![MachineFieldDescription { name: "data".into(), type_expression: "string".into(), required: true }],
                         crate::interpret::RuntimeValueCode::Product => vec![MachineFieldDescription { name: "data".into(), type_expression: "runtime_product_data".into(), required: true }],
                         crate::interpret::RuntimeValueCode::Sum => vec![MachineFieldDescription { name: "data".into(), type_expression: "runtime_sum_data".into(), required: true }],
+                        crate::interpret::RuntimeValueCode::Sequence => vec![MachineFieldDescription { name: "data".into(), type_expression: "runtime_sequence_data".into(), required: true }],
                     },
                     invariants: match code {
                         crate::interpret::RuntimeValueCode::Product => vec![
@@ -2781,6 +3000,13 @@ pub fn schema_description() -> SchemaDescription {
                         crate::interpret::RuntimeValueCode::Bytes => vec![
                             "equality and behavior depend only on visible ordered octets; backing, view, sharing, and runtime handles are unobservable".into(),
                             "data is canonical unpadded URL-safe base64 with no whitespace and canonical trailing bits".into(),
+                        ],
+                        crate::interpret::RuntimeValueCode::Text => vec![
+                            "data is valid UTF-8, compared by exact UTF-8 bytes, and is not normalized".into(),
+                        ],
+                        crate::interpret::RuntimeValueCode::Sequence => vec![
+                            "ty is an exact semantic sequence declaration and elements have its exact element type".into(),
+                            "element order is observable; allocation, capacity, and sharing are unobservable".into(),
                         ],
                         _ => vec!["value must have the exact primitive semantic type".into()],
                     },
@@ -2888,14 +3114,19 @@ pub fn schema_description() -> SchemaDescription {
             machine_schema_digest: "64 lowercase hexadecimal characters".to_owned(),
         },
         nominal_declarations: NominalDeclarationsDescription {
-            declaration_kinds: vec![NodeKind::ProductType, NodeKind::SumType],
+            declaration_kinds: vec![
+                NodeKind::ProductType,
+                NodeKind::SumType,
+                NodeKind::SequenceType,
+            ],
             member_kinds: vec![NodeKind::ProductField, NodeKind::SumVariant],
             shape_invariants: vec![
                 "nominal type identity is its declaration Node ID; member identity is its field or variant Node ID".into(),
                 "one declaration identity has immutable owner, ordered member identities, ordinals, field types, and variant payload contracts".into(),
                 "product construction names every exact owned field once; sum construction names one exact owned variant and its exact optional payload".into(),
                 "closed-sum match has exactly one identity-keyed arm per variant and canonical storage follows declaration order".into(),
-                "direct and indirect by-value nominal cycles reject atomically".into(),
+                "direct and indirect by-value nominal cycles reject atomically while sequence indirection permits finite recursive values".into(),
+                "a sequence declaration owns one exact homogeneous element type and deterministic order".into(),
             ],
             layout_invariants: vec![
                 "layout is deterministic derived state and is absent from semantic artifacts".into(),

@@ -14,6 +14,10 @@ pub const MAXIMUM_BYTE_STRING_ENCODED_BYTES: usize = (MAXIMUM_BYTE_STRING_BYTES 
     };
 pub const MAXIMUM_BYTE_LITERAL_BYTES: usize = 4 * 1024;
 pub const MAXIMUM_TRANSACTION_BYTE_LITERAL_BYTES: usize = 64 * 1024;
+pub const MAXIMUM_TEXT_BYTES: usize = 64 * 1024;
+pub const MAXIMUM_TEXT_LITERAL_BYTES: usize = 4 * 1024;
+pub const MAXIMUM_TRANSACTION_TEXT_LITERAL_BYTES: usize = 64 * 1024;
+pub const MAXIMUM_SEQUENCE_ELEMENTS: usize = 16 * 1024;
 
 #[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct ByteString(Box<[u8]>);
@@ -123,6 +127,90 @@ impl<'de> Deserialize<'de> for ByteString {
     }
 }
 
+/// Canonical immutable UTF-8 text. Equality is exact byte equality and no Unicode
+/// normalization, locale, collation, or display-width contract is implied.
+#[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
+pub struct TextString(Box<str>);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TextStringTooLarge;
+
+impl fmt::Display for TextStringTooLarge {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("text exceeds UTF-8 byte policy")
+    }
+}
+
+impl std::error::Error for TextStringTooLarge {}
+
+impl TextString {
+    pub fn new(value: impl Into<String>) -> Result<Self, TextStringTooLarge> {
+        let value = value.into();
+        if value.len() > MAXIMUM_TEXT_BYTES {
+            return Err(TextStringTooLarge);
+        }
+        Ok(Self(value.into_boxed_str()))
+    }
+
+    pub fn try_from_str(value: &str) -> Result<Self, TextStringTooLarge> {
+        if value.len() > MAXIMUM_TEXT_BYTES {
+            return Err(TextStringTooLarge);
+        }
+        Ok(Self(value.into()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+
+    pub fn len_bytes(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl Serialize for TextString {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.0)
+    }
+}
+
+struct TextStringVisitor;
+
+impl<'de> de::Visitor<'de> for TextStringVisitor {
+    type Value = TextString;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("bounded UTF-8 text")
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        TextString::try_from_str(value).map_err(E::custom)
+    }
+}
+
+impl<'de> Deserialize<'de> for TextString {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_str(TextStringVisitor)
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ValueStorageClass {
@@ -150,14 +238,15 @@ pub enum SemanticType {
     Bool,
     I64,
     Bytes,
+    Text,
     Nominal(NodeId),
 }
 
 impl SemanticType {
-    pub const PRIMITIVES: [Self; 4] = [Self::Unit, Self::Bool, Self::I64, Self::Bytes];
-    pub const ALL: [Self; 4] = Self::PRIMITIVES;
+    pub const PRIMITIVES: [Self; 5] = [Self::Unit, Self::Bool, Self::I64, Self::Bytes, Self::Text];
+    pub const ALL: [Self; 5] = Self::PRIMITIVES;
 
-    pub const PRIMITIVE_DESCRIPTORS: [PrimitiveDescriptor; 4] = [
+    pub const PRIMITIVE_DESCRIPTORS: [PrimitiveDescriptor; 5] = [
         PrimitiveDescriptor {
             ty: Self::Unit,
             machine_name: "unit",
@@ -194,6 +283,15 @@ impl SemanticType {
             physical_slot_align: 8,
             cells: 1,
         },
+        PrimitiveDescriptor {
+            ty: Self::Text,
+            machine_name: "text",
+            stable_tag: 6,
+            storage_class: ValueStorageClass::ManagedHandle,
+            physical_slot_size: 8,
+            physical_slot_align: 8,
+            cells: 1,
+        },
     ];
 
     pub const fn primitive_descriptor(self) -> Option<&'static PrimitiveDescriptor> {
@@ -202,6 +300,7 @@ impl SemanticType {
             Self::Bool => Some(&Self::PRIMITIVE_DESCRIPTORS[1]),
             Self::I64 => Some(&Self::PRIMITIVE_DESCRIPTORS[2]),
             Self::Bytes => Some(&Self::PRIMITIVE_DESCRIPTORS[3]),
+            Self::Text => Some(&Self::PRIMITIVE_DESCRIPTORS[4]),
             Self::Nominal(_) => None,
         }
     }
@@ -212,6 +311,7 @@ impl SemanticType {
             Self::Bool => "bool",
             Self::I64 => "i64",
             Self::Bytes => "bytes",
+            Self::Text => "text",
             Self::Nominal(_) => "nominal",
         }
     }
@@ -222,6 +322,7 @@ impl SemanticType {
             Self::Bool => 2,
             Self::I64 => 3,
             Self::Bytes => 5,
+            Self::Text => 6,
             Self::Nominal(_) => 4,
         }
     }
@@ -232,6 +333,7 @@ impl SemanticType {
             2 => Some(Self::Bool),
             3 => Some(Self::I64),
             5 => Some(Self::Bytes),
+            6 => Some(Self::Text),
             _ => None,
         }
     }
@@ -251,6 +353,7 @@ pub enum TypeDraft {
     Bool,
     I64,
     Bytes,
+    Text,
     Nominal(NodeTarget),
 }
 
@@ -261,6 +364,7 @@ impl From<SemanticType> for TypeDraft {
             SemanticType::Bool => Self::Bool,
             SemanticType::I64 => Self::I64,
             SemanticType::Bytes => Self::Bytes,
+            SemanticType::Text => Self::Text,
             SemanticType::Nominal(target) => Self::Nominal(NodeTarget::Existing(target)),
         }
     }
@@ -282,10 +386,11 @@ pub enum NodeKind {
     ProductField,
     SumType,
     SumVariant,
+    SequenceType,
 }
 
 impl NodeKind {
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::WorkspaceRoot,
         Self::Package,
         Self::Module,
@@ -299,6 +404,7 @@ impl NodeKind {
         Self::ProductField,
         Self::SumType,
         Self::SumVariant,
+        Self::SequenceType,
     ];
     pub const fn machine_name(self) -> &'static str {
         match self {
@@ -315,6 +421,7 @@ impl NodeKind {
             Self::ProductField => "product_field",
             Self::SumType => "sum_type",
             Self::SumVariant => "sum_variant",
+            Self::SequenceType => "sequence_type",
         }
     }
 
@@ -333,6 +440,7 @@ impl NodeKind {
             Self::ProductField => 11,
             Self::SumType => 12,
             Self::SumVariant => 13,
+            Self::SequenceType => 14,
         }
     }
 
@@ -351,6 +459,7 @@ impl NodeKind {
             11 => Some(Self::ProductField),
             12 => Some(Self::SumType),
             13 => Some(Self::SumVariant),
+            14 => Some(Self::SequenceType),
             _ => None,
         }
     }
@@ -407,7 +516,11 @@ impl NameUniquenessGroup {
         match self {
             Self::WorkspacePackages => &[NodeKind::Package],
             Self::PackageModules => &[NodeKind::Module],
-            Self::ModuleTypes => &[NodeKind::ProductType, NodeKind::SumType],
+            Self::ModuleTypes => &[
+                NodeKind::ProductType,
+                NodeKind::SumType,
+                NodeKind::SequenceType,
+            ],
             Self::ModuleFunctions => &[NodeKind::Function],
             Self::ProductFields => &[NodeKind::ProductField],
             Self::SumVariants => &[NodeKind::SumVariant],
@@ -486,10 +599,23 @@ pub enum OperationCode {
     BytesSlice,
     BytesEqual,
     BytesConcat,
+    EqualI64,
+    NotBool,
+    AndBool,
+    OrBool,
+    ConstText,
+    TextLen,
+    TextEqual,
+    TextConcat,
+    SequenceEmpty,
+    SequenceLen,
+    SequenceGet,
+    SequenceAppend,
+    SequenceReplace,
 }
 
 impl OperationCode {
-    pub const ALL: [Self; 21] = [
+    pub const ALL: [Self; 34] = [
         Self::ConstUnit,
         Self::ConstI64,
         Self::ConstBool,
@@ -511,6 +637,19 @@ impl OperationCode {
         Self::BytesSlice,
         Self::BytesEqual,
         Self::BytesConcat,
+        Self::EqualI64,
+        Self::NotBool,
+        Self::AndBool,
+        Self::OrBool,
+        Self::ConstText,
+        Self::TextLen,
+        Self::TextEqual,
+        Self::TextConcat,
+        Self::SequenceEmpty,
+        Self::SequenceLen,
+        Self::SequenceGet,
+        Self::SequenceAppend,
+        Self::SequenceReplace,
     ];
 
     pub const fn stable_tag(self) -> u8 {
@@ -540,6 +679,19 @@ impl OperationCode {
             19 => Some(Self::BytesSlice),
             20 => Some(Self::BytesEqual),
             21 => Some(Self::BytesConcat),
+            22 => Some(Self::EqualI64),
+            23 => Some(Self::NotBool),
+            24 => Some(Self::AndBool),
+            25 => Some(Self::OrBool),
+            26 => Some(Self::ConstText),
+            27 => Some(Self::TextLen),
+            28 => Some(Self::TextEqual),
+            29 => Some(Self::TextConcat),
+            30 => Some(Self::SequenceEmpty),
+            31 => Some(Self::SequenceLen),
+            32 => Some(Self::SequenceGet),
+            33 => Some(Self::SequenceAppend),
+            34 => Some(Self::SequenceReplace),
             _ => None,
         }
     }
@@ -571,6 +723,19 @@ impl OperationCode {
             Self::BytesSlice => &BYTES_SLICE_DESCRIPTOR,
             Self::BytesEqual => &BYTES_EQUAL_DESCRIPTOR,
             Self::BytesConcat => &BYTES_CONCAT_DESCRIPTOR,
+            Self::EqualI64 => &EQUAL_I64_DESCRIPTOR,
+            Self::NotBool => &NOT_BOOL_DESCRIPTOR,
+            Self::AndBool => &AND_BOOL_DESCRIPTOR,
+            Self::OrBool => &OR_BOOL_DESCRIPTOR,
+            Self::ConstText => &CONST_TEXT_DESCRIPTOR,
+            Self::TextLen => &TEXT_LEN_DESCRIPTOR,
+            Self::TextEqual => &TEXT_EQUAL_DESCRIPTOR,
+            Self::TextConcat => &TEXT_CONCAT_DESCRIPTOR,
+            Self::SequenceEmpty => &SEQUENCE_EMPTY_DESCRIPTOR,
+            Self::SequenceLen => &SEQUENCE_LEN_DESCRIPTOR,
+            Self::SequenceGet => &SEQUENCE_GET_DESCRIPTOR,
+            Self::SequenceAppend => &SEQUENCE_APPEND_DESCRIPTOR,
+            Self::SequenceReplace => &SEQUENCE_REPLACE_DESCRIPTOR,
         }
     }
 }
@@ -599,6 +764,9 @@ pub enum TypeRule {
     VariantOwnerResult,
     MatchScrutinee,
     MatchResult,
+    SequenceDeclarationResult,
+    SequenceOwner,
+    SequenceElement,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
@@ -611,6 +779,7 @@ pub enum LiteralField {
     CarriedType,
     PositiveStep,
     BytesValue,
+    TextValue,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
@@ -687,6 +856,7 @@ const UNIT_RESULT: &[TypeRule] = &[TypeRule::Fixed(SemanticType::Unit)];
 const I64_RESULT: &[TypeRule] = &[TypeRule::Fixed(SemanticType::I64)];
 const BOOL_RESULT: &[TypeRule] = &[TypeRule::Fixed(SemanticType::Bool)];
 const BYTES_RESULT: &[TypeRule] = &[TypeRule::Fixed(SemanticType::Bytes)];
+const TEXT_RESULT: &[TypeRule] = &[TypeRule::Fixed(SemanticType::Text)];
 const PAYLOAD_RESULT: &[TypeRule] = &[TypeRule::PayloadExpected];
 const STRUCTURED_RESULT: &[TypeRule] = &[TypeRule::PayloadResult];
 const CARRIED_RESULT: &[TypeRule] = &[TypeRule::PayloadCarried];
@@ -695,6 +865,8 @@ const PRODUCT_RESULT: &[TypeRule] = &[TypeRule::ProductDeclarationResult];
 const PROJECT_RESULT: &[TypeRule] = &[TypeRule::ProjectedFieldResult];
 const VARIANT_RESULT: &[TypeRule] = &[TypeRule::VariantOwnerResult];
 const MATCH_RESULT: &[TypeRule] = &[TypeRule::MatchResult];
+const SEQUENCE_RESULT: &[TypeRule] = &[TypeRule::SequenceDeclarationResult];
+const SEQUENCE_ELEMENT_RESULT: &[TypeRule] = &[TypeRule::SequenceElement];
 const PRODUCT_OPERANDS: &[OperandDescriptor] = &[OperandDescriptor {
     ty: TypeRule::ProductFieldType,
     use_mode: OperandUse::Read,
@@ -718,6 +890,20 @@ const I64_BINARY_OPERANDS: &[OperandDescriptor] = &[
     },
     OperandDescriptor {
         ty: TypeRule::Fixed(SemanticType::I64),
+        use_mode: OperandUse::Read,
+    },
+];
+const BOOL_UNARY_OPERANDS: &[OperandDescriptor] = &[OperandDescriptor {
+    ty: TypeRule::Fixed(SemanticType::Bool),
+    use_mode: OperandUse::Read,
+}];
+const BOOL_BINARY_OPERANDS: &[OperandDescriptor] = &[
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::Bool),
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::Bool),
         use_mode: OperandUse::Read,
     },
 ];
@@ -789,9 +975,62 @@ const BYTES_BINARY_OPERANDS: &[OperandDescriptor] = &[
         use_mode: OperandUse::Read,
     },
 ];
+const TEXT_UNARY_OPERANDS: &[OperandDescriptor] = &[OperandDescriptor {
+    ty: TypeRule::Fixed(SemanticType::Text),
+    use_mode: OperandUse::Read,
+}];
+const TEXT_BINARY_OPERANDS: &[OperandDescriptor] = &[
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::Text),
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::Text),
+        use_mode: OperandUse::Read,
+    },
+];
+const SEQUENCE_UNARY_OPERANDS: &[OperandDescriptor] = &[OperandDescriptor {
+    ty: TypeRule::SequenceOwner,
+    use_mode: OperandUse::Read,
+}];
+const SEQUENCE_GET_OPERANDS: &[OperandDescriptor] = &[
+    OperandDescriptor {
+        ty: TypeRule::SequenceOwner,
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::I64),
+        use_mode: OperandUse::Read,
+    },
+];
+const SEQUENCE_APPEND_OPERANDS: &[OperandDescriptor] = &[
+    OperandDescriptor {
+        ty: TypeRule::SequenceOwner,
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::SequenceElement,
+        use_mode: OperandUse::Read,
+    },
+];
+const SEQUENCE_REPLACE_OPERANDS: &[OperandDescriptor] = &[
+    OperandDescriptor {
+        ty: TypeRule::SequenceOwner,
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::I64),
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::SequenceElement,
+        use_mode: OperandUse::Read,
+    },
+];
 const I64_LITERAL: &[LiteralField] = &[LiteralField::I64Value];
 const BOOL_LITERAL: &[LiteralField] = &[LiteralField::BoolValue];
 const BYTES_LITERAL: &[LiteralField] = &[LiteralField::BytesValue];
+const TEXT_LITERAL: &[LiteralField] = &[LiteralField::TextValue];
 const EXPECTED_LITERAL: &[LiteralField] = &[LiteralField::ExpectedType];
 const IF_LITERALS: &[LiteralField] = &[LiteralField::ResultType];
 const FOR_LITERALS: &[LiteralField] = &[LiteralField::PositiveStep, LiteralField::CarriedType];
@@ -1122,6 +1361,175 @@ descriptor!(
     false,
     true
 );
+descriptor!(
+    EQUAL_I64_DESCRIPTOR,
+    EqualI64,
+    "equal_i64",
+    22,
+    OperandArity::Fixed(2),
+    I64_BINARY_OPERANDS,
+    BOOL_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    NOT_BOOL_DESCRIPTOR,
+    NotBool,
+    "not_bool",
+    23,
+    OperandArity::Fixed(1),
+    BOOL_UNARY_OPERANDS,
+    BOOL_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    AND_BOOL_DESCRIPTOR,
+    AndBool,
+    "and_bool",
+    24,
+    OperandArity::Fixed(2),
+    BOOL_BINARY_OPERANDS,
+    BOOL_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    OR_BOOL_DESCRIPTOR,
+    OrBool,
+    "or_bool",
+    25,
+    OperandArity::Fixed(2),
+    BOOL_BINARY_OPERANDS,
+    BOOL_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    CONST_TEXT_DESCRIPTOR,
+    ConstText,
+    "const_text",
+    26,
+    OperandArity::Fixed(0),
+    NO_OPERANDS,
+    TEXT_RESULT,
+    TEXT_LITERAL,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    TEXT_LEN_DESCRIPTOR,
+    TextLen,
+    "text_len",
+    27,
+    OperandArity::Fixed(1),
+    TEXT_UNARY_OPERANDS,
+    I64_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    TEXT_EQUAL_DESCRIPTOR,
+    TextEqual,
+    "text_equal",
+    28,
+    OperandArity::Fixed(2),
+    TEXT_BINARY_OPERANDS,
+    BOOL_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    TEXT_CONCAT_DESCRIPTOR,
+    TextConcat,
+    "text_concat",
+    29,
+    OperandArity::Fixed(2),
+    TEXT_BINARY_OPERANDS,
+    TEXT_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    SEQUENCE_EMPTY_DESCRIPTOR,
+    SequenceEmpty,
+    "sequence_empty",
+    30,
+    OperandArity::Fixed(0),
+    NO_OPERANDS,
+    SEQUENCE_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    SEQUENCE_LEN_DESCRIPTOR,
+    SequenceLen,
+    "sequence_len",
+    31,
+    OperandArity::Fixed(1),
+    SEQUENCE_UNARY_OPERANDS,
+    I64_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    SEQUENCE_GET_DESCRIPTOR,
+    SequenceGet,
+    "sequence_get",
+    32,
+    OperandArity::Fixed(2),
+    SEQUENCE_GET_OPERANDS,
+    SEQUENCE_ELEMENT_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    SEQUENCE_APPEND_DESCRIPTOR,
+    SequenceAppend,
+    "sequence_append",
+    33,
+    OperandArity::Fixed(2),
+    SEQUENCE_APPEND_OPERANDS,
+    SEQUENCE_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    SEQUENCE_REPLACE_DESCRIPTOR,
+    SequenceReplace,
+    "sequence_replace",
+    34,
+    OperandArity::Fixed(3),
+    SEQUENCE_REPLACE_OPERANDS,
+    SEQUENCE_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
 #[serde(
@@ -1185,11 +1593,27 @@ pub enum OperationDraft {
     ConstI64(i64),
     ConstBool(bool),
     ConstBytes(ByteString),
+    ConstText(TextString),
     AddI64 {
         lhs: ValueDraft,
         rhs: ValueDraft,
     },
     LtI64 {
+        lhs: ValueDraft,
+        rhs: ValueDraft,
+    },
+    EqualI64 {
+        lhs: ValueDraft,
+        rhs: ValueDraft,
+    },
+    NotBool {
+        value: ValueDraft,
+    },
+    AndBool {
+        lhs: ValueDraft,
+        rhs: ValueDraft,
+    },
+    OrBool {
         lhs: ValueDraft,
         rhs: ValueDraft,
     },
@@ -1212,6 +1636,40 @@ pub enum OperationDraft {
     BytesConcat {
         lhs: ValueDraft,
         rhs: ValueDraft,
+    },
+    TextLen {
+        value: ValueDraft,
+    },
+    TextEqual {
+        lhs: ValueDraft,
+        rhs: ValueDraft,
+    },
+    TextConcat {
+        lhs: ValueDraft,
+        rhs: ValueDraft,
+    },
+    SequenceEmpty {
+        sequence: NodeTarget,
+    },
+    SequenceLen {
+        sequence: NodeTarget,
+        value: ValueDraft,
+    },
+    SequenceGet {
+        sequence: NodeTarget,
+        value: ValueDraft,
+        index: ValueDraft,
+    },
+    SequenceAppend {
+        sequence: NodeTarget,
+        value: ValueDraft,
+        element: ValueDraft,
+    },
+    SequenceReplace {
+        sequence: NodeTarget,
+        value: ValueDraft,
+        index: ValueDraft,
+        element: ValueDraft,
     },
     Call {
         function: NodeTarget,
@@ -1267,13 +1725,26 @@ impl OperationDraft {
             Self::ConstI64(_) => OperationCode::ConstI64,
             Self::ConstBool(_) => OperationCode::ConstBool,
             Self::ConstBytes(_) => OperationCode::ConstBytes,
+            Self::ConstText(_) => OperationCode::ConstText,
             Self::AddI64 { .. } => OperationCode::AddI64,
             Self::LtI64 { .. } => OperationCode::LtI64,
+            Self::EqualI64 { .. } => OperationCode::EqualI64,
+            Self::NotBool { .. } => OperationCode::NotBool,
+            Self::AndBool { .. } => OperationCode::AndBool,
+            Self::OrBool { .. } => OperationCode::OrBool,
             Self::BytesLen { .. } => OperationCode::BytesLen,
             Self::BytesAt { .. } => OperationCode::BytesAt,
             Self::BytesSlice { .. } => OperationCode::BytesSlice,
             Self::BytesEqual { .. } => OperationCode::BytesEqual,
             Self::BytesConcat { .. } => OperationCode::BytesConcat,
+            Self::TextLen { .. } => OperationCode::TextLen,
+            Self::TextEqual { .. } => OperationCode::TextEqual,
+            Self::TextConcat { .. } => OperationCode::TextConcat,
+            Self::SequenceEmpty { .. } => OperationCode::SequenceEmpty,
+            Self::SequenceLen { .. } => OperationCode::SequenceLen,
+            Self::SequenceGet { .. } => OperationCode::SequenceGet,
+            Self::SequenceAppend { .. } => OperationCode::SequenceAppend,
+            Self::SequenceReplace { .. } => OperationCode::SequenceReplace,
             Self::Call { .. } => OperationCode::Call,
             Self::Hole { .. } => OperationCode::Hole,
             Self::If { .. } => OperationCode::If,
@@ -1314,11 +1785,27 @@ pub enum OperationKind {
     ConstI64(i64),
     ConstBool(bool),
     ConstBytes(ByteString),
+    ConstText(TextString),
     AddI64 {
         lhs: ValueRef,
         rhs: ValueRef,
     },
     LtI64 {
+        lhs: ValueRef,
+        rhs: ValueRef,
+    },
+    EqualI64 {
+        lhs: ValueRef,
+        rhs: ValueRef,
+    },
+    NotBool {
+        value: ValueRef,
+    },
+    AndBool {
+        lhs: ValueRef,
+        rhs: ValueRef,
+    },
+    OrBool {
         lhs: ValueRef,
         rhs: ValueRef,
     },
@@ -1341,6 +1828,40 @@ pub enum OperationKind {
     BytesConcat {
         lhs: ValueRef,
         rhs: ValueRef,
+    },
+    TextLen {
+        value: ValueRef,
+    },
+    TextEqual {
+        lhs: ValueRef,
+        rhs: ValueRef,
+    },
+    TextConcat {
+        lhs: ValueRef,
+        rhs: ValueRef,
+    },
+    SequenceEmpty {
+        sequence: NodeId,
+    },
+    SequenceLen {
+        sequence: NodeId,
+        value: ValueRef,
+    },
+    SequenceGet {
+        sequence: NodeId,
+        value: ValueRef,
+        index: ValueRef,
+    },
+    SequenceAppend {
+        sequence: NodeId,
+        value: ValueRef,
+        element: ValueRef,
+    },
+    SequenceReplace {
+        sequence: NodeId,
+        value: ValueRef,
+        index: ValueRef,
+        element: ValueRef,
     },
     Call {
         function: NodeId,
@@ -1396,13 +1917,26 @@ impl OperationKind {
             Self::ConstI64(_) => OperationCode::ConstI64,
             Self::ConstBool(_) => OperationCode::ConstBool,
             Self::ConstBytes(_) => OperationCode::ConstBytes,
+            Self::ConstText(_) => OperationCode::ConstText,
             Self::AddI64 { .. } => OperationCode::AddI64,
             Self::LtI64 { .. } => OperationCode::LtI64,
+            Self::EqualI64 { .. } => OperationCode::EqualI64,
+            Self::NotBool { .. } => OperationCode::NotBool,
+            Self::AndBool { .. } => OperationCode::AndBool,
+            Self::OrBool { .. } => OperationCode::OrBool,
             Self::BytesLen { .. } => OperationCode::BytesLen,
             Self::BytesAt { .. } => OperationCode::BytesAt,
             Self::BytesSlice { .. } => OperationCode::BytesSlice,
             Self::BytesEqual { .. } => OperationCode::BytesEqual,
             Self::BytesConcat { .. } => OperationCode::BytesConcat,
+            Self::TextLen { .. } => OperationCode::TextLen,
+            Self::TextEqual { .. } => OperationCode::TextEqual,
+            Self::TextConcat { .. } => OperationCode::TextConcat,
+            Self::SequenceEmpty { .. } => OperationCode::SequenceEmpty,
+            Self::SequenceLen { .. } => OperationCode::SequenceLen,
+            Self::SequenceGet { .. } => OperationCode::SequenceGet,
+            Self::SequenceAppend { .. } => OperationCode::SequenceAppend,
+            Self::SequenceReplace { .. } => OperationCode::SequenceReplace,
             Self::Call { .. } => OperationCode::Call,
             Self::Hole { .. } => OperationCode::Hole,
             Self::If { .. } => OperationCode::If,
@@ -1442,23 +1976,42 @@ impl OperationKind {
             (
                 Self::AddI64 { lhs, .. }
                 | Self::LtI64 { lhs, .. }
+                | Self::EqualI64 { lhs, .. }
+                | Self::AndBool { lhs, .. }
+                | Self::OrBool { lhs, .. }
                 | Self::BytesEqual { lhs, .. }
-                | Self::BytesConcat { lhs, .. },
+                | Self::BytesConcat { lhs, .. }
+                | Self::TextEqual { lhs, .. }
+                | Self::TextConcat { lhs, .. },
                 0,
             ) => Some(*lhs),
             (
                 Self::AddI64 { rhs, .. }
                 | Self::LtI64 { rhs, .. }
+                | Self::EqualI64 { rhs, .. }
+                | Self::AndBool { rhs, .. }
+                | Self::OrBool { rhs, .. }
                 | Self::BytesEqual { rhs, .. }
-                | Self::BytesConcat { rhs, .. },
+                | Self::BytesConcat { rhs, .. }
+                | Self::TextEqual { rhs, .. }
+                | Self::TextConcat { rhs, .. },
                 1,
             ) => Some(*rhs),
+            (Self::NotBool { value } | Self::TextLen { value }, 0) => Some(*value),
             (Self::BytesLen { value }, 0) => Some(*value),
             (Self::BytesAt { value, .. }, 0) => Some(*value),
             (Self::BytesAt { index, .. }, 1) => Some(*index),
             (Self::BytesSlice { value, .. }, 0) => Some(*value),
             (Self::BytesSlice { start, .. }, 1) => Some(*start),
             (Self::BytesSlice { length, .. }, 2) => Some(*length),
+            (Self::SequenceLen { value, .. }, 0) => Some(*value),
+            (Self::SequenceGet { value, .. }, 0) => Some(*value),
+            (Self::SequenceGet { index, .. }, 1) => Some(*index),
+            (Self::SequenceAppend { value, .. }, 0) => Some(*value),
+            (Self::SequenceAppend { element, .. }, 1) => Some(*element),
+            (Self::SequenceReplace { value, .. }, 0) => Some(*value),
+            (Self::SequenceReplace { index, .. }, 1) => Some(*index),
+            (Self::SequenceReplace { element, .. }, 2) => Some(*element),
             (Self::Call { arguments, .. }, index) => arguments.get(index).copied(),
             (Self::If { condition, .. }, 0) => Some(*condition),
             (Self::ForI64 { start, .. }, 0) => Some(*start),
@@ -1529,23 +2082,42 @@ impl OperationKind {
             (
                 Self::AddI64 { lhs, .. }
                 | Self::LtI64 { lhs, .. }
+                | Self::EqualI64 { lhs, .. }
+                | Self::AndBool { lhs, .. }
+                | Self::OrBool { lhs, .. }
                 | Self::BytesEqual { lhs, .. }
-                | Self::BytesConcat { lhs, .. },
+                | Self::BytesConcat { lhs, .. }
+                | Self::TextEqual { lhs, .. }
+                | Self::TextConcat { lhs, .. },
                 0,
             ) => *lhs = replacement,
             (
                 Self::AddI64 { rhs, .. }
                 | Self::LtI64 { rhs, .. }
+                | Self::EqualI64 { rhs, .. }
+                | Self::AndBool { rhs, .. }
+                | Self::OrBool { rhs, .. }
                 | Self::BytesEqual { rhs, .. }
-                | Self::BytesConcat { rhs, .. },
+                | Self::BytesConcat { rhs, .. }
+                | Self::TextEqual { rhs, .. }
+                | Self::TextConcat { rhs, .. },
                 1,
             ) => *rhs = replacement,
+            (Self::NotBool { value } | Self::TextLen { value }, 0) => *value = replacement,
             (Self::BytesLen { value }, 0) => *value = replacement,
             (Self::BytesAt { value, .. }, 0) => *value = replacement,
             (Self::BytesAt { index, .. }, 1) => *index = replacement,
             (Self::BytesSlice { value, .. }, 0) => *value = replacement,
             (Self::BytesSlice { start, .. }, 1) => *start = replacement,
             (Self::BytesSlice { length, .. }, 2) => *length = replacement,
+            (Self::SequenceLen { value, .. }, 0) => *value = replacement,
+            (Self::SequenceGet { value, .. }, 0) => *value = replacement,
+            (Self::SequenceGet { index, .. }, 1) => *index = replacement,
+            (Self::SequenceAppend { value, .. }, 0) => *value = replacement,
+            (Self::SequenceAppend { element, .. }, 1) => *element = replacement,
+            (Self::SequenceReplace { value, .. }, 0) => *value = replacement,
+            (Self::SequenceReplace { index, .. }, 1) => *index = replacement,
+            (Self::SequenceReplace { element, .. }, 2) => *element = replacement,
             (Self::Call { arguments, .. }, index) if index < arguments.len() => {
                 arguments[index] = replacement
             }
@@ -1573,7 +2145,14 @@ impl OperationKind {
 
     pub fn definition_target_count(&self) -> usize {
         match self {
-            Self::Call { .. } | Self::ProjectField { .. } | Self::ConstructVariant { .. } => 1,
+            Self::Call { .. }
+            | Self::ProjectField { .. }
+            | Self::ConstructVariant { .. }
+            | Self::SequenceEmpty { .. }
+            | Self::SequenceLen { .. }
+            | Self::SequenceGet { .. }
+            | Self::SequenceAppend { .. }
+            | Self::SequenceReplace { .. } => 1,
             Self::ConstructProduct { fields, .. } => 1 + fields.len(),
             Self::MatchSum { arms, .. } => arms.len(),
             _ => 0,
@@ -1590,6 +2169,14 @@ impl OperationKind {
             (Self::ProjectField { field, .. }, 0) => Some(*field),
             (Self::ConstructVariant { variant, .. }, 0) => Some(*variant),
             (Self::MatchSum { arms, .. }, index) => arms.get(index).map(|arm| arm.variant),
+            (
+                Self::SequenceEmpty { sequence }
+                | Self::SequenceLen { sequence, .. }
+                | Self::SequenceGet { sequence, .. }
+                | Self::SequenceAppend { sequence, .. }
+                | Self::SequenceReplace { sequence, .. },
+                0,
+            ) => Some(*sequence),
             _ => None,
         }
     }
@@ -1680,6 +2267,14 @@ impl OperationKind {
                 Self::MatchSum { result, .. } => Some(*result),
                 _ => None,
             },
+            TypeRule::SequenceDeclarationResult | TypeRule::SequenceOwner => match self {
+                Self::SequenceEmpty { sequence }
+                | Self::SequenceLen { sequence, .. }
+                | Self::SequenceGet { sequence, .. }
+                | Self::SequenceAppend { sequence, .. }
+                | Self::SequenceReplace { sequence, .. } => Some(SemanticType::Nominal(*sequence)),
+                _ => None,
+            },
             TypeRule::CallTargetParameter
             | TypeRule::CallTargetResult
             | TypeRule::OwningRegionYield
@@ -1688,7 +2283,8 @@ impl OperationKind {
             | TypeRule::ProjectedFieldResult
             | TypeRule::VariantPayload
             | TypeRule::VariantOwnerResult
-            | TypeRule::MatchScrutinee => None,
+            | TypeRule::MatchScrutinee
+            | TypeRule::SequenceElement => None,
         }
     }
 }
@@ -1700,6 +2296,7 @@ pub enum TypeReferenceSlot {
     ParameterType,
     ProductFieldType,
     SumVariantPayload,
+    SequenceElementType,
     BlockArgumentType,
     OperationType,
 }
@@ -1779,6 +2376,11 @@ pub enum Node {
         name: String,
         payload: Option<SemanticType>,
     },
+    SequenceType {
+        owner: NodeId,
+        name: String,
+        element: SemanticType,
+    },
     Function {
         owner: NodeId,
         name: String,
@@ -1838,6 +2440,7 @@ impl Node {
             Self::ProductField { .. } => NodeKind::ProductField,
             Self::SumType { .. } => NodeKind::SumType,
             Self::SumVariant { .. } => NodeKind::SumVariant,
+            Self::SequenceType { .. } => NodeKind::SequenceType,
             Self::Function { .. } => NodeKind::Function,
             Self::Parameter { .. } => NodeKind::Parameter,
             Self::Region { .. } => NodeKind::Region,
@@ -1856,6 +2459,7 @@ impl Node {
             | Self::ProductField { owner, .. }
             | Self::SumType { owner, .. }
             | Self::SumVariant { owner, .. }
+            | Self::SequenceType { owner, .. }
             | Self::Function { owner, .. }
             | Self::Parameter { owner, .. }
             | Self::Region { owner, .. }
@@ -1873,6 +2477,7 @@ impl Node {
             | Self::ProductField { name, .. }
             | Self::SumType { name, .. }
             | Self::SumVariant { name, .. }
+            | Self::SequenceType { name, .. }
             | Self::Function { name, .. }
             | Self::Parameter { name, .. } => Some(name),
             _ => None,
@@ -1887,6 +2492,7 @@ impl Node {
             | Self::ProductField { name, .. }
             | Self::SumType { name, .. }
             | Self::SumVariant { name, .. }
+            | Self::SequenceType { name, .. }
             | Self::Function { name, .. }
             | Self::Parameter { name, .. } => {
                 *name = replacement;
@@ -1905,7 +2511,7 @@ impl Node {
             } => types.len() + functions.len(),
             Self::ProductType { fields, .. } => fields.len(),
             Self::SumType { variants, .. } => variants.len(),
-            Self::ProductField { .. } | Self::SumVariant { .. } => 0,
+            Self::ProductField { .. } | Self::SumVariant { .. } | Self::SequenceType { .. } => 0,
             Self::Function {
                 parameters, body, ..
             } => parameters.len() + usize::from(body.is_some()),
@@ -1933,7 +2539,7 @@ impl Node {
                 .or_else(|| functions.get(index.saturating_sub(types.len())).copied()),
             Self::ProductType { fields, .. } => fields.get(index).copied(),
             Self::SumType { variants, .. } => variants.get(index).copied(),
-            Self::ProductField { .. } | Self::SumVariant { .. } => None,
+            Self::ProductField { .. } | Self::SumVariant { .. } | Self::SequenceType { .. } => None,
             Self::Function {
                 parameters, body, ..
             } => parameters
@@ -1976,6 +2582,7 @@ impl Node {
             Self::SumVariant { payload, .. } => {
                 usize::from(payload.and_then(SemanticType::nominal_target).is_some())
             }
+            Self::SequenceType { element, .. } => usize::from(element.nominal_target().is_some()),
             Self::Operation { operation, .. } => {
                 operation.operand_count()
                     + operation.definition_target_count()
@@ -2005,6 +2612,9 @@ impl Node {
             }
             Self::SumVariant { payload, .. } if index == 0 => {
                 payload.and_then(|ty| type_reference(TypeReferenceSlot::SumVariantPayload, ty))
+            }
+            Self::SequenceType { element, .. } if index == 0 => {
+                type_reference(TypeReferenceSlot::SequenceElementType, *element)
             }
             Self::BlockArgument { ty, .. } if index == 0 => {
                 type_reference(TypeReferenceSlot::BlockArgumentType, *ty)
@@ -2042,7 +2652,9 @@ pub const fn expected_owner_kind(kind: NodeKind) -> Option<NodeKind> {
         NodeKind::WorkspaceRoot => None,
         NodeKind::Package => Some(NodeKind::WorkspaceRoot),
         NodeKind::Module => Some(NodeKind::Package),
-        NodeKind::ProductType | NodeKind::SumType | NodeKind::Function => Some(NodeKind::Module),
+        NodeKind::ProductType | NodeKind::SumType | NodeKind::SequenceType | NodeKind::Function => {
+            Some(NodeKind::Module)
+        }
         NodeKind::ProductField => Some(NodeKind::ProductType),
         NodeKind::SumVariant => Some(NodeKind::SumType),
         NodeKind::Parameter => Some(NodeKind::Function),
@@ -2098,8 +2710,8 @@ mod tests {
 
     #[test]
     fn primitive_descriptors_own_stable_tags_storage_and_layout_facts() {
-        assert_eq!(SemanticType::PRIMITIVES.len(), 4);
-        assert_eq!(SemanticType::PRIMITIVE_DESCRIPTORS.len(), 4);
+        assert_eq!(SemanticType::PRIMITIVES.len(), 5);
+        assert_eq!(SemanticType::PRIMITIVE_DESCRIPTORS.len(), 5);
         let mut tags = BTreeSet::new();
         for (ty, descriptor) in SemanticType::PRIMITIVES
             .into_iter()
@@ -2117,6 +2729,17 @@ mod tests {
                 bytes.physical_slot_size,
                 bytes.physical_slot_align,
                 bytes.cells
+            ),
+            (8, 8, 1)
+        );
+        let text = SemanticType::Text.primitive_descriptor().unwrap();
+        assert_eq!(text.machine_name, "text");
+        assert_eq!(text.storage_class, ValueStorageClass::ManagedHandle);
+        assert_eq!(
+            (
+                text.physical_slot_size,
+                text.physical_slot_align,
+                text.cells
             ),
             (8, 8, 1)
         );

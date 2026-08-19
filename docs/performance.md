@@ -1,195 +1,198 @@
-# Current evidence and architecture decisions
+# Performance and design evidence
 
-This file interprets reproduced measurements and reversal evidence for the generalized application
-world/runtime campaign. Exact structured facts are in
-[`evidence/20260818-generalized-runtime.json`](evidence/20260818-generalized-runtime.json). Older
-evidence remains historical baseline, not current status.
+Measurements here are observations, not semantic authority. Canonical raw corpus receipts are
+[`20260819-lkjwork-functional.json`](evidence/20260819-lkjwork-functional.json) and
+[`20260819-lkjwork-representative.json`](evidence/20260819-lkjwork-representative.json). The campaign
+summary is `docs/evidence/20260819-lkjwork-campaign.json`.
 
-## Measurement boundary
+## Observation environment
 
-The campaign started on `main` at `d52f7cda0cc64f988dd3f48ea454ce1647601aa1`, exactly equal to
-the audited baseline. Pre-existing user work was modified root `AGENTS.md` and untracked active
-`prompts/202608181408.md`; both were preserved. Their SHA-256 values are respectively
-`796ba183836f961eef0c4e2304b1f20b48f93918b4ed318a9d59984df569d3dd` and
-`98f293d665b4a4c3052fb7f6247fc6d24b74769ea71df74b60b09eae20b7e61f`.
+- Linux `7.0.0-29-generic`, x86-64, ZFS container root;
+- AMD Ryzen 9 9955HX, 16 cores / 32 logical CPUs, 64 MiB L3;
+- 32 GiB RAM;
+- rustc `1.96.0` / LLVM `22.1.2`, Cargo `1.96.0`, optimized release binaries;
+- sequential samples on a warm host unless a row explicitly says initialization; and
+- one unrecorded warm-up followed by five one-shot samples for each retained query/mutation shape.
 
-The observation host is Linux 7.0.0-29-generic x86-64 on ZFS, AMD Ryzen 9 9955HX, 20 exposed
-logical CPUs, 32 GiB memory, rustc/cargo 1.96.0, and stable Rust edition 2024. `Cargo.lock` SHA-256
-is `d23b75fc162e485b7149d92f1e3349f3cca39f00420a9fef68f8abea6c405620`.
-`/usr/bin/time` is absent, so maximum RSS is unavailable. Provider model, input/cached-input/output/
-reasoning tokens, pricing, and exact provider cost were not exposed. Bytes are not tokens.
+Page cache was not dropped and these are not cold-machine results. Timing uses monotonic
+`perf_counter_ns`; stage counters use Rust monotonic durations. Process RSS, provider tokens, and
+provider prices were unavailable.
 
-The audited/reproduced baseline had 230 passing and four ignored tests, 2,562,705 bytes / 72,900
-lines under `src/` plus `tests/`, and an 8,312,104-byte optimized binary. The current measured tree
-has 2,689,232 bytes / 76,324 lines in those roots: +126,527 bytes (4.9%) and +3,424 lines (4.7%).
-The optimized binary is 8,821,040 bytes: +508,936 bytes (6.1%). One changed-source optimized LTO
-build after the campaign changes took 120.60 seconds. This build observation is not a clean-build
-distribution.
+## Frozen product corpora
 
-## Selected application-world and authority model
-
-The selected model combines application-owned nominal command/outcome/decision sums with two closed
-built-in immutable host-interface identities. An application import slot maps exact command and
-request variants to one operation and compatible outcome variants. Resume is `(State, Outcome) ->
-Decision`. Instance creation binds every slot to one immutable instance-specific grant.
-
-| alternative | result | disposition and reversal |
-|---|---|---|
-| preserve activation-specific integer ABI | cannot express blob content publication without another magic family | rejected; v3 path deleted |
-| generic command/outcome bytes | small runtime shape but moves type ownership to conventions/adapters | rejected; no byte envelope retained |
-| application-owned nominal types | both controller and blob publisher use existing products/sums with exact local workflow vocabulary | selected |
-| dedicated interface artifact/registry | independent distribution identity but no current independent publisher/resolver consumer | rejected; reopen for a third reusable-interface consumer |
-| closed built-in interface identity | two exact narrow contracts, no mutable catalogue, application vocabulary remains local | selected bootstrap |
-| direct interpreter host effects | concise but mixes purity, grants, live authority, and interpreter lifetime | rejected |
-| general filesystem grant | implements both adapters but broadens authority and path-oriented semantics | rejected |
-| immutable lifetime grant | satisfies both retained applications and keeps restart lookup exact | selected; new instance is current authority-change route |
-| grant revision/mutable lookup | no rotation/revocation consumer and complicates pending unknown outcomes | deferred with no dormant format |
-| dynamic plugins/workers | no untrusted external adapter consumer | rejected; no ABI/dependency/process retained |
-
-Application format 4 and instance format 2 directly replace v3/v1. Release format 1 and workspace
-semantic schema 6 remain sufficient because all request/outcome/decision types use existing nominal
-language constructs. No language operation, effect system, release format, or global machine-schema
-record was added.
-
-## Complete application observations
-
-One optimized durable-controller run after cutover used 41 processes and one workspace `Engine`,
-57,880 action bytes, 42,197 observation/diagnostic bytes, and 449,545,031 ns summed command/RPC
-boundary time. Its controller/payload applications were 19,890 / 14,486 bytes. The primary ended at
-revision 4 with five records / 9,006 bytes; the fake lifecycle reached revision 8 before tombstone.
-
-The immutable-blob publisher application is 17,609 bytes. It proves exact 4,096-byte application
-business acceptance and 4,097-byte terminal handling, content-addressed publication, exact
-already-present behavior, unknown-to-inspection reconciliation, fake known failure/retry,
-production/fake and cross-instance denial, corrupt outcome rejection, bounded history, restart,
-tombstone, and no reuse. Its primary history is five records / 8,956 bytes and retained content is
-25 bytes.
-
-Both workflows build through public authoring/release/application commands and delete their source
-workspace and standalone release before instance operation. Python supplies inputs and assertions;
-the lkjscript nominal state machines own workflow decisions.
-
-## One-shot versus foreground session
-
-The predeclared foreground gate was at least 20% complete-workflow latency improvement or at least
-50% process reduction, without semantic duplication or weaker failure boundaries. The resident
-supervisor gate additionally required an unresolved multi-client/aggregate-admission consumer.
-
-The same optimized blob workflow ran once as unrecorded warm-up and then five measured times per
-topology. Every sample used a fresh temporary workspace, release/application build, object
-namespaces, and instance store; the binary and OS page cache were warm and were not cleared. Thus
-these are fresh-authority/warm-host samples, not cold-OS measurements. `boundary_elapsed_nanoseconds`
-is the sum of monotonic command/RPC waits recorded by the driver, not an external wall-clock/RSS
-measurement. The topology samples ran sequentially; no measured workflow competed with the other
-topology.
-
-| topology | processes | samples | min ns | median ns | max ns | action bytes | observation bytes |
+| profile | tasks | core mutation requests | edges | notes | attachments | pure queries | final revision |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| one-shot | 36 | 5 | 330,054,595 | 330,890,204 | 336,399,529 | 59,082 | 42,843 |
-| foreground session | 5 | 5 | 288,461,787 | 292,133,309 | 316,441,803 | 61,945 | 49,845–49,852 |
+| functional | 25 | 75 | 30 | 50 | 5 | 100 | 85 |
+| representative | 500 | 2,500 | 1,000 | 1,000 | 100 | 2,000 | 2,700 |
 
-The session improves median summed boundary time by 11.71%, below the latency gate, but removes 31
-processes (86.1%), crossing the process gate. Its extra bytes include one detailed runtime
-inspection. It retains because the caller owns lifecycle, malformed lines recover independently,
-one common kernel owns semantics, and shutdown releases the exact store lock.
+Both use seed `lkjwork-corpus-v1` and the independent Rust reference-model tests. Final semantic
+digests are stable across runs: functional
+`c69cedb5b247818f4ab1490fe289ee7f6f97600d5f032ea4ba48cfde1fd8b27e` and representative
+`1c0004ff62a19423f0ce564ce3688b1d61ccb04f9c50c35400b9d23c8261d9e2`.
 
-One-shot remains a thin supported adapter for shell composition. A Unix-socket supervisor was not
-prototyped: after the session there is no demonstrated multi-client, durable-queue, or centralized
-admission consumer. Therefore there is no socket protocol, daemon, auto-spawn, stale-socket path, or
-fallback topology to retain.
+The retained stress shape is 2,000 tasks / 10,000 mutations. It was not executed; no stress service
+claim is made.
 
-## Stage evidence, cache, and execution tier
+## Representative service results
 
-The foreground session exposes aggregated stages for the same 29 admitted instance requests. Across
-five samples, median totals were:
+Times are median / p95 milliseconds. Session rows include all retained corpus samples; one-shot rows
+are five samples after warm-up.
 
-| stage | median total ns | share of complete median boundary |
+| operation | session | one-shot |
 |---|---:|---:|
-| state publication | 102,709,767 | 35.16% |
-| deterministic instance replay | 78,268,409 | 26.79% |
-| outcome publication | 24,041,683 | 8.23% |
-| adapter preparation | 8,652,783 | 2.96% |
-| application envelope decode | 9,905,500 | 3.39% |
-| closure flattening | 8,486,937 | 2.91% |
-| transition preparation | 8,534,732 | 2.92% |
-| host action | 4,049,997 | 1.39% |
-| record-chain validation | 2,014,862 | 0.69% |
-| interpreter execution | 949,845 | 0.33% |
-| lowering | 723,277 | 0.25% |
-| Core verification | 100,089 | 0.03% |
-| public-value validation/materialization | 30,821 | 0.01% |
+| publishing mutation | 53.8 / 106.1 | 69.8 / 75.1 on five explicit post-corpus publications |
+| unchanged mutation | — | 44.5 / 49.7 |
+| show | 51.7 / 54.8 | 31.1 / 32.5 |
+| list (20, priority) | 222.4 / 234.7 | 193.1 / 194.4 |
+| next (10) | 65.6 / 68.9 | 42.4 / 43.0 |
+| summary | 70.2 / 74.1 | 47.9 / 49.6 |
+| context (10 tasks) | 82.8 / 87.2 | 59.0 / 59.7 |
+| export page (20) | 59.1 / 62.0 | 33.9 / 34.7 |
+| retained history page | 94.8 / 98.8 | 73.1 / 73.9 |
 
-The predeclared in-memory-cache gate required repeated validation/lowering to be material and at
-least 20% complete-workflow improvement. Decode plus flattening is about 6.3% of the measured complete
-median even before subtracting cache lookup/invalidation cost. Persistent cache adds hostile format,
-target/compiler binding, atomic publication, eviction, and disk accounting without a restart benefit
-large enough to repay it. No cache is retained; cache budgets/counters are explicitly zero.
+Initialization was 44.1 ms. One complete genesis replay/deep audit of 2,701 records took 33.8 s in
+the frozen corpus; an independent post-corpus audit of revision 2,705 took 32.8 s and reproduced its
+exact state. Attachments, including semantic suspend, host publication, and resume, were 258.0 / 275.8
+ms median/p95. All ordinary query and mutation targets are met.
 
-The bytecode/native/JIT gate required execution to dominate and at least 30% complete-workflow
-improvement after compile cost. Lowering, Core verification, and execution together are under 1% of
-the complete median. The explicit-frame interpreter remains the sole tier/oracle; no bytecode,
-compiler backend, executable-memory path, profile, or cache format was prototyped or retained.
+Before the product-open correction, representative one-shot application queries took 1.65–1.88 s:
+the product locator performed a complete instance inspection before invoking the exact query owner.
+Removing that duplicated traversal and using the HEAD-bound current manifest reduced complete
+one-shot query medians by 89–98 percent, depending on query shape. This is a complete-workflow
+comparison; no interpreter-only speedup is claimed.
 
-Full records also remain: current five-record histories are small, and replay is the largest measured
-stage but no second representative history crosses a service/retained-byte threshold. A later
-replay optimization must preserve corruption traversal and the full-history differential rather
-than infer a database requirement from this one workload.
+## Storage
 
-## Runtime resource decision
+Representative authority contains 2,701 journal records:
 
-The kernel separates semantic policy from deployment admission. Existing exact owners retain
-application/graph/test bytes, public values, fuel, frames, cells, managed visible/backing bytes,
-state, event, response, host evidence, history, replay, and blob object/count bytes. Runtime policy
-adds request/response/application bytes plus one store, transition, host-operation, and compilation
-slot.
+| category | bytes |
+|---|---:|
+| immutable record chain | 102,841,790 |
+| records carrying 64-revision checkpoints | 96,203,455 |
+| HEAD-bound current manifest | 1,588,695 |
+| application | 163,670 |
+| attempts / outcomes | 35,100 / 107,000 |
+| blob objects | 5,000 |
+| complete project files | 104,741,804 |
 
-Queue, compiled-unit, cache, and profile limits are exactly zero; a nonzero policy rejects. Runtime
-inspection reports reservation release, request/application/replay/adapter counters, all named stage
-slots, and explicit RSS/open-file/temporary-publication omissions. This is logical admission and
-observation, not exact resident-memory enforcement. A synchronous store-wide lock stays because the
-workload proves process amortization but not cross-instance throughput requiring per-instance locks
-or a scheduler.
+A copied revision-2,700 representative project received one non-checkpoint label mutation. Revision
+2,701 published a 2,254-byte journal record, a 1,589,052-byte replacement current manifest, and a
+308-byte HEAD: 1,591,614 logical file-payload bytes. The retained tree grew by 2,611 bytes, giving a
+609.58x logical-payload/retained-growth ratio. This is a canonical file-payload observation, not a
+claim about physical ZFS blocks, device writes, or power-loss amplification.
 
-## Agent-facing economy
+The current public state is large enough that checkpoints dominate retained bytes, but the complete
+project remains below the 256 MiB journal ceiling. There is no semantic-history deletion or
+compaction. Normal current operations validate HEAD, current record, manifest/state/index, and exact
+accounting without replay. Missing/corrupt acceleration triggers complete chain validation plus
+checkpoint reconstruction; deep audit always reexecutes genesis.
 
-The measured development/runtime cost improvement is process count: the exact same complete blob
-task falls from 36 to 5 processes. Runtime orientation is 1,194 bytes and runtime help is 582 bytes;
-bounded expansion uses 988-byte application help, 1,558-byte instance help, and exact inspection.
-The unrelated full workspace schema remains 136,796 bytes. Agents can discover the runtime without
-opening that global catalogue or Rust source, and application authoring no longer requires magic
-integer tags.
+### History alternatives
 
-Deterministic validators cover interface routing, completed/suspended typing, grant binding, denied
-authority, unknown/reconciliation, malformed outcome compatibility, exact/one-over resource policy,
-cache-zero inspection, direct incompatible format rejection, and both complete workflows. These
-tests are frozen machine oracles, not an independent model trial. Provider telemetry was absent, so
-no token, weak-model, cached-input, or monetary claim is made.
+| design | result |
+|---|---|
+| full state in every revision | rejected: representative write amplification and ordinary-open replay were the original dominant product costs |
+| hash-linked event/host journal + periodic full checkpoints | selected: one exact chain, bounded current restart, simple deep oracle, and localized corruption |
+| content-addressed state object per revision | rejected: adds object reachability/GC/publication obligations without beating the selected corpus result |
+| structural-sharing full records | rejected: complicates retained accounting and portable decode while checkpoints already meet the ceiling |
+| embedded database | rejected: no query-authority or concurrency consumer repays dependency, transaction, backup, and corruption obligations |
 
-## External primary-source orientation
+Fixed 64-revision checkpoints were selected over adaptive/user-triggered policies because cadence is
+canonical, interruption cannot change semantics, and at most 63 post-checkpoint transitions are
+needed on fallback. A retained-byte trigger is a reversal gate if larger states approach the journal
+ceiling.
 
-Primary sources were accessed 2026-08-18 to sharpen tradeoffs, not import architecture:
+## Semantic design selections
 
-- [WebAssembly Component Model worlds](https://component-model.bytecodealliance.org/design/worlds.html)
-  reinforced explicit directional imports/exports and host fulfillment. lkjscript retained its own
-  nominal semantics and did not add WIT, live resources, WASI, or a component runtime.
-- [Wasmtime `Config`](https://docs.wasmtime.dev/api/wasmtime/struct.Config.html) distinguishes
-  deterministic fuel from nondeterministic epoch interruption and notes that guest interruption does
-  not solve blocking host calls. lkjscript kept deterministic semantic fuel and did not add async,
-  epochs, Wasmtime, or a native tier.
-- [V8 Sparkplug](https://v8.dev/blog/sparkplug) emphasizes real workloads and the compile-speed/
-  execution-speed tradeoff of a baseline tier. Here interpreter execution is below 1%, so no tier
-  pays rent.
-- [Erlang/OTP runtime options](https://www.erlang.org/doc/apps/erts/erlang.html) informed the
-  distinction between runtime scheduling and language meaning. No actor/mailbox or mid-transition
-  consumer exists, so no scheduler was copied.
-- [systemd transient settings](https://systemd.io/TRANSIENT-SETTINGS/) show process lifecycle and
-  cgroup resource controls available at deployment. They do not replace semantic/runtime admission,
-  and no service-manager integration was added.
+### Text
 
-## Reversal summary
+First-class immutable validated UTF-8 text won over client-only bytes, a nominal wrapper, and a
+separate nominal declaration kind. It is the only design that makes invalid product text
+unrepresentable across workspace, release, application, instance, query, and JSON boundaries without
+duplicating a validator. Exact UTF-8 byte equality and no normalization keep the contract small.
 
-Reopen interface identity for an independent reusable-interface consumer; grant revision for a
-current rotation/revocation need; supervisor/per-instance scheduling for measured multi-client or
-concurrency demand; cache only above the 20% complete-workload gate; and execution tier only when
-execution dominates above the 30% gate. Preserve the pure interpreter, exact application validator,
-full replay, and deterministic fake adapters until any replacement directly cuts over.
+### Sequences and operations
+
+Nominal homogeneous immutable sequences won over serialized bytes, recursive cons products,
+application-specific fixed arrays, structural generics, and host tables. Nominal identity reuses the
+existing release reference model and permits managed indirection without a generic declaration
+system. Empty/length/get/append/replace plus counted loops were sufficient; higher-order operations,
+mutable builders, maps, sets, and iterators had no product consumer.
+
+Exact `i64` equality and boolean not/and/or were retained because lifecycle, filtering, pagination,
+and dependency paths repeatedly used them. Broader arithmetic, polymorphic equality, traits, and
+operator syntax lost for lack of a second domain.
+
+### Values and memory
+
+A unified safe managed byte store remains for bytes/text. Safe immutable `Arc` sequence elements won
+over tracing GC and mutable arenas because accepted values cannot form pointer cycles and canonical
+allocate-new retained accounting remains simple. Representation sharing is invisible and cannot evade
+limits. No unsafe Rust or new dependency was introduced.
+
+### Responses and queries
+
+Application-owned typed response and query types directly replaced byte responses and read-as-event.
+The four decision variants were selected over full-state no-op records and client preflight because
+they preserve application policy while publishing zero revisions for domain decline/no-change.
+No-publication receipts are not retained; exact retry is bounded by the unchanged base.
+
+First-class pure queries won over client state decode and a second query database. Exact result
+digests permit cache-independent unchanged responses. Current queries publish no filesystem facts,
+as verified by complete tree comparison and fault tests.
+
+## Packaging, source, CLI, and topology decisions
+
+- Embedded validated application bytes plus checked-in public-command recipe won over runtime
+  generation, mutable artifact lookup, and required user paths. The product remains operable without
+  development authority.
+- The deterministic Python recipe issues only public `lkjscript` commands and uses named local
+  symbols. A new textual language and private Rust builder lost because the existing transaction /
+  editable-document path already provides validation and reproducibility.
+- Manual standard-library CLI parsing was retained. No parser dependency was needed to deliver closed
+  grammar, help examples, strict machine mode, and bounded errors; JSON-only lost the human product
+  requirement.
+- Parent locator discovery with explicit override won over directory-name identity and global
+  registries. Exact operation validation remains in the instance owner.
+- A caller-owned product session was retained: one process handles roughly 4,700 representative
+  operations instead of one process per request, comfortably exceeding the 50 percent process gate.
+  A daemon, worker pool, and socket supervisor have no consumer.
+- One session-local exact-HEAD application/current-state cache was retained because repeated query
+  medians meet the product ceiling and miss/restart remain correct. No persistent cache was built.
+- The activation interface, durable-controller driver, and standalone blob-publisher driver were
+  deleted. The product supplies the current stateful/blob consumer and focused tests retain failure
+  invariants.
+
+## Agent-cost observation
+
+`lkjwork context` selects active/actionable work and exact blockers under task/note/dependency/text
+bounds, reporting omissions and an exact result digest. The representative run used one product
+session for 2,000 query observations and recorded 796,923 request bytes and 7,717,826 response bytes.
+The five measured one-shot query/mutation groups used 48 fresh processes; the corpus itself used two.
+Exact known-result digests eliminate unchanged result serialization without persistent handles.
+
+The maintained application is split into one recipe, one artifact, one binding manifest, and bounded
+Rust product owners. Current maintained source/artifact fixtures under `src`, `tests`, `applications`,
+and `examples` comprise 95 files / 3,804,716 bytes at measurement time. No provider token classes or
+prices were exposed; bytes are not reported as tokens or money.
+
+## Build observations and reversal gates
+
+The observed optimized rebuild after central semantic changes took 2m10s; a later product-only
+incremental optimized rebuild took 14.39s. A detached worktree at the baseline with the exact tracked
+patch and new files applied built into an empty target directory in 132.84s wall time (Cargo reported
+2m12s), then passed the complete public acceptance story and reproduced byte-identical application
+and binding artifacts. The page and compiler caches were still host-warm; this is an isolated-target
+build, not a cold-machine claim.
+The final release binaries are 2,795,368 bytes (`lkjwork`) and 9,706,336 bytes (`lkjscript`).
+
+Reopen design only when a complete current consumer crosses a gate:
+
+- checkpoint cadence or compaction: representative store approaches 256 MiB or fallback/deep service
+  becomes unacceptable;
+- persistent cache: restart benefit improves complete workload by at least 20 percent and repays its
+  hostile format/lifecycle;
+- bytecode/native tier: execution dominates and complete work improves at least 30 percent;
+- daemon/concurrency: a real multi-client or unattended workflow cannot use the foreground session;
+- database/index: accepted query or concurrency needs cannot be met by bounded application scans;
+- broader text/collections/search: a complete product workflow requires exact new semantics.

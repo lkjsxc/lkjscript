@@ -406,6 +406,9 @@ fn identity_shape_is_stable(
             old == new
         }
         (Node::SumType { variants: old, .. }, Node::SumType { variants: new, .. }) => old == new,
+        (Node::SequenceType { element: old, .. }, Node::SequenceType { element: new, .. }) => {
+            old == new
+        }
         (
             Node::ProductField {
                 ordinal: old_ordinal,
@@ -491,6 +494,10 @@ fn operation_identity_shape_is_stable(
                 crate::schema::OperationKind::ConstructProduct { .. }
                     | crate::schema::OperationKind::ConstructVariant { .. }
                     | crate::schema::OperationKind::ProjectField { .. }
+                    | crate::schema::OperationKind::SequenceEmpty { .. }
+                    | crate::schema::OperationKind::SequenceGet { .. }
+                    | crate::schema::OperationKind::SequenceAppend { .. }
+                    | crate::schema::OperationKind::SequenceReplace { .. }
             ),
             _ => true,
         }
@@ -547,6 +554,19 @@ pub(crate) fn operation_result_type(
             }
         }
         crate::schema::OperationKind::MatchSum { result, .. } => Some(*result),
+        crate::schema::OperationKind::SequenceEmpty { sequence }
+        | crate::schema::OperationKind::SequenceAppend { sequence, .. }
+        | crate::schema::OperationKind::SequenceReplace { sequence, .. } => matches!(
+            snapshot.nodes.get(sequence),
+            Some(Node::SequenceType { .. })
+        )
+        .then_some(crate::schema::SemanticType::Nominal(*sequence)),
+        crate::schema::OperationKind::SequenceGet { sequence, .. } => {
+            match snapshot.nodes.get(sequence) {
+                Some(Node::SequenceType { element, .. }) => Some(*element),
+                _ => None,
+            }
+        }
         _ => operation.result_type(index, None),
     }
 }

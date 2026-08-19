@@ -12,14 +12,14 @@ all validation, execution, publication, replay, inspection, and host outcomes. O
 and the foreground session use this same kernel; neither topology contains a second semantic path.
 
 The kernel may read exact application bytes, open an instance store, admit an operation, prepare a
-pure transition, coordinate an adapter call, and collect disposable observations. It is not a
+typed mutation or pure query, coordinate an adapter call, and collect disposable observations. It is not a
 workspace `Engine`, package resolver, application registry, grant registry, instance authority,
 semantic scheduler, durable queue, deployment manager, or sandbox. There is no implicit current
 application, instance, grant, or revision.
 
 ## Retained deployment policy
 
-Runtime contract version 1 owns these operational maxima:
+Runtime contract version 2 owns these operational maxima:
 
 - JSON request 8 MiB and response 32 MiB;
 - application artifact 256 MiB;
@@ -69,19 +69,23 @@ bounded response, release resources, and exit. Process cleanup is operational on
 authority remains in its owner. An output failure cannot undo a completed publication. Exact
 idempotency or inspection is the retry route.
 
-## Foreground session protocol version 1
+Current-revision operations delegate to the instance owner's HEAD-bound current manifest and exact
+fallback. Historical queries, history pages, and deep audit delegate to the full chain oracle. The
+kernel does not duplicate either loader or turn operational reuse into semantic authority.
+
+## Foreground session protocol version 2
 
 `runtime session --store DIRECTORY` opens one kernel and store lock for a caller-owned lifetime.
 It accepts one strict line-delimited JSON envelope per request:
 
 ```json
-{"version":1,"request_id":1,"request":{"kind":"inspect_runtime"}}
+{"version":2,"request_id":1,"request":{"kind":"inspect_runtime"}}
 ```
 
-Version must be 1 and request ID must be nonzero. Every request names its exact application path,
+Version must be 2 and request ID must be nonzero. Every request names its exact application path,
 instance, base, command, grant, or inspection target as applicable. Supported variants are create,
-validate/apply event, execute host, fake outcome, validate/resume, inspect instance, history,
-delete, inspect runtime, and shutdown.
+validate/apply event, pure query, execute host, fake outcome, validate/resume, inspect instance,
+history, delete, inspect runtime, and shutdown.
 
 Input is bounded to the workspace JSON maximum before allocation. Unknown/duplicate fields,
 unknown variants, wrong versions, invalid IDs, malformed UTF-8/JSON, trailing JSON, and oversized
@@ -98,13 +102,20 @@ The session retains only kernel counters and the store handle. It does not cache
 meaning, grant decisions, HEAD, pending commands, or authorization. Restart reconstructs all
 semantic and instance state from durable owners.
 
+The application-specific `lkjwork session` is a separate caller-owned product transport. Its
+`InstanceStore::open_session` may retain one prepared application and one current state/manifest
+object keyed by exact HEAD. Every hit rereads and compares HEAD; publication updates the entry only
+after success; a miss, eviction, process restart, missing manifest, or corrupt manifest remains fully
+correct. This reuse is bounded to one project and does not create a persistent cache or second query
+owner.
+
 ## Topology and acceleration exclusions
 
 The supported topologies are one-shot and foreground session. There is no Unix-socket supervisor,
-automatic spawn, daemon, worker pool, request multiplexing, scheduler, persistent cache, in-memory
-application/Core cache, bytecode, native compiler, or JIT. Cache counts and bytes are exactly zero,
-so eviction/corruption cannot affect semantics. The explicit-frame interpreter remains the sole
-execution route and oracle.
+automatic spawn, daemon, worker pool, request multiplexing, scheduler, persistent cache, generic
+application/Core cache, bytecode, native compiler, or JIT. Generic runtime cache counts and bytes are
+exactly zero. The product-local exact-HEAD reuse above is disposable and independently differential.
+The explicit-frame interpreter remains the sole execution route and oracle.
 
 A resident supervisor requires a demonstrated multi-client or centralized-admission consumer beyond
 the foreground session. A cache requires repeated validation/lowering to cross the documented

@@ -14,19 +14,19 @@ fn instance_id_and_strict_json_are_canonical_and_closed() {
     }
 
     let canonical =
-        br#"{"version":2,"instance":"12121212121212121212121212121212","base_revision":7}"#;
+        br#"{"version":3,"instance":"12121212121212121212121212121212","base_revision":7}"#;
     let request = strict_json::<InstanceDeleteRequest>(canonical, "delete").expect("canonical");
     validate_version(request.version).expect("active contract version");
     assert_eq!(request.instance, instance);
     assert_eq!(request.base_revision, 7);
     assert_eq!(
-        validate_version(1).expect_err("old contract version").code,
+        validate_version(2).expect_err("old contract version").code,
         ErrorCode::ProtocolVersion
     );
     for malformed in [
-        br#"{"version":2,"version":2,"instance":"12121212121212121212121212121212","base_revision":7}"#.as_slice(),
-        br#"{"version":2,"instance":"12121212121212121212121212121212","base_revision":7,"extra":0}"#.as_slice(),
-        br#"{"version":2,"instance":"12121212121212121212121212121212","base_revision":7}x"#.as_slice(),
+        br#"{"version":3,"version":3,"instance":"12121212121212121212121212121212","base_revision":7}"#.as_slice(),
+        br#"{"version":3,"instance":"12121212121212121212121212121212","base_revision":7,"extra":0}"#.as_slice(),
+        br#"{"version":3,"instance":"12121212121212121212121212121212","base_revision":7}x"#.as_slice(),
     ] {
         assert!(strict_json::<InstanceDeleteRequest>(malformed, "delete").is_err());
     }
@@ -130,7 +130,7 @@ fn instance_envelope_rejects_every_truncation_mutation_old_version_and_trailing_
         );
     }
     let mut old_version = bytes.clone();
-    old_version[8..10].copy_from_slice(&1_u16.to_le_bytes());
+    old_version[8..10].copy_from_slice(&2_u16.to_le_bytes());
     assert!(
         decode_envelope::<HostAttemptRecord>(ATTEMPT_MAGIC, ATTEMPT_DOMAIN, &old_version, 1024)
             .is_err()
@@ -145,18 +145,7 @@ fn instance_envelope_rejects_every_truncation_mutation_old_version_and_trailing_
 
 #[test]
 fn host_interfaces_and_operation_outcomes_are_closed_and_disjoint() {
-    assert_ne!(
-        HostInterface::ApplicationActivation.identity(),
-        HostInterface::ImmutableBlob.identity()
-    );
-    assert!(application::host_outcome_is_compatible(
-        HostOperation::ActivateApplication,
-        HostOutcomeClass::OutcomeUnknown
-    ));
-    assert!(!application::host_outcome_is_compatible(
-        HostOperation::ActivateApplication,
-        HostOutcomeClass::AlreadyPresent
-    ));
+    assert_ne!(HostInterface::ImmutableBlob.identity().as_bytes(), [0; 32]);
     assert!(application::host_outcome_is_compatible(
         HostOperation::PutBlob,
         HostOutcomeClass::AlreadyPresent
@@ -225,10 +214,6 @@ fn canonical_paths_reject_relative_dot_repeated_and_symlinked_parents() {
     let linked = temporary.path().join("linked");
     std::os::unix::fs::symlink(&real, &linked).expect("symlink");
     assert!(validate_parent_chain(&linked.join("child"), "path").is_err());
-    assert!(
-        validate_source_path(&linked.join("application.lkja"), temporary.path()).is_err(),
-        "a lexically contained source cannot traverse a symlinked parent"
-    );
 
     let instance = temporary.path().join("instance");
     create_private_directory(&instance).expect("instance authority directory");
@@ -240,39 +225,6 @@ fn canonical_paths_reject_relative_dot_repeated_and_symlinked_parents() {
     std::os::unix::fs::symlink(&real, instance.join("outcomes"))
         .expect("substituted outcomes symlink");
     assert!(validate_instance_directory_layout(&instance).is_err());
-}
-
-#[test]
-fn activation_faults_distinguish_previsibility_failure_from_unknown_visibility() {
-    let temporary = tempfile::tempdir().expect("temporary directory");
-    let slot = temporary.path().join("active.lkja");
-    let bytes = b"exact application bytes";
-
-    for fault in [
-        ActivationFault::BeforeWrite,
-        ActivationFault::AfterWrite,
-        ActivationFault::AfterFileSync,
-    ] {
-        let error = activate_slot_with_fault(&slot, bytes, fault).expect_err("injected failure");
-        assert_eq!(error.code, ErrorCode::Io);
-        assert!(
-            !slot.exists(),
-            "previsibility fault {fault:?} exposed a slot"
-        );
-    }
-
-    for fault in [
-        ActivationFault::AfterVisibility,
-        ActivationFault::AfterDirectorySync,
-    ] {
-        let error = activate_slot_with_fault(&slot, bytes, fault).expect_err("unknown outcome");
-        assert_eq!(error.code, ErrorCode::ArtifactPublicationOutcomeUnknown);
-        assert_eq!(fs::read(&slot).expect("visible slot"), bytes);
-        fs::remove_file(&slot).expect("reset slot");
-    }
-
-    activate_slot_with_fault(&slot, bytes, ActivationFault::None).expect("activation");
-    assert_eq!(fs::read(slot).expect("active bytes"), bytes);
 }
 
 #[test]

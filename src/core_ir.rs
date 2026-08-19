@@ -1,6 +1,9 @@
 use crate::error::{ErrorCode, LkError, Result};
 use crate::ids::NodeId;
-use crate::schema::{ByteString, MAXIMUM_BYTE_LITERAL_BYTES, SemanticType, ValueStorageClass};
+use crate::schema::{
+    ByteString, MAXIMUM_BYTE_LITERAL_BYTES, MAXIMUM_TEXT_LITERAL_BYTES, SemanticType, TextString,
+    ValueStorageClass,
+};
 use crate::type_layout::{FieldLayout, LayoutShape, ValueLayout, VariantLayout};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -17,6 +20,7 @@ pub(crate) const UNIT_TYPE: CoreTypeId = CoreTypeId(0);
 pub(crate) const BOOL_TYPE: CoreTypeId = CoreTypeId(1);
 pub(crate) const I64_TYPE: CoreTypeId = CoreTypeId(2);
 pub(crate) const BYTES_TYPE: CoreTypeId = CoreTypeId(3);
+pub(crate) const TEXT_TYPE: CoreTypeId = CoreTypeId(4);
 pub(crate) const PRIMITIVE_TYPE_COUNT: usize = SemanticType::PRIMITIVES.len();
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -39,8 +43,24 @@ pub(crate) enum CoreTypeKind {
     Bool,
     I64,
     Bytes,
+    Text,
     Product { fields: Vec<CoreField> },
     Sum { variants: Vec<CoreVariant> },
+    Sequence { element: CoreTypeId },
+}
+
+#[cfg(test)]
+impl CoreTypeKind {
+    pub(crate) const fn from_semantic_primitive(semantic: SemanticType) -> Option<Self> {
+        match semantic {
+            SemanticType::Unit => Some(Self::Unit),
+            SemanticType::Bool => Some(Self::Bool),
+            SemanticType::I64 => Some(Self::I64),
+            SemanticType::Bytes => Some(Self::Bytes),
+            SemanticType::Text => Some(Self::Text),
+            SemanticType::Nominal(_) => None,
+        }
+    }
 }
 
 impl CoreType {
@@ -48,7 +68,9 @@ impl CoreType {
         match self.kind {
             CoreTypeKind::Unit => ValueStorageClass::ZeroCell,
             CoreTypeKind::Bool | CoreTypeKind::I64 => ValueStorageClass::Immediate,
-            CoreTypeKind::Bytes => ValueStorageClass::ManagedHandle,
+            CoreTypeKind::Bytes | CoreTypeKind::Text | CoreTypeKind::Sequence { .. } => {
+                ValueStorageClass::ManagedHandle
+            }
             CoreTypeKind::Product { .. } | CoreTypeKind::Sum { .. } => {
                 ValueStorageClass::FixedAggregate
             }
@@ -110,6 +132,11 @@ pub(crate) enum Instruction {
         result: ValueId,
         value: ByteString,
     },
+    ConstText {
+        origin: NodeId,
+        result: ValueId,
+        value: TextString,
+    },
     AddI64 {
         origin: NodeId,
         result: ValueId,
@@ -117,6 +144,29 @@ pub(crate) enum Instruction {
         rhs: ValueId,
     },
     LtI64 {
+        origin: NodeId,
+        result: ValueId,
+        lhs: ValueId,
+        rhs: ValueId,
+    },
+    EqualI64 {
+        origin: NodeId,
+        result: ValueId,
+        lhs: ValueId,
+        rhs: ValueId,
+    },
+    NotBool {
+        origin: NodeId,
+        result: ValueId,
+        value: ValueId,
+    },
+    AndBool {
+        origin: NodeId,
+        result: ValueId,
+        lhs: ValueId,
+        rhs: ValueId,
+    },
+    OrBool {
         origin: NodeId,
         result: ValueId,
         lhs: ValueId,
@@ -152,6 +202,56 @@ pub(crate) enum Instruction {
         lhs: ValueId,
         rhs: ValueId,
     },
+    TextLen {
+        origin: NodeId,
+        result: ValueId,
+        value: ValueId,
+    },
+    TextEqual {
+        origin: NodeId,
+        result: ValueId,
+        lhs: ValueId,
+        rhs: ValueId,
+    },
+    TextConcat {
+        origin: NodeId,
+        result: ValueId,
+        lhs: ValueId,
+        rhs: ValueId,
+    },
+    SequenceEmpty {
+        origin: NodeId,
+        result: ValueId,
+        ty: CoreTypeId,
+    },
+    SequenceLen {
+        origin: NodeId,
+        result: ValueId,
+        ty: CoreTypeId,
+        value: ValueId,
+    },
+    SequenceGet {
+        origin: NodeId,
+        result: ValueId,
+        ty: CoreTypeId,
+        value: ValueId,
+        index: ValueId,
+    },
+    SequenceAppend {
+        origin: NodeId,
+        result: ValueId,
+        ty: CoreTypeId,
+        value: ValueId,
+        element: ValueId,
+    },
+    SequenceReplace {
+        origin: NodeId,
+        result: ValueId,
+        ty: CoreTypeId,
+        value: ValueId,
+        index: ValueId,
+        element: ValueId,
+    },
     Call {
         origin: NodeId,
         result: ValueId,
@@ -186,13 +286,26 @@ impl Instruction {
             | Self::ConstBool { origin, .. }
             | Self::ConstI64 { origin, .. }
             | Self::ConstBytes { origin, .. }
+            | Self::ConstText { origin, .. }
             | Self::AddI64 { origin, .. }
             | Self::LtI64 { origin, .. }
+            | Self::EqualI64 { origin, .. }
+            | Self::NotBool { origin, .. }
+            | Self::AndBool { origin, .. }
+            | Self::OrBool { origin, .. }
             | Self::BytesLen { origin, .. }
             | Self::BytesAt { origin, .. }
             | Self::BytesSlice { origin, .. }
             | Self::BytesEqual { origin, .. }
             | Self::BytesConcat { origin, .. }
+            | Self::TextLen { origin, .. }
+            | Self::TextEqual { origin, .. }
+            | Self::TextConcat { origin, .. }
+            | Self::SequenceEmpty { origin, .. }
+            | Self::SequenceLen { origin, .. }
+            | Self::SequenceGet { origin, .. }
+            | Self::SequenceAppend { origin, .. }
+            | Self::SequenceReplace { origin, .. }
             | Self::Call { origin, .. }
             | Self::ConstructProduct { origin, .. }
             | Self::ProjectField { origin, .. }
@@ -294,6 +407,7 @@ fn verify_types(program: &CoreProgram) -> Result<()> {
             SemanticType::Bool => CoreTypeKind::Bool,
             SemanticType::I64 => CoreTypeKind::I64,
             SemanticType::Bytes => CoreTypeKind::Bytes,
+            SemanticType::Text => CoreTypeKind::Text,
             SemanticType::Nominal(_) => return Err(invalid("primitive descriptor is nominal")),
         };
         let layout = crate::type_layout::primitive_layout(semantic)
@@ -325,7 +439,7 @@ fn verify_types(program: &CoreProgram) -> Result<()> {
         previous = Some(origin);
         if !matches!(
             ty.kind,
-            CoreTypeKind::Product { .. } | CoreTypeKind::Sum { .. }
+            CoreTypeKind::Product { .. } | CoreTypeKind::Sum { .. } | CoreTypeKind::Sequence { .. }
         ) {
             return Err(invalid("nominal Core type has a primitive kind"));
         }
@@ -374,6 +488,11 @@ fn verify_types(program: &CoreProgram) -> Result<()> {
                             dependencies.insert(dependency);
                         }
                     }
+                }
+            }
+            CoreTypeKind::Sequence { element } => {
+                if type_index(*element)? >= program.types.len() {
+                    return Err(invalid("Core sequence element type is out of bounds"));
                 }
             }
             _ => return Err(invalid("non-fixed primitive appears in Core type table")),
@@ -504,6 +623,7 @@ fn derive_layout(
                 },
             })
         }
+        CoreTypeKind::Sequence { .. } => Ok(crate::type_layout::managed_handle_layout()),
         _ => Err(invalid(
             "layout derivation requested for primitive Core type",
         )),
@@ -571,13 +691,26 @@ fn instruction_result(instruction: &Instruction) -> ValueId {
         | Instruction::ConstBool { result, .. }
         | Instruction::ConstI64 { result, .. }
         | Instruction::ConstBytes { result, .. }
+        | Instruction::ConstText { result, .. }
         | Instruction::AddI64 { result, .. }
         | Instruction::LtI64 { result, .. }
+        | Instruction::EqualI64 { result, .. }
+        | Instruction::NotBool { result, .. }
+        | Instruction::AndBool { result, .. }
+        | Instruction::OrBool { result, .. }
         | Instruction::BytesLen { result, .. }
         | Instruction::BytesAt { result, .. }
         | Instruction::BytesSlice { result, .. }
         | Instruction::BytesEqual { result, .. }
         | Instruction::BytesConcat { result, .. }
+        | Instruction::TextLen { result, .. }
+        | Instruction::TextEqual { result, .. }
+        | Instruction::TextConcat { result, .. }
+        | Instruction::SequenceEmpty { result, .. }
+        | Instruction::SequenceLen { result, .. }
+        | Instruction::SequenceGet { result, .. }
+        | Instruction::SequenceAppend { result, .. }
+        | Instruction::SequenceReplace { result, .. }
         | Instruction::Call { result, .. }
         | Instruction::ConstructProduct { result, .. }
         | Instruction::ProjectField { result, .. }
@@ -601,6 +734,12 @@ fn verify_instruction(
             }
             Ok(BYTES_TYPE)
         }
+        Instruction::ConstText { value, .. } => {
+            if value.len_bytes() > MAXIMUM_TEXT_LITERAL_BYTES {
+                return Err(invalid("Core text literal exceeds the literal policy"));
+            }
+            Ok(TEXT_TYPE)
+        }
         Instruction::AddI64 { lhs, rhs, .. } => {
             require_local(function, local, *lhs, I64_TYPE)?;
             require_local(function, local, *rhs, I64_TYPE)?;
@@ -609,6 +748,20 @@ fn verify_instruction(
         Instruction::LtI64 { lhs, rhs, .. } => {
             require_local(function, local, *lhs, I64_TYPE)?;
             require_local(function, local, *rhs, I64_TYPE)?;
+            Ok(BOOL_TYPE)
+        }
+        Instruction::EqualI64 { lhs, rhs, .. } => {
+            require_local(function, local, *lhs, I64_TYPE)?;
+            require_local(function, local, *rhs, I64_TYPE)?;
+            Ok(BOOL_TYPE)
+        }
+        Instruction::NotBool { value, .. } => {
+            require_local(function, local, *value, BOOL_TYPE)?;
+            Ok(BOOL_TYPE)
+        }
+        Instruction::AndBool { lhs, rhs, .. } | Instruction::OrBool { lhs, rhs, .. } => {
+            require_local(function, local, *lhs, BOOL_TYPE)?;
+            require_local(function, local, *rhs, BOOL_TYPE)?;
             Ok(BOOL_TYPE)
         }
         Instruction::BytesLen { value, .. } => {
@@ -640,6 +793,58 @@ fn verify_instruction(
             require_local(function, local, *lhs, BYTES_TYPE)?;
             require_local(function, local, *rhs, BYTES_TYPE)?;
             Ok(BYTES_TYPE)
+        }
+        Instruction::TextLen { value, .. } => {
+            require_local(function, local, *value, TEXT_TYPE)?;
+            Ok(I64_TYPE)
+        }
+        Instruction::TextEqual { lhs, rhs, .. } => {
+            require_local(function, local, *lhs, TEXT_TYPE)?;
+            require_local(function, local, *rhs, TEXT_TYPE)?;
+            Ok(BOOL_TYPE)
+        }
+        Instruction::TextConcat { lhs, rhs, .. } => {
+            require_local(function, local, *lhs, TEXT_TYPE)?;
+            require_local(function, local, *rhs, TEXT_TYPE)?;
+            Ok(TEXT_TYPE)
+        }
+        Instruction::SequenceEmpty { ty, .. } => {
+            require_sequence(program, *ty)?;
+            Ok(*ty)
+        }
+        Instruction::SequenceLen { ty, value, .. } => {
+            require_sequence(program, *ty)?;
+            require_local(function, local, *value, *ty)?;
+            Ok(I64_TYPE)
+        }
+        Instruction::SequenceGet {
+            ty, value, index, ..
+        } => {
+            let element = require_sequence(program, *ty)?;
+            require_local(function, local, *value, *ty)?;
+            require_local(function, local, *index, I64_TYPE)?;
+            Ok(element)
+        }
+        Instruction::SequenceAppend {
+            ty, value, element, ..
+        } => {
+            let element_ty = require_sequence(program, *ty)?;
+            require_local(function, local, *value, *ty)?;
+            require_local(function, local, *element, element_ty)?;
+            Ok(*ty)
+        }
+        Instruction::SequenceReplace {
+            ty,
+            value,
+            index,
+            element,
+            ..
+        } => {
+            let element_ty = require_sequence(program, *ty)?;
+            require_local(function, local, *value, *ty)?;
+            require_local(function, local, *index, I64_TYPE)?;
+            require_local(function, local, *element, element_ty)?;
+            Ok(*ty)
         }
         Instruction::Call {
             function: target,
@@ -870,6 +1075,12 @@ fn require_local(
     }
     Ok(())
 }
+fn require_sequence(program: &CoreProgram, ty: CoreTypeId) -> Result<CoreTypeId> {
+    let CoreTypeKind::Sequence { element } = type_at(program, ty)?.kind else {
+        return Err(invalid("sequence instruction names a non-sequence type"));
+    };
+    Ok(element)
+}
 fn type_index(id: CoreTypeId) -> Result<usize> {
     usize::try_from(id.0).map_err(|_| invalid("type index overflows host indexes"))
 }
@@ -911,48 +1122,14 @@ mod tests {
         NodeId::new(WorkspaceId::from_bytes([3; 16]), serial).expect("node")
     }
     fn primitives() -> Vec<CoreType> {
-        vec![
-            CoreType {
+        SemanticType::PRIMITIVES
+            .into_iter()
+            .map(|semantic| CoreType {
                 origin: None,
-                kind: CoreTypeKind::Unit,
-                layout: ValueLayout {
-                    size: 0,
-                    align: 1,
-                    cells: 0,
-                    shape: LayoutShape::Primitive,
-                },
-            },
-            CoreType {
-                origin: None,
-                kind: CoreTypeKind::Bool,
-                layout: ValueLayout {
-                    size: 1,
-                    align: 1,
-                    cells: 1,
-                    shape: LayoutShape::Primitive,
-                },
-            },
-            CoreType {
-                origin: None,
-                kind: CoreTypeKind::I64,
-                layout: ValueLayout {
-                    size: 8,
-                    align: 8,
-                    cells: 1,
-                    shape: LayoutShape::Primitive,
-                },
-            },
-            CoreType {
-                origin: None,
-                kind: CoreTypeKind::Bytes,
-                layout: ValueLayout {
-                    size: 8,
-                    align: 8,
-                    cells: 1,
-                    shape: LayoutShape::Primitive,
-                },
-            },
-        ]
+                kind: CoreTypeKind::from_semantic_primitive(semantic).expect("primitive kind"),
+                layout: crate::type_layout::primitive_layout(semantic).expect("primitive layout"),
+            })
+            .collect()
     }
     const PRODUCT_TYPE: CoreTypeId = CoreTypeId(PRIMITIVE_TYPE_COUNT as u32);
     const SUM_TYPE: CoreTypeId = CoreTypeId(PRIMITIVE_TYPE_COUNT as u32 + 1);

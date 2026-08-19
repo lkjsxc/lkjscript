@@ -1,136 +1,125 @@
 # Implemented status
 
-This file describes implemented reality at the current checkout. Normative behavior belongs under
-`docs/spec/`; measurements and reversal evidence belong in `docs/performance.md` and
-`docs/evidence/`.
+This file records the current checkout, not intended future work. Normative behavior is owned under
+[`docs/spec/`](spec/); product use is owned by
+[`applications/lkjwork/README.md`](../applications/lkjwork/README.md).
 
-## Product boundary
+## Supported public product
 
-`lkjscript` is a local typed semantic application platform for exact pure programs and durable
-stateful instances. Coding agents can author workspace revisions, publish immutable reusable
-releases, build offline application worlds with typed exports/imports, bind instances to exact
-grants, apply/replay pure transitions, execute two narrow host interfaces, inspect bounded state and
-runtime observations, reconcile unknown visibility, and tombstone identities.
+`lkjwork` is an installed local CLI product backed by one exact embedded lkjscript application and
+one durable instance per project. It supports:
 
-The durable controller and immutable-blob publisher both complete their public lifecycle after
-source workspaces and standalone releases are deleted. Each uses production and disjoint fake
-adapters across isolated instances, restart, duplicate delivery, stale bases, denied authority,
-unknown outcomes, corruption rejection, bounded history, and no identity reuse.
+- private project initialization and parent-directory discovery;
+- task create/edit, priority, lifecycle, hold, archive, labels, dependencies, notes, and activity;
+- exact DAG cycle rejection and application-derived readiness/actionable ordering;
+- pure show/list/next/summary/context/export queries with bounded pages and omission facts;
+- immutable file attachments through the built-in blob interface, including unknown-outcome
+  reconciliation without repeating a possibly visible put;
+- deterministic human output, strict one-shot JSON, and a bounded caller-owned product session;
+- exact backup, new-instance restore with explicit grant rebinding, shallow/deep doctor, history,
+  and deterministic export version 1.
 
-## Active contracts
+Task policy, identity allocation, lifecycle, dependencies, readiness, filtering, ordering, context
+selection, notes, labels, attachments, typed conflicts, and typed query results live in the embedded
+application. The Rust client owns arguments, locator validation, bounded explicit file reads,
+terminal-safe rendering, exact host routing, backup transport, and process lifecycle. It has no task
+database and does not decode private instance state to answer product queries.
 
-| boundary | active identity | direct rejection |
+The checked application artifact is 163,670 bytes with digest
+`9d5ebe527719aa4c68b471cc10f9113df421385997113a08fbd1a6eae4650c4d`. The public-command build
+recipe and generated bindings reproduce and check that artifact. The installed binary validates the
+embedded artifact before use; development workspaces and standalone release files are not runtime
+dependencies.
+
+## Active contract identities
+
+| boundary | active identity | direct rejected predecessor |
 |---|---|---|
-| workspace logical/JSON protocol | 10 | 9 and older |
-| machine contract | `lkjscript-machine-schema-v10` | v9 names |
-| workbench | 2 | older roots |
-| context packet | 2 | 1 |
-| editable document | 1, root `document` | `plan` |
-| reusable release | 1, `LKJREL\0\x01` | every other format |
-| application world | 4, `LKJAPP\0\x04` | 3 and older |
-| durable instance | 2, `LKJINS\0\x02` plus v2 outcome/attempt | 1 and older |
-| runtime session | 1 | every other version |
-| workspace semantic artifact | 6, `LKJTSM\0\x06` | older successful forms |
-| semantic schema | `lkjscript-tsm006` | older schema names |
-| workspace HEAD | `LKJHEAD8` | HEAD7 |
+| workspace protocol / machine schema | 11 / `lkjscript-machine-schema-v11` | 10 and older |
+| semantic workbench / edit document | 2 / 1 | context packet 1 / `plan` root |
+| workspace semantic artifact | 7, `LKJTSM\0\x07`, `lkjscript-tsm007` | format 6 and older |
+| workspace HEAD | `LKJHEAD9` | `LKJHEAD8` and older |
+| reusable release | contract/format 2, `LKJREL\0\x02` | format 1 and older |
+| application world | contract/format 5, `LKJAPP\0\x05` | format 4 and older |
+| durable instance | contract/format 3, `LKJINS\0\x03` | format 2 and older |
+| runtime session | 2 | every other version |
+| lkjwork machine / export | 1 / 1 | every other version |
 
-Release, application, instance, and runtime DTOs remain command-local owners and are absent from the
-global workspace machine catalogue.
+There are no editions, compatibility readers, aliases, migration-only paths, or silent format
+fallbacks.
 
-## Semantic language and execution
+## Language and execution
 
-The closed values are `unit`, `bool`, checked `i64`, immutable `bytes`, nominal immutable products,
-and nominal immutable sums. Operations cover constants, integer addition/comparison, direct calls,
-conditions, counted loops, products, exhaustive sum matching, byte operations, typed holes,
-returns, and yields.
+The language implements `unit`, `bool`, checked `i64`, immutable bytes, validated UTF-8 text,
+nominal products, nominal sums, and nominal homogeneous ordered sequences. Text has exact UTF-8 byte
+equality and no normalization promise. Sequences support canonical empty, length, checked access,
+append, and replace. Public JSON uses strings and ordered arrays; exact release-local nominal identity
+is preserved.
 
-Complete selected closure lowers through independently verified Core IR and runs on one
-explicit-frame interpreter. Managed immutable bytes retain an allocate-new differential oracle.
-There is no bytecode, serialized Core cache, native compiler, or JIT.
+The minimal retained algebra adds exact integer equality and boolean not/and/or. One explicit-frame
+interpreter remains the execution oracle. Managed bytes/text use the safe generation-checked store;
+sequences use safe immutable `Arc` elements with exact canonical retained accounting and an
+allocate-new differential. No local unsafe Rust exists.
 
-## Application worlds
+## Applications and instances
 
-Application format 4 embeds a complete exact release graph, entry/profile/policy, and exact pure
-tests. Stateful profiles name exact nominal state, event, command, outcome, and completed/suspended
-decision structure. They declare canonical import slots and exact variant routing for
-`application_activation_v1` and `immutable_blob_v1`. Interface IDs are derived immutable contract
-identities; application bytes contain no grants.
+Stateful application format 5 owns exact mutation response, query/query-result, state, event,
+command, outcome, and four-variant decision types. The only built-in interface is
+`immutable_blob_v1`; the activation interface and its examples were deleted for lack of a current
+consumer.
 
-Magic integer commands, fixed digest targets, raw resume tags/evidence arguments, and the
-activation-specific stateful ABI are removed. Pure typed and bounded byte-stream invocation remain
-host-free.
+Instance format 3 publishes declined/unchanged decisions without a revision and completed/suspended
+decisions with exactly one revision. Published idempotency receipts replay exactly; no-publication
+results are reevaluated only while their exact base remains current. Pure query receipts bind exact
+application/instance/revision/record/state/input/result facts and publish nothing.
 
-## Durable instances and adapters
+History is an immutable hash-linked event/host journal with full semantic checkpoints at genesis and
+every 64 revisions. HEAD binds cumulative history bytes and a current-manifest digest. The bounded
+manifest contains current state and the published event-key index, enabling ordinary queries and
+mutations without replaying thousands of transitions. Missing or corrupt acceleration falls back to
+the full chain without query writes. `doctor --deep` reexecutes every transition and compares every
+checkpoint.
 
-Instance format 2 embeds exact application bytes, full typed state snapshots, canonical grant
-bindings, monotonically contiguous revisions, event receipts, typed pending commands, attempt
-markers, typed outcomes, and one validated HEAD. Restart validates and reexecutes complete history
-without adapters. Validate-only publishes nothing; exact duplicate keys replay, conflicts/stale bases
-reject, and tombstones permanently forbid reuse.
+The representative 2,700-revision project retains 102,841,790 record bytes and 104,741,804 total
+project bytes, below the 256 MiB journal policy. Its HEAD-bound current manifest is 1,588,695 bytes.
+The stress profile is retained but was not executed; 10,000 transitions and 256 MiB journal bytes are
+the documented hard ceilings, not a claimed stress result.
 
-Every application import is bound to one immutable instance-specific `HostGrant`. Activation grants
-name one source namespace and slot. Blob grants name one private immutable-object namespace with
-count/byte limits. Production and deterministic-fake adapters are disjoint. A foreign instance,
-slot, interface, descriptor, adapter, command, or outcome rejects before external work.
+## Runtime and topology
 
-Activation validates/installs/reconciles one exact application. Immutable blob performs bounded
-create-if-absent and exact inspection by content digest. Visibility-capable work records an attempt
-first. A crash after attempt but before outcome becomes explicit unknown and is not repeated. Only a
-later pure resume can turn retained typed evidence into semantic state.
+The topology-neutral runtime contract implements one-shot and foreground line sessions, strict
+request correlation, query routing, bounded admission, exact stage observations, and one synchronous
+store lock. The generic runtime has no queue, worker, persistent cache, compiled-unit cache, profile,
+bytecode, JIT, or native tier.
 
-## Runtime kernel and topology
+`lkjwork session` retains one product-local prepared application/current-state object keyed by exact
+HEAD. It revalidates HEAD on hits, updates only after publication, and remains correct on miss,
+corruption, eviction, or restart. This is disposable acceleration, not authority or a daemon.
 
-One topology-neutral runtime kernel now owns operational admission, store opening, adapter
-coordination, and stage/resource observations while delegating meaning and durability to application
-and instance owners. All one-shot application/instance operations use it.
+## Verification surfaces
 
-The retained foreground `runtime session` calls that same kernel over bounded line-delimited
-version-1 JSON. It holds one store lock for caller-owned lifetime and remains synchronized after a
-malformed line. Every request names exact authority. The workspace authoring line session remains a
-separate `Engine` topology.
+The checkout contains:
 
-There is one installed binary and no resident supervisor, socket, auto-spawn, daemon, worker,
-scheduler, async runtime, background queue, or multi-client service.
+- independent product reference-model differential tests;
+- exact text/sequence/compiler/interpreter/release/application/instance/runtime tests;
+- complete product vocabulary, lifecycle, cycle, readiness, pagination, context, export, attachment,
+  locator, backup/restore, corruption, restart, idempotency, and session tests;
+- deterministic public acceptance and functional/representative workload scripts; and
+- structured evidence under `docs/evidence/`.
 
-## Resource governance and observations
+The retained examples are workspace/release/authoring verification consumers. The old durable
+controller and durable blob-publisher drivers were deleted because `lkjwork` now owns the complete
+stateful/blob product vertical and focused platform tests retain their invariants.
 
-Semantic owners independently bound application/graph/tests, fuel, frames, cells, values, managed
-bytes/objects, state, event, response, evidence, history, replay, and blob objects. Instance and blob
-bytes remain durable and grant/policy-accounted.
+## Explicit absences and trust boundary
 
-Runtime policy admits at most 8 MiB request, 32 MiB response, 256 MiB application, one open store,
-one active transition, one active host operation, and one compilation. Queue, cache, compiled-unit,
-and profile budgets are exactly zero and nonzero requests reject. Inspection exposes current
-reservations, counters, all stage observations, supported adapters/topologies, and omissions. RSS and
-open files are not claimed as exact logical enforcement.
+The verified deployment is Linux x86-64 under one trusted local operator and OS account. The client
+and immutable-blob adapter are trusted native code. Paths remain locators and deployment facts, not
+semantic authority.
 
-Telemetry separates startup, request/application decode, canonical re-encode, graph validation,
-release tests, flattening, lowering, Core verification, execution, instance open/chain/replay,
-transition/state publication, grant/adapter/host/outcome work, queue/cache stages, and response
-encoding. It is optional operational evidence, not semantic authority.
-
-## Agent surface
-
-`runtime orientation` gives compact contract versions, exact interface IDs, topology/adapter names,
-limits, roots, and expansion commands. Application inspection exposes exact world/import routing;
-instance inspection exposes exact revision, command, interface, grant binding, outcome state, legal
-actions, bounds, and history counts. Agents author ordinary nominal sums/products rather than magic
-tags or a second language.
-
-## Retained choices and explicit absences
-
-Full workspace snapshots, full instance records, embedded exact release graphs, store-wide locking,
-synchronous transition-boundary operation, and no cache remain the smallest verified paths for the
-current workloads. Repeated instance replay—not interpreter dispatch—is the largest observed runtime
-term. The foreground session earns retention through process reduction; a resident supervisor does
-not have a current multi-client consumer.
-
-There is no backward compatibility, registry, resolver, mutable dependency store, application
-rebinding/migration, grant mutation/revocation, instance compaction/purge, timer, mid-transition
-preemption, network, child process, ambient environment, general filesystem interface, secret
-store, encryption, multi-user authorization, hostile-host sandbox, database, signature system,
-public plugin ABI, or cross-platform support claim.
-
-The supported bootstrap remains stable Rust edition 2024 on Linux x86-64 with no local unsafe Rust.
-Durability claims are limited to the documented trusted local POSIX-like filesystem model; formal
-verification, power-loss proof, and hostile-administrator isolation are not claimed.
+There is no network service, cloud sync, account/multi-user model, encryption, signature,
+provenance, hostile-administrator isolation, native-code sandbox, broad filesystem grant, secret
+store, child process interface, wall-clock semantics, background daemon, scheduler, worker pool,
+database, persistent query cache, full-text index, import/migration contract, GUI/TUI, or
+cross-platform support claim. Logical resource accounting is not exact RSS enforcement. Provider
+tokens and monetary cost are unavailable and are not inferred from bytes.

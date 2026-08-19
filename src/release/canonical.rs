@@ -297,7 +297,7 @@ fn canonical_source_exports(
             if imported.contains(&export.target) {
                 return Err(LkError::new(
                     ErrorCode::ProtocolMalformed,
-                    "a dependency proxy cannot be re-exported in release format 1",
+                    "a dependency proxy cannot be re-exported in release format 2",
                 )
                 .for_node(export.target));
             }
@@ -341,7 +341,7 @@ fn canonical_tests(
             if !test.arguments.iter().all(super::primitive_runtime_value) {
                 return Err(LkError::new(
                     ErrorCode::ProtocolMalformed,
-                    "release format 1 test arguments must be primitive values",
+                    "release format 2 test arguments must be primitive values",
                 ));
             }
             if let ReleaseTestExpectation::Value(value) = &test.expected
@@ -349,7 +349,7 @@ fn canonical_tests(
             {
                 return Err(LkError::new(
                     ErrorCode::ProtocolMalformed,
-                    "release format 1 test expectations must be primitive values",
+                    "release format 2 test expectations must be primitive values",
                 ));
             }
             let expected = match test.expected.clone() {
@@ -487,7 +487,10 @@ fn semantic_closure_ids(snapshot: &Snapshot, roots: &[NodeId]) -> Result<BTreeSe
 
 fn closure_definition(snapshot: &Snapshot, target: NodeId) -> Result<NodeId> {
     Ok(match snapshot.node(target)? {
-        Node::Function { .. } | Node::ProductType { .. } | Node::SumType { .. } => target,
+        Node::Function { .. }
+        | Node::ProductType { .. }
+        | Node::SumType { .. }
+        | Node::SequenceType { .. } => target,
         Node::ProductField { owner, .. } | Node::SumVariant { owner, .. } => *owner,
         node => {
             let mut current = node.owner();
@@ -563,6 +566,7 @@ fn build_id_map(
                         assign_durable(&mut map, child, &mut next)?;
                     }
                 }
+                Node::SequenceType { .. } => {}
                 Node::Function {
                     parameters, body, ..
                 } => {
@@ -687,7 +691,8 @@ fn definition_key(source: &Snapshot, id: NodeId) -> (u8, String) {
             match node {
                 Node::ProductType { .. } => 1,
                 Node::SumType { .. } => 2,
-                Node::Function { .. } => 3,
+                Node::SequenceType { .. } => 3,
+                Node::Function { .. } => 4,
                 _ => u8::MAX,
             },
             node.name().unwrap_or_default().to_owned(),
@@ -791,6 +796,10 @@ fn normalize_and_remap(
             *owner = map_id(map, *owner)?;
             *payload = payload.map(|ty| remap_type(ty, map)).transpose()?;
         }
+        Node::SequenceType { owner, element, .. } => {
+            *owner = map_id(map, *owner)?;
+            *element = remap_type(*element, map)?;
+        }
         Node::Function {
             owner,
             parameters,
@@ -891,11 +900,27 @@ pub(super) fn remap_node_with(
             OperationKind::ConstI64(value) => OperationKind::ConstI64(value),
             OperationKind::ConstBool(value) => OperationKind::ConstBool(value),
             OperationKind::ConstBytes(value) => OperationKind::ConstBytes(value),
+            OperationKind::ConstText(value) => OperationKind::ConstText(value),
             OperationKind::AddI64 { lhs, rhs } => OperationKind::AddI64 {
                 lhs: value(lhs, remap)?,
                 rhs: value(rhs, remap)?,
             },
             OperationKind::LtI64 { lhs, rhs } => OperationKind::LtI64 {
+                lhs: value(lhs, remap)?,
+                rhs: value(rhs, remap)?,
+            },
+            OperationKind::EqualI64 { lhs, rhs } => OperationKind::EqualI64 {
+                lhs: value(lhs, remap)?,
+                rhs: value(rhs, remap)?,
+            },
+            OperationKind::NotBool { value: input } => OperationKind::NotBool {
+                value: value(input, remap)?,
+            },
+            OperationKind::AndBool { lhs, rhs } => OperationKind::AndBool {
+                lhs: value(lhs, remap)?,
+                rhs: value(rhs, remap)?,
+            },
+            OperationKind::OrBool { lhs, rhs } => OperationKind::OrBool {
                 lhs: value(lhs, remap)?,
                 rhs: value(rhs, remap)?,
             },
@@ -925,6 +950,56 @@ pub(super) fn remap_node_with(
             OperationKind::BytesConcat { lhs, rhs } => OperationKind::BytesConcat {
                 lhs: value(lhs, remap)?,
                 rhs: value(rhs, remap)?,
+            },
+            OperationKind::TextLen { value: input } => OperationKind::TextLen {
+                value: value(input, remap)?,
+            },
+            OperationKind::TextEqual { lhs, rhs } => OperationKind::TextEqual {
+                lhs: value(lhs, remap)?,
+                rhs: value(rhs, remap)?,
+            },
+            OperationKind::TextConcat { lhs, rhs } => OperationKind::TextConcat {
+                lhs: value(lhs, remap)?,
+                rhs: value(rhs, remap)?,
+            },
+            OperationKind::SequenceEmpty { sequence } => OperationKind::SequenceEmpty {
+                sequence: remap(sequence)?,
+            },
+            OperationKind::SequenceLen {
+                sequence,
+                value: input,
+            } => OperationKind::SequenceLen {
+                sequence: remap(sequence)?,
+                value: value(input, remap)?,
+            },
+            OperationKind::SequenceGet {
+                sequence,
+                value: input,
+                index,
+            } => OperationKind::SequenceGet {
+                sequence: remap(sequence)?,
+                value: value(input, remap)?,
+                index: value(index, remap)?,
+            },
+            OperationKind::SequenceAppend {
+                sequence,
+                value: input,
+                element,
+            } => OperationKind::SequenceAppend {
+                sequence: remap(sequence)?,
+                value: value(input, remap)?,
+                element: value(element, remap)?,
+            },
+            OperationKind::SequenceReplace {
+                sequence,
+                value: input,
+                index,
+                element,
+            } => OperationKind::SequenceReplace {
+                sequence: remap(sequence)?,
+                value: value(input, remap)?,
+                index: value(index, remap)?,
+                element: value(element, remap)?,
             },
             OperationKind::Call {
                 function,
@@ -1091,6 +1166,15 @@ pub(super) fn remap_node_with(
             ordinal,
             name,
             payload: payload.map(|item| ty(item, &mut remap)).transpose()?,
+        },
+        Node::SequenceType {
+            owner,
+            name,
+            element,
+        } => Node::SequenceType {
+            owner: remap(owner)?,
+            name,
+            element: ty(element, &mut remap)?,
         },
         Node::Function {
             owner,
@@ -1424,6 +1508,7 @@ fn validate_public_signature(
                 types.extend(*payload);
             }
         }
+        Node::SequenceType { element, .. } => types.push(*element),
         _ => return Err(LkError::new(code, "release export kind is unsupported")),
     }
     for ty in types {

@@ -10,7 +10,7 @@ use crate::query::{
     ContextBudget, PageRequest, Query, QueryBatchRequest, QueryItem, QueryResult, RepairTarget,
     VisibleCursorPurpose,
 };
-use crate::schema::{OperationDraft, SemanticType, ValueDraft, ValueRef};
+use crate::schema::{OperationDraft, SemanticType, TypeDraft, ValueDraft, ValueRef};
 use crate::transaction::{
     ApplyTransactionRequest, ExpressionDraft, ExpressionKindDraft, FunctionBodyDraft,
     FunctionParameterDraft, NodeTarget, SumVariantDraft, Transaction, TransactionMode,
@@ -1424,6 +1424,12 @@ fn request_corpus() -> Vec<Request> {
                 payload: None,
             }],
         },
+        TransactionOp::CreateSequenceType {
+            symbol: DraftSymbol::generated(12),
+            module: local(2),
+            name: "sequence".to_owned(),
+            element: TypeDraft::I64,
+        },
     ];
     assert_eq!(
         transaction_operations
@@ -1525,7 +1531,7 @@ fn mutate_json(source: &[u8], seed: u64, case: u64) -> Vec<u8> {
     match case % 10 {
         0 => text.replacen("{", "{\"unknown\":0,", 1).into_bytes(),
         1 => text
-            .replacen("\"version\":10", "\"version\":10,\"version\":10", 1)
+            .replacen("\"version\":11", "\"version\":11,\"version\":11", 1)
             .into_bytes(),
         2 => text
             .replacen("\"request_id\":1", "\"request_id\":-1", 1)
@@ -1727,7 +1733,7 @@ fn targeted_json_mutations(requests: &[Request]) -> Vec<NamedMutation> {
         &mut mutations,
         "json-duplicate-field",
         query,
-        replace_json(query, "\"version\":10", "\"version\":10,\"version\":10"),
+        replace_json(query, "\"version\":11", "\"version\":11,\"version\":11"),
     );
     push_mutation(
         &mut mutations,

@@ -670,8 +670,10 @@ pub enum RuntimeValuePayload {
     Bool,
     I64,
     Bytes,
+    Text,
     Product,
     Sum,
+    Sequence,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]

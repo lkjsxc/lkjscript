@@ -14,11 +14,11 @@ use crate::ids::{NodeId, Revision};
 use crate::interpret::{self, RunPolicy, RuntimeValue};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub(super) const RELEASE_MAGIC: [u8; 8] = *b"LKJREL\0\x01";
-pub(super) const RELEASE_FORMAT_VERSION: u16 = 1;
-const RELEASE_ID_DOMAIN: &str = "lkjscript.reusable-release.identity.v1";
-const RELEASE_CONTENT_DOMAIN: &str = "lkjscript.reusable-release.content.v1";
-const MAXIMUM_RUNTIME_VALUE_JSON_BYTES: usize = 1024 * 1024;
+pub(super) const RELEASE_MAGIC: [u8; 8] = *b"LKJREL\0\x02";
+pub(super) const RELEASE_FORMAT_VERSION: u16 = 2;
+const RELEASE_ID_DOMAIN: &str = "lkjscript.reusable-release.identity.v2";
+const RELEASE_CONTENT_DOMAIN: &str = "lkjscript.reusable-release.content.v2";
+const MAXIMUM_RUNTIME_VALUE_JSON_BYTES: usize = 64 * 1024 * 1024;
 
 pub(super) fn encode(release: &DecodedRelease) -> Result<Vec<u8>> {
     let payload = encode_payload(release)?;

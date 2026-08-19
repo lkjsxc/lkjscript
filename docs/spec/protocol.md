@@ -23,24 +23,29 @@ command or session rejects with `authority_busy`. The engine never silently retr
 ## Process topologies
 
 The primary CLI opens `Engine` directly for one workspace command and exits.
-`lkjscript --state DIR session` holds one engine and accepts one compact protocol-v10 JSON request
+`lkjscript --state DIR session` holds one engine and accepts one compact protocol-v11 JSON request
 per line; each line has an independent publication boundary. EOF closes the session. A successful
 `shutdown` response is flushed before exit.
 
 Application and instance one-shot commands use the topology-neutral runtime kernel. The separate
 `lkjscript runtime session --store DIR` command retains that same kernel and store lock behind exact
-line-delimited runtime protocol version 1; its contract is specified in
+line-delimited runtime protocol version 2; its contract is specified in
 [runtime-kernel.md](runtime-kernel.md). There is one installed binary and no daemon, socket client,
 or background service. Disconnect or stdout failure does not roll back a published workspace
 revision, instance revision, or host outcome. Exact idempotency receipts are the retry route; no
 mutation or possibly visible host action is retried implicitly.
 
+`lkjwork --json` and `lkjwork session` use independent product contract version 1. Product fields and
+rendering remain application-specific and are intentionally absent from the global workspace machine
+catalogue. The product session is caller-owned, line-delimited, bounded, and recovers after malformed
+independent lines; it is not a daemon or authority.
+
 ## Strict JSON projection
 
-Protocol and JSON envelope version is 10. A request envelope is exactly:
+Protocol and JSON envelope version is 11. A request envelope is exactly:
 
 ```json
-{"version":10,"request_id":1,"request":{"kind":"create_workspace"}}
+{"version":11,"request_id":1,"request":{"kind":"create_workspace"}}
 ```
 
 Response envelopes carry the same nonzero request ID. Unknown fields and variants, duplicate fields,
@@ -59,7 +64,7 @@ contains the shared descriptor value model. Agreement tests compare every advert
 response, record, variant, scalar domain, error, operation, query, and limit with strict serde and
 executable samples.
 
-The active identity is `lkjscript-machine-schema-v10`. Its canonical BLAKE3 digest is embedded in the
+The active identity is `lkjscript-machine-schema-v11`. Its canonical BLAKE3 digest is embedded in the
 agent binary and printed by `agent orient`. Diagnostic clients may request:
 
 - a compact manifest;
@@ -72,15 +77,15 @@ discovery.
 
 Reusable-release build, validate, inspect, and test are command-local projections of the separate
 [release contract](reusable-release.md), not additions to workspace RPC. Release build JSON uses
-contract version 1 and names exact workspace/revision authority; all dependency artifact paths are
+contract version 2 and names exact workspace/revision authority; all dependency artifact paths are
 explicit command inputs. Its strict Rust records, canonical codec, and command-local help own the
 fields.
 
 Application build, validate, inspect, test, typed run, and stream are command-local projections of
-the separate [application contract](application.md). Application JSON uses contract version 4 and
+the separate [application contract](application.md). Application JSON uses contract version 5 and
 build accepts only explicit release files. Durable-instance commands use command-local contract
-version 2 specified by [instance.md](instance.md). Runtime orientation, inspection, and session use
-command-local contract version 1. Release, application, instance, and runtime records are
+version 3 specified by [instance.md](instance.md). Runtime orientation, inspection, and session use
+command-local contract version 2. Release, application, instance, and runtime records are
 deliberately absent from the global workspace catalogue, avoiding duplicate schema owners and a
 mandatory global dump. Top-level parsing and operation errors return the applicable contract
 version.
@@ -164,7 +169,7 @@ gate if measured request savings justify response preflight and idempotency comp
 
 ## Version rejection
 
-Protocol/JSON 9 and older, machine schema v9 and older, context packet 1, release command contract
-0, application command/artifact version 3 and older, instance command/artifact version 1 and older,
-runtime session versions other than 1, release artifact formats other than 1, and the `plan` edit
-root reject. No alias, fallback, compatibility reader, daemon transport, or migration mode remains.
+Protocol/JSON 10 and older, machine schema v10 and older, context packet 1, release command/artifact
+version 1 and older, application command/artifact version 4 and older, instance command/artifact
+version 2 and older, runtime session versions other than 2, and the `plan` edit root reject. No
+alias, fallback, compatibility reader, daemon transport, or migration mode remains.

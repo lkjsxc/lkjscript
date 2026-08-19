@@ -3,15 +3,16 @@ use crate::error::{ErrorCode, LkError, Result};
 use crate::graph::Snapshot;
 use crate::ids::{ArtifactVersion, NodeId, Revision, SchemaId, SnapshotHash, WorkspaceId};
 use crate::schema::{
-    ByteString, MAXIMUM_BYTE_LITERAL_BYTES, Node, OperationCode, OperationKind, SemanticType,
-    ValueRef,
+    ByteString, MAXIMUM_BYTE_LITERAL_BYTES, MAXIMUM_TEXT_LITERAL_BYTES, Node, OperationCode,
+    OperationKind, SemanticType, TextString, ValueRef,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const MAGIC: [u8; 8] = *b"LKJTSM\0\x06";
-pub const FORMAT_VERSION: ArtifactVersion = ArtifactVersion(6);
-pub const SCHEMA_ID: SchemaId = SchemaId(*b"lkjscript-tsm006");
-const SNAPSHOT_HASH_DOMAIN: &str = "lkjscript.typed-semantic-model.snapshot.v6";
+pub const MAGIC: [u8; 8] = *b"LKJTSM\0\x07";
+pub const FORMAT_VERSION: ArtifactVersion = ArtifactVersion(7);
+pub const SCHEMA_NAME: &str = "lkjscript-tsm007";
+pub const SCHEMA_ID: SchemaId = SchemaId(*b"lkjscript-tsm007");
+const SNAPSHOT_HASH_DOMAIN: &str = "lkjscript.typed-semantic-model.snapshot.v7";
 pub const MAXIMUM_ARTIFACT_BYTES: usize = 64 * 1024 * 1024;
 pub const MAXIMUM_ARTIFACT_NAME_BYTES: usize = 1024 * 1024;
 const ENCODED_COUNT_BYTES: usize = 8;
@@ -285,6 +286,15 @@ pub(crate) fn put_node(writer: &mut Writer, node: &Node) -> Result<()> {
             }
             Ok(())
         }
+        Node::SequenceType {
+            owner,
+            name,
+            element,
+        } => {
+            put_node_id(writer, *owner);
+            writer.string(name).map_err(artifact_codec)?;
+            put_type(writer, *element)
+        }
         Node::Function {
             owner,
             name,
@@ -400,6 +410,13 @@ pub(crate) fn read_node(
                 None
             },
         },
+        crate::schema::NodeKind::SequenceType => Node::SequenceType {
+            owner: read_node_id(reader, workspace)?,
+            name: reader
+                .string(policy.maximum_name_bytes)
+                .map_err(artifact_codec)?,
+            element: read_type(reader, workspace)?,
+        },
         crate::schema::NodeKind::Function => Node::Function {
             owner: read_node_id(reader, workspace)?,
             name: reader
@@ -454,14 +471,30 @@ pub(crate) fn put_operation(writer: &mut Writer, operation: &OperationKind) -> R
             }
             writer.bytes(value.as_slice()).map_err(artifact_codec)?
         }
+        OperationKind::ConstText(value) => {
+            if value.len_bytes() > MAXIMUM_TEXT_LITERAL_BYTES {
+                return Err(LkError::new(
+                    ErrorCode::PolicyExceeded,
+                    "artifact text literal exceeds the semantic literal policy",
+                ));
+            }
+            writer.string(value.as_str()).map_err(artifact_codec)?
+        }
         OperationKind::AddI64 { lhs, rhs }
         | OperationKind::LtI64 { lhs, rhs }
+        | OperationKind::EqualI64 { lhs, rhs }
+        | OperationKind::AndBool { lhs, rhs }
+        | OperationKind::OrBool { lhs, rhs }
         | OperationKind::BytesEqual { lhs, rhs }
-        | OperationKind::BytesConcat { lhs, rhs } => {
+        | OperationKind::BytesConcat { lhs, rhs }
+        | OperationKind::TextEqual { lhs, rhs }
+        | OperationKind::TextConcat { lhs, rhs } => {
             put_value(writer, *lhs);
             put_value(writer, *rhs);
         }
-        OperationKind::BytesLen { value } => put_value(writer, *value),
+        OperationKind::NotBool { value }
+        | OperationKind::BytesLen { value }
+        | OperationKind::TextLen { value } => put_value(writer, *value),
         OperationKind::BytesAt { value, index } => {
             put_value(writer, *value);
             put_value(writer, *index);
@@ -474,6 +507,40 @@ pub(crate) fn put_operation(writer: &mut Writer, operation: &OperationKind) -> R
             put_value(writer, *value);
             put_value(writer, *start);
             put_value(writer, *length);
+        }
+        OperationKind::SequenceEmpty { sequence } => put_node_id(writer, *sequence),
+        OperationKind::SequenceLen { sequence, value } => {
+            put_node_id(writer, *sequence);
+            put_value(writer, *value);
+        }
+        OperationKind::SequenceGet {
+            sequence,
+            value,
+            index,
+        } => {
+            put_node_id(writer, *sequence);
+            put_value(writer, *value);
+            put_value(writer, *index);
+        }
+        OperationKind::SequenceAppend {
+            sequence,
+            value,
+            element,
+        } => {
+            put_node_id(writer, *sequence);
+            put_value(writer, *value);
+            put_value(writer, *element);
+        }
+        OperationKind::SequenceReplace {
+            sequence,
+            value,
+            index,
+            element,
+        } => {
+            put_node_id(writer, *sequence);
+            put_value(writer, *value);
+            put_value(writer, *index);
+            put_value(writer, *element);
         }
         OperationKind::Call {
             function,
@@ -579,11 +646,39 @@ pub(crate) fn read_operation(
                 })?,
             ))
         }
+        OperationCode::ConstText => {
+            let value = reader
+                .string(MAXIMUM_TEXT_LITERAL_BYTES)
+                .map_err(artifact_codec)?;
+            Ok(OperationKind::ConstText(TextString::new(value).map_err(
+                |_| {
+                    LkError::new(
+                        ErrorCode::ArtifactCorrupt,
+                        "artifact text literal exceeds the decoded value policy",
+                    )
+                },
+            )?))
+        }
         OperationCode::AddI64 => Ok(OperationKind::AddI64 {
             lhs: read_value(reader, workspace)?,
             rhs: read_value(reader, workspace)?,
         }),
         OperationCode::LtI64 => Ok(OperationKind::LtI64 {
+            lhs: read_value(reader, workspace)?,
+            rhs: read_value(reader, workspace)?,
+        }),
+        OperationCode::EqualI64 => Ok(OperationKind::EqualI64 {
+            lhs: read_value(reader, workspace)?,
+            rhs: read_value(reader, workspace)?,
+        }),
+        OperationCode::NotBool => Ok(OperationKind::NotBool {
+            value: read_value(reader, workspace)?,
+        }),
+        OperationCode::AndBool => Ok(OperationKind::AndBool {
+            lhs: read_value(reader, workspace)?,
+            rhs: read_value(reader, workspace)?,
+        }),
+        OperationCode::OrBool => Ok(OperationKind::OrBool {
             lhs: read_value(reader, workspace)?,
             rhs: read_value(reader, workspace)?,
         }),
@@ -606,6 +701,40 @@ pub(crate) fn read_operation(
         OperationCode::BytesConcat => Ok(OperationKind::BytesConcat {
             lhs: read_value(reader, workspace)?,
             rhs: read_value(reader, workspace)?,
+        }),
+        OperationCode::TextLen => Ok(OperationKind::TextLen {
+            value: read_value(reader, workspace)?,
+        }),
+        OperationCode::TextEqual => Ok(OperationKind::TextEqual {
+            lhs: read_value(reader, workspace)?,
+            rhs: read_value(reader, workspace)?,
+        }),
+        OperationCode::TextConcat => Ok(OperationKind::TextConcat {
+            lhs: read_value(reader, workspace)?,
+            rhs: read_value(reader, workspace)?,
+        }),
+        OperationCode::SequenceEmpty => Ok(OperationKind::SequenceEmpty {
+            sequence: read_node_id(reader, workspace)?,
+        }),
+        OperationCode::SequenceLen => Ok(OperationKind::SequenceLen {
+            sequence: read_node_id(reader, workspace)?,
+            value: read_value(reader, workspace)?,
+        }),
+        OperationCode::SequenceGet => Ok(OperationKind::SequenceGet {
+            sequence: read_node_id(reader, workspace)?,
+            value: read_value(reader, workspace)?,
+            index: read_value(reader, workspace)?,
+        }),
+        OperationCode::SequenceAppend => Ok(OperationKind::SequenceAppend {
+            sequence: read_node_id(reader, workspace)?,
+            value: read_value(reader, workspace)?,
+            element: read_value(reader, workspace)?,
+        }),
+        OperationCode::SequenceReplace => Ok(OperationKind::SequenceReplace {
+            sequence: read_node_id(reader, workspace)?,
+            value: read_value(reader, workspace)?,
+            index: read_value(reader, workspace)?,
+            element: read_value(reader, workspace)?,
         }),
         OperationCode::Call => {
             let function = read_node_id(reader, workspace)?;
@@ -1049,6 +1178,54 @@ mod tests {
                 lhs: ValueRef::BlockArgument(first),
                 rhs: ValueRef::BlockArgument(second),
             },
+            OperationKind::EqualI64 {
+                lhs: ValueRef::BlockArgument(first),
+                rhs: ValueRef::BlockArgument(second),
+            },
+            OperationKind::NotBool {
+                value: ValueRef::BlockArgument(first),
+            },
+            OperationKind::AndBool {
+                lhs: ValueRef::BlockArgument(first),
+                rhs: ValueRef::BlockArgument(second),
+            },
+            OperationKind::OrBool {
+                lhs: ValueRef::BlockArgument(first),
+                rhs: ValueRef::BlockArgument(second),
+            },
+            OperationKind::ConstText(TextString::try_from_str("lkjwork").unwrap()),
+            OperationKind::TextLen {
+                value: ValueRef::BlockArgument(first),
+            },
+            OperationKind::TextEqual {
+                lhs: ValueRef::BlockArgument(first),
+                rhs: ValueRef::BlockArgument(second),
+            },
+            OperationKind::TextConcat {
+                lhs: ValueRef::BlockArgument(first),
+                rhs: ValueRef::BlockArgument(second),
+            },
+            OperationKind::SequenceEmpty { sequence: first },
+            OperationKind::SequenceLen {
+                sequence: first,
+                value: ValueRef::BlockArgument(second),
+            },
+            OperationKind::SequenceGet {
+                sequence: first,
+                value: ValueRef::BlockArgument(second),
+                index: ValueRef::BlockArgument(first),
+            },
+            OperationKind::SequenceAppend {
+                sequence: first,
+                value: ValueRef::BlockArgument(first),
+                element: ValueRef::BlockArgument(second),
+            },
+            OperationKind::SequenceReplace {
+                sequence: first,
+                value: ValueRef::BlockArgument(first),
+                index: ValueRef::BlockArgument(second),
+                element: ValueRef::BlockArgument(first),
+            },
         ];
         assert_eq!(operations.len(), OperationCode::ALL.len());
         for operation in operations {
@@ -1114,12 +1291,12 @@ mod tests {
     }
 
     #[test]
-    fn artifact_format_five_rejects_without_compatibility_reader() {
-        let mut bytes = encode(&initial()).expect("format six artifact");
-        bytes[..MAGIC.len()].copy_from_slice(b"LKJSPG\0\x05");
-        bytes[MAGIC.len()..MAGIC.len() + 2].copy_from_slice(&5_u16.to_le_bytes());
+    fn artifact_format_six_rejects_without_compatibility_reader() {
+        let mut bytes = encode(&initial()).expect("format seven artifact");
+        bytes[..MAGIC.len()].copy_from_slice(b"LKJTSM\0\x06");
+        bytes[MAGIC.len()..MAGIC.len() + 2].copy_from_slice(&6_u16.to_le_bytes());
         assert_eq!(
-            decode(&bytes).expect_err("format five must reject").code,
+            decode(&bytes).expect_err("format six must reject").code,
             ErrorCode::ArtifactCorrupt
         );
     }

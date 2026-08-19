@@ -1,6 +1,6 @@
 # Named records, variants, and complete handling
 
-This focused example uses strict protocol-v10 JSON through the direct production CLI. It creates a
+This focused example uses strict protocol-v11 JSON through the direct production CLI. It creates a
 named `Reading` record, an `Input` variant with payload and payload-free alternatives, constructors,
 projections, complete lazy matching, and a `main` function containing one typed hole.
 

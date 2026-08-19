@@ -31,7 +31,7 @@ fn real_json_cli_repairs_hole_and_operand_across_direct_reopen() {
 
     let raw_create = invoke_raw(
         state,
-        br#"{"version":10,"request_id":1,"request":{"kind":"create_workspace"}}"#,
+        br#"{"version":11,"request_id":1,"request":{"kind":"create_workspace"}}"#,
     );
     assert!(raw_create.status.success());
     assert!(raw_create.stderr.is_empty());
@@ -208,6 +208,8 @@ fn real_json_cli_repairs_hole_and_operand_across_direct_reopen() {
             OperationCode::ForI64,
             OperationCode::BytesLen,
             OperationCode::BytesAt,
+            OperationCode::TextLen,
+            OperationCode::SequenceLen,
         ]
     );
     assert!(context_before.incoming_uses.items.iter().any(|site| {
@@ -290,6 +292,8 @@ fn real_json_cli_repairs_hole_and_operand_across_direct_reopen() {
             OperationCode::ForI64,
             OperationCode::BytesLen,
             OperationCode::BytesAt,
+            OperationCode::TextLen,
+            OperationCode::SequenceLen,
         ]
     );
 
@@ -648,7 +652,7 @@ fn real_json_cli_repairs_hole_and_operand_across_direct_reopen() {
 
     let zero_request_id = invoke_raw(
         state,
-        br#"{"version":10,"request_id":0,"request":{"kind":"shutdown"}}"#,
+        br#"{"version":11,"request_id":0,"request":{"kind":"shutdown"}}"#,
     );
     assert_eq!(zero_request_id.status.code(), Some(2));
     let zero_request_id: BoundaryErrorEnvelope =
@@ -658,7 +662,7 @@ fn real_json_cli_repairs_hole_and_operand_across_direct_reopen() {
 
     let malformed = invoke_raw(
         state,
-        br#"{"version":10,"request_id":99,"request":{"kind":"shutdown","unknown":true}}"#,
+        br#"{"version":11,"request_id":99,"request":{"kind":"shutdown","unknown":true}}"#,
     );
     assert_eq!(malformed.status.code(), Some(2));
     assert_one_json(&malformed.stdout);

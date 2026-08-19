@@ -97,7 +97,7 @@ fn reachable_nominal_types(snapshot: &Snapshot, reachable: &[NodeId]) -> Result<
                     declarations.insert(target);
                 }
                 Some(DirectReference::Definition { target }) => match snapshot.node(target)? {
-                    Node::ProductType { .. } | Node::SumType { .. } => {
+                    Node::ProductType { .. } | Node::SumType { .. } | Node::SequenceType { .. } => {
                         declarations.insert(target);
                     }
                     Node::ProductField { owner, .. } | Node::SumVariant { owner, .. } => {
@@ -147,6 +147,13 @@ fn reachable_nominal_types(snapshot: &Snapshot, reachable: &[NodeId]) -> Result<
                     }
                 }
             }
+            Node::SequenceType { element, .. } => {
+                if let SemanticType::Nominal(target) = element
+                    && declarations.insert(*target)
+                {
+                    pending.push(*target);
+                }
+            }
             _ => {
                 return Err(invalid(
                     declaration,
@@ -171,6 +178,7 @@ fn build_type_table(
             SemanticType::Bool => CoreTypeKind::Bool,
             SemanticType::I64 => CoreTypeKind::I64,
             SemanticType::Bytes => CoreTypeKind::Bytes,
+            SemanticType::Text => CoreTypeKind::Text,
             SemanticType::Nominal(_) => {
                 return Err(invalid(snapshot.root(), "primitive type is nominal"));
             }
@@ -273,6 +281,14 @@ fn build_type_table(
                     variants: core_variants,
                 }
             }
+            Node::SequenceType { element, .. } => CoreTypeKind::Sequence {
+                element: *ids.get(element).ok_or_else(|| {
+                    invalid(
+                        *declaration,
+                        "sequence element type is absent from Core closure",
+                    )
+                })?,
+            },
             _ => {
                 return Err(invalid(
                     *declaration,
@@ -998,6 +1014,11 @@ fn lower_instruction(
             result,
             value: value.clone(),
         },
+        OperationKind::ConstText(value) => Instruction::ConstText {
+            origin,
+            result,
+            value: value.clone(),
+        },
         OperationKind::AddI64 { lhs, rhs } => Instruction::AddI64 {
             origin,
             result,
@@ -1005,6 +1026,29 @@ fn lower_instruction(
             rhs: lower_value(environment, *rhs)?,
         },
         OperationKind::LtI64 { lhs, rhs } => Instruction::LtI64 {
+            origin,
+            result,
+            lhs: lower_value(environment, *lhs)?,
+            rhs: lower_value(environment, *rhs)?,
+        },
+        OperationKind::EqualI64 { lhs, rhs } => Instruction::EqualI64 {
+            origin,
+            result,
+            lhs: lower_value(environment, *lhs)?,
+            rhs: lower_value(environment, *rhs)?,
+        },
+        OperationKind::NotBool { value } => Instruction::NotBool {
+            origin,
+            result,
+            value: lower_value(environment, *value)?,
+        },
+        OperationKind::AndBool { lhs, rhs } => Instruction::AndBool {
+            origin,
+            result,
+            lhs: lower_value(environment, *lhs)?,
+            rhs: lower_value(environment, *rhs)?,
+        },
+        OperationKind::OrBool { lhs, rhs } => Instruction::OrBool {
             origin,
             result,
             lhs: lower_value(environment, *lhs)?,
@@ -1043,6 +1087,69 @@ fn lower_instruction(
             result,
             lhs: lower_value(environment, *lhs)?,
             rhs: lower_value(environment, *rhs)?,
+        },
+        OperationKind::TextLen { value } => Instruction::TextLen {
+            origin,
+            result,
+            value: lower_value(environment, *value)?,
+        },
+        OperationKind::TextEqual { lhs, rhs } => Instruction::TextEqual {
+            origin,
+            result,
+            lhs: lower_value(environment, *lhs)?,
+            rhs: lower_value(environment, *rhs)?,
+        },
+        OperationKind::TextConcat { lhs, rhs } => Instruction::TextConcat {
+            origin,
+            result,
+            lhs: lower_value(environment, *lhs)?,
+            rhs: lower_value(environment, *rhs)?,
+        },
+        OperationKind::SequenceEmpty { sequence } => Instruction::SequenceEmpty {
+            origin,
+            result,
+            ty: core_type(type_ids, SemanticType::Nominal(*sequence), origin)?,
+        },
+        OperationKind::SequenceLen { sequence, value } => Instruction::SequenceLen {
+            origin,
+            result,
+            ty: core_type(type_ids, SemanticType::Nominal(*sequence), origin)?,
+            value: lower_value(environment, *value)?,
+        },
+        OperationKind::SequenceGet {
+            sequence,
+            value,
+            index,
+        } => Instruction::SequenceGet {
+            origin,
+            result,
+            ty: core_type(type_ids, SemanticType::Nominal(*sequence), origin)?,
+            value: lower_value(environment, *value)?,
+            index: lower_value(environment, *index)?,
+        },
+        OperationKind::SequenceAppend {
+            sequence,
+            value,
+            element,
+        } => Instruction::SequenceAppend {
+            origin,
+            result,
+            ty: core_type(type_ids, SemanticType::Nominal(*sequence), origin)?,
+            value: lower_value(environment, *value)?,
+            element: lower_value(environment, *element)?,
+        },
+        OperationKind::SequenceReplace {
+            sequence,
+            value,
+            index,
+            element,
+        } => Instruction::SequenceReplace {
+            origin,
+            result,
+            ty: core_type(type_ids, SemanticType::Nominal(*sequence), origin)?,
+            value: lower_value(environment, *value)?,
+            index: lower_value(environment, *index)?,
+            element: lower_value(environment, *element)?,
         },
         OperationKind::Call {
             function,
@@ -1125,15 +1232,24 @@ fn core_type(
 fn semantic_result_type(snapshot: &Snapshot, operation: &OperationKind) -> Result<SemanticType> {
     Ok(match operation {
         OperationKind::ConstUnit => SemanticType::Unit,
-        OperationKind::ConstBool(_) | OperationKind::LtI64 { .. } => SemanticType::Bool,
+        OperationKind::ConstBool(_)
+        | OperationKind::LtI64 { .. }
+        | OperationKind::EqualI64 { .. }
+        | OperationKind::NotBool { .. }
+        | OperationKind::AndBool { .. }
+        | OperationKind::OrBool { .. }
+        | OperationKind::BytesEqual { .. }
+        | OperationKind::TextEqual { .. } => SemanticType::Bool,
         OperationKind::ConstI64(_)
         | OperationKind::AddI64 { .. }
         | OperationKind::BytesLen { .. }
-        | OperationKind::BytesAt { .. } => SemanticType::I64,
+        | OperationKind::BytesAt { .. }
+        | OperationKind::TextLen { .. }
+        | OperationKind::SequenceLen { .. } => SemanticType::I64,
         OperationKind::ConstBytes(_)
         | OperationKind::BytesSlice { .. }
         | OperationKind::BytesConcat { .. } => SemanticType::Bytes,
-        OperationKind::BytesEqual { .. } => SemanticType::Bool,
+        OperationKind::ConstText(_) | OperationKind::TextConcat { .. } => SemanticType::Text,
         OperationKind::Call { function, .. } => match snapshot.node(*function)? {
             Node::Function { result, .. } => *result,
             _ => return Err(invalid(*function, "call target is not a function")),
@@ -1151,6 +1267,13 @@ fn semantic_result_type(snapshot: &Snapshot, operation: &OperationKind) -> Resul
             _ => return Err(invalid(*variant, "variant target is not a sum variant")),
         },
         OperationKind::MatchSum { result, .. } => *result,
+        OperationKind::SequenceEmpty { sequence }
+        | OperationKind::SequenceAppend { sequence, .. }
+        | OperationKind::SequenceReplace { sequence, .. } => SemanticType::Nominal(*sequence),
+        OperationKind::SequenceGet { sequence, .. } => match snapshot.node(*sequence)? {
+            Node::SequenceType { element, .. } => *element,
+            _ => return Err(invalid(*sequence, "sequence target is not a sequence type")),
+        },
         OperationKind::Return { .. } | OperationKind::Yield { .. } => {
             return Err(invalid(
                 operation

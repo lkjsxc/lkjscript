@@ -336,11 +336,27 @@ fn render_expression_kind(
         OperationKind::ConstI64(value) => ExpressionKindDraft::ConstI64(*value),
         OperationKind::ConstBool(value) => ExpressionKindDraft::ConstBool(*value),
         OperationKind::ConstBytes(value) => ExpressionKindDraft::ConstBytes(value.clone()),
+        OperationKind::ConstText(value) => ExpressionKindDraft::ConstText(value.clone()),
         OperationKind::AddI64 { lhs, rhs } => ExpressionKindDraft::AddI64 {
             lhs: value(*lhs)?,
             rhs: value(*rhs)?,
         },
         OperationKind::LtI64 { lhs, rhs } => ExpressionKindDraft::LtI64 {
+            lhs: value(*lhs)?,
+            rhs: value(*rhs)?,
+        },
+        OperationKind::EqualI64 { lhs, rhs } => ExpressionKindDraft::EqualI64 {
+            lhs: value(*lhs)?,
+            rhs: value(*rhs)?,
+        },
+        OperationKind::NotBool { value: operand } => ExpressionKindDraft::NotBool {
+            value: value(*operand)?,
+        },
+        OperationKind::AndBool { lhs, rhs } => ExpressionKindDraft::AndBool {
+            lhs: value(*lhs)?,
+            rhs: value(*rhs)?,
+        },
+        OperationKind::OrBool { lhs, rhs } => ExpressionKindDraft::OrBool {
             lhs: value(*lhs)?,
             rhs: value(*rhs)?,
         },
@@ -370,6 +386,56 @@ fn render_expression_kind(
         OperationKind::BytesConcat { lhs, rhs } => ExpressionKindDraft::BytesConcat {
             lhs: value(*lhs)?,
             rhs: value(*rhs)?,
+        },
+        OperationKind::TextLen { value: operand } => ExpressionKindDraft::TextLen {
+            value: value(*operand)?,
+        },
+        OperationKind::TextEqual { lhs, rhs } => ExpressionKindDraft::TextEqual {
+            lhs: value(*lhs)?,
+            rhs: value(*rhs)?,
+        },
+        OperationKind::TextConcat { lhs, rhs } => ExpressionKindDraft::TextConcat {
+            lhs: value(*lhs)?,
+            rhs: value(*rhs)?,
+        },
+        OperationKind::SequenceEmpty { sequence } => ExpressionKindDraft::SequenceEmpty {
+            sequence: NodeTarget::Existing(*sequence),
+        },
+        OperationKind::SequenceLen {
+            sequence,
+            value: operand,
+        } => ExpressionKindDraft::SequenceLen {
+            sequence: NodeTarget::Existing(*sequence),
+            value: value(*operand)?,
+        },
+        OperationKind::SequenceGet {
+            sequence,
+            value: operand,
+            index,
+        } => ExpressionKindDraft::SequenceGet {
+            sequence: NodeTarget::Existing(*sequence),
+            value: value(*operand)?,
+            index: value(*index)?,
+        },
+        OperationKind::SequenceAppend {
+            sequence,
+            value: operand,
+            element,
+        } => ExpressionKindDraft::SequenceAppend {
+            sequence: NodeTarget::Existing(*sequence),
+            value: value(*operand)?,
+            element: value(*element)?,
+        },
+        OperationKind::SequenceReplace {
+            sequence,
+            value: operand,
+            index,
+            element,
+        } => ExpressionKindDraft::SequenceReplace {
+            sequence: NodeTarget::Existing(*sequence),
+            value: value(*operand)?,
+            index: value(*index)?,
+            element: value(*element)?,
         },
         OperationKind::Call {
             function,

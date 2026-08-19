@@ -266,11 +266,14 @@ fn validate_containment(snapshot: &Snapshot) -> Result<()> {
                 .with_related([*owner_id])
             })?;
             if matches!(reference, DirectReference::Type { .. })
-                && !matches!(target_node, Node::ProductType { .. } | Node::SumType { .. })
+                && !matches!(
+                    target_node,
+                    Node::ProductType { .. } | Node::SumType { .. } | Node::SequenceType { .. }
+                )
             {
                 return Err(LkError::new(
                     ErrorCode::WrongKind,
-                    "nominal semantic type must target a product or sum declaration",
+                    "nominal semantic type must target a product, sum, or sequence declaration",
                 )
                 .for_node(target)
                 .with_related([*owner_id]));
@@ -342,7 +345,10 @@ fn validate_slot_targets(snapshot: &Snapshot, id: NodeId, node: &Node) -> Result
         } => {
             for ty in types {
                 let node = snapshot.node(*ty)?;
-                if !matches!(node, Node::ProductType { .. } | Node::SumType { .. }) {
+                if !matches!(
+                    node,
+                    Node::ProductType { .. } | Node::SumType { .. } | Node::SequenceType { .. }
+                ) {
                     return Err(LkError::new(
                         ErrorCode::WrongKind,
                         "module type slot must contain a nominal declaration",
@@ -356,7 +362,7 @@ fn validate_slot_targets(snapshot: &Snapshot, id: NodeId, node: &Node) -> Result
         Node::ProductType { fields, .. } => {
             require_children(snapshot, id, fields, NodeKind::ProductField)?;
         }
-        Node::ProductField { .. } | Node::SumVariant { .. } => {}
+        Node::ProductField { .. } | Node::SumVariant { .. } | Node::SequenceType { .. } => {}
         Node::SumType { variants, .. } => {
             if variants.is_empty() {
                 return Err(LkError::new(
@@ -561,6 +567,21 @@ fn validate_semantics(snapshot: &Snapshot) -> Result<()> {
                         )
                         .for_node(*variant_id));
                     }
+                }
+            }
+            Node::SequenceType { element, .. } => {
+                if let SemanticType::Nominal(target) = element
+                    && !matches!(
+                        snapshot.node(*target)?,
+                        Node::ProductType { .. } | Node::SumType { .. } | Node::SequenceType { .. }
+                    )
+                {
+                    return Err(LkError::new(
+                        ErrorCode::WrongKind,
+                        "sequence element type must name a nominal declaration",
+                    )
+                    .for_node(*target)
+                    .with_related([*declaration_id]));
                 }
             }
             _ => {}
@@ -860,6 +881,15 @@ fn validate_operation(
         )
         .for_node(operation_id));
     }
+    if let OperationKind::ConstText(value) = operation
+        && value.len_bytes() > crate::schema::MAXIMUM_TEXT_LITERAL_BYTES
+    {
+        return Err(LkError::new(
+            ErrorCode::PolicyExceeded,
+            "const_text literal exceeds the semantic literal policy",
+        )
+        .for_node(operation_id));
+    }
     if let OperationKind::ForI64 { step, .. } = operation
         && *step <= 0
     {
@@ -1039,6 +1069,22 @@ fn validate_nominal_operation_contract(
                 }
             }
         }
+        OperationKind::SequenceEmpty { sequence }
+        | OperationKind::SequenceLen { sequence, .. }
+        | OperationKind::SequenceGet { sequence, .. }
+        | OperationKind::SequenceAppend { sequence, .. }
+        | OperationKind::SequenceReplace { sequence, .. } => {
+            let node = snapshot.node(*sequence)?;
+            if !matches!(node, Node::SequenceType { .. }) {
+                return Err(LkError::new(
+                    ErrorCode::WrongKind,
+                    "sequence operation must name a sequence declaration",
+                )
+                .for_node(*sequence)
+                .with_kinds(NodeKind::SequenceType, node.kind())
+                .with_related([operation_id]));
+            }
+        }
         _ => {}
     }
     Ok(())
@@ -1165,7 +1211,7 @@ fn expected_operand_types(
 }
 
 fn resolve_type_rule(
-    _snapshot: &Snapshot,
+    snapshot: &Snapshot,
     operation: &OperationKind,
     rule: TypeRule,
     _function: NodeId,
@@ -1196,6 +1242,27 @@ fn resolve_type_rule(
         },
         TypeRule::MatchResult => match operation {
             OperationKind::MatchSum { result, .. } => Some(*result),
+            _ => None,
+        },
+        TypeRule::SequenceDeclarationResult | TypeRule::SequenceOwner => match operation {
+            OperationKind::SequenceEmpty { sequence }
+            | OperationKind::SequenceLen { sequence, .. }
+            | OperationKind::SequenceGet { sequence, .. }
+            | OperationKind::SequenceAppend { sequence, .. }
+            | OperationKind::SequenceReplace { sequence, .. } => {
+                Some(SemanticType::Nominal(*sequence))
+            }
+            _ => None,
+        },
+        TypeRule::SequenceElement => match operation {
+            OperationKind::SequenceEmpty { sequence }
+            | OperationKind::SequenceLen { sequence, .. }
+            | OperationKind::SequenceGet { sequence, .. }
+            | OperationKind::SequenceAppend { sequence, .. }
+            | OperationKind::SequenceReplace { sequence, .. } => match snapshot.node(*sequence)? {
+                Node::SequenceType { element, .. } => Some(*element),
+                _ => None,
+            },
             _ => None,
         },
         TypeRule::OwnerFunctionResult

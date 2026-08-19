@@ -100,6 +100,7 @@ pub enum ScalarValue {
     Bool(bool),
     Type(SemanticType),
     Bytes(ByteString),
+    Text(crate::schema::TextString),
 }
 
 impl ChangeKind {
@@ -339,6 +340,15 @@ fn hash_scalar_value(hasher: &mut blake3::Hasher, value: &ScalarValue) {
             hasher.update(&u64::try_from(value.len()).unwrap_or(u64::MAX).to_le_bytes());
             hasher.update(value.as_slice());
         }
+        ScalarValue::Text(value) => {
+            hasher.update(&[5]);
+            hasher.update(
+                &u64::try_from(value.len_bytes())
+                    .unwrap_or(u64::MAX)
+                    .to_le_bytes(),
+            );
+            hasher.update(value.as_bytes());
+        }
     }
 }
 
@@ -356,14 +366,29 @@ fn hash_operation(hasher: &mut blake3::Hasher, operation: &OperationKind) {
             hasher.update(&u64::try_from(value.len()).unwrap_or(u64::MAX).to_le_bytes());
             hasher.update(value.as_slice());
         }
+        OperationKind::ConstText(value) => {
+            hasher.update(
+                &u64::try_from(value.len_bytes())
+                    .unwrap_or(u64::MAX)
+                    .to_le_bytes(),
+            );
+            hasher.update(value.as_bytes());
+        }
         OperationKind::AddI64 { lhs, rhs }
         | OperationKind::LtI64 { lhs, rhs }
+        | OperationKind::EqualI64 { lhs, rhs }
+        | OperationKind::AndBool { lhs, rhs }
+        | OperationKind::OrBool { lhs, rhs }
         | OperationKind::BytesEqual { lhs, rhs }
-        | OperationKind::BytesConcat { lhs, rhs } => {
+        | OperationKind::BytesConcat { lhs, rhs }
+        | OperationKind::TextEqual { lhs, rhs }
+        | OperationKind::TextConcat { lhs, rhs } => {
             hash_value(hasher, *lhs);
             hash_value(hasher, *rhs);
         }
-        OperationKind::BytesLen { value } => hash_value(hasher, *value),
+        OperationKind::NotBool { value }
+        | OperationKind::BytesLen { value }
+        | OperationKind::TextLen { value } => hash_value(hasher, *value),
         OperationKind::BytesAt { value, index } => {
             hash_value(hasher, *value);
             hash_value(hasher, *index);
@@ -376,6 +401,40 @@ fn hash_operation(hasher: &mut blake3::Hasher, operation: &OperationKind) {
             hash_value(hasher, *value);
             hash_value(hasher, *start);
             hash_value(hasher, *length);
+        }
+        OperationKind::SequenceEmpty { sequence } => hash_node(hasher, *sequence),
+        OperationKind::SequenceLen { sequence, value } => {
+            hash_node(hasher, *sequence);
+            hash_value(hasher, *value);
+        }
+        OperationKind::SequenceGet {
+            sequence,
+            value,
+            index,
+        } => {
+            hash_node(hasher, *sequence);
+            hash_value(hasher, *value);
+            hash_value(hasher, *index);
+        }
+        OperationKind::SequenceAppend {
+            sequence,
+            value,
+            element,
+        } => {
+            hash_node(hasher, *sequence);
+            hash_value(hasher, *value);
+            hash_value(hasher, *element);
+        }
+        OperationKind::SequenceReplace {
+            sequence,
+            value,
+            index,
+            element,
+        } => {
+            hash_node(hasher, *sequence);
+            hash_value(hasher, *value);
+            hash_value(hasher, *index);
+            hash_value(hasher, *element);
         }
         OperationKind::Call {
             function,
@@ -630,6 +689,12 @@ fn scalar_operation_change(
             Some((
                 ScalarValue::Bytes(left.clone()),
                 ScalarValue::Bytes(right.clone()),
+            ))
+        }
+        (OperationKind::ConstText(left), OperationKind::ConstText(right)) if left != right => {
+            Some((
+                ScalarValue::Text(left.clone()),
+                ScalarValue::Text(right.clone()),
             ))
         }
         (OperationKind::Hole { expected: left }, OperationKind::Hole { expected: right })

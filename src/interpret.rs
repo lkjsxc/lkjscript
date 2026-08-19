@@ -1,7 +1,7 @@
 use crate::compile;
 use crate::core_ir::{
     self, BOOL_TYPE, BYTES_TYPE, BlockId, CoreProgram, CoreTypeId, CoreTypeKind, FunctionId,
-    I64_TYPE, Instruction, SwitchArgument, Terminator, ValueId,
+    I64_TYPE, Instruction, SwitchArgument, TEXT_TYPE, Terminator, ValueId,
 };
 use crate::error::{ErrorCode, LkError, Result};
 use crate::graph::Snapshot;
@@ -11,9 +11,13 @@ use crate::ownership::{
     self, EdgeOwnership, EdgeSource, InstructionOwnership, OwnershipPlan, TerminatorOwnership,
     UseAction,
 };
-use crate::schema::{ByteString, MAXIMUM_BYTE_STRING_BYTES, Node, SemanticType};
+use crate::schema::{
+    ByteString, MAXIMUM_BYTE_STRING_BYTES, MAXIMUM_SEQUENCE_ELEMENTS, MAXIMUM_TEXT_BYTES, Node,
+    SemanticType, TextString,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 use std::time::Instant;
 
 pub use crate::managed::{
@@ -21,13 +25,13 @@ pub use crate::managed::{
 };
 
 pub const MAX_RUN_ARGUMENTS: usize = 1_024;
-pub const MAX_RUN_FUEL: u64 = 10_000_000;
+pub const MAX_RUN_FUEL: u64 = 100_000_000;
 pub const MAX_RUN_FRAMES: u32 = 100_000;
 pub const MAX_RUN_LIVE_CELLS: usize = 65_536;
 pub const MAX_RUNTIME_VALUE_DEPTH: usize = 24;
-pub const MAX_RUNTIME_VALUE_ITEMS: usize = 4_096;
-pub const MAX_RUNTIME_VALUE_BYTES: usize = 64 * 1024;
-pub const MAX_RUN_ARGUMENT_BYTE_BYTES: usize = 64 * 1024;
+pub const MAX_RUNTIME_VALUE_ITEMS: usize = 1_000_000;
+pub const MAX_RUNTIME_VALUE_BYTES: usize = 64 * 1024 * 1024;
+pub const MAX_RUN_ARGUMENT_BYTE_BYTES: usize = 64 * 1024 * 1024;
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -48,6 +52,7 @@ pub enum RuntimeValue {
     Bool(bool),
     I64(i64),
     Bytes(ByteString),
+    Text(TextString),
     Product {
         ty: NodeId,
         fields: Vec<RuntimeFieldValue>,
@@ -58,6 +63,10 @@ pub enum RuntimeValue {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         payload: Option<Box<RuntimeValue>>,
     },
+    Sequence {
+        ty: NodeId,
+        elements: Vec<RuntimeValue>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -66,17 +75,21 @@ pub(crate) enum RuntimeValueCode {
     Bool,
     I64,
     Bytes,
+    Text,
     Product,
     Sum,
+    Sequence,
 }
 impl RuntimeValueCode {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 8] = [
         Self::Unit,
         Self::Bool,
         Self::I64,
         Self::Bytes,
+        Self::Text,
         Self::Product,
         Self::Sum,
+        Self::Sequence,
     ];
     pub const fn machine_name(self) -> &'static str {
         match self {
@@ -84,8 +97,10 @@ impl RuntimeValueCode {
             Self::Bool => "bool",
             Self::I64 => "i64",
             Self::Bytes => "bytes",
+            Self::Text => "text",
             Self::Product => "product",
             Self::Sum => "sum",
+            Self::Sequence => "sequence",
         }
     }
 }
@@ -97,8 +112,10 @@ impl RuntimeValue {
             Self::Bool(_) => RuntimeValueCode::Bool,
             Self::I64(_) => RuntimeValueCode::I64,
             Self::Bytes(_) => RuntimeValueCode::Bytes,
+            Self::Text(_) => RuntimeValueCode::Text,
             Self::Product { .. } => RuntimeValueCode::Product,
             Self::Sum { .. } => RuntimeValueCode::Sum,
+            Self::Sequence { .. } => RuntimeValueCode::Sequence,
         }
     }
     fn semantic_type(&self) -> SemanticType {
@@ -107,7 +124,9 @@ impl RuntimeValue {
             Self::Bool(_) => SemanticType::Bool,
             Self::I64(_) => SemanticType::I64,
             Self::Bytes(_) => SemanticType::Bytes,
+            Self::Text(_) => SemanticType::Text,
             Self::Product { ty, .. } | Self::Sum { ty, .. } => SemanticType::Nominal(*ty),
+            Self::Sequence { ty, .. } => SemanticType::Nominal(*ty),
         }
     }
 }
@@ -176,7 +195,7 @@ pub(crate) fn compile_and_run(
     preflight_flat_output(&program, &managed, &flat, entry)?;
     let value = from_flat(&program, &managed, &flat, 1, entry)?;
     validate_runtime_value(snapshot, &value, result_type, entry)?;
-    if runtime_byte_value_bytes(&value)? > MAXIMUM_BYTE_STRING_BYTES {
+    if runtime_byte_value_bytes(&value)? > MAX_RUNTIME_VALUE_BYTES {
         return Err(LkError::new(
             ErrorCode::ResultBytePolicyExceeded,
             "run result exceeds the decoded byte output policy",
@@ -190,6 +209,73 @@ pub(crate) fn compile_and_run(
         lowering_nanoseconds: compile_observation.lowering_nanoseconds,
         core_verification_nanoseconds: compile_observation.core_verification_nanoseconds,
         execute_nanoseconds,
+    })
+}
+
+pub(crate) fn compile_entry(
+    snapshot: &Snapshot,
+    entry: NodeId,
+) -> Result<(CoreProgram, compile::CompileObservation)> {
+    compile::compile_observed(snapshot, entry)
+}
+
+pub(crate) fn run_compiled(
+    snapshot: &Snapshot,
+    entry: NodeId,
+    program: &CoreProgram,
+    arguments: &[RuntimeValue],
+    policy: RunPolicy,
+) -> Result<RunResult> {
+    validate_policy(policy)?;
+    let result_type = validate_invocation(snapshot, entry, arguments)?;
+    preflight_result(snapshot, result_type, entry)?;
+    let entry_function = program
+        .functions
+        .get(index(program.entry.0, "entry function")?)
+        .ok_or_else(|| invalid_ir("entry function is out of bounds"))?;
+    let argument_cells =
+        entry_function
+            .parameters
+            .iter()
+            .try_fold(0_usize, |total, parameter| {
+                total
+                    .checked_add(core_ir::type_cells(
+                        program,
+                        core_ir::value_type(entry_function, *parameter)?,
+                    )?)
+                    .ok_or_else(|| invalid_ir("entry argument cell count overflowed"))
+            })?;
+    ensure_peak_cells(frame_cells(entry_function)?, argument_cells, 0, entry)?;
+    let mut managed = InvocationStore::default();
+    let mut flat_arguments = Vec::with_capacity(arguments.len());
+    for (value, parameter) in arguments.iter().zip(&entry_function.parameters) {
+        flat_arguments.push(to_flat(
+            program,
+            &mut managed,
+            value,
+            core_ir::value_type(entry_function, *parameter)?,
+            1,
+            entry_function.origin,
+        )?);
+    }
+    let execute_started = Instant::now();
+    let flat = interpret_with_store(program, flat_arguments, policy, &mut managed)?;
+    preflight_flat_output(program, &managed, &flat, entry)?;
+    let value = from_flat(program, &managed, &flat, 1, entry)?;
+    validate_runtime_value(snapshot, &value, result_type, entry)?;
+    if runtime_byte_value_bytes(&value)? > MAX_RUNTIME_VALUE_BYTES {
+        return Err(LkError::new(
+            ErrorCode::ResultBytePolicyExceeded,
+            "run result exceeds the decoded byte output policy",
+        )
+        .for_node(entry));
+    }
+    Ok(RunResult {
+        value,
+        compile_nanoseconds: 0,
+        lowering_nanoseconds: 0,
+        core_verification_nanoseconds: 0,
+        execute_nanoseconds: nanos(execute_started.elapsed().as_nanos()),
     })
 }
 
@@ -304,6 +390,12 @@ pub(crate) fn runtime_value_policy_metrics(root: &RuntimeValue) -> Result<(usize
             RuntimeValue::Bool(_) => 2,
             RuntimeValue::I64(_) => 9,
             RuntimeValue::Bytes(_) => 16,
+            RuntimeValue::Text(value) => value.len_bytes().checked_add(16).ok_or_else(|| {
+                LkError::new(
+                    ErrorCode::PolicyExceeded,
+                    "runtime text byte accounting overflowed",
+                )
+            })?,
             RuntimeValue::Product { fields, .. } => {
                 for field in fields.iter().rev() {
                     stack.push((&field.value, depth + 1));
@@ -324,6 +416,27 @@ pub(crate) fn runtime_value_policy_metrics(root: &RuntimeValue) -> Result<(usize
                     stack.push((payload, depth + 1));
                 }
                 1 + 24 + 24 + 1
+            }
+            RuntimeValue::Sequence { elements, .. } => {
+                if elements.len() > MAXIMUM_SEQUENCE_ELEMENTS {
+                    return Err(LkError::new(
+                        ErrorCode::PolicyExceeded,
+                        "runtime sequence exceeds element-count policy",
+                    ));
+                }
+                for element in elements.iter().rev() {
+                    stack.push((element, depth + 1));
+                }
+                1_usize
+                    .checked_add(24)
+                    .and_then(|value| value.checked_add(8))
+                    .and_then(|value| value.checked_add(elements.len().checked_mul(8)?))
+                    .ok_or_else(|| {
+                        LkError::new(
+                            ErrorCode::PolicyExceeded,
+                            "runtime sequence byte accounting overflowed",
+                        )
+                    })?
             }
         };
         bytes = bytes.checked_add(own_bytes).ok_or_else(|| {
@@ -361,6 +474,14 @@ pub(crate) fn runtime_byte_value_bytes(root: &RuntimeValue) -> Result<usize> {
                     )
                 })?;
             }
+            RuntimeValue::Text(value) => {
+                total = total.checked_add(value.len_bytes()).ok_or_else(|| {
+                    LkError::new(
+                        ErrorCode::RuntimeByteInputTooLarge,
+                        "runtime text input accounting overflowed",
+                    )
+                })?;
+            }
             RuntimeValue::Product { fields, .. } => {
                 stack.extend(fields.iter().rev().map(|field| &field.value));
             }
@@ -368,6 +489,9 @@ pub(crate) fn runtime_byte_value_bytes(root: &RuntimeValue) -> Result<usize> {
                 if let Some(payload) = payload {
                     stack.push(payload);
                 }
+            }
+            RuntimeValue::Sequence { elements, .. } => {
+                stack.extend(elements.iter().rev());
             }
             RuntimeValue::Unit | RuntimeValue::Bool(_) | RuntimeValue::I64(_) => {}
         }
@@ -408,7 +532,8 @@ pub(crate) fn validate_runtime_value(
             RuntimeValue::Unit
             | RuntimeValue::Bool(_)
             | RuntimeValue::I64(_)
-            | RuntimeValue::Bytes(_) => {}
+            | RuntimeValue::Bytes(_)
+            | RuntimeValue::Text(_) => {}
             RuntimeValue::Product { ty, fields } => {
                 let Node::ProductType {
                     fields: expected_fields,
@@ -502,6 +627,24 @@ pub(crate) fn validate_runtime_value(
                         )
                         .for_node(*variant));
                     }
+                }
+            }
+            RuntimeValue::Sequence { ty, elements } => {
+                let Node::SequenceType { element, .. } = snapshot.node(*ty)? else {
+                    return Err(LkError::new(
+                        ErrorCode::RunArgumentMismatch,
+                        "runtime sequence type is not a sequence declaration",
+                    )
+                    .for_node(*ty));
+                };
+                if elements.len() > MAXIMUM_SEQUENCE_ELEMENTS {
+                    return Err(value_policy(
+                        origin,
+                        "runtime sequence exceeds element-count policy",
+                    ));
+                }
+                for value in elements.iter().rev() {
+                    stack.push((value, *element, depth + 1));
                 }
             }
         }
@@ -630,6 +773,11 @@ fn type_metric(snapshot: &Snapshot, root: SemanticType, origin: NodeId) -> Resul
                         .ok_or_else(|| value_policy(origin, "result bytes overflowed"))?,
                 }
             }
+            Node::SequenceType { .. } => ValueMetric {
+                depth: 1,
+                items: 1,
+                bytes: 96,
+            },
             _ => {
                 return Err(
                     invalid_ir("runtime result nominal target is not a declaration").for_node(id),
@@ -668,6 +816,7 @@ fn nominal_dependencies(snapshot: &Snapshot, id: NodeId) -> Result<Vec<NodeId>> 
                 }
             }
         }
+        Node::SequenceType { .. } => {}
         _ => {
             return Err(
                 invalid_ir("runtime nominal dependency target is not a declaration").for_node(id),
@@ -692,10 +841,345 @@ fn metric_of(
     }
 }
 
-type InvocationStore = ManagedStore;
+#[derive(Debug)]
+struct SequenceObject {
+    elements: Vec<Arc<RuntimeValue>>,
+    element_bytes: Vec<usize>,
+    retained_bytes: usize,
+    visible_bytes: usize,
+    owners: u32,
+}
+
+struct InvocationStore {
+    bytes: ManagedStore,
+    sequences: BTreeMap<ByteHandle, SequenceObject>,
+}
+
+impl Default for InvocationStore {
+    fn default() -> Self {
+        Self::new(
+            crate::managed::ManagedLimits {
+                cumulative_visible_bytes: MAX_RUN_MANAGED_VISIBLE_BYTES,
+                live_backing_bytes: MAX_RUN_RETAINED_BACKING_BYTES,
+                live_objects: MAX_RUN_MANAGED_OBJECTS,
+            },
+            crate::managed::ExecutionMode::Ownership,
+        )
+    }
+}
+
+impl InvocationStore {
+    fn new(limits: crate::managed::ManagedLimits, mode: crate::managed::ExecutionMode) -> Self {
+        Self {
+            bytes: ManagedStore::new(limits, mode),
+            sequences: BTreeMap::new(),
+        }
+    }
+
+    #[cfg(test)]
+    fn with_drop_witness(
+        limits: crate::managed::ManagedLimits,
+        mode: crate::managed::ExecutionMode,
+        witness: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    ) -> Self {
+        Self {
+            bytes: ManagedStore::with_drop_witness(limits, mode, witness),
+            sequences: BTreeMap::new(),
+        }
+    }
+
+    fn allocate_sequence(
+        &mut self,
+        elements: Vec<RuntimeValue>,
+        origin: NodeId,
+    ) -> Result<ByteHandle> {
+        if elements.len() > MAXIMUM_SEQUENCE_ELEMENTS {
+            return Err(value_policy(
+                origin,
+                "sequence exceeds element-count policy before allocation",
+            ));
+        }
+        let mut retained = Vec::new();
+        retained
+            .try_reserve_exact(elements.len())
+            .map_err(|_| managed_allocation_error(origin))?;
+        let mut element_bytes = Vec::new();
+        element_bytes
+            .try_reserve_exact(elements.len())
+            .map_err(|_| managed_allocation_error(origin))?;
+        let mut visible_bytes = 0_usize;
+        for element in elements {
+            element_bytes.push(encoded_runtime_value_bytes(&element, origin)?);
+            visible_bytes = visible_bytes
+                .checked_add(runtime_byte_value_bytes(&element)?)
+                .ok_or_else(|| {
+                    value_policy(origin, "sequence visible-byte accounting overflowed")
+                })?;
+            retained.push(Arc::new(element));
+        }
+        let retained_bytes = sequence_retained_bytes(&element_bytes, origin)?;
+        self.allocate_sequence_parts(
+            retained,
+            element_bytes,
+            retained_bytes,
+            visible_bytes,
+            origin,
+        )
+    }
+
+    fn allocate_sequence_parts(
+        &mut self,
+        elements: Vec<Arc<RuntimeValue>>,
+        element_bytes: Vec<usize>,
+        retained_bytes: usize,
+        visible_bytes: usize,
+        origin: NodeId,
+    ) -> Result<ByteHandle> {
+        if retained_bytes > MAX_RUNTIME_VALUE_BYTES {
+            return Err(value_policy(
+                origin,
+                "sequence retained representation exceeds byte policy",
+            ));
+        }
+        let handle = self.bytes.allocate_backing(b"", origin)?;
+        if let Err(error) =
+            self.bytes
+                .reserve_external_backing(retained_bytes, visible_bytes, origin)
+        {
+            self.bytes.drop_claim(handle, origin)?;
+            return Err(error);
+        }
+        if self
+            .sequences
+            .insert(
+                handle,
+                SequenceObject {
+                    elements,
+                    element_bytes,
+                    retained_bytes,
+                    visible_bytes,
+                    owners: 1,
+                },
+            )
+            .is_some()
+        {
+            self.bytes
+                .release_external_backing(retained_bytes, origin)?;
+            self.bytes.drop_claim(handle, origin)?;
+            return Err(invalid_handle(
+                origin,
+                "sequence allocation reused a live managed handle",
+            ));
+        }
+        Ok(handle)
+    }
+
+    fn sequence_object(&self, handle: ByteHandle, origin: NodeId) -> Result<&SequenceObject> {
+        self.sequences
+            .get(&handle)
+            .ok_or_else(|| invalid_handle(origin, "managed sequence handle is stale or malformed"))
+    }
+
+    fn sequence_len(&self, handle: ByteHandle, origin: NodeId) -> Result<usize> {
+        Ok(self.sequence_object(handle, origin)?.elements.len())
+    }
+
+    fn sequence_element(
+        &self,
+        handle: ByteHandle,
+        index: usize,
+        origin: NodeId,
+    ) -> Result<Arc<RuntimeValue>> {
+        self.sequence_object(handle, origin)?
+            .elements
+            .get(index)
+            .cloned()
+            .ok_or_else(|| {
+                LkError::new(ErrorCode::RuntimeTrap, "sequence index is out of bounds")
+                    .for_node(origin)
+            })
+    }
+
+    fn materialize_sequence(
+        &self,
+        handle: ByteHandle,
+        origin: NodeId,
+    ) -> Result<Vec<RuntimeValue>> {
+        Ok(self
+            .sequence_object(handle, origin)?
+            .elements
+            .iter()
+            .map(|element| (**element).clone())
+            .collect())
+    }
+
+    fn append_sequence(
+        &mut self,
+        handle: ByteHandle,
+        element: RuntimeValue,
+        origin: NodeId,
+    ) -> Result<(ByteHandle, usize)> {
+        let source = self.sequence_object(handle, origin)?;
+        if source.elements.len() == MAXIMUM_SEQUENCE_ELEMENTS {
+            return Err(value_policy(
+                origin,
+                "sequence append exceeds element-count policy",
+            ));
+        }
+        let element_bytes = encoded_runtime_value_bytes(&element, origin)?;
+        let element_visible = runtime_byte_value_bytes(&element)?;
+        let separator = usize::from(!source.elements.is_empty());
+        let retained_bytes = source
+            .retained_bytes
+            .checked_add(separator)
+            .and_then(|value| value.checked_add(element_bytes))
+            .ok_or_else(|| value_policy(origin, "sequence retained-byte accounting overflowed"))?;
+        let visible_bytes = source
+            .visible_bytes
+            .checked_add(element_visible)
+            .ok_or_else(|| value_policy(origin, "sequence visible-byte accounting overflowed"))?;
+        let mut elements = source.elements.clone();
+        let mut encoded_lengths = source.element_bytes.clone();
+        elements.push(Arc::new(element));
+        encoded_lengths.push(element_bytes);
+        let length = elements.len();
+        let handle = self.allocate_sequence_parts(
+            elements,
+            encoded_lengths,
+            retained_bytes,
+            visible_bytes,
+            origin,
+        )?;
+        Ok((handle, length))
+    }
+
+    fn replace_sequence(
+        &mut self,
+        handle: ByteHandle,
+        index: usize,
+        element: RuntimeValue,
+        origin: NodeId,
+    ) -> Result<(ByteHandle, usize)> {
+        let source = self.sequence_object(handle, origin)?;
+        let old = source.elements.get(index).ok_or_else(|| {
+            LkError::new(
+                ErrorCode::RuntimeTrap,
+                "sequence replacement index is out of bounds",
+            )
+            .for_node(origin)
+        })?;
+        let old_encoded = *source
+            .element_bytes
+            .get(index)
+            .ok_or_else(|| invalid_handle(origin, "sequence element accounting is malformed"))?;
+        let old_visible = runtime_byte_value_bytes(old)?;
+        let replacement_encoded = encoded_runtime_value_bytes(&element, origin)?;
+        let replacement_visible = runtime_byte_value_bytes(&element)?;
+        let retained_bytes = source
+            .retained_bytes
+            .checked_sub(old_encoded)
+            .and_then(|value| value.checked_add(replacement_encoded))
+            .ok_or_else(|| value_policy(origin, "sequence retained-byte accounting overflowed"))?;
+        let visible_bytes = source
+            .visible_bytes
+            .checked_sub(old_visible)
+            .and_then(|value| value.checked_add(replacement_visible))
+            .ok_or_else(|| value_policy(origin, "sequence visible-byte accounting overflowed"))?;
+        let mut elements = source.elements.clone();
+        let mut encoded_lengths = source.element_bytes.clone();
+        elements[index] = Arc::new(element);
+        encoded_lengths[index] = replacement_encoded;
+        let length = elements.len();
+        let handle = self.allocate_sequence_parts(
+            elements,
+            encoded_lengths,
+            retained_bytes,
+            visible_bytes,
+            origin,
+        )?;
+        Ok((handle, length))
+    }
+
+    fn share(&mut self, handle: ByteHandle, origin: NodeId) -> Result<()> {
+        let next_owners = self
+            .sequences
+            .get(&handle)
+            .map(|sequence| {
+                sequence.owners.checked_add(1).ok_or_else(|| {
+                    LkError::new(
+                        ErrorCode::ExecutionMemoryExhausted,
+                        "managed sequence ownership count overflowed",
+                    )
+                    .for_node(origin)
+                })
+            })
+            .transpose()?;
+        self.bytes.share(handle, origin)?;
+        if let Some(next_owners) = next_owners {
+            self.sequences
+                .get_mut(&handle)
+                .ok_or_else(|| invalid_handle(origin, "managed sequence disappeared during share"))?
+                .owners = next_owners;
+        }
+        Ok(())
+    }
+
+    fn drop_claim(&mut self, handle: ByteHandle, origin: NodeId) -> Result<()> {
+        let sequence_drop = self
+            .sequences
+            .get(&handle)
+            .map(|sequence| {
+                Ok::<_, LkError>((
+                    sequence.owners.checked_sub(1).ok_or_else(|| {
+                        invalid_handle(origin, "managed sequence ownership was zero")
+                    })?,
+                    sequence.retained_bytes,
+                ))
+            })
+            .transpose()?;
+        self.bytes.drop_claim(handle, origin)?;
+        if let Some((next_owners, retained_bytes)) = sequence_drop {
+            if next_owners == 0 {
+                self.sequences.remove(&handle);
+                self.bytes
+                    .release_external_backing(retained_bytes, origin)?;
+            } else {
+                self.sequences
+                    .get_mut(&handle)
+                    .ok_or_else(|| {
+                        invalid_handle(origin, "managed sequence disappeared during drop")
+                    })?
+                    .owners = next_owners;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl std::ops::Deref for InvocationStore {
+    type Target = ManagedStore;
+
+    fn deref(&self) -> &Self::Target {
+        &self.bytes
+    }
+}
+
+impl std::ops::DerefMut for InvocationStore {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.bytes
+    }
+}
 
 fn invalid_handle(origin: NodeId, message: &str) -> LkError {
     LkError::new(ErrorCode::InvalidManagedHandle, message).for_node(origin)
+}
+
+fn managed_allocation_error(origin: NodeId) -> LkError {
+    LkError::new(
+        ErrorCode::ExecutionMemoryExhausted,
+        "managed sequence allocation failed",
+    )
+    .for_node(origin)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -779,6 +1263,107 @@ fn share_flat_value(
     Ok(())
 }
 
+fn encoded_runtime_value_bytes(value: &RuntimeValue, origin: NodeId) -> Result<usize> {
+    let encoded = serde_json::to_vec(value).map_err(|error| {
+        invalid_ir(format!(
+            "runtime value encoding failed after validation: {error}"
+        ))
+        .for_node(origin)
+    })?;
+    if encoded.len() > MAX_RUNTIME_VALUE_BYTES {
+        return Err(value_policy(
+            origin,
+            "sequence element representation exceeds byte policy",
+        ));
+    }
+    Ok(encoded.len())
+}
+
+fn sequence_retained_bytes(element_bytes: &[usize], origin: NodeId) -> Result<usize> {
+    let separators = element_bytes.len().saturating_sub(1);
+    let retained = element_bytes.iter().try_fold(
+        2_usize
+            .checked_add(separators)
+            .ok_or_else(|| value_policy(origin, "sequence retained-byte accounting overflowed"))?,
+        |total, length| {
+            total
+                .checked_add(*length)
+                .ok_or_else(|| value_policy(origin, "sequence retained-byte accounting overflowed"))
+        },
+    )?;
+    if retained > MAX_RUNTIME_VALUE_BYTES {
+        return Err(value_policy(
+            origin,
+            "sequence retained representation exceeds byte policy",
+        ));
+    }
+    Ok(retained)
+}
+
+#[cfg(test)]
+fn encode_sequence(elements: &[RuntimeValue], origin: NodeId) -> Result<Vec<u8>> {
+    if elements.len() > MAXIMUM_SEQUENCE_ELEMENTS {
+        return Err(value_policy(
+            origin,
+            "sequence exceeds element-count policy before allocation",
+        ));
+    }
+    let encoded = serde_json::to_vec(elements).map_err(|error| {
+        invalid_ir(format!(
+            "sequence encoding failed after validation: {error}"
+        ))
+        .for_node(origin)
+    })?;
+    if encoded.len() > MAX_RUNTIME_VALUE_BYTES {
+        return Err(value_policy(
+            origin,
+            "sequence retained representation exceeds byte policy",
+        ));
+    }
+    Ok(encoded)
+}
+
+#[cfg(test)]
+fn decode_sequence(bytes: &[u8], origin: NodeId) -> Result<Vec<RuntimeValue>> {
+    if bytes.len() > MAX_RUNTIME_VALUE_BYTES {
+        return Err(invalid_handle(
+            origin,
+            "sequence retained representation exceeds byte policy",
+        ));
+    }
+    let elements: Vec<RuntimeValue> = serde_json::from_slice(bytes)
+        .map_err(|_| invalid_handle(origin, "sequence retained representation is malformed"))?;
+    if elements.len() > MAXIMUM_SEQUENCE_ELEMENTS {
+        return Err(invalid_handle(
+            origin,
+            "sequence retained representation exceeds element-count policy",
+        ));
+    }
+    let canonical = serde_json::to_vec(&elements)
+        .map_err(|_| invalid_ir("sequence canonical re-encoding failed"))?;
+    if canonical != bytes {
+        return Err(invalid_handle(
+            origin,
+            "sequence retained representation is noncanonical",
+        ));
+    }
+    Ok(elements)
+}
+
+fn managed_cell_handle(cells: &[Cell], origin: NodeId, category: &str) -> Result<ByteHandle> {
+    match cells.first().copied() {
+        Some(Cell::Bytes(handle)) => Ok(handle),
+        Some(Cell::Scalar(_)) => Err(invalid_handle(
+            origin,
+            &format!("{category} cell has the wrong kind"),
+        )),
+        None => Err(invalid_handle(
+            origin,
+            &format!("{category} cell is absent"),
+        )),
+    }
+}
+
 fn to_flat(
     program: &CoreProgram,
     managed: &mut InvocationStore,
@@ -827,6 +1412,16 @@ fn write_flat(
         }
         (CoreTypeKind::Bytes, RuntimeValue::Bytes(value)) => {
             destination[0] = Cell::Bytes(managed.allocate_backing(value.as_slice(), origin)?);
+            Ok(())
+        }
+        (CoreTypeKind::Text, RuntimeValue::Text(value)) => {
+            destination[0] = Cell::Bytes(managed.allocate_backing(value.as_bytes(), origin)?);
+            Ok(())
+        }
+        (CoreTypeKind::Sequence { .. }, RuntimeValue::Sequence { ty, elements })
+            if core.origin == Some(*ty) =>
+        {
+            destination[0] = Cell::Bytes(managed.allocate_sequence(elements.clone(), origin)?);
             Ok(())
         }
         (
@@ -906,8 +1501,18 @@ fn preflight_flat_output(
     value: &FlatValue,
     origin: NodeId,
 ) -> Result<()> {
+    preflight_flat_output_with_limit(program, managed, value, origin, MAX_RUNTIME_VALUE_BYTES)
+}
+
+fn preflight_flat_output_with_limit(
+    program: &CoreProgram,
+    managed: &InvocationStore,
+    value: &FlatValue,
+    origin: NodeId,
+    maximum_visible_bytes: usize,
+) -> Result<()> {
     let visible = flat_visible_bytes(program, managed, value.ty, &value.cells, 1, origin)?;
-    if visible > MAXIMUM_BYTE_STRING_BYTES {
+    if visible > maximum_visible_bytes {
         return Err(LkError::new(
             ErrorCode::ResultBytePolicyExceeded,
             "run result exceeds the decoded byte output policy",
@@ -933,13 +1538,17 @@ fn flat_visible_bytes(
         .for_node(origin));
     }
     match &core_ir::type_at(program, ty)?.kind {
-        CoreTypeKind::Bytes => match cells.first().copied() {
+        CoreTypeKind::Bytes | CoreTypeKind::Text => match cells.first().copied() {
             Some(Cell::Bytes(handle)) => Ok(managed.bytes(handle, origin)?.len()),
             _ => Err(invalid_handle(
                 origin,
                 "byte output cell has the wrong kind",
             )),
         },
+        CoreTypeKind::Sequence { .. } => {
+            let handle = managed_cell_handle(cells, origin, "sequence output")?;
+            Ok(managed.sequence_object(handle, origin)?.visible_bytes)
+        }
         CoreTypeKind::Product { fields } => fields.iter().try_fold(0_usize, |total, field| {
             let start = usize::try_from(field.cell_offset)
                 .map_err(|_| invalid_ir("output field offset overflows host"))?;
@@ -1062,6 +1671,28 @@ fn from_flat_cells(
                     .for_node(origin)
                 },
             )?))
+        }
+        CoreTypeKind::Text => {
+            let handle = managed_cell_handle(cells, origin, "text result")?;
+            let text = std::str::from_utf8(managed.bytes(handle, origin)?)
+                .map_err(|_| invalid_handle(origin, "text result backing is not valid UTF-8"))?;
+            Ok(RuntimeValue::Text(TextString::try_from_str(text).map_err(
+                |_| {
+                    LkError::new(
+                        ErrorCode::ResultBytePolicyExceeded,
+                        "text result exceeds the public materialization policy",
+                    )
+                    .for_node(origin)
+                },
+            )?))
+        }
+        CoreTypeKind::Sequence { .. } => {
+            let ty = core
+                .origin
+                .ok_or_else(|| invalid_ir("sequence Core origin is absent"))?;
+            let handle = managed_cell_handle(cells, origin, "sequence result")?;
+            let elements = managed.materialize_sequence(handle, origin)?;
+            Ok(RuntimeValue::Sequence { ty, elements })
         }
         CoreTypeKind::Product { fields } => {
             let ty = core
@@ -1270,6 +1901,21 @@ fn interpret_with_store(
                             handle,
                         )?;
                     }
+                    Instruction::ConstText {
+                        origin,
+                        result,
+                        value,
+                    } => {
+                        let handle = managed.allocate_backing(value.as_bytes(), *origin)?;
+                        write_managed_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            TEXT_TYPE,
+                            handle,
+                        )?;
+                    }
                     Instruction::AddI64 {
                         origin,
                         result,
@@ -1301,6 +1947,59 @@ fn interpret_with_store(
                     } => {
                         let value = require_i64(program, function, &frames[frame_index], *lhs)?
                             < require_i64(program, function, &frames[frame_index], *rhs)?;
+                        write_scalar_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            BOOL_TYPE,
+                            u64::from(value),
+                        )?;
+                    }
+                    Instruction::EqualI64 {
+                        result, lhs, rhs, ..
+                    } => {
+                        let value = require_i64(program, function, &frames[frame_index], *lhs)?
+                            == require_i64(program, function, &frames[frame_index], *rhs)?;
+                        write_scalar_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            BOOL_TYPE,
+                            u64::from(value),
+                        )?;
+                    }
+                    Instruction::NotBool { result, value, .. } => {
+                        let value = !require_bool(program, function, &frames[frame_index], *value)?;
+                        write_scalar_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            BOOL_TYPE,
+                            u64::from(value),
+                        )?;
+                    }
+                    Instruction::AndBool {
+                        result, lhs, rhs, ..
+                    } => {
+                        let value = require_bool(program, function, &frames[frame_index], *lhs)?
+                            & require_bool(program, function, &frames[frame_index], *rhs)?;
+                        write_scalar_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            BOOL_TYPE,
+                            u64::from(value),
+                        )?;
+                    }
+                    Instruction::OrBool {
+                        result, lhs, rhs, ..
+                    } => {
+                        let value = require_bool(program, function, &frames[frame_index], *lhs)?
+                            | require_bool(program, function, &frames[frame_index], *rhs)?;
                         write_scalar_direct(
                             program,
                             function,
@@ -1502,6 +2201,297 @@ fn interpret_with_store(
                         if reused {
                             transfer_frame_value(&mut frames[frame_index], *lhs, managed)?;
                         }
+                    }
+                    Instruction::TextLen {
+                        origin,
+                        result,
+                        value,
+                    } => {
+                        let handle = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *value,
+                            TEXT_TYPE,
+                            *origin,
+                        )?;
+                        let length = i64::try_from(managed.bytes(handle, *origin)?.len())
+                            .map_err(|_| invalid_handle(*origin, "text length exceeds i64"))?;
+                        write_scalar_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            I64_TYPE,
+                            length as u64,
+                        )?;
+                    }
+                    Instruction::TextEqual {
+                        origin,
+                        result,
+                        lhs,
+                        rhs,
+                    } => {
+                        let lhs = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *lhs,
+                            TEXT_TYPE,
+                            *origin,
+                        )?;
+                        let rhs = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *rhs,
+                            TEXT_TYPE,
+                            *origin,
+                        )?;
+                        let equal = managed.bytes(lhs, *origin)? == managed.bytes(rhs, *origin)?;
+                        consume_fuel(
+                            &mut fuel,
+                            u64::try_from(
+                                managed
+                                    .bytes(lhs, *origin)?
+                                    .len()
+                                    .min(managed.bytes(rhs, *origin)?.len()),
+                            )
+                            .map_err(|_| invalid_ir("text equality fuel overflows u64"))?,
+                            *origin,
+                        )?;
+                        write_scalar_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            BOOL_TYPE,
+                            u64::from(equal),
+                        )?;
+                    }
+                    Instruction::TextConcat {
+                        origin,
+                        result,
+                        lhs,
+                        rhs,
+                    } => {
+                        let lhs_handle = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *lhs,
+                            TEXT_TYPE,
+                            *origin,
+                        )?;
+                        let rhs_handle = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *rhs,
+                            TEXT_TYPE,
+                            *origin,
+                        )?;
+                        let result_len = managed
+                            .bytes(lhs_handle, *origin)?
+                            .len()
+                            .checked_add(managed.bytes(rhs_handle, *origin)?.len())
+                            .ok_or_else(|| {
+                                value_policy(*origin, "text concatenation length overflowed")
+                            })?;
+                        if result_len > MAXIMUM_TEXT_BYTES {
+                            return Err(value_policy(
+                                *origin,
+                                "text concatenation result exceeds text byte policy",
+                            ));
+                        }
+                        consume_fuel(
+                            &mut fuel,
+                            u64::try_from(result_len)
+                                .map_err(|_| invalid_ir("text concat fuel length overflows u64"))?,
+                            *origin,
+                        )?;
+                        let (handle, reused) = managed.concat(
+                            lhs_handle,
+                            rhs_handle,
+                            instruction_plan.reuse_left,
+                            MAXIMUM_TEXT_BYTES,
+                            *origin,
+                        )?;
+                        write_managed_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            TEXT_TYPE,
+                            handle,
+                        )?;
+                        if reused {
+                            transfer_frame_value(&mut frames[frame_index], *lhs, managed)?;
+                        }
+                    }
+                    Instruction::SequenceEmpty { origin, result, ty } => {
+                        let handle = managed.allocate_sequence(Vec::new(), *origin)?;
+                        write_managed_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            *ty,
+                            handle,
+                        )?;
+                    }
+                    Instruction::SequenceLen {
+                        origin,
+                        result,
+                        ty,
+                        value,
+                    } => {
+                        let handle = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *value,
+                            *ty,
+                            *origin,
+                        )?;
+                        let sequence_len = managed.sequence_len(handle, *origin)?;
+                        let length = i64::try_from(sequence_len)
+                            .map_err(|_| invalid_ir("sequence length exceeds i64"))?;
+                        consume_fuel(
+                            &mut fuel,
+                            u64::try_from(sequence_len)
+                                .map_err(|_| invalid_ir("sequence length fuel overflows"))?,
+                            *origin,
+                        )?;
+                        write_scalar_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            I64_TYPE,
+                            length as u64,
+                        )?;
+                    }
+                    Instruction::SequenceGet {
+                        origin,
+                        result,
+                        ty,
+                        value,
+                        index,
+                    } => {
+                        let handle = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *value,
+                            *ty,
+                            *origin,
+                        )?;
+                        let requested = usize::try_from(require_i64(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *index,
+                        )?)
+                        .map_err(|_| {
+                            LkError::new(
+                                ErrorCode::RuntimeTrap,
+                                "sequence index must be nonnegative and in bounds",
+                            )
+                            .for_node(*origin)
+                        })?;
+                        let element = managed.sequence_element(handle, requested, *origin)?;
+                        let CoreTypeKind::Sequence {
+                            element: element_ty,
+                        } = core_ir::type_at(program, *ty)?.kind
+                        else {
+                            return Err(invalid_ir("verified sequence type is malformed"));
+                        };
+                        let flat =
+                            to_flat(program, managed, element.as_ref(), element_ty, 1, *origin)?;
+                        write_value(program, function, &mut frames[frame_index], *result, &flat)?;
+                    }
+                    Instruction::SequenceAppend {
+                        origin,
+                        result,
+                        ty,
+                        value,
+                        element,
+                    } => {
+                        let handle = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *value,
+                            *ty,
+                            *origin,
+                        )?;
+                        let flat = read_value(program, function, &frames[frame_index], *element)?;
+                        let element = from_flat(program, managed, &flat, 1, *origin)?;
+                        let (handle, result_len) =
+                            managed.append_sequence(handle, element, *origin)?;
+                        consume_fuel(
+                            &mut fuel,
+                            u64::try_from(result_len)
+                                .map_err(|_| invalid_ir("sequence append fuel overflows"))?,
+                            *origin,
+                        )?;
+                        write_managed_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            *ty,
+                            handle,
+                        )?;
+                    }
+                    Instruction::SequenceReplace {
+                        origin,
+                        result,
+                        ty,
+                        value,
+                        index,
+                        element,
+                    } => {
+                        let handle = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *value,
+                            *ty,
+                            *origin,
+                        )?;
+                        let requested = usize::try_from(require_i64(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *index,
+                        )?)
+                        .map_err(|_| {
+                            LkError::new(
+                                ErrorCode::RuntimeTrap,
+                                "sequence index must be nonnegative and in bounds",
+                            )
+                            .for_node(*origin)
+                        })?;
+                        let flat = read_value(program, function, &frames[frame_index], *element)?;
+                        let element = from_flat(program, managed, &flat, 1, *origin)?;
+                        let (handle, result_len) =
+                            managed.replace_sequence(handle, requested, element, *origin)?;
+                        consume_fuel(
+                            &mut fuel,
+                            u64::try_from(result_len)
+                                .map_err(|_| invalid_ir("sequence replace fuel overflows"))?,
+                            *origin,
+                        )?;
+                        write_managed_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            *ty,
+                            handle,
+                        )?;
                     }
                     Instruction::Call {
                         origin,
@@ -2046,11 +3036,20 @@ fn write_bytes_direct(
     result: ValueId,
     handle: ByteHandle,
 ) -> Result<()> {
-    let range = prepare_direct_write(program, function, frame, result, BYTES_TYPE)?;
+    write_managed_direct(program, function, frame, result, BYTES_TYPE, handle)
+}
+
+fn write_managed_direct(
+    program: &CoreProgram,
+    function: &crate::core_ir::CoreFunction,
+    frame: &mut Frame,
+    result: ValueId,
+    ty: CoreTypeId,
+    handle: ByteHandle,
+) -> Result<()> {
+    let range = prepare_direct_write(program, function, frame, result, ty)?;
     if range.len() != 1 {
-        return Err(invalid_ir(
-            "managed byte runtime write has wrong cell count",
-        ));
+        return Err(invalid_ir("managed runtime write has wrong cell count"));
     }
     frame.cells[range.start] = Cell::Bytes(handle);
     mark_initialized(frame, result)
@@ -2509,24 +3508,35 @@ fn require_bytes_handle(
     id: ValueId,
     origin: NodeId,
 ) -> Result<ByteHandle> {
-    if core_ir::value_type(function, id)? != BYTES_TYPE {
+    require_managed_handle(program, function, frame, id, BYTES_TYPE, origin)
+}
+
+fn require_managed_handle(
+    program: &CoreProgram,
+    function: &crate::core_ir::CoreFunction,
+    frame: &Frame,
+    id: ValueId,
+    expected: CoreTypeId,
+    origin: NodeId,
+) -> Result<ByteHandle> {
+    if core_ir::value_type(function, id)? != expected {
         return Err(invalid_handle(
             origin,
-            "verified byte value has a non-byte runtime type",
+            "verified managed value has the wrong runtime type",
         ));
     }
     let range = value_range(frame, id)?;
-    if range.len() != core_ir::type_cells(program, BYTES_TYPE)? {
+    if range.len() != core_ir::type_cells(program, expected)? {
         return Err(invalid_handle(
             origin,
-            "verified byte value has a malformed cell range",
+            "verified managed value has a malformed cell range",
         ));
     }
     match frame.cells[range.start] {
         Cell::Bytes(handle) => Ok(handle),
         Cell::Scalar(_) => Err(invalid_handle(
             origin,
-            "managed byte cell has the wrong runtime kind",
+            "managed cell has the wrong runtime kind",
         )),
     }
 }

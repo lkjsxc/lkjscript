@@ -84,6 +84,7 @@ fn every_closed_machine_variant_round_trips() {
     }
     for value in [
         ValueRef::FunctionParameter(first),
+        ValueRef::BlockArgument(first),
         ValueRef::OperationResult {
             operation: first,
             output: 0,
@@ -173,6 +174,54 @@ fn every_closed_machine_variant_round_trips() {
         OperationDraft::BytesConcat {
             lhs: value.clone(),
             rhs: value.clone(),
+        },
+        OperationDraft::EqualI64 {
+            lhs: value.clone(),
+            rhs: value.clone(),
+        },
+        OperationDraft::NotBool {
+            value: value.clone(),
+        },
+        OperationDraft::AndBool {
+            lhs: value.clone(),
+            rhs: value.clone(),
+        },
+        OperationDraft::OrBool {
+            lhs: value.clone(),
+            rhs: value.clone(),
+        },
+        OperationDraft::ConstText(TextString::try_from_str("lkjwork").unwrap()),
+        OperationDraft::TextLen {
+            value: value.clone(),
+        },
+        OperationDraft::TextEqual {
+            lhs: value.clone(),
+            rhs: value.clone(),
+        },
+        OperationDraft::TextConcat {
+            lhs: value.clone(),
+            rhs: value.clone(),
+        },
+        OperationDraft::SequenceEmpty { sequence: existing },
+        OperationDraft::SequenceLen {
+            sequence: existing,
+            value: value.clone(),
+        },
+        OperationDraft::SequenceGet {
+            sequence: existing,
+            value: value.clone(),
+            index: value.clone(),
+        },
+        OperationDraft::SequenceAppend {
+            sequence: existing,
+            value: value.clone(),
+            element: value.clone(),
+        },
+        OperationDraft::SequenceReplace {
+            sequence: existing,
+            value: value.clone(),
+            index: value.clone(),
+            element: value.clone(),
         },
     ];
     assert_eq!(drafts.len(), OperationCode::ALL.len());
@@ -270,6 +319,54 @@ fn every_closed_machine_variant_round_trips() {
             lhs: value.clone(),
             rhs: value.clone(),
         },
+        ExpressionKindDraft::EqualI64 {
+            lhs: value.clone(),
+            rhs: value.clone(),
+        },
+        ExpressionKindDraft::NotBool {
+            value: value.clone(),
+        },
+        ExpressionKindDraft::AndBool {
+            lhs: value.clone(),
+            rhs: value.clone(),
+        },
+        ExpressionKindDraft::OrBool {
+            lhs: value.clone(),
+            rhs: value.clone(),
+        },
+        ExpressionKindDraft::ConstText(TextString::try_from_str("lkjwork").unwrap()),
+        ExpressionKindDraft::TextLen {
+            value: value.clone(),
+        },
+        ExpressionKindDraft::TextEqual {
+            lhs: value.clone(),
+            rhs: value.clone(),
+        },
+        ExpressionKindDraft::TextConcat {
+            lhs: value.clone(),
+            rhs: value.clone(),
+        },
+        ExpressionKindDraft::SequenceEmpty { sequence: existing },
+        ExpressionKindDraft::SequenceLen {
+            sequence: existing,
+            value: value.clone(),
+        },
+        ExpressionKindDraft::SequenceGet {
+            sequence: existing,
+            value: value.clone(),
+            index: value.clone(),
+        },
+        ExpressionKindDraft::SequenceAppend {
+            sequence: existing,
+            value: value.clone(),
+            element: value.clone(),
+        },
+        ExpressionKindDraft::SequenceReplace {
+            sequence: existing,
+            value: value.clone(),
+            index: value.clone(),
+            element: value.clone(),
+        },
     ];
     for (index, operation) in expression_variants.into_iter().enumerate() {
         round_trip(&ExpressionDraft {
@@ -345,6 +442,54 @@ fn every_closed_machine_variant_round_trips() {
         OperationKind::BytesConcat {
             lhs: ValueRef::FunctionParameter(first),
             rhs: ValueRef::FunctionParameter(second),
+        },
+        OperationKind::EqualI64 {
+            lhs: ValueRef::FunctionParameter(first),
+            rhs: ValueRef::FunctionParameter(second),
+        },
+        OperationKind::NotBool {
+            value: ValueRef::FunctionParameter(first),
+        },
+        OperationKind::AndBool {
+            lhs: ValueRef::FunctionParameter(first),
+            rhs: ValueRef::FunctionParameter(second),
+        },
+        OperationKind::OrBool {
+            lhs: ValueRef::FunctionParameter(first),
+            rhs: ValueRef::FunctionParameter(second),
+        },
+        OperationKind::ConstText(TextString::try_from_str("lkjwork").unwrap()),
+        OperationKind::TextLen {
+            value: ValueRef::FunctionParameter(first),
+        },
+        OperationKind::TextEqual {
+            lhs: ValueRef::FunctionParameter(first),
+            rhs: ValueRef::FunctionParameter(second),
+        },
+        OperationKind::TextConcat {
+            lhs: ValueRef::FunctionParameter(first),
+            rhs: ValueRef::FunctionParameter(second),
+        },
+        OperationKind::SequenceEmpty { sequence: first },
+        OperationKind::SequenceLen {
+            sequence: first,
+            value: ValueRef::FunctionParameter(first),
+        },
+        OperationKind::SequenceGet {
+            sequence: first,
+            value: ValueRef::FunctionParameter(first),
+            index: ValueRef::FunctionParameter(second),
+        },
+        OperationKind::SequenceAppend {
+            sequence: first,
+            value: ValueRef::FunctionParameter(first),
+            element: ValueRef::FunctionParameter(second),
+        },
+        OperationKind::SequenceReplace {
+            sequence: first,
+            value: ValueRef::FunctionParameter(first),
+            index: ValueRef::FunctionParameter(second),
+            element: ValueRef::FunctionParameter(second),
         },
     ] {
         round_trip(&kind);
@@ -482,12 +627,19 @@ fn every_closed_machine_variant_round_trips() {
                 payload: None,
             }],
         },
+        TransactionOp::CreateSequenceType {
+            symbol: DraftSymbol::new("s16"),
+            module: local,
+            name: "Sequence".to_owned(),
+            element: TypeDraft::Text,
+        },
     ];
     for type_draft in [
         TypeDraft::Unit,
         TypeDraft::Bool,
         TypeDraft::I64,
         TypeDraft::Bytes,
+        TypeDraft::Text,
         TypeDraft::Nominal(NodeTarget::Draft(DraftSymbol::new("s14"))),
         TypeDraft::Nominal(NodeTarget::Existing(first)),
     ] {
@@ -577,6 +729,7 @@ fn every_closed_machine_variant_round_trips() {
         LiteralValue::Bool(true),
         LiteralValue::ExpectedType(SemanticType::I64),
         LiteralValue::Bytes(ByteString::from_slice(b"x").unwrap()),
+        LiteralValue::Text(TextString::try_from_str("x").unwrap()),
     ] {
         round_trip(&literal);
     }
@@ -778,6 +931,7 @@ fn every_closed_machine_variant_round_trips() {
         ScalarValue::Bool(true),
         ScalarValue::Type(SemanticType::I64),
         ScalarValue::Bytes(ByteString::from_slice(b"x").unwrap()),
+        ScalarValue::Text(TextString::try_from_str("x").unwrap()),
     ] {
         round_trip(&scalar);
     }
@@ -786,6 +940,7 @@ fn every_closed_machine_variant_round_trips() {
         RuntimeValue::Bool(true),
         RuntimeValue::I64(1),
         RuntimeValue::Bytes(ByteString::from_slice(b"x").unwrap()),
+        RuntimeValue::Text(TextString::try_from_str("x").unwrap()),
     ] {
         round_trip(&value);
     }
@@ -800,6 +955,10 @@ fn every_closed_machine_variant_round_trips() {
         ty: first,
         variant: second,
         payload: Some(Box::new(RuntimeValue::Bool(true))),
+    });
+    round_trip(&RuntimeValue::Sequence {
+        ty: first,
+        elements: vec![RuntimeValue::Text(TextString::try_from_str("x").unwrap())],
     });
     let mut deepest = RuntimeValue::Unit;
     for _ in 1..lkjscript::interpret::MAX_RUNTIME_VALUE_DEPTH {
@@ -1130,11 +1289,11 @@ fn strict_json_rejects_malformed_shapes_values_and_limits() {
     }
     let workspace = WorkspaceId::from_bytes([0xab; 16]);
     let valid = format!(
-        "{{\"version\":10,\"request_id\":1,\"request\":{{\"kind\":\"query_batch\",\"data\":{{\"workspace\":\"{workspace}\",\"revision\":0,\"queries\":[{{\"id\":1,\"query\":{{\"kind\":\"blockers\",\"data\":{{\"page\":{{\"limit\":1}}}}}}}}]}}}}}}"
+        "{{\"version\":11,\"request_id\":1,\"request\":{{\"kind\":\"query_batch\",\"data\":{{\"workspace\":\"{workspace}\",\"revision\":0,\"queries\":[{{\"id\":1,\"query\":{{\"kind\":\"blockers\",\"data\":{{\"page\":{{\"limit\":1}}}}}}}}]}}}}}}"
     );
     assert!(decode_request(valid.as_bytes()).is_ok());
     let invalid = [
-        valid.replacen("\"version\":10", "\"version\":9", 1),
+        valid.replacen("\"version\":11", "\"version\":10", 1),
         valid.replacen("\"request_id\":1", "\"request_id\":0", 1),
         valid.replacen("\"request_id\":1", "\"request_id\":-1", 1),
         valid.replacen("\"request_id\":1", "\"request_id\":18446744073709551616", 1),

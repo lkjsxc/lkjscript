@@ -34,7 +34,7 @@ fn request(transaction: &Transaction) -> ApplyTransactionRequest {
 }
 
 #[test]
-fn nominal_declarations_survive_format_six_restart_and_rederive_layout() {
+fn nominal_declarations_survive_format_seven_restart_and_rederive_layout() {
     let temporary = tempfile::tempdir().expect("state");
     ensure_state_directory(temporary.path()).expect("state directory");
     let id = WorkspaceId::from_bytes([0x94; 16]);
@@ -89,7 +89,7 @@ fn nominal_declarations_survive_format_six_restart_and_rederive_layout() {
 }
 
 #[test]
-fn nominal_operation_and_match_graph_survives_format_six_restart_and_retained_query() {
+fn nominal_operation_and_match_graph_survives_format_seven_restart_and_retained_query() {
     let temporary = tempfile::tempdir().expect("state");
     ensure_state_directory(temporary.path()).expect("state directory");
     let id = WorkspaceId::from_bytes([0x96; 16]);
@@ -652,17 +652,17 @@ fn every_apply_path_verifies_live_head_before_replay_or_validation() {
 }
 
 #[test]
-fn head8_domain_separated_grammar_remains_fixed_and_deterministic() {
+fn head9_domain_separated_grammar_remains_fixed_and_deterministic() {
     let revision = Revision::new(7);
     let hash = SnapshotHash::from_bytes([0xa5; SnapshotHash::BYTE_LEN]);
-    let first = encode_head(revision, hash, None).expect("HEAD8 encode");
+    let first = encode_head(revision, hash, None).expect("HEAD9 encode");
     assert_eq!(
         first,
-        encode_head(revision, hash, None).expect("deterministic HEAD8")
+        encode_head(revision, hash, None).expect("deterministic HEAD9")
     );
 
     let mut expected_body = Vec::new();
-    expected_body.extend_from_slice(b"LKJHEAD8");
+    expected_body.extend_from_slice(b"LKJHEAD9");
     expected_body.extend_from_slice(&7_u64.to_le_bytes());
     expected_body.extend_from_slice(&[0xa5; SnapshotHash::BYTE_LEN]);
     expected_body.push(0);
@@ -673,7 +673,7 @@ fn head8_domain_separated_grammar_remains_fixed_and_deterministic() {
         head_checksum(&expected_body).as_slice()
     );
     let (decoded_revision, decoded_hash, decoded_record) =
-        decode_head(&first).expect("HEAD8 decode");
+        decode_head(&first).expect("HEAD9 decode");
     assert_eq!((decoded_revision, decoded_hash), (revision, hash));
     assert!(decoded_record.is_none());
 }
@@ -717,14 +717,14 @@ fn exact_commit_response_preflight_uses_real_id_and_fails_before_publication() {
 }
 
 #[test]
-fn head_version_seven_magic_is_rejected_without_compatibility_reader() {
+fn head_version_eight_magic_is_rejected_without_compatibility_reader() {
     let temporary = tempfile::tempdir().expect("temporary directory");
     ensure_state_directory(temporary.path()).expect("state directory");
     let id = WorkspaceId::from_bytes([0x18; 16]);
     DurableWorkspace::create(temporary.path(), id).expect("workspace");
     let head_path = workspace_directory(temporary.path(), id).join("HEAD");
     let mut bytes = fs::read(&head_path).expect("head bytes");
-    bytes[..8].copy_from_slice(b"LKJHEAD7");
+    bytes[..8].copy_from_slice(b"LKJHEAD8");
     let body_length = bytes.len() - SnapshotHash::BYTE_LEN;
     let checksum = head_checksum(&bytes[..body_length]);
     bytes[body_length..].copy_from_slice(&checksum);
@@ -732,7 +732,7 @@ fn head_version_seven_magic_is_rejected_without_compatibility_reader() {
     assert_eq!(
         DurableWorkspace::open(temporary.path(), id)
             .err()
-            .expect("HEAD7 must reject")
+            .expect("HEAD8 must reject")
             .code,
         ErrorCode::ArtifactCorrupt
     );
@@ -874,7 +874,7 @@ fn validate_only_and_commit_share_persistence_policy_preflight() {
 }
 
 #[test]
-fn keyed_head8_publication_faults_preserve_prior_replay_and_allocator() {
+fn keyed_head9_publication_faults_preserve_prior_replay_and_allocator() {
     let temporary = tempfile::tempdir().expect("temporary state directory");
     ensure_state_directory(temporary.path()).expect("state directory");
     let id = WorkspaceId::from_bytes([5; 16]);

@@ -195,7 +195,7 @@ def start_session():
         ),
         "manifest",
     )
-    if manifest["protocol_version"] != 10:
+    if manifest["protocol_version"] != 11:
         raise RuntimeError("unexpected protocol version")
 
 
@@ -215,7 +215,7 @@ def stop_session():
 def rpc(request, purpose):
     global request_id
     request_id += 1
-    envelope = {"version": 10, "request_id": request_id, "request": request}
+    envelope = {"version": 11, "request_id": request_id, "request": request}
     encoded = json.dumps(envelope, separators=(",", ":")).encode()
     started = time.monotonic_ns()
     session.stdin.write(encoded + b"\n")
@@ -232,7 +232,7 @@ def rpc(request, purpose):
     if not response_bytes:
         raise RuntimeError(f"line session ended during {purpose}")
     response = json.loads(response_bytes)
-    if response.get("version") != 10 or response.get("request_id") != request_id:
+    if response.get("version") != 11 or response.get("request_id") != request_id:
         raise RuntimeError(f"RPC correlation failed during {purpose}")
     return response["response"]
 
@@ -363,7 +363,7 @@ def producer_operations(reverse=False, noise=False, doubled=False):
 def producer_request(workspace, revision, ids, version, doubled=False):
     expected = b"abcabc" if doubled else b"abc"
     return {
-        "version": 1,
+        "version": 2,
         "workspace": workspace,
         "revision": revision,
         "root": ids[1],
@@ -574,7 +574,7 @@ def build_application(path, request, releases):
 def application_request(root_release, entry_item, profile, arguments, expected):
     entry = target(root_release, entry_item)
     return {
-        "version": 4,
+        "version": 5,
         "root_release": root_release,
         "entry": entry,
         "profile": {"kind": profile},
@@ -592,7 +592,7 @@ def application_request(root_release, entry_item, profile, arguments, expected):
 
 
 def invocation(arguments):
-    return {"version": 4, "arguments": arguments}
+    return {"version": 5, "arguments": arguments}
 
 
 def release_test(path, dependencies):
@@ -659,7 +659,7 @@ def workflow():
             raise RuntimeError("R1/R2 coordinate coexistence is malformed")
 
         a_request = {
-            "version": 1,
+            "version": 2,
             "workspace": a_workspace,
             "revision": a_revision,
             "root": a[1],
@@ -702,7 +702,7 @@ def workflow():
         a_id = a_release["inspection"]["release"]
 
         b_request = {
-            "version": 1,
+            "version": 2,
             "workspace": b_workspace,
             "revision": b_revision,
             "root": b[1],
@@ -728,7 +728,7 @@ def workflow():
         b_id = b_release["inspection"]["release"]
 
         c_request = {
-            "version": 1,
+            "version": 2,
             "workspace": c_workspace,
             "revision": c_revision,
             "root": c[1],
@@ -763,7 +763,7 @@ def workflow():
         c_id = c_release["inspection"]["release"]
 
         d_request = {
-            "version": 1,
+            "version": 2,
             "workspace": d_workspace,
             "revision": d_revision,
             "root": d[1],
@@ -954,8 +954,8 @@ def workflow():
 
         report = {
             "campaign": "reusable-semantic-release",
-            "release_contract": 1,
-            "application_contract": 4,
+            "release_contract": 2,
+            "application_contract": 5,
             "canonical_rebuild_across_workspace_histories": True,
             "private_access_rejected": True,
             "workspaces_removed": not state.exists(),

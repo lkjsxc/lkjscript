@@ -48,9 +48,9 @@ fn strict_envelope_and_canonical_id_rejections() {
     assert_eq!(decode_request(&bytes).expect("decode"), request);
     let text = String::from_utf8(bytes).expect("UTF-8");
     for invalid in [
-        text.replacen("\"version\":10", "\"version\":9", 1),
+        text.replacen("\"version\":11", "\"version\":10", 1),
         text.replacen("\"request_id\":1", "\"request_id\":0", 1),
-        text.replacen("{\"version\":10", "{\"unknown\":0,\"version\":10", 1),
+        text.replacen("{\"version\":11", "{\"unknown\":0,\"version\":11", 1),
         format!("{text} {{}}"),
         text.replacen(
             &workspace.to_string(),
@@ -138,6 +138,7 @@ fn semantic_transaction_and_query_variant_samples_are_exhaustive() {
             SemanticType::Bool,
             SemanticType::I64,
             SemanticType::Bytes,
+            SemanticType::Text,
             SemanticType::Nominal(node),
         ],
     );
@@ -240,6 +241,50 @@ fn semantic_transaction_and_query_variant_samples_are_exhaustive() {
             lhs: value,
             rhs: value,
         },
+        OperationKind::EqualI64 {
+            lhs: value,
+            rhs: value,
+        },
+        OperationKind::NotBool { value },
+        OperationKind::AndBool {
+            lhs: value,
+            rhs: value,
+        },
+        OperationKind::OrBool {
+            lhs: value,
+            rhs: value,
+        },
+        OperationKind::ConstText(crate::schema::TextString::try_from_str("text").unwrap()),
+        OperationKind::TextLen { value },
+        OperationKind::TextEqual {
+            lhs: value,
+            rhs: value,
+        },
+        OperationKind::TextConcat {
+            lhs: value,
+            rhs: value,
+        },
+        OperationKind::SequenceEmpty { sequence: node },
+        OperationKind::SequenceLen {
+            sequence: node,
+            value,
+        },
+        OperationKind::SequenceGet {
+            sequence: node,
+            value,
+            index: value,
+        },
+        OperationKind::SequenceAppend {
+            sequence: node,
+            value,
+            element: value,
+        },
+        OperationKind::SequenceReplace {
+            sequence: node,
+            value,
+            index: value,
+            element: value,
+        },
     ];
     assert_eq!(operations.len(), OperationCode::ALL.len());
     assert_family_samples(&schema, "operation_kind", &operations);
@@ -281,6 +326,11 @@ fn semantic_transaction_and_query_variant_samples_are_exhaustive() {
             ordinal: 0,
             name: "variant".into(),
             payload: Some(SemanticType::I64),
+        },
+        Node::SequenceType {
+            owner: node,
+            name: "sequence".into(),
+            element: SemanticType::I64,
         },
         Node::Function {
             owner: node,
@@ -394,12 +444,14 @@ fn semantic_transaction_and_query_variant_samples_are_exhaustive() {
         DefinitionSlot::ParameterType,
         DefinitionSlot::ProductFieldType,
         DefinitionSlot::SumVariantPayloadType,
+        DefinitionSlot::SequenceElementType,
         DefinitionSlot::BlockArgumentType,
         DefinitionSlot::OperationType,
         DefinitionSlot::ProductDeclaration,
         DefinitionSlot::ProductField,
         DefinitionSlot::SumVariant,
         DefinitionSlot::MatchVariant,
+        DefinitionSlot::SequenceDeclaration,
     ];
     assert_family_samples(&schema, "definition_slot", &definition_slots);
     assert_family_samples(
@@ -419,6 +471,7 @@ fn semantic_transaction_and_query_variant_samples_are_exhaustive() {
             LiteralValue::Bool(true),
             LiteralValue::ExpectedType(SemanticType::I64),
             LiteralValue::Bytes(crate::schema::ByteString::from_slice(b"x").unwrap()),
+            LiteralValue::Text(crate::schema::TextString::try_from_str("x").unwrap()),
         ],
     );
     assert_family_samples(
@@ -440,6 +493,7 @@ fn semantic_transaction_and_query_variant_samples_are_exhaustive() {
             ScalarValue::Bool(true),
             ScalarValue::Type(SemanticType::I64),
             ScalarValue::Bytes(crate::schema::ByteString::from_slice(b"x").unwrap()),
+            ScalarValue::Text(crate::schema::TextString::try_from_str("x").unwrap()),
         ],
     );
     let changes = vec![
@@ -628,8 +682,10 @@ fn schema_meta_variant_samples_are_exhaustive() {
             RuntimeValuePayload::Bool,
             RuntimeValuePayload::I64,
             RuntimeValuePayload::Bytes,
+            RuntimeValuePayload::Text,
             RuntimeValuePayload::Product,
             RuntimeValuePayload::Sum,
+            RuntimeValuePayload::Sequence,
         ],
     );
     assert_family_samples(&schema, "draft_field_type", &DraftFieldType::ALL);
@@ -678,6 +734,7 @@ fn schema_meta_variant_samples_are_exhaustive() {
             LiteralField::CarriedType,
             LiteralField::PositiveStep,
             LiteralField::BytesValue,
+            LiteralField::TextValue,
         ],
     );
     assert_family_samples(
@@ -709,6 +766,9 @@ fn schema_meta_variant_samples_are_exhaustive() {
             TypeRule::VariantOwnerResult,
             TypeRule::MatchScrutinee,
             TypeRule::MatchResult,
+            TypeRule::SequenceDeclarationResult,
+            TypeRule::SequenceOwner,
+            TypeRule::SequenceElement,
         ],
     );
     for root in SchemaRoot::ALL {
@@ -1401,6 +1461,12 @@ fn every_advertised_public_variant_matches_strict_serde() {
                 payload: Some(TypeDraft::I64),
             }],
         },
+        TransactionOp::CreateSequenceType {
+            symbol: DraftSymbol::generated(9),
+            module: target,
+            name: "items".into(),
+            element: TypeDraft::I64,
+        },
     ];
     assert_eq!(transaction_samples.len(), TransactionOpCode::ALL.len());
     for (sample, code) in transaction_samples.iter().zip(TransactionOpCode::ALL) {
@@ -1884,6 +1950,54 @@ fn every_advertised_public_variant_matches_strict_serde() {
             lhs: value.clone(),
             rhs: value.clone(),
         },
+        ExpressionKindDraft::ConstText(crate::schema::TextString::try_from_str("x").unwrap()),
+        ExpressionKindDraft::EqualI64 {
+            lhs: value.clone(),
+            rhs: value.clone(),
+        },
+        ExpressionKindDraft::NotBool {
+            value: value.clone(),
+        },
+        ExpressionKindDraft::AndBool {
+            lhs: value.clone(),
+            rhs: value.clone(),
+        },
+        ExpressionKindDraft::OrBool {
+            lhs: value.clone(),
+            rhs: value.clone(),
+        },
+        ExpressionKindDraft::TextLen {
+            value: value.clone(),
+        },
+        ExpressionKindDraft::TextEqual {
+            lhs: value.clone(),
+            rhs: value.clone(),
+        },
+        ExpressionKindDraft::TextConcat {
+            lhs: value.clone(),
+            rhs: value.clone(),
+        },
+        ExpressionKindDraft::SequenceEmpty { sequence: target },
+        ExpressionKindDraft::SequenceLen {
+            sequence: target,
+            value: value.clone(),
+        },
+        ExpressionKindDraft::SequenceGet {
+            sequence: target,
+            value: value.clone(),
+            index: value.clone(),
+        },
+        ExpressionKindDraft::SequenceAppend {
+            sequence: target,
+            value: value.clone(),
+            element: value.clone(),
+        },
+        ExpressionKindDraft::SequenceReplace {
+            sequence: target,
+            value: value.clone(),
+            index: value.clone(),
+            element: value.clone(),
+        },
     ];
     assert_eq!(expression_samples.len(), ExpressionDraftCode::ALL.len());
     for (sample, code) in expression_samples.iter().zip(ExpressionDraftCode::ALL) {
@@ -1978,6 +2092,54 @@ fn every_advertised_public_variant_matches_strict_serde() {
             lhs: value.clone(),
             rhs: value.clone(),
         },
+        OperationDraft::EqualI64 {
+            lhs: value.clone(),
+            rhs: value.clone(),
+        },
+        OperationDraft::NotBool {
+            value: value.clone(),
+        },
+        OperationDraft::AndBool {
+            lhs: value.clone(),
+            rhs: value.clone(),
+        },
+        OperationDraft::OrBool {
+            lhs: value.clone(),
+            rhs: value.clone(),
+        },
+        OperationDraft::ConstText(crate::schema::TextString::try_from_str("x").unwrap()),
+        OperationDraft::TextLen {
+            value: value.clone(),
+        },
+        OperationDraft::TextEqual {
+            lhs: value.clone(),
+            rhs: value.clone(),
+        },
+        OperationDraft::TextConcat {
+            lhs: value.clone(),
+            rhs: value.clone(),
+        },
+        OperationDraft::SequenceEmpty { sequence: target },
+        OperationDraft::SequenceLen {
+            sequence: target,
+            value: value.clone(),
+        },
+        OperationDraft::SequenceGet {
+            sequence: target,
+            value: value.clone(),
+            index: value.clone(),
+        },
+        OperationDraft::SequenceAppend {
+            sequence: target,
+            value: value.clone(),
+            element: value.clone(),
+        },
+        OperationDraft::SequenceReplace {
+            sequence: target,
+            value: value.clone(),
+            index: value.clone(),
+            element: value.clone(),
+        },
     ];
     assert_eq!(operation_samples.len(), OperationCode::ALL.len());
     for (sample, code) in operation_samples.iter().zip(OperationCode::ALL) {
@@ -2014,6 +2176,7 @@ fn every_advertised_public_variant_matches_strict_serde() {
         RuntimeValue::Bool(true),
         RuntimeValue::I64(1),
         RuntimeValue::Bytes(crate::schema::ByteString::from_slice(b"x").unwrap()),
+        RuntimeValue::Text(crate::schema::TextString::try_from_str("x").unwrap()),
         RuntimeValue::Product {
             ty: node,
             fields: vec![RuntimeFieldValue {
@@ -2025,6 +2188,10 @@ fn every_advertised_public_variant_matches_strict_serde() {
             ty: node,
             variant: other,
             payload: Some(Box::new(RuntimeValue::I64(1))),
+        },
+        RuntimeValue::Sequence {
+            ty: node,
+            elements: vec![RuntimeValue::I64(1)],
         },
     ];
     assert_eq!(runtime_samples.len(), RuntimeValueCode::ALL.len());
@@ -2051,6 +2218,7 @@ fn every_advertised_public_variant_matches_strict_serde() {
         TypeDraft::Bool,
         TypeDraft::I64,
         TypeDraft::Bytes,
+        TypeDraft::Text,
         TypeDraft::Nominal(target),
     ];
     assert_eq!(
@@ -2125,6 +2293,17 @@ fn every_advertised_public_variant_matches_strict_serde() {
         },
         SumVariantDraft,
         false
+    );
+    structured_record_count += check_draft_record!(
+        "create_sequence_type",
+        TransactionOp::CreateSequenceType {
+            symbol: DraftSymbol::generated(9),
+            module: target,
+            name: "items".into(),
+            element: TypeDraft::I64
+        },
+        TransactionOp,
+        true
     );
     structured_record_count += check_draft_record!(
         "create_function",
@@ -2325,7 +2504,16 @@ fn every_advertised_public_variant_matches_strict_serde() {
         named_payload(&schema.run.records, "runtime_sum_data"),
         true,
     );
-    assert_eq!(run_record_count + 2, schema.run.records.len());
+    assert_machine_record_serde_contract::<RuntimeValue>(
+        serde_json::to_value(RuntimeValue::Sequence {
+            ty: node,
+            elements: vec![RuntimeValue::I64(1)],
+        })
+        .expect("runtime sequence data"),
+        named_payload(&schema.run.records, "runtime_sequence_data"),
+        true,
+    );
+    assert_eq!(run_record_count + 3, schema.run.records.len());
     let query_item_result = crate::query::QueryItemResult {
         id: QueryId::new(1),
         outcome: crate::query::QueryOutcome::Success(Box::new(QueryResult::WorkspaceSummary(
@@ -4229,6 +4417,7 @@ fn name_and_artifact_policies_are_exact_and_validator_derived() {
             NodeKind::Module,
             NodeKind::ProductType,
             NodeKind::SumType,
+            NodeKind::SequenceType,
             NodeKind::Function,
             NodeKind::ProductField,
             NodeKind::SumVariant,
@@ -4290,7 +4479,7 @@ fn schema_is_deterministic_complete_and_unique() {
     assert_named_variant_counts(
         &first.semantic_variants,
         &[
-            ("semantic_type", 5),
+            ("semantic_type", 6),
             ("value_ref", 3),
             ("region_role", 4),
             ("operation_kind", OperationCode::ALL.len()),
@@ -4317,10 +4506,10 @@ fn schema_is_deterministic_complete_and_unique() {
             ("expected_category", 3),
             ("visible_cursor_purpose", VisibleCursorPurpose::ALL.len()),
             ("layout_failure", 3),
-            ("definition_slot", 12),
-            ("literal_value", 4),
+            ("definition_slot", 14),
+            ("literal_value", 5),
             ("dependency_fact", 2),
-            ("scalar_value", 4),
+            ("scalar_value", 5),
             ("change_kind", 12),
         ],
     );
@@ -4335,14 +4524,14 @@ fn schema_is_deterministic_complete_and_unique() {
             ("json_scalar_kind", 3),
             ("machine_scalar_domain", 8),
             ("run_field_type", 7),
-            ("runtime_value_payload", 6),
+            ("runtime_value_payload", 8),
             ("draft_field_type", DraftFieldType::ALL.len()),
             ("operand_arity", 4),
             ("region_arity", 2),
             ("operand_use", 1),
-            ("literal_field", 7),
+            ("literal_field", 8),
             ("block_argument_role", 3),
-            ("type_rule", 16),
+            ("type_rule", 19),
         ],
     );
     assert_eq!(
@@ -4362,6 +4551,7 @@ fn schema_is_deterministic_complete_and_unique() {
             ("bool", 2),
             ("i64", 3),
             ("bytes", 5),
+            ("text", 6),
             ("nominal", 4),
         ],
     );
@@ -4372,6 +4562,7 @@ fn schema_is_deterministic_complete_and_unique() {
             ("bool", 2),
             ("i64", 3),
             ("bytes", 0),
+            ("text", 0),
             ("nominal", 4),
         ],
     );
@@ -4409,13 +4600,13 @@ fn schema_is_deterministic_complete_and_unique() {
         assert_eq!(field.nullable, !field.required, "{}", field.name);
     }
     assert!(
-        first.structured_authoring.type_variants[..4]
+        first.structured_authoring.type_variants[..5]
             .iter()
             .all(|variant| variant.shape == PayloadShapeKind::Unit
                 && variant.newtype.is_none()
                 && variant.fields.is_empty())
     );
-    let nominal = &first.structured_authoring.type_variants[4];
+    let nominal = &first.structured_authoring.type_variants[5];
     assert_eq!(nominal.shape, PayloadShapeKind::Newtype);
     assert_eq!(nominal.newtype, Some(DraftFieldType::NodeTarget));
     assert!(nominal.fields.is_empty());
@@ -4587,8 +4778,10 @@ fn schema_is_deterministic_complete_and_unique() {
             ("bool", RuntimeValuePayload::Bool),
             ("i64", RuntimeValuePayload::I64),
             ("bytes", RuntimeValuePayload::Bytes),
+            ("text", RuntimeValuePayload::Text),
             ("product", RuntimeValuePayload::Product),
             ("sum", RuntimeValuePayload::Sum),
+            ("sequence", RuntimeValuePayload::Sequence),
         ]
     );
     let product_runtime = first
@@ -5134,12 +5327,12 @@ fn schema_projection_byte_measurements_are_retained() {
         sizes,
         vec![
             ("manifest", None, 1_244, 1_323),
-            ("selected_agent_task_roots", Some(113), 88_048, 88_127),
-            ("full", None, 136_795, 136_874),
+            ("selected_agent_task_roots", Some(114), 98_639, 98_718),
+            ("full", None, 152_964, 153_043),
             ("unchanged", None, 105, 184),
         ]
     );
-    assert!(sizes[1].2 < 88_100);
+    assert!(sizes[1].2 < 98_700);
 }
 
 fn assert_variant_payloads<const N: usize>(

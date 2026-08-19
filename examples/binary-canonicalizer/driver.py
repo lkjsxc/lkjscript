@@ -408,7 +408,7 @@ def stop_stack():
 def rpc(request, purpose, counted=True):
     global request_id
     request_id += 1
-    envelope = {"version": 10, "request_id": request_id, "request": request}
+    envelope = {"version": 11, "request_id": request_id, "request": request}
     encoded = json.dumps(envelope, separators=(",", ":")).encode()
     started = time.monotonic_ns()
     session.stdin.write(encoded + b"\n")
@@ -418,7 +418,7 @@ def rpc(request, purpose, counted=True):
     if not response_bytes:
         raise RuntimeError(f"CLI session ended during {purpose}")
     response = json.loads(response_bytes)
-    if response.get("version") != 10 or response.get("request_id") != request_id:
+    if response.get("version") != 11 or response.get("request_id") != request_id:
         raise RuntimeError(f"response correlation mismatch for {purpose}")
     measurements.append({
         "purpose": purpose,
@@ -529,9 +529,9 @@ def run_case(workspace, revision, ids, name, raw, expected, fuel=10_000_000):
     return run
 
 
-def dense_boundary(workspace, ids):
+def dense_boundary(workspace, ids, maximum_runtime_byte_value_bytes):
     low = 0
-    high = 2_048
+    high = maximum_runtime_byte_value_bytes + 1
     while low + 1 < high:
         middle = (low + high) // 2
         response = run_request(
@@ -610,6 +610,15 @@ def workflow():
             raise RuntimeError("schema digests disagree")
         if "bytes_concat" not in json.dumps(task, separators=(",", ":")):
             raise RuntimeError("targeted schema roots omit bytes_concat")
+        limits = next(
+            item["body"]["data"]
+            for item in task["definitions"]
+            if item["name"] == "limits"
+        )
+        maximum_runtime_byte_value_bytes = limits["maximum_runtime_byte_value_bytes"]
+        if not isinstance(maximum_runtime_byte_value_bytes, int) \
+                or maximum_runtime_byte_value_bytes < 1:
+            raise RuntimeError("run schema omits a usable runtime-byte value limit")
 
         workspace = expect(rpc({"kind": "create_workspace"}, "create_workspace"),
                            "workspace_created")["workspace"]
@@ -729,7 +738,7 @@ def workflow():
                                  "dense_low_fuel", fuel=1_000), "execution_fuel_exhausted")
         expect_error(run_request(workspace, 2, ids[400], bytes([0xA5, 1]),
                                  "bounds_probe"), "byte_index_out_of_bounds")
-        boundary = dense_boundary(workspace, ids)
+        boundary = dense_boundary(workspace, ids, maximum_runtime_byte_value_bytes)
 
         run_case(workspace, 2, ids, "after_runtime_traps", bytes([0xA5, 1, 0, 2]),
                  canonical_value(ids, bytes([1, 2])))
@@ -760,7 +769,7 @@ def workflow():
         stop_stack()
 
         release_request = {
-            "version": 1,
+            "version": 2,
             "workspace": workspace,
             "revision": 3,
             "root": ids[1],
@@ -829,7 +838,7 @@ def workflow():
         bounds_target = {"release": release_id, "item": release_exports["bounds_probe"]}
 
         application_request = {
-            "version": 4,
+            "version": 5,
             "root_release": release_id,
             "entry": stream_target,
             "profile": {"kind": "bytes_stream"},
@@ -893,7 +902,7 @@ def workflow():
             "build", "--release", str(release_path), "--output", str(blocked_path),
         ], failing_request, expected_returncode=7)
         blocked_error = json.loads(blocked.stdout)
-        if (blocked_error.get("contract_version") != 4
+        if (blocked_error.get("contract_version") != 5
                 or blocked_error.get("error", {}).get("code") != "application_test_failed"
                 or blocked_path.exists()):
             raise RuntimeError(f"failing release test did not block publication: {blocked_error}")
@@ -903,7 +912,7 @@ def workflow():
         corrupted[len(corrupted) // 2] ^= 0x01
         artifact.write_bytes(corrupted)
         corrupt_probe = json.dumps({
-            "version": 10,
+            "version": 11,
             "request_id": request_id + 1,
             "request": {"kind": "describe_schema", "data": {
                 "projection": {"kind": "manifest"},
@@ -938,7 +947,7 @@ def workflow():
         ]).stdout)
         typed = json.loads(application_command([
             "run", "--artifact", str(application_path),
-        ], {"version": 4, "arguments": [bytes_value(bytes([0xA5, 3, 0, 4]))]}).stdout)
+        ], {"version": 5, "arguments": [bytes_value(bytes([0xA5, 3, 0, 4]))]}).stdout)
         stream_input = bytes([0xA5, 5, 0, 6])
         stream_started = time.monotonic_ns()
         streamed = subprocess.run(
@@ -983,7 +992,7 @@ def workflow():
         ]
         report = {
             "application": "binary-canonicalizer",
-            "protocol_version": 10,
+            "protocol_version": 11,
             "schema_digest": manifest["digest"],
             "task_schema_json_bytes": len(json.dumps(task, separators=(",", ":")).encode()),
             "calls": len(counted),

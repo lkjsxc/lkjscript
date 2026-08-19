@@ -821,6 +821,7 @@ fn canonical_release_is_workspace_independent_strict_and_private() {
             .any(|window| window == first_snapshot.workspace().as_bytes())
     );
     let inspection = inspect(first.bytes()).expect("inspection");
+    assert_eq!(inspection.semantic_schema, crate::artifact::SCHEMA_NAME);
     assert_eq!(
         inspection
             .exports
@@ -846,7 +847,7 @@ fn canonical_release_is_workspace_independent_strict_and_private() {
         ErrorCode::ArtifactCorrupt
     );
     let mut old = first.bytes().to_vec();
-    old[8..10].copy_from_slice(&0_u16.to_le_bytes());
+    old[8..10].copy_from_slice(&1_u16.to_le_bytes());
     assert_eq!(
         validate(&old).expect_err("old version").code,
         ErrorCode::ArtifactCorrupt

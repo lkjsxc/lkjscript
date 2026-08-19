@@ -17,8 +17,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-const HEAD_MAGIC: [u8; 8] = *b"LKJHEAD8";
-const HEAD_CHECKSUM_DOMAIN: &str = "lkjscript.workspace-head.checksum.v8";
+const HEAD_MAGIC: [u8; 8] = *b"LKJHEAD9";
+const HEAD_CHECKSUM_DOMAIN: &str = "lkjscript.workspace-head.checksum.v9";
 pub const MAXIMUM_HEAD_BYTES: usize = 16 * 1024;
 static TEMP_SERIAL: AtomicU64 = AtomicU64::new(1);
 
@@ -905,7 +905,7 @@ fn put_transaction_receipt(writer: &mut Writer, receipt: &TransactionReceipt) ->
     writer.u64(u64::try_from(receipt.returned_bindings.len()).map_err(|_| {
         LkError::new(
             ErrorCode::PolicyExceeded,
-            "transaction receipt binding count exceeds HEAD8 encoding",
+            "transaction receipt binding count exceeds HEAD9 encoding",
         )
     })?);
     for (symbol, node) in &receipt.returned_bindings {

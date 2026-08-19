@@ -1,222 +1,164 @@
-# Durable application-instance, grant, and host-adapter contract
+# Durable application instances
 
-This specification owns mutable application-instance authority, transition history, event
-idempotency, typed command suspension, immutable grant bindings, host attempts and outcomes,
-reconciliation, inspection, and tombstone deletion. Immutable application meaning is owned by
-[application.md](application.md). Runtime topology and aggregate operational policy are owned by
-[runtime-kernel.md](runtime-kernel.md). An instance is not a workspace, release, application,
-filesystem path, process, cache, or deployment.
+This specification owns instance identity, typed mutation and query, revision publication, journal
+and checkpoint authority, idempotency, grants, host attempts/outcomes, inspection, deletion, and the
+durable format. Application profile meaning belongs to
+[`application.md`](application.md).
 
-## Selected semantic model
+## Identity and policy
 
-Instance command and durable format version 2 bind one caller-selected 128-bit `InstanceId`, one
-exact embedded application-format-4 artifact, one validated nominal state type, one immutable
-instance policy, and exactly one immutable grant binding for every required application import
-slot. The local store never allocates, reuses, or reinterprets an instance ID.
+Instance contract and format version 3 bind one nonzero 128-bit `InstanceId`, one exact embedded
+application-format-5 artifact, one exact application state type, immutable grant bindings, and one
+serial revision chain. Deleted instance identities are tombstoned and never reused.
 
-Creation supplies exact typed initial state and complete grant descriptors. Application and grant
-validation precede any visible instance directory. Revision zero contains initial state and the
-canonical grant bindings. Every committed event or resume evaluates a pure application transition
-from exact current state and then publishes one complete next-state record. Rejection and
-validate-only publish no revision. A successful semantic no-op is still one explicit accepted
-event; duplicate delivery does not publish again.
+`InstancePolicy` bounds current-state public bytes, event public bytes, total journal bytes,
+transitions, and replay work. Global maxima are 16 MiB state, 1 MiB event, 256 MiB journal, 10,000
+transitions, and 10,000 replay records. Event keys are nonempty canonical text of at most 96 bytes.
+All counts and lengths are checked before corresponding allocation or work.
 
-Each instance is serial. A request names an exact base revision. Any nonduplicate stale or future
-base rejects with `revision_conflict`. One process owns the store-wide exclusive lock, so competing
-store opens reject with `authority_busy`. There is no cross-instance transaction.
+One store-wide exclusive lock serializes local instance operations. A path locates the store; it is
+not instance or grant authority.
 
-## Pure suspension and resume
+## Creation
 
-The application result is the exact typed sum specified by [application.md](application.md):
+Creation accepts exact application bytes, initial typed state, immutable grants, and policy. It
+validates the application, state type/value/resource bounds, grant/interface bindings, and genesis
+record before publication. Validate-only publishes nothing. Commit publishes one private instance
+directory containing application bytes, genesis checkpoint record, current manifest, HEAD, and empty
+attempt/outcome directories. Directory visibility followed by failed synchronization is reported as
+unknown; identity is never silently retried or reused.
 
-```text
-(State, Event)   -> completed { state, response }
-                 | suspended { state, response, command }
+Revision zero is the genesis checkpoint. A successful later publishing transition increments the
+revision by exactly one.
 
-(State, Outcome) -> completed { state, response }
-                 | suspended { state, response, command }
-```
+## Mutation decisions
 
-The instance owner validates next state, bounded response, exact command wrapper, import slot,
-interface identity, operation, request type, and grant binding before publication. State and a
-pending command are durably published before host work. Host execution never mutates semantic
-state; it records one immutable typed outcome. Only a later pure resume may consume that outcome.
-Semantic state publication and external visibility are deliberately not atomic.
+An event names exact instance, base revision, typed event, mode, and—for commit—an event key. Stale or
+future base rejects before application evaluation unless the exact key resolves to a previously
+published identical input.
 
-At most one command is pending. A pending command contains its derived `CommandId`, slot, interface
-and exact interface identity, operation, canonical typed request, immutable grant digest, and
-adapter kind. Command identity is derived under `lkjscript.instance-command.v2` from the exact
-instance/application/revision/routing/grant/value facts. It is correlation and equality evidence,
-not authority. No application sees a runtime command ID.
+The application decision maps to instance publication exactly:
 
-## Grants and authority
+| decision | revision | state | command | receipt |
+|---|---:|---|---|---|
+| `declined` | none | none | none | typed response, `published=false` |
+| `unchanged` | none | none | none | typed response, `published=false` |
+| `completed` | one | exact next state | none | typed response and new digest |
+| `suspended` | one | exact next state | one pending command | typed response, state, command |
 
-A `HostGrant` contains contract version 2, canonical name, exact instance, exact import slot,
-interface, adapter kind, and one matching closed descriptor. Its canonical JSON is hashed under
-`lkjscript.host-grant.v2`. The descriptor must be resupplied exactly for host execution after
-restart; a path or matching name does not substitute for its digest.
+The entire decision, response type/value, state type/value, command route, policy, next journal bytes,
+and receipt encoding are validated before publication. A suspended state and command publish before
+host work. At most one command is pending.
 
-Creation requires exactly one grant for every import and no extras. Slots are sorted and unique.
-The grant slot and interface must equal the application requirement, the descriptor must belong to
-that interface, and the grant must bind the target instance. Application bytes contain no grants.
+No durable receipt is retained for declined or unchanged evaluation. Repeating the exact request is
+safe only while its exact base remains current and deterministically reevaluates the application. If
+authority advances, the old base rejects as stale; clients must inspect and decide. Published
+transitions retain the exact event key/input/response. An exact key/input repeat returns the original
+receipt without reexecution, including after restart; reuse with different input rejects.
 
-Retained descriptors are:
+Validate-only and commit share evaluation. Validate-only consumes no event key and publishes no
+record, manifest, HEAD, attempt, outcome, or identity.
 
-- `application_activation { source_directory, activation_slot }`; and
-- `immutable_blob { namespace, maximum_objects, maximum_bytes }`.
+## Pure query
 
-Both require bounded absolute canonical paths with validated non-symlink parents and narrow
-resource shape. Activation authorizes only one source namespace and slot. Blob authorizes only one
-private immutable-object namespace plus object/count bytes. Neither is a general filesystem grant.
-The retained grant is immutable for instance lifetime; grant rotation, revocation, or lookup is
-absent because neither current application needs it. A new instance is the current authority-change
-route.
+`InstanceQueryRequest` names contract 3, exact instance, optional exact revision, and typed query.
+The selected application query entry receives `(State, Query)` and must return the exact
+application-owned `QueryResult` type.
 
-`production` and `deterministic_fake` are disjoint adapter domains. Production execution rejects a
-fake grant. Fake outcome injection rejects a production grant. A grant from another instance,
-slot, interface, adapter, or descriptor rejects before host action.
+A query publishes no journal record, state revision, event key, command, attempt, outcome, current
+manifest, checkpoint, or HEAD. Its receipt binds application, instance, selected revision, record
+digest, state digest, exact typed result, result digest, and `published=false`. The result digest also
+binds the exact query input. It is equality evidence, not authority. A product may compare a known
+digest only after exact recomputation.
 
-## Host attempts, outcomes, and replay
+Current-revision queries use the HEAD-bound current manifest described below. An explicitly selected
+historical revision validates the retained chain and reconstructs that exact state. Malformed input,
+wrong type/domain, excessive input/output, runtime trap, resource exhaustion, and corruption remain
+distinct. Output failure cannot roll back anything because no publication occurred.
 
-A retained host outcome binds exact instance, application, pending command, interface, grant,
-adapter, operation, infrastructure class, typed application outcome, bounded evidence, and its
-canonical digest. The instance owner forms the application-visible outcome using the exact route in
-the embedded application; adapters cannot invent semantic state, response, workflow intent, or an
-unmapped outcome.
+## Journal, checkpoints, and current manifest
 
-The closed infrastructure classes are:
+The authoritative history is a contiguous hash-linked immutable record chain selected by HEAD. Each
+transition record contains exact instance/application/revision/prior identities, canonical event or
+host input, typed response, state digest, public-state byte accounting, immutable grants/policy, and
+optional pending command. It contains a full state checkpoint exactly at revision zero and every 64th
+revision. Other records contain no full state snapshot.
 
-- `succeeded` and `already_present`;
-- `known_failure_before_visibility` and `outcome_unknown`;
-- `reconciliation_present`, `reconciliation_absent`, and `reconciliation_indeterminate`;
-- `cancelled_before_action` and `timeout_before_action`; and
-- `timeout_after_possible_visibility` and `cleanup_failure`.
+State digest uses the exact application identity and canonical bounded binary `ApplicationValue`
+encoding. Public-state byte accounting uses canonical public JSON length; the two units are not
+interchangeable.
 
-Only classes declared compatible with the exact operation can become a typed outcome. Expected
-workflow results are ordinary application variants. Corruption, capability denial, resource
-exhaustion, and inability to operate the store remain distinct errors.
+HEAD selects exact instance, revision, record digest, current-manifest digest, cumulative authoritative
+journal bytes, and tombstone state. The current manifest contains exact current state plus a bounded
+contiguous event-key-to-record index. Its envelope digest is bound by HEAD. The index makes published
+idempotency replay one immutable-record lookup and makes cumulative policy checks independent of a
+full journal scan.
 
-Before `activate_application` or `put_blob`, the store publishes an attempt marker because
-visibility may become unknown. If restart finds a matching attempt without an outcome, production
-execution records `outcome_unknown` with exact evidence and does not repeat the action. Validation
-and inspection operations do not publish visibility markers. Repeating an exact completed host
-request returns its immutable receipt; a conflicting outcome rejects.
+The current manifest is replaceable acceleration, not independent semantic history. Missing,
+mismatched, truncated, or corrupt manifest input falls back to the HEAD-selected complete record chain
+and latest checkpoint. A pure query does not repair or republish it. Interruption after a new manifest
+but before new HEAD leaves old HEAD authoritative and the manifest ignored.
 
-On every open, the store validates the record chain and reruns each event and resume transition
-from embedded exact application bytes. Replay reproduces state, response, pending command, routing,
-grant binding, and outcome compatibility. It never calls an adapter. Missing/corrupt bytes,
-noncontiguous history, foreign authority, or a different transition result reject rather than
-repair or guess.
+Ordinary current-state open validates the private directory, HEAD, exact application, HEAD-bound
+manifest envelope and state digest, current record, its immediate prior object, current checkpoint
+when applicable, event-key index, grant/policy shape, and cumulative count/byte bounds. It does not
+claim complete-history audit. Missing or unusable acceleration causes complete chain validation and
+checkpoint reconstruction.
 
-## Activation interface and adapters
+`inspect --deep` reads every HEAD-selected record from genesis, checks canonical envelopes, links,
+identities, event-key uniqueness, cumulative bytes, grants, policy, checkpoint cadence, and every
+checkpoint, then reexecutes every transition through the application and compares final state. It is
+the independent audit oracle. A disagreement rejects; no record or checkpoint is guessed or repaired.
+Orphan records/manifests after interrupted pre-HEAD publication are nonauthority.
 
-The activation interface accepts application-owned nominal requests routed to:
+## Host grants and immutable blobs
 
-- `validate_application`, carrying one exact application digest plus an explicit source path at the
-  adapter boundary;
-- `activate_application`, carrying the digest and explicit source path; or
-- `reconcile_activation`, carrying the digest and no source input.
+A `HostGrant` binds contract 3, canonical grant name, exact instance and import slot, exact built-in
+interface, adapter kind, and bounded descriptor. Instance creation stores only a digest-bound
+`GrantBinding` in semantic records. Applications declare requirements and never contain grants.
 
-The production adapter accepts a regular application file lexically below the granted source
-directory, independently decodes and validates it, and requires exact digest equality. Activation
-writes a private same-directory candidate, synchronizes it, renames it over the one granted slot,
-and synchronizes the directory. Rename is the visibility point. Previsibility failure is known;
-postvisibility failure is unknown and never silently retried.
+The retained descriptor is `immutable_blob { namespace, maximum_objects, maximum_bytes }`. Namespace
+paths are absolute, canonical, bounded, non-symlink local deployment locators. Production and
+deterministic-fake adapters are distinct exact kinds. The only adapter input is `none`; blob content is
+the application command request, not broad filesystem authority.
 
-Reconciliation reads only the granted slot, validates a regular non-symlink exact application, and
-returns present, absent, or indeterminate evidence. It performs no semantic transition. The fake
-adapter records only route-compatible exact evidence and performs no filesystem action.
+A visibility-capable put records an exact attempt before host action. Outcomes are immutable and bind
+instance, application, command, interface, grant, adapter, operation, class, typed application outcome,
+and evidence. Known success/already-present, known previsibility failure, possible visibility, and
+reconciliation remain disjoint. Restart with an attempt but no outcome materializes unknown evidence;
+the put is never repeated automatically. Resume consumes one exact compatible outcome and publishes
+at most one next revision.
 
-## Immutable-blob interface and adapters
+Blob names are domain-separated content digests and objects publish no-replace. Digest equality claims
+content equality only—not provenance, authorization, freshness, or signature. Missing, foreign,
+symlinked, nonregular, oversized, or digest-mismatched objects reject.
 
-The blob interface owns two operations:
+## Inspection, history, and deletion
 
-- `put_blob` carries bounded content bytes; and
-- `inspect_blob` carries one exact 32-byte content digest.
+Ordinary inspection returns exact current state, response, command/outcome/attempt status, grants,
+policy, HEAD revision/digests, cumulative history records/bytes, checkpoint fact, validation scope, and
+legal next actions. Bounded history pages expose retained revision/digest/key/status/command facts and
+do not execute application queries. History inspection publishes nothing.
 
-The content identity is derived under `lkjscript.immutable-blob.content.v1`. It identifies exact
-content in this object domain only; it is not provenance, authorization, or application identity.
-The production adapter publishes content without replacement as `<digest>.lkjb` in the granted
-private namespace. It validates the entire namespace layout and every existing object's canonical
-name, regular-file type, bound, and digest. Same digest/same content returns `already_present`;
-conflicting or corrupt retained bytes reject. Count and aggregate retained-byte limits are checked
-before publication.
+Deletion requires exact current base, no pending command, and publishes only a tombstone HEAD.
+Retained files remain inspectable; identity cannot be recreated.
 
-Inspection derives the canonical object path, revalidates content against its name, and returns
-present or absent evidence. A put may return unknown after possible visibility; the application can
-suspend on an exact later inspection. No arbitrary read path or mutable replacement operation is
-exposed. The deterministic fake supplies only compatible evidence and never touches the namespace.
+## Format version 3
 
-## Events and idempotency
+The sole successful durable encodings use:
 
-A committed event or resume requires an instance-scoped event key of 1–96 ASCII alphanumeric,
-underscore, hyphen, or dot bytes. Validate-only requests omit the key. Exact repeated key plus
-canonical original input returns the retained receipt without reevaluation. Reusing a key with a
-different base or value rejects with `idempotency_conflict`.
+- records `LKJINS\0\x03`;
+- outcomes `LKJOUT\0\x03`;
+- attempts `LKJATT\0\x03`;
+- canonical HEAD `LKJIHEAD`; and
+- canonical current manifest `LKJICUR\0`.
 
-Host outcomes and attempts are separate durable evidence. Resumes name only exact instance/base and
-event key; the store supplies the one compatible retained outcome to the pure application. A
-foreign command, outcome, grant, interface, application, or instance cannot be replayed into this
-history.
+Every envelope carries format 3, checked little-endian payload length, strict payload, and a
+domain-separated digest. Records/HEAD/outcomes/attempts use closed canonical JSON payloads; current
+state uses the closed binary application-value/index payload. Decoders reject wrong magic/version,
+unknown or duplicate fields/tags, invalid UTF-8, noncanonical IDs/order, malformed length, foreign
+domains, excessive values, truncation, digest mismatch, and trailing bytes.
 
-## Durable format version 2
-
-The bootstrap retains one full canonical state record per revision and no compaction. A validated
-HEAD selects one exact chain. Unreferenced immutable records left before a HEAD change are not
-authority; a referenced gap or corrupt chain rejects.
-
-Records use `LKJINS\0\x02`, outcomes `LKJOUT\0\x02`, attempts `LKJATT\0\x02`, and HEAD
-`LKJIHEAD`. Each envelope contains format 2, checked little-endian payload length, strict canonical
-JSON, and a domain-separated 32-byte BLAKE3 digest. Domains are:
-
-- `lkjscript.instance-record.v2`;
-- `lkjscript.instance-host-outcome.v2`;
-- `lkjscript.instance-host-attempt.v2`; and
-- `lkjscript.instance-head.v2`.
-
-State, grant, and command domains are `lkjscript.instance-state.v2`,
-`lkjscript.host-grant.v2`, and `lkjscript.instance-command.v2`. Digests provide their explicitly
-named content/equality role only.
-
-The decoder checks lengths before allocation and rejects wrong magic/version, duplicate or unknown
-JSON fields, noncanonical identities/order/base64, wrong domain, foreign application/instance/
-interface/grant/command, incompatible typed outcome, digest mismatch, truncation, trailing bytes,
-and excessive counts/bytes. The embedded application, `records/`, `outcomes/`, `attempts/`, and HEAD
-are all revalidated. Version 1 has no reader or migration path and rejects directly.
-
-## Publication, deletion, and bounds
-
-Creation synchronizes a private staging directory, embedded application, revision-zero record, and
-HEAD before one directory rename and store sync. Later transitions publish an immutable record,
-then replace and synchronize HEAD. Receipts are encoded and bounded before publication. Response
-loss does not roll back authority; event-key or exact host retry returns the retained receipt.
-
-Failure before visibility is known no-change. Failure after a link/rename may have become visible is
-explicit unknown. No non-idempotent host action is retried after possible visibility. Tombstone
-deletion requires the exact current base and no pending command. It retains history and permanently
-forbids ID reuse.
-
-Global maxima are 1 MiB each for state, event, and blob content; 64 MiB retained history; 10,000
-transitions and replay records; 256 history items per page; 64 grants; 64 KiB host evidence; 96-byte
-event keys; 64-byte grant/slot names; 4,096-byte paths; 10,000 blob objects; and 64 MiB per blob
-namespace grant. Per-instance and per-grant limits may attenuate these maxima. Counts and aggregate
-bytes are checked before corresponding allocation or publication. Logical accounting is not a
-claim of exact RSS enforcement.
-
-## Public commands and explicit absences
-
-```text
-instance create
-instance validate-event | apply-event
-instance execute-host | fake-outcome
-instance validate-resume | resume
-instance inspect | history | delete
-```
-
-All consume strict command-local version-2 JSON and the topology-neutral runtime kernel. The old
-activation-specific command families and version-1 records are absent.
-
-There is no mutable grant lookup, automatic retry, command batch, live handle, wall-clock semantic
-value, durable runtime queue, worker, general filesystem interface, database, compaction,
-cross-instance transaction, application migration, purge, or identity reuse. Process boundaries and
-in-process adapters are not sandboxes.
+Format 2 and older successful records and their byte-response/query-less assumptions reject directly.
+There is no compatibility reader, migration, edition, fallback parser, no-op full-state publication,
+activation adapter, database, compaction root, mutable state index, or persistent opaque query cache.

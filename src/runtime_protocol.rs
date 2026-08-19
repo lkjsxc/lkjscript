@@ -4,7 +4,8 @@ use crate::error::{LkError, Result};
 use crate::instance::{
     HostExecutionReceipt, InstanceCreateReceipt, InstanceCreateRequest, InstanceDeleteRequest,
     InstanceEventRequest, InstanceFakeHostRequest, InstanceHistoryPage, InstanceHostRequest,
-    InstanceId, InstanceInspection, InstanceResumeRequest, InstanceTransitionReceipt,
+    InstanceId, InstanceInspection, InstanceQueryReceipt, InstanceQueryRequest,
+    InstanceResumeRequest, InstanceTransitionReceipt,
 };
 use crate::runtime::{RUNTIME_CONTRACT_VERSION, RuntimeInspection, RuntimeKernel};
 use serde::{Deserialize, Serialize};
@@ -50,6 +51,7 @@ pub enum RuntimeRequest {
     },
     ValidateEvent(InstanceEventRequest),
     ApplyEvent(InstanceEventRequest),
+    Query(InstanceQueryRequest),
     ExecuteHost(InstanceHostRequest),
     FakeOutcome(InstanceFakeHostRequest),
     ValidateResume(InstanceResumeRequest),
@@ -82,6 +84,7 @@ impl RuntimeRequest {
             Self::ApplyEvent(request) => kernel
                 .apply_event(&request)
                 .map(RuntimeResponse::Transition),
+            Self::Query(request) => kernel.query(&request).map(RuntimeResponse::Query),
             Self::ExecuteHost(request) => kernel
                 .execute_host(&request)
                 .map(RuntimeResponse::HostOutcome),
@@ -94,7 +97,7 @@ impl RuntimeRequest {
             Self::Resume(request) => kernel.resume(&request).map(RuntimeResponse::Transition),
             Self::InspectInstance { instance } => kernel
                 .inspect_instance(instance)
-                .map(RuntimeResponse::Instance),
+                .map(|inspection| RuntimeResponse::Instance(Box::new(inspection))),
             Self::History {
                 instance,
                 start_revision,
@@ -102,7 +105,9 @@ impl RuntimeRequest {
             } => kernel
                 .history(instance, start_revision, limit)
                 .map(RuntimeResponse::History),
-            Self::Delete(request) => kernel.delete(request).map(RuntimeResponse::Instance),
+            Self::Delete(request) => kernel
+                .delete(request)
+                .map(|inspection| RuntimeResponse::Instance(Box::new(inspection))),
             Self::InspectRuntime => Ok(RuntimeResponse::Runtime(kernel.inspection())),
             Self::Shutdown => Ok(RuntimeResponse::Shutdown),
         }
@@ -123,8 +128,9 @@ impl RuntimeRequest {
 pub enum RuntimeResponse {
     Created(InstanceCreateReceipt),
     Transition(InstanceTransitionReceipt),
+    Query(InstanceQueryReceipt),
     HostOutcome(HostExecutionReceipt),
-    Instance(InstanceInspection),
+    Instance(Box<InstanceInspection>),
     History(InstanceHistoryPage),
     Runtime(RuntimeInspection),
     Shutdown,
@@ -176,10 +182,15 @@ mod tests {
         request.validate().expect("validate runtime request");
 
         let text = String::from_utf8(canonical).expect("runtime request UTF-8");
+        let version_field = format!("\"version\":{RUNTIME_CONTRACT_VERSION}");
         for malformed in [
-            text.replacen("\"version\":1", "\"version\":0", 1),
+            text.replacen(&version_field, "\"version\":0", 1),
             text.replacen("\"request_id\":7", "\"request_id\":7,\"request_id\":7", 1),
-            text.replacen("{\"version\":1", "{\"unknown\":0,\"version\":1", 1),
+            text.replacen(
+                &format!("{{{version_field}"),
+                &format!("{{\"unknown\":0,{version_field}"),
+                1,
+            ),
             text.replacen("inspect_runtime", "unknown_runtime_request", 1),
             format!("{text} {{}}"),
         ] {

@@ -169,9 +169,12 @@ fn type_dependencies(kind: &CoreTypeKind) -> Vec<usize> {
             .filter_map(|variant| variant.payload)
             .filter_map(|payload| usize::try_from(payload.0).ok())
             .collect(),
-        CoreTypeKind::Unit | CoreTypeKind::Bool | CoreTypeKind::I64 | CoreTypeKind::Bytes => {
-            Vec::new()
-        }
+        CoreTypeKind::Unit
+        | CoreTypeKind::Bool
+        | CoreTypeKind::I64
+        | CoreTypeKind::Bytes
+        | CoreTypeKind::Text
+        | CoreTypeKind::Sequence { .. } => Vec::new(),
     }
 }
 
@@ -187,10 +190,12 @@ fn derive_type_map(
     let mut paths = Vec::new();
     match &ty.kind {
         CoreTypeKind::Unit | CoreTypeKind::Bool | CoreTypeKind::I64 => {}
-        CoreTypeKind::Bytes => paths.push(ManagedCellPath {
-            cell: 0,
-            conditions: Vec::new(),
-        }),
+        CoreTypeKind::Bytes | CoreTypeKind::Text | CoreTypeKind::Sequence { .. } => {
+            paths.push(ManagedCellPath {
+                cell: 0,
+                conditions: Vec::new(),
+            })
+        }
         CoreTypeKind::Product { fields } => {
             for field in fields {
                 let child = complete
@@ -360,7 +365,8 @@ fn derive_block(
         drops_after.sort();
         drops_after.dedup();
         let reuse_left = match instruction {
-            Instruction::BytesConcat { lhs, rhs, .. } => {
+            Instruction::BytesConcat { lhs, rhs, .. }
+            | Instruction::TextConcat { lhs, rhs, .. } => {
                 lhs != rhs
                     && last_instruction_use.get(lhs) == Some(&instruction_index)
                     && !terminator_set.contains(lhs)
@@ -573,9 +579,15 @@ fn instruction_operands(instruction: &Instruction) -> Vec<ValueId> {
         Instruction::ConstUnit { .. }
         | Instruction::ConstBool { .. }
         | Instruction::ConstI64 { .. }
-        | Instruction::ConstBytes { .. } => Vec::new(),
-        Instruction::BytesLen { value, .. } => vec![*value],
-        Instruction::BytesAt { value, index, .. } => vec![*value, *index],
+        | Instruction::ConstBytes { .. }
+        | Instruction::ConstText { .. }
+        | Instruction::SequenceEmpty { .. } => Vec::new(),
+        Instruction::NotBool { value, .. }
+        | Instruction::BytesLen { value, .. }
+        | Instruction::TextLen { value, .. }
+        | Instruction::SequenceLen { value, .. } => vec![*value],
+        Instruction::BytesAt { value, index, .. }
+        | Instruction::SequenceGet { value, index, .. } => vec![*value, *index],
         Instruction::BytesSlice {
             value,
             start,
@@ -584,8 +596,20 @@ fn instruction_operands(instruction: &Instruction) -> Vec<ValueId> {
         } => vec![*value, *start, *length],
         Instruction::AddI64 { lhs, rhs, .. }
         | Instruction::LtI64 { lhs, rhs, .. }
+        | Instruction::EqualI64 { lhs, rhs, .. }
+        | Instruction::AndBool { lhs, rhs, .. }
+        | Instruction::OrBool { lhs, rhs, .. }
         | Instruction::BytesEqual { lhs, rhs, .. }
-        | Instruction::BytesConcat { lhs, rhs, .. } => vec![*lhs, *rhs],
+        | Instruction::BytesConcat { lhs, rhs, .. }
+        | Instruction::TextEqual { lhs, rhs, .. }
+        | Instruction::TextConcat { lhs, rhs, .. } => vec![*lhs, *rhs],
+        Instruction::SequenceAppend { value, element, .. } => vec![*value, *element],
+        Instruction::SequenceReplace {
+            value,
+            index,
+            element,
+            ..
+        } => vec![*value, *index, *element],
         Instruction::Call { arguments, .. } => arguments.clone(),
         Instruction::ConstructProduct { fields, .. } => fields.clone(),
         Instruction::ProjectField { value, .. } => vec![*value],
@@ -639,13 +663,26 @@ fn instruction_result(instruction: &Instruction) -> ValueId {
         | Instruction::ConstBool { result, .. }
         | Instruction::ConstI64 { result, .. }
         | Instruction::ConstBytes { result, .. }
+        | Instruction::ConstText { result, .. }
         | Instruction::AddI64 { result, .. }
         | Instruction::LtI64 { result, .. }
+        | Instruction::EqualI64 { result, .. }
+        | Instruction::NotBool { result, .. }
+        | Instruction::AndBool { result, .. }
+        | Instruction::OrBool { result, .. }
         | Instruction::BytesLen { result, .. }
         | Instruction::BytesAt { result, .. }
         | Instruction::BytesSlice { result, .. }
         | Instruction::BytesEqual { result, .. }
         | Instruction::BytesConcat { result, .. }
+        | Instruction::TextLen { result, .. }
+        | Instruction::TextEqual { result, .. }
+        | Instruction::TextConcat { result, .. }
+        | Instruction::SequenceEmpty { result, .. }
+        | Instruction::SequenceLen { result, .. }
+        | Instruction::SequenceGet { result, .. }
+        | Instruction::SequenceAppend { result, .. }
+        | Instruction::SequenceReplace { result, .. }
         | Instruction::Call { result, .. }
         | Instruction::ConstructProduct { result, .. }
         | Instruction::ProjectField { result, .. }
@@ -851,6 +888,7 @@ fn verify_block_plan(
         let expected_reuse = matches!(
             instruction,
             Instruction::BytesConcat { lhs, rhs, .. }
+                | Instruction::TextConcat { lhs, rhs, .. }
                 if lhs != rhs
                     && last_instruction_use.get(lhs) == Some(&instruction_index)
                     && !terminator_set.contains(lhs)
@@ -1108,6 +1146,7 @@ mod tests {
                     SemanticType::Bool => CoreTypeKind::Bool,
                     SemanticType::I64 => CoreTypeKind::I64,
                     SemanticType::Bytes => CoreTypeKind::Bytes,
+                    SemanticType::Text => CoreTypeKind::Text,
                     SemanticType::Nominal(_) => unreachable!(),
                 },
                 layout: crate::type_layout::primitive_layout(semantic).unwrap(),
@@ -1233,8 +1272,8 @@ mod tests {
     fn product_and_active_variant_maps_are_exact_and_rederived() {
         use crate::type_layout::{FieldLayout, LayoutShape, ValueLayout, VariantLayout};
 
-        let product = CoreTypeId(4);
-        let sum = CoreTypeId(5);
+        let product = CoreTypeId(crate::core_ir::PRIMITIVE_TYPE_COUNT as u32);
+        let sum = CoreTypeId(crate::core_ir::PRIMITIVE_TYPE_COUNT as u32 + 1);
         let field = node(20);
         let empty = node(21);
         let payload = node(22);

@@ -8,7 +8,8 @@ use super::{
 use lkjscript::error::{ErrorCode, LkError};
 use lkjscript::instance::{
     INSTANCE_CONTRACT_VERSION, InstanceCreateRequest, InstanceDeleteRequest, InstanceEventRequest,
-    InstanceFakeHostRequest, InstanceHostRequest, InstanceId, InstanceResumeRequest, strict_json,
+    InstanceFakeHostRequest, InstanceHostRequest, InstanceId, InstanceQueryRequest,
+    InstanceResumeRequest, strict_json,
 };
 use lkjscript::machine::MAX_JSON_OUTPUT_BYTES;
 use lkjscript::runtime::{RuntimeKernel, RuntimePolicy};
@@ -25,6 +26,8 @@ Commands:
           # strict InstanceEventRequest JSON on stdin; mode must be validate_only
   apply-event --store DIRECTORY [--pretty]
           # strict InstanceEventRequest JSON on stdin; mode must be commit
+  query --store DIRECTORY [--pretty]
+          # strict InstanceQueryRequest JSON on stdin; publishes nothing
   execute-host --store DIRECTORY [--pretty]
           # strict InstanceHostRequest JSON on stdin
   fake-outcome --store DIRECTORY [--pretty]
@@ -38,11 +41,11 @@ Commands:
   delete --store DIRECTORY [--pretty]
           # strict InstanceDeleteRequest JSON on stdin
 
-Instance CLI JSON contract version 2 is required. Store, application, adapter, and grant paths
+Instance CLI JSON contract version 3 is required. Store, application, adapter, and grant paths
 paths are bounded canonical absolute paths. A committed event or resume requires an instance-scoped
 event key. Host execution records an exact typed outcome but never mutates semantic state; resume
 is the only path that lets a host outcome enter the next deterministic transition. A possibly
-visible activation is never repeated automatically.";
+visible immutable-blob publication is never repeated automatically.";
 
 pub(super) enum InstanceCommand {
     Invalid(String),
@@ -57,6 +60,10 @@ pub(super) enum InstanceCommand {
         pretty: bool,
     },
     ApplyEvent {
+        store: PathBuf,
+        pretty: bool,
+    },
+    Query {
         store: PathBuf,
         pretty: bool,
     },
@@ -105,6 +112,7 @@ pub(super) fn parse(arguments: impl Iterator<Item = String>) -> Result<InstanceC
         "create" => parse_create(rest),
         "validate-event" => parse_store_action(rest, StoreAction::ValidateEvent),
         "apply-event" => parse_store_action(rest, StoreAction::ApplyEvent),
+        "query" => parse_store_action(rest, StoreAction::Query),
         "execute-host" => parse_store_action(rest, StoreAction::ExecuteHost),
         "fake-outcome" => parse_store_action(rest, StoreAction::FakeOutcome),
         "validate-resume" => parse_store_action(rest, StoreAction::ValidateResume),
@@ -156,6 +164,13 @@ fn run_json(command: InstanceCommand) -> CliOutcome {
                 Err(error) => return instance_error(error, pretty),
             };
             with_kernel(&store, pretty, |kernel| kernel.apply_event(&request))
+        }
+        InstanceCommand::Query { store, pretty } => {
+            let request = match read_request::<InstanceQueryRequest>("instance query request") {
+                Ok(request) => request,
+                Err(error) => return instance_error(error, pretty),
+            };
+            with_kernel(&store, pretty, |kernel| kernel.query(&request))
         }
         InstanceCommand::ExecuteHost { store, pretty } => {
             let request = match read_request::<InstanceHostRequest>("instance host request") {
@@ -330,6 +345,7 @@ fn parse_create(arguments: &[String]) -> Result<InstanceCommand, String> {
 enum StoreAction {
     ValidateEvent,
     ApplyEvent,
+    Query,
     ExecuteHost,
     FakeOutcome,
     ValidateResume,
@@ -345,6 +361,7 @@ fn parse_store_action(
     Ok(match action {
         StoreAction::ValidateEvent => InstanceCommand::ValidateEvent { store, pretty },
         StoreAction::ApplyEvent => InstanceCommand::ApplyEvent { store, pretty },
+        StoreAction::Query => InstanceCommand::Query { store, pretty },
         StoreAction::ExecuteHost => InstanceCommand::ExecuteHost { store, pretty },
         StoreAction::FakeOutcome => InstanceCommand::FakeOutcome { store, pretty },
         StoreAction::ValidateResume => InstanceCommand::ValidateResume { store, pretty },
