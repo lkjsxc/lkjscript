@@ -7,9 +7,11 @@
     "timezone": "Etc/UTC",
     "branch": "main",
     "starting_commit": "7ffaf514a8ead2e0838fdc87217e904b3edde38b",
-    "ending_commit": "7ffaf514a8ead2e0838fdc87217e904b3edde38b",
+    "ending_commit": "2af914ac8d338879264b96378fe84630848390b9",
+    "implementation_commit": "2af914ac8d338879264b96378fe84630848390b9",
+    "evidence_finalization": "recorded in a subsequent local commit because a commit cannot contain its own digest",
     "checkout_relation_to_audited_baseline": "equal",
-    "commit_created": false,
+    "commit_created": true,
     "root_policy": {
       "path": "AGENTS.md",
       "sha256": "53d77ddfd824f87311ceea4e8f6ad1d7eb8799f66e2a00730fafad4b9196517c",
@@ -453,7 +455,7 @@
     "Backup synchronization is bounded by the documented local filesystem assumptions; no power-loss guarantee is claimed.",
     "Fine-grained final corpus stage distributions and backup latency were not retained; no value is inferred for them.",
     "No application-state migration or semantic-export import was implemented.",
-    "No commit, push, pull request, release publication, or other remote action was performed.",
+    "Two local commits were created: the implementation commit and a provenance-only evidence finalization; no push, pull request, release publication, or other remote action was performed.",
     "Provider tokens, model identity, prices, and monetary cost were unavailable and were not inferred from bytes."
   ]
 }
