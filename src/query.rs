@@ -1646,7 +1646,9 @@ fn operation_definition_slot(operation: &OperationKind, target: NodeId) -> Optio
         | OperationKind::SequenceLen { .. }
         | OperationKind::SequenceGet { .. }
         | OperationKind::SequenceAppend { .. }
-        | OperationKind::SequenceReplace { .. } => DefinitionSlot::SequenceDeclaration,
+        | OperationKind::SequenceReplace { .. }
+        | OperationKind::SequenceSlice { .. }
+        | OperationKind::SequenceConcat { .. } => DefinitionSlot::SequenceDeclaration,
         _ => return None,
     })
 }

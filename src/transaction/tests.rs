@@ -754,6 +754,187 @@ fn function_body_replacement_preserves_entity_without_durable_churn() {
 }
 
 #[test]
+fn add_product_field_requires_atomic_constructor_update_and_preserves_continuity() {
+    let id = WorkspaceId::from_bytes([0x6d; 16]);
+    let mut workspace = Workspace::new(id).expect("workspace");
+    let mut initial = structured_semantic_request(
+        id,
+        vec![
+            TransactionOp::CreateProductType {
+                symbol: DraftSymbol::generated(3),
+                module: draft_symbol(2),
+                name: "Pair".into(),
+                fields: vec![ProductFieldDraft {
+                    symbol: DraftSymbol::generated(4),
+                    name: "first".into(),
+                    ty: TypeDraft::I64,
+                }],
+            },
+            TransactionOp::CreateFunction {
+                symbol: DraftSymbol::generated(5),
+                module: draft_symbol(2),
+                name: "make_pair".into(),
+                parameters: Vec::new(),
+                result: TypeDraft::Nominal(draft_symbol(3)),
+                body: Some(FunctionBodyDraft {
+                    operations: vec![
+                        draft_expression(6, ExpressionKindDraft::ConstI64(1)),
+                        draft_expression(
+                            7,
+                            ExpressionKindDraft::ConstructProduct {
+                                product: draft_symbol(3),
+                                fields: vec![ProductFieldValueDraft {
+                                    field: draft_symbol(4),
+                                    value: draft_result(6),
+                                }],
+                            },
+                        ),
+                    ],
+                    return_value: draft_result(7),
+                }),
+            },
+        ],
+    );
+    initial.response.return_symbols = [3, 4, 5].into_iter().map(DraftSymbol::generated).collect();
+    let prepared = workspace
+        .prepare_transaction(&initial)
+        .expect("initial product consumer");
+    let product = binding(&prepared.receipt, 3);
+    let first = binding(&prepared.receipt, 4);
+    let function = binding(&prepared.receipt, 5);
+    workspace
+        .publish(prepared.snapshot)
+        .expect("publish initial product");
+
+    let second_symbol = DraftSymbol::new("second");
+    let missing_constructor_update = Transaction {
+        workspace: id,
+        base_revision: Revision::new(1),
+        idempotency_key: None,
+        mode: TransactionMode::Commit,
+        operations: vec![TransactionOp::AddProductField {
+            symbol: second_symbol,
+            product: NodeTarget::Existing(product),
+            name: "second".into(),
+            ty: TypeDraft::I64,
+        }],
+    };
+    assert_eq!(
+        workspace
+            .prepare_transaction(&request(&missing_constructor_update))
+            .expect_err("all existing constructions must be updated atomically")
+            .code,
+        ErrorCode::InvalidOperand
+    );
+    assert_eq!(workspace.head_revision(), Revision::new(1));
+
+    let first_value = DraftSymbol::new("first_value");
+    let second_value = DraftSymbol::new("second_value");
+    let pair_value = DraftSymbol::new("pair_value");
+    let atomic = ApplyTransactionRequest {
+        transaction: Transaction {
+            workspace: id,
+            base_revision: Revision::new(1),
+            idempotency_key: None,
+            mode: TransactionMode::Commit,
+            operations: vec![
+                TransactionOp::AddProductField {
+                    symbol: second_symbol,
+                    product: NodeTarget::Existing(product),
+                    name: "second".into(),
+                    ty: TypeDraft::I64,
+                },
+                TransactionOp::ReplaceFunctionBody {
+                    function,
+                    body: FunctionBodyDraft {
+                        operations: vec![
+                            ExpressionDraft {
+                                symbol: Some(first_value),
+                                operation: ExpressionKindDraft::ConstI64(1),
+                            },
+                            ExpressionDraft {
+                                symbol: Some(second_value),
+                                operation: ExpressionKindDraft::ConstI64(2),
+                            },
+                            ExpressionDraft {
+                                symbol: Some(pair_value),
+                                operation: ExpressionKindDraft::ConstructProduct {
+                                    product: NodeTarget::Existing(product),
+                                    fields: vec![
+                                        ProductFieldValueDraft {
+                                            field: NodeTarget::Existing(first),
+                                            value: ValueDraft::OperationResult {
+                                                operation: NodeTarget::Draft(first_value),
+                                                output: 0,
+                                            },
+                                        },
+                                        ProductFieldValueDraft {
+                                            field: NodeTarget::Draft(second_symbol),
+                                            value: ValueDraft::OperationResult {
+                                                operation: NodeTarget::Draft(second_value),
+                                                output: 0,
+                                            },
+                                        },
+                                    ],
+                                },
+                            },
+                        ],
+                        return_value: ValueDraft::OperationResult {
+                            operation: NodeTarget::Draft(pair_value),
+                            output: 0,
+                        },
+                    },
+                },
+            ],
+        },
+        response: TransactionResponseSpec {
+            return_symbols: vec![second_symbol],
+        },
+    };
+    let candidate = workspace
+        .prepare_transaction(&atomic)
+        .expect("atomic product evolution");
+    let second = candidate.receipt.returned_bindings[0].1;
+    assert_eq!(candidate.receipt.created_count, 1);
+    let Node::ProductType { fields, .. } = candidate.snapshot.node(product).expect("product")
+    else {
+        panic!("product declaration")
+    };
+    assert_eq!(fields, &vec![first, second]);
+    assert!(matches!(
+        candidate.snapshot.node(second),
+        Ok(Node::ProductField {
+            owner,
+            ordinal: 1,
+            ty: SemanticType::I64,
+            ..
+        }) if *owner == product
+    ));
+    let constructed_fields = candidate
+        .snapshot
+        .nodes()
+        .find_map(|(_, node)| match node {
+            Node::Operation {
+                operation:
+                    OperationKind::ConstructProduct {
+                        product: owner,
+                        fields,
+                    },
+                ..
+            } if *owner == product => {
+                Some(fields.iter().map(|field| field.field).collect::<Vec<_>>())
+            }
+            _ => None,
+        })
+        .expect("updated construction");
+    assert_eq!(constructed_fields, vec![first, second]);
+    workspace
+        .publish(candidate.snapshot)
+        .expect("publish atomic product evolution");
+    assert_eq!(workspace.head_revision(), Revision::new(2));
+}
+
+#[test]
 fn function_body_replacement_rejects_implicit_anchor_deletion() {
     let id = WorkspaceId::from_bytes([0x6e; 16]);
     let mut workspace = Workspace::new(id).expect("workspace");

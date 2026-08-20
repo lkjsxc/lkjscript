@@ -21,6 +21,42 @@ Page cache was not dropped and these are not cold-machine results. Timing uses m
 `perf_counter_ns`; stage counters use Rust monotonic durations. Process RSS, provider tokens, and
 provider prices were unavailable.
 
+## lkjstudio revision-48 release workload
+
+The current workbench observations are retained in
+[`20260819-lkjstudio-workload.json`](evidence/20260819-lkjstudio-workload.json). They used optimized
+revision-48 binaries on the warm Linux x86-64 host, with 20 logical CPUs visible to the harness and
+without dropping page cache. Each headless row is one complete process-inclusive sample; only
+artifact validation and orientation have five samples. The harness did not collect individual-event
+latencies, so no event p50/p95 claim is made.
+
+| observation | exact result |
+|---|---:|
+| artifact validation | 11.075 ms median / 11.563 ms p95 |
+| semantic project orientation | 361.340 ms median / 368.737 ms p95 |
+| exact function query | 366.422 ms / 69,761 response bytes |
+| generated function proposal | 360.316 ms / 189,752 response bytes |
+| 10,000 mixed edit/resize/close events | 27,145.253 ms total / 9,999 changed |
+| 1,000 growing inserts plus close | 10,962.479 ms total |
+| 100-buffer corpus plus close | 287.601 ms total |
+| maximum 65,536-scalar paste plus close | 804.825 ms / accepted once |
+| 1x1 resize plus close | 18.318 ms |
+
+The mixed total is approximately 2.71 ms per input by division, not a sampled event percentile. The
+1,000-growing-insert observation misses a uniformly fast edit-loop ambition and is the retained
+representation/rendering reversal gate. The 65,536-scalar paste originally exhausted the old
+application-level copy loops; checked sequence slice/concatenate and a target-owned 100,000,000-fuel
+policy close that bounded workflow. No provider token/cache/price telemetry was available, and bytes
+are not converted into token or monetary estimates.
+
+The isolated fresh-copy receipt is
+[`20260819-lkjstudio-fresh-checkout.json`](evidence/20260819-lkjstudio-fresh-checkout.json). With no
+copied target directory, the locked release workspace built in 204 seconds using the preinstalled
+toolchain and host Cargo registry/source caches. Both semantic projects passed shallow/deep doctor;
+all 29 workbench and eight `lkjwork` target cases passed; and two no-overwrite workbench builds were
+byte-identical to the checked 161,562-byte artifact. This is an initially absent-target observation,
+not a cold-host or empty-dependency-cache claim.
+
 ## Semantic-development repository workload
 
 The retained development workload started from the migrated `lkjwork` revision 7 project and used
@@ -173,8 +209,10 @@ duplicating a validator. Exact UTF-8 byte equality and no normalization keep the
 Nominal homogeneous immutable sequences won over serialized bytes, recursive cons products,
 application-specific fixed arrays, structural generics, and host tables. Nominal identity reuses the
 existing release reference model and permits managed indirection without a generic declaration
-system. Empty/length/get/append/replace plus counted loops were sufficient; higher-order operations,
-mutable builders, maps, sets, and iterators had no product consumer.
+system. Empty/length/get/append/replace remain the simple construction oracle. Checked slice and
+concatenate are retained because they removed editor/render copy loops and closed the maximum-paste
+workflow under deterministic fuel. Higher-order operations, mutable builders, maps, sets, and
+iterators had no product consumer.
 
 Exact `i64` equality and boolean not/and/or were retained because lifecycle, filtering, pagination,
 and dependency paths repeatedly used them. Broader arithmetic, polymorphic equality, traits, and
@@ -232,7 +270,7 @@ proposal: an identity-preserving rename revision, an atomic type/function creati
 query/target/case cutover revision. The three canonical change inputs totalled 13,796 bytes (387,
 9,420, and 3,989 bytes). The following bounded one-shot observations at revision 7 were retained:
 
-| observation | response bytes |
+| observation | observed bytes |
 |---|---:|
 | orientation | 1,228 |
 | unchanged orientation | 252 |
@@ -240,6 +278,15 @@ query/target/case cutover revision. The three canonical change inputs totalled 1
 | targeted refactor context | 53,811 |
 | latest four revision records | 2,397 |
 | migration-to-dogfood diff | 3,334 |
+| exact `query_entry` function projection | 33,133 |
+| `query_entry` function + callees + targets | 35,762 |
+| packet-free `query_entry` proposal document | 11,846 |
+| unchanged exact function projection | 391 |
+
+The proposal row measures the extracted editable document; its enclosing project response was
+12,550 bytes. The three new semantic-query/proposal rows were measured on the same checked revision
+7 authority after the public query/proposal implementation. Bytes are not converted to tokens or
+money.
 
 The feature required three apply processes/engine opens, one target build, and one target test; its
 semantic proposal correction depth was zero. The predecessor baseline was a 255,704-byte,
@@ -257,9 +304,10 @@ application interaction, not semantic development authoring.
 
 The predecessor product campaign observed a 130-second optimized workspace rebuild and a
 132.84-second isolated-target build on a warm host; those measurements predate the semantic-project
-cutover and remain historical baseline. The current uncommitted tree was copied without `.git`,
-`target`, or local caches and built with an initially absent isolated Cargo target directory on the
-same warm host. The locked release build took 184.784 seconds elapsed (201.487 user, 3.441 system).
+cutover and remain historical baseline. The verified campaign tree was copied before its final
+local commit without `.git`, `target`, or local caches and built with an initially absent isolated
+Cargo target directory on the same warm host. The locked release build took 184.784 seconds elapsed
+(201.487 user, 3.441 system).
 The resulting `lkjscript` binary is 13,263,608 bytes with SHA-256
 `634ba9c4647b6fa2d0c16768d3f5ebe8fe9aa0dd78d1b22d41f133304cefc679`; `lkjwork` is
 3,553,056 bytes with SHA-256

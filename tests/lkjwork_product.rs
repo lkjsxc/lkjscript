@@ -869,6 +869,8 @@ fn public_product_story_is_pure_restartable_backed_up_and_source_independent() {
             .all(|result| result["result"]["published"] == false)
     );
     assert_eq!(query_results[5]["result"]["export_version"], 1);
+    assert_eq!(result_value(&query_results[3])["kind"], "summary");
+    assert_eq!(result_value(&query_results[3])["blocked"], 2);
     assert_eq!(result_value(&query_results[7])["kind"], "why");
     assert_eq!(result_value(&query_results[7])["task"], 5);
     assert_eq!(result_value(&query_results[7])["actionable"], false);

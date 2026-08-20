@@ -46,10 +46,31 @@ Controls and escape characters are valid semantic text; terminal-safe rendering 
 obligation. One text value is limited to 65,536 UTF-8 bytes, and a literal retained in semantic source
 is limited to 4,096 bytes.
 
+### Editor scalar contract
+
+`lkjstudio` deliberately adds no second language text type. Its editor content is a nominal
+immutable sequence of checked `i64` Unicode scalar values. Every insertion validates
+`char::from_u32` at the application boundary; cursor, selection, search, and line movement use
+zero-based scalar indexes. Native file adaptation decodes valid UTF-8 to scalars and re-encodes
+scalars to UTF-8 only after validation.
+
+LF is the sole semantic line break used by editor movement. A combining scalar is independently
+addressable, so editing may split a grapheme cluster. Tabs and controls remain scalars; display-cell
+width is a terminal projection and never changes the editor index. Literal search compares exact
+scalar subsequences, allows overlapping matches, uses deterministic forward order and wrap, and
+rejects an empty pattern. These are application semantics, not general language primitives.
+
+The editor rebuilds flat immutable sequences with empty/get/append/replace plus checked slice and
+concatenate. Slice and concatenate replaced application-level element-copy loops after the retained
+65,536-scalar paste exhausted the bounded interactive fuel policy. The allocate-new flat result
+remains the independent representation oracle. No rope, piece table, gap buffer, line index, search
+index, map, or mutable builder is retained because the complete current workload does not justify
+another representation owner.
+
 ### Sequences
 
 A sequence declaration has one exact nominal identity and one exact element type. Order is semantic;
-allocation order and backing identity are not. Empty is canonical. Length is limited to 16,384
+allocation order and backing identity are not. Empty is canonical. Length is limited to 131,072
 elements before allocation or traversal. Public JSON is one ordered array, and every element is
 validated against the exact declaration-owned type. Foreign nominal values reject even when their
 shape is equal.
@@ -71,14 +92,17 @@ The closed operation set includes:
 - sum construction and exhaustive `match_sum`;
 - byte length, checked index, checked slice, equality, and concatenation;
 - text byte length, equality, and concatenation;
-- sequence empty, length, checked zero-based element access, append, and replace;
+- sequence empty, length, checked zero-based element access, append, replace, checked half-open
+  slice, and concatenate;
 - typed `hole`; and
 - `return` and `yield` terminators.
 
 Integer overflow traps; it never wraps. Byte and sequence indexes are signed `i64` proposals and must
-be nonnegative and in range before access. Sequence append and replace return a new immutable value
-of the same exact sequence type; replacement preserves length. Text concatenation checks its result
-byte length before allocation and remains valid UTF-8 because both operands are valid UTF-8.
+be nonnegative and in range before access. Sequence append, replace, slice, and concatenate return a
+new immutable value of the same exact sequence type; replacement preserves length, slice uses
+`start..end_exclusive`, and concatenate checks the combined element count before allocation. Text
+concatenation checks its result byte length before allocation and remains valid UTF-8 because both
+operands are valid UTF-8.
 
 A product constructor supplies every field exactly once. A sum match supplies every variant exactly
 once and binds a payload only for payload-bearing variants. Calls target durable function entities.
@@ -100,9 +124,9 @@ iteration receives the prior yield.
 Every executed instruction and transferred flat value has the common deterministic charge. Variable
 work adds a logical charge: byte/text equality charges the compared prefix, concatenation charges
 result bytes, byte slice charges result bytes, sequence length charges element count, and sequence
-append/replace charge result element count. Sequence access is checked constant logical work plus
-normal value flattening. These charges do not depend on allocation reuse, capacity, `Arc` counts, or
-serialization size.
+append/replace/slice/concatenate charge result element count. Sequence access is checked constant
+logical work plus normal value flattening. These charges do not depend on allocation reuse,
+capacity, `Arc` counts, or serialization size.
 
 Calls and user-scalable control use explicit runtime frames. User depth does not consume unbounded
 native stack. Recursion and dependency traversal are bounded by explicit frames, fuel, and the
@@ -142,11 +166,12 @@ verified managed-reference maps, exact ownership claims, deterministic reclamati
 views, and uniqueness-guided concat reuse. A test-only allocate-new byte mode remains the oracle.
 
 Sequences use a safe invocation-local immutable object containing ordered `Arc<RuntimeValue>`
-elements. Append and replace shallow-share immutable elements while allocating one new sequence
-object. The store separately charges every live sequence the exact retained byte count of the simple
-canonical allocate-new representation and the logical visible byte content; sharing therefore cannot
-evade limits. Empty/append/replace/access/materialization are differentially checked against canonical
-allocate-new encoding. Public results are deeply materialized once at the boundary.
+elements. Append, replace, slice, and concatenate shallow-share immutable elements while allocating
+one new sequence object. The store separately charges every live sequence the exact retained byte
+count of the simple canonical allocate-new representation and the logical visible byte content;
+sharing therefore cannot evade limits. Empty/append/replace/slice/concatenate/access/materialization
+are differentially checked against canonical allocate-new encoding. Public results are deeply
+materialized once at the boundary.
 
 This representation is not language ownership. Authors cannot observe handles, generations,
 reference counts, allocation, sharing, capacity, addresses, or reuse. Accounting is exact logical

@@ -594,6 +594,12 @@ fn instruction_operands(instruction: &Instruction) -> Vec<ValueId> {
             length,
             ..
         } => vec![*value, *start, *length],
+        Instruction::SequenceSlice {
+            value,
+            start,
+            end_exclusive,
+            ..
+        } => vec![*value, *start, *end_exclusive],
         Instruction::AddI64 { lhs, rhs, .. }
         | Instruction::LtI64 { lhs, rhs, .. }
         | Instruction::EqualI64 { lhs, rhs, .. }
@@ -602,7 +608,8 @@ fn instruction_operands(instruction: &Instruction) -> Vec<ValueId> {
         | Instruction::BytesEqual { lhs, rhs, .. }
         | Instruction::BytesConcat { lhs, rhs, .. }
         | Instruction::TextEqual { lhs, rhs, .. }
-        | Instruction::TextConcat { lhs, rhs, .. } => vec![*lhs, *rhs],
+        | Instruction::TextConcat { lhs, rhs, .. }
+        | Instruction::SequenceConcat { lhs, rhs, .. } => vec![*lhs, *rhs],
         Instruction::SequenceAppend { value, element, .. } => vec![*value, *element],
         Instruction::SequenceReplace {
             value,
@@ -683,6 +690,8 @@ fn instruction_result(instruction: &Instruction) -> ValueId {
         | Instruction::SequenceGet { result, .. }
         | Instruction::SequenceAppend { result, .. }
         | Instruction::SequenceReplace { result, .. }
+        | Instruction::SequenceSlice { result, .. }
+        | Instruction::SequenceConcat { result, .. }
         | Instruction::Call { result, .. }
         | Instruction::ConstructProduct { result, .. }
         | Instruction::ProjectField { result, .. }

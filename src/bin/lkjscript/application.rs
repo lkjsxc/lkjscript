@@ -25,7 +25,7 @@ Commands:
   run --artifact FILE [--pretty]       # strict ApplicationInvocation JSON on stdin
   stream --artifact FILE               # raw bytes on stdin and stdout
 
-Application CLI JSON contract version 5 is required on inputs and reported on outputs. These
+Application CLI JSON contract version 8 is required on inputs and reported on outputs. These
 commands consume immutable application distribution authority. Semantic projects create
 applications through `lkjscript target build`; the removed command-local build predecessor is
 rejected. Artifact paths must be absolute.";
@@ -356,6 +356,7 @@ mod tests {
 
     #[test]
     fn application_help_is_default_and_options_are_closed() {
+        assert!(HELP.contains(&format!("contract version {APPLICATION_CONTRACT_VERSION}")));
         assert!(matches!(
             parse(Vec::<String>::new().into_iter()).expect("default"),
             ApplicationCommand::Help

@@ -13,7 +13,7 @@ use crate::schema::{NodeKind, OperationCode, SemanticType};
 use crate::transaction::{MAX_RETURNED_BINDINGS, TransactionOpCode};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-pub const MACHINE_SCHEMA_IDENTITY: &str = "lkjscript-machine-schema-v12";
+pub const MACHINE_SCHEMA_IDENTITY: &str = "lkjscript-machine-schema-v13";
 const MACHINE_SCHEMA_DIGEST_DOMAIN: &str = "lkjscript.machine-schema.digest.v2";
 
 fn scalar_types() -> Vec<MachineScalarDescription> {
@@ -401,6 +401,25 @@ fn expression_variant(code: crate::transaction::ExpressionDraftCode) -> DraftVar
                 draft_field("element", T::Value, true, false),
             ],
         ),
+        C::SequenceSlice => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("sequence", T::NodeTarget, true, false),
+                draft_field("value", T::Value, true, false),
+                draft_field("start", T::Value, true, false),
+                draft_field("end_exclusive", T::Value, true, false),
+            ],
+        ),
+        C::SequenceConcat => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("sequence", T::NodeTarget, true, false),
+                draft_field("lhs", T::Value, true, false),
+                draft_field("rhs", T::Value, true, false),
+            ],
+        ),
         C::BytesLen => (
             PayloadShapeKind::Record,
             None,
@@ -579,6 +598,25 @@ fn operation_variant(code: OperationCode) -> DraftVariantDescription {
                 draft_field("value", T::Value, true, false),
                 draft_field("index", T::Value, true, false),
                 draft_field("element", T::Value, true, false),
+            ],
+        ),
+        C::SequenceSlice => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("sequence", T::NodeTarget, true, false),
+                draft_field("value", T::Value, true, false),
+                draft_field("start", T::Value, true, false),
+                draft_field("end_exclusive", T::Value, true, false),
+            ],
+        ),
+        C::SequenceConcat => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("sequence", T::NodeTarget, true, false),
+                draft_field("lhs", T::Value, true, false),
+                draft_field("rhs", T::Value, true, false),
             ],
         ),
         C::BytesLen => (
@@ -953,6 +991,23 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
                         ("element", "value_ref", true),
                     ]),
                 ),
+                variant_payload(
+                    "sequence_slice",
+                    record_payload(&[
+                        ("sequence", "node_id", true),
+                        ("value", "value_ref", true),
+                        ("start", "value_ref", true),
+                        ("end_exclusive", "value_ref", true),
+                    ]),
+                ),
+                variant_payload(
+                    "sequence_concat",
+                    record_payload(&[
+                        ("sequence", "node_id", true),
+                        ("lhs", "value_ref", true),
+                        ("rhs", "value_ref", true),
+                    ]),
+                ),
             ],
         ),
         named_variant(
@@ -1252,6 +1307,67 @@ fn transaction_records() -> Vec<NamedPayloadDescription> {
             ],
         ),
         named_record(
+            "target_interactive_key_routes",
+            &[
+                ("code", "target_item", true),
+                ("character_variant", "target_item", true),
+                ("enter_variant", "target_item", true),
+                ("backspace_variant", "target_item", true),
+                ("delete_variant", "target_item", true),
+                ("left_variant", "target_item", true),
+                ("right_variant", "target_item", true),
+                ("up_variant", "target_item", true),
+                ("down_variant", "target_item", true),
+                ("home_variant", "target_item", true),
+                ("end_variant", "target_item", true),
+                ("escape_variant", "target_item", true),
+                ("event", "target_item", true),
+                ("event_code_field", "target_item", true),
+                ("event_control_field", "target_item", true),
+                ("event_alt_field", "target_item", true),
+                ("event_shift_field", "target_item", true),
+                ("event_repeat_field", "target_item", true),
+            ],
+        ),
+        named_record(
+            "target_interactive_event_routes",
+            &[
+                ("event", "target_item", true),
+                ("key_variant", "target_item", true),
+                ("paste_variant", "target_item", true),
+                ("resize_variant", "target_item", true),
+                ("close_variant", "target_item", true),
+                ("size", "target_item", true),
+                ("size_rows_field", "target_item", true),
+                ("size_columns_field", "target_item", true),
+                ("scalars", "target_item", true),
+                ("key", "target_interactive_key_routes", true),
+            ],
+        ),
+        named_record(
+            "target_interactive_application_profile",
+            &[
+                ("version", "u16", true),
+                ("initialize", "target_item", true),
+                ("update", "target_item", true),
+                ("render", "target_item", true),
+                ("state", "target_item", true),
+                ("update_result", "target_item", true),
+                ("update_state_field", "target_item", true),
+                ("update_changed_field", "target_item", true),
+                ("update_exit_field", "target_item", true),
+                ("frame", "target_item", true),
+                ("frame_rows_field", "target_item", true),
+                ("frame_columns_field", "target_item", true),
+                ("frame_scalars_field", "target_item", true),
+                ("frame_cursor_row_field", "target_item", true),
+                ("frame_cursor_column_field", "target_item", true),
+                ("frame_cursor_visible_field", "target_item", true),
+                ("frame_status_field", "target_item", true),
+                ("events", "target_interactive_event_routes", true),
+            ],
+        ),
+        named_record(
             "target_trap",
             &[
                 ("code", "application_trap_code", true),
@@ -1367,6 +1483,10 @@ fn transaction_variants() -> Vec<NamedVariantDescription> {
                 variant_payload(
                     "stateful",
                     newtype_payload("target_stateful_application_profile"),
+                ),
+                variant_payload(
+                    "interactive",
+                    newtype_payload("target_interactive_application_profile"),
                 ),
             ],
         ),
@@ -1578,6 +1698,12 @@ fn transaction_payload(code: TransactionOpCode) -> VariantPayloadDescription {
             ("module", "node_target", true),
             ("name", "string", true),
             ("fields", "list<product_field>", true),
+        ]),
+        TransactionOpCode::AddProductField => record_payload(&[
+            ("symbol", "draft_symbol", true),
+            ("product", "node_target", true),
+            ("name", "string", true),
+            ("ty", "type_draft", true),
         ]),
         TransactionOpCode::CreateSumType => record_payload(&[
             ("symbol", "draft_symbol", true),

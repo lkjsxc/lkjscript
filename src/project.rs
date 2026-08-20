@@ -18,7 +18,10 @@ use crate::transaction::{
     ApplyTransactionRequest, Transaction, TransactionMode, TransactionOp, TransactionReceipt,
     TransactionResponseSpec,
 };
-use crate::workbench::{ContextBuildRequest, ContextPacket, ContextPacketDigest, ContextPurpose};
+use crate::workbench::{
+    ContextBuildRequest, ContextPacket, ContextPacketDigest, ContextPurpose, SemanticProjection,
+    SemanticQueryRequest, SemanticQueryResult,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, VecDeque};
 use std::fs::{self, File, OpenOptions};
@@ -29,12 +32,14 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 pub const PROJECT_CONTRACT_VERSION: u16 = 1;
-pub const PROJECT_CHANGE_VERSION: u16 = 1;
+pub const PROJECT_CHANGE_VERSION: u16 = 2;
+pub const PROJECT_CHANGE_CONTINUATION_VERSION: u16 = 1;
 pub const PROJECT_MARKER_NAME: &str = "project";
 pub const PROJECT_DIRECTORY_NAME: &str = ".lkjscript";
 pub const PROJECT_REPOSITORY_NAME: &str = "repository";
 pub const MAXIMUM_PROJECT_MARKER_BYTES: usize = 128;
 pub const MAXIMUM_PROJECT_CHANGE_BYTES: usize = crate::machine::MAX_JSON_INPUT_BYTES;
+pub const MAXIMUM_PROJECT_CHANGE_CONTINUATION_BYTES: usize = 64 * 1024;
 pub const MAXIMUM_DISCOVERY_DEPTH: usize = 64;
 pub const MAXIMUM_BACKUP_FILES: u64 = 1_000_000;
 pub const MAXIMUM_BACKUP_BYTES: u64 = 4 * 1024 * 1024 * 1024;
@@ -164,6 +169,25 @@ pub struct ProjectChangeReceipt {
     pub semantic_diff: SemanticDiff,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revision_record: Option<RevisionRecordInspection>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub continuation: Option<ProjectChangeContinuation>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectChangeContinuation {
+    pub version: u16,
+    pub workspace: WorkspaceId,
+    pub revision: Revision,
+    pub snapshot: SnapshotHash,
+    pub revision_record: RevisionRecordDigest,
+    pub accepted_change_set: crate::ChangeDigest,
+    pub semantic_diff: crate::ChangeDigest,
+    pub returned_bindings: Vec<(crate::DraftSymbol, NodeId)>,
+    pub changed_functions: Vec<NodeId>,
+    pub affected_targets: Vec<NodeId>,
+    pub session_local_aliases_invalidated: bool,
+    pub digest: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -191,6 +215,20 @@ pub struct ProjectNodeInspection {
     pub resolved: NodeId,
     pub qualified_name: String,
     pub view: NodeView,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectFunctionProposal {
+    pub contract_version: u16,
+    pub document_version: u16,
+    pub workspace: WorkspaceId,
+    pub revision: Revision,
+    pub snapshot: SnapshotHash,
+    pub function: NodeId,
+    pub qualified_name: String,
+    pub document_digest: String,
+    pub document: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -389,6 +427,8 @@ impl Project {
             "orient",
             "status",
             "inspect",
+            "query",
+            "proposal",
             "context",
             "change.validate",
             "change.apply",
@@ -535,6 +575,74 @@ impl Project {
         })
     }
 
+    pub fn semantic_query(
+        &self,
+        projection: SemanticProjection,
+        selectors: &[String],
+        revision: Option<Revision>,
+        limit: u32,
+        continuation: Option<String>,
+        known_digest: Option<&str>,
+    ) -> Result<SemanticQueryResult> {
+        let workspace = self.engine.workspace(self.workspace)?;
+        let selected_revision = revision.unwrap_or(workspace.head()?.revision());
+        let snapshot = workspace.snapshot(selected_revision)?;
+        let roots = selectors
+            .iter()
+            .map(|selector| resolve_node(snapshot, selector, None))
+            .collect::<Result<Vec<_>>>()?;
+        let request = SemanticQueryRequest {
+            workspace: self.workspace,
+            revision: selected_revision,
+            projection,
+            roots,
+            limit,
+            continuation,
+        };
+        crate::workbench::build_semantic_query(snapshot, &request, known_digest)
+    }
+
+    pub fn function_proposal(
+        &self,
+        selector: &str,
+        revision: Option<Revision>,
+    ) -> Result<ProjectFunctionProposal> {
+        let workspace = self.engine.workspace(self.workspace)?;
+        let selected_revision = revision.unwrap_or(workspace.head()?.revision());
+        let snapshot = workspace.snapshot(selected_revision)?;
+        let function = resolve_node(snapshot, selector, None)?;
+        if !matches!(snapshot.node(function)?, Node::Function { .. }) {
+            return Err(LkError::new(
+                ErrorCode::WrongKind,
+                "function proposal selector does not name a function",
+            )
+            .for_node(function));
+        }
+        let bytes = crate::workbench::render_function_document(snapshot, function)?;
+        let document = String::from_utf8(bytes).map_err(|_| {
+            LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "function proposal renderer produced invalid UTF-8",
+            )
+            .for_node(function)
+        })?;
+        let mut hasher = blake3::Hasher::new_derive_key("lkjscript.function-proposal.v1");
+        hasher.update(document.as_bytes());
+        let receipt = ProjectFunctionProposal {
+            contract_version: PROJECT_CONTRACT_VERSION,
+            document_version: crate::workbench::EDIT_DOCUMENT_VERSION,
+            workspace: self.workspace,
+            revision: selected_revision,
+            snapshot: snapshot.hash(),
+            function,
+            qualified_name: qualified_name(snapshot, function)?,
+            document_digest: crate::release::hex(hasher.finalize().as_bytes()),
+            document,
+        };
+        preflight_project_response(&receipt, "project function proposal")?;
+        Ok(receipt)
+    }
+
     pub fn context(
         &mut self,
         purpose: ContextPurpose,
@@ -628,11 +736,14 @@ impl Project {
             } else {
                 None
             };
+            let continuation =
+                project_change_continuation(&preview.receipt, revision_record.as_ref())?;
             let predicted = ProjectChangeReceipt {
                 contract_version: PROJECT_CONTRACT_VERSION,
                 transaction: preview.receipt.clone(),
                 semantic_diff,
                 revision_record,
+                continuation,
             };
             preflight_project_response(&predicted, "project change receipt")?;
         }
@@ -661,11 +772,13 @@ impl Project {
             .published
             .then(|| workspace.record(receipt.revision).cloned())
             .transpose()?;
+        let continuation = project_change_continuation(&receipt, revision_record.as_ref())?;
         Ok(ProjectChangeReceipt {
             contract_version: PROJECT_CONTRACT_VERSION,
             transaction: receipt,
             semantic_diff,
             revision_record,
+            continuation,
         })
     }
 
@@ -871,6 +984,104 @@ impl Project {
         }
         Ok(receipt)
     }
+}
+
+#[derive(Serialize)]
+#[serde(deny_unknown_fields)]
+struct ProjectChangeContinuationDigestInput<'a> {
+    version: u16,
+    workspace: WorkspaceId,
+    revision: Revision,
+    snapshot: SnapshotHash,
+    revision_record: RevisionRecordDigest,
+    accepted_change_set: crate::ChangeDigest,
+    semantic_diff: crate::ChangeDigest,
+    returned_bindings: &'a [(crate::DraftSymbol, NodeId)],
+    changed_functions: &'a [NodeId],
+    affected_targets: &'a [NodeId],
+    session_local_aliases_invalidated: bool,
+}
+
+fn project_change_continuation(
+    receipt: &TransactionReceipt,
+    record: Option<&RevisionRecordInspection>,
+) -> Result<Option<ProjectChangeContinuation>> {
+    if !receipt.published {
+        if record.is_some() {
+            return Err(LkError::new(
+                ErrorCode::ArtifactCorrupt,
+                "unpublished project change unexpectedly has a revision record",
+            ));
+        }
+        return Ok(None);
+    }
+    let record = record.ok_or_else(|| {
+        LkError::new(
+            ErrorCode::ArtifactCorrupt,
+            "published project change is missing its revision record",
+        )
+    })?;
+    if record.record.workspace != receipt.workspace
+        || record.record.revision != receipt.revision
+        || record.record.result_snapshot != receipt.hash
+    {
+        return Err(LkError::new(
+            ErrorCode::ArtifactCorrupt,
+            "project change receipt and revision record disagree",
+        )
+        .for_workspace(receipt.workspace)
+        .at_revision(receipt.revision));
+    }
+    let input = ProjectChangeContinuationDigestInput {
+        version: PROJECT_CHANGE_CONTINUATION_VERSION,
+        workspace: receipt.workspace,
+        revision: receipt.revision,
+        snapshot: receipt.hash,
+        revision_record: record.digest,
+        accepted_change_set: record.record.accepted_change_set,
+        semantic_diff: record.record.semantic_diff,
+        returned_bindings: &receipt.returned_bindings,
+        changed_functions: &record.record.function_bodies_changed,
+        affected_targets: &record.record.affected_targets,
+        session_local_aliases_invalidated: true,
+    };
+    let encoded = serde_json::to_vec(&input).map_err(|error| {
+        LkError::new(
+            ErrorCode::PolicyExceeded,
+            format!("cannot encode project change continuation: {error}"),
+        )
+    })?;
+    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.project-change-continuation.v1");
+    hasher.update(&encoded);
+    let continuation = ProjectChangeContinuation {
+        version: input.version,
+        workspace: input.workspace,
+        revision: input.revision,
+        snapshot: input.snapshot,
+        revision_record: input.revision_record,
+        accepted_change_set: input.accepted_change_set,
+        semantic_diff: input.semantic_diff,
+        returned_bindings: input.returned_bindings.to_vec(),
+        changed_functions: input.changed_functions.to_vec(),
+        affected_targets: input.affected_targets.to_vec(),
+        session_local_aliases_invalidated: input.session_local_aliases_invalidated,
+        digest: crate::release::hex(hasher.finalize().as_bytes()),
+    };
+    let encoded = serde_json::to_vec(&continuation).map_err(|error| {
+        LkError::new(
+            ErrorCode::PolicyExceeded,
+            format!("cannot encode project change continuation: {error}"),
+        )
+    })?;
+    if encoded.len() > MAXIMUM_PROJECT_CHANGE_CONTINUATION_BYTES {
+        return Err(LkError::new(
+            ErrorCode::PolicyExceeded,
+            "project change continuation exceeds the response byte policy",
+        )
+        .for_workspace(receipt.workspace)
+        .at_revision(receipt.revision));
+    }
+    Ok(Some(continuation))
 }
 
 pub fn decode_change(bytes: &[u8]) -> Result<ProjectChangeRequest> {

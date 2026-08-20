@@ -4,7 +4,9 @@ use crate::application::{
     ApplicationFieldValue, ApplicationImport, ApplicationTarget, ApplicationTestCase,
     ApplicationTestExpectation, ApplicationTrap, ApplicationTrapCode, ApplicationValue,
     HostInterface, HostOperation, HostOutcomeClass, HostOutcomeRoute, HostRequestRoute,
-    InvocationProfile, StatefulApplicationProfile,
+    InteractiveActionKind, InteractiveActionRoute, InteractiveActionRoutes,
+    InteractiveApplicationProfile, InteractiveEventRoutes, InteractiveKeyRoutes, InvocationProfile,
+    StatefulApplicationProfile,
 };
 use crate::error::{ErrorCode, LkError, Result};
 use crate::graph::Snapshot;
@@ -175,6 +177,94 @@ pub struct TargetStatefulApplicationProfile {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TargetInteractiveKeyRoutes {
+    pub code: TargetItem,
+    pub character_variant: TargetItem,
+    pub enter_variant: TargetItem,
+    pub backspace_variant: TargetItem,
+    pub delete_variant: TargetItem,
+    pub left_variant: TargetItem,
+    pub right_variant: TargetItem,
+    pub up_variant: TargetItem,
+    pub down_variant: TargetItem,
+    pub home_variant: TargetItem,
+    pub end_variant: TargetItem,
+    pub escape_variant: TargetItem,
+    pub event: TargetItem,
+    pub event_code_field: TargetItem,
+    pub event_control_field: TargetItem,
+    pub event_alt_field: TargetItem,
+    pub event_shift_field: TargetItem,
+    pub event_repeat_field: TargetItem,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TargetInteractiveEventRoutes {
+    pub event: TargetItem,
+    pub key_variant: TargetItem,
+    pub paste_variant: TargetItem,
+    pub resize_variant: TargetItem,
+    pub close_variant: TargetItem,
+    pub size: TargetItem,
+    pub size_rows_field: TargetItem,
+    pub size_columns_field: TargetItem,
+    pub scalars: TargetItem,
+    pub key: TargetInteractiveKeyRoutes,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TargetInteractiveActionRoute {
+    pub variant: TargetItem,
+    pub kind: InteractiveActionKind,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TargetInteractiveActionRoutes {
+    pub action: TargetItem,
+    pub update_action_field: TargetItem,
+    pub routes: Vec<TargetInteractiveActionRoute>,
+    pub file_save_payload: TargetItem,
+    pub file_save_origin_field: TargetItem,
+    pub file_save_content_field: TargetItem,
+    pub file_save_create_field: TargetItem,
+    pub outcome: TargetItem,
+    pub outcome_class_field: TargetItem,
+    pub outcome_message_field: TargetItem,
+    pub outcome_content_field: TargetItem,
+    pub outcome_token_field: TargetItem,
+    pub resume: TargetItem,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TargetInteractiveApplicationProfile {
+    pub version: u16,
+    pub initialize: TargetItem,
+    pub update: TargetItem,
+    pub render: TargetItem,
+    pub state: TargetItem,
+    pub update_result: TargetItem,
+    pub update_state_field: TargetItem,
+    pub update_changed_field: TargetItem,
+    pub update_exit_field: TargetItem,
+    pub frame: TargetItem,
+    pub frame_rows_field: TargetItem,
+    pub frame_columns_field: TargetItem,
+    pub frame_scalars_field: TargetItem,
+    pub frame_cursor_row_field: TargetItem,
+    pub frame_cursor_column_field: TargetItem,
+    pub frame_cursor_visible_field: TargetItem,
+    pub frame_status_field: TargetItem,
+    pub events: TargetInteractiveEventRoutes,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actions: Option<Box<TargetInteractiveActionRoutes>>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(
     tag = "kind",
     content = "data",
@@ -185,6 +275,7 @@ pub enum TargetInvocationProfile {
     Typed,
     BytesStream,
     Stateful(Box<TargetStatefulApplicationProfile>),
+    Interactive(Box<TargetInteractiveApplicationProfile>),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
@@ -529,55 +620,128 @@ fn visit_profile_items(
     profile: &TargetInvocationProfile,
     mut visit: impl FnMut(TargetItem) -> Result<()>,
 ) -> Result<()> {
-    let TargetInvocationProfile::Stateful(profile) = profile else {
-        return Ok(());
-    };
-    for item in [
-        profile.resume,
-        profile.query_entry,
-        profile.state,
-        profile.event,
-        profile.response,
-        profile.query,
-        profile.query_result,
-        profile.command,
-        profile.outcome,
-        profile.decision,
-        profile.declined_variant,
-        profile.declined_payload,
-        profile.declined_response_field,
-        profile.unchanged_variant,
-        profile.unchanged_payload,
-        profile.unchanged_response_field,
-        profile.completed_variant,
-        profile.completed_payload,
-        profile.completed_state_field,
-        profile.completed_response_field,
-        profile.suspended_variant,
-        profile.suspended_payload,
-        profile.suspended_state_field,
-        profile.suspended_response_field,
-        profile.suspended_command_field,
-    ] {
-        visit(item)?;
-    }
-    for import in &profile.imports {
-        for item in [
-            import.request,
-            import.outcome,
-            import.command_variant,
-            import.outcome_variant,
-        ] {
-            visit(item)?;
+    match profile {
+        TargetInvocationProfile::Typed | TargetInvocationProfile::BytesStream => {}
+        TargetInvocationProfile::Stateful(profile) => {
+            for item in [
+                profile.resume,
+                profile.query_entry,
+                profile.state,
+                profile.event,
+                profile.response,
+                profile.query,
+                profile.query_result,
+                profile.command,
+                profile.outcome,
+                profile.decision,
+                profile.declined_variant,
+                profile.declined_payload,
+                profile.declined_response_field,
+                profile.unchanged_variant,
+                profile.unchanged_payload,
+                profile.unchanged_response_field,
+                profile.completed_variant,
+                profile.completed_payload,
+                profile.completed_state_field,
+                profile.completed_response_field,
+                profile.suspended_variant,
+                profile.suspended_payload,
+                profile.suspended_state_field,
+                profile.suspended_response_field,
+                profile.suspended_command_field,
+            ] {
+                visit(item)?;
+            }
+            for import in &profile.imports {
+                for item in [
+                    import.request,
+                    import.outcome,
+                    import.command_variant,
+                    import.outcome_variant,
+                ] {
+                    visit(item)?;
+                }
+                for route in &import.requests {
+                    visit(route.variant)?;
+                }
+                for route in &import.outcomes {
+                    visit(route.variant)?;
+                }
+            }
         }
-        for route in &import.requests {
-            visit(route.variant)?;
-        }
-        for route in &import.outcomes {
-            visit(route.variant)?;
+        TargetInvocationProfile::Interactive(profile) => {
+            for item in interactive_profile_items(profile) {
+                visit(item)?;
+            }
         }
     }
     Ok(())
+}
+
+fn interactive_profile_items(profile: &TargetInteractiveApplicationProfile) -> Vec<TargetItem> {
+    let mut items = vec![
+        profile.initialize,
+        profile.update,
+        profile.render,
+        profile.state,
+        profile.update_result,
+        profile.update_state_field,
+        profile.update_changed_field,
+        profile.update_exit_field,
+        profile.frame,
+        profile.frame_rows_field,
+        profile.frame_columns_field,
+        profile.frame_scalars_field,
+        profile.frame_cursor_row_field,
+        profile.frame_cursor_column_field,
+        profile.frame_cursor_visible_field,
+        profile.frame_status_field,
+        profile.events.event,
+        profile.events.key_variant,
+        profile.events.paste_variant,
+        profile.events.resize_variant,
+        profile.events.close_variant,
+        profile.events.size,
+        profile.events.size_rows_field,
+        profile.events.size_columns_field,
+        profile.events.scalars,
+        profile.events.key.code,
+        profile.events.key.character_variant,
+        profile.events.key.enter_variant,
+        profile.events.key.backspace_variant,
+        profile.events.key.delete_variant,
+        profile.events.key.left_variant,
+        profile.events.key.right_variant,
+        profile.events.key.up_variant,
+        profile.events.key.down_variant,
+        profile.events.key.home_variant,
+        profile.events.key.end_variant,
+        profile.events.key.escape_variant,
+        profile.events.key.event,
+        profile.events.key.event_code_field,
+        profile.events.key.event_control_field,
+        profile.events.key.event_alt_field,
+        profile.events.key.event_shift_field,
+        profile.events.key.event_repeat_field,
+    ];
+    if let Some(actions) = &profile.actions {
+        items.extend([
+            actions.action,
+            actions.update_action_field,
+            actions.file_save_payload,
+            actions.file_save_origin_field,
+            actions.file_save_content_field,
+            actions.file_save_create_field,
+            actions.outcome,
+            actions.outcome_class_field,
+            actions.outcome_message_field,
+            actions.outcome_content_field,
+            actions.outcome_token_field,
+            actions.resume,
+        ]);
+        items.extend(actions.routes.iter().map(|route| route.variant));
+    }
+    items
 }
 
 fn visit_value_items(
@@ -971,6 +1135,91 @@ fn lower_profile(
                     })
                     .collect::<Result<Vec<_>>>()?,
             })
+        }
+        TargetInvocationProfile::Interactive(profile) => {
+            let item = |value| lower_item(value, releases);
+            InvocationProfile::Interactive(Box::new(InteractiveApplicationProfile {
+                version: profile.version,
+                initialize: item(profile.initialize)?,
+                update: item(profile.update)?,
+                render: item(profile.render)?,
+                state: item(profile.state)?,
+                update_result: item(profile.update_result)?,
+                update_state_field: item(profile.update_state_field)?,
+                update_changed_field: item(profile.update_changed_field)?,
+                update_exit_field: item(profile.update_exit_field)?,
+                frame: item(profile.frame)?,
+                frame_rows_field: item(profile.frame_rows_field)?,
+                frame_columns_field: item(profile.frame_columns_field)?,
+                frame_scalars_field: item(profile.frame_scalars_field)?,
+                frame_cursor_row_field: item(profile.frame_cursor_row_field)?,
+                frame_cursor_column_field: item(profile.frame_cursor_column_field)?,
+                frame_cursor_visible_field: item(profile.frame_cursor_visible_field)?,
+                frame_status_field: item(profile.frame_status_field)?,
+                events: InteractiveEventRoutes {
+                    event: item(profile.events.event)?,
+                    key_variant: item(profile.events.key_variant)?,
+                    paste_variant: item(profile.events.paste_variant)?,
+                    resize_variant: item(profile.events.resize_variant)?,
+                    close_variant: item(profile.events.close_variant)?,
+                    size: item(profile.events.size)?,
+                    size_rows_field: item(profile.events.size_rows_field)?,
+                    size_columns_field: item(profile.events.size_columns_field)?,
+                    scalars: item(profile.events.scalars)?,
+                    key: InteractiveKeyRoutes {
+                        code: item(profile.events.key.code)?,
+                        character_variant: item(profile.events.key.character_variant)?,
+                        enter_variant: item(profile.events.key.enter_variant)?,
+                        backspace_variant: item(profile.events.key.backspace_variant)?,
+                        delete_variant: item(profile.events.key.delete_variant)?,
+                        left_variant: item(profile.events.key.left_variant)?,
+                        right_variant: item(profile.events.key.right_variant)?,
+                        up_variant: item(profile.events.key.up_variant)?,
+                        down_variant: item(profile.events.key.down_variant)?,
+                        home_variant: item(profile.events.key.home_variant)?,
+                        end_variant: item(profile.events.key.end_variant)?,
+                        escape_variant: item(profile.events.key.escape_variant)?,
+                        event: item(profile.events.key.event)?,
+                        event_code_field: item(profile.events.key.event_code_field)?,
+                        event_control_field: item(profile.events.key.event_control_field)?,
+                        event_alt_field: item(profile.events.key.event_alt_field)?,
+                        event_shift_field: item(profile.events.key.event_shift_field)?,
+                        event_repeat_field: item(profile.events.key.event_repeat_field)?,
+                    },
+                },
+                actions: profile
+                    .actions
+                    .as_ref()
+                    .map(|actions| {
+                        Ok::<Box<InteractiveActionRoutes>, LkError>(Box::new(
+                            InteractiveActionRoutes {
+                                action: item(actions.action)?,
+                                update_action_field: item(actions.update_action_field)?,
+                                routes: actions
+                                    .routes
+                                    .iter()
+                                    .map(|route| {
+                                        Ok(InteractiveActionRoute {
+                                            variant: item(route.variant)?,
+                                            kind: route.kind,
+                                        })
+                                    })
+                                    .collect::<Result<Vec<_>>>()?,
+                                file_save_payload: item(actions.file_save_payload)?,
+                                file_save_origin_field: item(actions.file_save_origin_field)?,
+                                file_save_content_field: item(actions.file_save_content_field)?,
+                                file_save_create_field: item(actions.file_save_create_field)?,
+                                outcome: item(actions.outcome)?,
+                                outcome_class_field: item(actions.outcome_class_field)?,
+                                outcome_message_field: item(actions.outcome_message_field)?,
+                                outcome_content_field: item(actions.outcome_content_field)?,
+                                outcome_token_field: item(actions.outcome_token_field)?,
+                                resume: item(actions.resume)?,
+                            },
+                        ))
+                    })
+                    .transpose()?,
+            }))
         }
     })
 }

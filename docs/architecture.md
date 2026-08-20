@@ -19,10 +19,11 @@ semantic repository -- HEAD --> exact development revision + revision record
                  |                              deterministic lowering
                  |                                      v
                  |                          release --> application
-                 |                                         |
-                 |                                  instance + grants
-                 |                                         v
-                 +-- immutable history             durable product state
+                 |                                    /          \
+                 |                        durable instance    foreground session
+                 |                              + grants      + explicit grants
+                 |                                  |                |
+                 +-- immutable history       durable state     frame + host actions
 ```
 
 Project identity, revision identity, target identity, release identity, application identity,
@@ -58,17 +59,22 @@ type, scope, dominance, target, and completeness invariants. `src/transaction.rs
 normalizer and allocator. Validation and commit prepare the same exact candidate; allocation is
 provisional until publication.
 
-A project JSON change is a thin exact-project/base envelope around the transaction operations. The
-semantic document parser in `src/workbench/document.rs` offers a human-editable proposal with
-proposal-local symbols and packet aliases. Context construction and views live under
-`src/workbench/`. Neither representation is authority, and both pass through the transaction owner.
-Omission never means deletion. Whole-function replacement remains the simple oracle; fine-grained
-operation replacement and typed-hole refinement remain available.
+A project JSON change is a thin exact-project/base envelope around the transaction operations.
+`src/workbench/query_plan.rs` owns the closed revision-bound semantic explorer projections and
+opaque continuations without an index or cache. The semantic document parser in
+`src/workbench/document.rs` offers a human-editable proposal with proposal-local symbols and optional
+packet aliases; generated function proposals spell exact IDs and require no packet. Context
+construction and views also live under `src/workbench/`. None of these representations is authority,
+and every proposal passes through the transaction owner. Omission never means deletion.
+Whole-function replacement remains the simple oracle; fine-grained operation replacement and
+typed-hole refinement remain available.
 
 `src/bin/lkjscript/project.rs` owns the public one-shot grammar and a strict correlated JSON-lines
 foreground session. The session may retain one exact context capsule, but aliases expire on any HEAD
-advance and restart loses all handles. The raw engine RPC is retained solely as a lower-level
-conformance/embedding transport, not an alternate semantic project.
+advance and restart loses all handles. A published transaction receipt carries fixed bounded
+continuation facts from the project/history owner; those facts do not keep local aliases alive. The
+raw engine RPC is retained solely as a lower-level conformance/embedding transport, not an alternate
+semantic project.
 
 ## Automatic development history
 
@@ -126,14 +132,24 @@ unknown output visibility after a visibility-capable step. Builds never mutate p
 `src/release/` projects one selected package closure into canonical release format 2. Workspace and
 revision identities disappear; exact release-local nominal identity, dependencies/imports, exports,
 and cases remain. `src/application.rs` composes one complete exact release graph into application
-format 5, validates profiles and host requirements, exposes a bounded interface description, and
+format 8, validates profiles and host requirements, exposes a bounded interface description, and
 owns public application-value conversion.
+
+`src/application/interactive.rs` owns interactive-profile-2 validation and the application-owned
+initialize/update/resume/render route. State, events, frames, action intent, outcome consumption,
+exit, and one-pending-action policy are semantic values. `src/interactive_runner.rs` owns bounded
+deterministic headless replay over the same route. Interactive state is foreground-ephemeral and is
+not an instance revision, development revision, terminal session, or file version. A step or resume
+replaces that state only after candidate update, policy validation, and frame rendering all succeed;
+failure preserves the prior ephemeral state and pending action.
 
 `src/compile.rs`, `src/core_ir.rs`, and `src/interpret.rs` lower the complete selected closure and run
 one explicit-frame interpreter. Core IR and ownership plans are derived and independently checked.
 Bytes/text use a generation-checked managed store; nominal sequences use immutable `Arc` elements.
-Visible cells/bytes, retained bytes, values, depth, items, frames, and fuel are separately bounded.
-No semantic value exposes allocation, sharing, address, or representation identity.
+Checked sequence slice and concatenate shallow-share elements internally but charge exact flat
+allocate-new logical results and retain that route as their differential oracle. Visible
+cells/bytes, retained bytes, values, depth, items, frames, and fuel are separately bounded. No
+semantic value exposes allocation, sharing, address, or representation identity.
 
 ## Product instances and host authority
 
@@ -145,7 +161,7 @@ accelerates current access. Missing/corrupt acceleration falls back to full repl
 reexecutes the whole chain.
 
 Applications declare host-interface requirements. Instances bind those requirements to exact
-deployment grants. The only production interface is the bounded immutable blob namespace. A
+deployment grants. The only durable-instance interface is the bounded immutable blob namespace. A
 visibility-capable put records an attempt before host work; known failure, known success, possible
 visibility, and reconciliation remain distinct. Adapters cannot invent command intent, semantic
 state, or application responses.
@@ -157,8 +173,9 @@ async runtime, or retry engine.
 ## lkjwork packaging
 
 `applications/lkjwork/.lkjscript` is the checked semantic development repository. It contains the
-imported product history, first-class release/application/product targets, and three dogfood
-revisions for `why`. `lkjscript target build lkjwork` deterministically reproduces
+imported product history, first-class release/application/product targets, three dogfood revisions
+for `why`, and two dogfood revisions for the application-owned blocked-task summary. `lkjscript
+target build lkjwork` deterministically reproduces
 `applications/lkjwork/lkjwork.lkja`; no graph builder or generated binding file remains.
 
 `src/bin/lkjwork/bindings.rs` constructs and decodes application-owned values only after discovering
@@ -179,14 +196,43 @@ PROJECT/.lkjwork/
 
 This product state is independent from the semantic development project and its history.
 
+## lkjstudio packaging and host boundaries
+
+`applications/lkjstudio/.lkjscript` is the checked semantic development repository for the
+workbench. Its meaning graph owns the editor model, key-to-command/action policy, host-outcome
+transition, rendering content, exact release/application/product targets, and target cases.
+`lkjscript target build lkjstudio` reproduces the checked application artifact. There is no native
+builder, generated semantic source, or generated binding file.
+
+`src/bin/lkjstudio.rs` owns deployment parsing, bounded artifact read, project/root selection, and
+terminal versus headless process topology. `src/terminal.rs` owns only terminal decoding,
+Unicode-width full-frame emission, live-resource lifecycle, signals, EOF, and cleanup. It cannot
+decode private editor state. Raw ANSI exists only inside this adapter and never crosses the
+application boundary.
+
+`src/project_host.rs` binds one exact workspace grant and routes closed explorer/proposal/history/
+target requests into the same `Project` owner used by the public CLI. It has no persistence or
+transaction bypass. `src/selected_filesystem.rs` pins one Linux directory descriptor and owns
+bounded path/list/read/save/reconcile behavior. `src/workbench_host.rs` composes these two grants,
+converts bounded UTF-8 file observations, and returns closed outcomes. Project publication,
+filesystem publication, foreground editor state, and terminal presentation remain separate
+authority domains.
+
+The retained interactive topology is one sequential foreground loop and one full frame per semantic
+step. A daemon, durable-per-key instance, hybrid checkpoint store, patch renderer, background job,
+and async runtime all lost because they add authority without improving the complete current
+workflow. Output failure cleans the terminal but never rolls back a completed host publication.
+
 ## Trust boundary and absences
 
 The bootstrap trust boundary is one local operator/OS account, Rust implementation, validated
-artifacts, and the narrow blob adapter. Graph bytes, JSON, documents, text, paths, locators, records,
-artifacts, manifests, outcomes, backups, and blobs are hostile input. Every authority decoder is
-closed, bounded, canonical, and consumes all input. Terminal safety is independent of text semantics.
+artifacts, and the narrow blob/project/selected-filesystem/terminal adapters. Graph bytes, JSON,
+documents, text, paths, locators, records, artifacts, manifests, terminal bytes, paste, dimensions,
+directory entries, file content/metadata, outcomes, backups, and blobs are hostile input. Every
+authority decoder is closed, bounded, canonical, and consumes all input. Terminal safety is
+independent of text semantics.
 
-There is no native sandbox, network, multi-user authorization, secrets system, broad filesystem or
-terminal interface, child-process interface, daemon, scheduler, database, general VCS, package
-registry, build hook, build cache, bytecode/JIT/native tier, automatic migration, or compatibility
-path.
+There is no native sandbox, network, multi-user authorization, secrets system, ambient/broad
+filesystem interface, application-supplied terminal escape interface, child-process interface,
+daemon, scheduler, background worker, database, general VCS, package registry, build hook, build
+cache, bytecode/JIT/native tier, automatic migration, or compatibility path.

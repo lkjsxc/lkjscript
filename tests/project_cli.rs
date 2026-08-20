@@ -1,13 +1,16 @@
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 
 use lkjscript::project::{PROJECT_CHANGE_VERSION, ProjectChangeRequest};
-use lkjscript::transaction::{TransactionOp, TransactionResponseSpec};
+use lkjscript::transaction::{NodeTarget, TransactionOp, TransactionResponseSpec};
 use lkjscript::{DraftSymbol, Revision, WorkspaceId};
 use serde_json::Value;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Output, Stdio};
+use std::sync::Mutex;
+
+static CHECKED_PROJECT_LOCK: Mutex<()> = Mutex::new(());
 
 fn cli(current: &Path, arguments: &[String], input: &[u8]) -> Output {
     let mut child = Command::new(env!("CARGO_BIN_EXE_lkjscript"))
@@ -61,6 +64,77 @@ fn superseded_agent_and_command_local_build_paths_reject() {
 }
 
 #[test]
+fn superseded_project_change_document_and_session_versions_reject() {
+    let temporary = tempfile::tempdir().expect("temporary root");
+    let initialized = value(
+        &cli(temporary.path(), &strings(&["init", "project"]), &[]),
+        0,
+    );
+    let project = temporary.path().join("project");
+    let workspace = initialized["result"]["data"]["workspace"]
+        .as_str()
+        .expect("workspace");
+    let orientation = value(&cli(&project, &strings(&["orient"]), &[]), 0);
+    let schema = orientation["result"]["data"]["data"]["machine_schema"]
+        .as_str()
+        .expect("machine schema");
+
+    let old_change = serde_json::json!({
+        "version": 1,
+        "workspace": workspace,
+        "base_revision": 0,
+        "operations": [],
+        "response": {"return_symbols": []}
+    });
+    let rejected_change = value(
+        &cli(
+            &project,
+            &strings(&["change", "validate"]),
+            old_change.to_string().as_bytes(),
+        ),
+        2,
+    );
+    assert_eq!(
+        rejected_change["result"]["data"]["code"],
+        "protocol_version"
+    );
+
+    let old_document = format!(
+        "document {{ version 1 schema {schema} workspace {workspace} base_revision 0 scope (workspace) edits [] return_symbols [] }}"
+    );
+    let rejected_document = value(
+        &cli(
+            &project,
+            &strings(&["change", "validate", "--document"]),
+            old_document.as_bytes(),
+        ),
+        2,
+    );
+    assert_eq!(
+        rejected_document["result"]["data"]["code"],
+        "protocol_version"
+    );
+
+    let session_input = concat!(
+        "{\"version\":1,\"request_id\":1,\"request\":{\"kind\":\"status\"}}\n",
+        "{\"version\":2,\"request_id\":2,\"request\":{\"kind\":\"shutdown\"}}\n"
+    );
+    let session = cli(&project, &strings(&["session"]), session_input.as_bytes());
+    assert_eq!(session.status.code(), Some(0));
+    let responses = session
+        .stdout
+        .split(|byte| *byte == b'\n')
+        .filter(|line| !line.is_empty())
+        .map(|line| serde_json::from_slice::<Value>(line).expect("session response"))
+        .collect::<Vec<_>>();
+    assert_eq!(responses.len(), 2);
+    assert!(responses[0].get("request_id").is_none());
+    assert_eq!(responses[0]["version"], 2);
+    assert_eq!(responses[0]["result"]["data"]["code"], "protocol_version");
+    assert_eq!(responses[1]["request_id"], 2);
+}
+
+#[test]
 fn public_project_workflow_discovers_validates_applies_reviews_and_recovers() {
     let temporary = tempfile::tempdir().expect("temporary root");
     let project_root = temporary.path().join("application");
@@ -68,7 +142,7 @@ fn public_project_workflow_discovers_validates_applies_reviews_and_recovers() {
         &cli(temporary.path(), &strings(&["init", "application"]), &[]),
         0,
     );
-    assert_eq!(initialized["version"], 1);
+    assert_eq!(initialized["version"], 2);
     assert_eq!(initialized["result"]["kind"], "initialized");
     assert_eq!(initialized["result"]["data"]["revision"], 0);
     let workspace = initialized["result"]["data"]["workspace"]
@@ -126,6 +200,7 @@ fn public_project_workflow_discovers_validates_applies_reviews_and_recovers() {
         validated["result"]["data"]["transaction"]["published"],
         false
     );
+    assert!(validated["result"]["data"].get("continuation").is_none());
     assert_eq!(
         value(&cli(&descendant, &strings(&["status"]), &[]), 0)["result"]["data"]["revision"],
         0
@@ -137,6 +212,12 @@ fn public_project_workflow_discovers_validates_applies_reviews_and_recovers() {
     );
     assert_eq!(applied["result"]["data"]["transaction"]["published"], true);
     assert_eq!(applied["result"]["data"]["transaction"]["revision"], 1);
+    assert_eq!(applied["result"]["data"]["continuation"]["version"], 1);
+    assert_eq!(applied["result"]["data"]["continuation"]["revision"], 1);
+    assert_eq!(
+        applied["result"]["data"]["continuation"]["session_local_aliases_invalidated"],
+        true
+    );
     let package = applied["result"]["data"]["transaction"]["returned_bindings"][0][1]
         .as_str()
         .expect("created package")
@@ -165,7 +246,7 @@ fn public_project_workflow_discovers_validates_applies_reviews_and_recovers() {
     fs::write(&context_path, &context.stdout).expect("save exact context response");
 
     let document = format!(
-        "document {{ version 1 schema \"{schema}\" packet \"{packet_digest}\" workspace \"{workspace}\" base_revision 1 scope (workspace) edits [ (rename_node {{ node (existing @{alias}) name renamed }}) ] return_symbols [] }}"
+        "document {{ version 2 schema \"{schema}\" packet \"{packet_digest}\" workspace \"{workspace}\" base_revision 1 scope (workspace) edits [ (rename_node {{ node (existing @{alias}) name renamed }}) ] return_symbols [] }}"
     );
     let context_path = context_path.to_str().expect("UTF-8 context path");
     let validate_document = value(
@@ -262,7 +343,221 @@ fn public_project_workflow_discovers_validates_applies_reviews_and_recovers() {
 }
 
 #[test]
+fn semantic_query_and_function_proposal_are_bounded_and_base_exact() {
+    let _checked_project = CHECKED_PROJECT_LOCK.lock().expect("checked project lock");
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let project = repository.join("applications/lkjwork");
+    let project_path = project.to_str().expect("UTF-8 project path");
+
+    let first = value(
+        &cli(
+            repository,
+            &strings(&[
+                "query",
+                "function",
+                "--root",
+                "why_task",
+                "--limit",
+                "1",
+                "--project",
+                project_path,
+            ]),
+            &[],
+        ),
+        0,
+    );
+    assert_eq!(first["result"]["kind"], "query");
+    assert_eq!(first["result"]["data"]["kind"], "changed");
+    assert_eq!(
+        first["result"]["data"]["data"]["items"]
+            .as_array()
+            .expect("query items")
+            .len(),
+        1
+    );
+    assert_eq!(
+        first["result"]["data"]["data"]["omissions"]["truncated"],
+        true
+    );
+    let continuation = first["result"]["data"]["data"]["continuation"]
+        .as_str()
+        .expect("query continuation");
+    let digest = first["result"]["data"]["data"]["result_digest"]
+        .as_str()
+        .expect("query result digest");
+    let second = value(
+        &cli(
+            repository,
+            &strings(&[
+                "query",
+                "function",
+                "--root",
+                "why_task",
+                "--limit",
+                "1",
+                "--continuation",
+                continuation,
+                "--project",
+                project_path,
+            ]),
+            &[],
+        ),
+        0,
+    );
+    assert_ne!(
+        first["result"]["data"]["data"]["items"][0],
+        second["result"]["data"]["data"]["items"][0]
+    );
+    let unchanged = value(
+        &cli(
+            repository,
+            &strings(&[
+                "query",
+                "function",
+                "--root",
+                "why_task",
+                "--limit",
+                "1",
+                "--known-digest",
+                digest,
+                "--project",
+                project_path,
+            ]),
+            &[],
+        ),
+        0,
+    );
+    assert_eq!(unchanged["result"]["data"]["kind"], "unchanged");
+    let mismatched = value(
+        &cli(
+            repository,
+            &strings(&[
+                "query",
+                "summary",
+                "--root",
+                "why_task",
+                "--limit",
+                "1",
+                "--continuation",
+                continuation,
+                "--project",
+                project_path,
+            ]),
+            &[],
+        ),
+        2,
+    );
+    assert_eq!(mismatched["result"]["data"]["code"], "invalid_cursor");
+
+    let proposal = value(
+        &cli(
+            repository,
+            &strings(&["proposal", "why_task", "--project", project_path]),
+            &[],
+        ),
+        0,
+    );
+    assert_eq!(proposal["result"]["kind"], "proposal");
+    let base_revision = proposal["result"]["data"]["revision"]
+        .as_u64()
+        .expect("proposal revision");
+    let document = proposal["result"]["data"]["document"]
+        .as_str()
+        .expect("proposal document");
+    assert!(document.contains("packet null"));
+    let no_change = value(
+        &cli(
+            repository,
+            &strings(&[
+                "change",
+                "validate",
+                "--document",
+                "--project",
+                project_path,
+            ]),
+            document.as_bytes(),
+        ),
+        2,
+    );
+    assert_eq!(no_change["result"]["data"]["code"], "no_change");
+
+    let owners = value(
+        &cli(
+            repository,
+            &strings(&[
+                "query",
+                "owner_chain",
+                "--root",
+                "why_task",
+                "--project",
+                project_path,
+            ]),
+            &[],
+        ),
+        0,
+    );
+    let package = owners["result"]["data"]["data"]["items"]
+        .as_array()
+        .expect("owner items")
+        .iter()
+        .find(|item| item["data"]["kind"] == "package")
+        .and_then(|item| item["data"]["node"].as_str())
+        .expect("owning package")
+        .parse()
+        .expect("package identity");
+    let workspace = proposal["result"]["data"]["workspace"]
+        .as_str()
+        .expect("proposal workspace")
+        .parse::<WorkspaceId>()
+        .expect("workspace identity");
+    let temporary = tempfile::tempdir().expect("backup parent");
+    let backup = temporary.path().join("backup");
+    value(
+        &cli(
+            repository,
+            &strings(&[
+                "backup",
+                backup.to_str().expect("UTF-8 backup path"),
+                "--project",
+                project_path,
+            ]),
+            &[],
+        ),
+        0,
+    );
+    let advance = ProjectChangeRequest {
+        version: PROJECT_CHANGE_VERSION,
+        workspace,
+        base_revision: Revision::new(base_revision),
+        idempotency_key: None,
+        operations: vec![TransactionOp::RenameNode {
+            node: NodeTarget::Existing(package),
+            name: "lkjwork_stale_test".into(),
+        }],
+        response: TransactionResponseSpec::default(),
+    };
+    value(
+        &cli(
+            &backup,
+            &strings(&["change", "apply"]),
+            &serde_json::to_vec(&advance).expect("advance request"),
+        ),
+        0,
+    );
+    let stale = value(
+        &cli(
+            &backup,
+            &strings(&["change", "validate", "--document"]),
+            document.as_bytes(),
+        ),
+        2,
+    );
+    assert_eq!(stale["result"]["data"]["code"], "revision_conflict");
+}
+
+#[test]
 fn checked_lkjwork_target_rebuild_is_public_and_byte_identical() {
+    let _checked_project = CHECKED_PROJECT_LOCK.lock().expect("checked project lock");
     let repository = Path::new(env!("CARGO_MANIFEST_DIR"));
     let project = repository.join("applications/lkjwork");
     let temporary = tempfile::tempdir().expect("target output root");
@@ -284,7 +579,7 @@ fn checked_lkjwork_target_rebuild_is_public_and_byte_identical() {
         0,
     );
     assert_eq!(build["result"]["data"]["published"], true);
-    assert_eq!(build["result"]["data"]["revision"], 7);
+    assert_eq!(build["result"]["data"]["revision"], 9);
     assert_eq!(
         fs::read(&output_path).expect("target-derived application"),
         fs::read(project.join("lkjwork.lkja")).expect("checked application")
@@ -338,38 +633,38 @@ fn project_session_is_correlated_restartable_and_rejects_stale_aliases() {
     };
     let requests = [
         serde_json::json!({
-            "version": 1,
+            "version": 2,
             "request_id": 1,
             "request": {"kind": "context", "data": {"purpose": "orient"}}
         })
         .to_string(),
         serde_json::json!({
-            "version": 1,
+            "version": 2,
             "request_id": 2,
             "request": {"kind": "change_apply", "data": request}
         })
         .to_string(),
         serde_json::json!({
-            "version": 1,
+            "version": 2,
             "request_id": 3,
             "request": {"kind": "inspect", "data": {"selector": "@n1"}}
         })
         .to_string(),
-        "{\"version\":1,".into(),
+        "{\"version\":2,".into(),
         serde_json::json!({
-            "version": 1,
+            "version": 2,
             "request_id": 2,
             "request": {"kind": "status"}
         })
         .to_string(),
         serde_json::json!({
-            "version": 1,
+            "version": 2,
             "request_id": 5,
             "request": {"kind": "status"}
         })
         .to_string(),
         serde_json::json!({
-            "version": 1,
+            "version": 2,
             "request_id": 6,
             "request": {"kind": "shutdown"}
         })

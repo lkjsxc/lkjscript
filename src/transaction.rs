@@ -77,6 +77,7 @@ pub enum TransactionOpCode {
     DeleteOwnedSubtree,
     RefineHole,
     CreateProductType,
+    AddProductField,
     CreateSumType,
     CreateSequenceType,
     CreateBuildTarget,
@@ -87,7 +88,7 @@ pub enum TransactionOpCode {
     AddApplicationTargetTest,
 }
 impl TransactionOpCode {
-    pub const ALL: [Self; 21] = [
+    pub const ALL: [Self; 22] = [
         Self::CreatePackage,
         Self::CreateModule,
         Self::CreateFunction,
@@ -101,6 +102,7 @@ impl TransactionOpCode {
         Self::DeleteOwnedSubtree,
         Self::RefineHole,
         Self::CreateProductType,
+        Self::AddProductField,
         Self::CreateSumType,
         Self::CreateSequenceType,
         Self::CreateBuildTarget,
@@ -125,6 +127,7 @@ impl TransactionOpCode {
             Self::RefineHole => "refine_hole",
             Self::DeleteOwnedSubtree => "delete_owned_subtree",
             Self::CreateProductType => "create_product_type",
+            Self::AddProductField => "add_product_field",
             Self::CreateSumType => "create_sum_type",
             Self::CreateSequenceType => "create_sequence_type",
             Self::CreateBuildTarget => "create_build_target",
@@ -174,9 +177,11 @@ pub enum ExpressionDraftCode {
     SequenceGet,
     SequenceAppend,
     SequenceReplace,
+    SequenceSlice,
+    SequenceConcat,
 }
 impl ExpressionDraftCode {
-    pub const ALL: [Self; 32] = [
+    pub const ALL: [Self; 34] = [
         Self::ConstUnit,
         Self::ConstBool,
         Self::ConstI64,
@@ -209,6 +214,8 @@ impl ExpressionDraftCode {
         Self::SequenceGet,
         Self::SequenceAppend,
         Self::SequenceReplace,
+        Self::SequenceSlice,
+        Self::SequenceConcat,
     ];
     pub const fn machine_name(self) -> &'static str {
         match self {
@@ -244,6 +251,8 @@ impl ExpressionDraftCode {
             Self::SequenceGet => "sequence_get",
             Self::SequenceAppend => "sequence_append",
             Self::SequenceReplace => "sequence_replace",
+            Self::SequenceSlice => "sequence_slice",
+            Self::SequenceConcat => "sequence_concat",
         }
     }
 
@@ -281,6 +290,8 @@ impl ExpressionDraftCode {
             Self::SequenceGet => OperationCode::SequenceGet,
             Self::SequenceAppend => OperationCode::SequenceAppend,
             Self::SequenceReplace => OperationCode::SequenceReplace,
+            Self::SequenceSlice => OperationCode::SequenceSlice,
+            Self::SequenceConcat => OperationCode::SequenceConcat,
         }
     }
 
@@ -358,6 +369,8 @@ impl ExpressionKindDraft {
             Self::SequenceGet { .. } => ExpressionDraftCode::SequenceGet,
             Self::SequenceAppend { .. } => ExpressionDraftCode::SequenceAppend,
             Self::SequenceReplace { .. } => ExpressionDraftCode::SequenceReplace,
+            Self::SequenceSlice { .. } => ExpressionDraftCode::SequenceSlice,
+            Self::SequenceConcat { .. } => ExpressionDraftCode::SequenceConcat,
             Self::BytesLen { .. } => ExpressionDraftCode::BytesLen,
             Self::BytesAt { .. } => ExpressionDraftCode::BytesAt,
             Self::BytesSlice { .. } => ExpressionDraftCode::BytesSlice,
@@ -521,6 +534,17 @@ pub enum ExpressionKindDraft {
         index: ValueDraft,
         element: ValueDraft,
     },
+    SequenceSlice {
+        sequence: NodeTarget,
+        value: ValueDraft,
+        start: ValueDraft,
+        end_exclusive: ValueDraft,
+    },
+    SequenceConcat {
+        sequence: NodeTarget,
+        lhs: ValueDraft,
+        rhs: ValueDraft,
+    },
     Call {
         function: NodeTarget,
         arguments: Vec<ValueDraft>,
@@ -589,6 +613,12 @@ pub enum TransactionOp {
         module: NodeTarget,
         name: String,
         fields: Vec<ProductFieldDraft>,
+    },
+    AddProductField {
+        symbol: DraftSymbol,
+        product: NodeTarget,
+        name: String,
+        ty: TypeDraft,
     },
     CreateSumType {
         symbol: DraftSymbol,
@@ -683,6 +713,7 @@ impl TransactionOp {
             Self::CreatePackage { .. } => TransactionOpCode::CreatePackage,
             Self::CreateModule { .. } => TransactionOpCode::CreateModule,
             Self::CreateProductType { .. } => TransactionOpCode::CreateProductType,
+            Self::AddProductField { .. } => TransactionOpCode::AddProductField,
             Self::CreateSumType { .. } => TransactionOpCode::CreateSumType,
             Self::CreateSequenceType { .. } => TransactionOpCode::CreateSequenceType,
             Self::CreateFunction { .. } => TransactionOpCode::CreateFunction,
@@ -710,6 +741,7 @@ impl TransactionOp {
             Self::CreatePackage { symbol, .. }
             | Self::CreateModule { symbol, .. }
             | Self::CreateProductType { symbol, .. }
+            | Self::AddProductField { symbol, .. }
             | Self::CreateSumType { symbol, .. }
             | Self::CreateSequenceType { symbol, .. }
             | Self::CreateFunction { symbol, .. }
@@ -949,6 +981,16 @@ impl StagedNominalCatalogue {
                         catalogue.field_owners.insert(*member, declaration);
                     }
                     catalogue.products.insert(declaration, members);
+                }
+                TransactionOp::AddProductField {
+                    symbol,
+                    product,
+                    ty: _,
+                    ..
+                } => {
+                    let member = NodeTarget::Draft(*symbol);
+                    catalogue.field_owners.insert(member, *product);
+                    catalogue.products.entry(*product).or_default().push(member);
                 }
                 TransactionOp::CreateSumType {
                     symbol, variants, ..
@@ -1242,6 +1284,17 @@ fn expand_transaction(
                     name: name.clone(),
                 }));
             }
+            TransactionOp::AddProductField {
+                symbol,
+                product,
+                name,
+                ty,
+            } => events.push(ExpandEvent::Edit(CanonicalEdit::CreateProductField {
+                symbol: *symbol,
+                product: *product,
+                name: name.clone(),
+                ty: *ty,
+            })),
             TransactionOp::CreateSumType {
                 symbol,
                 module,
@@ -1834,6 +1887,30 @@ fn expand_transaction(
                         element,
                     },
                 }),
+                ExpressionKindDraft::SequenceSlice {
+                    sequence,
+                    value,
+                    start,
+                    end_exclusive,
+                } => edits.push(CanonicalEdit::CreateOperation {
+                    symbol: expression_symbol,
+                    block,
+                    before,
+                    operation: OperationDraft::SequenceSlice {
+                        sequence,
+                        value,
+                        start,
+                        end_exclusive,
+                    },
+                }),
+                ExpressionKindDraft::SequenceConcat { sequence, lhs, rhs } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::SequenceConcat { sequence, lhs, rhs },
+                    })
+                }
                 ExpressionKindDraft::Call {
                     function,
                     arguments,
@@ -2114,6 +2191,20 @@ fn extract_inline_children(
             extract(value, "value".to_owned())?;
             extract(index, "index".to_owned())?;
             extract(element, "element".to_owned())?;
+        }
+        ExpressionKindDraft::SequenceSlice {
+            value,
+            start,
+            end_exclusive,
+            ..
+        } => {
+            extract(value, "value".to_owned())?;
+            extract(start, "start".to_owned())?;
+            extract(end_exclusive, "end_exclusive".to_owned())?;
+        }
+        ExpressionKindDraft::SequenceConcat { lhs, rhs, .. } => {
+            extract(lhs, "lhs".to_owned())?;
+            extract(rhs, "rhs".to_owned())?;
         }
         ExpressionKindDraft::Call { arguments, .. } => {
             for (index, value) in arguments.iter_mut().enumerate() {
@@ -2540,6 +2631,32 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
                 value_reference(index, source, references)?;
                 value_reference(element, source, references)?;
             }
+            OperationDraft::SequenceSlice {
+                sequence,
+                value,
+                start,
+                end_exclusive,
+            } => {
+                reference(
+                    *sequence,
+                    DraftReferenceKind::SequenceType,
+                    source,
+                    references,
+                );
+                value_reference(value, source, references)?;
+                value_reference(start, source, references)?;
+                value_reference(end_exclusive, source, references)?;
+            }
+            OperationDraft::SequenceConcat { sequence, lhs, rhs } => {
+                reference(
+                    *sequence,
+                    DraftReferenceKind::SequenceType,
+                    source,
+                    references,
+                );
+                value_reference(lhs, source, references)?;
+                value_reference(rhs, source, references)?;
+            }
             OperationDraft::Call {
                 function,
                 arguments,
@@ -2698,6 +2815,27 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
                     )?;
                     type_reference(field.ty, source, &mut references);
                 }
+            }
+            TransactionOp::AddProductField {
+                symbol,
+                product,
+                ty,
+                ..
+            } => {
+                declare(
+                    &mut symbols,
+                    &mut kinds,
+                    *symbol,
+                    DraftSymbolKind::ProductField,
+                    source,
+                )?;
+                reference(
+                    *product,
+                    DraftReferenceKind::ProductType,
+                    source,
+                    &mut references,
+                );
+                type_reference(*ty, source, &mut references);
             }
             TransactionOp::CreateSumType {
                 symbol,
@@ -3055,6 +3193,51 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
                     &mut references,
                 );
                 for (value, segment) in [(element, "element"), (index, "index"), (value, "value")] {
+                    structured_value(
+                        value,
+                        depth,
+                        source,
+                        child_draft_path(&path, segment, source)?,
+                        &mut stack,
+                        &mut references,
+                    )?;
+                }
+            }
+            ExpressionKindDraft::SequenceSlice {
+                sequence,
+                value,
+                start,
+                end_exclusive,
+            } => {
+                reference(
+                    *sequence,
+                    DraftReferenceKind::SequenceType,
+                    source,
+                    &mut references,
+                );
+                for (value, segment) in [
+                    (end_exclusive, "end_exclusive"),
+                    (start, "start"),
+                    (value, "value"),
+                ] {
+                    structured_value(
+                        value,
+                        depth,
+                        source,
+                        child_draft_path(&path, segment, source)?,
+                        &mut stack,
+                        &mut references,
+                    )?;
+                }
+            }
+            ExpressionKindDraft::SequenceConcat { sequence, lhs, rhs } => {
+                reference(
+                    *sequence,
+                    DraftReferenceKind::SequenceType,
+                    source,
+                    &mut references,
+                );
+                for (value, segment) in [(rhs, "rhs"), (lhs, "lhs")] {
                     structured_value(
                         value,
                         depth,
@@ -4899,6 +5082,22 @@ fn resolve_operation(
             index: resolve_value(index, allocations, workspace)?,
             element: resolve_value(element, allocations, workspace)?,
         },
+        OperationDraft::SequenceSlice {
+            sequence,
+            value,
+            start,
+            end_exclusive,
+        } => OperationKind::SequenceSlice {
+            sequence: resolve(*sequence, allocations, workspace)?,
+            value: resolve_value(value, allocations, workspace)?,
+            start: resolve_value(start, allocations, workspace)?,
+            end_exclusive: resolve_value(end_exclusive, allocations, workspace)?,
+        },
+        OperationDraft::SequenceConcat { sequence, lhs, rhs } => OperationKind::SequenceConcat {
+            sequence: resolve(*sequence, allocations, workspace)?,
+            lhs: resolve_value(lhs, allocations, workspace)?,
+            rhs: resolve_value(rhs, allocations, workspace)?,
+        },
         OperationDraft::Call {
             function,
             arguments,
@@ -5111,6 +5310,8 @@ fn operation_result_types_in_nodes(
             OperationKind::SequenceEmpty { sequence }
             | OperationKind::SequenceAppend { sequence, .. }
             | OperationKind::SequenceReplace { sequence, .. }
+            | OperationKind::SequenceSlice { sequence, .. }
+            | OperationKind::SequenceConcat { sequence, .. }
                 if index == 0 =>
             {
                 matches!(nodes.get(sequence), Some(Node::SequenceType { .. }))

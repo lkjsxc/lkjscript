@@ -1832,10 +1832,9 @@ fn validate_revision_record_chain(
         if !created.is_disjoint(&deleted)
             || !created.is_disjoint(&modified)
             || !deleted.is_disjoint(&modified)
-            || !record
-                .function_bodies_changed
-                .iter()
-                .all(|node| created.contains(node) || modified.contains(node))
+            || !record.function_bodies_changed.iter().all(|node| {
+                created.contains(node) || deleted.contains(node) || modified.contains(node)
+            })
             || !record.target_definitions_changed.iter().all(|node| {
                 created.contains(node) || deleted.contains(node) || modified.contains(node)
             })

@@ -1414,6 +1414,12 @@ fn request_corpus() -> Vec<Request> {
             name: "product".to_owned(),
             fields: Vec::new(),
         },
+        TransactionOp::AddProductField {
+            symbol: DraftSymbol::new("added_field"),
+            product: NodeTarget::Existing(node),
+            name: "added".to_owned(),
+            ty: TypeDraft::Text,
+        },
         TransactionOp::CreateSumType {
             symbol: DraftSymbol::generated(10),
             module: local(2),
@@ -1583,7 +1589,7 @@ fn mutate_json(source: &[u8], seed: u64, case: u64) -> Vec<u8> {
     match case % 10 {
         0 => text.replacen("{", "{\"unknown\":0,", 1).into_bytes(),
         1 => text
-            .replacen("\"version\":12", "\"version\":12,\"version\":12", 1)
+            .replacen("\"version\":13", "\"version\":13,\"version\":13", 1)
             .into_bytes(),
         2 => text
             .replacen("\"request_id\":1", "\"request_id\":-1", 1)
@@ -1785,7 +1791,7 @@ fn targeted_json_mutations(requests: &[Request]) -> Vec<NamedMutation> {
         &mut mutations,
         "json-duplicate-field",
         query,
-        replace_json(query, "\"version\":12", "\"version\":12,\"version\":12"),
+        replace_json(query, "\"version\":13", "\"version\":13,\"version\":13"),
     );
     push_mutation(
         &mut mutations,

@@ -1,8 +1,21 @@
 //! Independently transferable exact-release-graph applications.
 //!
-//! Application format 5 embeds one canonical exact reusable-release graph, exact exported
+//! Application format 8 embeds one canonical exact reusable-release graph, exact exported
 //! entries, an invocation profile, resource policy, and typed application cases. Source workspace
 //! identity, mutable resolver state, proposal syntax, Core IR, and runtime handles are absent.
+
+mod interactive;
+
+pub use interactive::{
+    INTERACTIVE_PROFILE_VERSION, InteractiveAction, InteractiveActionKind,
+    InteractiveActionOutcome, InteractiveActionOutcomeClass, InteractiveActionRoute,
+    InteractiveActionRoutes, InteractiveApplicationProfile, InteractiveEvent,
+    InteractiveEventRoutes, InteractiveExecutionObservation, InteractiveFrame, InteractiveKeyCode,
+    InteractiveKeyEvent, InteractiveKeyRoutes, InteractiveSession, InteractiveStep,
+    MAXIMUM_INTERACTIVE_COLUMNS, MAXIMUM_INTERACTIVE_FRAME_SCALARS,
+    MAXIMUM_INTERACTIVE_PASTE_SCALARS, MAXIMUM_INTERACTIVE_ROWS, MAXIMUM_INTERACTIVE_STATUS_BYTES,
+    PreparedInteractiveApplication, prepare_interactive,
+};
 
 use crate::artifact;
 use crate::artifact_io;
@@ -23,9 +36,9 @@ use std::fmt;
 use std::path::Path;
 use std::time::Instant;
 
-pub const APPLICATION_MAGIC: [u8; 8] = *b"LKJAPP\0\x05";
-pub const APPLICATION_FORMAT_VERSION: u16 = 5;
-pub const APPLICATION_CONTRACT_VERSION: u16 = 5;
+pub const APPLICATION_MAGIC: [u8; 8] = *b"LKJAPP\0\x08";
+pub const APPLICATION_FORMAT_VERSION: u16 = 8;
+pub const APPLICATION_CONTRACT_VERSION: u16 = 8;
 pub const APPLICATION_INTERFACE_CONTRACT_VERSION: u16 = 1;
 pub const MAXIMUM_APPLICATION_ARTIFACT_BYTES: usize = 256 * 1024 * 1024;
 pub const MAXIMUM_APPLICATION_TESTS: usize = 256;
@@ -33,7 +46,7 @@ pub const MAXIMUM_APPLICATION_TEST_NAME_BYTES: usize = 64;
 pub const MAXIMUM_APPLICATION_SUITE_FUEL: u64 = 100_000_000;
 pub const MAXIMUM_APPLICATION_PATH_BYTES: usize = artifact_io::MAXIMUM_ARTIFACT_PATH_BYTES;
 const MAXIMUM_APPLICATION_VALUE_JSON_BYTES: usize = 64 * 1024 * 1024;
-const APPLICATION_DIGEST_DOMAIN: &str = "lkjscript.application-artifact.v5";
+const APPLICATION_DIGEST_DOMAIN: &str = "lkjscript.application-artifact.v8";
 const APPLICATION_GRAPH_DIGEST_DOMAIN: &str = "lkjscript.application-release-graph.v1";
 const APPLICATION_TEST_DIGEST_DOMAIN: &str = "lkjscript.application-test-case.v2";
 const TEMPORARY_PREFIX: &str = ".lkjscript-application-";
@@ -380,6 +393,7 @@ pub enum InvocationProfile {
     Typed,
     BytesStream,
     Stateful(StatefulApplicationProfile),
+    Interactive(Box<InteractiveApplicationProfile>),
 }
 
 impl InvocationProfile {
@@ -388,6 +402,7 @@ impl InvocationProfile {
             Self::Typed => 1,
             Self::BytesStream => 2,
             Self::Stateful(_) => 3,
+            Self::Interactive(_) => 4,
         }
     }
 }
@@ -1799,6 +1814,9 @@ fn validate_profile(
         }
         InvocationProfile::Stateful(stateful) => {
             validate_stateful_profile(graph, flattened, parameters, *result, stateful)
+        }
+        InvocationProfile::Interactive(profile) => {
+            interactive::validate_profile(graph, flattened, entry, profile)
         }
     }
 }
@@ -3238,54 +3256,58 @@ fn put_target(writer: &mut Writer, target: ApplicationTarget) {
 
 fn put_profile(writer: &mut Writer, profile: &InvocationProfile) -> Result<()> {
     writer.u8(profile.stable_tag());
-    if let InvocationProfile::Stateful(stateful) = profile {
-        put_target(writer, stateful.resume);
-        put_target(writer, stateful.query_entry);
-        put_target(writer, stateful.state);
-        put_target(writer, stateful.event);
-        put_target(writer, stateful.response);
-        put_target(writer, stateful.query);
-        put_target(writer, stateful.query_result);
-        put_target(writer, stateful.command);
-        put_target(writer, stateful.outcome);
-        put_target(writer, stateful.decision);
-        put_target(writer, stateful.declined_variant);
-        put_target(writer, stateful.declined_payload);
-        put_target(writer, stateful.declined_response_field);
-        put_target(writer, stateful.unchanged_variant);
-        put_target(writer, stateful.unchanged_payload);
-        put_target(writer, stateful.unchanged_response_field);
-        put_target(writer, stateful.completed_variant);
-        put_target(writer, stateful.completed_payload);
-        put_target(writer, stateful.completed_state_field);
-        put_target(writer, stateful.completed_response_field);
-        put_target(writer, stateful.suspended_variant);
-        put_target(writer, stateful.suspended_payload);
-        put_target(writer, stateful.suspended_state_field);
-        put_target(writer, stateful.suspended_response_field);
-        put_target(writer, stateful.suspended_command_field);
-        put_count(writer, stateful.imports.len())?;
-        for import in &stateful.imports {
-            writer.string(&import.slot).map_err(application_codec)?;
-            writer.u8(match import.interface {
-                HostInterface::ImmutableBlob => 2,
-            });
-            put_target(writer, import.request);
-            put_target(writer, import.outcome);
-            put_target(writer, import.command_variant);
-            put_target(writer, import.outcome_variant);
-            put_count(writer, import.requests.len())?;
-            for route in &import.requests {
-                put_target(writer, route.variant);
-                writer.u8(route.operation.stable_tag());
-            }
-            put_count(writer, import.outcomes.len())?;
-            for route in &import.outcomes {
-                writer.u8(route.operation.stable_tag());
-                writer.u8(route.class.stable_tag());
-                put_target(writer, route.variant);
+    match profile {
+        InvocationProfile::Typed | InvocationProfile::BytesStream => {}
+        InvocationProfile::Stateful(stateful) => {
+            put_target(writer, stateful.resume);
+            put_target(writer, stateful.query_entry);
+            put_target(writer, stateful.state);
+            put_target(writer, stateful.event);
+            put_target(writer, stateful.response);
+            put_target(writer, stateful.query);
+            put_target(writer, stateful.query_result);
+            put_target(writer, stateful.command);
+            put_target(writer, stateful.outcome);
+            put_target(writer, stateful.decision);
+            put_target(writer, stateful.declined_variant);
+            put_target(writer, stateful.declined_payload);
+            put_target(writer, stateful.declined_response_field);
+            put_target(writer, stateful.unchanged_variant);
+            put_target(writer, stateful.unchanged_payload);
+            put_target(writer, stateful.unchanged_response_field);
+            put_target(writer, stateful.completed_variant);
+            put_target(writer, stateful.completed_payload);
+            put_target(writer, stateful.completed_state_field);
+            put_target(writer, stateful.completed_response_field);
+            put_target(writer, stateful.suspended_variant);
+            put_target(writer, stateful.suspended_payload);
+            put_target(writer, stateful.suspended_state_field);
+            put_target(writer, stateful.suspended_response_field);
+            put_target(writer, stateful.suspended_command_field);
+            put_count(writer, stateful.imports.len())?;
+            for import in &stateful.imports {
+                writer.string(&import.slot).map_err(application_codec)?;
+                writer.u8(match import.interface {
+                    HostInterface::ImmutableBlob => 2,
+                });
+                put_target(writer, import.request);
+                put_target(writer, import.outcome);
+                put_target(writer, import.command_variant);
+                put_target(writer, import.outcome_variant);
+                put_count(writer, import.requests.len())?;
+                for route in &import.requests {
+                    put_target(writer, route.variant);
+                    writer.u8(route.operation.stable_tag());
+                }
+                put_count(writer, import.outcomes.len())?;
+                for route in &import.outcomes {
+                    writer.u8(route.operation.stable_tag());
+                    writer.u8(route.class.stable_tag());
+                    put_target(writer, route.variant);
+                }
             }
         }
+        InvocationProfile::Interactive(profile) => interactive::put_profile(writer, profile),
     }
     Ok(())
 }
@@ -3396,6 +3418,7 @@ fn read_profile(reader: &mut Reader<'_>) -> Result<InvocationProfile> {
                 imports,
             })
         }
+        4 => InvocationProfile::Interactive(Box::new(interactive::read_profile(reader)?)),
         _ => return Err(corrupt("application invocation profile tag is unknown")),
     })
 }

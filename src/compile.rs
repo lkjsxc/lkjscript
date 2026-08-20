@@ -1151,6 +1151,26 @@ fn lower_instruction(
             index: lower_value(environment, *index)?,
             element: lower_value(environment, *element)?,
         },
+        OperationKind::SequenceSlice {
+            sequence,
+            value,
+            start,
+            end_exclusive,
+        } => Instruction::SequenceSlice {
+            origin,
+            result,
+            ty: core_type(type_ids, SemanticType::Nominal(*sequence), origin)?,
+            value: lower_value(environment, *value)?,
+            start: lower_value(environment, *start)?,
+            end_exclusive: lower_value(environment, *end_exclusive)?,
+        },
+        OperationKind::SequenceConcat { sequence, lhs, rhs } => Instruction::SequenceConcat {
+            origin,
+            result,
+            ty: core_type(type_ids, SemanticType::Nominal(*sequence), origin)?,
+            lhs: lower_value(environment, *lhs)?,
+            rhs: lower_value(environment, *rhs)?,
+        },
         OperationKind::Call {
             function,
             arguments,
@@ -1269,7 +1289,9 @@ fn semantic_result_type(snapshot: &Snapshot, operation: &OperationKind) -> Resul
         OperationKind::MatchSum { result, .. } => *result,
         OperationKind::SequenceEmpty { sequence }
         | OperationKind::SequenceAppend { sequence, .. }
-        | OperationKind::SequenceReplace { sequence, .. } => SemanticType::Nominal(*sequence),
+        | OperationKind::SequenceReplace { sequence, .. }
+        | OperationKind::SequenceSlice { sequence, .. }
+        | OperationKind::SequenceConcat { sequence, .. } => SemanticType::Nominal(*sequence),
         OperationKind::SequenceGet { sequence, .. } => match snapshot.node(*sequence)? {
             Node::SequenceType { element, .. } => *element,
             _ => return Err(invalid(*sequence, "sequence target is not a sequence type")),

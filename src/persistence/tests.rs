@@ -235,6 +235,73 @@ fn nominal_operation_and_match_graph_survives_format_eight_restart_and_retained_
 }
 
 #[test]
+fn deleting_a_function_body_produces_a_reopenable_revision_record() {
+    let temporary = tempfile::tempdir().expect("state");
+    ensure_state_directory(temporary.path()).expect("state directory");
+    let id = WorkspaceId::from_bytes([0x97; 16]);
+    let local = |value| NodeTarget::Draft(DraftSymbol::generated(value));
+    let mut workspace = DurableWorkspace::create(temporary.path(), id).expect("workspace");
+    let create = Transaction {
+        workspace: id,
+        base_revision: Revision::INITIAL,
+        idempotency_key: None,
+        mode: TransactionMode::Commit,
+        operations: vec![
+            TransactionOp::CreatePackage {
+                symbol: DraftSymbol::generated(1),
+                name: "p".into(),
+            },
+            TransactionOp::CreateModule {
+                symbol: DraftSymbol::generated(2),
+                package: local(1),
+                name: "m".into(),
+            },
+            TransactionOp::CreateFunction {
+                symbol: DraftSymbol::generated(3),
+                module: local(2),
+                name: "removed".into(),
+                parameters: Vec::new(),
+                result: TypeDraft::I64,
+                body: Some(FunctionBodyDraft {
+                    operations: vec![ExpressionDraft {
+                        symbol: Some(DraftSymbol::generated(4)),
+                        operation: ExpressionKindDraft::ConstI64(1),
+                    }],
+                    return_value: ValueDraft::OperationResult {
+                        operation: local(4),
+                        output: 0,
+                    },
+                }),
+            },
+        ],
+    };
+    let created = workspace
+        .apply(&request(&create), [0x97; 32])
+        .expect("create function body");
+    let function = created.returned_bindings[2].1;
+    let delete = Transaction {
+        workspace: id,
+        base_revision: Revision::new(1),
+        idempotency_key: None,
+        mode: TransactionMode::Commit,
+        operations: vec![TransactionOp::DeleteOwnedSubtree {
+            root: NodeTarget::Existing(function),
+        }],
+    };
+    workspace
+        .apply(&request(&delete), [0x98; 32])
+        .expect("delete function body");
+    let record = workspace.record(Revision::new(2)).expect("deletion record");
+    assert_eq!(record.record.deleted, vec![function]);
+    assert_eq!(record.record.function_bodies_changed, vec![function]);
+    drop(workspace);
+
+    let reopened = DurableWorkspace::open(temporary.path(), id).expect("restart after deletion");
+    reopened.deep_verify().expect("deep history");
+    assert_eq!(reopened.head().expect("head").revision(), Revision::new(2));
+}
+
+#[test]
 fn state_directory_rejects_relative_and_symlinked_paths() {
     use std::os::unix::fs::symlink;
 

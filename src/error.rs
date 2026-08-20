@@ -63,10 +63,22 @@ pub enum ErrorCode {
     ByteValueTooLarge,
     ExecutionMemoryExhausted,
     OwnershipPlanInvalid,
+    TerminalUnavailable,
+    TerminalDecode,
+    TerminalOutput,
+    TerminalCleanup,
+    FilesystemDenied,
+    FilesystemConflict,
+    FilesystemWrongType,
+    FilesystemNotFound,
+    FilesystemInputTooLarge,
+    FilesystemKnownFailure,
+    FilesystemUnknownVisibility,
+    FilesystemReconciliationIndeterminate,
 }
 
 impl ErrorCode {
-    pub const ALL: [Self; 50] = [
+    pub const ALL: [Self; 62] = [
         Self::AuthorityBusy,
         Self::ArtifactCorrupt,
         Self::ArtifactPublicationOutcomeUnknown,
@@ -117,6 +129,18 @@ impl ErrorCode {
         Self::ByteValueTooLarge,
         Self::ExecutionMemoryExhausted,
         Self::OwnershipPlanInvalid,
+        Self::TerminalUnavailable,
+        Self::TerminalDecode,
+        Self::TerminalOutput,
+        Self::TerminalCleanup,
+        Self::FilesystemDenied,
+        Self::FilesystemConflict,
+        Self::FilesystemWrongType,
+        Self::FilesystemNotFound,
+        Self::FilesystemInputTooLarge,
+        Self::FilesystemKnownFailure,
+        Self::FilesystemUnknownVisibility,
+        Self::FilesystemReconciliationIndeterminate,
     ];
     pub const fn machine_name(self) -> &'static str {
         match self {
@@ -170,6 +194,20 @@ impl ErrorCode {
             Self::ByteValueTooLarge => "byte_value_too_large",
             Self::ExecutionMemoryExhausted => "execution_memory_exhausted",
             Self::OwnershipPlanInvalid => "ownership_plan_invalid",
+            Self::TerminalUnavailable => "terminal_unavailable",
+            Self::TerminalDecode => "terminal_decode",
+            Self::TerminalOutput => "terminal_output",
+            Self::TerminalCleanup => "terminal_cleanup",
+            Self::FilesystemDenied => "filesystem_denied",
+            Self::FilesystemConflict => "filesystem_conflict",
+            Self::FilesystemWrongType => "filesystem_wrong_type",
+            Self::FilesystemNotFound => "filesystem_not_found",
+            Self::FilesystemInputTooLarge => "filesystem_input_too_large",
+            Self::FilesystemKnownFailure => "filesystem_known_failure",
+            Self::FilesystemUnknownVisibility => "filesystem_unknown_visibility",
+            Self::FilesystemReconciliationIndeterminate => {
+                "filesystem_reconciliation_indeterminate"
+            }
         }
     }
 }

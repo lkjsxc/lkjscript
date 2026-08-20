@@ -1,132 +1,144 @@
 # Implemented status
 
-This file records the current checkout. Normative behavior is owned by `docs/spec/`; product use is
-owned by `applications/lkjwork/README.md`.
+This file describes the current checkout. Normative contracts under `docs/spec/` and executable
+validation outrank this summary. Product-specific `lkjwork` and `lkjstudio` behavior is owned by
+their application READMEs and checked semantic projects.
 
-## Semantic development projects
+## Semantic development repository and CLI
 
-A semantic project is a strict `.lkjscript` authority containing one project marker, one existing
-workspace identity, immutable full graph revisions, immutable canonical revision records, and one
-HEAD. Project paths are locators only. Explicit selection and bounded ancestor discovery reject
-parent traversal, symlinked or nonregular components, malformed markers, nested ambiguity, foreign
-workspace bindings, missing closure, and corrupt history.
+One discoverable semantic project owns one validated typed graph, first-class build-target graph,
+selected HEAD, full immutable revision snapshots, and canonical compact revision records. The strict
+`.lkjscript/project` marker binds one workspace. Explicit relative/absolute selection overrides
+ambient discovery; parent traversal, symlinked or nonregular markers, nested ambiguity, foreign
+workspace bindings, malformed state, and corrupt history reject.
 
-The public project CLI implements initialization, orientation with known-digest reuse, status,
-historical inspect, targeted context, JSON or semantic-document validation/application, bounded log,
-record show, arbitrary semantic diff, forward restoration, target list/show/build/test/run, shallow
-or deep doctor, no-replace backup, and a correlated foreground session. Ordinary commands discover
-the project and do not require a state directory, workspace ID, or revision. Machine responses are
-closed version-1 envelopes; `--pretty` is the deterministic bounded human-readable JSON projection.
+The public CLI implements init, orient/known-digest, status, historical inspect, closed paginated
+semantic queries, packet-free function proposal rendering, targeted context, JSON and document
+validate/apply, log, record show, endpoint diff, forward restoration, target list/show/test/build/run,
+shallow/deep doctor, no-replace backup, and a correlated foreground session. Public machine results
+use project envelope 2. Ordinary work discovers workspace/revision facts; callers do not supply
+internal repository paths.
 
-Every accepted change publishes exactly one revision and one revision record. Validate-only,
-malformed, foreign, excessive, stale, invalid, and no-change requests publish nothing. Commit
-requests bind the exact project workspace/base, and optional idempotency replays the retained exact
-receipt across restart. Restoration validates a candidate and publishes forward; it never rewinds
-HEAD or resurrects a tombstoned durable identity.
+Every accepted mutation publishes exactly one immutable revision and one record. Validate-only,
+malformed, foreign, stale, excessive, invalid, rejected, and semantic-no-change requests publish
+nothing. The owner preflights candidate validation, every target, artifact preparation, and both
+response projections before publication. A commit-only idempotency key fingerprints response
+projection and replays one exact retained receipt after restart. No stale mutation is retried.
 
-The current repository stores one canonical full snapshot and one compact record per revision.
-Ordinary open checks every retained path and compact record, validates the complete record chain,
-then decodes the exact HEAD snapshot plus any snapshots needed by the retained idempotency receipt.
-Historical selection decodes and validates the selected snapshot on demand. `doctor --deep` decodes
-every snapshot, validates every adjacent identity transition, and recomputes every revision-record
-diff fact. Derived indexes and caches are absent. All project operations conservatively hold the one
-engine lock; concurrent snapshot readers are not yet exposed.
+Published receipts include change-continuation 1: new revision/snapshot/record, accepted-change and
+semantic-diff digests, requested created bindings, changed functions, affected targets, and explicit
+local-alias invalidation. It is bounded to 64 KiB and is an observation, not durable local identity.
 
-## First-class build targets
+Semantic-query 1 has closed `summary`, `exact`, `children`, `function`, `owner_chain`,
+`dependencies`, `incoming_uses`, `callers`, `callees`, `targets`, and `blockers` projections. Queries
+bind one exact revision, deterministic roots/order, work/page/output bounds, result digest, and an
+opaque plan-bound continuation. There is no general query language, index, cache, or concurrent
+snapshot-reader path. All project operations conservatively hold one engine lock.
 
-Build targets are durable graph nodes with exact identity, presentation name, kind, and typed
-definition. Active kinds are reusable release, application, and native product distribution. Release
-targets own the exact root package, metadata, exports, exact target dependencies/imports, and cases.
-Application targets own exact release edges, entry/profile mappings, host requirements, policies,
-and cases. Product targets select one exact application target. Target cycles, missing/foreign
-references, nominal mismatches, incomplete closures, and failing cases reject accepted changes.
+## Build and distribution
 
-`target build` lowers one exact revision deterministically, preflights its response, runs all cases,
-and publishes an immutable artifact at an explicit no-overwrite path. Relative output paths resolve
-against the command working directory before path validation. Build/test/run never publish a
-development revision. There is no arbitrary hook, mutable registry lookup, ambient filesystem input,
-or derived build cache.
+Durable target kinds are reusable release, application, and native product. Target identity and
+edges use durable graph IDs; names are revision-bound lookup metadata. Every accepted candidate
+eagerly validates every target through the full oracle. `target build` deterministically lowers one
+exact revision and publishes one synchronized no-overwrite artifact. Build/test/run never publish a
+development revision. There is no arbitrary hook, build script, ambient file input, mutable
+coordinate, derived cache, or hidden generated binding.
 
-The former `agent` command, procedural example builders, `release build`, and `app build` were
-deleted. The raw `--state … rpc|session` transport remains only as the strict engine-conformance and
-embedding boundary; it is not a second project authoring model. Immutable release/application
-validate, inspect, test, run, instance, and runtime commands remain distinct distribution/runtime
-consumers.
+Release format 2 and application format 8 are immutable distribution authorities. Application 8
+supports typed, byte-stream, stateful, and interactive profiles. Interface self-description remains
+contract 1. Interactive profile 2 binds exact application-owned initialize/update/resume/render
+roles, closed event/action/outcome values, and full frames. Headless replay 3 exercises the same roles
+for up to 10,000 deterministic events.
 
-## Migrated lkjwork product
+## lkjstudio semantic workbench
 
-`applications/lkjwork/.lkjscript` is the maintained semantic development authority. Its revision 4
-target reproduced the audited pre-migration application byte-for-byte. Revisions 5–7 are the public
-CLI dogfood history for the cross-cutting `why TASK` query: rename replaced owners, create the new
-types/functions, then update release/application target meaning and cases. Revision 7 has 3,339 graph
-nodes, 546 durable identities, three targets, seven passing semantic cases, and no blockers.
+`applications/lkjstudio/.lkjscript` is the sole maintained program/build authority. It is workspace
+`6ee361b40e2ce5041d64321d79c3db0d`, revision 48, snapshot
+`12898095ee151d9d0c6f46fdbd17838ed88febd17533c6c6badb731b1f4cf83e`, record
+`79837c3208dadc34e941192c54c1fcb2252260fe9b3d657055e09ee9ed1a3961`, with 3,301 graph nodes,
+359 durable identities, 2,942 function-local references, three targets, 29 passing target cases,
+and no blockers. Its 49 accepted revisions (including genesis) were created through public project
+commands. Revision 46 is the retained self-change: host actions moved to Alt so Ctrl-N/W/Y/Z remain
+semantic editor commands. Revision 47 replaced application-level scalar-copy loops with checked
+sequence slice/concatenate, and revision 48 raised only the interactive target's deterministic fuel
+policy to the already bounded 100,000,000 maximum required by the 65,536-scalar paste workflow.
 
-`applications/lkjwork/build.py` and generated `bindings.json` are deleted. The checked application
-is 167,848 bytes, has file SHA-256
-`f9b335db22fbecdacdf7047f8a8e8aa7711d030eccaf3ed42d3eb2783b3cc184`, semantic application digest
-`4eb891dc2f400e070d8feaf3ff8aa14e35420010d2ded3ace1a107cec8e45092`, and root release
-`67c30ef33a26b53b98c7ded1a89ac6f0f9f961eef103f399bd70c963dca115bf`.
+The checked 161,562-byte `lkjstudio.lkja` has file SHA-256
+`d7c89b503a8b3ca882495919105812ebf38735dd3e019daf2127f6b6cdd9e039`, application digest
+`74597b6fb8fbc38dd2d6191f979fe8e380af32de6bb5a085812dac436fe4b683`, graph digest
+`39e1d780bd08cd76562fe37ab308cb47696c7b67851da6d1aca8ef67cba7fe85`, and root release
+`9ba6554e46709b5148236c55f37ec410b3d3ede6449e749b84429d71bb3675cc`.
 
-The native binary discovers the complete interface from validated application self-description.
-`why` returns task ID, phase, archive state, optional manual hold, actionability, and ordered blocker
-IDs as application-owned typed data. Missing task is a typed product outcome. Human and JSON output
-agree, and filesystem-tree comparison proves successful and missing-task queries publish no instance
-revision, event, command, attempt, outcome, checkpoint, manifest, HEAD, or blob.
+Application meaning owns buffer allocation/nonreuse, active/order state, scalar-indexed content,
+cursor/selection, insert/delete/replace/movement, line movement, select-all, 32-entry bounded
+undo/redo, exact literal search, resize, exit, keymap action selection, one-pending-action state,
+outcome transitions, status, and frame content. Restart loses unsaved foreground state. Editor undo
+is neither semantic history nor filesystem rollback.
 
-The complete product still provides task lifecycle/editing, exact DAG dependencies, labels, notes,
-attachments, activity/history, list/show/next/summary/context/export/why pure queries, strict JSON,
-foreground session, backup/restore, and shallow/deep doctor. The Rust client owns only boundary and
-host-adapter duties; task policy remains application meaning.
+The explorer actions cover orientation, children, exact function, callers/callees, targets,
+blockers, history, record, and diff. Proposal actions render a selected function document, validate
+without publication, apply once, and preserve a stale draft on conflict. Target actions list, test,
+build, and run. The native adapter invokes the same `Project` owner and has no private-store mutation
+path.
 
-## Active identities
+Terminal contract 3 decodes a closed key/paste/resize vocabulary, performs bounded Unicode-width
+full-frame rendering, and owns raw/alternate-screen/bracketed-paste/cursor lifecycle. Cleanup is
+idempotent and tested across staged acquisition/output failures, unwind, normal exit, signal, EOF,
+and disconnected pseudo-terminal input. The application cannot emit ANSI.
 
-| boundary | active identity | direct rejected predecessor |
+Selected-filesystem 1 pins one Linux directory descriptor and confines UTF-8 relative components
+with `openat2` beneath/no-magiclink/no-symlink/no-mount-crossing policy. It provides deterministic
+digest-bound directory pages, stable regular-file read, no-replace create, expected-content atomic
+replace, explicit conflict/known-failure/unknown-visibility outcomes, and independent reconciliation.
+No possibly visible write is repeated.
+
+## lkjwork dogfood
+
+`applications/lkjwork/.lkjscript` is workspace `6894b57786a7e1ef14370d2da3a3cf33`, revision 9,
+snapshot `4ae531e41c93b69583ee14c44837ce1d5f6748e427d3a02f60c7164b2174eec1`, record
+`fb28346946daef184262e06781ee42c537913d63ba313ef50834744458f30561`, with 3,353 graph nodes,
+547 durable identities, three targets, eight passing cases, and no blockers. Revisions 8 and 9 are
+the new cross-cutting dogfood feature: application-owned summary reports blocked nonarchived planned
+tasks; target cases and native rendering consume it.
+
+The checked 170,545-byte artifact has SHA-256
+`dbd9e2e3ec63e6291978ba0409428d75a657decc701bc9959b23ce893b8d26eb` and application digest
+`53c52e0a513c1b03b3c57f131aa372d64aea6cc04f07f0857fe24cd0fe45f985`. The prior `why` feature,
+complete work-ledger lifecycle, pure queries, durable instance journal/checkpoints, immutable blob
+grant, backup/restore, doctor, strict JSON, and foreground session remain active.
+
+## Active identities and rejected predecessors
+
+| boundary | active identity | rejected predecessor |
 |---|---|---|
-| workspace protocol / machine schema | 12 / `lkjscript-machine-schema-v12` | 11 and older |
-| semantic project / marker / change / session | 1 / `LKJPROJ1` / 1 / 1 | every other version |
-| development revision record | 1 / `LKJREC01` | every other version |
-| semantic workbench / context / edit document | 2 / 2 / 1 | context 1, `plan`, every other document version |
-| workspace semantic artifact | 8 / `LKJTSM\0\x08` / `lkjscript-tsm008` | format 7 and older |
-| workspace HEAD | `LKJHDA10` | `LKJHEAD9` and older |
-| build target | 1 | every other version/kind |
-| reusable release | contract/format 2 / `LKJREL\0\x02` | format 1 and older |
-| application / interface view | contract/format 5 / interface 1 / `LKJAPP\0\x05` | format 4 and older |
-| durable instance | contract/format 3 / `LKJINS\0\x03` | format 2 and older |
-| runtime session | 2 | every other version |
-| lkjwork machine / export | 1 / 1 | every other version |
+| raw workspace protocol / schema | 13 / `lkjscript-machine-schema-v13` | protocol 12, schema v12, and older |
+| semantic project / marker | 1 / `LKJPROJ1` | every other version |
+| project change / machine / session | 2 / 2 / 2 | version 1 |
+| semantic query / change continuation | 1 / 1 | every other version |
+| workbench / context / edit document | 2 / 2 / 2 | context/document 1 and `plan` |
+| revision record | 1 / `LKJREC01` | every other version |
+| workspace artifact / HEAD | 8 / `LKJTSM\0\x08` / `LKJHDA10` | format 7 / `LKJHEAD9` and older |
+| target / release | 1 / 2 (`LKJREL\0\x02`) | every other target kind/version; release 1 |
+| application / interface | 8 (`LKJAPP\0\x08`) / 1 | application 7 and older |
+| interactive / headless / terminal | 2 / 3 / 3 | every other current-execution version |
+| project host / workbench host / selected filesystem | 2 / 2 / 1 | every other version |
+| instance / runtime session | 3 (`LKJINS\0\x03`) / 2 | instance 2; other runtime-session versions |
 
-There are no editions, compatibility readers, aliases, silent migration, or builder fallbacks.
+There are no editions, compatibility artifact readers, dual success paths, migration modes, old
+command aliases, or builder fallbacks. Immutable historical project snapshots retain their exact
+validation route; that history reconstruction cannot produce or execute a predecessor artifact.
 
-## Language, execution, and product runtime
+## Trust, limits, and explicit absences
 
-The language implements `unit`, `bool`, checked `i64`, immutable bytes, validated UTF-8 text,
-nominal products, sums, and homogeneous ordered sequences. Text has byte equality and no Unicode
-normalization promise. Sequences support empty, length, checked access, append, and replace. One
-explicit-frame interpreter is the execution oracle; safe managed bytes/text and immutable `Arc`
-sequence elements have exact canonical retained accounting and independent differentials. No local
-unsafe Rust exists.
+The verified deployment is Linux x86-64 under one trusted local operator and OS account. Native
+code, rustix/crossterm/signal adaptation, and selected host adapters are trusted. Projects, records,
+artifacts, JSON, proposals, terminal bytes, paste, dimensions, selected roots, directory entries,
+file content/metadata, origin/reconciliation tokens, and outcomes are hostile bounded input.
 
-Stateful application format 5 separates mutations and pure queries. Declined/unchanged operations
-publish no instance revision; completed/suspended operations publish exactly one. Instance format 3
-uses a hash-linked journal, full checkpoints at genesis and every 64 revisions, and a HEAD-bound
-current manifest. Missing/corrupt acceleration falls back to full replay without query writes.
-`doctor --deep` reexecutes every transition. The representative 2,700-revision product retains
-104,745,982 total project bytes below the 256 MiB journal policy.
-
-The only built-in host interface is `immutable_blob_v1`. Applications declare requirements;
-instances bind exact grants. Visibility-capable puts record attempts first, and possible visibility
-is reconciled without automatic retry. Generic runtime one-shot and caller-owned foreground-session
-topologies share one synchronous instance owner; there is no daemon, queue, worker, scheduler,
-bytecode, JIT, or native tier.
-
-## Explicit absences and trust
-
-The verified deployment is Linux x86-64 under one trusted local operator and OS account. Native code
-and the blob adapter are trusted. Paths remain deployment facts, never semantic identity.
-
-There is no network, cloud sync, multi-user authorization, encryption, signature/provenance,
-hostile-native-code sandbox, broad filesystem grant, secret store, child-process interface,
-wall-clock semantics, database, persistent project index, build cache, automatic merge, branch,
-remote, GUI, production TUI, or cross-platform support claim. Logical resource accounting is not
-exact RSS enforcement. Provider token classes and monetary cost are unavailable and are not inferred
-from bytes.
+There is no network, cloud sync, multi-user authorization, encryption/signature/provenance,
+hostile-native-code sandbox, broad filesystem grant, secret store, child-process application
+interface, wall-clock language semantic, database, persistent project/text index, build cache,
+daemon, background worker, general async runtime, automatic merge/branch/rebase, GUI, binary editor,
+grapheme-correct editing, syntax highlighting, clipboard, mouse workflow, or cross-platform product
+claim. Provider token/cache/price telemetry is unavailable; bytes are not converted into token or
+monetary claims.

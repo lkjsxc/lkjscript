@@ -453,6 +453,22 @@ fn hash_operation(hasher: &mut blake3::Hasher, operation: &OperationKind) {
             hash_value(hasher, *index);
             hash_value(hasher, *element);
         }
+        OperationKind::SequenceSlice {
+            sequence,
+            value,
+            start,
+            end_exclusive,
+        } => {
+            hash_node(hasher, *sequence);
+            hash_value(hasher, *value);
+            hash_value(hasher, *start);
+            hash_value(hasher, *end_exclusive);
+        }
+        OperationKind::SequenceConcat { sequence, lhs, rhs } => {
+            hash_node(hasher, *sequence);
+            hash_value(hasher, *lhs);
+            hash_value(hasher, *rhs);
+        }
         OperationKind::Call {
             function,
             arguments,

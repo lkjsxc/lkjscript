@@ -48,9 +48,9 @@ fn strict_envelope_and_canonical_id_rejections() {
     assert_eq!(decode_request(&bytes).expect("decode"), request);
     let text = String::from_utf8(bytes).expect("UTF-8");
     for invalid in [
-        text.replacen("\"version\":12", "\"version\":11", 1),
+        text.replacen("\"version\":13", "\"version\":12", 1),
         text.replacen("\"request_id\":1", "\"request_id\":0", 1),
-        text.replacen("{\"version\":12", "{\"unknown\":0,\"version\":12", 1),
+        text.replacen("{\"version\":13", "{\"unknown\":0,\"version\":13", 1),
         format!("{text} {{}}"),
         text.replacen(
             &workspace.to_string(),
@@ -284,6 +284,17 @@ fn semantic_transaction_and_query_variant_samples_are_exhaustive() {
             value,
             index: value,
             element: value,
+        },
+        OperationKind::SequenceSlice {
+            sequence: node,
+            value,
+            start: value,
+            end_exclusive: value,
+        },
+        OperationKind::SequenceConcat {
+            sequence: node,
+            lhs: value,
+            rhs: value,
         },
     ];
     assert_eq!(operations.len(), OperationCode::ALL.len());
@@ -1467,6 +1478,12 @@ fn every_advertised_public_variant_matches_strict_serde() {
                 ty: TypeDraft::I64,
             }],
         },
+        TransactionOp::AddProductField {
+            symbol: DraftSymbol::generated(6),
+            product: target,
+            name: "extra".into(),
+            ty: TypeDraft::Text,
+        },
         TransactionOp::CreateSumType {
             symbol: DraftSymbol::generated(7),
             module: target,
@@ -2053,6 +2070,17 @@ fn every_advertised_public_variant_matches_strict_serde() {
             index: value.clone(),
             element: value.clone(),
         },
+        ExpressionKindDraft::SequenceSlice {
+            sequence: target,
+            value: value.clone(),
+            start: value.clone(),
+            end_exclusive: value.clone(),
+        },
+        ExpressionKindDraft::SequenceConcat {
+            sequence: target,
+            lhs: value.clone(),
+            rhs: value.clone(),
+        },
     ];
     assert_eq!(expression_samples.len(), ExpressionDraftCode::ALL.len());
     for (sample, code) in expression_samples.iter().zip(ExpressionDraftCode::ALL) {
@@ -2194,6 +2222,17 @@ fn every_advertised_public_variant_matches_strict_serde() {
             value: value.clone(),
             index: value.clone(),
             element: value.clone(),
+        },
+        OperationDraft::SequenceSlice {
+            sequence: target,
+            value: value.clone(),
+            start: value.clone(),
+            end_exclusive: value.clone(),
+        },
+        OperationDraft::SequenceConcat {
+            sequence: target,
+            lhs: value.clone(),
+            rhs: value.clone(),
         },
     ];
     assert_eq!(operation_samples.len(), OperationCode::ALL.len());
@@ -2578,6 +2617,59 @@ fn every_advertised_public_variant_matches_strict_serde() {
         suspended_command_field: target_item,
         imports: vec![target_import.clone()],
     };
+    let target_interactive_key_routes = crate::target::TargetInteractiveKeyRoutes {
+        code: target_item,
+        character_variant: target_item,
+        enter_variant: target_item,
+        backspace_variant: target_item,
+        delete_variant: target_item,
+        left_variant: target_item,
+        right_variant: target_item,
+        up_variant: target_item,
+        down_variant: target_item,
+        home_variant: target_item,
+        end_variant: target_item,
+        escape_variant: target_item,
+        event: target_item,
+        event_code_field: target_item,
+        event_control_field: target_item,
+        event_alt_field: target_item,
+        event_shift_field: target_item,
+        event_repeat_field: target_item,
+    };
+    let target_interactive_event_routes = crate::target::TargetInteractiveEventRoutes {
+        event: target_item,
+        key_variant: target_item,
+        paste_variant: target_item,
+        resize_variant: target_item,
+        close_variant: target_item,
+        size: target_item,
+        size_rows_field: target_item,
+        size_columns_field: target_item,
+        scalars: target_item,
+        key: target_interactive_key_routes.clone(),
+    };
+    let target_interactive_profile = crate::target::TargetInteractiveApplicationProfile {
+        version: crate::application::INTERACTIVE_PROFILE_VERSION,
+        initialize: target_item,
+        update: target_item,
+        render: target_item,
+        state: target_item,
+        update_result: target_item,
+        update_state_field: target_item,
+        update_changed_field: target_item,
+        update_exit_field: target_item,
+        frame: target_item,
+        frame_rows_field: target_item,
+        frame_columns_field: target_item,
+        frame_scalars_field: target_item,
+        frame_cursor_row_field: target_item,
+        frame_cursor_column_field: target_item,
+        frame_cursor_visible_field: target_item,
+        frame_status_field: target_item,
+        events: target_interactive_event_routes.clone(),
+        actions: None,
+    };
     let target_case = crate::target::TargetApplicationTestCase {
         name: "application_case".into(),
         target: target_item,
@@ -2627,6 +2719,9 @@ fn every_advertised_public_variant_matches_strict_serde() {
         "target_host_outcome_route" => target_outcome_route,
         "target_application_import" => target_import,
         "target_stateful_application_profile" => target_profile,
+        "target_interactive_key_routes" => target_interactive_key_routes,
+        "target_interactive_event_routes" => target_interactive_event_routes,
+        "target_interactive_application_profile" => target_interactive_profile,
         "target_trap" => crate::target::TargetTrap { code: crate::application::ApplicationTrapCode::RuntimeTrap, target: Some(target_item) },
         "target_application_test_case" => target_case.clone(),
         "application_target_definition" => crate::target::ApplicationTargetDefinition {
@@ -4659,7 +4754,7 @@ fn schema_is_deterministic_complete_and_unique() {
             ("release_test_expectation", 2),
             ("release_trap_code", 3),
             ("target_value", 8),
-            ("target_invocation_profile", 3),
+            ("target_invocation_profile", 4),
             ("target_test_expectation", 2),
             ("host_interface", 1),
             ("host_operation", 2),
@@ -5501,12 +5596,12 @@ fn schema_projection_byte_measurements_are_retained() {
         sizes,
         vec![
             ("manifest", None, 1_244, 1_323),
-            ("selected_agent_task_roots", Some(140), 114_888, 114_967),
-            ("full", None, 167_618, 167_697),
+            ("selected_agent_task_roots", Some(143), 121_966, 122_045),
+            ("full", None, 175_411, 175_490),
             ("unchanged", None, 105, 184),
         ]
     );
-    assert!(sizes[1].2 < 115_000);
+    assert!(sizes[1].2 < 125_000);
 }
 
 fn assert_variant_payloads<const N: usize>(

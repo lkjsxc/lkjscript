@@ -223,6 +223,17 @@ fn every_closed_machine_variant_round_trips() {
             index: value.clone(),
             element: value.clone(),
         },
+        OperationDraft::SequenceSlice {
+            sequence: existing,
+            value: value.clone(),
+            start: value.clone(),
+            end_exclusive: value.clone(),
+        },
+        OperationDraft::SequenceConcat {
+            sequence: existing,
+            lhs: value.clone(),
+            rhs: value.clone(),
+        },
     ];
     assert_eq!(drafts.len(), OperationCode::ALL.len());
     for (draft, code) in drafts.iter().zip(OperationCode::ALL) {
@@ -367,6 +378,17 @@ fn every_closed_machine_variant_round_trips() {
             index: value.clone(),
             element: value.clone(),
         },
+        ExpressionKindDraft::SequenceSlice {
+            sequence: existing,
+            value: value.clone(),
+            start: value.clone(),
+            end_exclusive: value.clone(),
+        },
+        ExpressionKindDraft::SequenceConcat {
+            sequence: existing,
+            lhs: value.clone(),
+            rhs: value.clone(),
+        },
     ];
     for (index, operation) in expression_variants.into_iter().enumerate() {
         round_trip(&ExpressionDraft {
@@ -490,6 +512,17 @@ fn every_closed_machine_variant_round_trips() {
             value: ValueRef::FunctionParameter(first),
             index: ValueRef::FunctionParameter(second),
             element: ValueRef::FunctionParameter(second),
+        },
+        OperationKind::SequenceSlice {
+            sequence: first,
+            value: ValueRef::FunctionParameter(first),
+            start: ValueRef::FunctionParameter(second),
+            end_exclusive: ValueRef::FunctionParameter(second),
+        },
+        OperationKind::SequenceConcat {
+            sequence: first,
+            lhs: ValueRef::FunctionParameter(first),
+            rhs: ValueRef::FunctionParameter(second),
         },
     ] {
         round_trip(&kind);
@@ -616,6 +649,12 @@ fn every_closed_machine_variant_round_trips() {
                 name: "value".to_owned(),
                 ty: TypeDraft::I64,
             }],
+        },
+        TransactionOp::AddProductField {
+            symbol: DraftSymbol::new("s11_extra"),
+            product: existing,
+            name: "extra".to_owned(),
+            ty: TypeDraft::Text,
         },
         TransactionOp::CreateSumType {
             symbol: DraftSymbol::new("s12"),
@@ -1340,11 +1379,11 @@ fn strict_json_rejects_malformed_shapes_values_and_limits() {
     }
     let workspace = WorkspaceId::from_bytes([0xab; 16]);
     let valid = format!(
-        "{{\"version\":12,\"request_id\":1,\"request\":{{\"kind\":\"query_batch\",\"data\":{{\"workspace\":\"{workspace}\",\"revision\":0,\"queries\":[{{\"id\":1,\"query\":{{\"kind\":\"blockers\",\"data\":{{\"page\":{{\"limit\":1}}}}}}}}]}}}}}}"
+        "{{\"version\":13,\"request_id\":1,\"request\":{{\"kind\":\"query_batch\",\"data\":{{\"workspace\":\"{workspace}\",\"revision\":0,\"queries\":[{{\"id\":1,\"query\":{{\"kind\":\"blockers\",\"data\":{{\"page\":{{\"limit\":1}}}}}}}}]}}}}}}"
     );
     assert!(decode_request(valid.as_bytes()).is_ok());
     let invalid = [
-        valid.replacen("\"version\":12", "\"version\":11", 1),
+        valid.replacen("\"version\":13", "\"version\":12", 1),
         valid.replacen("\"request_id\":1", "\"request_id\":0", 1),
         valid.replacen("\"request_id\":1", "\"request_id\":-1", 1),
         valid.replacen("\"request_id\":1", "\"request_id\":18446744073709551616", 1),

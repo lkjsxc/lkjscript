@@ -1076,7 +1076,9 @@ fn validate_nominal_operation_contract(
         | OperationKind::SequenceLen { sequence, .. }
         | OperationKind::SequenceGet { sequence, .. }
         | OperationKind::SequenceAppend { sequence, .. }
-        | OperationKind::SequenceReplace { sequence, .. } => {
+        | OperationKind::SequenceReplace { sequence, .. }
+        | OperationKind::SequenceSlice { sequence, .. }
+        | OperationKind::SequenceConcat { sequence, .. } => {
             let node = snapshot.node(*sequence)?;
             if !matches!(node, Node::SequenceType { .. }) {
                 return Err(LkError::new(
@@ -1252,7 +1254,9 @@ fn resolve_type_rule(
             | OperationKind::SequenceLen { sequence, .. }
             | OperationKind::SequenceGet { sequence, .. }
             | OperationKind::SequenceAppend { sequence, .. }
-            | OperationKind::SequenceReplace { sequence, .. } => {
+            | OperationKind::SequenceReplace { sequence, .. }
+            | OperationKind::SequenceSlice { sequence, .. }
+            | OperationKind::SequenceConcat { sequence, .. } => {
                 Some(SemanticType::Nominal(*sequence))
             }
             _ => None,
@@ -1262,7 +1266,9 @@ fn resolve_type_rule(
             | OperationKind::SequenceLen { sequence, .. }
             | OperationKind::SequenceGet { sequence, .. }
             | OperationKind::SequenceAppend { sequence, .. }
-            | OperationKind::SequenceReplace { sequence, .. } => match snapshot.node(*sequence)? {
+            | OperationKind::SequenceReplace { sequence, .. }
+            | OperationKind::SequenceSlice { sequence, .. }
+            | OperationKind::SequenceConcat { sequence, .. } => match snapshot.node(*sequence)? {
                 Node::SequenceType { element, .. } => Some(*element),
                 _ => None,
             },

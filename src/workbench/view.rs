@@ -488,6 +488,24 @@ fn render_operation(
             value(*index),
             value(*element)
         ),
+        OperationKind::SequenceSlice {
+            sequence,
+            value: operand,
+            start,
+            end_exclusive,
+        } => format!(
+            "sequence_slice({}, {}, {}, {})",
+            node(*sequence),
+            value(*operand),
+            value(*start),
+            value(*end_exclusive)
+        ),
+        OperationKind::SequenceConcat { sequence, lhs, rhs } => format!(
+            "sequence_concat({}, {}, {})",
+            node(*sequence),
+            value(*lhs),
+            value(*rhs)
+        ),
         OperationKind::Call {
             function,
             arguments,

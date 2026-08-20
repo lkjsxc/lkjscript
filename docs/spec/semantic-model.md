@@ -106,7 +106,7 @@ never infer continuity.
 
 ## Change proposals and transactions
 
-Project change contract 1 binds:
+Project change contract 2 binds:
 
 - exact workspace and base revision;
 - `validate_only` or `commit` selected by the command;
@@ -116,8 +116,10 @@ Project change contract 1 binds:
 
 Creation operations use proposal-local symbols and are dependency resolved independently of request
 order. Function bodies may be created/replaced wholesale, refined by hole, or changed through typed
-local operations. Build-target definitions and focused export/query/case edits are typed operations,
-not opaque text. A bundle can update multiple functions and targets atomically. When a new target
+local operations. `AddProductField` extends one exact existing product with one allocated durable
+field while preserving the product identity; every constructor/use and target case must be rewritten
+in the same valid candidate or the change rejects. Build-target definitions and focused
+export/query/case edits are typed operations, not opaque text. A bundle can update multiple functions and targets atomically. When a new target
 needs durable IDs allocated by an earlier declaration proposal, the supported reviewable workflow is
 an untargeted valid declaration revision followed by the target revision; there is no incomplete
 distribution or hidden draft authority.
@@ -135,7 +137,7 @@ base/result revision, snapshot and change digests, publication truth, durable cr
 requested bindings, completeness, semantic diff, target impact, and the published revision record.
 Function-local churn is summarized as a body change; durable entities are listed exactly.
 
-Idempotency fingerprints canonical protocol-v12 transaction bytes, including response projection.
+Idempotency fingerprints canonical protocol-v13 transaction bytes, including response projection.
 An exact retained replay returns the same receipt after restart without another revision; changed
 reuse rejects. Validate-only cannot carry a key. An output failure after publication does not undo
 authority; status/log/idempotency recover the accepted result.
@@ -149,7 +151,7 @@ acyclic.
 A release target owns one exact package root, coordinate/user-version fields with current artifact
 consumers, exports, exact release-target dependencies, imports, immutable invocation cases, and
 policies. An application target owns an exact root release target, entry, typed/byte-stream/stateful
-profile, all nominal interface mappings, host requirements (never grants), resource policy, and
+or interactive profile, all nominal interface mappings, host requirements (never grants), resource policy, and
 immutable cases. A product target selects one exact application target for native distribution.
 
 Every accepted snapshot prepares every target through the same release/application validators and
@@ -217,7 +219,7 @@ and binds it to the record's result digest. Deep doctor additionally decodes eve
 every adjacent allocation/tombstone/identity transition, and recomputes every record's semantic diff
 and entity/target facts. Missing, truncated, oversized, trailing, noncanonical, wrong-schema,
 checksum-mismatched, foreign, or conflicting selected state rejects. Format 7 / `LKJTSM\0\x07` /
-`lkjscript-tsm007`, `LKJHEAD9`, protocol 11, and all older direct predecessors reject; no migration
+`lkjscript-tsm007`, `LKJHEAD9`, protocol 12, and all older direct predecessors reject; no migration
 reader remains.
 
 Full snapshots are selected over a change journal, content-addressed object graph, Merkle sharing,
@@ -229,8 +231,8 @@ hostile decoding, crash consistency, tombstones, history, portable backup, and a
 
 ## Other authority domains
 
-Release format 2 owns reusable immutable closure. Application format 5 owns one runnable release
-graph, public types/entries/cases, stateful query/mutation mappings, resource policy, and host
+Release format 2 owns reusable immutable closure. Application format 8 owns one runnable release
+graph, public types/entries/cases, stateful and interactive role mappings, resource policy, and host
 requirements but no grant. Instance format 3 owns exact application-bound mutable continuity,
 grants, state revisions, journal/checkpoints, commands/attempts/outcomes, and pure-query receipts.
 Deployment owns paths, processes, users, and resources. Core IR, ownership plans, indexes, caches,

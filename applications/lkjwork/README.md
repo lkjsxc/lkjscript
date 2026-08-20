@@ -49,7 +49,9 @@ The application owns these lifecycle rules:
 
 Readiness is derived. No client-side ready flag exists. Dependency insertion rejects missing
 endpoints, self-edges, duplicates, and cycles through bounded iterative application semantics.
-Actionable order is higher priority first, then lower task ID.
+Actionable order is higher priority first, then lower task ID. `summary` reports `blocked` as the
+number of nonarchived planned tasks that are not ready because of a manual hold or unfinished
+prerequisite.
 
 Expected conflicts and semantic no-change are typed application results. They publish no revision.
 Successful state changes publish one revision. Attachment requests publish a pending state before
@@ -161,9 +163,9 @@ authority and no import contract exists.
 
 `applications/lkjwork/.lkjscript` is the maintained development authority. Its typed graph owns the
 complete program, release/application/product targets, and immutable cases. Its automatic history
-records the migration and the three-revision `why` dogfood change. `build.py` and generated bindings
-are absent; the native client discovers exact artifact-owned interface identities through validated
-self-description.
+records the migration, the three-revision `why` dogfood change, and the revision-8/9 `blocked`
+summary dogfood change. `build.py` and generated bindings are absent; the native client discovers
+exact artifact-owned interface identities through validated self-description.
 
 The installed executable embeds `lkjwork.lkja` and validates it at startup. Reproduce that checked
 distribution artifact through the public project target only:

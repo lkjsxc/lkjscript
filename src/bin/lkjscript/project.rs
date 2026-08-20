@@ -10,14 +10,15 @@ use lkjscript::ids::Revision;
 use lkjscript::machine::MAX_JSON_OUTPUT_BYTES;
 use lkjscript::project::{
     MAXIMUM_PROJECT_CHANGE_BYTES, Project, ProjectBackupReceipt, ProjectChangeReceipt,
-    ProjectChangeRequest, ProjectContextResult, ProjectDiffPage, ProjectInitReceipt,
-    ProjectNodeInspection, ProjectOrientationResult, ProjectStatus, ProjectTargetReceipt,
-    TargetInspection, decode_change,
+    ProjectChangeRequest, ProjectContextResult, ProjectDiffPage, ProjectFunctionProposal,
+    ProjectInitReceipt, ProjectNodeInspection, ProjectOrientationResult, ProjectStatus,
+    ProjectTargetReceipt, TargetInspection, decode_change,
 };
 use lkjscript::target::TargetSummary;
 use lkjscript::transaction::TransactionMode;
 use lkjscript::workbench::{
-    ContextPacket, ContextPacketDigest, ContextPurpose, decode_context_packet, parse_edit_document,
+    ContextPacket, ContextPacketDigest, ContextPurpose, SemanticProjection, SemanticQueryResult,
+    decode_context_packet, parse_edit_document,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -25,8 +26,8 @@ use std::io::Read;
 use std::io::{BufRead, Write};
 use std::path::{Component, Path, PathBuf};
 
-const PROJECT_MACHINE_VERSION: u16 = 1;
-const PROJECT_SESSION_VERSION: u16 = 1;
+const PROJECT_MACHINE_VERSION: u16 = 2;
+const PROJECT_SESSION_VERSION: u16 = 2;
 const MAXIMUM_PROJECT_SESSION_REQUESTS: usize = 65_536;
 
 pub(super) enum ProjectCommand {
@@ -48,6 +49,22 @@ pub(super) enum ProjectCommand {
         selector: String,
         revision: Option<Revision>,
         expand: bool,
+        pretty: bool,
+    },
+    Query {
+        project: Option<PathBuf>,
+        projection: SemanticProjection,
+        roots: Vec<String>,
+        revision: Option<Revision>,
+        limit: u32,
+        continuation: Option<String>,
+        known_digest: Option<String>,
+        pretty: bool,
+    },
+    Proposal {
+        project: Option<PathBuf>,
+        selector: String,
+        revision: Option<Revision>,
         pretty: bool,
     },
     Context {
@@ -160,8 +177,10 @@ enum ProjectResult {
     Orientation(ProjectOrientationResult),
     Status(ProjectStatus),
     Inspection(ProjectNodeInspection),
+    Query(SemanticQueryResult),
+    Proposal(ProjectFunctionProposal),
     Context(ProjectContextResult),
-    Change(ProjectChangeReceipt),
+    Change(Box<ProjectChangeReceipt>),
     History(HistoryPage),
     Revision(RevisionRecordInspection),
     Diff(ProjectDiffPage),
@@ -201,6 +220,24 @@ enum ProjectSessionRequest {
         revision: Option<Revision>,
         #[serde(default)]
         summary: bool,
+    },
+    Query {
+        projection: SemanticProjection,
+        #[serde(default)]
+        roots: Vec<String>,
+        #[serde(default)]
+        revision: Option<Revision>,
+        #[serde(default = "default_query_limit")]
+        limit: u32,
+        #[serde(default)]
+        continuation: Option<String>,
+        #[serde(default)]
+        known_digest: Option<String>,
+    },
+    Proposal {
+        selector: String,
+        #[serde(default)]
+        revision: Option<Revision>,
     },
     Context {
         purpose: ContextPurpose,
@@ -307,6 +344,8 @@ pub(super) fn is_project_command(command: &str) -> bool {
             | "orient"
             | "status"
             | "inspect"
+            | "query"
+            | "proposal"
             | "context"
             | "change"
             | "log"
@@ -330,6 +369,8 @@ pub(super) fn parse(
         "orient" => parse_orient(&arguments),
         "status" => parse_status(&arguments),
         "inspect" => parse_inspect(&arguments),
+        "query" => parse_query(&arguments),
+        "proposal" => parse_proposal(&arguments),
         "context" => parse_context(&arguments),
         "change" => parse_change(&arguments),
         "log" => parse_log(&arguments),
@@ -482,6 +523,37 @@ fn run_inner(command: ProjectCommand) -> Result<(ProjectResult, bool), (LkError,
                 .inspect(&selector, revision, expand)
                 .map(ProjectResult::Inspection)
         }),
+        ProjectCommand::Query {
+            project,
+            projection,
+            roots,
+            revision,
+            limit,
+            continuation,
+            known_digest,
+            pretty,
+        } => with_project(project.as_deref(), pretty, |project| {
+            project
+                .semantic_query(
+                    projection,
+                    &roots,
+                    revision,
+                    limit,
+                    continuation,
+                    known_digest.as_deref(),
+                )
+                .map(ProjectResult::Query)
+        }),
+        ProjectCommand::Proposal {
+            project,
+            selector,
+            revision,
+            pretty,
+        } => with_project(project.as_deref(), pretty, |project| {
+            project
+                .function_proposal(&selector, revision)
+                .map(ProjectResult::Proposal)
+        }),
         ProjectCommand::Context {
             project,
             purpose,
@@ -536,7 +608,7 @@ fn run_inner(command: ProjectCommand) -> Result<(ProjectResult, bool), (LkError,
             with_project_mut(project.as_deref(), pretty, |project| {
                 project
                     .apply_change(&request, mode)
-                    .map(ProjectResult::Change)
+                    .map(|receipt| ProjectResult::Change(Box::new(receipt)))
             })
         }
         ProjectCommand::Log {
@@ -677,6 +749,35 @@ impl ProjectSession {
                     .inspect(&selector, revision, !summary)
                     .map(ProjectResult::Inspection)
             }
+            ProjectSessionRequest::Query {
+                projection,
+                roots,
+                revision,
+                limit,
+                continuation,
+                known_digest,
+            } => {
+                let roots = roots
+                    .iter()
+                    .map(|selector| self.selector(selector, revision))
+                    .collect::<lkjscript::Result<Vec<_>>>()?;
+                self.project
+                    .semantic_query(
+                        projection,
+                        &roots,
+                        revision,
+                        limit,
+                        continuation,
+                        known_digest.as_deref(),
+                    )
+                    .map(ProjectResult::Query)
+            }
+            ProjectSessionRequest::Proposal { selector, revision } => {
+                let selector = self.selector(&selector, revision)?;
+                self.project
+                    .function_proposal(&selector, revision)
+                    .map(ProjectResult::Proposal)
+            }
             ProjectSessionRequest::Context {
                 purpose,
                 targets,
@@ -705,25 +806,25 @@ impl ProjectSession {
             ProjectSessionRequest::ChangeValidate(request) => self
                 .project
                 .apply_change(&request, TransactionMode::ValidateOnly)
-                .map(ProjectResult::Change),
+                .map(|receipt| ProjectResult::Change(Box::new(receipt))),
             ProjectSessionRequest::ChangeApply(request) => {
                 let receipt = self
                     .project
                     .apply_change(&request, TransactionMode::Commit)?;
-                Ok(ProjectResult::Change(receipt))
+                Ok(ProjectResult::Change(Box::new(receipt)))
             }
             ProjectSessionRequest::DocumentValidate { document } => {
                 let request = self.document_request(&document, TransactionMode::ValidateOnly)?;
                 self.project
                     .apply_change(&request, TransactionMode::ValidateOnly)
-                    .map(ProjectResult::Change)
+                    .map(|receipt| ProjectResult::Change(Box::new(receipt)))
             }
             ProjectSessionRequest::DocumentApply { document } => {
                 let request = self.document_request(&document, TransactionMode::Commit)?;
                 let receipt = self
                     .project
                     .apply_change(&request, TransactionMode::Commit)?;
-                Ok(ProjectResult::Change(receipt))
+                Ok(ProjectResult::Change(Box::new(receipt)))
             }
             ProjectSessionRequest::Log { before, limit } => self
                 .project
@@ -977,6 +1078,51 @@ fn parse_inspect(arguments: &[String]) -> Result<ProjectCommand, String> {
         selector: selector.to_owned(),
         revision,
         expand,
+        pretty,
+    })
+}
+
+fn parse_query(arguments: &[String]) -> Result<ProjectCommand, String> {
+    let (projection, rest) = positional(arguments, "query requires one projection")?;
+    let projection = projection
+        .parse::<SemanticProjection>()
+        .map_err(project_usage)?;
+    let mut options = Options::new(rest);
+    let project = options.project()?;
+    let roots = options.values("--root")?;
+    let revision = options.revision("--at")?;
+    let limit = options.u32("--limit")?.unwrap_or_else(default_query_limit);
+    let continuation = options.value("--continuation")?.map(str::to_owned);
+    let known_digest = options.value("--known-digest")?.map(str::to_owned);
+    let pretty = options.pretty()?;
+    options.finish()?;
+    Ok(ProjectCommand::Query {
+        project,
+        projection,
+        roots,
+        revision,
+        limit,
+        continuation,
+        known_digest,
+        pretty,
+    })
+}
+
+const fn default_query_limit() -> u32 {
+    64
+}
+
+fn parse_proposal(arguments: &[String]) -> Result<ProjectCommand, String> {
+    let (selector, rest) = positional(arguments, "proposal requires one function selector")?;
+    let mut options = Options::new(rest);
+    let project = options.project()?;
+    let revision = options.revision("--at")?;
+    let pretty = options.pretty()?;
+    options.finish()?;
+    Ok(ProjectCommand::Proposal {
+        project,
+        selector: selector.to_owned(),
+        revision,
         pretty,
     })
 }
@@ -1615,7 +1761,7 @@ fn canonical_output_path(path: &Path) -> Result<PathBuf, LkError> {
 
 fn project_usage(reason: &str) -> String {
     format!(
-        "{reason}; usage: lkjscript init [PROJECT] | orient|status [--project PROJECT] | inspect SELECTOR [--at N] | context --purpose PURPOSE [--target SELECTOR ...] [--known-digest DIGEST] | change validate|apply [--document [--context FILE]] | log [--before N] [--limit N] | show REVISION | diff --from N --to N | restore REVISION [--validate] | target list|show|build|test|run ... | doctor [--deep] | backup DESTINATION; all project commands accept --pretty"
+        "{reason}; usage: lkjscript init [PROJECT] | orient|status [--project PROJECT] | inspect SELECTOR [--at N] | query PROJECTION [--root SELECTOR ...] [--at N] [--limit N] [--continuation TOKEN] [--known-digest DIGEST] | proposal FUNCTION [--at N] | context --purpose PURPOSE [--target SELECTOR ...] [--known-digest DIGEST] | change validate|apply [--document [--context FILE]] | log [--before N] [--limit N] | show REVISION | diff --from N --to N | restore REVISION [--validate] | target list|show|build|test|run ... | doctor [--deep] | backup DESTINATION; all project commands accept --pretty"
     )
 }
 

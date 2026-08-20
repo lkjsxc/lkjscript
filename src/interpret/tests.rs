@@ -413,6 +413,72 @@ fn managed_sequence_objects_match_the_canonical_allocate_new_oracle() {
 }
 
 #[test]
+fn sequence_slice_and_concat_match_flat_allocate_new_results() {
+    let origin = node(402);
+    let mut managed = InvocationStore::default();
+    let source = managed
+        .allocate_sequence(
+            vec![
+                RuntimeValue::I64(1),
+                RuntimeValue::I64(2),
+                RuntimeValue::I64(3),
+            ],
+            origin,
+        )
+        .expect("source sequence");
+    let (slice, slice_length) = managed
+        .slice_sequence(source, 1, 3, origin)
+        .expect("bounded slice");
+    assert_eq!(slice_length, 2);
+    assert_eq!(
+        managed.materialize_sequence(slice, origin).unwrap(),
+        vec![RuntimeValue::I64(2), RuntimeValue::I64(3)]
+    );
+
+    let suffix = managed
+        .allocate_sequence(vec![RuntimeValue::I64(4)], origin)
+        .expect("suffix sequence");
+    let (combined, combined_length) = managed
+        .concat_sequence(slice, suffix, origin)
+        .expect("bounded concatenation");
+    assert_eq!(combined_length, 3);
+    assert_eq!(
+        managed.materialize_sequence(combined, origin).unwrap(),
+        vec![
+            RuntimeValue::I64(2),
+            RuntimeValue::I64(3),
+            RuntimeValue::I64(4)
+        ]
+    );
+    assert_eq!(
+        managed
+            .slice_sequence(source, 2, 4, origin)
+            .expect_err("one-over slice")
+            .code,
+        ErrorCode::RuntimeTrap
+    );
+}
+
+#[test]
+fn sequence_concat_rejects_one_over_the_element_limit_before_allocation() {
+    let origin = node(403);
+    let mut managed = InvocationStore::default();
+    let maximum = managed
+        .allocate_sequence(vec![RuntimeValue::Unit; MAXIMUM_SEQUENCE_ELEMENTS], origin)
+        .expect("maximum sequence");
+    let one = managed
+        .allocate_sequence(vec![RuntimeValue::Unit], origin)
+        .expect("one-element sequence");
+    assert_eq!(
+        managed
+            .concat_sequence(maximum, one, origin)
+            .expect_err("one-over concatenation")
+            .code,
+        ErrorCode::PolicyExceeded
+    );
+}
+
+#[test]
 fn byte_operations_have_exact_content_bounds_and_logical_fuel() {
     assert_eq!(
         run_core_value(&byte_length_program(b""), policy(4)).unwrap(),

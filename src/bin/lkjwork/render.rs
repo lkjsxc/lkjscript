@@ -34,6 +34,7 @@ pub fn query_result(bindings: &Bindings, value: &ApplicationValue) -> Result<Val
                 "cancelled": expect_i64(required(&fields, "cancelled")?)?,
                 "actionable": expect_i64(required(&fields, "actionable")?)?,
                 "archived": expect_i64(required(&fields, "archived")?)?,
+                "blocked": expect_i64(required(&fields, "blocked")?)?,
             }))
         }
         "not_found" => {
@@ -196,12 +197,13 @@ pub fn human_query(result: &Value, revision: u64) -> String {
             format!("Task #{task} was not found (revision {revision}).")
         }
         Some("summary") => format!(
-            "planned {} | active {} | done {} | cancelled {} | actionable {} | archived {}\nrevision {}",
+            "planned {} | active {} | done {} | cancelled {} | actionable {} | blocked {} | archived {}\nrevision {}",
             number(result, "planned"),
             number(result, "active"),
             number(result, "done"),
             number(result, "cancelled"),
             number(result, "actionable"),
+            number(result, "blocked"),
             number(result, "archived"),
             revision,
         ),

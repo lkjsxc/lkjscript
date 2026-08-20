@@ -1014,6 +1014,22 @@ pub(super) fn remap_node_with(
                 index: value(index, remap)?,
                 element: value(element, remap)?,
             },
+            OperationKind::SequenceSlice {
+                sequence,
+                value: input,
+                start,
+                end_exclusive,
+            } => OperationKind::SequenceSlice {
+                sequence: remap(sequence)?,
+                value: value(input, remap)?,
+                start: value(start, remap)?,
+                end_exclusive: value(end_exclusive, remap)?,
+            },
+            OperationKind::SequenceConcat { sequence, lhs, rhs } => OperationKind::SequenceConcat {
+                sequence: remap(sequence)?,
+                lhs: value(lhs, remap)?,
+                rhs: value(rhs, remap)?,
+            },
             OperationKind::Call {
                 function,
                 arguments,

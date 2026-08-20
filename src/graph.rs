@@ -447,7 +447,11 @@ fn identity_shape_is_stable(
             },
         ) => old.kind() == new.kind(),
         (Node::ProductType { fields: old, .. }, Node::ProductType { fields: new, .. }) => {
-            old == new
+            // A product may evolve only by atomically appending newly allocated fields. Existing
+            // field identity, order, type, and ownership remain stable, and complete candidate
+            // validation requires every construction to supply the expanded contract. Removal,
+            // reordering, replacement, and type changes remain incompatible with continuity.
+            new.starts_with(old)
         }
         (Node::SumType { variants: old, .. }, Node::SumType { variants: new, .. }) => old == new,
         (Node::SequenceType { element: old, .. }, Node::SequenceType { element: new, .. }) => {
@@ -542,6 +546,8 @@ fn operation_identity_shape_is_stable(
                     | crate::schema::OperationKind::SequenceGet { .. }
                     | crate::schema::OperationKind::SequenceAppend { .. }
                     | crate::schema::OperationKind::SequenceReplace { .. }
+                    | crate::schema::OperationKind::SequenceSlice { .. }
+                    | crate::schema::OperationKind::SequenceConcat { .. }
             ),
             _ => true,
         }
@@ -600,7 +606,9 @@ pub(crate) fn operation_result_type(
         crate::schema::OperationKind::MatchSum { result, .. } => Some(*result),
         crate::schema::OperationKind::SequenceEmpty { sequence }
         | crate::schema::OperationKind::SequenceAppend { sequence, .. }
-        | crate::schema::OperationKind::SequenceReplace { sequence, .. } => matches!(
+        | crate::schema::OperationKind::SequenceReplace { sequence, .. }
+        | crate::schema::OperationKind::SequenceSlice { sequence, .. }
+        | crate::schema::OperationKind::SequenceConcat { sequence, .. } => matches!(
             snapshot.nodes.get(sequence),
             Some(Node::SequenceType { .. })
         )

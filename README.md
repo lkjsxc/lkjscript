@@ -5,9 +5,10 @@ one validated typed meaning graph, immutable development revisions, canonical re
 first-class build targets. The public CLI is the normal authoring, history, inspection, build, test,
 run, backup, and recovery interface. No source generator or separate semantic commit step is needed.
 
-The repository also ships `lkjwork`, a complete local durable work ledger whose application meaning
-and build definitions live in a checked semantic project. The verified bootstrap target is stable
-Rust 2024 on Linux x86-64. There is no network service, daemon, database, package registry, unsafe
+The repository also ships `lkjwork`, a complete local durable work ledger, and `lkjstudio`, a
+terminal semantic workbench and selected UTF-8 file editor. Both applications and their build
+definitions live in checked semantic projects. The verified bootstrap target is stable Rust 2024 on
+Linux x86-64. There is no network service, daemon, database, package registry, unsafe first-party
 Rust, or compatibility layer.
 
 ## Develop a semantic project
@@ -19,6 +20,7 @@ target/release/lkjscript init ./my-project
 cd my-project
 ../target/release/lkjscript orient
 ../target/release/lkjscript status
+../target/release/lkjscript query targets
 ../target/release/lkjscript context --purpose create
 ../target/release/lkjscript change validate < change.json
 ../target/release/lkjscript change apply < change.json
@@ -26,7 +28,8 @@ cd my-project
 ../target/release/lkjscript diff --from 0 --to 1
 ```
 
-Every accepted `change apply` publishes exactly one immutable revision and revision record.
+Every accepted `change apply` publishes exactly one immutable revision and revision record and
+returns a bounded exact continuation for the next query or affected-target action.
 Validation, rejection, stale input, and semantic no-change publish nothing. Changes bind an exact
 workspace and base revision; selectors are revision-bound and ambiguous names reject. An editable
 semantic document can be submitted with `change validate|apply --document`, optionally using aliases
@@ -35,7 +38,7 @@ from one exact context capsule. The document is a proposal, never a second sourc
 Useful project commands include:
 
 ```sh
-lkjscript orient|status|inspect|context
+lkjscript orient|status|inspect|query|proposal|context
 lkjscript change validate|apply
 lkjscript log|show|diff|restore
 lkjscript target list|show|build|test|run
@@ -88,6 +91,41 @@ and deployment lifecycle; it does not reconstruct task policy or carry generated
 See [`applications/lkjwork/README.md`](applications/lkjwork/README.md) for its complete product
 contract.
 
+## Build and use lkjstudio
+
+Reproduce the workbench application from its maintained semantic authority:
+
+```sh
+target/release/lkjscript doctor --project applications/lkjstudio --deep
+target/release/lkjscript target test lkjstudio --project applications/lkjstudio
+target/release/lkjscript target build lkjstudio \
+  --project applications/lkjstudio --output /tmp/lkjstudio.lkja
+cmp /tmp/lkjstudio.lkja applications/lkjstudio/lkjstudio.lkja
+```
+
+Run against an explicitly selected semantic project and optional filesystem root:
+
+```sh
+target/release/lkjstudio \
+  --artifact applications/lkjstudio/lkjstudio.lkja \
+  --project applications/lkjstudio \
+  --root .
+```
+
+Unmodified keys edit the active semantic buffer. Ctrl-A/N/W/Z/Y/Q are editor select-all, new,
+close, undo, redo, and quit. Alt keys select workbench actions: Alt-O orientation, Alt-E children,
+Alt-I function, Alt-U/D callers/callees, Alt-T targets, Alt-B blockers, Alt-P proposal, Alt-V
+validate, Alt-X apply, Alt-W diff, Alt-H/N history/record, Alt-K/L/Z target test/build/run, and
+Alt-J/F/S/R filesystem list/open/save/reconcile.
+
+The meaning graph remains central: explorer and proposal actions call the same exact project owner
+as the CLI, validation publishes nothing, apply publishes once, stale drafts remain visible, and
+target actions derive from the selected revision. Application meaning owns editor state, commands,
+action intent, outcome handling, and frame content. Native code owns terminal mechanics and narrow
+project/filesystem adaptation. See
+[`applications/lkjstudio/README.md`](applications/lkjstudio/README.md) for indexing, recovery,
+authority, limits, headless replay, and acceptance details.
+
 ## Authority model
 
 The domains are deliberately separate:
@@ -95,8 +133,8 @@ The domains are deliberately separate:
 - a semantic project owns development identity, accepted graph meaning, targets, and immutable
   automatic history;
 - a release owns one reusable workspace-independent semantic closure;
-- an application owns one exact runnable release graph, typed interfaces, cases, and host
-  requirements;
+- an application owns one exact runnable release graph, typed or interactive role mappings, cases,
+  and host requirements;
 - an instance owns durable product-state continuity, mutation/query history, grants, commands,
   attempts, and outcomes; and
 - deployment owns paths, processes, local accounts, output locations, and resource placement.
@@ -109,8 +147,9 @@ authority and do not contain development paths or workspace identity.
 
 The language includes validated UTF-8 text, immutable nominal sequences, products, sums, checked
 integers, booleans, bytes, direct calls, and structured control. One explicit-frame interpreter and
-independently checked Core IR remain the correctness route. The sole built-in host interface is a
-bounded immutable blob namespace with explicit grants and unknown-visibility reconciliation.
+independently checked Core IR remain the correctness route. Durable applications have a bounded
+immutable-blob interface. The foreground workbench additionally uses explicit semantic-project and
+selected-filesystem grants with separate publication and unknown-visibility reconciliation.
 
 Current format identities, rejected predecessors, implemented limits, and exact absences are in
 [`docs/status.md`](docs/status.md). Normative contracts live under [`docs/spec/`](docs/spec/).
@@ -121,6 +160,9 @@ Current format identities, rejected predecessors, implemented limits, and exact 
 python3 applications/lkjwork/acceptance.py --binary target/release/lkjwork
 python3 applications/lkjwork/workload.py target/release/lkjwork --profile functional
 python3 applications/lkjwork/workload.py target/release/lkjwork --profile representative
+python3 applications/lkjstudio/acceptance.py --binary target/release/lkjstudio
+python3 applications/lkjstudio/workload.py --binary target/release/lkjstudio \
+  --project-cli target/release/lkjscript --samples 5
 ```
 
 The representative retained corpus has 500 tasks, 2,500 core mutation requests, 1,000 dependency

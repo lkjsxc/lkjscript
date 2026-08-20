@@ -1100,6 +1100,84 @@ impl InvocationStore {
         Ok((handle, length))
     }
 
+    fn slice_sequence(
+        &mut self,
+        handle: ByteHandle,
+        start: usize,
+        end_exclusive: usize,
+        origin: NodeId,
+    ) -> Result<(ByteHandle, usize)> {
+        let source = self.sequence_object(handle, origin)?;
+        if start > end_exclusive || end_exclusive > source.elements.len() {
+            return Err(
+                LkError::new(ErrorCode::RuntimeTrap, "sequence slice is out of bounds")
+                    .for_node(origin),
+            );
+        }
+        let elements = source.elements[start..end_exclusive].to_vec();
+        let element_bytes = source.element_bytes[start..end_exclusive].to_vec();
+        let visible_bytes = elements.iter().try_fold(0_usize, |total, element| {
+            total
+                .checked_add(runtime_byte_value_bytes(element)?)
+                .ok_or_else(|| value_policy(origin, "sequence visible-byte accounting overflowed"))
+        })?;
+        let retained_bytes = sequence_retained_bytes(&element_bytes, origin)?;
+        let handle = self.allocate_sequence_parts(
+            elements,
+            element_bytes,
+            retained_bytes,
+            visible_bytes,
+            origin,
+        )?;
+        Ok((handle, end_exclusive - start))
+    }
+
+    fn concat_sequence(
+        &mut self,
+        lhs: ByteHandle,
+        rhs: ByteHandle,
+        origin: NodeId,
+    ) -> Result<(ByteHandle, usize)> {
+        let lhs = self.sequence_object(lhs, origin)?;
+        let rhs = self.sequence_object(rhs, origin)?;
+        let length = lhs
+            .elements
+            .len()
+            .checked_add(rhs.elements.len())
+            .ok_or_else(|| value_policy(origin, "sequence concatenation length overflows"))?;
+        if length > MAXIMUM_SEQUENCE_ELEMENTS {
+            return Err(value_policy(
+                origin,
+                "sequence concatenation exceeds element-count policy",
+            ));
+        }
+        let mut elements = Vec::new();
+        elements
+            .try_reserve_exact(length)
+            .map_err(|_| managed_allocation_error(origin))?;
+        elements.extend(lhs.elements.iter().cloned());
+        elements.extend(rhs.elements.iter().cloned());
+        let mut element_bytes = Vec::new();
+        element_bytes
+            .try_reserve_exact(length)
+            .map_err(|_| managed_allocation_error(origin))?;
+        element_bytes.extend_from_slice(&lhs.element_bytes);
+        element_bytes.extend_from_slice(&rhs.element_bytes);
+        let visible_bytes = lhs
+            .visible_bytes
+            .checked_add(rhs.visible_bytes)
+            .ok_or_else(|| value_policy(origin, "sequence visible-byte accounting overflowed"))?;
+        let retained_bytes = sequence_retained_bytes(&element_bytes, origin)?;
+        let handle = self.allocate_sequence_parts(
+            elements,
+            element_bytes,
+            retained_bytes,
+            visible_bytes,
+            origin,
+        )?;
+        Ok((handle, length))
+    }
+
     fn share(&mut self, handle: ByteHandle, origin: NodeId) -> Result<()> {
         let next_owners = self
             .sequences
@@ -2482,6 +2560,104 @@ fn interpret_with_store(
                             &mut fuel,
                             u64::try_from(result_len)
                                 .map_err(|_| invalid_ir("sequence replace fuel overflows"))?,
+                            *origin,
+                        )?;
+                        write_managed_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            *ty,
+                            handle,
+                        )?;
+                    }
+                    Instruction::SequenceSlice {
+                        origin,
+                        result,
+                        ty,
+                        value,
+                        start,
+                        end_exclusive,
+                    } => {
+                        let handle = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *value,
+                            *ty,
+                            *origin,
+                        )?;
+                        let start = usize::try_from(require_i64(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *start,
+                        )?)
+                        .map_err(|_| {
+                            LkError::new(
+                                ErrorCode::RuntimeTrap,
+                                "sequence slice start must be nonnegative",
+                            )
+                            .for_node(*origin)
+                        })?;
+                        let end_exclusive = usize::try_from(require_i64(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *end_exclusive,
+                        )?)
+                        .map_err(|_| {
+                            LkError::new(
+                                ErrorCode::RuntimeTrap,
+                                "sequence slice end must be nonnegative",
+                            )
+                            .for_node(*origin)
+                        })?;
+                        let (handle, result_len) =
+                            managed.slice_sequence(handle, start, end_exclusive, *origin)?;
+                        consume_fuel(
+                            &mut fuel,
+                            u64::try_from(result_len)
+                                .map_err(|_| invalid_ir("sequence slice fuel overflows"))?,
+                            *origin,
+                        )?;
+                        write_managed_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            *ty,
+                            handle,
+                        )?;
+                    }
+                    Instruction::SequenceConcat {
+                        origin,
+                        result,
+                        ty,
+                        lhs,
+                        rhs,
+                    } => {
+                        let lhs = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *lhs,
+                            *ty,
+                            *origin,
+                        )?;
+                        let rhs = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *rhs,
+                            *ty,
+                            *origin,
+                        )?;
+                        let (handle, result_len) = managed.concat_sequence(lhs, rhs, *origin)?;
+                        consume_fuel(
+                            &mut fuel,
+                            u64::try_from(result_len)
+                                .map_err(|_| invalid_ir("sequence concat fuel overflows"))?,
                             *origin,
                         )?;
                         write_managed_direct(

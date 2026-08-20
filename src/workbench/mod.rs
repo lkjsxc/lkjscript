@@ -6,6 +6,7 @@
 mod context;
 mod document;
 mod help;
+mod query_plan;
 mod view;
 
 pub use context::{
@@ -18,6 +19,13 @@ pub use document::{
     ParsedRunDocument, parse_edit_document, parse_run_document, render_function_document,
 };
 pub use help::authoring_help_cards;
+pub use query_plan::{
+    CallFact, MAXIMUM_SEMANTIC_QUERY_CONTINUATION_BYTES, MAXIMUM_SEMANTIC_QUERY_PAGE_ITEMS,
+    MAXIMUM_SEMANTIC_QUERY_RESPONSE_BYTES, MAXIMUM_SEMANTIC_QUERY_ROOTS,
+    MAXIMUM_SEMANTIC_QUERY_WORK_ITEMS, SEMANTIC_QUERY_CONTRACT_VERSION, SemanticProjection,
+    SemanticQueryItem, SemanticQueryOmissions, SemanticQueryPage, SemanticQueryPlanFacts,
+    SemanticQueryRequest, SemanticQueryResult, build_semantic_query,
+};
 pub use view::{render_context_packet, render_semantic_diff};
 
 pub const WORKBENCH_VERSION: u16 = 2;

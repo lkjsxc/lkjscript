@@ -567,6 +567,22 @@ pub(crate) fn put_operation(writer: &mut Writer, operation: &OperationKind) -> R
             put_value(writer, *index);
             put_value(writer, *element);
         }
+        OperationKind::SequenceSlice {
+            sequence,
+            value,
+            start,
+            end_exclusive,
+        } => {
+            put_node_id(writer, *sequence);
+            put_value(writer, *value);
+            put_value(writer, *start);
+            put_value(writer, *end_exclusive);
+        }
+        OperationKind::SequenceConcat { sequence, lhs, rhs } => {
+            put_node_id(writer, *sequence);
+            put_value(writer, *lhs);
+            put_value(writer, *rhs);
+        }
         OperationKind::Call {
             function,
             arguments,
@@ -760,6 +776,17 @@ pub(crate) fn read_operation(
             value: read_value(reader, workspace)?,
             index: read_value(reader, workspace)?,
             element: read_value(reader, workspace)?,
+        }),
+        OperationCode::SequenceSlice => Ok(OperationKind::SequenceSlice {
+            sequence: read_node_id(reader, workspace)?,
+            value: read_value(reader, workspace)?,
+            start: read_value(reader, workspace)?,
+            end_exclusive: read_value(reader, workspace)?,
+        }),
+        OperationCode::SequenceConcat => Ok(OperationKind::SequenceConcat {
+            sequence: read_node_id(reader, workspace)?,
+            lhs: read_value(reader, workspace)?,
+            rhs: read_value(reader, workspace)?,
         }),
         OperationCode::Call => {
             let function = read_node_id(reader, workspace)?;
@@ -1251,6 +1278,17 @@ mod tests {
                 value: ValueRef::BlockArgument(first),
                 index: ValueRef::BlockArgument(second),
                 element: ValueRef::BlockArgument(first),
+            },
+            OperationKind::SequenceSlice {
+                sequence: first,
+                value: ValueRef::BlockArgument(first),
+                start: ValueRef::BlockArgument(second),
+                end_exclusive: ValueRef::BlockArgument(first),
+            },
+            OperationKind::SequenceConcat {
+                sequence: first,
+                lhs: ValueRef::BlockArgument(first),
+                rhs: ValueRef::BlockArgument(second),
             },
         ];
         assert_eq!(operations.len(), OperationCode::ALL.len());

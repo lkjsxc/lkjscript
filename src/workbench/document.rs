@@ -18,7 +18,7 @@ use std::fmt;
 const MAX_DOCUMENT_DEPTH: usize = 32;
 const MAX_DOCUMENT_ITEMS: usize = 65_536;
 const MAX_DOCUMENT_ERROR_BYTES: usize = 512;
-pub const EDIT_DOCUMENT_VERSION: u16 = 1;
+pub const EDIT_DOCUMENT_VERSION: u16 = 2;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -139,36 +139,52 @@ struct EditDocument {
     return_symbols: Vec<DraftSymbol>,
 }
 
-pub fn render_function_document(packet: &ContextPacket) -> crate::Result<Vec<u8>> {
-    if packet.payload.targets.len() != 1 {
-        return Err(document_render_error(
-            "function document rendering requires exactly one context target",
-            None,
-        ));
-    }
-    if packet.payload.omissions.node_scope_truncated {
-        return Err(document_render_error(
-            "function document rendering requires the complete bounded function scope",
-            packet.payload.targets.first().copied(),
-        ));
-    }
-    let function = packet.payload.targets[0];
+pub fn render_function_document(
+    snapshot: &crate::graph::Snapshot,
+    function: NodeId,
+) -> crate::Result<Vec<u8>> {
     if !function.is_durable() {
         return Err(document_render_error(
             "function document target must be a durable entity",
             Some(function),
         ));
     }
-    let nodes = packet
-        .payload
-        .nodes
-        .iter()
-        .filter_map(|view| {
-            view.record
-                .as_ref()
-                .map(|record| (view.summary.node, record))
-        })
-        .collect::<BTreeMap<_, _>>();
+    if function.workspace() != snapshot.workspace() {
+        return Err(crate::LkError::new(
+            crate::ErrorCode::WrongWorkspace,
+            "function document target belongs to another workspace",
+        )
+        .for_node(function));
+    }
+    let mut nodes = BTreeMap::new();
+    let mut stack = vec![function];
+    while let Some(node_id) = stack.pop() {
+        if nodes.contains_key(&node_id) {
+            return Err(crate::LkError::new(
+                crate::ErrorCode::ArtifactCorrupt,
+                "function document ownership tree contains a duplicate or cycle",
+            )
+            .for_node(node_id));
+        }
+        if nodes.len() >= crate::workbench::MAXIMUM_SEMANTIC_QUERY_WORK_ITEMS {
+            return Err(crate::LkError::new(
+                crate::ErrorCode::PolicyExceeded,
+                "function document scope exceeds the semantic query work policy",
+            )
+            .for_node(function));
+        }
+        let node = snapshot.node(node_id)?;
+        nodes.insert(node_id, node);
+        for index in (0..node.owned_child_count()).rev() {
+            stack.push(node.owned_child(index).ok_or_else(|| {
+                crate::LkError::new(
+                    crate::ErrorCode::ArtifactCorrupt,
+                    "function document ownership tree omitted a counted child",
+                )
+                .for_node(node_id)
+            })?);
+        }
+    }
     let body = match nodes.get(&function).copied() {
         Some(Node::Function {
             body: Some(body), ..
@@ -195,10 +211,10 @@ pub fn render_function_document(packet: &ContextPacket) -> crate::Result<Vec<u8>
     let body = render_function_body_draft(&nodes, body)?;
     let document = EditDocument {
         version: EDIT_DOCUMENT_VERSION,
-        schema: packet.payload.schema_digest,
-        packet: Some(packet.digest),
-        workspace: packet.payload.workspace,
-        base_revision: packet.payload.revision,
+        schema: active_machine_schema_digest()?,
+        packet: None,
+        workspace: snapshot.workspace(),
+        base_revision: snapshot.revision(),
         scope: EditScope::Function(function),
         idempotency_key: None,
         edits: vec![TransactionOp::ReplaceFunctionBody { function, body }],
@@ -457,6 +473,24 @@ fn render_expression_kind(
             index: value(*index)?,
             element: value(*element)?,
         },
+        OperationKind::SequenceSlice {
+            sequence,
+            value: operand,
+            start,
+            end_exclusive,
+        } => ExpressionKindDraft::SequenceSlice {
+            sequence: NodeTarget::Existing(*sequence),
+            value: value(*operand)?,
+            start: value(*start)?,
+            end_exclusive: value(*end_exclusive)?,
+        },
+        OperationKind::SequenceConcat { sequence, lhs, rhs } => {
+            ExpressionKindDraft::SequenceConcat {
+                sequence: NodeTarget::Existing(*sequence),
+                lhs: value(*lhs)?,
+                rhs: value(*rhs)?,
+            }
+        }
         OperationKind::Call {
             function,
             arguments,
@@ -1642,7 +1676,7 @@ mod tests {
     #[test]
     fn compact_document_normalizes_directly_to_the_typed_transaction() {
         let source = format!(
-            "document {{ version 1 schema {} workspace {} base_revision 0 scope (workspace) edits [\n\
+            "document {{ version 2 schema {} workspace {} base_revision 0 scope (workspace) edits [\n\
              (create_package {{ symbol app name \"deployment\" }})\n\
              ] return_symbols [app] }}",
             active_machine_schema_digest().expect("schema digest"),
@@ -1687,7 +1721,7 @@ mod tests {
     #[test]
     fn quoted_alias_spelling_is_not_alias_resolution() {
         let source = format!(
-            "document {{ version 1 schema {} workspace {} base_revision 0 scope (workspace) edits [\n\
+            "document {{ version 2 schema {} workspace {} base_revision 0 scope (workspace) edits [\n\
              (create_package {{ symbol app name \"@n1\" }})] }}",
             active_machine_schema_digest().expect("schema digest"),
             workspace()
@@ -1704,7 +1738,7 @@ mod tests {
     #[test]
     fn unquoted_alias_without_packet_rejects_at_its_location() {
         let source = format!(
-            "document {{\n version 1\n schema {}\n workspace {}\n base_revision 0\n scope (workspace)\n edits [\n\
+            "document {{\n version 2\n schema {}\n workspace {}\n base_revision 0\n scope (workspace)\n edits [\n\
              (rename_node {{ node @n1 name x }})] }}",
             active_machine_schema_digest().expect("schema digest"),
             workspace()

@@ -252,6 +252,21 @@ pub(crate) enum Instruction {
         index: ValueId,
         element: ValueId,
     },
+    SequenceSlice {
+        origin: NodeId,
+        result: ValueId,
+        ty: CoreTypeId,
+        value: ValueId,
+        start: ValueId,
+        end_exclusive: ValueId,
+    },
+    SequenceConcat {
+        origin: NodeId,
+        result: ValueId,
+        ty: CoreTypeId,
+        lhs: ValueId,
+        rhs: ValueId,
+    },
     Call {
         origin: NodeId,
         result: ValueId,
@@ -306,6 +321,8 @@ impl Instruction {
             | Self::SequenceGet { origin, .. }
             | Self::SequenceAppend { origin, .. }
             | Self::SequenceReplace { origin, .. }
+            | Self::SequenceSlice { origin, .. }
+            | Self::SequenceConcat { origin, .. }
             | Self::Call { origin, .. }
             | Self::ConstructProduct { origin, .. }
             | Self::ProjectField { origin, .. }
@@ -711,6 +728,8 @@ fn instruction_result(instruction: &Instruction) -> ValueId {
         | Instruction::SequenceGet { result, .. }
         | Instruction::SequenceAppend { result, .. }
         | Instruction::SequenceReplace { result, .. }
+        | Instruction::SequenceSlice { result, .. }
+        | Instruction::SequenceConcat { result, .. }
         | Instruction::Call { result, .. }
         | Instruction::ConstructProduct { result, .. }
         | Instruction::ProjectField { result, .. }
@@ -844,6 +863,25 @@ fn verify_instruction(
             require_local(function, local, *value, *ty)?;
             require_local(function, local, *index, I64_TYPE)?;
             require_local(function, local, *element, element_ty)?;
+            Ok(*ty)
+        }
+        Instruction::SequenceSlice {
+            ty,
+            value,
+            start,
+            end_exclusive,
+            ..
+        } => {
+            require_sequence(program, *ty)?;
+            require_local(function, local, *value, *ty)?;
+            require_local(function, local, *start, I64_TYPE)?;
+            require_local(function, local, *end_exclusive, I64_TYPE)?;
+            Ok(*ty)
+        }
+        Instruction::SequenceConcat { ty, lhs, rhs, .. } => {
+            require_sequence(program, *ty)?;
+            require_local(function, local, *lhs, *ty)?;
+            require_local(function, local, *rhs, *ty)?;
             Ok(*ty)
         }
         Instruction::Call {

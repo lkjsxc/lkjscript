@@ -17,7 +17,7 @@ pub const MAXIMUM_TRANSACTION_BYTE_LITERAL_BYTES: usize = 64 * 1024;
 pub const MAXIMUM_TEXT_BYTES: usize = 64 * 1024;
 pub const MAXIMUM_TEXT_LITERAL_BYTES: usize = 4 * 1024;
 pub const MAXIMUM_TRANSACTION_TEXT_LITERAL_BYTES: usize = 64 * 1024;
-pub const MAXIMUM_SEQUENCE_ELEMENTS: usize = 16 * 1024;
+pub const MAXIMUM_SEQUENCE_ELEMENTS: usize = 128 * 1024;
 
 #[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct ByteString(Box<[u8]>);
@@ -621,10 +621,12 @@ pub enum OperationCode {
     SequenceGet,
     SequenceAppend,
     SequenceReplace,
+    SequenceSlice,
+    SequenceConcat,
 }
 
 impl OperationCode {
-    pub const ALL: [Self; 34] = [
+    pub const ALL: [Self; 36] = [
         Self::ConstUnit,
         Self::ConstI64,
         Self::ConstBool,
@@ -659,6 +661,8 @@ impl OperationCode {
         Self::SequenceGet,
         Self::SequenceAppend,
         Self::SequenceReplace,
+        Self::SequenceSlice,
+        Self::SequenceConcat,
     ];
 
     pub const fn stable_tag(self) -> u8 {
@@ -701,6 +705,8 @@ impl OperationCode {
             32 => Some(Self::SequenceGet),
             33 => Some(Self::SequenceAppend),
             34 => Some(Self::SequenceReplace),
+            35 => Some(Self::SequenceSlice),
+            36 => Some(Self::SequenceConcat),
             _ => None,
         }
     }
@@ -745,6 +751,8 @@ impl OperationCode {
             Self::SequenceGet => &SEQUENCE_GET_DESCRIPTOR,
             Self::SequenceAppend => &SEQUENCE_APPEND_DESCRIPTOR,
             Self::SequenceReplace => &SEQUENCE_REPLACE_DESCRIPTOR,
+            Self::SequenceSlice => &SEQUENCE_SLICE_DESCRIPTOR,
+            Self::SequenceConcat => &SEQUENCE_CONCAT_DESCRIPTOR,
         }
     }
 }
@@ -1033,6 +1041,30 @@ const SEQUENCE_REPLACE_OPERANDS: &[OperandDescriptor] = &[
     },
     OperandDescriptor {
         ty: TypeRule::SequenceElement,
+        use_mode: OperandUse::Read,
+    },
+];
+const SEQUENCE_SLICE_OPERANDS: &[OperandDescriptor] = &[
+    OperandDescriptor {
+        ty: TypeRule::SequenceOwner,
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::I64),
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::I64),
+        use_mode: OperandUse::Read,
+    },
+];
+const SEQUENCE_CONCAT_OPERANDS: &[OperandDescriptor] = &[
+    OperandDescriptor {
+        ty: TypeRule::SequenceOwner,
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::SequenceOwner,
         use_mode: OperandUse::Read,
     },
 ];
@@ -1539,6 +1571,32 @@ descriptor!(
     false,
     true
 );
+descriptor!(
+    SEQUENCE_SLICE_DESCRIPTOR,
+    SequenceSlice,
+    "sequence_slice",
+    35,
+    OperandArity::Fixed(3),
+    SEQUENCE_SLICE_OPERANDS,
+    SEQUENCE_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    SEQUENCE_CONCAT_DESCRIPTOR,
+    SequenceConcat,
+    "sequence_concat",
+    36,
+    OperandArity::Fixed(2),
+    SEQUENCE_CONCAT_OPERANDS,
+    SEQUENCE_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
 #[serde(
@@ -1680,6 +1738,17 @@ pub enum OperationDraft {
         index: ValueDraft,
         element: ValueDraft,
     },
+    SequenceSlice {
+        sequence: NodeTarget,
+        value: ValueDraft,
+        start: ValueDraft,
+        end_exclusive: ValueDraft,
+    },
+    SequenceConcat {
+        sequence: NodeTarget,
+        lhs: ValueDraft,
+        rhs: ValueDraft,
+    },
     Call {
         function: NodeTarget,
         arguments: Vec<ValueDraft>,
@@ -1754,6 +1823,8 @@ impl OperationDraft {
             Self::SequenceGet { .. } => OperationCode::SequenceGet,
             Self::SequenceAppend { .. } => OperationCode::SequenceAppend,
             Self::SequenceReplace { .. } => OperationCode::SequenceReplace,
+            Self::SequenceSlice { .. } => OperationCode::SequenceSlice,
+            Self::SequenceConcat { .. } => OperationCode::SequenceConcat,
             Self::Call { .. } => OperationCode::Call,
             Self::Hole { .. } => OperationCode::Hole,
             Self::If { .. } => OperationCode::If,
@@ -1872,6 +1943,17 @@ pub enum OperationKind {
         index: ValueRef,
         element: ValueRef,
     },
+    SequenceSlice {
+        sequence: NodeId,
+        value: ValueRef,
+        start: ValueRef,
+        end_exclusive: ValueRef,
+    },
+    SequenceConcat {
+        sequence: NodeId,
+        lhs: ValueRef,
+        rhs: ValueRef,
+    },
     Call {
         function: NodeId,
         arguments: Vec<ValueRef>,
@@ -1946,6 +2028,8 @@ impl OperationKind {
             Self::SequenceGet { .. } => OperationCode::SequenceGet,
             Self::SequenceAppend { .. } => OperationCode::SequenceAppend,
             Self::SequenceReplace { .. } => OperationCode::SequenceReplace,
+            Self::SequenceSlice { .. } => OperationCode::SequenceSlice,
+            Self::SequenceConcat { .. } => OperationCode::SequenceConcat,
             Self::Call { .. } => OperationCode::Call,
             Self::Hole { .. } => OperationCode::Hole,
             Self::If { .. } => OperationCode::If,
@@ -2021,6 +2105,11 @@ impl OperationKind {
             (Self::SequenceReplace { value, .. }, 0) => Some(*value),
             (Self::SequenceReplace { index, .. }, 1) => Some(*index),
             (Self::SequenceReplace { element, .. }, 2) => Some(*element),
+            (Self::SequenceSlice { value, .. }, 0) => Some(*value),
+            (Self::SequenceSlice { start, .. }, 1) => Some(*start),
+            (Self::SequenceSlice { end_exclusive, .. }, 2) => Some(*end_exclusive),
+            (Self::SequenceConcat { lhs, .. }, 0) => Some(*lhs),
+            (Self::SequenceConcat { rhs, .. }, 1) => Some(*rhs),
             (Self::Call { arguments, .. }, index) => arguments.get(index).copied(),
             (Self::If { condition, .. }, 0) => Some(*condition),
             (Self::ForI64 { start, .. }, 0) => Some(*start),
@@ -2127,6 +2216,11 @@ impl OperationKind {
             (Self::SequenceReplace { value, .. }, 0) => *value = replacement,
             (Self::SequenceReplace { index, .. }, 1) => *index = replacement,
             (Self::SequenceReplace { element, .. }, 2) => *element = replacement,
+            (Self::SequenceSlice { value, .. }, 0) => *value = replacement,
+            (Self::SequenceSlice { start, .. }, 1) => *start = replacement,
+            (Self::SequenceSlice { end_exclusive, .. }, 2) => *end_exclusive = replacement,
+            (Self::SequenceConcat { lhs, .. }, 0) => *lhs = replacement,
+            (Self::SequenceConcat { rhs, .. }, 1) => *rhs = replacement,
             (Self::Call { arguments, .. }, index) if index < arguments.len() => {
                 arguments[index] = replacement
             }
@@ -2161,7 +2255,9 @@ impl OperationKind {
             | Self::SequenceLen { .. }
             | Self::SequenceGet { .. }
             | Self::SequenceAppend { .. }
-            | Self::SequenceReplace { .. } => 1,
+            | Self::SequenceReplace { .. }
+            | Self::SequenceSlice { .. }
+            | Self::SequenceConcat { .. } => 1,
             Self::ConstructProduct { fields, .. } => 1 + fields.len(),
             Self::MatchSum { arms, .. } => arms.len(),
             _ => 0,
@@ -2183,7 +2279,9 @@ impl OperationKind {
                 | Self::SequenceLen { sequence, .. }
                 | Self::SequenceGet { sequence, .. }
                 | Self::SequenceAppend { sequence, .. }
-                | Self::SequenceReplace { sequence, .. },
+                | Self::SequenceReplace { sequence, .. }
+                | Self::SequenceSlice { sequence, .. }
+                | Self::SequenceConcat { sequence, .. },
                 0,
             ) => Some(*sequence),
             _ => None,
@@ -2281,7 +2379,9 @@ impl OperationKind {
                 | Self::SequenceLen { sequence, .. }
                 | Self::SequenceGet { sequence, .. }
                 | Self::SequenceAppend { sequence, .. }
-                | Self::SequenceReplace { sequence, .. } => Some(SemanticType::Nominal(*sequence)),
+                | Self::SequenceReplace { sequence, .. }
+                | Self::SequenceSlice { sequence, .. }
+                | Self::SequenceConcat { sequence, .. } => Some(SemanticType::Nominal(*sequence)),
                 _ => None,
             },
             TypeRule::CallTargetParameter

@@ -108,13 +108,13 @@ fn request(fixture: &DiamondFixture) -> ApplicationBuildRequest {
 }
 
 #[test]
-fn bundled_graph_application_is_canonical_offline_and_rejects_v2() {
+fn bundled_graph_application_is_canonical_offline_and_rejects_predecessors() {
     let fixture = diamond_fixture();
     let request = request(&fixture);
     let prepared = prepare(&request, &fixture.releases).expect("prepare application");
     let artifact = prepared.bytes().to_vec();
     let inspection = inspect(&artifact).expect("inspect application");
-    assert_eq!(inspection.format_version, 5);
+    assert_eq!(inspection.format_version, APPLICATION_FORMAT_VERSION);
     assert_eq!(inspection.root_release, fixture.root);
     assert_eq!(inspection.releases.len(), 4);
     assert_eq!(inspection.graph_edges, 4);
@@ -158,6 +158,9 @@ fn bundled_graph_application_is_canonical_offline_and_rejects_v2() {
         b"LKJAPP\0\x02".as_slice(),
         b"LKJAPP\0\x03".as_slice(),
         b"LKJAPP\0\x04".as_slice(),
+        b"LKJAPP\0\x05".as_slice(),
+        b"LKJAPP\0\x06".as_slice(),
+        b"LKJAPP\0\x07".as_slice(),
     ] {
         assert_eq!(
             validate(old).expect_err("old application rejection").code,
@@ -176,10 +179,10 @@ fn bundled_graph_application_is_canonical_offline_and_rejects_v2() {
 }
 
 #[test]
-fn application_v5_profile_and_contract_json_reject_v4_shapes() {
+fn application_v8_profile_and_contract_json_reject_v7_and_untagged_shapes() {
     assert_eq!(
-        validate_contract_version(4)
-            .expect_err("application contract v4 rejection")
+        validate_contract_version(7)
+            .expect_err("application contract v7 rejection")
             .code,
         ErrorCode::ProtocolVersion
     );

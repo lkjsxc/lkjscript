@@ -162,7 +162,7 @@ current test pass.
 
 Release artifacts and one bundled application artifact are sufficient after every producer and
 consumer workspace is removed. Correctness never depends on a local immutable store, filename,
-ambient resolver state, or network. Application format 5 embeds the exact reachable graph once, so
+ambient resolver state, or network. Application format 8 embeds the exact reachable graph once, so
 execution needs no external release files.
 
 Release format 1 and every predecessor reject directly. No compatibility reader or migration path

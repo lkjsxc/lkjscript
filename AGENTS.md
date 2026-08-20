@@ -1,91 +1,103 @@
 # AGENTS.md
 
-This file governs the entire `lkjsxc/lkjscript` repository. A deeper `AGENTS.md` may add procedures
-for a genuine ownership boundary, but it may not weaken any applicable rule in this file.
+This file governs the entire `lkjsxc/lkjscript` repository.
+
+A deeper `AGENTS.md` may add rules for a genuine ownership boundary, but it may not weaken any
+applicable rule in this file.
 
 Use English for maintained code, tests, diagnostics, protocol fields, machine output,
-specifications, documentation, examples, benchmark labels, commit messages, revision metadata, and
-handoffs.
+specifications, documentation, examples, benchmark labels, commit messages, revision metadata,
+evidence, and handoffs.
 
 ## Mission
 
 Build `lkjscript` as a meaning-first, agent-native semantic software platform.
 
-The primary editable authority for an lkjscript program is its validated typed meaning graph and
-immutable development history. Coding agents and humans should be able to create, inspect, change,
-validate, test, build, run, package, diagnose, and evolve useful software through the public
-lkjscript CLI without reconstructing the graph through a custom Python, shell, Rust, or generated
-source builder.
+The primary editable authority for an lkjscript program is one validated typed meaning graph with
+exact immutable development history.
+
+Coding agents and humans must be able to discover, inspect, change, validate, test, build, run,
+package, diagnose, recover, and evolve useful software through the public `lkjscript` CLI without
+maintaining a custom graph-construction program.
 
 Humans remain first-class for intent, product judgment, governance, security policy, explanation,
-review, operations, and acceptance. Coding agents are first-class program authors and maintainers.
+review, operations, and acceptance.
+
+Coding agents are first-class program authors and maintainers.
 
 Optimize jointly for:
-
 - semantic correctness;
-- complete useful applications;
+- complete useful software;
 - direct CLI-native authoring;
 - compact exact agent interactions;
 - weak-model success;
-- low correction depth and provider cost;
+- low correction depth;
+- low provider and operator cost when measured;
 - automatic immutable development history;
-- deterministic builds and artifacts;
-- explicit authority and recoverable operation;
+- deterministic artifacts;
+- explicit authority;
+- recoverable operation;
 - bounded resource use;
 - maintainable ownership;
-- independently checkable evidence; and
-- long-term performance.
+- independently checkable evidence;
+- interactive responsiveness where required;
+- long-term performance;
 
-Do not optimize for novelty, feature count, benchmark theater, syntax fashion, roadmap inertia,
-sunk cost, compatibility with superseded repository states, or preservation of an implementation
-merely because it was difficult to create.
+Do not optimize for novelty, feature count, benchmark theater, syntax fashion, roadmap inertia, sunk
+cost, compatibility with superseded states, or preservation of an implementation merely because it
+was difficult to create.
 
 ## North star
 
-A coding agent should be able to enter an ordinary project directory and, through public
-`lkjscript` commands:
+A coding agent should be able to enter an ordinary project directory and use public `lkjscript`
+commands to:
+1. discover the exact semantic project and selected revision.
+2. obtain a compact orientation without loading the whole graph or schema.
+3. request only the typed subgraph, constraints, and examples relevant to one task.
+4. prepare one bounded exact semantic change.
+5. validate through the same owner that would publish it.
+6. publish exactly one immutable revision and canonical revision record.
+7. receive enough exact continuation state to avoid rediscovering unchanged meaning.
+8. inspect the semantic diff, target impact, diagnostics, and history.
+9. build, test, and run a named target derived from the selected revision.
+10. recover after interruption, stale state, output loss, or unknown publication without unsafe
+    retry.
+11. continue development without reading or regenerating a large construction script.
 
-1. discover the exact semantic project and current revision;
-2. request only the relevant typed context;
-3. propose one bounded semantic change;
-4. validate it through the same owner that would publish it;
-5. publish exactly one immutable revision and exact revision record;
-6. inspect the resulting semantic diff and history;
-7. build, test, and run a named target derived from that revision;
-8. recover after interruption or stale state without silent retry; and
-9. continue development without reading or regenerating an enormous construction script.
+The meaning graph is the center.
 
-The meaning graph is the center. Text documents, command streams, JSON, rendered source-like views,
-TUI views, generated bindings, compiled forms, artifacts, caches, and Git diffs are interfaces,
-proposals, distribution objects, or derived views according to their exact contracts. None silently
-becomes a second editable source of truth.
+Text documents, command streams, JSON, rendered source-like views, TUI views, generated bindings,
+compiled forms, indexes, caches, artifacts, and Git diffs are proposals, views, distribution
+objects, or derived state according to explicit contracts.
 
-A rich TUI editor with an explorer is a long-term representative application, not permission to add
-speculative terminal, filesystem, event-loop, collection, or text machinery without a complete
-consumer and exact authority model.
+None silently becomes a second editable source of truth.
+
+A rich terminal workbench with an explorer and editor is a representative product objective.
+
+It is not permission to add speculative terminal, filesystem, event-loop, collection, text,
+concurrency, or persistence machinery without a complete consumer and exact authority model.
 
 ## Authority and precedence
 
 When active artifacts disagree, use this order:
-
 1. The active user task.
 2. This root `AGENTS.md`.
 3. An explicitly selected active campaign prompt.
 4. Accepted normative files under `docs/spec/`.
 5. Executable contracts and focused invariant tests.
 6. The accepted semantic development repository and its exact revision records.
-7. Generated descriptions derived from one executable owner.
+7. Generated descriptions mechanically derived from one executable owner.
 8. `docs/status.md`.
 9. `docs/architecture.md`.
 10. Current structured evidence and `docs/performance.md`.
 11. `docs/roadmap.md`.
 12. `README.md`.
-13. Comments, examples, old prompts, branches, pull requests, commits, issues, discussions, and
-    historical documents.
+13. Comments, examples, historical prompts, branches, pull requests, commits, issues, and
+    discussions.
 
 Newer verified checkout state outranks older plans and remembered repository state.
 
-A campaign prompt owns one campaign's objective, hypotheses, gates, and handoff. It does not become
+A campaign prompt owns one campaign's objectives, hypotheses, gates, and handoff. It does not become
 permanent semantic authority.
 
 An old prompt is historical evidence unless the active task explicitly selects it.
@@ -93,8 +105,8 @@ An old prompt is historical evidence unless the active task explicitly selects i
 When accepted behavior changes, update the owning specification and executable contract in the same
 verified milestone.
 
-Do not let generated documentation, a checked-in artifact, a test fixture, or a Git commit message
-silently outrank the semantic owner that produced it.
+Do not let generated documentation, a checked artifact, a test fixture, or a commit message silently
+outrank the semantic owner that produced it.
 
 ## Repository safety
 
@@ -104,7 +116,7 @@ Before editing, inspect the actual checkout:
 git status --short
 git branch --show-current
 git rev-parse HEAD
-git log -1 --oneline
+git log -3 --oneline
 find .. -name AGENTS.md -print
 ```
 
@@ -112,11 +124,12 @@ Read every applicable instruction file.
 
 Preserve unrelated modified and untracked work.
 
-Reading in-scope files, editing in-scope files, and running non-destructive validation are authorized
-for implementation tasks unless the active task says otherwise.
+Reading in-scope files, editing in-scope files, and running non-destructive validation are
+authorized for implementation tasks unless the active task says otherwise.
 
 Do not reset, clean, overwrite unrelated files, amend, rebase, merge, force-push, publish a release,
-close a pull request, or alter unrelated remote state without authorization for that action.
+close a pull request, or alter unrelated remote state without explicit authorization for that
+action.
 
 Repository permissions are not user authorization.
 
@@ -149,99 +162,79 @@ Incompatible-change freedom is not permission for an unverified rewrite.
 
 ## Meaning graph as development authority
 
-Each accepted workspace revision has one authoritative typed meaning graph.
+Each accepted project revision has one authoritative typed meaning graph.
 
 The graph may include program declarations, function bodies, tests, build targets, release
-projections, application composition declarations, interface-role declarations, and other
-development meaning only when their authority domain and consumer are explicit.
+projections, application composition, interface-role declarations, and other development meaning
+only when their authority domain and consumer are explicit.
 
-Names, formatting, source positions, file paths, command order, generated indexes, and renderings are
-not semantic identity.
+Names, formatting, source positions, file paths, command order, generated indexes, and renderings
+are not semantic identity.
 
 A human-readable document is a proposal or view. It may be convenient and editable, but accepted
 meaning never depends on preserving, reparsing, or diffing its formatting.
 
-A command stream is a proposal and may be retained as an exact revision recipe or audit fact. It is
-not the current program authority.
+A command stream is a proposal and may be retained as an exact recipe or audit fact. It is not
+current program authority.
 
-A checked-in application artifact may be immutable distribution authority under its specification.
-It is not an acceptable replacement for a maintained development repository when the application is
-still developed in this repository.
+A checked application artifact may be immutable distribution authority under its specification. It
+is not maintained development authority.
 
-A custom program that reconstructs the graph is not maintained semantic source. It is a temporary
-migration tool, a test generator, or a losing duplicate authority and must not remain as the normal
-development path.
+A custom Python, shell, Rust, macro, build-script, or generated program that reconstructs the graph
+is not maintained semantic source.
 
-Every first-party maintained lkjscript application must have a public-CLI-native path from its
-tracked semantic development repository to its validated release and application artifacts.
+Temporary migration code must be isolated, independently checked, and deleted after direct cutover.
+
+Every maintained first-party lkjscript application must have a public-CLI-native path from its
+tracked semantic project to validated targets and distribution artifacts.
+
+Derived views may be regenerated or discarded without changing accepted meaning.
+
+## Self-hosting gradient
+
+Prefer building lkjscript development tools as lkjscript applications when the current language and
+runtime can own their policy.
+
+Use native code only for bootstrap, operating-system adaptation, terminal integration, explicit
+resource handling, artifact embedding, deployment, or independently justified performance
+boundaries.
+
+A native shell must not become the hidden owner of application state transitions, edit policy,
+project selection policy, ordering, validation, undo semantics, or domain decisions.
+
+A first-party semantic tool must be authored and evolved through the same public CLI that ordinary
+agents use.
+
+A bootstrap exception is temporary. Record why it exists, what exact capability blocks removal, and
+the cutover condition.
+
+Self-hosting is a gradient, not a slogan. Do not move a boundary into lkjscript merely to increase a
+percentage.
+
+The winning boundary minimizes duplicate authority while preserving exact validation, performance,
+recovery, and independent testing.
 
 ## Semantic development repository
 
-A semantic development repository owns one workspace continuity and its immutable accepted
-development history.
+A semantic development repository owns one project continuity and immutable accepted development
+history.
 
-It must expose:
+It exposes exact workspace identity, selected revision, immutable revision objects, canonical
+revision records, parent continuity, durable allocation, tombstones, semantic diff facts, named
+targets, validation, history, diagnosis, backup, and reconstruction.
 
-- exact workspace identity;
-- one selected current revision;
-- immutable revision objects or artifacts;
-- canonical revision records;
-- exact parent continuity;
-- durable entity allocation and tombstones;
-- semantic diff facts;
-- named build targets;
-- validation, history, diagnosis, backup, and reconstruction;
-- strict project discovery; and
-- direct rejection of foreign, malformed, stale, incomplete, or excessive state.
-
-Git and the semantic development repository are distinct domains.
-
-Git owns collaboration and distribution of repository files. The semantic repository owns the
-accepted evolution of lkjscript meaning. Neither is inferred from the other.
+Git owns collaboration and distribution of repository files. The semantic repository owns accepted
+evolution of lkjscript meaning. Neither is inferred from the other.
 
 Do not require agents to reverse-engineer semantic history from binary Git diffs.
 
-Do not use a Git commit hash as workspace identity, semantic entity identity, revision identity,
-release identity, application identity, or authorization.
+Do not use a Git commit hash as workspace, entity, revision, release, application, instance,
+authorization, or capability identity.
 
-Tracked first-party semantic repositories must be portable, bounded, deterministic under their
-documented trust model, and usable from a fresh checkout through public commands.
+Tracked first-party semantic repositories must be portable, bounded, deterministic under their trust
+model, and usable from a fresh checkout through public commands.
 
 A project path is a locator. It is not semantic identity.
-
-## Automatic development history
-
-Every successful public semantic development mutation must publish exactly one immutable workspace
-revision and one canonical revision record.
-
-Validation-only and rejected operations publish no revision, record, durable identity, target
-artifact, or HEAD change.
-
-A revision record must bind at least:
-
-- workspace identity;
-- exact base and result revisions;
-- parent and result snapshot facts;
-- canonical accepted change-set digest;
-- exact semantic diff digest and completeness facts;
-- created, deleted, replaced, and modified durable entities;
-- function-body change facts without inventing cross-revision local identity;
-- build-target changes;
-- publication outcome; and
-- the exact contract version used to interpret the record.
-
-Optional intent, actor label, tool label, or observed time is untrusted metadata. It must be bounded,
-validated, clearly separated from semantic meaning, and irrelevant to release or application
-identity unless a future specification deliberately says otherwise.
-
-Do not store hidden chain of thought, provider transcripts, raw prompts, or secrets as revision
-metadata.
-
-A normal accepted semantic development command should record itself without requiring a manually
-written commit message.
-
-History is append-only. Revert publishes a new validated revision. It does not rewrite or delete
-accepted history.
 
 Branching, merging, rebasing, distributed synchronization, and conflict-free replication require
 current consumers and exact semantics. Do not copy Git features speculatively.
@@ -250,184 +243,463 @@ current consumers and exact semantics. Do not copy Git features speculatively.
 
 The public `lkjscript` CLI is the primary development interface.
 
-Raw Rust constructors, private library calls, test-only builders, custom generators, and direct
-store mutation are not acceptable first-party authoring paths.
+Raw constructors, private library calls, test-only builders, custom generators, and direct store
+mutation are not acceptable first-party authoring paths.
 
-The CLI must support ordinary human and coding-agent use.
+Human mode provides deterministic bounded help, orientation, status, inspection, history, diff,
+validation, build, test, run, recovery, and actionable errors.
 
-Human mode must provide deterministic bounded help, status, inspection, history, diff, validation,
-build, test, run, and actionable errors.
+Machine mode provides one strict versioned typed contract with exact framing, request correlation,
+stable error classes, explicit omissions, and no progress contamination.
 
-Machine mode must provide one strict versioned typed contract with exact framing, request
-correlation, stable error codes, explicit omissions, and no progress contamination.
+A caller-owned foreground session may reuse validated state, contexts, and local handles. It is not
+authority, a daemon, a queue, or a scheduler.
 
-A caller-owned foreground session may reuse validated state and local handles. It is not authority, a
-daemon, a queue, or a scheduler.
+Ordinary commands discover a project from the current directory or an explicit relative or absolute
+path.
 
-The normal CLI should discover a project from the current directory or an explicit path. Users should
-not need to supply workspace IDs, current revisions, schema digests, or absolute internal state paths
-for ordinary work.
+Users must not supply workspace IDs, current revisions, schema digests, or internal state paths for
+ordinary work when the CLI can discover them exactly.
 
-Convenience never weakens exactness:
+Convenience never weakens exactness.
 
+The CLI must preserve all of these invariants:
 - project discovery resolves to one exact workspace;
 - reads report the exact selected revision;
 - mutations bind an exact expected revision;
 - stale state rejects;
 - no mutation is silently retried;
 - selectors reject ambiguity;
-- session-local handles never persist as semantic identity; and
-- all accepted changes still pass the same typed validator.
+- session-local handles never persist as semantic identity;
+- all accepted changes pass the same typed validator;
+- validate-only and commit use the same normalization and candidate path;
+- output preflight happens before publication where output size can reject;
+- an output failure cannot retroactively undo accepted authority;
 
-Relative paths are normal public input. Resolve them against an explicit documented base, canonicalize
-and revalidate authority boundaries, reject unsafe traversal and symlink substitution, and keep paths
-out of semantic identity.
+## Human, machine, and interactive surfaces
 
-The CLI contract should be generated from or mechanically checked against one typed executable owner.
+One semantic owner may have human, machine, and interactive projections, but those projections must
+not define competing semantics.
 
-Do not make routine agents request a global schema dump. Provide compact orientation, targeted
-context, on-demand expansion, and exact unchanged/delta responses.
+Human output is bounded, escaped, deterministic, and useful without requiring machine-field
+archaeology.
+
+Machine output is closed, versioned, correlated, deterministic, and complete about omissions and
+continuations.
+
+Interactive views are derived from exact revisions or explicit ephemeral state.
+
+A TUI must never make rendered rows, cursor coordinates, pane order, or cached labels semantic
+project identity.
+
+A source-like editor view must carry exact base and context facts and normalize through the
+transaction owner.
+
+Formatting-only changes that normalize to the same meaning publish no semantic revision.
+
+Interactive convenience must expose stale state, conflicts, unknown outcomes, and validation
+failures rather than silently hiding them.
+
+## Project discovery and paths
+
+Relative paths are normal public input.
+
+Resolve paths against one documented base, canonicalize and revalidate authority boundaries, reject
+unsafe traversal and substitution, and keep paths out of semantic identity.
+
+Discovery must find exactly one strict marker under a bounded parent-walk policy.
+
+Reject symlinked markers, unsafe traversal, ambiguous nested authorities, nonregular files, foreign
+workspace bindings, malformed locators, and path substitution.
+
+Canonical paths are deployment facts and may change without changing semantic identity.
+
+When an exact file is selected, bind the selected authority or content facts required to prevent
+time-of-check/time-of-use substitution.
+
+Build outputs, backups, imported documents, and selected filesystem roots remain explicit deployment
+inputs.
+
+## Context and semantic graph queries
+
+Context budget is a correctness, latency, and provider-cost constraint.
+
+Do not make routine agents request a global graph, full schema, full history, or full target
+closure.
+
+Provide compact orientation, typed task-scoped context, on-demand expansion, stable projections,
+exact digests, continuations, and explicit omissions.
+
+A context object is a disposable observation bound to one exact project, revision, schema, query
+plan, bounds, and result digest.
+
+A context alias or handle is session-local and revision-bound. It is never durable entity identity.
+
+Known-digest reuse may return unchanged only when every bound fact agrees.
+
+Queries must state traversal direction, ordering, page bounds, projection, truncation, and
+continuation.
+
+Graph queries must use a closed bounded vocabulary rather than an ambient general database language
+unless a complete consumer proves the need.
+
+After exact owners are identified, stop broad discovery unless evidence invalidates the ownership
+map.
+
+Context response growth, repeated rediscovery, and correction depth are measured on complete tasks.
 
 ## CLI-native change model
 
-A semantic change may be submitted as one complete high-level command, one bounded atomic change
-bundle, or one request in a foreground session.
+A semantic change may be one high-level command, one bounded atomic bundle, or one request in a
+foreground session.
 
-The change model must support multi-entity atomicity when a valid transformation cannot be expressed
-as independently valid intermediate revisions.
+The change model must support multi-entity atomicity when no valid intermediate revision exists.
 
 Draft state is not accepted meaning.
 
-If an interactive draft or change session exists, define its owner, lifetime, bounds, crash behavior,
-identity domain, validation points, and whether it is retained. Do not let a draft become hidden
-authority.
+If an interactive draft exists, define its owner, lifetime, bounds, crash behavior, identity domain,
+validation points, and retention.
 
-Use exact base-bound selectors. A convenient name or path may resolve only when unambiguous in the
-selected revision.
+Use exact base-bound selectors. Friendly names resolve only when unambiguous in the selected
+revision.
 
-Function-local operation references remain revision- and function-bound. A patch may target an exact
-local item in one base revision without granting it durable continuity.
+Function-local references remain function- and revision-bound unless a concrete continuity consumer
+justifies more.
 
-Prefer bounded subgraph edits and declaration-level operations over resending an entire large
-application when they materially reduce context and correction risk.
+A local edit selector may use exact base-local identity or a structural precondition without
+granting durable cross-revision identity.
 
-Retain whole-function replacement as a simple oracle and escape hatch when it is the clearer exact
-operation.
+Prefer bounded subgraph edits and declaration-level operations over resending a large application
+when they materially reduce context and correction risk.
 
-Validate-only and commit must share parsing, normalization, semantic validation, artifact
-preflight, response preflight, and relevant resource checks.
+Retain whole-function replacement as a simple independent oracle and escape hatch.
+
+Validate-only and commit share parsing, normalization, semantic validation, target validation,
+artifact preflight, response preflight, and relevant resource checks.
+
+A successful apply may return a bounded continuation or context delta only when it is exact,
+preflighted, idempotency-bound, and measurably useful.
+
+Do not preserve a second edit protocol merely for compatibility.
+
+## Automatic development history
+
+Every successful public semantic mutation publishes exactly one immutable revision and one canonical
+revision record.
+
+Validation-only, rejection, semantic no-change, stale input, failed prepublication, and read-only
+work publish no revision.
+
+A revision record binds workspace, exact base and result, parent and result snapshots, accepted
+change digest, exact semantic diff facts, durable entity changes, function-body changes, target
+changes, and publication outcome.
+
+Optional intent, actor, tool, or observed time is bounded untrusted metadata and cannot affect
+semantic identity unless a future specification deliberately assigns that role.
+
+Do not store hidden chain of thought, provider transcripts, prompts, credentials, or secrets as
+revision metadata.
+
+Normal accepted changes record themselves without requiring a manually authored commit message.
+
+History is append-only. Revert or restoration publishes a new validated revision and never rewrites
+accepted history.
+
+Product undo and editor undo are application semantics and must not move semantic project HEAD
+backward.
 
 ## Build targets and deterministic derivation
 
-Build configuration for maintained lkjscript software belongs in an exact versioned target graph, not
-in a custom Python dictionary, shell command sequence, Cargo build script, or undocumented set of
-manual arguments.
+Build configuration for maintained lkjscript software belongs in an exact versioned target graph.
 
-A target declaration may describe:
+Do not hide build meaning in Python dictionaries, shell sequences, Cargo build scripts, private Rust
+code, generated manifests, or undocumented command arguments.
 
-- reusable release projection;
-- exact package root;
-- exports;
-- exact dependencies and imports;
-- immutable tests;
-- application composition;
-- stateful or pure profile roles;
-- query and response roles;
-- host-interface requirements;
-- application cases;
-- generated binding views; and
-- product packaging checks.
+Target identity and edges use exact semantic identities. Target names are lookup metadata.
 
-Target names are lookup metadata. Target identity and references use the exact graph domain.
+A build selects one exact project revision and exact dependency artifacts.
 
-A build selects one exact workspace revision and exact dependency artifacts.
+No target resolves `latest`, mutable registry coordinates, ambient files, or unverified paths at the
+semantic boundary.
 
-No target resolves `latest`, a mutable registry coordinate, or an unverified path at the semantic
-boundary.
+Release and application artifacts remain separate immutable authority domains.
 
-Release and application artifacts remain separate authority domains. Development target declarations
-do not silently become runtime grants, instance state, deployment authority, or executable identity.
+Target declarations do not silently become runtime grants, instance state, deployment authority, or
+executable identity.
 
 Generated bindings are derived views. Prefer direct validated artifact descriptors when they are
-simpler. If bindings are retained, one generator owns them, stale output fails, and clients
-independently validate the artifact facts they use.
+simpler.
 
-A checked-in derived artifact is allowed when packaging requires it, but the repository must prove
-that public CLI build reproduces it from the tracked semantic repository.
+A checked derived artifact is allowed only when packaging needs it and a public target build
+reproduces it exactly or deliberately replaces it under a new specified identity.
+
+Build, test, and run never publish a development revision.
+
+Selective validation, caching, and incremental lowering are optimizations and require an independent
+full oracle.
 
 ## Prohibition on semantic build scripts
 
-Do not retain `build.py`, `generate.py`, shell heredocs, private Rust builders, or similar programs as
-the primary way to construct or evolve a maintained meaning graph.
+Do not retain `build.py`, `generate.py`, shell heredocs, private Rust builders, macros, `build.rs`,
+or similar programs as the primary way to construct or evolve maintained meaning.
 
-Do not replace a Python graph builder with a Rust graph builder, a larger JSON fixture, a generated
-source file, a Cargo `build.rs`, or a macro that owns the same duplicate meaning.
-
-Temporary migration code may use a historical recipe to establish an initial semantic repository.
-It must be isolated, independently checked against the old artifact, and deleted after direct
-cutover.
+Do not replace one graph builder with another language, a larger fixture, generated source, or
+opaque serialized graph.
 
 Acceptance, workload, fault-injection, and measurement scripts may remain when they exercise public
-product boundaries and do not own application meaning or build configuration.
+boundaries and do not own application meaning or build configuration.
 
 ## Application-first closure
 
-Every substantial platform campaign selects a valuable complete application or product workflow that
-determines whether the platform change succeeds.
+Every substantial platform campaign selects a valuable complete application or user workflow.
 
 The application owns domain state, validation, ordering, decisions, and typed outcomes in lkjscript
 semantics.
 
-A host client may own transport, rendering, explicit file selection, narrow adapter execution,
-process lifecycle, and independent assertions. It may not own hidden business state or policy.
+A host client may own transport, terminal adaptation, rendering mechanics, explicit resource
+selection, process lifecycle, and independent assertions.
 
-Build the smallest complete product slice first. Add a language, runtime, storage, interface, or
-tooling mechanism only for an exact blocker revealed by that slice, then return to the product.
+A host client may not own hidden business state, edit policy, ordering, query semantics, or domain
+decisions.
+
+Build the smallest complete product slice first.
+
+Add language, runtime, storage, interface, or tooling mechanisms only for an exact blocker revealed
+by the slice.
+
+Return to the product immediately after closing each blocker.
 
 A capability is incomplete when the host reconstructs private state, suppresses invalid requests,
 parses opaque responses for domain meaning, or remains the real workflow controller.
 
-Run the completed product from a fresh checkout through public release binaries and dogfood the
-semantic CLI on a real maintained-application change before completion.
+Run the completed product from a fresh checkout through public release binaries.
+
+Dogfood the semantic CLI on a real maintained-application change before completion.
 
 Delete productless infrastructure, losing prototypes, stale examples, and intermediate artifacts
 without a retained consumer.
 
-## Semantic authority
+## Interactive application architecture
 
-Each accepted authority unit has one authoritative typed representation.
+Interactive software separates accepted semantic meaning, ephemeral foreground session state,
+durable application state, external resource authority, and rendered presentation.
 
-Natural-language intent and model output are untrusted proposals.
+Do not publish a durable application revision for every key event merely because a durable instance
+mechanism exists.
 
-Text, JSON, documents, context packets, reviews, caches, indexes, IR, bytecode, profiles, memory
-plans, machine code, renderings, terminal output, and generated bindings are proposals, views, or
-derived state unless a specification deliberately assigns a narrower immutable authority.
+Do not claim crash durability for ephemeral state.
 
-No proposal, view, cache, generated form, or derived form bypasses deterministic validation.
+Select pure foreground, durable, or hybrid interaction topology from a complete latency, recovery,
+and authority comparison.
 
-Accepted authority never depends on rendering and reparsing.
+A foreground interactive session is caller-owned and disappears on process exit unless an explicit
+recovery authority exists.
 
-Unknown, malformed, ambiguous, unsupported, foreign-domain, noncanonical, truncated, oversized,
-duplicate, conflicting, stale, or trailing forms reject.
+An application-defined update function owns state transition and action intent.
 
-Derived facts never become a second mutable source of truth.
+An application-defined render function owns semantic frame content.
 
-A human-readable source-like form is acceptable only when it deterministically normalizes through the
-same typed validator and cannot silently diverge from accepted meaning.
+A native runner owns terminal acquisition, event decoding, frame emission, signal handling, and
+cleanup.
+
+The runner must not interpret application domain state to decide behavior.
+
+External actions are closed typed requests with explicit outcomes.
+
+Possible external visibility stops automatic retry and enters an explicit reconciliation state.
+
+Input queues, action queues, render queues, and background work are bounded.
+
+Event ordering, coalescing, cancellation, stale results, shutdown, and restart are specified.
+
+## Editor and text semantics
+
+Buffer identity is distinct from file path, content digest, tab position, and display name.
+
+Text indexing chooses and documents one semantic unit for each operation: UTF-8 byte, Unicode
+scalar, grapheme cluster, line-column pair, or terminal cell.
+
+Never call byte offsets character offsets.
+
+Every text edit preserves valid UTF-8 or returns a typed rejection.
+
+Cursor, anchor, selection, replacement, line break, end-of-buffer, and movement behavior are exact.
+
+Selection direction and collapsed selection behavior are explicit.
+
+Undo and redo define retention, bounds, grouping, branching after undo, external action interaction,
+and crash behavior.
+
+Editor undo is not semantic project restoration and is not filesystem rollback.
+
+Multiple buffers define allocation, nonreuse, close, dirty state, origin, conflict, and reopen
+behavior.
+
+A file origin is a deployment locator plus exact observed base facts, not buffer identity.
+
+Search defines exact matching unit, overlap, ordering, case behavior, normalization behavior,
+bounds, and continuation.
+
+Syntax highlighting, diagnostics, line indexes, and search indexes are derived and disposable.
+
+Large-text representation is unobservable. Retain ropes, piece tables, line tables, or structural
+sharing only when a complete editor workload beats the simple oracle.
+
+A source-like semantic document is an editable proposal. The meaning graph remains authority.
+
+## Terminal boundary
+
+Applications do not emit raw terminal escape sequences.
+
+Terminal input is decoded into one closed bounded event vocabulary.
+
+Key code, modifiers, press/repeat/release state, paste, focus, mouse, and resize are distinct when
+supported.
+
+Unknown or malformed escape sequences do not become arbitrary application bytes.
+
+Resize dimensions are explicit, bounded, and tested at zero, minimum, odd, and excessive sizes.
+
+Frames use a closed cell/span/style model with exact clipping and cursor semantics.
+
+Display width, combining marks, wide characters, control characters, invalid terminal responses, and
+clipping have explicit behavior.
+
+Terminal output is escaped by construction.
+
+Acquire, raw mode, alternate screen, cursor visibility, signal handling, suspension, EOF, panic,
+output error, and normal close all have tested cleanup behavior.
+
+A terminal process boundary is not a sandbox.
+
+Do not add a general terminal framework without a complete retained application.
+
+## Filesystem boundary
+
+Ambient broad filesystem authority is forbidden.
+
+A filesystem grant selects one exact root and explicit operation classes under a documented trust
+model.
+
+Semantic paths are ordered validated relative components, not unchecked host strings.
+
+Define encoding, separator, dot, dot-dot, empty component, reserved name, symlink, hard-link, mount,
+case-sensitivity, and normalization behavior.
+
+Directory listing defines ordering, pagination, metadata, truncation, races, and inaccessible
+entries.
+
+File read binds exact observed type, size, content digest or equivalent version fact, and maximum
+bytes.
+
+File write uses explicit expected-base semantics and no-clobber or atomic-replace publication.
+
+Conflict, absence, permission denial, invalid type, excessive input, I/O failure, known success,
+known failure, and unknown visibility are distinct.
+
+A possibly visible write is never silently repeated.
+
+Reconciliation determines present, absent, conflicting, or indeterminate state from independently
+observed facts.
+
+External modification produces an application-visible decision: reload, keep, compare, save-as, or
+cancel.
+
+Temporary files, synchronization, rename, directory synchronization, cleanup, and crash points are
+tested.
+
+The filesystem adapter cannot invent editor state, project meaning, or user intent.
+
+## Semantic project host boundary
+
+An lkjscript application that operates on another semantic project needs one explicit project grant.
+
+The grant binds exact workspace identity, locator policy, allowed read and mutation classes, limits,
+and applicable authority revision.
+
+Project reads return exact revision-bound typed results.
+
+Project mutations carry exact expected revision and idempotency facts.
+
+The application may propose project actions; the project owner alone validates and publishes them.
+
+Cross-authority atomicity between application state, project history, files, and terminal output is
+absent unless explicitly proved.
+
+A pending cross-authority action records enough facts to avoid duplicate execution and to reconcile
+after interruption.
+
+The project adapter does not expose private store mutation, raw lock manipulation, or unvalidated
+graph insertion.
+
+A project path is deployment state and cannot substitute for the granted workspace identity.
+
+## Host interfaces and grants
+
+Pure deterministic computation remains the default.
+
+Ambient host authority is forbidden.
+
+Applications declare exact host-interface requirements but never grants.
+
+Instances or foreground runners bind requirements to exact grants.
+
+A grant binds sharing domain, interface identity, adapter kind, bounded descriptor, applicable
+authority revision, and limits.
+
+Host requests and outcomes are closed typed values.
+
+Opaque bytes are permitted only when the interface deliberately defines and bounds them.
+
+An adapter cannot invent semantic state, application response, command intent, or authority.
+
+Live resources require explicit acquire, use, transfer, consume, close, cancellation, timeout,
+crash, and cleanup semantics.
+
+Expected workflow outcomes may be nominal data.
+
+Corruption, denial, exhaustion, infrastructure failure, stale state, conflict, and unknown
+visibility remain distinguishable.
+
+Non-idempotent work is never silently retried after possible partial execution.
+
+Time, randomness, scheduling observations, terminal input, filesystem observations, and host
+observations are explicit when observable.
+
+## Mutation and query separation
+
+Mutations and observations are separate semantic contracts.
+
+A project mutation may reject, validate without publication, or publish exactly one revision and
+record.
+
+An application mutation may decline, report unchanged, publish one completed state, or publish one
+suspended state and command under its profile.
+
+A pure query returns a typed value without publishing semantic or durable state.
+
+A query must not be implemented as a no-op event.
+
+A product client must not decode private state as a second query authority.
+
+Query output failure has no rollback meaning because no semantic publication occurred.
+
+Pagination, ordering, truncation, omissions, revision binding, and result digests are exact and
+bounded.
 
 ## Identity and continuity
 
-Assign durable identity only for a concrete continuity, sharing, reference, repair, attribution,
-import, export, history, provenance, targeting, durable instance, product entity, build target, or
-operational consumer.
+Assign durable identity only for a concrete continuity, reference, repair, history, sharing, import,
+export, target, instance, product, or operational consumer.
 
-Names, formatting, positions, order, paths, hashes, compiler indexes, artifact offsets, storage keys,
-runtime handles, queue positions, process IDs, and addresses are not semantic identity unless a
-closed contract assigns a narrower role.
+Names, formatting, positions, order, paths, hashes, compiler indexes, artifact offsets, storage
+keys, runtime handles, queue positions, process IDs, and addresses are not semantic identity unless
+a closed contract assigns a narrower role.
 
-Workspace, revision, revision record, change set, build target, release, application, instance,
-product entity, command, outcome, grant, interface, adapter, deployment, executable, checkpoint,
-backup, cache entry, profile, session handle, and runtime handle are distinct domains.
+Workspace, revision, revision record, change, build target, release, application, instance, product
+entity, command, outcome, grant, interface, adapter, deployment, executable, checkpoint, backup,
+cache entry, session handle, buffer, file origin, terminal session, and runtime handle are distinct
+domains.
 
 A digest is never implicitly continuity, provenance, authorization, signature, freshness, or
 capability identity.
@@ -438,16 +710,13 @@ Deleted durable identities are not silently reused.
 
 Multiple exact versions may coexist only when references remain unambiguous.
 
-A filesystem path locates an authority boundary; it does not create semantic authority.
-
-Function-local identities remain bound to one function and exact revision unless a specification
-adds a real continuity consumer.
+Function-local identities remain bound to one function and exact revision unless a real continuity
+consumer justifies more.
 
 ## Publication and durability
 
-Published workspace revisions, revision records, releases, applications, instance revisions, host
-outcomes, declared authoritative checkpoints, backups, and other declared durable objects are
-immutable within their domains.
+Published revisions, records, releases, applications, instance records, host outcomes, authoritative
+checkpoints, backups, and other declared durable objects are immutable within their domains.
 
 Every durable namespace has one publication authority.
 
@@ -455,7 +724,7 @@ One successful publication creates exactly one accepted durable outcome.
 
 Rejection and validate-only publish nothing and consume no durable identity.
 
-A semantic no-change must not consume a revision merely to return a response.
+Semantic no-change does not consume a revision merely to return a response.
 
 Success is acknowledged only after the documented synchronization boundary.
 
@@ -469,103 +738,7 @@ proved.
 
 Output failure cannot retroactively undo accepted authority.
 
-A workspace revision and its revision record must not become independently visible in conflicting
-combinations.
-
-## Artifact and authority domains
-
-Workspace snapshots own accepted development meaning at exact revisions.
-
-Revision records own accepted development-history facts.
-
-Build targets own exact derivation intent.
-
-Releases own exact reusable semantics.
-
-Applications own exact runnable closure and declared interfaces.
-
-Instances own durable state and transition history.
-
-Grants own authority.
-
-Deployments own process, machine, account, namespace, and resource placement.
-
-Backups own one exact transferable closure under their explicit contract.
-
-Executables, compiled units, indexes, generated bindings, profiles, ordinary checkpoints, and build
-outputs are derived unless a specification deliberately promotes one with exact validation.
-
-Caches are disposable acceleration.
-
-Compilation consumes one immutable accepted revision or independently validated distribution state
-and lowers only the complete selected closure.
-
-Coordinates, user versions, aliases, paths, and mutable lookup results are not exact dependencies.
-
-## Mutation and query separation
-
-Mutations and observations are separate semantic contracts.
-
-A workspace mutation may reject, validate without publication, or publish exactly one revision and
-revision record.
-
-An application mutation may decline, report unchanged, publish one completed state, or publish one
-suspended state and command under an application-owned typed decision.
-
-A declined or unchanged application mutation publishes no state revision, command, attempt, outcome,
-or HEAD change.
-
-A pure query names exact authority and returns a typed value without publishing semantic or durable
-state.
-
-A query must not be implemented as a no-op event.
-
-A product client must not decode private state as a second query authority.
-
-Query output failure has no rollback meaning because no semantic publication occurred.
-
-Query pagination, ordering, truncation, omissions, revision binding, and result-digest behavior are
-exact and bounded.
-
-Idempotency, stale-base behavior, and response retention remain explicit.
-
-## Application interfaces and host authority
-
-Pure deterministic computation remains the default.
-
-Ambient host authority is forbidden.
-
-Applications may declare exact host-interface requirements but never grants.
-
-Instances bind requirements to exact grants.
-
-A grant binds the exact sharing domain, interface identity, adapter kind, bounded descriptor,
-applicable authority revision, and limits needed to prevent implicit broadening.
-
-Host requests and outcomes are closed typed values.
-
-Opaque bytes are acceptable only when the interface deliberately defines and bounds them.
-
-An adapter cannot invent semantic state, application response, command intent, or authority.
-
-Parallel commands require a current complete application and exact ordering, cancellation,
-partial-result, retry, and replay contracts.
-
-A live resource handle, stream, socket, file descriptor, process, timer, terminal session, secret, or
-foreign object requires explicit acquire, use, transfer, consume, close, cancellation, timeout,
-crash, and cleanup semantics.
-
-Do not add live resources merely for adapter convenience.
-
-Expected workflow outcomes may be nominal data.
-
-Corruption, authority denial, resource exhaustion, infrastructure failure, stale state, and unknown
-visibility remain distinguishable.
-
-Non-idempotent work is never silently retried after possible partial execution.
-
-Time, randomness, scheduling observations, terminal input, filesystem observations, and host
-observations are explicit when observable.
+Related durable objects must not become independently visible in conflicting combinations.
 
 ## Values, language, and representation
 
@@ -573,16 +746,15 @@ Add a language or value capability only for a complete current application or th
 development CLI itself.
 
 Text and variable-length collections require exact validation, canonical encoding, bounds,
-deterministic equality and order, and a current consumer.
+deterministic equality and ordering, and a current consumer.
 
 Do not add a conventional source language merely to replace a graph-construction script.
 
-Do not add generics, traits, macros, maps, sets, iterators, mutable builders, slicing, normalization,
-formatting, or operator syntax without an exact blocker and complete end-to-end use.
+Do not add generics, traits, macros, maps, sets, iterators, mutable builders, normalization,
+formatting, reflection, or operator syntax without an exact blocker and complete end-to-end use.
 
-Representation, sharing, allocation, reclamation, checkpoint layout, cache entries, IR, bytecode,
-profiles, and native code are unobservable or derived unless a specification deliberately defines a
-narrower validated authority.
+Representation, sharing, allocation, reclamation, checkpoint layout, caches, IR, bytecode, profiles,
+and native code are unobservable or derived unless deliberately promoted by specification.
 
 A simple independent allocation, execution, reconstruction, and build route remains the oracle for
 optimized values, storage, caches, compaction, and execution tiers.
@@ -590,8 +762,7 @@ optimized values, storage, caches, compaction, and execution tiers.
 Cache miss, eviction, missing derived state, and process restart remain correct.
 
 Full snapshots, deltas, journals, object stores, databases, collectors, bytecode, JITs, schedulers,
-and supervisors must beat simpler safe designs on a complete representative workload and must be
-deleted when they lose.
+and supervisors must beat simpler safe designs on a representative complete workload.
 
 ## Execution, scheduling, and concurrency
 
@@ -606,53 +777,52 @@ Operational scheduling and language semantics are separate.
 
 Deterministic fuel is not wall-clock time.
 
-A scheduler may use time, priority, quota, or load for admission and fairness only when those choices
-do not silently change accepted semantic results.
+A scheduler may use time, priority, quota, or load only when those choices do not silently change
+semantic results.
 
 Observable interruption, yield, cancellation, or timeout requires an accepted contract.
 
-Per-workspace and per-instance mutations remain serial unless a specification defines a stronger
-model.
+Per-project and per-instance mutations remain serial unless a stronger model is specified and
+proved.
 
-Pure queries may run concurrently only after exact snapshot isolation, lifetime, ordering,
-admission, shutdown, and mutation interaction are proved.
+Pure queries may run concurrently only after snapshot isolation, lifetime, ordering, admission,
+shutdown, and mutation interaction are proved.
 
 Cross-project or cross-instance parallelism requires exact isolation, bounded queues, deterministic
-per-authority order, explicit overload, safe shutdown/restart, and differential tests against serial
+per-authority order, overload behavior, safe shutdown, and differential tests against serial
 execution.
 
-Do not add a general async runtime, worker pool, scheduler, actor system, or daemon merely because a
-foreground session exists.
+Do not add a general async runtime, worker pool, scheduler, actor system, or daemon merely because
+an interactive foreground session exists.
 
 ## Resource governance
 
 Semantic limits and operational limits are separate.
 
 Semantic limits include fuel, frames, value depth, item count, text bytes, collection elements,
-graph expansion, transaction operations, revision-record size, target closure, state size, query
+graph expansion, transaction operations, revision record size, target closure, state size, query
 work, and response size.
 
 Operational limits include queue capacity, concurrent compilation, cache bytes, aggregate memory,
-open files, adapter operations, process count, CPU share, temporary publication bytes, project count,
-and deployment quotas.
+open files, terminal events, adapter operations, process count, CPU share, temporary publication
+bytes, project count, and deployment quotas.
 
-Each category states its accounting unit, owner, reservation and release points, peak and retained
-accounting, limit source, rejection class, retryability, observability, restart behavior, and
-publication interaction.
+Each limit states accounting unit, owner, reservation and release points, peak and retained
+accounting, source, rejection class, retryability, observability, restart behavior, and publication
+interaction.
 
 Check lengths, counts, depth, and reservations before allocation or corresponding work.
 
 Do not present allocator observations as exact semantic accounting.
 
-Shared backing storage, checkpoints, caches, embedded artifacts, or target outputs must not bypass
-per-project or per-request limits.
+Shared backing storage, checkpoints, caches, embedded artifacts, and target outputs must not bypass
+limits.
 
-Overload must reject, queue within a bound, or shed work under an explicit policy.
+Overload rejects, queues within a bound, or sheds work under an explicit policy.
 
 Never create an unbounded hidden queue.
 
-OS controls may strengthen deployment containment. They do not replace semantic or runtime
-accounting.
+OS controls may strengthen containment but do not replace semantic or runtime accounting.
 
 ## Security and trust
 
@@ -666,9 +836,9 @@ concrete need, isolated ownership, safe public contract, and independent tests a
 Memory safety, exhaustion, stack safety, cleanup, aliasing, concurrency, permissions, path safety,
 crash consistency, supply-chain trust, and hostile-code isolation are separate contracts.
 
-Treat bytes, text, paths, project locators, filesystem metadata, semantic repositories, revision
-records, artifacts, instance files, checkpoints, backups, caches, profiles, IPC peers, terminal
-events, and adapter outcomes as hostile input.
+Treat bytes, text, paths, locators, filesystem metadata, semantic repositories, revision records,
+artifacts, instance files, checkpoints, backups, caches, profiles, IPC peers, terminal events, and
+adapter outcomes as hostile input.
 
 A process boundary creates neither semantic authority nor a sandbox.
 
@@ -678,11 +848,11 @@ A path, socket, UID, environment variable, or connection is not sufficient seman
 itself.
 
 Write the threat model before multi-user access, untrusted native code, broad filesystem or network
-access, child processes, secrets, terminal control beyond trusted local use, or remote semantic
-repository synchronization.
+access, child processes, secrets, terminal control beyond trusted local use, or remote
+synchronization.
 
-Large input, work, state, history, graph, output, queue, cache, diagnostics, and metrics are bounded,
-streamed, paginated, chunked, or policy-controlled.
+Large input, work, state, history, graph, output, queue, cache, diagnostics, and metrics are
+bounded, paginated, chunked, streamed, or policy-controlled.
 
 Human terminal output is escaped and bounded.
 
@@ -691,72 +861,46 @@ Machine output is framed separately and never contaminated by progress text.
 Compactness never weakens validation, authorization, identity, durability, diagnostics, or
 verification.
 
-## Project discovery and path handling
-
-Ordinary public commands should work from a project root or descendant directory and accept an
-explicit project override.
-
-Discovery must find exactly one strict marker under a documented parent-walk policy.
-
-Reject symlinked markers, unsafe traversal, ambiguous nested authorities, nonregular files, foreign
-workspace bindings, malformed locators, and path substitution.
-
-Canonical paths are deployment facts and may change without changing semantic identity.
-
-Do not require absolute paths at the public boundary solely for implementation convenience.
-
-When an exact file is deliberately selected, bind the selected authority or content facts needed to
-prevent time-of-check/time-of-use substitution.
-
-Build output paths, dependency paths, and attachment paths remain explicit deployment inputs.
-
 ## Agent and provider economy
 
-Context budget is a correctness, latency, and cost constraint.
+Context budget is part of correctness, latency, and cost.
 
-There is no fixed byte ceiling for this root file. Every durable instruction must still pay recurring
-context rent. Prefer one precise durable rule over repeated campaign prose, and permit a larger file
-when it materially reduces ambiguity, repeated discovery, or correction.
+This root policy has no arbitrary byte ceiling, but every durable instruction pays recurring context
+rent.
+
+Keep permanent rules here and volatile campaign facts in the active prompt, status, evidence, or
+generated orientation.
 
 State durable principles once.
 
-Put volatile facts in the active prompt, status, evidence, or generated orientation.
+Prefer compact orientation, task-scoped graph queries, exact on-demand expansion, bounded review,
+stable diagnostics, validate/apply parity, delta receipts, digest reuse, session-local handles, and
+explicit omissions.
 
-Prefer compact orientation, task-scoped context, exact on-demand expansion, bounded review, stable
-diagnostics, validate/apply parity, delta receipts, digest reuse, session-local handles, and explicit
-omissions.
+Build a compact campaign ledger instead of repeatedly reading a long prompt.
 
-After identifying exact owners, stop broad discovery unless evidence invalidates the map.
-
-Build a compact task ledger instead of rereading a long campaign prompt.
-
-Expose only relevant tools and schema roots.
+Expose only relevant schema roots and tools.
 
 Add prompt rules, examples, schemas, or context only for a measured failure mode.
 
-Compare equal tasks using:
+A larger response is justified when it prevents more expensive rediscovery or correction; byte
+minimization alone is not the objective.
 
-- semantic success;
-- unintended changes;
-- correction depth;
-- repeated discovery;
-- action and observation bytes;
-- request count;
-- process count;
-- files and source bytes opened;
-- schema bytes emitted;
-- build invocations;
-- elapsed time; and
-- failure quality.
+Compare equal tasks using semantic success, unintended changes, correction depth, repeated
+discovery, action bytes, observation bytes, request count, process count, files opened, source bytes
+opened, schema bytes, build invocations, elapsed time, and failure quality.
 
-Record provider model identity, token classes, pricing, and monetary cost only when directly exposed.
+Record provider model identity, token classes, cache classes, dated prices, and monetary cost only
+when directly exposed.
 
 Bytes are not tokens.
 
 Never infer provider cost from bytes.
 
-The semantic CLI must not claim API-cost savings without exact comparable telemetry. It may claim
-measured reductions in bytes, calls, processes, files opened, or elapsed time.
+Do not claim API-cost savings without exact comparable telemetry.
+
+Measured reductions in bytes, calls, processes, files opened, correction depth, or elapsed time may
+be claimed precisely.
 
 ## Code ownership and dependencies
 
@@ -775,7 +919,7 @@ measured reductions in bytes, calls, processes, files opened, or elapsed time.
 Campaign prompts are temporary execution artifacts.
 
 Keep one executable owner for every type, field, operation, query, error, limit, format, interface,
-grant, resource, command, target declaration, revision record, and machine descriptor.
+grant, resource, command, target, record, and machine descriptor.
 
 Derive views only when staleness cannot be silent.
 
@@ -788,37 +932,11 @@ Do not preserve arbitrary file-size or directory-count limits.
 
 Prefer the standard library and existing dependencies.
 
-A new dependency must repay its supply-chain, build, binary, audit, operational, and maintenance
-cost on the complete workflow.
+A new dependency must repay supply-chain, build, binary, audit, operational, and maintenance cost on
+the complete workflow.
 
-Git history is the archive for deleted repository material. The semantic repository is the accepted
-history for maintained lkjscript meaning. Delete stale active-tree copies and losing generated paths.
-
-## TUI and rich-editor north star
-
-A rich text editor with an explorer is a valid representative future application.
-
-Treat it as several separate contracts:
-
-- text-buffer semantics;
-- cursor, selection, undo, and command semantics;
-- project-tree semantics;
-- filesystem read/write and atomic replacement;
-- terminal input, resize, and rendering;
-- session lifetime and cleanup;
-- resource limits;
-- crash recovery;
-- application state versus file authority; and
-- host trust and path confinement.
-
-Do not call the platform editor-ready merely because it can render text or store bytes.
-
-Do not add broad filesystem authority, terminal control, timers, event loops, mutable text buffers,
-search indexes, maps, or concurrency as a speculative bundle.
-
-A bounded editor-core or semantic-explorer prototype may be retained only when it is authored through
-the public semantic CLI, has a complete user workflow, and exposes a concrete platform blocker or
-delivers independent value.
+Git history is the archive for deleted repository material. Delete stale active-tree copies and
+losing generated paths.
 
 ## Testing and verification
 
@@ -826,26 +944,33 @@ Acceptance tests have exact immutable input, oracle, policy, selection, order, a
 
 Skipped, exhausted, cancelled, unavailable, or indeterminate tests do not pass.
 
-For changed boundaries, cover applicable:
-
-- canonical and repeated success;
+For changed boundaries, cover every applicable case:
+- canonical success;
+- repeated success;
 - validate-only parity;
+- semantic no-change;
 - no-publication outcomes;
 - pure-query no-write behavior;
 - revision-record atomicity;
 - stale and future base;
 - duplicate and idempotency conflict;
-- wrong domain;
-- malformed, truncated, trailing, and excessive input;
+- wrong identity domain;
+- malformed input;
+- truncated input;
+- trailing input;
+- oversized input and output;
 - exact and one-over limits;
 - ambiguous selectors;
 - foreign authority;
 - corruption;
 - restart;
 - interrupted publication;
+- unknown visibility;
+- reconciliation;
 - output failure;
 - cleanup;
-- concurrent access and authority busy;
+- concurrent access;
+- authority busy;
 - overload;
 - replay;
 - cache miss, hit, eviction, and corruption;
@@ -855,12 +980,14 @@ For changed boundaries, cover applicable:
 - artifact reproduction;
 - backup and restore;
 - relative-path and discovery safety;
-- public CLI workflows; and
-- first-party application dogfooding.
+- terminal resize and cleanup;
+- filesystem substitution and conflict;
+- public CLI workflows;
+- first-party application dogfooding;
 
 Use a simple independent reference model where semantics become substantial.
 
-Run narrow checks first, then the full repository gates:
+Run narrow checks first, then the full repository gates.
 
 ```sh
 cargo fmt --all -- --check
@@ -873,8 +1000,8 @@ git diff --check
 Run every affected retained public workflow and every selected complete application.
 
 Use Miri, sanitizers, mutation tests, property tests, fuzzing, model checking, crash injection,
-filesystem fault injection, or cross-platform execution when they target a real risk and are
-available.
+filesystem fault injection, pseudo-terminal tests, or cross-platform execution when they target a
+real risk and are available.
 
 State scope and limitations.
 
@@ -887,7 +1014,7 @@ Change specification, implementation, and oracle together when behavior delibera
 Evidence is not semantic authority.
 
 Record exact environment, commit, command, input corpus, output, raw observations, units, sample
-selection, warm/cold classification, and unavailable data.
+selection, warm or cold classification, and unavailable data.
 
 Do not infer tokens from bytes.
 
@@ -906,6 +1033,8 @@ Do not call a process, worker, container, private directory, or project locator 
 Do not call compile success cross-platform support.
 
 Do not claim full-history validation from a current-state check.
+
+Do not call a terminal smoke test a production editor.
 
 Retain bounded evidence for serious losing alternatives, not only the selected result.
 
@@ -930,7 +1059,7 @@ Prefer direct semantic CLI operations over custom construction code.
 
 Prefer automatic immutable history over manual reconstruction.
 
-Prefer one topology-neutral implementation over duplicated process adapters.
+Prefer one topology-neutral owner over duplicated process adapters.
 
 Prefer local features over platforms built for one consumer.
 
@@ -946,7 +1075,6 @@ service, scheduler, worker, framework, source form, or generator needs a named c
 Complexity must pay rent in a representative end-to-end workflow.
 
 Before retaining a substantial choice, record:
-
 - consumer;
 - obligations;
 - reproduced baseline;
@@ -956,8 +1084,8 @@ Before retaining a substantial choice, record:
 - semantic and operational costs;
 - independent oracle;
 - direct-cutover deletions;
-- stop rule; and
-- reversal condition.
+- stop rule;
+- reversal condition;
 
 Delete losing prototypes completely.
 
@@ -965,22 +1093,23 @@ Current absences are not permanent prohibitions without semantic reason.
 
 ## Change workflow
 
-1. Inspect checkout, instructions, branch, commit, and unrelated changes.
+1. Inspect checkout, instructions, branch, commit, and unrelated work.
 2. Identify authoritative owners and active format identities.
-3. Select the valuable application workflow and freeze an independent oracle.
-4. Reproduce the current public authoring and build path.
-5. State outcome, completion bar, non-goals, alternatives, and reversal condition.
+3. Select the valuable complete application workflow and freeze an independent oracle.
+4. Reproduce the current public authoring, build, run, and recovery paths.
+5. Create a compact campaign ledger with outcomes, non-goals, alternatives, stop rules, and
+   verification state.
 6. Build the smallest complete semantic-CLI slice.
 7. Use it immediately on a real maintained application.
 8. Prototype uncertain questions in the smallest dependency-closed form.
 9. Select one coherent design from evidence.
 10. Implement the full vertical across semantic model, persistence, protocol, CLI, targets, product,
     tests, and documentation.
-11. Publish changes through the new path and inspect automatic history.
-12. Cut over directly and delete custom builders, duplicate public surfaces, compatibility paths, and
-    stale facts.
-13. Run focused, full, representative, restart, corruption, publication, and product checks.
-14. Measure equal authoring tasks and record only supported savings.
+11. Publish semantic changes through the new path and inspect automatic history.
+12. Cut over directly and delete builders, duplicate surfaces, compatibility paths, and stale facts.
+13. Run focused, full, representative, restart, corruption, publication, interaction, and product
+    checks.
+14. Measure equal authoring and product tasks and record only supported savings.
 15. Dogfood from a fresh checkout.
 16. Leave a compact exact handoff.
 
@@ -988,12 +1117,11 @@ Do not stop at a report when a safe complete implementation is authorized and fe
 
 Do not scatter partial architecture.
 
-Do not ask the user to decide ordinary engineering details the checkout and evidence can resolve.
+Do not ask the user to decide ordinary engineering details that checkout evidence can resolve.
 
 ## Completion and handoff
 
 A semantic-development capability is complete only when it is:
-
 - discoverable from an ordinary project directory;
 - usable through supported public human and machine CLI contracts;
 - exact-base-bound;
@@ -1007,24 +1135,25 @@ A semantic-development capability is complete only when it is:
 - resource-accounted where applicable;
 - documented by one owner;
 - exercised by a useful first-party application;
-- measured end to end; and
-- free of superseded paths.
+- measured end to end;
+- free of superseded paths;
 
 Before finishing, report:
-
 - exact starting and ending state;
 - selected design and serious rejected alternatives;
 - changed authority and format contracts;
 - automatic-history behavior;
 - CLI workflows;
+- interactive-session behavior when applicable;
+- terminal, filesystem, and project grants when applicable;
 - build-target behavior;
-- first-party application migration;
-- deleted custom builders and stale paths;
+- first-party application migration or creation;
+- deleted builders and stale paths;
 - validation commands and exact results;
-- representative application and authoring-economy evidence;
-- provider telemetry only when exposed;
+- representative product and authoring-economy evidence;
+- provider telemetry only when directly exposed;
 - known limits and trust assumptions;
-- reversal gates; and
-- every requested action not performed.
+- reversal gates;
+- every requested action not performed;
 
 Claims must be no stronger than the checkout and reproduced evidence.
