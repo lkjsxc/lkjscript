@@ -43,8 +43,8 @@ projection. Keep it only while frozen workload evidence remains at least 20 perc
 or latency and PTY reconstruction matches after cache loss, resize, wide/combining text, controls,
 styles, and output faults. Cell-patch semantics do not belong in application meaning.
 
-Revision-174 evidence closes maximum paste at 84.220 ms and reduces growing 1,000 inserts from
-11.056 seconds to 3.883 seconds, but the 10,000-event corpus remains 27.865 seconds and a duplicate
+Revision-174 evidence closes maximum paste at 89.962 ms and reduces growing 1,000 inserts from
+11.056 seconds to 4.235 seconds, but the 10,000-event corpus remains 28.034 seconds and a duplicate
 unoptimized layout replay took 977.90 seconds. Reopen prepared-program dispatch, application state
 shape, and viewport construction before adding a bytecode/native tier. Retain a faster tier only if
 the complete editor replay improves at least 30 percent with exact state/frame/action equality and

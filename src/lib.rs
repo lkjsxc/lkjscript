@@ -95,8 +95,8 @@ pub use project::{
     ProjectBackupReceipt, ProjectChangeContinuation, ProjectChangeReceipt, ProjectChangeRequest,
     ProjectContextResult, ProjectDiffPage, ProjectFunctionProposal, ProjectHealth,
     ProjectInitReceipt, ProjectLocatorFacts, ProjectNodeInspection, ProjectOrientation,
-    ProjectOrientationResult, ProjectStatus, ProjectTargetReceipt, TargetArtifactReceipt,
-    TargetInspection,
+    ProjectOrientationResult, ProjectStatus, ProjectTargetReceipt, ProjectTargetSummaryReceipt,
+    TargetArtifactReceipt, TargetArtifactSummaryReceipt, TargetInspection, TargetTestCountSummary,
 };
 pub use project_host::{
     PROJECT_HOST_CONTRACT_VERSION, ProjectGrantOperations, ProjectHostReceipt, ProjectHostRequest,

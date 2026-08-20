@@ -53,10 +53,10 @@ input and reject stale or foreign requests. Build output and backup destination 
 relative; they resolve against the command working directory, reject lexical parent traversal and
 symlink/nonregular parents, and remain deployment facts.
 
-The one-shot project machine envelope is contract version 2:
+The one-shot project machine envelope is contract version 3:
 
 ```json
-{"version":2,"result":{"kind":"status","data":{"contract_version":1}}}
+{"version":3,"result":{"kind":"status","data":{"contract_version":1}}}
 ```
 
 Each command writes exactly one JSON value plus newline to stdout. `--pretty` selects the equivalent
@@ -70,13 +70,20 @@ Project response serialization is bounded by the 32 MiB machine policy. Any muta
 whose compact or pretty receipt cannot fit rejects before semantic or artifact publication. Query
 responses are bounded at construction or paginated.
 
+Successful `target build` and `target test` responses project the complete validated preparation
+receipt into exact authority, target, artifact identity, publication, and aggregate test-count
+facts. Passing case names and complete artifact inspection are omitted from this default receipt;
+the immutable artifact owners expose those details on demand. Target preparation returns a typed
+failure before a success receipt when any embedded case does not pass. The foreground project
+session uses the same compact target projection.
+
 ## Project foreground session
 
 `lkjscript session` holds one selected project/engine in the caller-owned foreground process and
-accepts one project-session-v2 JSON request per line:
+accepts one project-session-v3 JSON request per line:
 
 ```json
-{"version":2,"request_id":1,"request":{"kind":"status"}}
+{"version":3,"request_id":1,"request":{"kind":"status"}}
 ```
 
 Responses carry the same unique nonzero request ID. The closed request variants cover orient,
@@ -233,8 +240,8 @@ owner.
 ## Version rejection
 
 Protocol 13 and older, machine schema v13 and older, project/marker versions other than 1, project
-change version 1, project machine/session version 1, editable document version 1, revision-record
-versions other than 1, context packet 1, workspace format 7,
+change version 1, project machine/session versions 1 and 2, editable document version 1,
+revision-record versions other than 1, context packet 1, workspace format 7,
 `lkjscript-tsm007`, `LKJHEAD9`, release format 1, application internal format 8, instance format 2, runtime
 session versions other than 2, the `agent` command, command-local release/application build commands,
 and the `plan` document root reject. There is no alias, fallback, edition, migration mode, or daemon

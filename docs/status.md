@@ -97,7 +97,7 @@ eight cases, and no blockers. Its format-9 checked artifact is 170,545 bytes wit
 |---|---|---|
 | raw workspace protocol / schema | 14 / `lkjscript-machine-schema-v14` | protocol/schema 13 and older |
 | semantic project / marker | 1 / `LKJPROJ1` | every other version |
-| project change / machine / session | 2 / 2 / 2 | version 1 |
+| project change / machine / session | 2 / 3 / 3 | machine/session 2 and older; change 1 |
 | semantic query / change continuation | 1 / 1 | every other version |
 | workbench / context / edit document | 2 / 2 / 2 | context/document 1 and `plan` |
 | revision record | 1 / `LKJREC01` | every other version |

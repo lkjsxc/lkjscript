@@ -71,23 +71,23 @@ use five samples. No per-event percentile is inferred from a total.
 
 | observation | revision-174 result | reproduced predecessor |
 |---|---:|---:|
-| artifact validation | 31.014 ms median / 32.915 ms p95 | 10.875 / 11.181 ms |
-| semantic project orientation | 1,014.191 ms median / 1,020.969 ms p95 / 1,247 bytes | 354.442 / 366.365 ms / 1,239 bytes |
-| exact function query | 1,010.180 ms / 17,402 bytes | 354.875 ms / 69,761 bytes |
-| generated function proposal | 1,026.689 ms / 5,864 bytes | 357.195 ms / 189,752 bytes |
-| 10,000 mixed local events | 27,864.909 ms / completed | 26,998.427 ms |
-| 1,000 growing inserts | 3,882.714 ms / completed | 11,055.720 ms |
-| 100 tabs / 795 transitions | 2,825.568 ms / completed | no equal predecessor corpus |
-| 65,536-scalar paste | 84.220 ms / completed | 799.446 ms |
-| 1x1 resize | 52.298 ms / completed | 17.894 ms |
+| artifact validation | 31.732 ms median / 38.432 ms p95 | 10.875 / 11.181 ms |
+| semantic project orientation | 1,032.112 ms median / 1,051.251 ms p95 / 1,247 bytes | 354.442 / 366.365 ms / 1,239 bytes |
+| exact function query | 1,014.409 ms / 17,402 bytes | 354.875 ms / 69,761 bytes |
+| generated function proposal | 1,001.663 ms / 5,864 bytes | 357.195 ms / 189,752 bytes |
+| 10,000 mixed local events | 28,033.687 ms / completed | 26,998.427 ms |
+| 1,000 growing inserts | 4,234.908 ms / completed | 11,055.720 ms |
+| 100 tabs / 795 transitions | 2,862.822 ms / completed | no equal predecessor corpus |
+| 65,536-scalar paste | 89.962 ms / completed | 799.446 ms |
+| 1x1 resize | 50.501 ms / completed | 17.894 ms |
 
 Bulk scalar conversion, bounded sequence repetition, and cell-prefix fitting removed the earlier
-application-level scalar loops. Growing insertion improves 64.9 percent and maximum paste improves
-89.5 percent on equal corpora; the paste now beats the 250 ms campaign target and no longer exhausts
+application-level scalar loops. Growing insertion improves 61.7 percent and maximum paste improves
+88.7 percent on equal corpora; the paste now beats the 250 ms campaign target and no longer exhausts
 fuel. Query and proposal responses are 75.1 and 96.9 percent smaller, respectively, although larger
 history and application authority make their complete process times slower. The mixed corpus is
-3.2 percent slower and still misses the 10-second ambition; growing insert still misses 2 seconds.
-Those misses, the 52.3 ms minimum resize, and an observed 977.90-second unoptimized duplicate
+3.8 percent slower and still misses the 10-second ambition; growing insert still misses 2 seconds.
+Those misses, the 50.5 ms minimum resize, and an observed 977.90-second unoptimized duplicate
 layout replay are explicit execution-tier/runtime-boundary reversal gates. They are not hidden by
 raising fuel or reported as interaction percentiles.
 
@@ -121,6 +121,10 @@ The compact product profile passed seven gates in 419,460 ms: format, locked opt
 build, complete 175-snapshot doctor, 12/12 target cases, no-replace artifact build, byte comparison,
 and headless plus four PTY groups. Default success was nine lines including the receipt locator. An
 injected quick-profile failure preserved its full log and emitted seven bounded diagnostic lines.
+The direct all-pass `target test` machine receipt fell from 16,767 to 826 bytes (95.07 percent), and
+the publishing `target build` receipt is 837 bytes; both omit passing case names while retaining
+exact revision, snapshot, target, artifact, publication, application, graph, release, and aggregate
+test facts.
 
 The revision-172 user-visible dogfood used one orientation response (1,247 bytes), one function
 inspection (694), one task context (64,134), one generated proposal (14,932), one validate-only

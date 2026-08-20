@@ -171,6 +171,9 @@ Use `tools/check quick`, `tools/check product`, or `tools/check full`. The wrapp
 offline gates, retains complete bounded logs under `.artifacts/check/`, and prints aggregate success
 or bounded failure evidence. `tools/check full` includes formatting, clippy, all-target tests,
 optimized build, deep project doctors, product target tests, artifact reproduction, and acceptance.
+Public `lkjscript target test` and `target build` success receipts likewise omit passing-case and
+complete artifact-inspection detail while retaining exact revision, target, artifact, publication,
+and aggregate test facts.
 
 The trust model is one local operator and OS account. Native code and the narrow blob adapter are
 trusted. Graphs, JSON, documents, paths, locators, records, artifacts, manifests, outcomes, backups,

@@ -23,29 +23,29 @@
     "graph_digest": "aebf4631e05840953a7d493999c610f18b189ad4bc31bd0eaf0fe3ab9608d2d3",
     "root_release": "13e49b20e4e2d5dbec7baf6a371d7ac9563b746547bb5af7b11d16c739c2b7ab",
     "binary_bytes": 9329928,
-    "binary_sha256": "dc2e2e123403cc0824c6abb18da55d1f2cc45adf57d08e19e24d2c4f15845e68",
-    "project_cli_bytes": 16603776,
-    "project_cli_sha256": "1add1675325b07b5a2d261d7599510358257fb3109da16d12357c871d4cc3055"
+    "binary_sha256": "b0e4ddd7242ef6cae10a5bf684470f170c99358a75d515c90208aad3d4c3767c",
+    "project_cli_bytes": 16643264,
+    "project_cli_sha256": "bec5d33b226ad3892ed0fe60b16883118aaf7f1bf8310f57aa8fa621ed9f3af4"
   },
   "process_inclusive": {
     "artifact_validation": {
-      "samples_ms": [30.959701, 31.069940, 31.014375, 30.349114, 32.914949],
-      "median_ms": 31.014375,
-      "p95_ms": 32.914949,
+      "samples_ms": [38.431926, 30.637495, 31.731834, 29.790533, 32.346160],
+      "median_ms": 31.731834,
+      "p95_ms": 38.431926,
       "response_bytes": 14938
     },
     "project_orientation": {
-      "samples_ms": [983.336730, 1018.148949, 995.831351, 1020.968652, 1014.190944],
-      "median_ms": 1014.190944,
-      "p95_ms": 1020.968652,
+      "samples_ms": [1016.682392, 1032.112373, 1051.251081, 1051.240802, 1003.223427],
+      "median_ms": 1032.112373,
+      "p95_ms": 1051.251081,
       "response_bytes": 1247
     },
     "function_query": {
-      "elapsed_ms": 1010.179900,
+      "elapsed_ms": 1014.409356,
       "response_bytes": 17402
     },
     "function_proposal": {
-      "elapsed_ms": 1026.689352,
+      "elapsed_ms": 1001.663342,
       "response_bytes": 5864
     }
   },
@@ -53,7 +53,7 @@
     {
       "name": "mixed_10000",
       "status": "completed",
-      "elapsed_ms": 27864.909158,
+      "elapsed_ms": 28033.687233,
       "transitions": 10000,
       "changed": 10000,
       "request_bytes": 1270050,
@@ -64,7 +64,7 @@
     {
       "name": "growing_insert_1000",
       "status": "completed",
-      "elapsed_ms": 3882.714107,
+      "elapsed_ms": 4234.908331,
       "transitions": 1006,
       "changed": 1006,
       "request_bytes": 130812,
@@ -75,7 +75,7 @@
     {
       "name": "tabs_100",
       "status": "completed",
-      "elapsed_ms": 2825.568309,
+      "elapsed_ms": 2862.822026,
       "transitions": 795,
       "changed": 795,
       "request_bytes": 102105,
@@ -86,7 +86,7 @@
     {
       "name": "maximum_paste_65536_scalars",
       "status": "completed",
-      "elapsed_ms": 84.219999,
+      "elapsed_ms": 89.962279,
       "transitions": 7,
       "changed": 7,
       "request_bytes": 263006,
@@ -97,7 +97,7 @@
     {
       "name": "resize_1_by_1",
       "status": "completed",
-      "elapsed_ms": 52.297706,
+      "elapsed_ms": 50.501427,
       "transitions": 4,
       "changed": 4,
       "request_bytes": 504,

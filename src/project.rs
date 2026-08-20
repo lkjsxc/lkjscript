@@ -271,6 +271,121 @@ pub struct ProjectTargetReceipt {
     pub artifact: TargetArtifactReceipt,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TargetTestCountSummary {
+    pub total: u64,
+    pub passed: u64,
+    pub failed: u64,
+    pub release_total: u64,
+    pub application_total: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(
+    tag = "kind",
+    content = "data",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
+pub enum TargetArtifactSummaryReceipt {
+    Release {
+        contract_version: u16,
+        format_version: u16,
+        release: crate::release::ReleaseId,
+        content_digest: crate::release::ReleaseContentDigest,
+        tests: TargetTestCountSummary,
+    },
+    Application {
+        contract_version: u16,
+        format_version: u16,
+        digest: crate::application::ApplicationDigest,
+        graph_digest: crate::application::ApplicationGraphDigest,
+        root_release: crate::release::ReleaseId,
+        tests: TargetTestCountSummary,
+    },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectTargetSummaryReceipt {
+    pub contract_version: u16,
+    pub workspace: WorkspaceId,
+    pub revision: Revision,
+    pub snapshot: SnapshotHash,
+    pub target: NodeId,
+    pub target_name: String,
+    pub artifact_bytes: u64,
+    pub artifact_digest: String,
+    pub published: bool,
+    pub artifact: TargetArtifactSummaryReceipt,
+}
+
+impl ProjectTargetReceipt {
+    /// Projects a successful target preparation into the bounded public command receipt.
+    ///
+    /// Complete artifact inspection and per-case passing detail remain available from their
+    /// artifact owners. Target preparation rejects before returning this receipt when any case
+    /// does not pass, so an all-pass count is sufficient continuation state here.
+    pub fn into_summary(self) -> ProjectTargetSummaryReceipt {
+        let artifact = match self.artifact {
+            TargetArtifactReceipt::Release(release) => {
+                let total = release.tests.total;
+                let passed = release.tests.passed;
+                TargetArtifactSummaryReceipt::Release {
+                    contract_version: release.contract_version,
+                    format_version: release.inspection.format_version,
+                    release: release.inspection.release,
+                    content_digest: release.inspection.content_digest,
+                    tests: TargetTestCountSummary {
+                        total,
+                        passed,
+                        failed: total.saturating_sub(passed),
+                        release_total: total,
+                        application_total: 0,
+                    },
+                }
+            }
+            TargetArtifactReceipt::Application(application) => {
+                let total = application.tests.total;
+                let passed = application.tests.passed;
+                TargetArtifactSummaryReceipt::Application {
+                    contract_version: application.contract_version,
+                    format_version: application.inspection.format_version,
+                    digest: application.inspection.digest,
+                    graph_digest: application.inspection.graph_digest,
+                    root_release: application.inspection.root_release,
+                    tests: TargetTestCountSummary {
+                        total,
+                        passed,
+                        failed: total.saturating_sub(passed),
+                        release_total: application.tests.release_total,
+                        application_total: application.tests.application_total,
+                    },
+                }
+            }
+        };
+        ProjectTargetSummaryReceipt {
+            contract_version: self.contract_version,
+            workspace: self.workspace,
+            revision: self.revision,
+            snapshot: self.snapshot,
+            target: self.target,
+            target_name: self.target_name,
+            artifact_bytes: self.artifact_bytes,
+            artifact_digest: self.artifact_digest,
+            published: self.published,
+            artifact,
+        }
+    }
+}
+
+impl From<ProjectTargetReceipt> for ProjectTargetSummaryReceipt {
+    fn from(receipt: ProjectTargetReceipt) -> Self {
+        receipt.into_summary()
+    }
+}
+
 /// An opened project holds the single-writer engine lock for its repository until it is dropped.
 pub struct Project {
     root: PathBuf,

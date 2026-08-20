@@ -62,6 +62,8 @@
   "changed_identities": {
     "raw_protocol": 14,
     "machine_schema": "lkjscript-machine-schema-v14",
+    "project_machine": 3,
+    "project_session": 3,
     "application_contract": 8,
     "application_internal_format": 9,
     "interactive_profile": 3,
@@ -74,7 +76,8 @@
       "interactive profile 2",
       "headless replay 3",
       "terminal contract 3",
-      "selected-filesystem contract 1"
+      "selected-filesystem contract 1",
+      "project machine/session 2"
     ]
   },
   "semantic_dogfood": [
@@ -110,20 +113,27 @@
       "exhausted": 0,
       "unavailable": 0,
       "indeterminate": 0,
-      "elapsed_ms": 944572,
-      "workspace_tests_ms": 529114,
-      "release_build_ms": 223140,
-      "lkjedit_deep_doctor_ms": 108282,
-      "lkjedit_acceptance_ms": 74972,
+      "elapsed_ms": 847116,
+      "workspace_tests_ms": 540732,
+      "release_build_ms": 112315,
+      "lkjedit_deep_doctor_ms": 109451,
+      "lkjedit_acceptance_ms": 75562,
       "summary_lines": 17
     },
     "terminal_row_differential": {"full_bytes": 5019, "delta_bytes": 172, "reduction_percent": 96.57},
+    "direct_target_success": {
+      "predecessor_test_receipt_bytes": 16767,
+      "current_test_receipt_bytes": 826,
+      "current_build_receipt_bytes": 837,
+      "test_receipt_reduction_percent": 95.07,
+      "passing_case_names_omitted": true
+    },
     "full_pty_groups": 4,
     "lkjstudio_active_paths_absent": true
   },
   "known_limits_and_reversal_gates": [
-    "10,000 mixed events take 27.865 seconds and miss the 10-second campaign ambition",
-    "1,000 growing inserts take 3.883 seconds and miss the 2-second ambition",
+    "10,000 mixed events take 28.034 seconds and miss the 10-second campaign ambition",
+    "1,000 growing inserts take 4.235 seconds and miss the 2-second ambition",
     "unoptimized duplicate layout replay took 977.90 seconds; one exact-digest replay remains the debug oracle",
     "process startup, first logical frame, first terminal flush, and 1 MiB/16 MiB file stage percentiles were not directly instrumented",
     "persistent unsaved editor recovery, regex, syntax highlighting, clipboard, file watch, binary files, plugins, and cross-platform support are absent"

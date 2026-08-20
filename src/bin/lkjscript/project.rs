@@ -12,7 +12,7 @@ use lkjscript::project::{
     MAXIMUM_PROJECT_CHANGE_BYTES, Project, ProjectBackupReceipt, ProjectChangeReceipt,
     ProjectChangeRequest, ProjectContextResult, ProjectDiffPage, ProjectFunctionProposal,
     ProjectInitReceipt, ProjectNodeInspection, ProjectOrientationResult, ProjectStatus,
-    ProjectTargetReceipt, TargetInspection, decode_change,
+    ProjectTargetSummaryReceipt, TargetInspection, decode_change,
 };
 use lkjscript::target::TargetSummary;
 use lkjscript::transaction::TransactionMode;
@@ -26,8 +26,8 @@ use std::io::Read;
 use std::io::{BufRead, Write};
 use std::path::{Component, Path, PathBuf};
 
-const PROJECT_MACHINE_VERSION: u16 = 2;
-const PROJECT_SESSION_VERSION: u16 = 2;
+const PROJECT_MACHINE_VERSION: u16 = 3;
+const PROJECT_SESSION_VERSION: u16 = 3;
 const MAXIMUM_PROJECT_SESSION_REQUESTS: usize = 65_536;
 
 pub(super) enum ProjectCommand {
@@ -187,7 +187,7 @@ enum ProjectResult {
     Restoration(RestorationReceipt),
     Targets(Vec<TargetSummary>),
     Target(TargetInspection),
-    TargetReceipt(ProjectTargetReceipt),
+    TargetReceipt(ProjectTargetSummaryReceipt),
     TargetRun(ApplicationRunReceipt),
     Backup(ProjectBackupReceipt),
     Error(LkError),
@@ -678,6 +678,7 @@ fn run_inner(command: ProjectCommand) -> Result<(ProjectResult, bool), (LkError,
             with_project(project.as_deref(), pretty, |project| {
                 project
                     .build_target(&selector, revision, &output)
+                    .map(ProjectTargetSummaryReceipt::from)
                     .map(ProjectResult::TargetReceipt)
             })
         }
@@ -689,6 +690,7 @@ fn run_inner(command: ProjectCommand) -> Result<(ProjectResult, bool), (LkError,
         } => with_project(project.as_deref(), pretty, |project| {
             project
                 .test_target(&selector, revision)
+                .map(ProjectTargetSummaryReceipt::from)
                 .map(ProjectResult::TargetReceipt)
         }),
         ProjectCommand::TargetRun {
@@ -869,12 +871,14 @@ impl ProjectSession {
                 let output = canonical_output_path(&output)?;
                 self.project
                     .build_target(&selector, revision, &output)
+                    .map(ProjectTargetSummaryReceipt::from)
                     .map(ProjectResult::TargetReceipt)
             }
             ProjectSessionRequest::TargetTest { selector, revision } => {
                 let selector = self.selector(&selector, revision)?;
                 self.project
                     .test_target(&selector, revision)
+                    .map(ProjectTargetSummaryReceipt::from)
                     .map(ProjectResult::TargetReceipt)
             }
             ProjectSessionRequest::TargetRun {
@@ -1600,7 +1604,7 @@ fn encode_session_response(request_id: Option<u64>, result: ProjectResult) -> Ve
     };
     let mut bytes = match serde_json::to_vec(&response) {
         Ok(bytes) if bytes.len() <= MAX_JSON_OUTPUT_BYTES => bytes,
-        _ => b"{\"version\":1,\"result\":{\"kind\":\"error\",\"data\":{\"code\":\"policy_exceeded\",\"related\":[],\"retryable\":false,\"message\":\"project session response exceeds output byte policy\"}}}".to_vec(),
+        _ => b"{\"version\":3,\"result\":{\"kind\":\"error\",\"data\":{\"code\":\"policy_exceeded\",\"related\":[],\"retryable\":false,\"message\":\"project session response exceeds output byte policy\"}}}".to_vec(),
     };
     bytes.push(b'\n');
     bytes
@@ -1768,6 +1772,9 @@ fn project_usage(reason: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lkjscript::ids::{NodeId, SnapshotHash, WorkspaceId};
+    use lkjscript::project::{TargetArtifactSummaryReceipt, TargetTestCountSummary};
+    use lkjscript::release::{ReleaseContentDigest, ReleaseId};
 
     #[test]
     fn project_parser_rejects_duplicate_and_noncanonical_options() {
@@ -1778,5 +1785,48 @@ mod tests {
             parse("init", Vec::<String>::new().into_iter()),
             Ok(ProjectCommand::Init { .. })
         ));
+    }
+
+    #[test]
+    fn target_success_envelope_is_bounded_and_omits_passing_case_detail()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let workspace = WorkspaceId::from_bytes([0x31; WorkspaceId::BYTE_LEN]);
+        let target = NodeId::new(workspace, 11)?;
+        let envelope = ProjectEnvelope {
+            version: PROJECT_MACHINE_VERSION,
+            result: ProjectResult::TargetReceipt(ProjectTargetSummaryReceipt {
+                contract_version: 1,
+                workspace,
+                revision: Revision::new(7),
+                snapshot: SnapshotHash::from_bytes([0x32; SnapshotHash::BYTE_LEN]),
+                target,
+                target_name: "application".into(),
+                artifact_bytes: 4096,
+                artifact_digest: "artifact-digest".into(),
+                published: false,
+                artifact: TargetArtifactSummaryReceipt::Release {
+                    contract_version: 2,
+                    format_version: 2,
+                    release: ReleaseId::from_bytes([0x33; 32]),
+                    content_digest: ReleaseContentDigest::from_bytes([0x34; 32]),
+                    tests: TargetTestCountSummary {
+                        total: 10_000,
+                        passed: 10_000,
+                        failed: 0,
+                        release_total: 10_000,
+                        application_total: 0,
+                    },
+                },
+            }),
+        };
+        let encoded = serde_json::to_vec(&envelope)?;
+        assert!(encoded.len() < 1024);
+        let text = std::str::from_utf8(&encoded)?;
+        assert!(!text.contains("results"));
+        assert!(!text.contains("case"));
+        assert!(text.contains("\"total\":10000"));
+        assert!(text.contains("\"passed\":10000"));
+        assert!(text.contains("\"failed\":0"));
+        Ok(())
     }
 }

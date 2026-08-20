@@ -116,8 +116,8 @@ fn superseded_project_change_document_and_session_versions_reject() {
     );
 
     let session_input = concat!(
-        "{\"version\":1,\"request_id\":1,\"request\":{\"kind\":\"status\"}}\n",
-        "{\"version\":2,\"request_id\":2,\"request\":{\"kind\":\"shutdown\"}}\n"
+        "{\"version\":2,\"request_id\":1,\"request\":{\"kind\":\"status\"}}\n",
+        "{\"version\":3,\"request_id\":2,\"request\":{\"kind\":\"shutdown\"}}\n"
     );
     let session = cli(&project, &strings(&["session"]), session_input.as_bytes());
     assert_eq!(session.status.code(), Some(0));
@@ -129,7 +129,7 @@ fn superseded_project_change_document_and_session_versions_reject() {
         .collect::<Vec<_>>();
     assert_eq!(responses.len(), 2);
     assert!(responses[0].get("request_id").is_none());
-    assert_eq!(responses[0]["version"], 2);
+    assert_eq!(responses[0]["version"], 3);
     assert_eq!(responses[0]["result"]["data"]["code"], "protocol_version");
     assert_eq!(responses[1]["request_id"], 2);
 }
@@ -142,7 +142,7 @@ fn public_project_workflow_discovers_validates_applies_reviews_and_recovers() {
         &cli(temporary.path(), &strings(&["init", "application"]), &[]),
         0,
     );
-    assert_eq!(initialized["version"], 2);
+    assert_eq!(initialized["version"], 3);
     assert_eq!(initialized["result"]["kind"], "initialized");
     assert_eq!(initialized["result"]["data"]["revision"], 0);
     let workspace = initialized["result"]["data"]["workspace"]
@@ -633,38 +633,38 @@ fn project_session_is_correlated_restartable_and_rejects_stale_aliases() {
     };
     let requests = [
         serde_json::json!({
-            "version": 2,
+            "version": 3,
             "request_id": 1,
             "request": {"kind": "context", "data": {"purpose": "orient"}}
         })
         .to_string(),
         serde_json::json!({
-            "version": 2,
+            "version": 3,
             "request_id": 2,
             "request": {"kind": "change_apply", "data": request}
         })
         .to_string(),
         serde_json::json!({
-            "version": 2,
+            "version": 3,
             "request_id": 3,
             "request": {"kind": "inspect", "data": {"selector": "@n1"}}
         })
         .to_string(),
-        "{\"version\":2,".into(),
+        "{\"version\":3,".into(),
         serde_json::json!({
-            "version": 2,
+            "version": 3,
             "request_id": 2,
             "request": {"kind": "status"}
         })
         .to_string(),
         serde_json::json!({
-            "version": 2,
+            "version": 3,
             "request_id": 5,
             "request": {"kind": "status"}
         })
         .to_string(),
         serde_json::json!({
-            "version": 2,
+            "version": 3,
             "request_id": 6,
             "request": {"kind": "shutdown"}
         })
