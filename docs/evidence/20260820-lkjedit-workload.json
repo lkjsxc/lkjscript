@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "measurement_git_commit": null,
-  "measurement_git_commit_note": "The exact implementation commit is assigned after final explicit staging and recorded by the evidence follow-up commit.",
+  "measurement_git_commit": "ca1d0b6b31697bd6a301912911b654f43d8eeb9a",
+  "measurement_git_commit_note": "The evidence follow-up commit changes retained evidence and documentation only; ca1d0b6b31697bd6a301912911b654f43d8eeb9a is the exact measured implementation.",
   "command": "python3 applications/lkjedit/workload.py --binary target/release/lkjedit --project-cli target/release/lkjscript --samples 5",
   "environment": {
     "platform": "Linux-7.0.0-29-generic-x86_64-with-glibc2.39",

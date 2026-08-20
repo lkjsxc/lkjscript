@@ -60,8 +60,9 @@ not a cold-host or empty-dependency-cache claim.
 ## lkjedit revision-174 product workload
 
 The current retained receipts are
-[`20260820-lkjedit-workload.json`](evidence/20260820-lkjedit-workload.json) and
-[`20260820-lkjedit-campaign.json`](evidence/20260820-lkjedit-campaign.json). Measurements use the
+[`20260820-lkjedit-workload.json`](evidence/20260820-lkjedit-workload.json),
+[`20260820-lkjedit-campaign.json`](evidence/20260820-lkjedit-campaign.json), and
+[`20260820-lkjedit-fresh-checkout.json`](evidence/20260820-lkjedit-fresh-checkout.json). Measurements use the
 471,096-byte revision-174 artifact at snapshot
 `7e037b9e97e2f04cd2243899a30a3721f31faf30c55aa9d7d97f050d22004aa4`, optimized binaries, Linux
 7.0.0-29-generic x86-64 with glibc 2.39, Python 3.12.3, 20 visible CPUs, monotonic timing, and warm

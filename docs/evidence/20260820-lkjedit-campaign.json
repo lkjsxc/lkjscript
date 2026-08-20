@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "measurement_git_commit": null,
-  "measurement_git_commit_note": "The exact implementation commit is assigned after final explicit staging and recorded by the evidence follow-up commit.",
+  "measurement_git_commit": "ca1d0b6b31697bd6a301912911b654f43d8eeb9a",
+  "measurement_git_commit_note": "The evidence follow-up commit changes retained evidence and documentation only; ca1d0b6b31697bd6a301912911b654f43d8eeb9a is the exact measured and fresh-verified implementation.",
   "starting_checkout": {
     "commit": "4d2cf69921584f8bb89e7142093726837ff08310",
     "branch": "main",
@@ -140,6 +140,17 @@
   ],
   "trust": "one trusted local operator and OS account, first-party Rust, validated package, one selected root, optional selected semantic project; inputs and outcomes are hostile bounded data",
   "provider_telemetry": "unavailable; no token, cache-class, or monetary inference",
-  "fresh_checkout": "pending final committed revision",
-  "push": "pending final committed revision"
+  "fresh_checkout": {
+    "evidence": "docs/evidence/20260820-lkjedit-fresh-checkout.json",
+    "implementation_commit": "ca1d0b6b31697bd6a301912911b654f43d8eeb9a",
+    "full_profile_passed": 15,
+    "full_profile_elapsed_ms": 991654,
+    "artifact_builds_equal": true,
+    "checked_artifact_equal": true,
+    "classification": "isolated target-free checkout with preinstalled toolchain and host Cargo caches; not cold-host"
+  },
+  "push": {
+    "authorized": true,
+    "status": "exact outcome is reported in the final handoff after the evidence follow-up commit"
+  }
 }
