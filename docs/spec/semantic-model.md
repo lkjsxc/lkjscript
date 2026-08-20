@@ -137,7 +137,7 @@ base/result revision, snapshot and change digests, publication truth, durable cr
 requested bindings, completeness, semantic diff, target impact, and the published revision record.
 Function-local churn is summarized as a body change; durable entities are listed exactly.
 
-Idempotency fingerprints canonical protocol-v13 transaction bytes, including response projection.
+Idempotency fingerprints canonical protocol-v14 transaction bytes, including response projection.
 An exact retained replay returns the same receipt after restart without another revision; changed
 reuse rejects. Validate-only cannot carry a key. An output failure after publication does not undo
 authority; status/log/idempotency recover the accepted result.
@@ -231,7 +231,7 @@ hostile decoding, crash consistency, tombstones, history, portable backup, and a
 
 ## Other authority domains
 
-Release format 2 owns reusable immutable closure. Application format 8 owns one runnable release
+Release format 2 owns reusable immutable closure. Application contract 8/internal format 9 owns one runnable release
 graph, public types/entries/cases, stateful and interactive role mappings, resource policy, and host
 requirements but no grant. Instance format 3 owns exact application-bound mutable continuity,
 grants, state revisions, journal/checkpoints, commands/attempts/outcomes, and pure-query receipts.

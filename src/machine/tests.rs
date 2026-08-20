@@ -264,6 +264,73 @@ fn semantic_transaction_and_query_variant_samples_are_exhaustive() {
             lhs: value,
             rhs: value,
         },
+        OperationKind::TextScalarLen { value },
+        OperationKind::TextGraphemeLen { value },
+        OperationKind::TextLineCount { value },
+        OperationKind::TextScalarAt {
+            value,
+            index: value,
+        },
+        OperationKind::TextPreviousGraphemeBoundary {
+            value,
+            index: value,
+        },
+        OperationKind::TextNextGraphemeBoundary {
+            value,
+            index: value,
+        },
+        OperationKind::TextLineStart { value, line: value },
+        OperationKind::TextLineEnd { value, line: value },
+        OperationKind::TextByteToLine {
+            value,
+            index: value,
+        },
+        OperationKind::TextSlice {
+            value,
+            start: value,
+            end_exclusive: value,
+        },
+        OperationKind::TextSplice {
+            value,
+            start: value,
+            end_exclusive: value,
+            replacement: value,
+        },
+        OperationKind::TextFindForward {
+            value,
+            query: value,
+            start: value,
+        },
+        OperationKind::TextFindBackward {
+            value,
+            query: value,
+            end_exclusive: value,
+        },
+        OperationKind::TextLineEndingKind { value },
+        OperationKind::TextDisplayWidth {
+            value,
+            start: value,
+            end_exclusive: value,
+            initial_column: value,
+            tab_width: value,
+        },
+        OperationKind::TextCellPrefixBoundary {
+            value,
+            start: value,
+            end_exclusive: value,
+            initial_column: value,
+            maximum_cells: value,
+            tab_width: value,
+        },
+        OperationKind::TextFromScalar { value },
+        OperationKind::TextToScalars {
+            sequence: node,
+            value,
+        },
+        OperationKind::TextFromScalars {
+            sequence: node,
+            value,
+        },
         OperationKind::SequenceEmpty { sequence: node },
         OperationKind::SequenceLen {
             sequence: node,
@@ -295,6 +362,11 @@ fn semantic_transaction_and_query_variant_samples_are_exhaustive() {
             sequence: node,
             lhs: value,
             rhs: value,
+        },
+        OperationKind::SequenceRepeat {
+            sequence: node,
+            element: value,
+            count: value,
         },
     ];
     assert_eq!(operations.len(), OperationCode::ALL.len());
@@ -2049,6 +2121,89 @@ fn every_advertised_public_variant_matches_strict_serde() {
             lhs: value.clone(),
             rhs: value.clone(),
         },
+        ExpressionKindDraft::TextScalarLen {
+            value: value.clone(),
+        },
+        ExpressionKindDraft::TextGraphemeLen {
+            value: value.clone(),
+        },
+        ExpressionKindDraft::TextLineCount {
+            value: value.clone(),
+        },
+        ExpressionKindDraft::TextScalarAt {
+            value: value.clone(),
+            index: value.clone(),
+        },
+        ExpressionKindDraft::TextPreviousGraphemeBoundary {
+            value: value.clone(),
+            index: value.clone(),
+        },
+        ExpressionKindDraft::TextNextGraphemeBoundary {
+            value: value.clone(),
+            index: value.clone(),
+        },
+        ExpressionKindDraft::TextLineStart {
+            value: value.clone(),
+            line: value.clone(),
+        },
+        ExpressionKindDraft::TextLineEnd {
+            value: value.clone(),
+            line: value.clone(),
+        },
+        ExpressionKindDraft::TextByteToLine {
+            value: value.clone(),
+            index: value.clone(),
+        },
+        ExpressionKindDraft::TextSlice {
+            value: value.clone(),
+            start: value.clone(),
+            end_exclusive: value.clone(),
+        },
+        ExpressionKindDraft::TextSplice {
+            value: value.clone(),
+            start: value.clone(),
+            end_exclusive: value.clone(),
+            replacement: value.clone(),
+        },
+        ExpressionKindDraft::TextFindForward {
+            value: value.clone(),
+            query: value.clone(),
+            start: value.clone(),
+        },
+        ExpressionKindDraft::TextFindBackward {
+            value: value.clone(),
+            query: value.clone(),
+            end_exclusive: value.clone(),
+        },
+        ExpressionKindDraft::TextLineEndingKind {
+            value: value.clone(),
+        },
+        ExpressionKindDraft::TextDisplayWidth {
+            value: value.clone(),
+            start: value.clone(),
+            end_exclusive: value.clone(),
+            initial_column: value.clone(),
+            tab_width: value.clone(),
+        },
+        ExpressionKindDraft::TextCellPrefixBoundary {
+            value: value.clone(),
+            start: value.clone(),
+            end_exclusive: value.clone(),
+            initial_column: value.clone(),
+            maximum_cells: value.clone(),
+            tab_width: value.clone(),
+        },
+        ExpressionKindDraft::TextFromScalar {
+            value: value.clone(),
+        },
+        ExpressionKindDraft::TextToScalars {
+            sequence: target,
+            value: value.clone(),
+        },
+        ExpressionKindDraft::TextFromScalars {
+            sequence: target,
+            value: value.clone(),
+        },
         ExpressionKindDraft::SequenceEmpty { sequence: target },
         ExpressionKindDraft::SequenceLen {
             sequence: target,
@@ -2080,6 +2235,11 @@ fn every_advertised_public_variant_matches_strict_serde() {
             sequence: target,
             lhs: value.clone(),
             rhs: value.clone(),
+        },
+        ExpressionKindDraft::SequenceRepeat {
+            sequence: target,
+            element: value.clone(),
+            count: value.clone(),
         },
     ];
     assert_eq!(expression_samples.len(), ExpressionDraftCode::ALL.len());
@@ -2202,6 +2362,89 @@ fn every_advertised_public_variant_matches_strict_serde() {
             lhs: value.clone(),
             rhs: value.clone(),
         },
+        OperationDraft::TextScalarLen {
+            value: value.clone(),
+        },
+        OperationDraft::TextGraphemeLen {
+            value: value.clone(),
+        },
+        OperationDraft::TextLineCount {
+            value: value.clone(),
+        },
+        OperationDraft::TextScalarAt {
+            value: value.clone(),
+            index: value.clone(),
+        },
+        OperationDraft::TextPreviousGraphemeBoundary {
+            value: value.clone(),
+            index: value.clone(),
+        },
+        OperationDraft::TextNextGraphemeBoundary {
+            value: value.clone(),
+            index: value.clone(),
+        },
+        OperationDraft::TextLineStart {
+            value: value.clone(),
+            line: value.clone(),
+        },
+        OperationDraft::TextLineEnd {
+            value: value.clone(),
+            line: value.clone(),
+        },
+        OperationDraft::TextByteToLine {
+            value: value.clone(),
+            index: value.clone(),
+        },
+        OperationDraft::TextSlice {
+            value: value.clone(),
+            start: value.clone(),
+            end_exclusive: value.clone(),
+        },
+        OperationDraft::TextSplice {
+            value: value.clone(),
+            start: value.clone(),
+            end_exclusive: value.clone(),
+            replacement: value.clone(),
+        },
+        OperationDraft::TextFindForward {
+            value: value.clone(),
+            query: value.clone(),
+            start: value.clone(),
+        },
+        OperationDraft::TextFindBackward {
+            value: value.clone(),
+            query: value.clone(),
+            end_exclusive: value.clone(),
+        },
+        OperationDraft::TextLineEndingKind {
+            value: value.clone(),
+        },
+        OperationDraft::TextDisplayWidth {
+            value: value.clone(),
+            start: value.clone(),
+            end_exclusive: value.clone(),
+            initial_column: value.clone(),
+            tab_width: value.clone(),
+        },
+        OperationDraft::TextCellPrefixBoundary {
+            value: value.clone(),
+            start: value.clone(),
+            end_exclusive: value.clone(),
+            initial_column: value.clone(),
+            maximum_cells: value.clone(),
+            tab_width: value.clone(),
+        },
+        OperationDraft::TextFromScalar {
+            value: value.clone(),
+        },
+        OperationDraft::TextToScalars {
+            sequence: target,
+            value: value.clone(),
+        },
+        OperationDraft::TextFromScalars {
+            sequence: target,
+            value: value.clone(),
+        },
         OperationDraft::SequenceEmpty { sequence: target },
         OperationDraft::SequenceLen {
             sequence: target,
@@ -2233,6 +2476,11 @@ fn every_advertised_public_variant_matches_strict_serde() {
             sequence: target,
             lhs: value.clone(),
             rhs: value.clone(),
+        },
+        OperationDraft::SequenceRepeat {
+            sequence: target,
+            element: value.clone(),
+            count: value.clone(),
         },
     ];
     assert_eq!(operation_samples.len(), OperationCode::ALL.len());
@@ -2270,7 +2518,7 @@ fn every_advertised_public_variant_matches_strict_serde() {
         RuntimeValue::Bool(true),
         RuntimeValue::I64(1),
         RuntimeValue::Bytes(crate::schema::ByteString::from_slice(b"x").unwrap()),
-        RuntimeValue::Text(crate::schema::TextString::try_from_str("x").unwrap()),
+        RuntimeValue::Text(crate::runtime_text::RuntimeText::try_from_str("x").unwrap()),
         RuntimeValue::Product {
             ty: node,
             fields: vec![RuntimeFieldValue {
@@ -2642,12 +2890,69 @@ fn every_advertised_public_variant_matches_strict_serde() {
         key_variant: target_item,
         paste_variant: target_item,
         resize_variant: target_item,
+        mouse_variant: target_item,
+        focus_gained_variant: target_item,
+        focus_lost_variant: target_item,
+        open_variant: target_item,
         close_variant: target_item,
         size: target_item,
         size_rows_field: target_item,
         size_columns_field: target_item,
         scalars: target_item,
         key: target_interactive_key_routes.clone(),
+        mouse: crate::target::TargetInteractiveMouseRoutes {
+            button: target_item,
+            button_none_variant: target_item,
+            button_primary_variant: target_item,
+            button_middle_variant: target_item,
+            button_secondary_variant: target_item,
+            kind: target_item,
+            press_variant: target_item,
+            release_variant: target_item,
+            drag_variant: target_item,
+            scroll_up_variant: target_item,
+            scroll_down_variant: target_item,
+            scroll_left_variant: target_item,
+            scroll_right_variant: target_item,
+            event: target_item,
+            event_button_field: target_item,
+            event_kind_field: target_item,
+            event_row_field: target_item,
+            event_column_field: target_item,
+            event_control_field: target_item,
+            event_alt_field: target_item,
+            event_shift_field: target_item,
+        },
+        open: crate::target::TargetInteractiveOpenRoutes {
+            event: target_item,
+            event_path_field: target_item,
+            event_directory_field: target_item,
+            event_project_field: target_item,
+        },
+    };
+    let target_interactive_action_route = crate::target::TargetInteractiveActionRoute {
+        variant: target_item,
+        kind: crate::application::InteractiveActionKind::None,
+    };
+    let target_interactive_action_routes = crate::target::TargetInteractiveActionRoutes {
+        action: target_item,
+        update_action_field: target_item,
+        update_action_id_field: target_item,
+        routes: vec![target_interactive_action_route],
+        file_save_payload: target_item,
+        file_save_origin_field: target_item,
+        file_save_content_field: target_item,
+        file_save_create_field: target_item,
+        file_search_payload: target_item,
+        file_search_start_field: target_item,
+        file_search_query_field: target_item,
+        outcome: target_item,
+        outcome_job_id_field: target_item,
+        outcome_class_field: target_item,
+        outcome_message_field: target_item,
+        outcome_content_field: target_item,
+        outcome_token_field: target_item,
+        resume: target_item,
     };
     let target_interactive_profile = crate::target::TargetInteractiveApplicationProfile {
         version: crate::application::INTERACTIVE_PROFILE_VERSION,
@@ -2663,12 +2968,15 @@ fn every_advertised_public_variant_matches_strict_serde() {
         frame_rows_field: target_item,
         frame_columns_field: target_item,
         frame_scalars_field: target_item,
+        frame_styles_field: target_item,
         frame_cursor_row_field: target_item,
         frame_cursor_column_field: target_item,
         frame_cursor_visible_field: target_item,
+        frame_cursor_shape_field: target_item,
         frame_status_field: target_item,
+        frame_status_style_field: target_item,
         events: target_interactive_event_routes.clone(),
-        actions: None,
+        actions: Some(Box::new(target_interactive_action_routes.clone())),
     };
     let target_case = crate::target::TargetApplicationTestCase {
         name: "application_case".into(),
@@ -2720,6 +3028,10 @@ fn every_advertised_public_variant_matches_strict_serde() {
         "target_application_import" => target_import,
         "target_stateful_application_profile" => target_profile,
         "target_interactive_key_routes" => target_interactive_key_routes,
+        "target_interactive_mouse_routes" => target_interactive_event_routes.mouse.clone(),
+        "target_interactive_open_routes" => target_interactive_event_routes.open.clone(),
+        "target_interactive_action_route" => target_interactive_action_route,
+        "target_interactive_action_routes" => target_interactive_action_routes,
         "target_interactive_event_routes" => target_interactive_event_routes,
         "target_interactive_application_profile" => target_interactive_profile,
         "target_trap" => crate::target::TargetTrap { code: crate::application::ApplicationTrapCode::RuntimeTrap, target: Some(target_item) },
@@ -4760,6 +5072,7 @@ fn schema_is_deterministic_complete_and_unique() {
             ("host_operation", 2),
             ("host_outcome_class", 11),
             ("application_trap_code", 3),
+            ("interactive_action_kind", 24),
             ("transaction_mode", 2),
         ],
     );
@@ -5596,12 +5909,12 @@ fn schema_projection_byte_measurements_are_retained() {
         sizes,
         vec![
             ("manifest", None, 1_244, 1_323),
-            ("selected_agent_task_roots", Some(143), 121_966, 122_045),
-            ("full", None, 175_411, 175_490),
+            ("selected_agent_task_roots", Some(148), 145_847, 145_926),
+            ("full", None, 205_431, 205_510),
             ("unchanged", None, 105, 184),
         ]
     );
-    assert!(sizes[1].2 < 125_000);
+    assert!(sizes[1].2 < 147_000);
 }
 
 fn assert_variant_payloads<const N: usize>(

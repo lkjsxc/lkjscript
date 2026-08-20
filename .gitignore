@@ -1,6 +1,7 @@
 # Build and local files
 /target/
 /tmp/
+/.artifacts/
 .env
 *.swp
 *.py[cod]

@@ -16,9 +16,10 @@ use crate::project_host::{
     SemanticProjectGrant,
 };
 use crate::selected_filesystem::{
-    FileReadOutcome, FileSaveOutcome, FileSaveRequest, FileVersion, FilesystemLimits,
-    FilesystemOperations, ReconciliationOutcome, ReconciliationToken, RelativePath,
-    SELECTED_FILESYSTEM_CONTRACT_VERSION, SaveMode, SelectedFilesystem,
+    DirectoryEntryKind, DirectoryPage, FileReadOutcome, FileSaveOutcome, FileSaveRequest,
+    FileVersion, FilesystemLimits, FilesystemOperations, ReconciliationOutcome,
+    ReconciliationToken, RelativePath, SELECTED_FILESYSTEM_CONTRACT_VERSION, SaveMode,
+    SearchCancellation, SearchRequest, SearchResult, SelectedFilesystem,
 };
 use crate::transaction::{TransactionMode, TransactionOp};
 use crate::workbench::{SemanticProjection, parse_edit_document};
@@ -66,28 +67,33 @@ struct ProjectTargetRunAction {
 }
 
 pub struct WorkbenchHost {
-    project: SemanticProjectGrant,
-    workspace: WorkspaceId,
+    project: Option<SemanticProjectGrant>,
+    workspace: Option<WorkspaceId>,
     filesystem: Option<SelectedFilesystem>,
     next_action: u64,
 }
 
 impl WorkbenchHost {
     pub fn open(project: Option<&Path>, filesystem_root: Option<&Path>) -> Result<Self> {
-        let selected = Project::open(project)?;
-        let workspace = selected.workspace();
-        let project_root = selected.root().to_owned();
-        drop(selected);
-        let project = SemanticProjectGrant::open(
-            "lkjstudio-project".to_owned(),
-            &project_root,
-            workspace,
-            ProjectGrantOperations::DEVELOPMENT,
-        )?;
+        let (project, workspace) = if let Some(project) = project {
+            let selected = Project::open(Some(project))?;
+            let workspace = selected.workspace();
+            let project_root = selected.root().to_owned();
+            drop(selected);
+            let grant = SemanticProjectGrant::open(
+                "lkjedit-project".to_owned(),
+                &project_root,
+                workspace,
+                ProjectGrantOperations::DEVELOPMENT,
+            )?;
+            (Some(grant), Some(workspace))
+        } else {
+            (None, None)
+        };
         let filesystem = filesystem_root
             .map(|root| {
                 SelectedFilesystem::select(
-                    "lkjstudio-files".to_owned(),
+                    "lkjedit-files".to_owned(),
                     root,
                     FilesystemOperations::READ_WRITE,
                     FilesystemLimits::default(),
@@ -102,12 +108,12 @@ impl WorkbenchHost {
         })
     }
 
-    pub const fn workspace(&self) -> WorkspaceId {
+    pub const fn workspace(&self) -> Option<WorkspaceId> {
         self.workspace
     }
 
-    pub fn project_root(&self) -> &Path {
-        self.project.root()
+    pub fn project_root(&self) -> Option<&Path> {
+        self.project.as_ref().map(SemanticProjectGrant::root)
     }
 
     pub fn filesystem_root(&self) -> Option<&Path> {
@@ -174,6 +180,9 @@ impl WorkbenchHost {
             InteractiveAction::ProjectTargetBuild(request) => self.project_target_build(request),
             InteractiveAction::ProjectTargetRun(request) => self.project_target_run(request),
             InteractiveAction::FilesystemList(path) => self.filesystem_list(path),
+            InteractiveAction::FilesystemSearch { start, query } => {
+                self.filesystem_search(start, query)
+            }
             InteractiveAction::FilesystemRead(path) => self.filesystem_read(path),
             InteractiveAction::FilesystemSave {
                 origin,
@@ -361,7 +370,19 @@ impl WorkbenchHost {
 
     fn execute_project(&mut self, request: ProjectHostRequest) -> Result<ProjectHostReceipt> {
         let action_id = self.action_id("project");
-        self.project.execute(action_id, self.workspace, request)
+        let workspace = self.workspace.ok_or_else(|| {
+            LkError::new(
+                ErrorCode::CapabilityDenied,
+                "lkjedit has no explicitly selected semantic project grant",
+            )
+        })?;
+        let project = self.project.as_mut().ok_or_else(|| {
+            LkError::new(
+                ErrorCode::CapabilityDenied,
+                "lkjedit has no explicitly selected semantic project grant",
+            )
+        })?;
+        project.execute(action_id, workspace, request)
     }
 
     fn filesystem_list(&mut self, path: String) -> Result<InteractiveActionOutcome> {
@@ -369,8 +390,17 @@ impl WorkbenchHost {
         let filesystem = self.filesystem()?;
         let page = filesystem.list(&path, 256, None)?;
         bounded_success(
-            format!("listed {}", path.display()),
-            pretty(&page)?,
+            format!(
+                "listed {}: {} entries{}",
+                path.display(),
+                page.entries.len(),
+                if page.continuation.is_some() {
+                    ", truncated"
+                } else {
+                    ""
+                }
+            ),
+            directory_page_text(&page),
             String::new(),
         )
     }
@@ -412,6 +442,34 @@ impl WorkbenchHost {
         }
     }
 
+    fn filesystem_search(
+        &mut self,
+        start: String,
+        query: String,
+    ) -> Result<InteractiveActionOutcome> {
+        let start = relative_path(&start)?;
+        let request = SearchRequest {
+            contract_version: SELECTED_FILESYSTEM_CONTRACT_VERSION,
+            start: start.clone(),
+            query,
+        };
+        let cancellation = SearchCancellation::default();
+        let result = self.filesystem()?.search(&request, &cancellation)?;
+        bounded_success(
+            format!(
+                "searched {}: {} matches, {} files, {} bytes{}{}",
+                start.display(),
+                result.matches.len(),
+                result.files,
+                result.bytes,
+                if result.truncated { ", truncated" } else { "" },
+                if result.cancelled { ", cancelled" } else { "" }
+            ),
+            search_result_text(&result),
+            String::new(),
+        )
+    }
+
     fn filesystem_save(
         &mut self,
         origin: String,
@@ -445,15 +503,32 @@ impl WorkbenchHost {
                 cleanup_pending,
             } => file_save_success(path, version, cleanup_pending, false),
             FileSaveOutcome::Unchanged { version } => file_save_success(path, version, false, true),
-            FileSaveOutcome::Conflict { observed } => Ok(InteractiveActionOutcome {
-                class: InteractiveActionOutcomeClass::Conflict,
-                message: observed.map_or_else(
-                    || "file save conflict: target is absent".to_owned(),
-                    |version| format!("file save conflict: observed {}", version.digest),
-                ),
-                content: String::new(),
-                token: String::new(),
-            }),
+            FileSaveOutcome::Conflict { observed } => {
+                let (message, mode) = observed.map_or_else(
+                    || {
+                        (
+                            "file save conflict: target is absent".to_owned(),
+                            SaveMode::Create,
+                        )
+                    },
+                    |version| {
+                        (
+                            format!("file save conflict: observed {}", version.digest),
+                            SaveMode::Replace {
+                                expected: version.digest,
+                            },
+                        )
+                    },
+                );
+                let token = encode_file_token(&FileSessionToken::Origin { path, mode })?;
+                Ok(InteractiveActionOutcome {
+                    job_id: 0,
+                    class: InteractiveActionOutcomeClass::Conflict,
+                    message,
+                    content: String::new(),
+                    token,
+                })
+            }
             FileSaveOutcome::NotFound => Err(LkError::new(
                 ErrorCode::FilesystemNotFound,
                 "file save expected an existing target",
@@ -466,6 +541,7 @@ impl WorkbenchHost {
                 Err(LkError::new(ErrorCode::FilesystemKnownFailure, message))
             }
             FileSaveOutcome::UnknownVisibility { token, message } => Ok(InteractiveActionOutcome {
+                job_id: 0,
                 class: InteractiveActionOutcomeClass::Unknown,
                 message,
                 content: String::new(),
@@ -491,6 +567,7 @@ impl WorkbenchHost {
                     expected: version.digest,
                 });
                 Ok(InteractiveActionOutcome {
+                    job_id: 0,
                     class: InteractiveActionOutcomeClass::Unchanged,
                     message: "unknown file save reconciled as absent".to_owned(),
                     content: String::new(),
@@ -501,6 +578,7 @@ impl WorkbenchHost {
                 })
             }
             ReconciliationOutcome::Conflicting { observed } => Ok(InteractiveActionOutcome {
+                job_id: 0,
                 class: InteractiveActionOutcomeClass::Conflict,
                 message: observed.map_or_else(
                     || "unknown file save reconciled against an absent target".to_owned(),
@@ -515,6 +593,7 @@ impl WorkbenchHost {
                 token: String::new(),
             }),
             ReconciliationOutcome::Indeterminate { message } => Ok(InteractiveActionOutcome {
+                job_id: 0,
                 class: InteractiveActionOutcomeClass::Unknown,
                 message,
                 content: String::new(),
@@ -539,6 +618,43 @@ impl WorkbenchHost {
     }
 }
 
+fn directory_page_text(page: &DirectoryPage) -> String {
+    let parent = page.path.display();
+    let mut output = String::new();
+    for entry in &page.entries {
+        let kind = match entry.kind {
+            DirectoryEntryKind::Directory => 'D',
+            DirectoryEntryKind::File => 'F',
+            DirectoryEntryKind::Symlink => 'L',
+            DirectoryEntryKind::Other => 'O',
+        };
+        output.push(kind);
+        output.push(' ');
+        if parent != "." {
+            output.push_str(&parent);
+            output.push('/');
+        }
+        output.push_str(&entry.name);
+        output.push('\n');
+    }
+    output
+}
+
+fn search_result_text(result: &SearchResult) -> String {
+    let mut output = String::new();
+    let mut previous = None;
+    for found in &result.matches {
+        let path = found.path.display();
+        if previous.as_deref() == Some(path.as_str()) {
+            continue;
+        }
+        output.push_str(&path);
+        output.push('\n');
+        previous = Some(path);
+    }
+    output
+}
+
 fn file_save_success(
     path: RelativePath,
     version: FileVersion,
@@ -552,6 +668,7 @@ fn file_save_success(
         },
     })?;
     Ok(InteractiveActionOutcome {
+        job_id: 0,
         class: if unchanged {
             InteractiveActionOutcomeClass::Unchanged
         } else {
@@ -588,6 +705,7 @@ fn error_outcome(error: LkError) -> InteractiveActionOutcome {
         _ => InteractiveActionOutcomeClass::Rejected,
     };
     InteractiveActionOutcome {
+        job_id: 0,
         class,
         message: format!("{}: {}", error.code.machine_name(), error.message),
         content: String::new(),
@@ -732,6 +850,7 @@ fn bounded_success(
         ));
     }
     Ok(InteractiveActionOutcome {
+        job_id: 0,
         class: InteractiveActionOutcomeClass::Succeeded,
         message,
         content,
@@ -749,6 +868,7 @@ fn internal_response(label: &str) -> LkError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::selected_filesystem::{DirectoryEntry, SearchMatch};
 
     #[test]
     fn host_content_reserves_bounded_application_frame_space() {
@@ -774,11 +894,74 @@ mod tests {
     }
 
     #[test]
+    fn filesystem_pages_use_closed_unambiguous_application_lines() {
+        let page = DirectoryPage {
+            contract_version: SELECTED_FILESYSTEM_CONTRACT_VERSION,
+            path: RelativePath::new(vec!["nested".into()]).expect("directory path"),
+            digest: "observation".into(),
+            entries: vec![
+                DirectoryEntry {
+                    name: "child".into(),
+                    kind: DirectoryEntryKind::Directory,
+                    size: 0,
+                },
+                DirectoryEntry {
+                    name: "note.txt".into(),
+                    kind: DirectoryEntryKind::File,
+                    size: 12,
+                },
+            ],
+            continuation: None,
+        };
+        assert_eq!(
+            directory_page_text(&page),
+            "D nested/child\nF nested/note.txt\n"
+        );
+
+        let result = SearchResult {
+            contract_version: SELECTED_FILESYSTEM_CONTRACT_VERSION,
+            start: RelativePath::root(),
+            query: "needle".into(),
+            matches: vec![
+                SearchMatch {
+                    path: RelativePath::new(vec!["a.txt".into()]).expect("a"),
+                    start_byte: 0,
+                    end_byte: 6,
+                    line: 1,
+                    preview: "needle".into(),
+                },
+                SearchMatch {
+                    path: RelativePath::new(vec!["a.txt".into()]).expect("a again"),
+                    start_byte: 7,
+                    end_byte: 13,
+                    line: 2,
+                    preview: "needle".into(),
+                },
+                SearchMatch {
+                    path: RelativePath::new(vec!["b.txt".into()]).expect("b"),
+                    start_byte: 3,
+                    end_byte: 9,
+                    line: 1,
+                    preview: "needle".into(),
+                },
+            ],
+            directories: 1,
+            files: 2,
+            bytes: 24,
+            unsupported_files: 0,
+            failures: vec![],
+            truncated: false,
+            cancelled: false,
+        };
+        assert_eq!(search_result_text(&result), "a.txt\nb.txt\n");
+    }
+
+    #[test]
     fn project_and_selected_file_actions_use_exact_owners() {
         let root = tempfile::tempdir().expect("root");
         let initialized = Project::initialize(root.path()).expect("project");
         let mut host = WorkbenchHost::open(Some(root.path()), Some(root.path())).expect("host");
-        assert_eq!(host.workspace(), initialized.workspace);
+        assert_eq!(host.workspace(), Some(initialized.workspace));
 
         let orientation = host
             .handle(InteractiveAction::ProjectOrient)
@@ -821,9 +1004,23 @@ mod tests {
             })
             .expect("conflict outcome");
         assert_eq!(conflict.class, InteractiveActionOutcomeClass::Conflict);
+        assert!(!conflict.token.is_empty());
         assert_eq!(
             std::fs::read_to_string(root.path().join("note.txt")).expect("preserved external"),
             "external"
+        );
+
+        let overwritten = host
+            .handle(InteractiveAction::FilesystemSave {
+                origin: conflict.token,
+                content: "local".into(),
+                create: false,
+            })
+            .expect("explicit current-base overwrite");
+        assert_eq!(overwritten.class, InteractiveActionOutcomeClass::Succeeded);
+        assert_eq!(
+            std::fs::read_to_string(root.path().join("note.txt")).expect("overwritten bytes"),
+            "local"
         );
     }
 }

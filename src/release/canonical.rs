@@ -975,6 +975,139 @@ pub(super) fn remap_node_with(
                 lhs: value(lhs, remap)?,
                 rhs: value(rhs, remap)?,
             },
+            OperationKind::TextScalarLen { value: input } => OperationKind::TextScalarLen {
+                value: value(input, remap)?,
+            },
+            OperationKind::TextGraphemeLen { value: input } => OperationKind::TextGraphemeLen {
+                value: value(input, remap)?,
+            },
+            OperationKind::TextLineCount { value: input } => OperationKind::TextLineCount {
+                value: value(input, remap)?,
+            },
+            OperationKind::TextScalarAt {
+                value: input,
+                index,
+            } => OperationKind::TextScalarAt {
+                value: value(input, remap)?,
+                index: value(index, remap)?,
+            },
+            OperationKind::TextPreviousGraphemeBoundary {
+                value: input,
+                index,
+            } => OperationKind::TextPreviousGraphemeBoundary {
+                value: value(input, remap)?,
+                index: value(index, remap)?,
+            },
+            OperationKind::TextNextGraphemeBoundary {
+                value: input,
+                index,
+            } => OperationKind::TextNextGraphemeBoundary {
+                value: value(input, remap)?,
+                index: value(index, remap)?,
+            },
+            OperationKind::TextLineStart { value: input, line } => OperationKind::TextLineStart {
+                value: value(input, remap)?,
+                line: value(line, remap)?,
+            },
+            OperationKind::TextLineEnd { value: input, line } => OperationKind::TextLineEnd {
+                value: value(input, remap)?,
+                line: value(line, remap)?,
+            },
+            OperationKind::TextByteToLine {
+                value: input,
+                index,
+            } => OperationKind::TextByteToLine {
+                value: value(input, remap)?,
+                index: value(index, remap)?,
+            },
+            OperationKind::TextSlice {
+                value: input,
+                start,
+                end_exclusive,
+            } => OperationKind::TextSlice {
+                value: value(input, remap)?,
+                start: value(start, remap)?,
+                end_exclusive: value(end_exclusive, remap)?,
+            },
+            OperationKind::TextSplice {
+                value: input,
+                start,
+                end_exclusive,
+                replacement,
+            } => OperationKind::TextSplice {
+                value: value(input, remap)?,
+                start: value(start, remap)?,
+                end_exclusive: value(end_exclusive, remap)?,
+                replacement: value(replacement, remap)?,
+            },
+            OperationKind::TextFindForward {
+                value: input,
+                query,
+                start,
+            } => OperationKind::TextFindForward {
+                value: value(input, remap)?,
+                query: value(query, remap)?,
+                start: value(start, remap)?,
+            },
+            OperationKind::TextFindBackward {
+                value: input,
+                query,
+                end_exclusive,
+            } => OperationKind::TextFindBackward {
+                value: value(input, remap)?,
+                query: value(query, remap)?,
+                end_exclusive: value(end_exclusive, remap)?,
+            },
+            OperationKind::TextLineEndingKind { value: input } => {
+                OperationKind::TextLineEndingKind {
+                    value: value(input, remap)?,
+                }
+            }
+            OperationKind::TextDisplayWidth {
+                value: input,
+                start,
+                end_exclusive,
+                initial_column,
+                tab_width,
+            } => OperationKind::TextDisplayWidth {
+                value: value(input, remap)?,
+                start: value(start, remap)?,
+                end_exclusive: value(end_exclusive, remap)?,
+                initial_column: value(initial_column, remap)?,
+                tab_width: value(tab_width, remap)?,
+            },
+            OperationKind::TextCellPrefixBoundary {
+                value: input,
+                start,
+                end_exclusive,
+                initial_column,
+                maximum_cells,
+                tab_width,
+            } => OperationKind::TextCellPrefixBoundary {
+                value: value(input, remap)?,
+                start: value(start, remap)?,
+                end_exclusive: value(end_exclusive, remap)?,
+                initial_column: value(initial_column, remap)?,
+                maximum_cells: value(maximum_cells, remap)?,
+                tab_width: value(tab_width, remap)?,
+            },
+            OperationKind::TextFromScalar { value: input } => OperationKind::TextFromScalar {
+                value: value(input, remap)?,
+            },
+            OperationKind::TextToScalars {
+                sequence,
+                value: input,
+            } => OperationKind::TextToScalars {
+                sequence: remap(sequence)?,
+                value: value(input, remap)?,
+            },
+            OperationKind::TextFromScalars {
+                sequence,
+                value: input,
+            } => OperationKind::TextFromScalars {
+                sequence: remap(sequence)?,
+                value: value(input, remap)?,
+            },
             OperationKind::SequenceEmpty { sequence } => OperationKind::SequenceEmpty {
                 sequence: remap(sequence)?,
             },
@@ -1029,6 +1162,15 @@ pub(super) fn remap_node_with(
                 sequence: remap(sequence)?,
                 lhs: value(lhs, remap)?,
                 rhs: value(rhs, remap)?,
+            },
+            OperationKind::SequenceRepeat {
+                sequence,
+                element,
+                count,
+            } => OperationKind::SequenceRepeat {
+                sequence: remap(sequence)?,
+                element: value(element, remap)?,
+                count: value(count, remap)?,
             },
             OperationKind::Call {
                 function,

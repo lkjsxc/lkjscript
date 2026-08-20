@@ -2,10 +2,11 @@ use lkjscript::application::{
     self, ApplicationDigest, ApplicationFieldValue, ApplicationTarget, ApplicationValue,
 };
 use lkjscript::release::{ReleaseId, ReleaseItemId, ReleaseSignatureInspection};
-use lkjscript::schema::{ByteString, MAXIMUM_BYTE_STRING_BYTES, MAXIMUM_TEXT_BYTES, TextString};
+use lkjscript::schema::{ByteString, MAXIMUM_BYTE_STRING_BYTES, TextString};
 use std::collections::BTreeMap;
 
 pub const APPLICATION_BYTES: &[u8] = include_bytes!("../../../applications/lkjwork/lkjwork.lkja");
+pub const MAXIMUM_PRODUCT_TEXT_BYTES: usize = 64 * 1024;
 
 #[derive(Clone, Debug)]
 struct ArtifactInterface {
@@ -149,9 +150,9 @@ impl Bindings {
     }
 
     pub fn text(&self, value: &str) -> Result<ApplicationValue, String> {
-        if value.len() > MAXIMUM_TEXT_BYTES {
+        if value.len() > MAXIMUM_PRODUCT_TEXT_BYTES {
             return Err(format!(
-                "product input requests {} UTF-8 text bytes; limit is {MAXIMUM_TEXT_BYTES}",
+                "product input requests {} UTF-8 text bytes; limit is {MAXIMUM_PRODUCT_TEXT_BYTES}",
                 value.len()
             ));
         }

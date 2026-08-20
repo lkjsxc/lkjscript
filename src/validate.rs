@@ -1072,13 +1072,41 @@ fn validate_nominal_operation_contract(
                 }
             }
         }
+        OperationKind::TextToScalars { sequence, .. }
+        | OperationKind::TextFromScalars { sequence, .. } => {
+            let node = snapshot.node(*sequence)?;
+            match node {
+                Node::SequenceType {
+                    element: SemanticType::I64,
+                    ..
+                } => {}
+                Node::SequenceType { .. } => {
+                    return Err(LkError::new(
+                        ErrorCode::InvalidOperand,
+                        "text scalar conversion requires an i64 sequence declaration",
+                    )
+                    .for_node(*sequence)
+                    .with_related([operation_id]));
+                }
+                _ => {
+                    return Err(LkError::new(
+                        ErrorCode::WrongKind,
+                        "text scalar conversion must name a sequence declaration",
+                    )
+                    .for_node(*sequence)
+                    .with_kinds(NodeKind::SequenceType, node.kind())
+                    .with_related([operation_id]));
+                }
+            }
+        }
         OperationKind::SequenceEmpty { sequence }
         | OperationKind::SequenceLen { sequence, .. }
         | OperationKind::SequenceGet { sequence, .. }
         | OperationKind::SequenceAppend { sequence, .. }
         | OperationKind::SequenceReplace { sequence, .. }
         | OperationKind::SequenceSlice { sequence, .. }
-        | OperationKind::SequenceConcat { sequence, .. } => {
+        | OperationKind::SequenceConcat { sequence, .. }
+        | OperationKind::SequenceRepeat { sequence, .. } => {
             let node = snapshot.node(*sequence)?;
             if !matches!(node, Node::SequenceType { .. }) {
                 return Err(LkError::new(
@@ -1256,7 +1284,10 @@ fn resolve_type_rule(
             | OperationKind::SequenceAppend { sequence, .. }
             | OperationKind::SequenceReplace { sequence, .. }
             | OperationKind::SequenceSlice { sequence, .. }
-            | OperationKind::SequenceConcat { sequence, .. } => {
+            | OperationKind::SequenceConcat { sequence, .. }
+            | OperationKind::SequenceRepeat { sequence, .. }
+            | OperationKind::TextToScalars { sequence, .. }
+            | OperationKind::TextFromScalars { sequence, .. } => {
                 Some(SemanticType::Nominal(*sequence))
             }
             _ => None,
@@ -1268,7 +1299,10 @@ fn resolve_type_rule(
             | OperationKind::SequenceAppend { sequence, .. }
             | OperationKind::SequenceReplace { sequence, .. }
             | OperationKind::SequenceSlice { sequence, .. }
-            | OperationKind::SequenceConcat { sequence, .. } => match snapshot.node(*sequence)? {
+            | OperationKind::SequenceConcat { sequence, .. }
+            | OperationKind::SequenceRepeat { sequence, .. }
+            | OperationKind::TextToScalars { sequence, .. }
+            | OperationKind::TextFromScalars { sequence, .. } => match snapshot.node(*sequence)? {
                 Node::SequenceType { element, .. } => Some(*element),
                 _ => None,
             },

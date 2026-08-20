@@ -9,8 +9,8 @@
 use crate::error::{ErrorCode, LkError, Result};
 use rustix::fd::OwnedFd;
 use rustix::fs::{
-    AtFlags, Dir, FileType, Mode, OFlags, RenameFlags, ResolveFlags, Stat, fstat, fsync, openat,
-    openat2, renameat_with, statat, unlinkat,
+    AtFlags, Dir, FileType, Mode, OFlags, RenameFlags, ResolveFlags, Stat, fchmod, fstat, fsync,
+    openat, openat2, renameat_with, statat, unlinkat,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::fmt;
@@ -18,8 +18,10 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
-pub const SELECTED_FILESYSTEM_CONTRACT_VERSION: u16 = 1;
+pub const SELECTED_FILESYSTEM_CONTRACT_VERSION: u16 = 2;
 pub const MAXIMUM_PATH_DEPTH: usize = 32;
 pub const MAXIMUM_PATH_COMPONENT_BYTES: usize = 255;
 pub const MAXIMUM_PATH_BYTES: usize = 4_096;
@@ -27,10 +29,18 @@ pub const MAXIMUM_DIRECTORY_ENTRIES: usize = 4_096;
 pub const MAXIMUM_DIRECTORY_PAGE_ENTRIES: usize = 256;
 pub const MAXIMUM_FILE_BYTES: usize = 8 * 1024 * 1024;
 pub const MAXIMUM_ACTION_ID_BYTES: usize = 64;
+pub const MAXIMUM_SEARCH_QUERY_BYTES: usize = 4_096;
+pub const MAXIMUM_SEARCH_DIRECTORIES: usize = 4_096;
+pub const MAXIMUM_SEARCH_FILES: usize = 8_192;
+pub const MAXIMUM_SEARCH_TOTAL_BYTES: usize = 64 * 1024 * 1024;
+pub const MAXIMUM_SEARCH_MATCHES: usize = 4_096;
+pub const MAXIMUM_SEARCH_PREVIEW_BYTES: usize = 256;
+pub const MAXIMUM_SEARCH_FAILURES: usize = 64;
 
-const FILE_DIGEST_DOMAIN: &[u8] = b"lkjscript-selected-file-v1\0";
-const DIRECTORY_DIGEST_DOMAIN: &[u8] = b"lkjscript-selected-directory-v1\0";
-const TEMPORARY_PREFIX: &str = ".lkjstudio-save-";
+const FILE_DIGEST_DOMAIN: &[u8] = b"lkjscript-selected-file-v2\0";
+const DIRECTORY_DIGEST_DOMAIN: &[u8] = b"lkjscript-selected-directory-v2\0";
+const TEMPORARY_PREFIX: &str = ".lkjedit-save-";
+const NEW_FILE_MODE: u32 = 0o644;
 const RESOLVE_POLICY: ResolveFlags = ResolveFlags::BENEATH
     .union(ResolveFlags::NO_MAGICLINKS)
     .union(ResolveFlags::NO_SYMLINKS)
@@ -45,6 +55,10 @@ pub struct FilesystemLimits {
     pub maximum_directory_entries: usize,
     pub maximum_directory_page_entries: usize,
     pub maximum_file_bytes: usize,
+    pub maximum_search_directories: usize,
+    pub maximum_search_files: usize,
+    pub maximum_search_total_bytes: usize,
+    pub maximum_search_matches: usize,
 }
 
 impl Default for FilesystemLimits {
@@ -56,6 +70,10 @@ impl Default for FilesystemLimits {
             maximum_directory_entries: MAXIMUM_DIRECTORY_ENTRIES,
             maximum_directory_page_entries: MAXIMUM_DIRECTORY_PAGE_ENTRIES,
             maximum_file_bytes: MAXIMUM_FILE_BYTES,
+            maximum_search_directories: MAXIMUM_SEARCH_DIRECTORIES,
+            maximum_search_files: MAXIMUM_SEARCH_FILES,
+            maximum_search_total_bytes: MAXIMUM_SEARCH_TOTAL_BYTES,
+            maximum_search_matches: MAXIMUM_SEARCH_MATCHES,
         }
     }
 }
@@ -65,6 +83,7 @@ impl Default for FilesystemLimits {
 pub struct FilesystemOperations {
     pub list: bool,
     pub read: bool,
+    pub search: bool,
     pub write: bool,
 }
 
@@ -72,6 +91,7 @@ impl FilesystemOperations {
     pub const READ_WRITE: Self = Self {
         list: true,
         read: true,
+        search: true,
         write: true,
     };
 }
@@ -222,6 +242,60 @@ pub struct DirectoryPage {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
+pub struct SearchRequest {
+    pub contract_version: u16,
+    pub start: RelativePath,
+    pub query: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SearchMatch {
+    pub path: RelativePath,
+    pub start_byte: usize,
+    pub end_byte: usize,
+    pub line: usize,
+    pub preview: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SearchFailure {
+    pub path: RelativePath,
+    pub class: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SearchResult {
+    pub contract_version: u16,
+    pub start: RelativePath,
+    pub query: String,
+    pub matches: Vec<SearchMatch>,
+    pub directories: usize,
+    pub files: usize,
+    pub bytes: usize,
+    pub unsupported_files: usize,
+    pub failures: Vec<SearchFailure>,
+    pub truncated: bool,
+    pub cancelled: bool,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct SearchCancellation(Arc<AtomicBool>);
+
+impl SearchCancellation {
+    pub fn cancel(&self) {
+        self.0.store(true, Ordering::Release);
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.0.load(Ordering::Acquire)
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct FileVersion {
     pub digest: FileDigest,
     pub size: u64,
@@ -231,6 +305,7 @@ pub struct FileVersion {
     pub modified_nanoseconds: u64,
     pub changed_seconds: i64,
     pub changed_nanoseconds: u64,
+    pub mode: u32,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -480,6 +555,160 @@ impl SelectedFilesystem {
         read_at(&parent, name, path, self.limits.maximum_file_bytes)
     }
 
+    pub fn search(
+        &self,
+        request: &SearchRequest,
+        cancellation: &SearchCancellation,
+    ) -> Result<SearchResult> {
+        self.require(self.operations.search, "recursive literal search")?;
+        if request.contract_version != SELECTED_FILESYSTEM_CONTRACT_VERSION {
+            return Err(LkError::new(
+                ErrorCode::ProtocolVersion,
+                "filesystem search request version is unsupported",
+            ));
+        }
+        self.validate_path(&request.start)?;
+        if request.query.is_empty() || request.query.len() > MAXIMUM_SEARCH_QUERY_BYTES {
+            return Err(LkError::new(
+                ErrorCode::FilesystemInputTooLarge,
+                "filesystem literal search query must contain 1..=4096 UTF-8 bytes",
+            ));
+        }
+
+        enum Task {
+            Directory(RelativePath),
+            File(RelativePath, u64),
+        }
+
+        let mut result = SearchResult {
+            contract_version: SELECTED_FILESYSTEM_CONTRACT_VERSION,
+            start: request.start.clone(),
+            query: request.query.clone(),
+            matches: Vec::new(),
+            directories: 0,
+            files: 0,
+            bytes: 0,
+            unsupported_files: 0,
+            failures: Vec::new(),
+            truncated: false,
+            cancelled: false,
+        };
+        let mut tasks = vec![Task::Directory(request.start.clone())];
+        while let Some(task) = tasks.pop() {
+            if cancellation.is_cancelled() {
+                result.cancelled = true;
+                break;
+            }
+            match task {
+                Task::Directory(path) => {
+                    if result.directories >= self.limits.maximum_search_directories {
+                        result.truncated = true;
+                        break;
+                    }
+                    result.directories += 1;
+                    let mut entries = Vec::new();
+                    let mut cursor = None;
+                    loop {
+                        let page = self.list(
+                            &path,
+                            self.limits.maximum_directory_page_entries,
+                            cursor.as_ref(),
+                        )?;
+                        entries.extend(page.entries);
+                        cursor = page.continuation;
+                        if cursor.is_none() {
+                            break;
+                        }
+                        if cancellation.is_cancelled() {
+                            result.cancelled = true;
+                            break;
+                        }
+                    }
+                    if result.cancelled {
+                        break;
+                    }
+                    for entry in entries.into_iter().rev() {
+                        let mut components = path.components().to_vec();
+                        components.push(entry.name);
+                        let child = RelativePath::new(components)?;
+                        match entry.kind {
+                            DirectoryEntryKind::Directory => {
+                                tasks.push(Task::Directory(child));
+                            }
+                            DirectoryEntryKind::File => {
+                                tasks.push(Task::File(child, entry.size));
+                            }
+                            DirectoryEntryKind::Symlink | DirectoryEntryKind::Other => {
+                                record_search_failure(&mut result, child, "unsupported_type");
+                            }
+                        }
+                    }
+                }
+                Task::File(path, declared_size) => {
+                    if result.files >= self.limits.maximum_search_files {
+                        result.truncated = true;
+                        break;
+                    }
+                    let admitted = usize::try_from(declared_size).ok().and_then(|size| {
+                        result
+                            .bytes
+                            .checked_add(size)
+                            .filter(|total| *total <= self.limits.maximum_search_total_bytes)
+                    });
+                    let Some(_) = admitted else {
+                        result.truncated = true;
+                        break;
+                    };
+                    result.files += 1;
+                    let file = match self.read(&path) {
+                        Ok(FileReadOutcome::Opened(file)) => file,
+                        Ok(FileReadOutcome::NotFound) => {
+                            record_search_failure(&mut result, path, "not_found");
+                            continue;
+                        }
+                        Ok(FileReadOutcome::WrongType) => {
+                            record_search_failure(&mut result, path, "wrong_type");
+                            continue;
+                        }
+                        Ok(FileReadOutcome::Changed) => {
+                            record_search_failure(&mut result, path, "changed");
+                            continue;
+                        }
+                        Err(error) => {
+                            record_search_failure(&mut result, path, error.code.machine_name());
+                            continue;
+                        }
+                    };
+                    let Some(total) = result.bytes.checked_add(file.content.len()) else {
+                        result.truncated = true;
+                        break;
+                    };
+                    if total > self.limits.maximum_search_total_bytes {
+                        result.truncated = true;
+                        break;
+                    }
+                    result.bytes = total;
+                    let Ok(text) = std::str::from_utf8(&file.content) else {
+                        result.unsupported_files = result.unsupported_files.saturating_add(1);
+                        continue;
+                    };
+                    collect_search_matches(
+                        &mut result,
+                        &file.path,
+                        text,
+                        &request.query,
+                        self.limits.maximum_search_matches,
+                        cancellation,
+                    );
+                    if result.cancelled || result.truncated {
+                        break;
+                    }
+                }
+            }
+        }
+        Ok(result)
+    }
+
     pub fn save(&self, request: &FileSaveRequest) -> Result<FileSaveOutcome> {
         self.save_inner(request, None)
     }
@@ -562,8 +791,8 @@ impl SelectedFilesystem {
         let intended = FileDigest::of(&request.content);
         let (parent, name) = self.open_parent(&request.path)?;
         let observed = read_at(&parent, name, &request.path, self.limits.maximum_file_bytes)?;
-        let expected = match (&request.mode, observed) {
-            (SaveMode::Create, FileReadOutcome::NotFound) => None,
+        let (expected, publication_mode) = match (&request.mode, observed) {
+            (SaveMode::Create, FileReadOutcome::NotFound) => (None, NEW_FILE_MODE),
             (SaveMode::Create, FileReadOutcome::Opened(file)) => {
                 return Ok(FileSaveOutcome::Conflict {
                     observed: Some(file.version),
@@ -598,7 +827,9 @@ impl SelectedFilesystem {
                     version: file.version,
                 });
             }
-            (SaveMode::Replace { expected }, FileReadOutcome::Opened(_)) => Some(*expected),
+            (SaveMode::Replace { expected }, FileReadOutcome::Opened(file)) => {
+                (Some(*expected), file.version.mode & 0o777)
+            }
         };
 
         let temporary_name = temporary_name(&request.action_id);
@@ -630,6 +861,12 @@ impl SelectedFilesystem {
             }
         };
         let mut temporary_file = File::from(temporary);
+        if let Err(error) = fchmod(&temporary_file, Mode::from_raw_mode(publication_mode)) {
+            let _ = unlinkat(&parent, temporary_name.as_str(), AtFlags::empty());
+            return Ok(FileSaveOutcome::KnownFailure {
+                message: errno_error(error, "cannot set save publication mode").to_string(),
+            });
+        }
         if let Err(error) = temporary_file
             .write_all(&request.content)
             .and_then(|()| temporary_file.sync_all())
@@ -783,6 +1020,95 @@ impl SelectedFilesystem {
     }
 }
 
+fn record_search_failure(result: &mut SearchResult, path: RelativePath, class: &str) {
+    if result.failures.len() < MAXIMUM_SEARCH_FAILURES {
+        result.failures.push(SearchFailure {
+            path,
+            class: class.to_owned(),
+        });
+    } else {
+        result.truncated = true;
+    }
+}
+
+fn collect_search_matches(
+    result: &mut SearchResult,
+    path: &RelativePath,
+    text: &str,
+    query: &str,
+    maximum_matches: usize,
+    cancellation: &SearchCancellation,
+) {
+    let bytes = text.as_bytes();
+    let query = query.as_bytes();
+    if query.len() > bytes.len() {
+        return;
+    }
+    let mut line = 0_usize;
+    let mut line_scan = 0_usize;
+    for start in 0..=bytes.len() - query.len() {
+        if start % (64 * 1024) == 0 && cancellation.is_cancelled() {
+            result.cancelled = true;
+            return;
+        }
+        if &bytes[start..start + query.len()] != query {
+            continue;
+        }
+        line = line.saturating_add(
+            bytes[line_scan..start]
+                .iter()
+                .filter(|byte| **byte == b'\n')
+                .count(),
+        );
+        line_scan = start;
+        if result.matches.len() >= maximum_matches {
+            result.truncated = true;
+            return;
+        }
+        result.matches.push(SearchMatch {
+            path: path.clone(),
+            start_byte: start,
+            end_byte: start + query.len(),
+            line,
+            preview: search_preview(text, start, start + query.len()),
+        });
+    }
+}
+
+fn search_preview(text: &str, start: usize, end: usize) -> String {
+    let bytes = text.as_bytes();
+    let line_start = bytes[..start]
+        .iter()
+        .rposition(|byte| *byte == b'\n')
+        .map_or(0, |offset| offset + 1);
+    let line_end = bytes[end..]
+        .iter()
+        .position(|byte| *byte == b'\n')
+        .map_or(bytes.len(), |offset| end + offset);
+    let mut preview_start = line_start;
+    let mut preview_end = line_end;
+    if preview_end.saturating_sub(preview_start) > MAXIMUM_SEARCH_PREVIEW_BYTES {
+        let half = MAXIMUM_SEARCH_PREVIEW_BYTES / 2;
+        preview_start = start.saturating_sub(half).max(line_start);
+        preview_end = preview_start
+            .saturating_add(MAXIMUM_SEARCH_PREVIEW_BYTES)
+            .min(line_end);
+        if end > preview_end {
+            preview_end = end.min(line_end);
+            preview_start = preview_end
+                .saturating_sub(MAXIMUM_SEARCH_PREVIEW_BYTES)
+                .max(line_start);
+        }
+        while preview_start < preview_end && !text.is_char_boundary(preview_start) {
+            preview_start += 1;
+        }
+        while preview_end > preview_start && !text.is_char_boundary(preview_end) {
+            preview_end -= 1;
+        }
+    }
+    text[preview_start..preview_end].to_owned()
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum SaveFault {
     BeforePublication,
@@ -874,6 +1200,14 @@ fn validate_limits(limits: &FilesystemLimits) -> Result<()> {
         || limits.maximum_directory_page_entries > MAXIMUM_DIRECTORY_PAGE_ENTRIES
         || limits.maximum_file_bytes == 0
         || limits.maximum_file_bytes > MAXIMUM_FILE_BYTES
+        || limits.maximum_search_directories == 0
+        || limits.maximum_search_directories > MAXIMUM_SEARCH_DIRECTORIES
+        || limits.maximum_search_files == 0
+        || limits.maximum_search_files > MAXIMUM_SEARCH_FILES
+        || limits.maximum_search_total_bytes == 0
+        || limits.maximum_search_total_bytes > MAXIMUM_SEARCH_TOTAL_BYTES
+        || limits.maximum_search_matches == 0
+        || limits.maximum_search_matches > MAXIMUM_SEARCH_MATCHES
     {
         return Err(LkError::new(
             ErrorCode::FilesystemInputTooLarge,
@@ -919,6 +1253,7 @@ fn validate_component(component: &str, limits: &FilesystemLimits) -> Result<()> 
         || component.as_bytes().contains(&0)
         || component.contains('/')
         || component.contains('\\')
+        || component.chars().any(char::is_control)
     {
         return Err(LkError::new(
             ErrorCode::FilesystemDenied,
@@ -962,6 +1297,7 @@ fn file_version(stat: &Stat, content: &[u8]) -> FileVersion {
         modified_nanoseconds: stat.st_mtime_nsec,
         changed_seconds: stat.st_ctime,
         changed_nanoseconds: stat.st_ctime_nsec,
+        mode: stat.st_mode & 0o777,
     }
 }
 
@@ -1043,6 +1379,7 @@ fn parse_digest(value: &str) -> std::result::Result<[u8; 32], DigestParseError> 
 mod tests {
     use super::*;
     use std::fs;
+    use std::os::unix::fs::PermissionsExt;
 
     fn selected(root: &Path) -> SelectedFilesystem {
         SelectedFilesystem::select(
@@ -1154,6 +1491,7 @@ mod tests {
         ));
         assert!(RelativePath::new(vec!["..".to_owned()]).is_err());
         assert!(RelativePath::new(vec!["a/b".to_owned()]).is_err());
+        assert!(RelativePath::new(vec!["line\nbreak".to_owned()]).is_err());
     }
 
     #[test]
@@ -1187,5 +1525,202 @@ mod tests {
             filesystem.save(&request).expect_err("one-over save").code,
             ErrorCode::FilesystemInputTooLarge
         );
+    }
+
+    #[test]
+    fn replacement_preserves_mode_and_creation_uses_the_exact_default() {
+        let root = tempfile::tempdir().expect("root");
+        let path = root.path().join("mode.txt");
+        fs::write(&path, b"base").expect("base");
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o754)).expect("set mode");
+        let filesystem = selected(root.path());
+        let semantic_path = RelativePath::new(vec!["mode.txt".to_owned()]).expect("path");
+        let base = match filesystem.read(&semantic_path).expect("read") {
+            FileReadOutcome::Opened(file) => file,
+            other => panic!("unexpected read outcome: {other:?}"),
+        };
+        let replaced = filesystem
+            .save(&FileSaveRequest {
+                contract_version: SELECTED_FILESYSTEM_CONTRACT_VERSION,
+                action_id: "mode-replace".to_owned(),
+                path: semantic_path,
+                content: b"next".to_vec(),
+                mode: SaveMode::Replace {
+                    expected: base.version.digest,
+                },
+            })
+            .expect("replace");
+        let FileSaveOutcome::Published { version, .. } = replaced else {
+            panic!("unexpected replacement outcome: {replaced:?}")
+        };
+        assert_eq!(version.mode, 0o754);
+        assert_eq!(
+            fs::metadata(&path).expect("metadata").permissions().mode() & 0o777,
+            0o754
+        );
+
+        let created_path = RelativePath::new(vec!["created.txt".to_owned()]).expect("create path");
+        let created = filesystem
+            .save(&FileSaveRequest {
+                contract_version: SELECTED_FILESYSTEM_CONTRACT_VERSION,
+                action_id: "mode-create".to_owned(),
+                path: created_path,
+                content: b"created".to_vec(),
+                mode: SaveMode::Create,
+            })
+            .expect("create");
+        let FileSaveOutcome::Published { version, .. } = created else {
+            panic!("unexpected creation outcome: {created:?}")
+        };
+        assert_eq!(version.mode, NEW_FILE_MODE);
+    }
+
+    #[test]
+    fn recursive_search_is_ordered_overlapping_bounded_and_cancellable() {
+        let root = tempfile::tempdir().expect("root");
+        fs::create_dir(root.path().join("dir")).expect("directory");
+        fs::write(root.path().join("a.txt"), b"aaaa\nneedle").expect("a");
+        fs::write(root.path().join("dir/b.txt"), b"needle needle").expect("b");
+        fs::write(root.path().join("invalid"), [0xff, 0xfe]).expect("invalid");
+        let filesystem = selected(root.path());
+        let cancellation = SearchCancellation::default();
+        let overlap = filesystem
+            .search(
+                &SearchRequest {
+                    contract_version: SELECTED_FILESYSTEM_CONTRACT_VERSION,
+                    start: RelativePath::root(),
+                    query: "aa".to_owned(),
+                },
+                &cancellation,
+            )
+            .expect("overlap search");
+        assert_eq!(
+            overlap
+                .matches
+                .iter()
+                .map(|item| item.start_byte)
+                .collect::<Vec<_>>(),
+            [0, 1, 2]
+        );
+        assert_eq!(overlap.unsupported_files, 1);
+        assert!(!overlap.truncated);
+
+        let ordered = filesystem
+            .search(
+                &SearchRequest {
+                    contract_version: SELECTED_FILESYSTEM_CONTRACT_VERSION,
+                    start: RelativePath::root(),
+                    query: "needle".to_owned(),
+                },
+                &cancellation,
+            )
+            .expect("ordered search");
+        assert_eq!(
+            ordered
+                .matches
+                .iter()
+                .map(|item| item.path.display())
+                .collect::<Vec<_>>(),
+            ["a.txt", "dir/b.txt", "dir/b.txt"]
+        );
+
+        let bounded = SelectedFilesystem::select(
+            "bounded-search".to_owned(),
+            root.path(),
+            FilesystemOperations::READ_WRITE,
+            FilesystemLimits {
+                maximum_search_matches: 2,
+                ..FilesystemLimits::default()
+            },
+        )
+        .expect("bounded search filesystem");
+        let truncated = bounded
+            .search(
+                &SearchRequest {
+                    contract_version: SELECTED_FILESYSTEM_CONTRACT_VERSION,
+                    start: RelativePath::root(),
+                    query: "aa".to_owned(),
+                },
+                &SearchCancellation::default(),
+            )
+            .expect("truncated search");
+        assert_eq!(truncated.matches.len(), 2);
+        assert!(truncated.truncated);
+
+        let cancelled = SearchCancellation::default();
+        cancelled.cancel();
+        let result = filesystem
+            .search(
+                &SearchRequest {
+                    contract_version: SELECTED_FILESYSTEM_CONTRACT_VERSION,
+                    start: RelativePath::root(),
+                    query: "needle".to_owned(),
+                },
+                &cancelled,
+            )
+            .expect("cancelled search");
+        assert!(result.cancelled);
+        assert_eq!(result.directories, 0);
+        assert_eq!(result.files, 0);
+    }
+
+    #[test]
+    fn unknown_visibility_reconciles_present_absent_and_conflicting() {
+        let root = tempfile::tempdir().expect("root");
+        let filesystem = selected(root.path());
+        let created_path = RelativePath::new(vec!["created.txt".to_owned()]).expect("path");
+        let create = FileSaveRequest {
+            contract_version: SELECTED_FILESYSTEM_CONTRACT_VERSION,
+            action_id: "unknown-create".to_owned(),
+            path: created_path.clone(),
+            content: b"intended".to_vec(),
+            mode: SaveMode::Create,
+        };
+        let create_token = match filesystem
+            .save_inner(&create, Some(SaveFault::AfterPublication))
+            .expect("unknown create")
+        {
+            FileSaveOutcome::UnknownVisibility { token, .. } => token,
+            other => panic!("unexpected unknown create: {other:?}"),
+        };
+        assert!(matches!(
+            filesystem.reconcile(&create_token).expect("present"),
+            ReconciliationOutcome::Present { .. }
+        ));
+        fs::remove_file(root.path().join("created.txt")).expect("remove target");
+        assert!(matches!(
+            filesystem.reconcile(&create_token).expect("absent"),
+            ReconciliationOutcome::Absent { observed: None }
+        ));
+
+        fs::write(root.path().join("base.txt"), b"base").expect("base");
+        let base_path = RelativePath::new(vec!["base.txt".to_owned()]).expect("base path");
+        let base = match filesystem.read(&base_path).expect("base read") {
+            FileReadOutcome::Opened(file) => file,
+            other => panic!("unexpected base read: {other:?}"),
+        };
+        let replace_token = match filesystem
+            .save_inner(
+                &FileSaveRequest {
+                    contract_version: SELECTED_FILESYSTEM_CONTRACT_VERSION,
+                    action_id: "unknown-replace".to_owned(),
+                    path: base_path,
+                    content: b"intended".to_vec(),
+                    mode: SaveMode::Replace {
+                        expected: base.version.digest,
+                    },
+                },
+                Some(SaveFault::AfterPublication),
+            )
+            .expect("unknown replace")
+        {
+            FileSaveOutcome::UnknownVisibility { token, .. } => token,
+            other => panic!("unexpected unknown replace: {other:?}"),
+        };
+        fs::write(root.path().join("base.txt"), b"third").expect("third content");
+        assert!(matches!(
+            filesystem.reconcile(&replace_token).expect("conflicting"),
+            ReconciliationOutcome::Conflicting { observed: Some(_) }
+        ));
     }
 }

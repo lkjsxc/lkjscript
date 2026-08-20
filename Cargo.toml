@@ -16,6 +16,7 @@ serde_json = { version = "1.0.149", default-features = false, features = ["std"]
 signal-hook = { version = "0.3.18", default-features = false }
 rustix = { version = "1.1.4", default-features = false, features = ["event", "fs", "std"] }
 unicode-width = { version = "0.2.2", default-features = false }
+unicode-segmentation = { version = "1.13.3", default-features = false }
 
 [dev-dependencies]
 tempfile = "3.23.0"

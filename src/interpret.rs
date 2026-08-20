@@ -11,9 +11,10 @@ use crate::ownership::{
     self, EdgeOwnership, EdgeSource, InstructionOwnership, OwnershipPlan, TerminatorOwnership,
     UseAction,
 };
+use crate::runtime_text::{RuntimeText, RuntimeTextError};
 use crate::schema::{
     ByteString, MAXIMUM_BYTE_STRING_BYTES, MAXIMUM_SEQUENCE_ELEMENTS, MAXIMUM_TEXT_BYTES, Node,
-    SemanticType, TextString,
+    SemanticType,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -52,7 +53,7 @@ pub enum RuntimeValue {
     Bool(bool),
     I64(i64),
     Bytes(ByteString),
-    Text(TextString),
+    Text(RuntimeText),
     Product {
         ty: NodeId,
         fields: Vec<RuntimeFieldValue>,
@@ -219,10 +220,42 @@ pub(crate) fn compile_entry(
     compile::compile_observed(snapshot, entry)
 }
 
-pub(crate) fn run_compiled(
+pub(crate) struct PreparedProgram {
+    program: CoreProgram,
+    ownership: OwnershipPlan,
+}
+
+pub(crate) fn prepare_entry(
+    snapshot: &Snapshot,
+    entry: NodeId,
+) -> Result<(PreparedProgram, compile::CompileObservation)> {
+    let (program, observation) = compile_entry(snapshot, entry)?;
+    let ownership = ownership::derive(&program)?;
+    Ok((PreparedProgram { program, ownership }, observation))
+}
+
+pub(crate) fn run_prepared(
+    snapshot: &Snapshot,
+    entry: NodeId,
+    prepared: &PreparedProgram,
+    arguments: &[RuntimeValue],
+    policy: RunPolicy,
+) -> Result<RunResult> {
+    run_prepared_parts(
+        snapshot,
+        entry,
+        &prepared.program,
+        &prepared.ownership,
+        arguments,
+        policy,
+    )
+}
+
+fn run_prepared_parts(
     snapshot: &Snapshot,
     entry: NodeId,
     program: &CoreProgram,
+    ownership: &OwnershipPlan,
     arguments: &[RuntimeValue],
     policy: RunPolicy,
 ) -> Result<RunResult> {
@@ -259,7 +292,8 @@ pub(crate) fn run_compiled(
         )?);
     }
     let execute_started = Instant::now();
-    let flat = interpret_with_store(program, flat_arguments, policy, &mut managed)?;
+    let flat =
+        interpret_with_store_and_plan(program, ownership, flat_arguments, policy, &mut managed)?;
     preflight_flat_output(program, &managed, &flat, entry)?;
     let value = from_flat(program, &managed, &flat, 1, entry)?;
     validate_runtime_value(snapshot, &value, result_type, entry)?;
@@ -850,9 +884,17 @@ struct SequenceObject {
     owners: u32,
 }
 
+#[derive(Debug)]
+struct TextObject {
+    value: RuntimeText,
+    retained_bytes: usize,
+    owners: u32,
+}
+
 struct InvocationStore {
     bytes: ManagedStore,
     sequences: BTreeMap<ByteHandle, SequenceObject>,
+    texts: BTreeMap<ByteHandle, TextObject>,
 }
 
 impl Default for InvocationStore {
@@ -873,6 +915,7 @@ impl InvocationStore {
         Self {
             bytes: ManagedStore::new(limits, mode),
             sequences: BTreeMap::new(),
+            texts: BTreeMap::new(),
         }
     }
 
@@ -885,7 +928,170 @@ impl InvocationStore {
         Self {
             bytes: ManagedStore::with_drop_witness(limits, mode, witness),
             sequences: BTreeMap::new(),
+            texts: BTreeMap::new(),
         }
+    }
+
+    fn allocate_text(&mut self, value: RuntimeText, origin: NodeId) -> Result<ByteHandle> {
+        let visible_work = value.len_bytes();
+        self.allocate_text_with_work(value, visible_work, origin)
+    }
+
+    fn allocate_text_with_work(
+        &mut self,
+        value: RuntimeText,
+        visible_work: usize,
+        origin: NodeId,
+    ) -> Result<ByteHandle> {
+        let retained_bytes = value.len_bytes();
+        if retained_bytes > MAXIMUM_TEXT_BYTES {
+            return Err(value_policy(origin, "text exceeds UTF-8 byte policy"));
+        }
+        let handle = self.bytes.allocate_backing(b"", origin)?;
+        if let Err(error) =
+            self.bytes
+                .reserve_external_backing(retained_bytes, visible_work, origin)
+        {
+            self.bytes.drop_claim(handle, origin)?;
+            return Err(error);
+        }
+        if self
+            .texts
+            .insert(
+                handle,
+                TextObject {
+                    value,
+                    retained_bytes,
+                    owners: 1,
+                },
+            )
+            .is_some()
+        {
+            self.bytes
+                .release_external_backing(retained_bytes, origin)?;
+            self.bytes.drop_claim(handle, origin)?;
+            return Err(invalid_handle(
+                origin,
+                "text allocation reused a live managed handle",
+            ));
+        }
+        Ok(handle)
+    }
+
+    fn text(&self, handle: ByteHandle, origin: NodeId) -> Result<&RuntimeText> {
+        self.texts
+            .get(&handle)
+            .map(|object| &object.value)
+            .ok_or_else(|| invalid_handle(origin, "managed text handle is stale or malformed"))
+    }
+
+    fn concat_text(
+        &mut self,
+        lhs: ByteHandle,
+        rhs: ByteHandle,
+        origin: NodeId,
+    ) -> Result<ByteHandle> {
+        let visible_work = self.text(rhs, origin)?.len_bytes().saturating_add(64);
+        let value = self
+            .text(lhs, origin)?
+            .concat(self.text(rhs, origin)?)
+            .map_err(|error| value_policy(origin, &error.to_string()))?;
+        self.allocate_text_with_work(value, visible_work, origin)
+    }
+
+    fn text_to_scalar_sequence(
+        &mut self,
+        handle: ByteHandle,
+        origin: NodeId,
+    ) -> Result<(ByteHandle, usize)> {
+        let materialized = self.text(handle, origin)?.materialized();
+        let count = materialized.chars().count();
+        if count > MAXIMUM_SEQUENCE_ELEMENTS {
+            return Err(value_policy(
+                origin,
+                "text scalar conversion exceeds sequence element-count policy",
+            ));
+        }
+        let mut elements = Vec::new();
+        elements
+            .try_reserve_exact(count)
+            .map_err(|_| managed_allocation_error(origin))?;
+        let mut element_bytes = Vec::new();
+        element_bytes
+            .try_reserve_exact(count)
+            .map_err(|_| managed_allocation_error(origin))?;
+        let mut visible_bytes = 0_usize;
+        for scalar in materialized.chars() {
+            let element = RuntimeValue::I64(i64::from(u32::from(scalar)));
+            element_bytes.push(encoded_runtime_value_bytes(&element, origin)?);
+            visible_bytes = visible_bytes
+                .checked_add(runtime_byte_value_bytes(&element)?)
+                .ok_or_else(|| {
+                    value_policy(origin, "text scalar conversion accounting overflowed")
+                })?;
+            elements.push(Arc::new(element));
+        }
+        let retained_bytes = sequence_retained_bytes(&element_bytes, origin)?;
+        let handle = self.allocate_sequence_parts(
+            elements,
+            element_bytes,
+            retained_bytes,
+            visible_bytes,
+            origin,
+        )?;
+        Ok((handle, materialized.len().saturating_add(count)))
+    }
+
+    fn text_from_scalar_sequence(
+        &mut self,
+        handle: ByteHandle,
+        origin: NodeId,
+    ) -> Result<(ByteHandle, usize)> {
+        let source = self.sequence_object(handle, origin)?;
+        let mut materialized = String::new();
+        materialized
+            .try_reserve(
+                source
+                    .elements
+                    .len()
+                    .saturating_mul(4)
+                    .min(MAXIMUM_TEXT_BYTES),
+            )
+            .map_err(|_| managed_allocation_error(origin))?;
+        for element in &source.elements {
+            let RuntimeValue::I64(value) = element.as_ref() else {
+                return Err(invalid_ir(
+                    "verified text-from-scalars sequence contains a non-i64 value",
+                )
+                .for_node(origin));
+            };
+            let scalar = u32::try_from(*value)
+                .ok()
+                .and_then(char::from_u32)
+                .ok_or_else(|| {
+                    LkError::new(
+                        ErrorCode::RuntimeTrap,
+                        "text scalar sequence contains a non-Unicode-scalar value",
+                    )
+                    .for_node(origin)
+                })?;
+            let next = materialized
+                .len()
+                .checked_add(scalar.len_utf8())
+                .ok_or_else(|| value_policy(origin, "text scalar conversion length overflows"))?;
+            if next > MAXIMUM_TEXT_BYTES {
+                return Err(value_policy(
+                    origin,
+                    "text scalar conversion exceeds UTF-8 byte policy",
+                ));
+            }
+            materialized.push(scalar);
+        }
+        let work = source.elements.len().saturating_add(materialized.len());
+        let text = RuntimeText::try_from_str(&materialized)
+            .map_err(|error| runtime_text_error(origin, error))?;
+        let handle = self.allocate_text(text, origin)?;
+        Ok((handle, work))
     }
 
     fn allocate_sequence(
@@ -995,8 +1201,11 @@ impl InvocationStore {
             .get(index)
             .cloned()
             .ok_or_else(|| {
-                LkError::new(ErrorCode::RuntimeTrap, "sequence index is out of bounds")
-                    .for_node(origin)
+                LkError::new(
+                    ErrorCode::RuntimeTrap,
+                    format!("sequence index is out of bounds at {origin}"),
+                )
+                .for_node(origin)
             })
     }
 
@@ -1017,8 +1226,9 @@ impl InvocationStore {
         &mut self,
         handle: ByteHandle,
         element: RuntimeValue,
+        reuse_candidate: bool,
         origin: NodeId,
-    ) -> Result<(ByteHandle, usize)> {
+    ) -> Result<(ByteHandle, usize, bool, usize)> {
         let source = self.sequence_object(handle, origin)?;
         if source.elements.len() == MAXIMUM_SEQUENCE_ELEMENTS {
             return Err(value_policy(
@@ -1038,6 +1248,33 @@ impl InvocationStore {
             .visible_bytes
             .checked_add(element_visible)
             .ok_or_else(|| value_policy(origin, "sequence visible-byte accounting overflowed"))?;
+        let work = element_bytes.max(1);
+        if reuse_candidate && source.owners == 1 {
+            let previous_retained = source.retained_bytes;
+            {
+                let source = self.sequences.get_mut(&handle).ok_or_else(|| {
+                    invalid_handle(origin, "managed sequence disappeared during append")
+                })?;
+                source
+                    .elements
+                    .try_reserve(1)
+                    .map_err(|_| managed_allocation_error(origin))?;
+                source
+                    .element_bytes
+                    .try_reserve(1)
+                    .map_err(|_| managed_allocation_error(origin))?;
+            }
+            self.bytes
+                .replace_external_backing(previous_retained, retained_bytes, work, origin)?;
+            let source = self.sequences.get_mut(&handle).ok_or_else(|| {
+                invalid_handle(origin, "managed sequence disappeared during append")
+            })?;
+            source.elements.push(Arc::new(element));
+            source.element_bytes.push(element_bytes);
+            source.retained_bytes = retained_bytes;
+            source.visible_bytes = visible_bytes;
+            return Ok((handle, source.elements.len(), true, work));
+        }
         let mut elements = source.elements.clone();
         let mut encoded_lengths = source.element_bytes.clone();
         elements.push(Arc::new(element));
@@ -1050,7 +1287,7 @@ impl InvocationStore {
             visible_bytes,
             origin,
         )?;
-        Ok((handle, length))
+        Ok((handle, length, false, work))
     }
 
     fn replace_sequence(
@@ -1058,8 +1295,9 @@ impl InvocationStore {
         handle: ByteHandle,
         index: usize,
         element: RuntimeValue,
+        reuse_candidate: bool,
         origin: NodeId,
-    ) -> Result<(ByteHandle, usize)> {
+    ) -> Result<(ByteHandle, usize, bool, usize)> {
         let source = self.sequence_object(handle, origin)?;
         let old = source.elements.get(index).ok_or_else(|| {
             LkError::new(
@@ -1085,6 +1323,20 @@ impl InvocationStore {
             .checked_sub(old_visible)
             .and_then(|value| value.checked_add(replacement_visible))
             .ok_or_else(|| value_policy(origin, "sequence visible-byte accounting overflowed"))?;
+        let work = replacement_encoded.max(1);
+        if reuse_candidate && source.owners == 1 {
+            let previous_retained = source.retained_bytes;
+            self.bytes
+                .replace_external_backing(previous_retained, retained_bytes, work, origin)?;
+            let source = self.sequences.get_mut(&handle).ok_or_else(|| {
+                invalid_handle(origin, "managed sequence disappeared during replacement")
+            })?;
+            source.elements[index] = Arc::new(element);
+            source.element_bytes[index] = replacement_encoded;
+            source.retained_bytes = retained_bytes;
+            source.visible_bytes = visible_bytes;
+            return Ok((handle, source.elements.len(), true, work));
+        }
         let mut elements = source.elements.clone();
         let mut encoded_lengths = source.element_bytes.clone();
         elements[index] = Arc::new(element);
@@ -1097,7 +1349,7 @@ impl InvocationStore {
             visible_bytes,
             origin,
         )?;
-        Ok((handle, length))
+        Ok((handle, length, false, work))
     }
 
     fn slice_sequence(
@@ -1178,8 +1430,47 @@ impl InvocationStore {
         Ok((handle, length))
     }
 
+    fn repeat_sequence(
+        &mut self,
+        element: RuntimeValue,
+        count: usize,
+        origin: NodeId,
+    ) -> Result<(ByteHandle, usize)> {
+        if count > MAXIMUM_SEQUENCE_ELEMENTS {
+            return Err(value_policy(
+                origin,
+                "sequence repetition exceeds element-count policy",
+            ));
+        }
+        let encoded = encoded_runtime_value_bytes(&element, origin)?;
+        let visible = runtime_byte_value_bytes(&element)?;
+        let visible_bytes = visible
+            .checked_mul(count)
+            .ok_or_else(|| value_policy(origin, "sequence repetition accounting overflowed"))?;
+        let mut elements = Vec::new();
+        elements
+            .try_reserve_exact(count)
+            .map_err(|_| managed_allocation_error(origin))?;
+        let element = Arc::new(element);
+        elements.extend(std::iter::repeat_n(element, count));
+        let mut element_bytes = Vec::new();
+        element_bytes
+            .try_reserve_exact(count)
+            .map_err(|_| managed_allocation_error(origin))?;
+        element_bytes.resize(count, encoded);
+        let retained_bytes = sequence_retained_bytes(&element_bytes, origin)?;
+        let handle = self.allocate_sequence_parts(
+            elements,
+            element_bytes,
+            retained_bytes,
+            visible_bytes,
+            origin,
+        )?;
+        Ok((handle, encoded.max(1).saturating_mul(count)))
+    }
+
     fn share(&mut self, handle: ByteHandle, origin: NodeId) -> Result<()> {
-        let next_owners = self
+        let next_sequence_owners = self
             .sequences
             .get(&handle)
             .map(|sequence| {
@@ -1192,11 +1483,36 @@ impl InvocationStore {
                 })
             })
             .transpose()?;
+        let next_text_owners = self
+            .texts
+            .get(&handle)
+            .map(|text| {
+                text.owners.checked_add(1).ok_or_else(|| {
+                    LkError::new(
+                        ErrorCode::ExecutionMemoryExhausted,
+                        "managed text ownership count overflowed",
+                    )
+                    .for_node(origin)
+                })
+            })
+            .transpose()?;
+        if next_sequence_owners.is_some() && next_text_owners.is_some() {
+            return Err(invalid_handle(
+                origin,
+                "managed handle aliases sequence and text objects",
+            ));
+        }
         self.bytes.share(handle, origin)?;
-        if let Some(next_owners) = next_owners {
+        if let Some(next_owners) = next_sequence_owners {
             self.sequences
                 .get_mut(&handle)
                 .ok_or_else(|| invalid_handle(origin, "managed sequence disappeared during share"))?
+                .owners = next_owners;
+        }
+        if let Some(next_owners) = next_text_owners {
+            self.texts
+                .get_mut(&handle)
+                .ok_or_else(|| invalid_handle(origin, "managed text disappeared during share"))?
                 .owners = next_owners;
         }
         Ok(())
@@ -1215,6 +1531,24 @@ impl InvocationStore {
                 ))
             })
             .transpose()?;
+        let text_drop = self
+            .texts
+            .get(&handle)
+            .map(|text| {
+                Ok::<_, LkError>((
+                    text.owners
+                        .checked_sub(1)
+                        .ok_or_else(|| invalid_handle(origin, "managed text ownership was zero"))?,
+                    text.retained_bytes,
+                ))
+            })
+            .transpose()?;
+        if sequence_drop.is_some() && text_drop.is_some() {
+            return Err(invalid_handle(
+                origin,
+                "managed handle aliases sequence and text objects",
+            ));
+        }
         self.bytes.drop_claim(handle, origin)?;
         if let Some((next_owners, retained_bytes)) = sequence_drop {
             if next_owners == 0 {
@@ -1227,6 +1561,18 @@ impl InvocationStore {
                     .ok_or_else(|| {
                         invalid_handle(origin, "managed sequence disappeared during drop")
                     })?
+                    .owners = next_owners;
+            }
+        }
+        if let Some((next_owners, retained_bytes)) = text_drop {
+            if next_owners == 0 {
+                self.texts.remove(&handle);
+                self.bytes
+                    .release_external_backing(retained_bytes, origin)?;
+            } else {
+                self.texts
+                    .get_mut(&handle)
+                    .ok_or_else(|| invalid_handle(origin, "managed text disappeared during drop"))?
                     .owners = next_owners;
             }
         }
@@ -1493,7 +1839,7 @@ fn write_flat(
             Ok(())
         }
         (CoreTypeKind::Text, RuntimeValue::Text(value)) => {
-            destination[0] = Cell::Bytes(managed.allocate_backing(value.as_bytes(), origin)?);
+            destination[0] = Cell::Bytes(managed.allocate_text(value.clone(), origin)?);
             Ok(())
         }
         (CoreTypeKind::Sequence { .. }, RuntimeValue::Sequence { ty, elements })
@@ -1616,11 +1962,18 @@ fn flat_visible_bytes(
         .for_node(origin));
     }
     match &core_ir::type_at(program, ty)?.kind {
-        CoreTypeKind::Bytes | CoreTypeKind::Text => match cells.first().copied() {
+        CoreTypeKind::Bytes => match cells.first().copied() {
             Some(Cell::Bytes(handle)) => Ok(managed.bytes(handle, origin)?.len()),
             _ => Err(invalid_handle(
                 origin,
                 "byte output cell has the wrong kind",
+            )),
+        },
+        CoreTypeKind::Text => match cells.first().copied() {
+            Some(Cell::Bytes(handle)) => Ok(managed.text(handle, origin)?.len_bytes()),
+            _ => Err(invalid_handle(
+                origin,
+                "text output cell has the wrong kind",
             )),
         },
         CoreTypeKind::Sequence { .. } => {
@@ -1752,17 +2105,7 @@ fn from_flat_cells(
         }
         CoreTypeKind::Text => {
             let handle = managed_cell_handle(cells, origin, "text result")?;
-            let text = std::str::from_utf8(managed.bytes(handle, origin)?)
-                .map_err(|_| invalid_handle(origin, "text result backing is not valid UTF-8"))?;
-            Ok(RuntimeValue::Text(TextString::try_from_str(text).map_err(
-                |_| {
-                    LkError::new(
-                        ErrorCode::ResultBytePolicyExceeded,
-                        "text result exceeds the public materialization policy",
-                    )
-                    .for_node(origin)
-                },
-            )?))
+            Ok(RuntimeValue::Text(managed.text(handle, origin)?.clone()))
         }
         CoreTypeKind::Sequence { .. } => {
             let ty = core
@@ -1879,6 +2222,16 @@ fn interpret_with_store(
     managed: &mut InvocationStore,
 ) -> Result<FlatValue> {
     let ownership_plan = ownership::derive(program)?;
+    interpret_with_store_and_plan(program, &ownership_plan, arguments, policy, managed)
+}
+
+fn interpret_with_store_and_plan(
+    program: &CoreProgram,
+    ownership_plan: &OwnershipPlan,
+    arguments: Vec<FlatValue>,
+    policy: RunPolicy,
+    managed: &mut InvocationStore,
+) -> Result<FlatValue> {
     validate_policy(policy)?;
     let mut fuel = policy.fuel;
     let entry = program
@@ -1925,7 +2278,7 @@ fn interpret_with_store(
                     function,
                     &mut frames[frame_index],
                     &block_plan.entry_drops,
-                    &ownership_plan,
+                    ownership_plan,
                     managed,
                     block.origin,
                 )?;
@@ -1984,7 +2337,8 @@ fn interpret_with_store(
                         result,
                         value,
                     } => {
-                        let handle = managed.allocate_backing(value.as_bytes(), *origin)?;
+                        let handle =
+                            managed.allocate_text(RuntimeText::from_text(value), *origin)?;
                         write_managed_direct(
                             program,
                             function,
@@ -2293,7 +2647,7 @@ fn interpret_with_store(
                             TEXT_TYPE,
                             *origin,
                         )?;
-                        let length = i64::try_from(managed.bytes(handle, *origin)?.len())
+                        let length = i64::try_from(managed.text(handle, *origin)?.len_bytes())
                             .map_err(|_| invalid_handle(*origin, "text length exceeds i64"))?;
                         write_scalar_direct(
                             program,
@@ -2326,14 +2680,14 @@ fn interpret_with_store(
                             TEXT_TYPE,
                             *origin,
                         )?;
-                        let equal = managed.bytes(lhs, *origin)? == managed.bytes(rhs, *origin)?;
+                        let equal = managed.text(lhs, *origin)? == managed.text(rhs, *origin)?;
                         consume_fuel(
                             &mut fuel,
                             u64::try_from(
                                 managed
-                                    .bytes(lhs, *origin)?
-                                    .len()
-                                    .min(managed.bytes(rhs, *origin)?.len()),
+                                    .text(lhs, *origin)?
+                                    .len_bytes()
+                                    .min(managed.text(rhs, *origin)?.len_bytes()),
                             )
                             .map_err(|_| invalid_ir("text equality fuel overflows u64"))?,
                             *origin,
@@ -2370,9 +2724,9 @@ fn interpret_with_store(
                             *origin,
                         )?;
                         let result_len = managed
-                            .bytes(lhs_handle, *origin)?
-                            .len()
-                            .checked_add(managed.bytes(rhs_handle, *origin)?.len())
+                            .text(lhs_handle, *origin)?
+                            .len_bytes()
+                            .checked_add(managed.text(rhs_handle, *origin)?.len_bytes())
                             .ok_or_else(|| {
                                 value_policy(*origin, "text concatenation length overflowed")
                             })?;
@@ -2382,17 +2736,295 @@ fn interpret_with_store(
                                 "text concatenation result exceeds text byte policy",
                             ));
                         }
-                        consume_fuel(
-                            &mut fuel,
-                            u64::try_from(result_len)
-                                .map_err(|_| invalid_ir("text concat fuel length overflows u64"))?,
+                        consume_fuel(&mut fuel, 1, *origin)?;
+                        let handle = managed.concat_text(lhs_handle, rhs_handle, *origin)?;
+                        write_managed_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            TEXT_TYPE,
+                            handle,
+                        )?;
+                    }
+                    Instruction::TextScalarLen {
+                        origin,
+                        result,
+                        value,
+                    } => {
+                        let handle = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *value,
+                            TEXT_TYPE,
                             *origin,
                         )?;
-                        let (handle, reused) = managed.concat(
-                            lhs_handle,
-                            rhs_handle,
-                            instruction_plan.reuse_left,
-                            MAXIMUM_TEXT_BYTES,
+                        let count = managed.text(handle, *origin)?.scalar_count();
+                        consume_fuel(&mut fuel, 1, *origin)?;
+                        write_i64_result(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            count,
+                            *origin,
+                            "text scalar count",
+                        )?;
+                    }
+                    Instruction::TextGraphemeLen {
+                        origin,
+                        result,
+                        value,
+                    } => {
+                        let handle = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *value,
+                            TEXT_TYPE,
+                            *origin,
+                        )?;
+                        let bytes = managed.text(handle, *origin)?.len_bytes();
+                        consume_fuel(&mut fuel, usize_fuel(bytes, *origin)?, *origin)?;
+                        let count = managed.text(handle, *origin)?.grapheme_count();
+                        write_i64_result(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            count,
+                            *origin,
+                            "text grapheme count",
+                        )?;
+                    }
+                    Instruction::TextLineCount {
+                        origin,
+                        result,
+                        value,
+                    } => {
+                        let handle = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *value,
+                            TEXT_TYPE,
+                            *origin,
+                        )?;
+                        let count = managed.text(handle, *origin)?.line_count();
+                        consume_fuel(&mut fuel, 1, *origin)?;
+                        write_i64_result(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            count,
+                            *origin,
+                            "text line count",
+                        )?;
+                    }
+                    Instruction::TextScalarAt {
+                        origin,
+                        result,
+                        value,
+                        index,
+                    } => {
+                        let handle = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *value,
+                            TEXT_TYPE,
+                            *origin,
+                        )?;
+                        let index = require_text_index(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *index,
+                            *origin,
+                        )?;
+                        consume_fuel(&mut fuel, 1, *origin)?;
+                        let scalar = managed
+                            .text(handle, *origin)?
+                            .scalar_at(index)
+                            .map_err(|error| runtime_text_error(*origin, error))?;
+                        write_scalar_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            I64_TYPE,
+                            u64::from(scalar),
+                        )?;
+                    }
+                    Instruction::TextPreviousGraphemeBoundary {
+                        origin,
+                        result,
+                        value,
+                        index,
+                    }
+                    | Instruction::TextNextGraphemeBoundary {
+                        origin,
+                        result,
+                        value,
+                        index,
+                    } => {
+                        let handle = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *value,
+                            TEXT_TYPE,
+                            *origin,
+                        )?;
+                        let index = require_text_index(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *index,
+                            *origin,
+                        )?;
+                        let bytes = managed.text(handle, *origin)?.len_bytes();
+                        consume_fuel(&mut fuel, usize_fuel(bytes, *origin)?, *origin)?;
+                        let boundary = if matches!(
+                            instruction,
+                            Instruction::TextPreviousGraphemeBoundary { .. }
+                        ) {
+                            managed
+                                .text(handle, *origin)?
+                                .previous_grapheme_boundary(index)
+                        } else {
+                            managed.text(handle, *origin)?.next_grapheme_boundary(index)
+                        }
+                        .map_err(|error| runtime_text_error(*origin, error))?;
+                        write_i64_result(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            boundary,
+                            *origin,
+                            "text grapheme boundary",
+                        )?;
+                    }
+                    Instruction::TextLineStart {
+                        origin,
+                        result,
+                        value,
+                        line,
+                    }
+                    | Instruction::TextLineEnd {
+                        origin,
+                        result,
+                        value,
+                        line,
+                    } => {
+                        let handle = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *value,
+                            TEXT_TYPE,
+                            *origin,
+                        )?;
+                        let line = require_text_index(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *line,
+                            *origin,
+                        )?;
+                        consume_fuel(&mut fuel, 1, *origin)?;
+                        let offset = if matches!(instruction, Instruction::TextLineStart { .. }) {
+                            managed.text(handle, *origin)?.line_start_byte(line)
+                        } else {
+                            managed.text(handle, *origin)?.line_end_byte(line)
+                        }
+                        .map_err(|error| runtime_text_error(*origin, error))?;
+                        write_i64_result(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            offset,
+                            *origin,
+                            "text line boundary",
+                        )?;
+                    }
+                    Instruction::TextByteToLine {
+                        origin,
+                        result,
+                        value,
+                        index,
+                    } => {
+                        let handle = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *value,
+                            TEXT_TYPE,
+                            *origin,
+                        )?;
+                        let index = require_text_index(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *index,
+                            *origin,
+                        )?;
+                        consume_fuel(&mut fuel, 1, *origin)?;
+                        let line = managed
+                            .text(handle, *origin)?
+                            .byte_to_line(index)
+                            .map_err(|error| runtime_text_error(*origin, error))?;
+                        write_i64_result(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            line,
+                            *origin,
+                            "text line index",
+                        )?;
+                    }
+                    Instruction::TextSlice {
+                        origin,
+                        result,
+                        value,
+                        start,
+                        end_exclusive,
+                    } => {
+                        let handle = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *value,
+                            TEXT_TYPE,
+                            *origin,
+                        )?;
+                        let start = require_text_index(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *start,
+                            *origin,
+                        )?;
+                        let end = require_text_index(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *end_exclusive,
+                            *origin,
+                        )?;
+                        consume_fuel(&mut fuel, 64, *origin)?;
+                        let value = managed
+                            .text(handle, *origin)?
+                            .slice_bytes(start, end)
+                            .map_err(|error| runtime_text_error(*origin, error))?;
+                        let handle = managed.allocate_text_with_work(
+                            value,
+                            end.saturating_sub(start).saturating_add(64),
                             *origin,
                         )?;
                         write_managed_direct(
@@ -2403,9 +3035,364 @@ fn interpret_with_store(
                             TEXT_TYPE,
                             handle,
                         )?;
-                        if reused {
-                            transfer_frame_value(&mut frames[frame_index], *lhs, managed)?;
+                    }
+                    Instruction::TextSplice {
+                        origin,
+                        result,
+                        value,
+                        start,
+                        end_exclusive,
+                        replacement,
+                    } => {
+                        let handle = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *value,
+                            TEXT_TYPE,
+                            *origin,
+                        )?;
+                        let replacement = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *replacement,
+                            TEXT_TYPE,
+                            *origin,
+                        )?;
+                        let start = require_text_index(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *start,
+                            *origin,
+                        )?;
+                        let end = require_text_index(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *end_exclusive,
+                            *origin,
+                        )?;
+                        let replacement_bytes = managed.text(replacement, *origin)?.len_bytes();
+                        consume_fuel(
+                            &mut fuel,
+                            64_u64.saturating_add(usize_fuel(replacement_bytes, *origin)?),
+                            *origin,
+                        )?;
+                        let value = managed
+                            .text(handle, *origin)?
+                            .splice_bytes(start, end, managed.text(replacement, *origin)?)
+                            .map_err(|error| runtime_text_error(*origin, error))?;
+                        let handle = managed.allocate_text_with_work(
+                            value,
+                            replacement_bytes.saturating_add(64),
+                            *origin,
+                        )?;
+                        write_managed_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            TEXT_TYPE,
+                            handle,
+                        )?;
+                    }
+                    Instruction::TextFindForward {
+                        origin,
+                        result,
+                        value,
+                        query,
+                        start,
+                    }
+                    | Instruction::TextFindBackward {
+                        origin,
+                        result,
+                        value,
+                        query,
+                        end_exclusive: start,
+                    } => {
+                        let value_handle = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *value,
+                            TEXT_TYPE,
+                            *origin,
+                        )?;
+                        let query_handle = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *query,
+                            TEXT_TYPE,
+                            *origin,
+                        )?;
+                        let boundary = require_text_index(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *start,
+                            *origin,
+                        )?;
+                        let bytes = managed.text(value_handle, *origin)?.len_bytes();
+                        consume_fuel(&mut fuel, usize_fuel(bytes, *origin)?, *origin)?;
+                        let found = if matches!(instruction, Instruction::TextFindForward { .. }) {
+                            managed
+                                .text(value_handle, *origin)?
+                                .find_forward(managed.text(query_handle, *origin)?, boundary)
+                        } else {
+                            managed
+                                .text(value_handle, *origin)?
+                                .find_backward(managed.text(query_handle, *origin)?, boundary)
                         }
+                        .map_err(|error| runtime_text_error(*origin, error))?;
+                        let found = found
+                            .map(|value| i64::try_from(value).unwrap_or(i64::MAX))
+                            .unwrap_or(-1);
+                        write_scalar_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            I64_TYPE,
+                            found as u64,
+                        )?;
+                    }
+                    Instruction::TextLineEndingKind {
+                        origin,
+                        result,
+                        value,
+                    } => {
+                        let handle = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *value,
+                            TEXT_TYPE,
+                            *origin,
+                        )?;
+                        let bytes = managed.text(handle, *origin)?.len_bytes();
+                        consume_fuel(&mut fuel, usize_fuel(bytes, *origin)?, *origin)?;
+                        let kind = managed.text(handle, *origin)?.line_ending_kind();
+                        write_scalar_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            I64_TYPE,
+                            u64::from(kind),
+                        )?;
+                    }
+                    Instruction::TextDisplayWidth {
+                        origin,
+                        result,
+                        value,
+                        start,
+                        end_exclusive,
+                        initial_column,
+                        tab_width,
+                    } => {
+                        let handle = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *value,
+                            TEXT_TYPE,
+                            *origin,
+                        )?;
+                        let start = require_text_index(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *start,
+                            *origin,
+                        )?;
+                        let end = require_text_index(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *end_exclusive,
+                            *origin,
+                        )?;
+                        let initial = require_text_index(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *initial_column,
+                            *origin,
+                        )?;
+                        let tab = require_text_index(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *tab_width,
+                            *origin,
+                        )?;
+                        let work = end.saturating_sub(start);
+                        consume_fuel(&mut fuel, usize_fuel(work, *origin)?, *origin)?;
+                        let width = managed
+                            .text(handle, *origin)?
+                            .display_width(start, end, initial, tab)
+                            .map_err(|error| runtime_text_error(*origin, error))?;
+                        write_i64_result(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            width,
+                            *origin,
+                            "text display width",
+                        )?;
+                    }
+                    Instruction::TextCellPrefixBoundary {
+                        origin,
+                        result,
+                        value,
+                        start,
+                        end_exclusive,
+                        initial_column,
+                        maximum_cells,
+                        tab_width,
+                    } => {
+                        let handle = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *value,
+                            TEXT_TYPE,
+                            *origin,
+                        )?;
+                        let start = require_text_index(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *start,
+                            *origin,
+                        )?;
+                        let end = require_text_index(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *end_exclusive,
+                            *origin,
+                        )?;
+                        let initial = require_text_index(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *initial_column,
+                            *origin,
+                        )?;
+                        let maximum = require_text_index(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *maximum_cells,
+                            *origin,
+                        )?;
+                        let tab = require_text_index(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *tab_width,
+                            *origin,
+                        )?;
+                        let (boundary, work) = managed
+                            .text(handle, *origin)?
+                            .cell_prefix_boundary(start, end, initial, maximum, tab)
+                            .map_err(|error| runtime_text_error(*origin, error))?;
+                        consume_fuel(&mut fuel, usize_fuel(work, *origin)?, *origin)?;
+                        write_i64_result(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            boundary,
+                            *origin,
+                            "text cell-prefix boundary",
+                        )?;
+                    }
+                    Instruction::TextFromScalar {
+                        origin,
+                        result,
+                        value,
+                    } => {
+                        let scalar = require_i64(program, function, &frames[frame_index], *value)?;
+                        let scalar = u32::try_from(scalar)
+                            .ok()
+                            .and_then(char::from_u32)
+                            .ok_or_else(|| {
+                                LkError::new(
+                                    ErrorCode::RuntimeTrap,
+                                    "text scalar constructor requires a Unicode scalar value",
+                                )
+                                .for_node(*origin)
+                            })?;
+                        consume_fuel(&mut fuel, 16, *origin)?;
+                        let mut encoded = [0_u8; 4];
+                        let encoded = scalar.encode_utf8(&mut encoded);
+                        let text = RuntimeText::try_from_str(encoded)
+                            .map_err(|error| runtime_text_error(*origin, error))?;
+                        let handle = managed.allocate_text(text, *origin)?;
+                        write_managed_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            TEXT_TYPE,
+                            handle,
+                        )?;
+                    }
+                    Instruction::TextToScalars {
+                        origin,
+                        result,
+                        ty,
+                        value,
+                    } => {
+                        let value = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *value,
+                            TEXT_TYPE,
+                            *origin,
+                        )?;
+                        let (handle, work) = managed.text_to_scalar_sequence(value, *origin)?;
+                        consume_fuel(&mut fuel, usize_fuel(work, *origin)?, *origin)?;
+                        write_managed_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            *ty,
+                            handle,
+                        )?;
+                    }
+                    Instruction::TextFromScalars {
+                        origin,
+                        result,
+                        ty,
+                        value,
+                    } => {
+                        let value = require_managed_handle(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *value,
+                            *ty,
+                            *origin,
+                        )?;
+                        let (handle, work) = managed.text_from_scalar_sequence(value, *origin)?;
+                        consume_fuel(&mut fuel, usize_fuel(work, *origin)?, *origin)?;
+                        write_managed_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            TEXT_TYPE,
+                            handle,
+                        )?;
                     }
                     Instruction::SequenceEmpty { origin, result, ty } => {
                         let handle = managed.allocate_sequence(Vec::new(), *origin)?;
@@ -2435,12 +3422,7 @@ fn interpret_with_store(
                         let sequence_len = managed.sequence_len(handle, *origin)?;
                         let length = i64::try_from(sequence_len)
                             .map_err(|_| invalid_ir("sequence length exceeds i64"))?;
-                        consume_fuel(
-                            &mut fuel,
-                            u64::try_from(sequence_len)
-                                .map_err(|_| invalid_ir("sequence length fuel overflows"))?,
-                            *origin,
-                        )?;
+                        consume_fuel(&mut fuel, 1, *origin)?;
                         write_scalar_direct(
                             program,
                             function,
@@ -2478,6 +3460,17 @@ fn interpret_with_store(
                             )
                             .for_node(*origin)
                         })?;
+                        let available = managed.sequence_len(handle, *origin)?;
+                        if requested >= available {
+                            return Err(LkError::new(
+                                ErrorCode::RuntimeTrap,
+                                format!(
+                                    "sequence index is out of bounds in function {} at {}: requested {requested}, length {available}",
+                                    function.origin, origin
+                                ),
+                            )
+                            .for_node(*origin));
+                        }
                         let element = managed.sequence_element(handle, requested, *origin)?;
                         let CoreTypeKind::Sequence {
                             element: element_ty,
@@ -2506,14 +3499,13 @@ fn interpret_with_store(
                         )?;
                         let flat = read_value(program, function, &frames[frame_index], *element)?;
                         let element = from_flat(program, managed, &flat, 1, *origin)?;
-                        let (handle, result_len) =
-                            managed.append_sequence(handle, element, *origin)?;
-                        consume_fuel(
-                            &mut fuel,
-                            u64::try_from(result_len)
-                                .map_err(|_| invalid_ir("sequence append fuel overflows"))?,
+                        let (handle, _result_len, reused, work) = managed.append_sequence(
+                            handle,
+                            element,
+                            instruction_plan.reuse_left,
                             *origin,
                         )?;
+                        consume_fuel(&mut fuel, usize_fuel(work, *origin)?, *origin)?;
                         write_managed_direct(
                             program,
                             function,
@@ -2522,6 +3514,9 @@ fn interpret_with_store(
                             *ty,
                             handle,
                         )?;
+                        if reused {
+                            transfer_frame_value(&mut frames[frame_index], *value, managed)?;
+                        }
                     }
                     Instruction::SequenceReplace {
                         origin,
@@ -2554,14 +3549,14 @@ fn interpret_with_store(
                         })?;
                         let flat = read_value(program, function, &frames[frame_index], *element)?;
                         let element = from_flat(program, managed, &flat, 1, *origin)?;
-                        let (handle, result_len) =
-                            managed.replace_sequence(handle, requested, element, *origin)?;
-                        consume_fuel(
-                            &mut fuel,
-                            u64::try_from(result_len)
-                                .map_err(|_| invalid_ir("sequence replace fuel overflows"))?,
+                        let (handle, _result_len, reused, work) = managed.replace_sequence(
+                            handle,
+                            requested,
+                            element,
+                            instruction_plan.reuse_left,
                             *origin,
                         )?;
+                        consume_fuel(&mut fuel, usize_fuel(work, *origin)?, *origin)?;
                         write_managed_direct(
                             program,
                             function,
@@ -2570,6 +3565,9 @@ fn interpret_with_store(
                             *ty,
                             handle,
                         )?;
+                        if reused {
+                            transfer_frame_value(&mut frames[frame_index], *value, managed)?;
+                        }
                     }
                     Instruction::SequenceSlice {
                         origin,
@@ -2669,6 +3667,39 @@ fn interpret_with_store(
                             handle,
                         )?;
                     }
+                    Instruction::SequenceRepeat {
+                        origin,
+                        result,
+                        ty,
+                        element,
+                        count,
+                    } => {
+                        let count = usize::try_from(require_i64(
+                            program,
+                            function,
+                            &frames[frame_index],
+                            *count,
+                        )?)
+                        .map_err(|_| {
+                            LkError::new(
+                                ErrorCode::RuntimeTrap,
+                                "sequence repetition count must be nonnegative",
+                            )
+                            .for_node(*origin)
+                        })?;
+                        let flat = read_value(program, function, &frames[frame_index], *element)?;
+                        let element = from_flat(program, managed, &flat, 1, *origin)?;
+                        let (handle, work) = managed.repeat_sequence(element, count, *origin)?;
+                        consume_fuel(&mut fuel, usize_fuel(work, *origin)?, *origin)?;
+                        write_managed_direct(
+                            program,
+                            function,
+                            &mut frames[frame_index],
+                            *result,
+                            *ty,
+                            handle,
+                        )?;
+                    }
                     Instruction::Call {
                         origin,
                         result,
@@ -2704,7 +3735,7 @@ fn interpret_with_store(
                             &mut frames[frame_index],
                             instruction,
                             instruction_plan,
-                            &ownership_plan,
+                            ownership_plan,
                             managed,
                         )?;
                         let call_result = match instruction {
@@ -2718,7 +3749,7 @@ fn interpret_with_store(
                             function,
                             &mut frames[frame_index],
                             &call_source_drops,
-                            &ownership_plan,
+                            ownership_plan,
                             managed,
                             *origin,
                         )?;
@@ -2787,7 +3818,7 @@ fn interpret_with_store(
                     &mut frames[frame_index],
                     instruction,
                     instruction_plan,
-                    &ownership_plan,
+                    ownership_plan,
                     managed,
                 )?;
                 frames[frame_index].instruction += 1;
@@ -2820,7 +3851,7 @@ fn interpret_with_store(
                         function,
                         &mut frames[frame_index],
                         &block_plan.cleanup_roots,
-                        &ownership_plan,
+                        ownership_plan,
                         managed,
                         *origin,
                     )?;
@@ -2851,7 +3882,7 @@ fn interpret_with_store(
                                 caller_function,
                                 &mut frames[caller_index],
                                 continuation.result,
-                                &ownership_plan,
+                                ownership_plan,
                                 managed,
                                 continuation.origin,
                             )?;
@@ -2892,7 +3923,7 @@ fn interpret_with_store(
                         &mut frames[frame_index],
                         &values,
                         edge,
-                        &ownership_plan,
+                        ownership_plan,
                         managed,
                         *origin,
                     )?;
@@ -2943,7 +3974,7 @@ fn interpret_with_store(
                         &mut frames[frame_index],
                         &values,
                         edge,
-                        &ownership_plan,
+                        ownership_plan,
                         managed,
                         *origin,
                     )?;
@@ -3025,7 +4056,7 @@ fn interpret_with_store(
                         &mut frames[frame_index],
                         &values,
                         edge,
-                        &ownership_plan,
+                        ownership_plan,
                         managed,
                         *origin,
                     )?;
@@ -3056,7 +4087,7 @@ fn interpret_with_store(
                 function,
                 frame,
                 &cleanup_roots.cleanup_roots,
-                &ownership_plan,
+                ownership_plan,
                 managed,
                 function.origin,
             )?;
@@ -3653,6 +4684,41 @@ fn require_i64(
         )),
     }
 }
+
+fn require_text_index(
+    program: &CoreProgram,
+    function: &crate::core_ir::CoreFunction,
+    frame: &Frame,
+    id: ValueId,
+    origin: NodeId,
+) -> Result<usize> {
+    let value = require_i64(program, function, frame, id)?;
+    usize::try_from(value).map_err(|_| {
+        LkError::new(
+            ErrorCode::RuntimeTrap,
+            "text byte or line index must be nonnegative and fit the host index domain",
+        )
+        .for_node(origin)
+    })
+}
+
+fn write_i64_result(
+    program: &CoreProgram,
+    function: &crate::core_ir::CoreFunction,
+    frame: &mut Frame,
+    result: ValueId,
+    value: usize,
+    origin: NodeId,
+    category: &str,
+) -> Result<()> {
+    let value = i64::try_from(value).map_err(|_| {
+        value_policy(
+            origin,
+            &format!("{category} exceeds the signed runtime integer domain"),
+        )
+    })?;
+    write_scalar_direct(program, function, frame, result, I64_TYPE, value as u64)
+}
 fn require_bool(
     program: &CoreProgram,
     function: &crate::core_ir::CoreFunction,
@@ -3726,6 +4792,36 @@ fn consume_fuel(fuel: &mut u64, cost: u64, origin: NodeId) -> Result<()> {
     }
     *fuel -= cost;
     Ok(())
+}
+
+fn usize_fuel(value: usize, origin: NodeId) -> Result<u64> {
+    u64::try_from(value)
+        .map_err(|_| value_policy(origin, "text work exceeds the deterministic fuel domain"))
+}
+
+fn runtime_text_error(origin: NodeId, error: RuntimeTextError) -> LkError {
+    match error {
+        RuntimeTextError::TooLarge => value_policy(origin, "text exceeds UTF-8 byte policy"),
+        RuntimeTextError::ByteRange => {
+            LkError::new(ErrorCode::RuntimeTrap, "text byte range is out of bounds")
+                .for_node(origin)
+        }
+        RuntimeTextError::ScalarRange => LkError::new(
+            ErrorCode::RuntimeTrap,
+            "Unicode scalar index is out of bounds",
+        )
+        .for_node(origin),
+        RuntimeTextError::Utf8Boundary => LkError::new(
+            ErrorCode::RuntimeTrap,
+            "text byte range does not use UTF-8 boundaries",
+        )
+        .for_node(origin),
+        RuntimeTextError::LineRange => LkError::new(
+            ErrorCode::RuntimeTrap,
+            "logical line index is out of bounds",
+        )
+        .for_node(origin),
+    }
 }
 fn value_policy(origin: NodeId, message: &str) -> LkError {
     LkError::new(ErrorCode::PolicyExceeded, message).for_node(origin)

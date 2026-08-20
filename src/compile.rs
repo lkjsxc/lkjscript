@@ -1105,6 +1105,161 @@ fn lower_instruction(
             lhs: lower_value(environment, *lhs)?,
             rhs: lower_value(environment, *rhs)?,
         },
+        OperationKind::TextScalarLen { value } => Instruction::TextScalarLen {
+            origin,
+            result,
+            value: lower_value(environment, *value)?,
+        },
+        OperationKind::TextGraphemeLen { value } => Instruction::TextGraphemeLen {
+            origin,
+            result,
+            value: lower_value(environment, *value)?,
+        },
+        OperationKind::TextLineCount { value } => Instruction::TextLineCount {
+            origin,
+            result,
+            value: lower_value(environment, *value)?,
+        },
+        OperationKind::TextScalarAt { value, index } => Instruction::TextScalarAt {
+            origin,
+            result,
+            value: lower_value(environment, *value)?,
+            index: lower_value(environment, *index)?,
+        },
+        OperationKind::TextPreviousGraphemeBoundary { value, index } => {
+            Instruction::TextPreviousGraphemeBoundary {
+                origin,
+                result,
+                value: lower_value(environment, *value)?,
+                index: lower_value(environment, *index)?,
+            }
+        }
+        OperationKind::TextNextGraphemeBoundary { value, index } => {
+            Instruction::TextNextGraphemeBoundary {
+                origin,
+                result,
+                value: lower_value(environment, *value)?,
+                index: lower_value(environment, *index)?,
+            }
+        }
+        OperationKind::TextLineStart { value, line } => Instruction::TextLineStart {
+            origin,
+            result,
+            value: lower_value(environment, *value)?,
+            line: lower_value(environment, *line)?,
+        },
+        OperationKind::TextLineEnd { value, line } => Instruction::TextLineEnd {
+            origin,
+            result,
+            value: lower_value(environment, *value)?,
+            line: lower_value(environment, *line)?,
+        },
+        OperationKind::TextByteToLine { value, index } => Instruction::TextByteToLine {
+            origin,
+            result,
+            value: lower_value(environment, *value)?,
+            index: lower_value(environment, *index)?,
+        },
+        OperationKind::TextSlice {
+            value,
+            start,
+            end_exclusive,
+        } => Instruction::TextSlice {
+            origin,
+            result,
+            value: lower_value(environment, *value)?,
+            start: lower_value(environment, *start)?,
+            end_exclusive: lower_value(environment, *end_exclusive)?,
+        },
+        OperationKind::TextSplice {
+            value,
+            start,
+            end_exclusive,
+            replacement,
+        } => Instruction::TextSplice {
+            origin,
+            result,
+            value: lower_value(environment, *value)?,
+            start: lower_value(environment, *start)?,
+            end_exclusive: lower_value(environment, *end_exclusive)?,
+            replacement: lower_value(environment, *replacement)?,
+        },
+        OperationKind::TextFindForward {
+            value,
+            query,
+            start,
+        } => Instruction::TextFindForward {
+            origin,
+            result,
+            value: lower_value(environment, *value)?,
+            query: lower_value(environment, *query)?,
+            start: lower_value(environment, *start)?,
+        },
+        OperationKind::TextFindBackward {
+            value,
+            query,
+            end_exclusive,
+        } => Instruction::TextFindBackward {
+            origin,
+            result,
+            value: lower_value(environment, *value)?,
+            query: lower_value(environment, *query)?,
+            end_exclusive: lower_value(environment, *end_exclusive)?,
+        },
+        OperationKind::TextLineEndingKind { value } => Instruction::TextLineEndingKind {
+            origin,
+            result,
+            value: lower_value(environment, *value)?,
+        },
+        OperationKind::TextDisplayWidth {
+            value,
+            start,
+            end_exclusive,
+            initial_column,
+            tab_width,
+        } => Instruction::TextDisplayWidth {
+            origin,
+            result,
+            value: lower_value(environment, *value)?,
+            start: lower_value(environment, *start)?,
+            end_exclusive: lower_value(environment, *end_exclusive)?,
+            initial_column: lower_value(environment, *initial_column)?,
+            tab_width: lower_value(environment, *tab_width)?,
+        },
+        OperationKind::TextCellPrefixBoundary {
+            value,
+            start,
+            end_exclusive,
+            initial_column,
+            maximum_cells,
+            tab_width,
+        } => Instruction::TextCellPrefixBoundary {
+            origin,
+            result,
+            value: lower_value(environment, *value)?,
+            start: lower_value(environment, *start)?,
+            end_exclusive: lower_value(environment, *end_exclusive)?,
+            initial_column: lower_value(environment, *initial_column)?,
+            maximum_cells: lower_value(environment, *maximum_cells)?,
+            tab_width: lower_value(environment, *tab_width)?,
+        },
+        OperationKind::TextFromScalar { value } => Instruction::TextFromScalar {
+            origin,
+            result,
+            value: lower_value(environment, *value)?,
+        },
+        OperationKind::TextToScalars { sequence, value } => Instruction::TextToScalars {
+            origin,
+            result,
+            ty: core_type(type_ids, SemanticType::Nominal(*sequence), origin)?,
+            value: lower_value(environment, *value)?,
+        },
+        OperationKind::TextFromScalars { sequence, value } => Instruction::TextFromScalars {
+            origin,
+            result,
+            ty: core_type(type_ids, SemanticType::Nominal(*sequence), origin)?,
+            value: lower_value(environment, *value)?,
+        },
         OperationKind::SequenceEmpty { sequence } => Instruction::SequenceEmpty {
             origin,
             result,
@@ -1170,6 +1325,17 @@ fn lower_instruction(
             ty: core_type(type_ids, SemanticType::Nominal(*sequence), origin)?,
             lhs: lower_value(environment, *lhs)?,
             rhs: lower_value(environment, *rhs)?,
+        },
+        OperationKind::SequenceRepeat {
+            sequence,
+            element,
+            count,
+        } => Instruction::SequenceRepeat {
+            origin,
+            result,
+            ty: core_type(type_ids, SemanticType::Nominal(*sequence), origin)?,
+            element: lower_value(environment, *element)?,
+            count: lower_value(environment, *count)?,
         },
         OperationKind::Call {
             function,
@@ -1265,11 +1431,30 @@ fn semantic_result_type(snapshot: &Snapshot, operation: &OperationKind) -> Resul
         | OperationKind::BytesLen { .. }
         | OperationKind::BytesAt { .. }
         | OperationKind::TextLen { .. }
+        | OperationKind::TextScalarLen { .. }
+        | OperationKind::TextGraphemeLen { .. }
+        | OperationKind::TextLineCount { .. }
+        | OperationKind::TextScalarAt { .. }
+        | OperationKind::TextPreviousGraphemeBoundary { .. }
+        | OperationKind::TextNextGraphemeBoundary { .. }
+        | OperationKind::TextLineStart { .. }
+        | OperationKind::TextLineEnd { .. }
+        | OperationKind::TextByteToLine { .. }
+        | OperationKind::TextFindForward { .. }
+        | OperationKind::TextFindBackward { .. }
+        | OperationKind::TextLineEndingKind { .. }
+        | OperationKind::TextDisplayWidth { .. }
+        | OperationKind::TextCellPrefixBoundary { .. }
         | OperationKind::SequenceLen { .. } => SemanticType::I64,
         OperationKind::ConstBytes(_)
         | OperationKind::BytesSlice { .. }
         | OperationKind::BytesConcat { .. } => SemanticType::Bytes,
-        OperationKind::ConstText(_) | OperationKind::TextConcat { .. } => SemanticType::Text,
+        OperationKind::ConstText(_)
+        | OperationKind::TextConcat { .. }
+        | OperationKind::TextSlice { .. }
+        | OperationKind::TextSplice { .. }
+        | OperationKind::TextFromScalar { .. }
+        | OperationKind::TextFromScalars { .. } => SemanticType::Text,
         OperationKind::Call { function, .. } => match snapshot.node(*function)? {
             Node::Function { result, .. } => *result,
             _ => return Err(invalid(*function, "call target is not a function")),
@@ -1291,7 +1476,9 @@ fn semantic_result_type(snapshot: &Snapshot, operation: &OperationKind) -> Resul
         | OperationKind::SequenceAppend { sequence, .. }
         | OperationKind::SequenceReplace { sequence, .. }
         | OperationKind::SequenceSlice { sequence, .. }
-        | OperationKind::SequenceConcat { sequence, .. } => SemanticType::Nominal(*sequence),
+        | OperationKind::SequenceConcat { sequence, .. }
+        | OperationKind::SequenceRepeat { sequence, .. }
+        | OperationKind::TextToScalars { sequence, .. } => SemanticType::Nominal(*sequence),
         OperationKind::SequenceGet { sequence, .. } => match snapshot.node(*sequence)? {
             Node::SequenceType { element, .. } => *element,
             _ => return Err(invalid(*sequence, "sequence target is not a sequence type")),

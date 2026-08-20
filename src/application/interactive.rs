@@ -5,16 +5,17 @@
 //! deliberately ephemeral and disappears with the owning process.
 
 use super::*;
-use crate::core_ir::CoreProgram;
 use crate::graph::Snapshot;
 use crate::ids::NodeId;
 
-pub const INTERACTIVE_PROFILE_VERSION: u16 = 2;
+pub const INTERACTIVE_PROFILE_VERSION: u16 = 3;
 pub const MAXIMUM_INTERACTIVE_ROWS: i64 = 1_000;
 pub const MAXIMUM_INTERACTIVE_COLUMNS: i64 = 1_000;
 pub const MAXIMUM_INTERACTIVE_FRAME_SCALARS: usize = crate::schema::MAXIMUM_SEQUENCE_ELEMENTS;
 pub const MAXIMUM_INTERACTIVE_PASTE_SCALARS: usize = 65_536;
 pub const MAXIMUM_INTERACTIVE_STATUS_BYTES: usize = 4_096;
+pub const MAXIMUM_INTERACTIVE_JOB_ID: u64 = i64::MAX as u64;
+pub const MAXIMUM_INTERACTIVE_STYLE: i64 = 15;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -46,12 +47,53 @@ pub struct InteractiveEventRoutes {
     pub key_variant: ApplicationTarget,
     pub paste_variant: ApplicationTarget,
     pub resize_variant: ApplicationTarget,
+    pub mouse_variant: ApplicationTarget,
+    pub focus_gained_variant: ApplicationTarget,
+    pub focus_lost_variant: ApplicationTarget,
+    pub open_variant: ApplicationTarget,
     pub close_variant: ApplicationTarget,
     pub size: ApplicationTarget,
     pub size_rows_field: ApplicationTarget,
     pub size_columns_field: ApplicationTarget,
     pub scalars: ApplicationTarget,
     pub key: InteractiveKeyRoutes,
+    pub mouse: InteractiveMouseRoutes,
+    pub open: InteractiveOpenRoutes,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct InteractiveMouseRoutes {
+    pub button: ApplicationTarget,
+    pub button_none_variant: ApplicationTarget,
+    pub button_primary_variant: ApplicationTarget,
+    pub button_middle_variant: ApplicationTarget,
+    pub button_secondary_variant: ApplicationTarget,
+    pub kind: ApplicationTarget,
+    pub press_variant: ApplicationTarget,
+    pub release_variant: ApplicationTarget,
+    pub drag_variant: ApplicationTarget,
+    pub scroll_up_variant: ApplicationTarget,
+    pub scroll_down_variant: ApplicationTarget,
+    pub scroll_left_variant: ApplicationTarget,
+    pub scroll_right_variant: ApplicationTarget,
+    pub event: ApplicationTarget,
+    pub event_button_field: ApplicationTarget,
+    pub event_kind_field: ApplicationTarget,
+    pub event_row_field: ApplicationTarget,
+    pub event_column_field: ApplicationTarget,
+    pub event_control_field: ApplicationTarget,
+    pub event_alt_field: ApplicationTarget,
+    pub event_shift_field: ApplicationTarget,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct InteractiveOpenRoutes {
+    pub event: ApplicationTarget,
+    pub event_path_field: ApplicationTarget,
+    pub event_directory_field: ApplicationTarget,
+    pub event_project_field: ApplicationTarget,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
@@ -77,13 +119,14 @@ pub enum InteractiveActionKind {
     ProjectTargetBuild,
     ProjectTargetRun,
     FilesystemList,
+    FilesystemSearch,
     FilesystemRead,
     FilesystemSave,
     FilesystemReconcile,
 }
 
 impl InteractiveActionKind {
-    pub const ALL: [Self; 23] = [
+    pub const ALL: [Self; 24] = [
         Self::None,
         Self::ProjectOrient,
         Self::ProjectSummary,
@@ -104,30 +147,7 @@ impl InteractiveActionKind {
         Self::ProjectTargetBuild,
         Self::ProjectTargetRun,
         Self::FilesystemList,
-        Self::FilesystemRead,
-        Self::FilesystemSave,
-        Self::FilesystemReconcile,
-    ];
-
-    /// Exact route order needed only to reconstruct immutable pre-cutover project snapshots.
-    /// [`prepare_interactive`] rejects this profile before execution.
-    const HISTORICAL_PROFILE_V1: [Self; 19] = [
-        Self::None,
-        Self::ProjectOrient,
-        Self::ProjectSummary,
-        Self::ProjectChildren,
-        Self::ProjectFunction,
-        Self::ProjectCallers,
-        Self::ProjectCallees,
-        Self::ProjectTargets,
-        Self::ProjectBlockers,
-        Self::ProjectProposal,
-        Self::ProjectHistory,
-        Self::ProjectValidate,
-        Self::ProjectApply,
-        Self::ProjectTargetList,
-        Self::ProjectTargetTest,
-        Self::FilesystemList,
+        Self::FilesystemSearch,
         Self::FilesystemRead,
         Self::FilesystemSave,
         Self::FilesystemReconcile,
@@ -155,6 +175,7 @@ impl InteractiveActionKind {
             Self::ProjectTargetBuild => "project_target_build",
             Self::ProjectTargetRun => "project_target_run",
             Self::FilesystemList => "filesystem_list",
+            Self::FilesystemSearch => "filesystem_search",
             Self::FilesystemRead => "filesystem_read",
             Self::FilesystemSave => "filesystem_save",
             Self::FilesystemReconcile => "filesystem_reconcile",
@@ -183,9 +204,10 @@ impl InteractiveActionKind {
             Self::ProjectTargetBuild => 18,
             Self::ProjectTargetRun => 19,
             Self::FilesystemList => 20,
-            Self::FilesystemRead => 21,
-            Self::FilesystemSave => 22,
-            Self::FilesystemReconcile => 23,
+            Self::FilesystemSearch => 21,
+            Self::FilesystemRead => 22,
+            Self::FilesystemSave => 23,
+            Self::FilesystemReconcile => 24,
         }
     }
 
@@ -211,9 +233,10 @@ impl InteractiveActionKind {
             18 => Some(Self::ProjectTargetBuild),
             19 => Some(Self::ProjectTargetRun),
             20 => Some(Self::FilesystemList),
-            21 => Some(Self::FilesystemRead),
-            22 => Some(Self::FilesystemSave),
-            23 => Some(Self::FilesystemReconcile),
+            21 => Some(Self::FilesystemSearch),
+            22 => Some(Self::FilesystemRead),
+            23 => Some(Self::FilesystemSave),
+            24 => Some(Self::FilesystemReconcile),
             _ => None,
         }
     }
@@ -244,12 +267,17 @@ pub struct InteractiveActionRoute {
 pub struct InteractiveActionRoutes {
     pub action: ApplicationTarget,
     pub update_action_field: ApplicationTarget,
+    pub update_action_id_field: ApplicationTarget,
     pub routes: Vec<InteractiveActionRoute>,
     pub file_save_payload: ApplicationTarget,
     pub file_save_origin_field: ApplicationTarget,
     pub file_save_content_field: ApplicationTarget,
     pub file_save_create_field: ApplicationTarget,
+    pub file_search_payload: ApplicationTarget,
+    pub file_search_start_field: ApplicationTarget,
+    pub file_search_query_field: ApplicationTarget,
     pub outcome: ApplicationTarget,
+    pub outcome_job_id_field: ApplicationTarget,
     pub outcome_class_field: ApplicationTarget,
     pub outcome_message_field: ApplicationTarget,
     pub outcome_content_field: ApplicationTarget,
@@ -273,10 +301,13 @@ pub struct InteractiveApplicationProfile {
     pub frame_rows_field: ApplicationTarget,
     pub frame_columns_field: ApplicationTarget,
     pub frame_scalars_field: ApplicationTarget,
+    pub frame_styles_field: ApplicationTarget,
     pub frame_cursor_row_field: ApplicationTarget,
     pub frame_cursor_column_field: ApplicationTarget,
     pub frame_cursor_visible_field: ApplicationTarget,
+    pub frame_cursor_shape_field: ApplicationTarget,
     pub frame_status_field: ApplicationTarget,
+    pub frame_status_style_field: ApplicationTarget,
     pub events: InteractiveEventRoutes,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actions: Option<Box<InteractiveActionRoutes>>,
@@ -308,6 +339,47 @@ pub struct InteractiveKeyEvent {
     pub repeat: bool,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InteractiveMouseButton {
+    None,
+    Primary,
+    Middle,
+    Secondary,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InteractiveMouseKind {
+    Press,
+    Release,
+    Drag,
+    ScrollUp,
+    ScrollDown,
+    ScrollLeft,
+    ScrollRight,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct InteractiveMouseEvent {
+    pub button: InteractiveMouseButton,
+    pub kind: InteractiveMouseKind,
+    pub row: i64,
+    pub column: i64,
+    pub control: bool,
+    pub alt: bool,
+    pub shift: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct InteractiveOpenEvent {
+    pub path: String,
+    pub directory: bool,
+    pub project: bool,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(
     tag = "kind",
@@ -319,6 +391,10 @@ pub enum InteractiveEvent {
     Key(InteractiveKeyEvent),
     Paste(Vec<u32>),
     Resize { rows: i64, columns: i64 },
+    Mouse(InteractiveMouseEvent),
+    FocusGained,
+    FocusLost,
+    Open(InteractiveOpenEvent),
     Close,
 }
 
@@ -344,6 +420,10 @@ pub enum InteractiveAction {
     ProjectTargetBuild(String),
     ProjectTargetRun(String),
     FilesystemList(String),
+    FilesystemSearch {
+        start: String,
+        query: String,
+    },
     FilesystemRead(String),
     FilesystemSave {
         origin: String,
@@ -351,6 +431,43 @@ pub enum InteractiveAction {
         create: bool,
     },
     FilesystemReconcile(String),
+}
+
+impl InteractiveAction {
+    pub const fn kind(&self) -> InteractiveActionKind {
+        match self {
+            Self::ProjectOrient => InteractiveActionKind::ProjectOrient,
+            Self::ProjectSummary(_) => InteractiveActionKind::ProjectSummary,
+            Self::ProjectChildren(_) => InteractiveActionKind::ProjectChildren,
+            Self::ProjectFunction(_) => InteractiveActionKind::ProjectFunction,
+            Self::ProjectCallers(_) => InteractiveActionKind::ProjectCallers,
+            Self::ProjectCallees(_) => InteractiveActionKind::ProjectCallees,
+            Self::ProjectTargets(_) => InteractiveActionKind::ProjectTargets,
+            Self::ProjectBlockers => InteractiveActionKind::ProjectBlockers,
+            Self::ProjectProposal(_) => InteractiveActionKind::ProjectProposal,
+            Self::ProjectHistory => InteractiveActionKind::ProjectHistory,
+            Self::ProjectRecord(_) => InteractiveActionKind::ProjectRecord,
+            Self::ProjectDiff(_) => InteractiveActionKind::ProjectDiff,
+            Self::ProjectValidate(_) => InteractiveActionKind::ProjectValidate,
+            Self::ProjectApply(_) => InteractiveActionKind::ProjectApply,
+            Self::ProjectTargetList => InteractiveActionKind::ProjectTargetList,
+            Self::ProjectTargetTest(_) => InteractiveActionKind::ProjectTargetTest,
+            Self::ProjectTargetBuild(_) => InteractiveActionKind::ProjectTargetBuild,
+            Self::ProjectTargetRun(_) => InteractiveActionKind::ProjectTargetRun,
+            Self::FilesystemList(_) => InteractiveActionKind::FilesystemList,
+            Self::FilesystemSearch { .. } => InteractiveActionKind::FilesystemSearch,
+            Self::FilesystemRead(_) => InteractiveActionKind::FilesystemRead,
+            Self::FilesystemSave { .. } => InteractiveActionKind::FilesystemSave,
+            Self::FilesystemReconcile(_) => InteractiveActionKind::FilesystemReconcile,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct InteractiveActionRequest {
+    pub job_id: u64,
+    pub action: InteractiveAction,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -378,10 +495,26 @@ impl InteractiveActionOutcomeClass {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct InteractiveActionOutcome {
+    pub job_id: u64,
     pub class: InteractiveActionOutcomeClass,
     pub message: String,
     pub content: String,
     pub token: String,
+}
+
+impl InteractiveActionOutcome {
+    pub const fn with_job_id(mut self, job_id: u64) -> Self {
+        self.job_id = job_id;
+        self
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InteractiveCursorShape {
+    Block,
+    Bar,
+    Underline,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -390,10 +523,13 @@ pub struct InteractiveFrame {
     pub rows: i64,
     pub columns: i64,
     pub scalars: Vec<u32>,
+    pub styles: Vec<u8>,
     pub cursor_row: i64,
     pub cursor_column: i64,
     pub cursor_visible: bool,
+    pub cursor_shape: InteractiveCursorShape,
     pub status: String,
+    pub status_style: u8,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
@@ -410,7 +546,7 @@ pub struct InteractiveStep {
     pub changed: bool,
     pub exit: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub action: Option<InteractiveAction>,
+    pub action: Option<InteractiveActionRequest>,
     pub observation: InteractiveExecutionObservation,
 }
 
@@ -421,16 +557,17 @@ pub struct PreparedInteractiveApplication {
     update_entry: NodeId,
     render_entry: NodeId,
     resume_entry: Option<NodeId>,
-    initialize_program: CoreProgram,
-    update_program: CoreProgram,
-    render_program: CoreProgram,
-    resume_program: Option<CoreProgram>,
+    initialize_program: interpret::PreparedProgram,
+    update_program: interpret::PreparedProgram,
+    render_program: interpret::PreparedProgram,
+    resume_program: Option<interpret::PreparedProgram>,
 }
 
 pub struct InteractiveSession {
     prepared: PreparedInteractiveApplication,
-    state: ApplicationValue,
-    pending_action: bool,
+    state: RuntimeValue,
+    pending_action: Option<u64>,
+    last_action_id: u64,
 }
 
 pub(super) fn put_profile(writer: &mut Writer, profile: &InteractiveApplicationProfile) {
@@ -448,14 +585,21 @@ pub(super) fn put_profile(writer: &mut Writer, profile: &InteractiveApplicationP
         profile.frame_rows_field,
         profile.frame_columns_field,
         profile.frame_scalars_field,
+        profile.frame_styles_field,
         profile.frame_cursor_row_field,
         profile.frame_cursor_column_field,
         profile.frame_cursor_visible_field,
+        profile.frame_cursor_shape_field,
         profile.frame_status_field,
+        profile.frame_status_style_field,
         profile.events.event,
         profile.events.key_variant,
         profile.events.paste_variant,
         profile.events.resize_variant,
+        profile.events.mouse_variant,
+        profile.events.focus_gained_variant,
+        profile.events.focus_lost_variant,
+        profile.events.open_variant,
         profile.events.close_variant,
         profile.events.size,
         profile.events.size_rows_field,
@@ -479,6 +623,31 @@ pub(super) fn put_profile(writer: &mut Writer, profile: &InteractiveApplicationP
         profile.events.key.event_alt_field,
         profile.events.key.event_shift_field,
         profile.events.key.event_repeat_field,
+        profile.events.mouse.button,
+        profile.events.mouse.button_none_variant,
+        profile.events.mouse.button_primary_variant,
+        profile.events.mouse.button_middle_variant,
+        profile.events.mouse.button_secondary_variant,
+        profile.events.mouse.kind,
+        profile.events.mouse.press_variant,
+        profile.events.mouse.release_variant,
+        profile.events.mouse.drag_variant,
+        profile.events.mouse.scroll_up_variant,
+        profile.events.mouse.scroll_down_variant,
+        profile.events.mouse.scroll_left_variant,
+        profile.events.mouse.scroll_right_variant,
+        profile.events.mouse.event,
+        profile.events.mouse.event_button_field,
+        profile.events.mouse.event_kind_field,
+        profile.events.mouse.event_row_field,
+        profile.events.mouse.event_column_field,
+        profile.events.mouse.event_control_field,
+        profile.events.mouse.event_alt_field,
+        profile.events.mouse.event_shift_field,
+        profile.events.open.event,
+        profile.events.open.event_path_field,
+        profile.events.open.event_directory_field,
+        profile.events.open.event_project_field,
     ] {
         put_target(writer, target);
     }
@@ -487,11 +656,16 @@ pub(super) fn put_profile(writer: &mut Writer, profile: &InteractiveApplicationP
         for target in [
             actions.action,
             actions.update_action_field,
+            actions.update_action_id_field,
             actions.file_save_payload,
             actions.file_save_origin_field,
             actions.file_save_content_field,
             actions.file_save_create_field,
+            actions.file_search_payload,
+            actions.file_search_start_field,
+            actions.file_search_query_field,
             actions.outcome,
+            actions.outcome_job_id_field,
             actions.outcome_class_field,
             actions.outcome_message_field,
             actions.outcome_content_field,
@@ -525,15 +699,22 @@ pub(super) fn read_profile(reader: &mut Reader<'_>) -> Result<InteractiveApplica
         frame_rows_field: next()?,
         frame_columns_field: next()?,
         frame_scalars_field: next()?,
+        frame_styles_field: next()?,
         frame_cursor_row_field: next()?,
         frame_cursor_column_field: next()?,
         frame_cursor_visible_field: next()?,
+        frame_cursor_shape_field: next()?,
         frame_status_field: next()?,
+        frame_status_style_field: next()?,
         events: InteractiveEventRoutes {
             event: next()?,
             key_variant: next()?,
             paste_variant: next()?,
             resize_variant: next()?,
+            mouse_variant: next()?,
+            focus_gained_variant: next()?,
+            focus_lost_variant: next()?,
+            open_variant: next()?,
             close_variant: next()?,
             size: next()?,
             size_rows_field: next()?,
@@ -559,17 +740,51 @@ pub(super) fn read_profile(reader: &mut Reader<'_>) -> Result<InteractiveApplica
                 event_shift_field: next()?,
                 event_repeat_field: next()?,
             },
+            mouse: InteractiveMouseRoutes {
+                button: next()?,
+                button_none_variant: next()?,
+                button_primary_variant: next()?,
+                button_middle_variant: next()?,
+                button_secondary_variant: next()?,
+                kind: next()?,
+                press_variant: next()?,
+                release_variant: next()?,
+                drag_variant: next()?,
+                scroll_up_variant: next()?,
+                scroll_down_variant: next()?,
+                scroll_left_variant: next()?,
+                scroll_right_variant: next()?,
+                event: next()?,
+                event_button_field: next()?,
+                event_kind_field: next()?,
+                event_row_field: next()?,
+                event_column_field: next()?,
+                event_control_field: next()?,
+                event_alt_field: next()?,
+                event_shift_field: next()?,
+            },
+            open: InteractiveOpenRoutes {
+                event: next()?,
+                event_path_field: next()?,
+                event_directory_field: next()?,
+                event_project_field: next()?,
+            },
         },
         actions: None,
     };
     if reader.bool().map_err(application_codec)? {
         let action = read_target(reader)?;
         let update_action_field = read_target(reader)?;
+        let update_action_id_field = read_target(reader)?;
         let file_save_payload = read_target(reader)?;
         let file_save_origin_field = read_target(reader)?;
         let file_save_content_field = read_target(reader)?;
         let file_save_create_field = read_target(reader)?;
+        let file_search_payload = read_target(reader)?;
+        let file_search_start_field = read_target(reader)?;
+        let file_search_query_field = read_target(reader)?;
         let outcome = read_target(reader)?;
+        let outcome_job_id_field = read_target(reader)?;
         let outcome_class_field = read_target(reader)?;
         let outcome_message_field = read_target(reader)?;
         let outcome_content_field = read_target(reader)?;
@@ -593,12 +808,17 @@ pub(super) fn read_profile(reader: &mut Reader<'_>) -> Result<InteractiveApplica
         profile.actions = Some(Box::new(InteractiveActionRoutes {
             action,
             update_action_field,
+            update_action_id_field,
             routes,
             file_save_payload,
             file_save_origin_field,
             file_save_content_field,
             file_save_create_field,
+            file_search_payload,
+            file_search_start_field,
+            file_search_query_field,
             outcome,
+            outcome_job_id_field,
             outcome_class_field,
             outcome_message_field,
             outcome_content_field,
@@ -612,18 +832,19 @@ pub(super) fn read_profile(reader: &mut Reader<'_>) -> Result<InteractiveApplica
 impl PreparedInteractiveApplication {
     pub fn start(self, rows: i64, columns: i64) -> Result<(InteractiveSession, InteractiveStep)> {
         validate_dimensions(rows, columns)?;
-        let (state, initialize_observation) = self.run(
+        let (state, initialize_observation) = self.run_runtime(
             self.initialize_entry,
             &self.initialize_program,
-            &[ApplicationValue::I64(rows), ApplicationValue::I64(columns)],
+            &[RuntimeValue::I64(rows), RuntimeValue::I64(columns)],
         )?;
-        self.validate_state(&state)?;
+        self.validate_runtime_state(&state)?;
         let (frame, render_observation) = self.render_state(&state)?;
         let observation = combine_observations(initialize_observation, render_observation);
         let session = InteractiveSession {
             prepared: self,
             state,
-            pending_action: false,
+            pending_action: None,
+            last_action_id: 0,
         };
         Ok((
             session,
@@ -641,29 +862,24 @@ impl PreparedInteractiveApplication {
         self.application.digest
     }
 
-    fn run(
+    fn run_runtime(
         &self,
         entry: NodeId,
-        program: &CoreProgram,
-        arguments: &[ApplicationValue],
-    ) -> Result<(ApplicationValue, InteractiveExecutionObservation)> {
+        program: &interpret::PreparedProgram,
+        arguments: &[RuntimeValue],
+    ) -> Result<(RuntimeValue, InteractiveExecutionObservation)> {
         let public_started = Instant::now();
-        let runtime_arguments = arguments
-            .iter()
-            .map(|value| to_runtime(&self.application.flattened, value))
-            .collect::<Result<Vec<_>>>()?;
         let argument_nanoseconds = elapsed_nanoseconds(public_started);
-        let result = interpret::run_compiled(
+        let result = interpret::run_prepared(
             &self.application.flattened.snapshot,
             entry,
             program,
-            &runtime_arguments,
+            arguments,
             self.application.policy,
         )?;
         let result_started = Instant::now();
-        let value = from_runtime(&self.application.flattened, &result.value)?;
         Ok((
-            value,
+            result.value,
             InteractiveExecutionObservation {
                 execute_nanoseconds: result.execute_nanoseconds,
                 public_value_nanoseconds: argument_nanoseconds
@@ -672,42 +888,174 @@ impl PreparedInteractiveApplication {
         ))
     }
 
-    fn validate_state(&self, state: &ApplicationValue) -> Result<()> {
-        validate_public_value_target(state, self.profile.state, "interactive state")
+    fn validate_runtime_state(&self, state: &RuntimeValue) -> Result<()> {
+        let expected = self
+            .application
+            .flattened
+            .item(self.profile.state.release, self.profile.state.item)?;
+        interpret::validate_runtime_value(
+            &self.application.flattened.snapshot,
+            state,
+            SemanticType::Nominal(expected),
+            expected,
+        )?;
+        Ok(())
     }
 
     fn render_state(
         &self,
-        state: &ApplicationValue,
+        state: &RuntimeValue,
     ) -> Result<(InteractiveFrame, InteractiveExecutionObservation)> {
-        let (value, observation) = self.run(
+        let (value, observation) = self.run_runtime(
             self.render_entry,
             &self.render_program,
             std::slice::from_ref(state),
         )?;
+        let value = from_runtime(&self.application.flattened, &value)?;
         Ok((decode_frame(&self.profile, value)?, observation))
+    }
+
+    fn decode_runtime_update(
+        &self,
+        value: RuntimeValue,
+    ) -> Result<(RuntimeValue, bool, bool, Option<InteractiveActionRequest>)> {
+        let RuntimeValue::Product { ty, fields } = value else {
+            return Err(malformed("interactive update result is not a product"));
+        };
+        let expected = self.application.flattened.item(
+            self.profile.update_result.release,
+            self.profile.update_result.item,
+        )?;
+        let expected_count = if self.profile.actions.is_some() { 5 } else { 3 };
+        if ty != expected || fields.len() != expected_count {
+            return Err(malformed(
+                "interactive update result has the wrong exact type or field count",
+            ));
+        }
+        let state_field = self.application.flattened.item(
+            self.profile.update_state_field.release,
+            self.profile.update_state_field.item,
+        )?;
+        let changed_field = self.application.flattened.item(
+            self.profile.update_changed_field.release,
+            self.profile.update_changed_field.item,
+        )?;
+        let exit_field = self.application.flattened.item(
+            self.profile.update_exit_field.release,
+            self.profile.update_exit_field.item,
+        )?;
+        let action_field = self
+            .profile
+            .actions
+            .as_ref()
+            .map(|actions| {
+                self.application.flattened.item(
+                    actions.update_action_field.release,
+                    actions.update_action_field.item,
+                )
+            })
+            .transpose()?;
+        let action_id_field = self
+            .profile
+            .actions
+            .as_ref()
+            .map(|actions| {
+                self.application.flattened.item(
+                    actions.update_action_id_field.release,
+                    actions.update_action_id_field.item,
+                )
+            })
+            .transpose()?;
+        let mut state = None;
+        let mut changed = None;
+        let mut exit = None;
+        let mut action = None;
+        let mut action_id = None;
+        for field in fields {
+            if field.field == state_field {
+                state = Some(field.value);
+            } else if field.field == changed_field {
+                let RuntimeValue::Bool(value) = field.value else {
+                    return Err(malformed("interactive changed field is not bool"));
+                };
+                changed = Some(value);
+            } else if field.field == exit_field {
+                let RuntimeValue::Bool(value) = field.value else {
+                    return Err(malformed("interactive exit field is not bool"));
+                };
+                exit = Some(value);
+            } else if action_field == Some(field.field) {
+                let actions = self.profile.actions.as_ref().ok_or_else(|| {
+                    malformed("interactive action field has no declared action profile")
+                })?;
+                let public = from_runtime(&self.application.flattened, &field.value)?;
+                action = Some(decode_action(&self.profile, actions, public)?);
+            } else if action_id_field == Some(field.field) {
+                let RuntimeValue::I64(value) = field.value else {
+                    return Err(malformed("interactive action id field is not i64"));
+                };
+                action_id = Some(value);
+            } else {
+                return Err(malformed(
+                    "interactive update result contains an unknown field",
+                ));
+            }
+        }
+        let action = match (action.unwrap_or(None), action_id) {
+            (None, None) if self.profile.actions.is_none() => None,
+            (None, Some(0)) => None,
+            (None, Some(_)) => {
+                return Err(malformed(
+                    "interactive no-action update carries a nonzero job identity",
+                ));
+            }
+            (Some(action), Some(job_id)) => {
+                let job_id = u64::try_from(job_id)
+                    .map_err(|_| malformed("interactive action job identity must be positive"))?;
+                if job_id == 0 || job_id > MAXIMUM_INTERACTIVE_JOB_ID {
+                    return Err(malformed(
+                        "interactive action job identity exceeds its exact positive domain",
+                    ));
+                }
+                Some(InteractiveActionRequest { job_id, action })
+            }
+            (Some(_), None) => {
+                return Err(malformed(
+                    "interactive action update omits its job identity",
+                ));
+            }
+            (None, None) => {
+                return Err(malformed(
+                    "interactive action update omits its zero job identity",
+                ));
+            }
+        };
+        Ok((
+            state.ok_or_else(|| malformed("interactive update result omits state"))?,
+            changed.ok_or_else(|| malformed("interactive update result omits changed"))?,
+            exit.ok_or_else(|| malformed("interactive update result omits exit"))?,
+            action,
+        ))
     }
 }
 
 impl InteractiveSession {
     pub fn step(&mut self, event: InteractiveEvent) -> Result<InteractiveStep> {
-        if self.pending_action {
-            return Err(LkError::new(
-                ErrorCode::AuthorityBusy,
-                "interactive session has one unresolved host action",
-            ));
-        }
         let event = encode_event(&self.prepared.profile, event)?;
-        let (value, update_observation) = self.prepared.run(
+        let event = to_runtime(&self.prepared.application.flattened, &event)?;
+        let (value, update_observation) = self.prepared.run_runtime(
             self.prepared.update_entry,
             &self.prepared.update_program,
             &[self.state.clone(), event],
         )?;
-        let (state, changed, exit, action) = decode_update(&self.prepared.profile, value)?;
-        self.prepared.validate_state(&state)?;
+        let (state, changed, exit, action) = self.prepared.decode_runtime_update(value)?;
+        self.prepared.validate_runtime_state(&state)?;
         let (frame, render_observation) = self.prepared.render_state(&state)?;
+        let (pending_action, last_action_id) =
+            next_action_state(self.pending_action, self.last_action_id, action.as_ref())?;
         self.state = state;
-        self.pending_action = action.is_some();
+        self.pending_action = pending_action;
+        self.last_action_id = last_action_id;
         Ok(InteractiveStep {
             frame,
             changed,
@@ -718,10 +1066,16 @@ impl InteractiveSession {
     }
 
     pub fn resume(&mut self, outcome: InteractiveActionOutcome) -> Result<InteractiveStep> {
-        if !self.pending_action {
-            return Err(LkError::new(
+        let pending = self.pending_action.ok_or_else(|| {
+            LkError::new(
                 ErrorCode::ProtocolMalformed,
                 "interactive session has no pending host action to resume",
+            )
+        })?;
+        if outcome.job_id != pending {
+            return Err(LkError::new(
+                ErrorCode::ProtocolMalformed,
+                "interactive outcome has a foreign or stale job identity",
             ));
         }
         let actions = self.prepared.profile.actions.as_ref().ok_or_else(|| {
@@ -743,14 +1097,20 @@ impl InteractiveSession {
             )
         })?;
         let outcome = encode_action_outcome(&self.prepared.profile, actions, outcome)?;
-        let (value, update_observation) =
-            self.prepared
-                .run(resume_entry, resume_program, &[self.state.clone(), outcome])?;
-        let (state, changed, exit, action) = decode_update(&self.prepared.profile, value)?;
-        self.prepared.validate_state(&state)?;
+        let outcome = to_runtime(&self.prepared.application.flattened, &outcome)?;
+        let (value, update_observation) = self.prepared.run_runtime(
+            resume_entry,
+            resume_program,
+            &[self.state.clone(), outcome],
+        )?;
+        let (state, changed, exit, action) = self.prepared.decode_runtime_update(value)?;
+        self.prepared.validate_runtime_state(&state)?;
         let (frame, render_observation) = self.prepared.render_state(&state)?;
+        let (pending_action, last_action_id) =
+            next_action_state(None, self.last_action_id, action.as_ref())?;
         self.state = state;
-        self.pending_action = action.is_some();
+        self.pending_action = pending_action;
+        self.last_action_id = last_action_id;
         Ok(InteractiveStep {
             frame,
             changed,
@@ -769,6 +1129,33 @@ impl InteractiveSession {
     pub fn application_digest(&self) -> ApplicationDigest {
         self.prepared.digest()
     }
+
+    pub const fn pending_action_id(&self) -> Option<u64> {
+        self.pending_action
+    }
+}
+
+fn next_action_state(
+    pending: Option<u64>,
+    last_action_id: u64,
+    action: Option<&InteractiveActionRequest>,
+) -> Result<(Option<u64>, u64)> {
+    let Some(action) = action else {
+        return Ok((pending, last_action_id));
+    };
+    if pending.is_some() {
+        return Err(LkError::new(
+            ErrorCode::AuthorityBusy,
+            "interactive application requested a second action while one job is pending",
+        ));
+    }
+    if action.job_id <= last_action_id || action.job_id > MAXIMUM_INTERACTIVE_JOB_ID {
+        return Err(LkError::new(
+            ErrorCode::ProtocolMalformed,
+            "interactive action job identities must increase monotonically without reuse",
+        ));
+    }
+    Ok((Some(action.job_id), action.job_id))
 }
 
 pub fn prepare_interactive(bytes: &[u8]) -> Result<PreparedInteractiveApplication> {
@@ -812,12 +1199,12 @@ pub(crate) fn prepare_interactive_observed(
         })
         .transpose()?;
     let initialize_program =
-        interpret::compile_entry(&application.flattened.snapshot, initialize_entry)?.0;
-    let update_program = interpret::compile_entry(&application.flattened.snapshot, update_entry)?.0;
-    let render_program = interpret::compile_entry(&application.flattened.snapshot, render_entry)?.0;
+        interpret::prepare_entry(&application.flattened.snapshot, initialize_entry)?.0;
+    let update_program = interpret::prepare_entry(&application.flattened.snapshot, update_entry)?.0;
+    let render_program = interpret::prepare_entry(&application.flattened.snapshot, render_entry)?.0;
     let resume_program = resume_entry
         .map(|entry| {
-            interpret::compile_entry(&application.flattened.snapshot, entry).map(|value| value.0)
+            interpret::prepare_entry(&application.flattened.snapshot, entry).map(|value| value.0)
         })
         .transpose()?;
     Ok(PreparedInteractiveApplication {
@@ -840,10 +1227,10 @@ pub(super) fn validate_profile(
     _entry: NodeId,
     profile: &InteractiveApplicationProfile,
 ) -> Result<()> {
-    if profile.version != 1 && profile.version != INTERACTIVE_PROFILE_VERSION {
+    if profile.version != INTERACTIVE_PROFILE_VERSION {
         return Err(LkError::new(
             ErrorCode::ProtocolVersion,
-            "interactive application profile version is unsupported",
+            "interactive application rejects predecessor profile versions",
         ));
     }
     for function in [profile.initialize, profile.update, profile.render] {
@@ -882,6 +1269,7 @@ pub(super) fn validate_profile(
     if let Some(actions) = &profile.actions {
         let action = item(flattened, actions.action)?;
         update_fields.push((actions.update_action_field, SemanticType::Nominal(action)));
+        update_fields.push((actions.update_action_id_field, SemanticType::I64));
     }
     expect_product(
         flattened,
@@ -896,10 +1284,13 @@ pub(super) fn validate_profile(
             (profile.frame_rows_field, SemanticType::I64),
             (profile.frame_columns_field, SemanticType::I64),
             (profile.frame_scalars_field, SemanticType::Nominal(scalars)),
+            (profile.frame_styles_field, SemanticType::Nominal(scalars)),
             (profile.frame_cursor_row_field, SemanticType::I64),
             (profile.frame_cursor_column_field, SemanticType::I64),
             (profile.frame_cursor_visible_field, SemanticType::Bool),
+            (profile.frame_cursor_shape_field, SemanticType::I64),
             (profile.frame_status_field, SemanticType::Text),
+            (profile.frame_status_style_field, SemanticType::I64),
         ],
         "interactive frame",
     )?;
@@ -944,6 +1335,64 @@ pub(super) fn validate_profile(
         ],
         "interactive key event",
     )?;
+    let mouse = &profile.events.mouse;
+    let mouse_button = item(flattened, mouse.button)?;
+    let mouse_kind = item(flattened, mouse.kind)?;
+    let mouse_event = item(flattened, mouse.event)?;
+    expect_sum(
+        flattened,
+        mouse_button,
+        &[
+            (mouse.button_none_variant, None),
+            (mouse.button_primary_variant, None),
+            (mouse.button_middle_variant, None),
+            (mouse.button_secondary_variant, None),
+        ],
+        "interactive mouse button",
+    )?;
+    expect_sum(
+        flattened,
+        mouse_kind,
+        &[
+            (mouse.press_variant, None),
+            (mouse.release_variant, None),
+            (mouse.drag_variant, None),
+            (mouse.scroll_up_variant, None),
+            (mouse.scroll_down_variant, None),
+            (mouse.scroll_left_variant, None),
+            (mouse.scroll_right_variant, None),
+        ],
+        "interactive mouse event kind",
+    )?;
+    expect_product(
+        flattened,
+        mouse_event,
+        &[
+            (
+                mouse.event_button_field,
+                SemanticType::Nominal(mouse_button),
+            ),
+            (mouse.event_kind_field, SemanticType::Nominal(mouse_kind)),
+            (mouse.event_row_field, SemanticType::I64),
+            (mouse.event_column_field, SemanticType::I64),
+            (mouse.event_control_field, SemanticType::Bool),
+            (mouse.event_alt_field, SemanticType::Bool),
+            (mouse.event_shift_field, SemanticType::Bool),
+        ],
+        "interactive mouse event",
+    )?;
+    let open = &profile.events.open;
+    let open_event = item(flattened, open.event)?;
+    expect_product(
+        flattened,
+        open_event,
+        &[
+            (open.event_path_field, SemanticType::Text),
+            (open.event_directory_field, SemanticType::Bool),
+            (open.event_project_field, SemanticType::Bool),
+        ],
+        "interactive deployment-open event",
+    )?;
     expect_sum(
         flattened,
         event,
@@ -959,6 +1408,16 @@ pub(super) fn validate_profile(
             (
                 profile.events.resize_variant,
                 Some(SemanticType::Nominal(size)),
+            ),
+            (
+                profile.events.mouse_variant,
+                Some(SemanticType::Nominal(mouse_event)),
+            ),
+            (profile.events.focus_gained_variant, None),
+            (profile.events.focus_lost_variant, None),
+            (
+                profile.events.open_variant,
+                Some(SemanticType::Nominal(open_event)),
             ),
             (profile.events.close_variant, None),
         ],
@@ -1009,11 +1468,13 @@ fn validate_action_routes(
     version: u16,
     actions: &InteractiveActionRoutes,
 ) -> Result<()> {
-    let expected = if version == 1 {
-        InteractiveActionKind::HISTORICAL_PROFILE_V1.as_slice()
-    } else {
-        InteractiveActionKind::ALL.as_slice()
-    };
+    if version != INTERACTIVE_PROFILE_VERSION {
+        return Err(LkError::new(
+            ErrorCode::ProtocolVersion,
+            "interactive action routes reject predecessor profile versions",
+        ));
+    }
+    let expected = InteractiveActionKind::ALL.as_slice();
     if actions.routes.len() != expected.len()
         || actions
             .routes
@@ -1060,6 +1521,16 @@ fn validate_action_routes(
         ],
         "interactive file-save action payload",
     )?;
+    let file_search_payload = item(flattened, actions.file_search_payload)?;
+    expect_product(
+        flattened,
+        file_search_payload,
+        &[
+            (actions.file_search_start_field, SemanticType::Text),
+            (actions.file_search_query_field, SemanticType::Text),
+        ],
+        "interactive root-search action payload",
+    )?;
     for (route, variant) in actions.routes.iter().zip(mapped) {
         let Node::SumVariant { owner, payload, .. } = flattened.snapshot.node(variant)? else {
             return Err(LkError::new(
@@ -1070,6 +1541,8 @@ fn validate_action_routes(
         };
         let expected = if route.kind == InteractiveActionKind::FilesystemSave {
             Some(SemanticType::Nominal(file_save_payload))
+        } else if route.kind == InteractiveActionKind::FilesystemSearch {
+            Some(SemanticType::Nominal(file_search_payload))
         } else if route.kind.requires_scalars() {
             Some(SemanticType::Nominal(scalars))
         } else if route.kind == InteractiveActionKind::FilesystemReconcile {
@@ -1090,6 +1563,7 @@ fn validate_action_routes(
         flattened,
         outcome,
         &[
+            (actions.outcome_job_id_field, SemanticType::I64),
             (actions.outcome_class_field, SemanticType::I64),
             (actions.outcome_message_field, SemanticType::Text),
             (
@@ -1340,49 +1814,83 @@ fn encode_event(
             };
             sum(events.event, events.resize_variant, Some(size))
         }
+        InteractiveEvent::Mouse(mouse) => {
+            if !(0..MAXIMUM_INTERACTIVE_ROWS).contains(&mouse.row)
+                || !(0..MAXIMUM_INTERACTIVE_COLUMNS).contains(&mouse.column)
+            {
+                return Err(LkError::new(
+                    ErrorCode::PolicyExceeded,
+                    "interactive mouse coordinates exceed the zero-based profile domain",
+                ));
+            }
+            let routes = &events.mouse;
+            let button = match mouse.button {
+                InteractiveMouseButton::None => routes.button_none_variant,
+                InteractiveMouseButton::Primary => routes.button_primary_variant,
+                InteractiveMouseButton::Middle => routes.button_middle_variant,
+                InteractiveMouseButton::Secondary => routes.button_secondary_variant,
+            };
+            let kind = match mouse.kind {
+                InteractiveMouseKind::Press => routes.press_variant,
+                InteractiveMouseKind::Release => routes.release_variant,
+                InteractiveMouseKind::Drag => routes.drag_variant,
+                InteractiveMouseKind::ScrollUp => routes.scroll_up_variant,
+                InteractiveMouseKind::ScrollDown => routes.scroll_down_variant,
+                InteractiveMouseKind::ScrollLeft => routes.scroll_left_variant,
+                InteractiveMouseKind::ScrollRight => routes.scroll_right_variant,
+            };
+            let value = ApplicationValue::Product {
+                ty: routes.event,
+                fields: vec![
+                    field(routes.event_button_field, sum(routes.button, button, None)),
+                    field(routes.event_kind_field, sum(routes.kind, kind, None)),
+                    field(routes.event_row_field, ApplicationValue::I64(mouse.row)),
+                    field(
+                        routes.event_column_field,
+                        ApplicationValue::I64(mouse.column),
+                    ),
+                    field(
+                        routes.event_control_field,
+                        ApplicationValue::Bool(mouse.control),
+                    ),
+                    field(routes.event_alt_field, ApplicationValue::Bool(mouse.alt)),
+                    field(
+                        routes.event_shift_field,
+                        ApplicationValue::Bool(mouse.shift),
+                    ),
+                ],
+            };
+            sum(events.event, events.mouse_variant, Some(value))
+        }
+        InteractiveEvent::FocusGained => sum(events.event, events.focus_gained_variant, None),
+        InteractiveEvent::FocusLost => sum(events.event, events.focus_lost_variant, None),
+        InteractiveEvent::Open(open) => {
+            let path = TextString::new(open.path).map_err(|_| {
+                LkError::new(
+                    ErrorCode::PolicyExceeded,
+                    "interactive deployment-open path exceeds text byte policy",
+                )
+            })?;
+            let routes = &events.open;
+            let value = ApplicationValue::Product {
+                ty: routes.event,
+                fields: vec![
+                    field(routes.event_path_field, ApplicationValue::Text(path)),
+                    field(
+                        routes.event_directory_field,
+                        ApplicationValue::Bool(open.directory),
+                    ),
+                    field(
+                        routes.event_project_field,
+                        ApplicationValue::Bool(open.project),
+                    ),
+                ],
+            };
+            sum(events.event, events.open_variant, Some(value))
+        }
         InteractiveEvent::Close => sum(events.event, events.close_variant, None),
     };
     Ok(value)
-}
-
-fn decode_update(
-    profile: &InteractiveApplicationProfile,
-    value: ApplicationValue,
-) -> Result<(ApplicationValue, bool, bool, Option<InteractiveAction>)> {
-    let field_count = if profile.actions.is_some() { 4 } else { 3 };
-    let fields = product_fields(
-        value,
-        profile.update_result,
-        field_count,
-        "interactive update result",
-    )?;
-    let mut state = None;
-    let mut changed = None;
-    let mut exit = None;
-    let mut action = None;
-    for field in fields {
-        if field.field == profile.update_state_field {
-            state = Some(field.value);
-        } else if field.field == profile.update_changed_field {
-            changed = Some(expect_bool(field.value, "interactive changed field")?);
-        } else if field.field == profile.update_exit_field {
-            exit = Some(expect_bool(field.value, "interactive exit field")?);
-        } else if let Some(actions) = profile.actions.as_ref()
-            && field.field == actions.update_action_field
-        {
-            action = Some(decode_action(profile, actions, field.value)?);
-        } else {
-            return Err(malformed(
-                "interactive update result contains an unknown field",
-            ));
-        }
-    }
-    Ok((
-        state.ok_or_else(|| malformed("interactive update result omits state"))?,
-        changed.ok_or_else(|| malformed("interactive update result omits changed"))?,
-        exit.ok_or_else(|| malformed("interactive update result omits exit"))?,
-        action.unwrap_or(None),
-    ))
 }
 
 fn decode_action(
@@ -1451,6 +1959,32 @@ fn decode_action(
                 .ok_or_else(|| malformed("interactive file-save action omits create mode"))?,
         }));
     }
+    if route.kind == InteractiveActionKind::FilesystemSearch {
+        let payload = payload.ok_or_else(|| malformed("interactive root search omits payload"))?;
+        let fields = product_fields(
+            *payload,
+            actions.file_search_payload,
+            2,
+            "interactive root-search action",
+        )?;
+        let mut start = None;
+        let mut query = None;
+        for field in fields {
+            if field.field == actions.file_search_start_field {
+                start = Some(expect_text(field.value, "interactive root-search start")?);
+            } else if field.field == actions.file_search_query_field {
+                query = Some(expect_text(field.value, "interactive root-search query")?);
+            } else {
+                return Err(malformed(
+                    "interactive root-search action contains an unknown field",
+                ));
+            }
+        }
+        return Ok(Some(InteractiveAction::FilesystemSearch {
+            start: start.ok_or_else(|| malformed("interactive root search omits start"))?,
+            query: query.ok_or_else(|| malformed("interactive root search omits query"))?,
+        }));
+    }
     if route.kind.requires_scalars() || route.kind == InteractiveActionKind::FilesystemReconcile {
         let text = payload.ok_or_else(|| malformed("interactive action omits its text payload"))?;
         let text = if route.kind == InteractiveActionKind::FilesystemReconcile {
@@ -1476,6 +2010,11 @@ fn decode_action(
             }
             InteractiveActionKind::ProjectTargetRun => InteractiveAction::ProjectTargetRun(text),
             InteractiveActionKind::FilesystemList => InteractiveAction::FilesystemList(text),
+            InteractiveActionKind::FilesystemSearch => {
+                return Err(malformed(
+                    "interactive root search uses a structured payload",
+                ));
+            }
             InteractiveActionKind::FilesystemRead => InteractiveAction::FilesystemRead(text),
             InteractiveActionKind::FilesystemReconcile => {
                 InteractiveAction::FilesystemReconcile(text)
@@ -1529,6 +2068,15 @@ fn encode_action_outcome(
         ty: actions.outcome,
         fields: vec![
             field(
+                actions.outcome_job_id_field,
+                ApplicationValue::I64(i64::try_from(outcome.job_id).map_err(|_| {
+                    LkError::new(
+                        ErrorCode::PolicyExceeded,
+                        "interactive action job identity exceeds signed runtime integer policy",
+                    )
+                })?),
+            ),
+            field(
                 actions.outcome_class_field,
                 ApplicationValue::I64(outcome.class.stable_value()),
             ),
@@ -1552,14 +2100,17 @@ fn decode_frame(
     profile: &InteractiveApplicationProfile,
     value: ApplicationValue,
 ) -> Result<InteractiveFrame> {
-    let fields = product_fields(value, profile.frame, 7, "interactive frame")?;
+    let fields = product_fields(value, profile.frame, 10, "interactive frame")?;
     let mut rows = None;
     let mut columns = None;
     let mut scalars = None;
+    let mut styles = None;
     let mut cursor_row = None;
     let mut cursor_column = None;
     let mut cursor_visible = None;
+    let mut cursor_shape = None;
     let mut status = None;
+    let mut status_style = None;
     for field in fields {
         if field.field == profile.frame_rows_field {
             rows = Some(expect_i64(field.value, "interactive frame rows")?);
@@ -1567,14 +2118,29 @@ fn decode_frame(
             columns = Some(expect_i64(field.value, "interactive frame columns")?);
         } else if field.field == profile.frame_scalars_field {
             scalars = Some(expect_scalars(profile.events.scalars, field.value)?);
+        } else if field.field == profile.frame_styles_field {
+            styles = Some(expect_styles(profile.events.scalars, field.value)?);
         } else if field.field == profile.frame_cursor_row_field {
             cursor_row = Some(expect_i64(field.value, "interactive cursor row")?);
         } else if field.field == profile.frame_cursor_column_field {
             cursor_column = Some(expect_i64(field.value, "interactive cursor column")?);
         } else if field.field == profile.frame_cursor_visible_field {
             cursor_visible = Some(expect_bool(field.value, "interactive cursor visibility")?);
+        } else if field.field == profile.frame_cursor_shape_field {
+            cursor_shape = Some(match expect_i64(field.value, "interactive cursor shape")? {
+                0 => InteractiveCursorShape::Block,
+                1 => InteractiveCursorShape::Bar,
+                2 => InteractiveCursorShape::Underline,
+                _ => {
+                    return Err(malformed(
+                        "interactive cursor shape is outside its closed set",
+                    ));
+                }
+            });
         } else if field.field == profile.frame_status_field {
             status = Some(expect_text(field.value, "interactive frame status")?);
+        } else if field.field == profile.frame_status_style_field {
+            status_style = Some(expect_style(field.value, "interactive status style")?);
         } else {
             return Err(malformed("interactive frame contains an unknown field"));
         }
@@ -1598,15 +2164,27 @@ fn decode_frame(
             "interactive status exceeds byte policy",
         ));
     }
+    let scalars = scalars.ok_or_else(|| malformed("interactive frame omits scalars"))?;
+    let styles = styles.ok_or_else(|| malformed("interactive frame omits styles"))?;
+    if styles.len() != scalars.len() {
+        return Err(malformed(
+            "interactive frame styles must correspond one-for-one with scalars",
+        ));
+    }
     Ok(InteractiveFrame {
         rows,
         columns,
-        scalars: scalars.ok_or_else(|| malformed("interactive frame omits scalars"))?,
+        scalars,
+        styles,
         cursor_row,
         cursor_column,
         cursor_visible: cursor_visible
             .ok_or_else(|| malformed("interactive frame omits cursor visibility"))?,
+        cursor_shape: cursor_shape
+            .ok_or_else(|| malformed("interactive frame omits cursor shape"))?,
         status,
+        status_style: status_style
+            .ok_or_else(|| malformed("interactive frame omits status style"))?,
     })
 }
 
@@ -1650,6 +2228,32 @@ fn expect_scalars(expected: ApplicationTarget, value: ApplicationValue) -> Resul
         .collect()
 }
 
+fn expect_styles(expected: ApplicationTarget, value: ApplicationValue) -> Result<Vec<u8>> {
+    let ApplicationValue::Sequence { ty, elements } = value else {
+        return Err(malformed("interactive frame styles are not a sequence"));
+    };
+    if ty != expected || elements.len() > MAXIMUM_INTERACTIVE_FRAME_SCALARS {
+        return Err(LkError::new(
+            ErrorCode::PolicyExceeded,
+            "interactive frame styles have the wrong type or exceed policy",
+        ));
+    }
+    elements
+        .into_iter()
+        .map(|value| expect_style(value, "interactive frame style"))
+        .collect()
+}
+
+fn expect_style(value: ApplicationValue, label: &str) -> Result<u8> {
+    let value = expect_i64(value, label)?;
+    if !(0..=MAXIMUM_INTERACTIVE_STYLE).contains(&value) {
+        return Err(malformed(format!(
+            "{label} is outside the closed style palette"
+        )));
+    }
+    u8::try_from(value).map_err(|_| malformed(format!("{label} does not fit its style domain")))
+}
+
 fn expect_scalar_text(
     expected: ApplicationTarget,
     value: ApplicationValue,
@@ -1682,26 +2286,6 @@ fn expect_text(value: ApplicationValue, label: &str) -> Result<String> {
     match value {
         ApplicationValue::Text(value) => Ok(value.as_str().to_owned()),
         _ => Err(malformed(format!("{label} is not text"))),
-    }
-}
-
-fn validate_public_value_target(
-    value: &ApplicationValue,
-    expected: ApplicationTarget,
-    label: &str,
-) -> Result<()> {
-    let actual = match value {
-        ApplicationValue::Product { ty, .. }
-        | ApplicationValue::Sum { ty, .. }
-        | ApplicationValue::Sequence { ty, .. } => *ty,
-        _ => return Err(malformed(format!("{label} is not nominal"))),
-    };
-    if actual == expected {
-        Ok(())
-    } else {
-        Err(malformed(format!(
-            "{label} has the wrong exact nominal type"
-        )))
     }
 }
 

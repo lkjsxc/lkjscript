@@ -5,8 +5,8 @@ use crate::application::{
     ApplicationTestExpectation, ApplicationTrap, ApplicationTrapCode, ApplicationValue,
     HostInterface, HostOperation, HostOutcomeClass, HostOutcomeRoute, HostRequestRoute,
     InteractiveActionKind, InteractiveActionRoute, InteractiveActionRoutes,
-    InteractiveApplicationProfile, InteractiveEventRoutes, InteractiveKeyRoutes, InvocationProfile,
-    StatefulApplicationProfile,
+    InteractiveApplicationProfile, InteractiveEventRoutes, InteractiveKeyRoutes,
+    InteractiveMouseRoutes, InteractiveOpenRoutes, InvocationProfile, StatefulApplicationProfile,
 };
 use crate::error::{ErrorCode, LkError, Result};
 use crate::graph::Snapshot;
@@ -206,12 +206,53 @@ pub struct TargetInteractiveEventRoutes {
     pub key_variant: TargetItem,
     pub paste_variant: TargetItem,
     pub resize_variant: TargetItem,
+    pub mouse_variant: TargetItem,
+    pub focus_gained_variant: TargetItem,
+    pub focus_lost_variant: TargetItem,
+    pub open_variant: TargetItem,
     pub close_variant: TargetItem,
     pub size: TargetItem,
     pub size_rows_field: TargetItem,
     pub size_columns_field: TargetItem,
     pub scalars: TargetItem,
     pub key: TargetInteractiveKeyRoutes,
+    pub mouse: TargetInteractiveMouseRoutes,
+    pub open: TargetInteractiveOpenRoutes,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TargetInteractiveMouseRoutes {
+    pub button: TargetItem,
+    pub button_none_variant: TargetItem,
+    pub button_primary_variant: TargetItem,
+    pub button_middle_variant: TargetItem,
+    pub button_secondary_variant: TargetItem,
+    pub kind: TargetItem,
+    pub press_variant: TargetItem,
+    pub release_variant: TargetItem,
+    pub drag_variant: TargetItem,
+    pub scroll_up_variant: TargetItem,
+    pub scroll_down_variant: TargetItem,
+    pub scroll_left_variant: TargetItem,
+    pub scroll_right_variant: TargetItem,
+    pub event: TargetItem,
+    pub event_button_field: TargetItem,
+    pub event_kind_field: TargetItem,
+    pub event_row_field: TargetItem,
+    pub event_column_field: TargetItem,
+    pub event_control_field: TargetItem,
+    pub event_alt_field: TargetItem,
+    pub event_shift_field: TargetItem,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TargetInteractiveOpenRoutes {
+    pub event: TargetItem,
+    pub event_path_field: TargetItem,
+    pub event_directory_field: TargetItem,
+    pub event_project_field: TargetItem,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
@@ -226,12 +267,17 @@ pub struct TargetInteractiveActionRoute {
 pub struct TargetInteractiveActionRoutes {
     pub action: TargetItem,
     pub update_action_field: TargetItem,
+    pub update_action_id_field: TargetItem,
     pub routes: Vec<TargetInteractiveActionRoute>,
     pub file_save_payload: TargetItem,
     pub file_save_origin_field: TargetItem,
     pub file_save_content_field: TargetItem,
     pub file_save_create_field: TargetItem,
+    pub file_search_payload: TargetItem,
+    pub file_search_start_field: TargetItem,
+    pub file_search_query_field: TargetItem,
     pub outcome: TargetItem,
+    pub outcome_job_id_field: TargetItem,
     pub outcome_class_field: TargetItem,
     pub outcome_message_field: TargetItem,
     pub outcome_content_field: TargetItem,
@@ -255,10 +301,13 @@ pub struct TargetInteractiveApplicationProfile {
     pub frame_rows_field: TargetItem,
     pub frame_columns_field: TargetItem,
     pub frame_scalars_field: TargetItem,
+    pub frame_styles_field: TargetItem,
     pub frame_cursor_row_field: TargetItem,
     pub frame_cursor_column_field: TargetItem,
     pub frame_cursor_visible_field: TargetItem,
+    pub frame_cursor_shape_field: TargetItem,
     pub frame_status_field: TargetItem,
+    pub frame_status_style_field: TargetItem,
     pub events: TargetInteractiveEventRoutes,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actions: Option<Box<TargetInteractiveActionRoutes>>,
@@ -363,8 +412,149 @@ pub struct TargetSummary {
     pub dependencies: Vec<NodeId>,
 }
 
+#[derive(Serialize)]
+#[serde(tag = "kind", content = "data", rename_all = "snake_case")]
+enum HistoricalBuildTargetDefinition<'a> {
+    Application(HistoricalApplicationTargetDefinition<'a>),
+}
+
+#[derive(Serialize)]
+struct HistoricalApplicationTargetDefinition<'a> {
+    root_release: NodeId,
+    entry: TargetItem,
+    profile: HistoricalInvocationProfile<'a>,
+    policy: &'a RunPolicy,
+    tests: &'a [TargetApplicationTestCase],
+}
+
+#[derive(Serialize)]
+#[serde(tag = "kind", content = "data", rename_all = "snake_case")]
+enum HistoricalInvocationProfile<'a> {
+    Interactive(HistoricalInteractiveProfile<'a>),
+}
+
+#[derive(Serialize)]
+struct HistoricalInteractiveProfile<'a> {
+    version: u16,
+    initialize: TargetItem,
+    update: TargetItem,
+    render: TargetItem,
+    state: TargetItem,
+    update_result: TargetItem,
+    update_state_field: TargetItem,
+    update_changed_field: TargetItem,
+    update_exit_field: TargetItem,
+    frame: TargetItem,
+    frame_rows_field: TargetItem,
+    frame_columns_field: TargetItem,
+    frame_scalars_field: TargetItem,
+    frame_cursor_row_field: TargetItem,
+    frame_cursor_column_field: TargetItem,
+    frame_cursor_visible_field: TargetItem,
+    frame_status_field: TargetItem,
+    events: HistoricalInteractiveEventRoutes<'a>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    actions: Option<HistoricalInteractiveActionRoutes<'a>>,
+}
+
+#[derive(Serialize)]
+struct HistoricalInteractiveEventRoutes<'a> {
+    event: TargetItem,
+    key_variant: TargetItem,
+    paste_variant: TargetItem,
+    resize_variant: TargetItem,
+    close_variant: TargetItem,
+    size: TargetItem,
+    size_rows_field: TargetItem,
+    size_columns_field: TargetItem,
+    scalars: TargetItem,
+    key: &'a TargetInteractiveKeyRoutes,
+}
+
+#[derive(Serialize)]
+struct HistoricalInteractiveActionRoutes<'a> {
+    action: TargetItem,
+    update_action_field: TargetItem,
+    routes: &'a [TargetInteractiveActionRoute],
+    file_save_payload: TargetItem,
+    file_save_origin_field: TargetItem,
+    file_save_content_field: TargetItem,
+    file_save_create_field: TargetItem,
+    outcome: TargetItem,
+    outcome_class_field: TargetItem,
+    outcome_message_field: TargetItem,
+    outcome_content_field: TargetItem,
+    outcome_token_field: TargetItem,
+    resume: TargetItem,
+}
+
 pub(crate) fn encode_definition(definition: &BuildTargetDefinition) -> Result<Vec<u8>> {
-    let bytes = serde_json::to_vec(definition).map_err(|error| {
+    let bytes = if let BuildTargetDefinition::Application(application) = definition
+        && let TargetInvocationProfile::Interactive(profile) = &application.profile
+        && profile.version < crate::application::INTERACTIVE_PROFILE_VERSION
+    {
+        let actions = profile
+            .actions
+            .as_ref()
+            .map(|actions| HistoricalInteractiveActionRoutes {
+                action: actions.action,
+                update_action_field: actions.update_action_field,
+                routes: &actions.routes,
+                file_save_payload: actions.file_save_payload,
+                file_save_origin_field: actions.file_save_origin_field,
+                file_save_content_field: actions.file_save_content_field,
+                file_save_create_field: actions.file_save_create_field,
+                outcome: actions.outcome,
+                outcome_class_field: actions.outcome_class_field,
+                outcome_message_field: actions.outcome_message_field,
+                outcome_content_field: actions.outcome_content_field,
+                outcome_token_field: actions.outcome_token_field,
+                resume: actions.resume,
+            });
+        serde_json::to_vec(&HistoricalBuildTargetDefinition::Application(
+            HistoricalApplicationTargetDefinition {
+                root_release: application.root_release,
+                entry: application.entry,
+                profile: HistoricalInvocationProfile::Interactive(HistoricalInteractiveProfile {
+                    version: profile.version,
+                    initialize: profile.initialize,
+                    update: profile.update,
+                    render: profile.render,
+                    state: profile.state,
+                    update_result: profile.update_result,
+                    update_state_field: profile.update_state_field,
+                    update_changed_field: profile.update_changed_field,
+                    update_exit_field: profile.update_exit_field,
+                    frame: profile.frame,
+                    frame_rows_field: profile.frame_rows_field,
+                    frame_columns_field: profile.frame_columns_field,
+                    frame_scalars_field: profile.frame_scalars_field,
+                    frame_cursor_row_field: profile.frame_cursor_row_field,
+                    frame_cursor_column_field: profile.frame_cursor_column_field,
+                    frame_cursor_visible_field: profile.frame_cursor_visible_field,
+                    frame_status_field: profile.frame_status_field,
+                    events: HistoricalInteractiveEventRoutes {
+                        event: profile.events.event,
+                        key_variant: profile.events.key_variant,
+                        paste_variant: profile.events.paste_variant,
+                        resize_variant: profile.events.resize_variant,
+                        close_variant: profile.events.close_variant,
+                        size: profile.events.size,
+                        size_rows_field: profile.events.size_rows_field,
+                        size_columns_field: profile.events.size_columns_field,
+                        scalars: profile.events.scalars,
+                        key: &profile.events.key,
+                    },
+                    actions,
+                }),
+                policy: &application.policy,
+                tests: &application.tests,
+            },
+        ))
+    } else {
+        serde_json::to_vec(definition)
+    }
+    .map_err(|error| {
         LkError::new(
             ErrorCode::ArtifactCorrupt,
             format!("cannot encode canonical build target: {error}"),
@@ -386,19 +576,172 @@ pub(crate) fn decode_definition(bytes: &[u8]) -> Result<BuildTargetDefinition> {
             "canonical build target exceeds byte policy",
         ));
     }
-    let definition: BuildTargetDefinition = serde_json::from_slice(bytes).map_err(|error| {
-        LkError::new(
-            ErrorCode::ArtifactCorrupt,
-            format!("canonical build-target decoding failed: {error}"),
-        )
-    })?;
-    if encode_definition(&definition)? != bytes {
+    let (definition, historical): (BuildTargetDefinition, bool) =
+        match serde_json::from_slice(bytes) {
+            Ok(definition) => (definition, false),
+            Err(current_error) => {
+                let mut value: serde_json::Value = serde_json::from_slice(bytes).map_err(|_| {
+                    LkError::new(
+                        ErrorCode::ArtifactCorrupt,
+                        format!("canonical build-target decoding failed: {current_error}"),
+                    )
+                })?;
+                if !complete_historical_interactive_v2(&mut value) {
+                    return Err(LkError::new(
+                        ErrorCode::ArtifactCorrupt,
+                        format!("canonical build-target decoding failed: {current_error}"),
+                    ));
+                }
+                let definition = serde_json::from_value(value).map_err(|error| {
+                    LkError::new(
+                        ErrorCode::ArtifactCorrupt,
+                        format!("historical interactive target decoding failed: {error}"),
+                    )
+                })?;
+                (definition, true)
+            }
+        };
+    if encode_definition(&definition)? != bytes && !historical {
         return Err(LkError::new(
             ErrorCode::ArtifactCorrupt,
             "build-target encoding is not canonical",
         ));
     }
     Ok(definition)
+}
+
+/// Completes only the fields needed to inspect immutable profile-1/2 history. The application owner
+/// rejects these profiles before execution or current artifact production; this is not a compatibility
+/// execution path. Outer snapshot digests continue to bind the exact retained legacy bytes.
+fn complete_historical_interactive_v2(value: &mut serde_json::Value) -> bool {
+    let Some(profile) = value
+        .get_mut("data")
+        .and_then(|value| value.get_mut("profile"))
+        .and_then(|value| value.get_mut("data"))
+        .and_then(serde_json::Value::as_object_mut)
+    else {
+        return false;
+    };
+    if !matches!(
+        profile.get("version").and_then(serde_json::Value::as_u64),
+        Some(1 | 2)
+    ) {
+        return false;
+    }
+    let Some(frame_scalars) = profile.get("frame_scalars_field").cloned() else {
+        return false;
+    };
+    let Some(frame_cursor_visible) = profile.get("frame_cursor_visible_field").cloned() else {
+        return false;
+    };
+    let Some(frame_status) = profile.get("frame_status_field").cloned() else {
+        return false;
+    };
+    profile.entry("frame_styles_field").or_insert(frame_scalars);
+    profile
+        .entry("frame_cursor_shape_field")
+        .or_insert(frame_cursor_visible);
+    profile
+        .entry("frame_status_style_field")
+        .or_insert(frame_status);
+
+    let Some(events) = profile
+        .get_mut("events")
+        .and_then(serde_json::Value::as_object_mut)
+    else {
+        return false;
+    };
+    let Some(event) = events.get("event").cloned() else {
+        return false;
+    };
+    let Some(close_variant) = events.get("close_variant").cloned() else {
+        return false;
+    };
+    for field in [
+        "mouse_variant",
+        "focus_gained_variant",
+        "focus_lost_variant",
+        "open_variant",
+    ] {
+        events.entry(field).or_insert(close_variant.clone());
+    }
+    let mut mouse = serde_json::Map::new();
+    for field in [
+        "button",
+        "button_none_variant",
+        "button_primary_variant",
+        "button_middle_variant",
+        "button_secondary_variant",
+        "kind",
+        "press_variant",
+        "release_variant",
+        "drag_variant",
+        "scroll_up_variant",
+        "scroll_down_variant",
+        "scroll_left_variant",
+        "scroll_right_variant",
+        "event",
+        "event_button_field",
+        "event_kind_field",
+        "event_row_field",
+        "event_column_field",
+        "event_control_field",
+        "event_alt_field",
+        "event_shift_field",
+    ] {
+        mouse.insert(field.to_owned(), event.clone());
+    }
+    events
+        .entry("mouse")
+        .or_insert(serde_json::Value::Object(mouse));
+    let mut open = serde_json::Map::new();
+    for field in [
+        "event",
+        "event_path_field",
+        "event_directory_field",
+        "event_project_field",
+    ] {
+        open.insert(field.to_owned(), event.clone());
+    }
+    events
+        .entry("open")
+        .or_insert(serde_json::Value::Object(open));
+
+    let Some(actions) = profile
+        .get_mut("actions")
+        .and_then(serde_json::Value::as_object_mut)
+    else {
+        return true;
+    };
+    let Some(update_action) = actions.get("update_action_field").cloned() else {
+        return false;
+    };
+    let Some(save_payload) = actions.get("file_save_payload").cloned() else {
+        return false;
+    };
+    let Some(save_origin) = actions.get("file_save_origin_field").cloned() else {
+        return false;
+    };
+    let Some(save_content) = actions.get("file_save_content_field").cloned() else {
+        return false;
+    };
+    let Some(outcome_class) = actions.get("outcome_class_field").cloned() else {
+        return false;
+    };
+    actions
+        .entry("update_action_id_field")
+        .or_insert(update_action);
+    actions.entry("file_search_payload").or_insert(save_payload);
+    actions
+        .entry("file_search_start_field")
+        .or_insert(save_origin);
+    actions
+        .entry("file_search_query_field")
+        .or_insert(save_content);
+    actions
+        .entry("outcome_job_id_field")
+        .or_insert(outcome_class);
+    true
 }
 
 pub fn summaries(snapshot: &Snapshot) -> Vec<TargetSummary> {
@@ -466,9 +809,28 @@ pub(crate) fn validate_snapshot_targets(snapshot: &Snapshot) -> Result<()> {
         validate_target(snapshot, summary.target)?;
     }
     for summary in &targets {
-        prepare(snapshot, summary.target)?;
+        if !historical_interactive_target(snapshot, summary.target)? {
+            prepare(snapshot, summary.target)?;
+        }
     }
     Ok(())
+}
+
+pub(crate) fn historical_interactive_target(snapshot: &Snapshot, target: NodeId) -> Result<bool> {
+    let Node::BuildTarget { definition, .. } = snapshot.node(target)? else {
+        return Ok(false);
+    };
+    match definition {
+        BuildTargetDefinition::Application(application) => Ok(matches!(
+            &application.profile,
+            TargetInvocationProfile::Interactive(profile)
+                if profile.version < crate::application::INTERACTIVE_PROFILE_VERSION
+        )),
+        BuildTargetDefinition::Product(product) => {
+            historical_interactive_target(snapshot, product.application)
+        }
+        BuildTargetDefinition::Release(_) => Ok(false),
+    }
 }
 
 fn validate_target_cycles(targets: &[TargetSummary]) -> Result<()> {
@@ -724,6 +1086,42 @@ fn interactive_profile_items(profile: &TargetInteractiveApplicationProfile) -> V
         profile.events.key.event_shift_field,
         profile.events.key.event_repeat_field,
     ];
+    if profile.version >= crate::application::INTERACTIVE_PROFILE_VERSION {
+        items.extend([
+            profile.frame_styles_field,
+            profile.frame_cursor_shape_field,
+            profile.frame_status_style_field,
+            profile.events.mouse_variant,
+            profile.events.focus_gained_variant,
+            profile.events.focus_lost_variant,
+            profile.events.open_variant,
+            profile.events.mouse.button,
+            profile.events.mouse.button_none_variant,
+            profile.events.mouse.button_primary_variant,
+            profile.events.mouse.button_middle_variant,
+            profile.events.mouse.button_secondary_variant,
+            profile.events.mouse.kind,
+            profile.events.mouse.press_variant,
+            profile.events.mouse.release_variant,
+            profile.events.mouse.drag_variant,
+            profile.events.mouse.scroll_up_variant,
+            profile.events.mouse.scroll_down_variant,
+            profile.events.mouse.scroll_left_variant,
+            profile.events.mouse.scroll_right_variant,
+            profile.events.mouse.event,
+            profile.events.mouse.event_button_field,
+            profile.events.mouse.event_kind_field,
+            profile.events.mouse.event_row_field,
+            profile.events.mouse.event_column_field,
+            profile.events.mouse.event_control_field,
+            profile.events.mouse.event_alt_field,
+            profile.events.mouse.event_shift_field,
+            profile.events.open.event,
+            profile.events.open.event_path_field,
+            profile.events.open.event_directory_field,
+            profile.events.open.event_project_field,
+        ]);
+    }
     if let Some(actions) = &profile.actions {
         items.extend([
             actions.action,
@@ -739,6 +1137,15 @@ fn interactive_profile_items(profile: &TargetInteractiveApplicationProfile) -> V
             actions.outcome_token_field,
             actions.resume,
         ]);
+        if profile.version >= crate::application::INTERACTIVE_PROFILE_VERSION {
+            items.extend([
+                actions.update_action_id_field,
+                actions.file_search_payload,
+                actions.file_search_start_field,
+                actions.file_search_query_field,
+                actions.outcome_job_id_field,
+            ]);
+        }
         items.extend(actions.routes.iter().map(|route| route.variant));
     }
     items
@@ -1152,15 +1559,22 @@ fn lower_profile(
                 frame_rows_field: item(profile.frame_rows_field)?,
                 frame_columns_field: item(profile.frame_columns_field)?,
                 frame_scalars_field: item(profile.frame_scalars_field)?,
+                frame_styles_field: item(profile.frame_styles_field)?,
                 frame_cursor_row_field: item(profile.frame_cursor_row_field)?,
                 frame_cursor_column_field: item(profile.frame_cursor_column_field)?,
                 frame_cursor_visible_field: item(profile.frame_cursor_visible_field)?,
+                frame_cursor_shape_field: item(profile.frame_cursor_shape_field)?,
                 frame_status_field: item(profile.frame_status_field)?,
+                frame_status_style_field: item(profile.frame_status_style_field)?,
                 events: InteractiveEventRoutes {
                     event: item(profile.events.event)?,
                     key_variant: item(profile.events.key_variant)?,
                     paste_variant: item(profile.events.paste_variant)?,
                     resize_variant: item(profile.events.resize_variant)?,
+                    mouse_variant: item(profile.events.mouse_variant)?,
+                    focus_gained_variant: item(profile.events.focus_gained_variant)?,
+                    focus_lost_variant: item(profile.events.focus_lost_variant)?,
+                    open_variant: item(profile.events.open_variant)?,
                     close_variant: item(profile.events.close_variant)?,
                     size: item(profile.events.size)?,
                     size_rows_field: item(profile.events.size_rows_field)?,
@@ -1186,6 +1600,37 @@ fn lower_profile(
                         event_shift_field: item(profile.events.key.event_shift_field)?,
                         event_repeat_field: item(profile.events.key.event_repeat_field)?,
                     },
+                    mouse: InteractiveMouseRoutes {
+                        button: item(profile.events.mouse.button)?,
+                        button_none_variant: item(profile.events.mouse.button_none_variant)?,
+                        button_primary_variant: item(profile.events.mouse.button_primary_variant)?,
+                        button_middle_variant: item(profile.events.mouse.button_middle_variant)?,
+                        button_secondary_variant: item(
+                            profile.events.mouse.button_secondary_variant,
+                        )?,
+                        kind: item(profile.events.mouse.kind)?,
+                        press_variant: item(profile.events.mouse.press_variant)?,
+                        release_variant: item(profile.events.mouse.release_variant)?,
+                        drag_variant: item(profile.events.mouse.drag_variant)?,
+                        scroll_up_variant: item(profile.events.mouse.scroll_up_variant)?,
+                        scroll_down_variant: item(profile.events.mouse.scroll_down_variant)?,
+                        scroll_left_variant: item(profile.events.mouse.scroll_left_variant)?,
+                        scroll_right_variant: item(profile.events.mouse.scroll_right_variant)?,
+                        event: item(profile.events.mouse.event)?,
+                        event_button_field: item(profile.events.mouse.event_button_field)?,
+                        event_kind_field: item(profile.events.mouse.event_kind_field)?,
+                        event_row_field: item(profile.events.mouse.event_row_field)?,
+                        event_column_field: item(profile.events.mouse.event_column_field)?,
+                        event_control_field: item(profile.events.mouse.event_control_field)?,
+                        event_alt_field: item(profile.events.mouse.event_alt_field)?,
+                        event_shift_field: item(profile.events.mouse.event_shift_field)?,
+                    },
+                    open: InteractiveOpenRoutes {
+                        event: item(profile.events.open.event)?,
+                        event_path_field: item(profile.events.open.event_path_field)?,
+                        event_directory_field: item(profile.events.open.event_directory_field)?,
+                        event_project_field: item(profile.events.open.event_project_field)?,
+                    },
                 },
                 actions: profile
                     .actions
@@ -1195,6 +1640,7 @@ fn lower_profile(
                             InteractiveActionRoutes {
                                 action: item(actions.action)?,
                                 update_action_field: item(actions.update_action_field)?,
+                                update_action_id_field: item(actions.update_action_id_field)?,
                                 routes: actions
                                     .routes
                                     .iter()
@@ -1209,7 +1655,11 @@ fn lower_profile(
                                 file_save_origin_field: item(actions.file_save_origin_field)?,
                                 file_save_content_field: item(actions.file_save_content_field)?,
                                 file_save_create_field: item(actions.file_save_create_field)?,
+                                file_search_payload: item(actions.file_search_payload)?,
+                                file_search_start_field: item(actions.file_search_start_field)?,
+                                file_search_query_field: item(actions.file_search_query_field)?,
                                 outcome: item(actions.outcome)?,
+                                outcome_job_id_field: item(actions.outcome_job_id_field)?,
                                 outcome_class_field: item(actions.outcome_class_field)?,
                                 outcome_message_field: item(actions.outcome_message_field)?,
                                 outcome_content_field: item(actions.outcome_content_field)?,

@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "measurement_git_commit": null,
+  "measurement_git_commit_note": "The exact implementation commit is assigned after final explicit staging and recorded by the evidence follow-up commit.",
+  "command": "python3 applications/lkjedit/workload.py --binary target/release/lkjedit --project-cli target/release/lkjscript --samples 5",
+  "environment": {
+    "platform": "Linux-7.0.0-29-generic-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "python": "3.12.3",
+    "cpu_count": 20,
+    "clock": "time.perf_counter_ns",
+    "classification": "optimized release; warm host caches not dropped",
+    "process_rss": "unavailable"
+  },
+  "authority": {
+    "workspace": "6ee361b40e2ce5041d64321d79c3db0d",
+    "revision": 174,
+    "snapshot": "7e037b9e97e2f04cd2243899a30a3721f31faf30c55aa9d7d97f050d22004aa4",
+    "revision_record": "aa634314469c3712fd4fca1976d07ce20073c5162a4109abaec94c6dabfe107b",
+    "artifact_bytes": 471096,
+    "artifact_sha256": "95cb525cea6440164e9eac58383fc194d79fc2b6df9baeadfc75309083e8338a",
+    "application_digest": "109577058354605dbcb8c6ca45a17476a2a7a8cf3689d3499ecc611ff76e8ef5",
+    "graph_digest": "aebf4631e05840953a7d493999c610f18b189ad4bc31bd0eaf0fe3ab9608d2d3",
+    "root_release": "13e49b20e4e2d5dbec7baf6a371d7ac9563b746547bb5af7b11d16c739c2b7ab",
+    "binary_bytes": 9329928,
+    "binary_sha256": "dc2e2e123403cc0824c6abb18da55d1f2cc45adf57d08e19e24d2c4f15845e68",
+    "project_cli_bytes": 16603776,
+    "project_cli_sha256": "1add1675325b07b5a2d261d7599510358257fb3109da16d12357c871d4cc3055"
+  },
+  "process_inclusive": {
+    "artifact_validation": {
+      "samples_ms": [30.959701, 31.069940, 31.014375, 30.349114, 32.914949],
+      "median_ms": 31.014375,
+      "p95_ms": 32.914949,
+      "response_bytes": 14938
+    },
+    "project_orientation": {
+      "samples_ms": [983.336730, 1018.148949, 995.831351, 1020.968652, 1014.190944],
+      "median_ms": 1014.190944,
+      "p95_ms": 1020.968652,
+      "response_bytes": 1247
+    },
+    "function_query": {
+      "elapsed_ms": 1010.179900,
+      "response_bytes": 17402
+    },
+    "function_proposal": {
+      "elapsed_ms": 1026.689352,
+      "response_bytes": 5864
+    }
+  },
+  "headless": [
+    {
+      "name": "mixed_10000",
+      "status": "completed",
+      "elapsed_ms": 27864.909158,
+      "transitions": 10000,
+      "changed": 10000,
+      "request_bytes": 1270050,
+      "response_bytes": 24360,
+      "replay_digest": "122adb0a8bb3047fb00913a0b481e6d1e1c7a55ea9546abe273eebca8f197c3c",
+      "final_frame_digest": "2df99e0f452f386815837b564027ff685ba214a2ba14012c79555a1bbd545691"
+    },
+    {
+      "name": "growing_insert_1000",
+      "status": "completed",
+      "elapsed_ms": 3882.714107,
+      "transitions": 1006,
+      "changed": 1006,
+      "request_bytes": 130812,
+      "response_bytes": 24477,
+      "replay_digest": "d520d7a96ccbe9d735a4beb0b92a8072de3efb7b4e29d5357c808ee5cc49e34f",
+      "final_frame_digest": "1fae5abb9efedaf0473aa65250e49d13b0ff74f4d1ede18bdcf7278af54d89ab"
+    },
+    {
+      "name": "tabs_100",
+      "status": "completed",
+      "elapsed_ms": 2825.568309,
+      "transitions": 795,
+      "changed": 795,
+      "request_bytes": 102105,
+      "response_bytes": 24389,
+      "replay_digest": "a37d30c9116b725d57c4707a72ce40c7985bfd7cf99943b5dc5bc8f444e65597",
+      "final_frame_digest": "4a1f9357f36ccc2b0fda52c04cf32307adc9edf1bcf5a5cf3ebb159e8e6057fc"
+    },
+    {
+      "name": "maximum_paste_65536_scalars",
+      "status": "completed",
+      "elapsed_ms": 84.219999,
+      "transitions": 7,
+      "changed": 7,
+      "request_bytes": 263006,
+      "response_bytes": 24461,
+      "replay_digest": "867589e7493625ba81162cd6595942712e5774b4a90f5f41a05e228718afa34a",
+      "final_frame_digest": "1fae5abb9efedaf0473aa65250e49d13b0ff74f4d1ede18bdcf7278af54d89ab"
+    },
+    {
+      "name": "resize_1_by_1",
+      "status": "completed",
+      "elapsed_ms": 52.297706,
+      "transitions": 4,
+      "changed": 4,
+      "request_bytes": 504,
+      "response_bytes": 744,
+      "replay_digest": "4eedbcae9fdbe0bbe883c9294883394f8cac95f905a007d95e56e4d9deefb1ae",
+      "final_frame_digest": "cb247192f9a26ccb4827364e9fa5f965eecdefb5688eb950b54f4439fc98aa8a"
+    }
+  ],
+  "reproduced_predecessor_ms": {
+    "artifact_validation_median": 10.875010,
+    "project_orientation_median": 354.441788,
+    "function_query": 354.874944,
+    "function_proposal": 357.195097,
+    "mixed_10000": 26998.426877,
+    "growing_insert_1000": 11055.720381,
+    "maximum_paste_65536_scalars": 799.446026,
+    "resize_1_by_1": 17.894019
+  },
+  "provider_telemetry": "unavailable; no token, cache-class, or monetary inference"
+}

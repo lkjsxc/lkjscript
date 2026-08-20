@@ -95,10 +95,10 @@ daemon, scheduler, queue, lock file, or semantic identity.
 
 ## Raw engine protocol and machine schema
 
-Raw protocol and JSON envelope version is 13:
+Raw protocol and JSON envelope version is 14:
 
 ```json
-{"version":13,"request_id":1,"request":{"kind":"create_workspace"}}
+{"version":14,"request_id":1,"request":{"kind":"create_workspace"}}
 ```
 
 Responses carry the same nonzero ID. Unknown/duplicate fields or variants, invalid IDs, wrong
@@ -108,13 +108,13 @@ Input is limited to 8 MiB and output to 32 MiB. A semantic failure is a successf
 
 `src/contract.rs` is the one executable schema owner. `src/machine.rs` owns strict JSON and
 fingerprinting only; `src/machine_contract.rs` owns shared descriptors. The active schema identity is
-`lkjscript-machine-schema-v13`. Schema requests return a compact manifest, at most 16 named roots
+`lkjscript-machine-schema-v14`. Schema requests return a compact manifest, at most 16 named roots
 with deterministic dependency closure, the explicit full contract, or an exact `unchanged` result
 for a known digest. Unknown, duplicate, empty, or excessive roots reject. Ordinary project work gets
 the active schema digest from orientation and does not need a global schema dump.
 
 The raw `--state DIR rpc|session` grammar is intentionally distinct from project commands. Its
-session accepts one protocol-v13 envelope per line and shares exact one-shot semantics. It has no
+session accepts one protocol-v14 envelope per line and shares exact one-shot semantics. It has no
 project locator, target build configuration, or automatic friendly selector resolution. The former
 `agent` adapter was removed rather than retained as an alias.
 
@@ -224,7 +224,7 @@ global context refresh.
 ## Distribution and runtime command families
 
 `release validate|inspect|test` consumes immutable release-format-2 artifacts. `app
-validate|inspect|test|run|stream` consumes immutable application-format-8 artifacts. Release and
+validate|inspect|test|run|stream` consumes immutable application-format-9 artifacts. Release and
 application construction occurs only through project targets; removed command-local `build`
 predecessors reject. Instance contract 3 and runtime contract 2 are specified separately. These
 records remain absent from the global workspace catalogue where they have an independent typed
@@ -232,10 +232,10 @@ owner.
 
 ## Version rejection
 
-Protocol 12 and older, machine schema v12 and older, project/marker versions other than 1, project
+Protocol 13 and older, machine schema v13 and older, project/marker versions other than 1, project
 change version 1, project machine/session version 1, editable document version 1, revision-record
 versions other than 1, context packet 1, workspace format 7,
-`lkjscript-tsm007`, `LKJHEAD9`, release format 1, application format 7, instance format 2, runtime
+`lkjscript-tsm007`, `LKJHEAD9`, release format 1, application internal format 8, instance format 2, runtime
 session versions other than 2, the `agent` command, command-local release/application build commands,
 and the `plan` document root reject. There is no alias, fallback, edition, migration mode, or daemon
 transport.

@@ -434,6 +434,145 @@ fn render_expression_kind(
             lhs: value(*lhs)?,
             rhs: value(*rhs)?,
         },
+        OperationKind::TextScalarLen { value: operand } => ExpressionKindDraft::TextScalarLen {
+            value: value(*operand)?,
+        },
+        OperationKind::TextGraphemeLen { value: operand } => ExpressionKindDraft::TextGraphemeLen {
+            value: value(*operand)?,
+        },
+        OperationKind::TextLineCount { value: operand } => ExpressionKindDraft::TextLineCount {
+            value: value(*operand)?,
+        },
+        OperationKind::TextScalarAt {
+            value: operand,
+            index,
+        } => ExpressionKindDraft::TextScalarAt {
+            value: value(*operand)?,
+            index: value(*index)?,
+        },
+        OperationKind::TextPreviousGraphemeBoundary {
+            value: operand,
+            index,
+        } => ExpressionKindDraft::TextPreviousGraphemeBoundary {
+            value: value(*operand)?,
+            index: value(*index)?,
+        },
+        OperationKind::TextNextGraphemeBoundary {
+            value: operand,
+            index,
+        } => ExpressionKindDraft::TextNextGraphemeBoundary {
+            value: value(*operand)?,
+            index: value(*index)?,
+        },
+        OperationKind::TextLineStart {
+            value: operand,
+            line,
+        } => ExpressionKindDraft::TextLineStart {
+            value: value(*operand)?,
+            line: value(*line)?,
+        },
+        OperationKind::TextLineEnd {
+            value: operand,
+            line,
+        } => ExpressionKindDraft::TextLineEnd {
+            value: value(*operand)?,
+            line: value(*line)?,
+        },
+        OperationKind::TextByteToLine {
+            value: operand,
+            index,
+        } => ExpressionKindDraft::TextByteToLine {
+            value: value(*operand)?,
+            index: value(*index)?,
+        },
+        OperationKind::TextSlice {
+            value: operand,
+            start,
+            end_exclusive,
+        } => ExpressionKindDraft::TextSlice {
+            value: value(*operand)?,
+            start: value(*start)?,
+            end_exclusive: value(*end_exclusive)?,
+        },
+        OperationKind::TextSplice {
+            value: operand,
+            start,
+            end_exclusive,
+            replacement,
+        } => ExpressionKindDraft::TextSplice {
+            value: value(*operand)?,
+            start: value(*start)?,
+            end_exclusive: value(*end_exclusive)?,
+            replacement: value(*replacement)?,
+        },
+        OperationKind::TextFindForward {
+            value: operand,
+            query,
+            start,
+        } => ExpressionKindDraft::TextFindForward {
+            value: value(*operand)?,
+            query: value(*query)?,
+            start: value(*start)?,
+        },
+        OperationKind::TextFindBackward {
+            value: operand,
+            query,
+            end_exclusive,
+        } => ExpressionKindDraft::TextFindBackward {
+            value: value(*operand)?,
+            query: value(*query)?,
+            end_exclusive: value(*end_exclusive)?,
+        },
+        OperationKind::TextLineEndingKind { value: operand } => {
+            ExpressionKindDraft::TextLineEndingKind {
+                value: value(*operand)?,
+            }
+        }
+        OperationKind::TextDisplayWidth {
+            value: operand,
+            start,
+            end_exclusive,
+            initial_column,
+            tab_width,
+        } => ExpressionKindDraft::TextDisplayWidth {
+            value: value(*operand)?,
+            start: value(*start)?,
+            end_exclusive: value(*end_exclusive)?,
+            initial_column: value(*initial_column)?,
+            tab_width: value(*tab_width)?,
+        },
+        OperationKind::TextCellPrefixBoundary {
+            value: operand,
+            start,
+            end_exclusive,
+            initial_column,
+            maximum_cells,
+            tab_width,
+        } => ExpressionKindDraft::TextCellPrefixBoundary {
+            value: value(*operand)?,
+            start: value(*start)?,
+            end_exclusive: value(*end_exclusive)?,
+            initial_column: value(*initial_column)?,
+            maximum_cells: value(*maximum_cells)?,
+            tab_width: value(*tab_width)?,
+        },
+        OperationKind::TextFromScalar { value: operand } => ExpressionKindDraft::TextFromScalar {
+            value: value(*operand)?,
+        },
+        OperationKind::TextToScalars {
+            sequence,
+            value: operand,
+        } => ExpressionKindDraft::TextToScalars {
+            sequence: NodeTarget::Existing(*sequence),
+            value: value(*operand)?,
+        },
+        OperationKind::TextFromScalars {
+            sequence,
+            value: operand,
+        } => ExpressionKindDraft::TextFromScalars {
+            sequence: NodeTarget::Existing(*sequence),
+            value: value(*operand)?,
+        },
         OperationKind::SequenceEmpty { sequence } => ExpressionKindDraft::SequenceEmpty {
             sequence: NodeTarget::Existing(*sequence),
         },
@@ -491,6 +630,15 @@ fn render_expression_kind(
                 rhs: value(*rhs)?,
             }
         }
+        OperationKind::SequenceRepeat {
+            sequence,
+            element,
+            count,
+        } => ExpressionKindDraft::SequenceRepeat {
+            sequence: NodeTarget::Existing(*sequence),
+            element: value(*element)?,
+            count: value(*count)?,
+        },
         OperationKind::Call {
             function,
             arguments,

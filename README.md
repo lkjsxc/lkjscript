@@ -5,11 +5,11 @@ one validated typed meaning graph, immutable development revisions, canonical re
 first-class build targets. The public CLI is the normal authoring, history, inspection, build, test,
 run, backup, and recovery interface. No source generator or separate semantic commit step is needed.
 
-The repository also ships `lkjwork`, a complete local durable work ledger, and `lkjstudio`, a
-terminal semantic workbench and selected UTF-8 file editor. Both applications and their build
-definitions live in checked semantic projects. The verified bootstrap target is stable Rust 2024 on
-Linux x86-64. There is no network service, daemon, database, package registry, unsafe first-party
-Rust, or compatibility layer.
+The repository also ships `lkjwork`, a complete local durable work ledger, and `lkjedit`, a
+mouse-capable Vim-like tiled terminal editor with ordinary semantic-project tabs. Both applications
+and their build definitions live in checked semantic projects. The verified bootstrap target is
+stable Rust 2024 on Linux x86-64. There is no network service, daemon, database, package registry,
+unsafe first-party Rust, or compatibility layer.
 
 ## Develop a semantic project
 
@@ -91,40 +91,34 @@ and deployment lifecycle; it does not reconstruct task policy or carry generated
 See [`applications/lkjwork/README.md`](applications/lkjwork/README.md) for its complete product
 contract.
 
-## Build and use lkjstudio
+## Build and use lkjedit
 
-Reproduce the workbench application from its maintained semantic authority:
-
-```sh
-target/release/lkjscript doctor --project applications/lkjstudio --deep
-target/release/lkjscript target test lkjstudio --project applications/lkjstudio
-target/release/lkjscript target build lkjstudio \
-  --project applications/lkjstudio --output /tmp/lkjstudio.lkja
-cmp /tmp/lkjstudio.lkja applications/lkjstudio/lkjstudio.lkja
-```
-
-Run against an explicitly selected semantic project and optional filesystem root:
+Reproduce the editor package from its maintained semantic authority:
 
 ```sh
-target/release/lkjstudio \
-  --artifact applications/lkjstudio/lkjstudio.lkja \
-  --project applications/lkjstudio \
-  --root .
+target/release/lkjscript doctor --project applications/lkjedit --deep
+target/release/lkjscript target test lkjedit --project applications/lkjedit
+target/release/lkjscript target build lkjedit-application \
+  --project applications/lkjedit --output /tmp/lkjedit.lkja
+cmp /tmp/lkjedit.lkja applications/lkjedit/lkjedit.lkja
 ```
 
-Unmodified keys edit the active semantic buffer. Ctrl-A/N/W/Z/Y/Q are editor select-all, new,
-close, undo, redo, and quit. Alt keys select workbench actions: Alt-O orientation, Alt-E children,
-Alt-I function, Alt-U/D callers/callees, Alt-T targets, Alt-B blockers, Alt-P proposal, Alt-V
-validate, Alt-X apply, Alt-W diff, Alt-H/N history/record, Alt-K/L/Z target test/build/run, and
-Alt-J/F/S/R filesystem list/open/save/reconcile.
+Ordinary launch uses the validated checked package without exposing an artifact path:
 
-The meaning graph remains central: explorer and proposal actions call the same exact project owner
-as the CLI, validation publishes nothing, apply publishes once, stale drafts remain visible, and
-target actions derive from the selected revision. Application meaning owns editor state, commands,
-action intent, outcome handling, and frame content. Native code owns terminal mechanics and narrow
-project/filesystem adaptation. See
-[`applications/lkjstudio/README.md`](applications/lkjstudio/README.md) for indexing, recovery,
-authority, limits, headless replay, and acceptance details.
+```sh
+target/release/lkjedit .
+target/release/lkjedit --root . README.md
+target/release/lkjedit --project applications/lkjedit .
+```
+
+The application owns Normal, Insert, Visual, command-line, and search modes; buffers and independent
+views; ordinary heterogeneous tabs; a normalized integer-weight split tree; keyboard and SGR mouse
+layout operations; explorer and bounded recursive search; expected-base save, conflict, unknown
+visibility, and reconciliation; and logical styled frames. One capacity-one native worker executes
+typed host work while local input continues. Semantic orientation, proposals, validation/apply,
+history/diff, and target work appear in the same tab model. See
+[`applications/lkjedit/README.md`](applications/lkjedit/README.md) for exact commands, Unicode and
+line-ending semantics, bounds, trust, replay, and acceptance details.
 
 ## Authority model
 
@@ -146,9 +140,10 @@ development revision. Release/application artifacts remain independently validat
 authority and do not contain development paths or workspace identity.
 
 The language includes validated UTF-8 text, immutable nominal sequences, products, sums, checked
-integers, booleans, bytes, direct calls, and structured control. One explicit-frame interpreter and
-independently checked Core IR remain the correctness route. Durable applications have a bounded
-immutable-blob interface. The foreground workbench additionally uses explicit semantic-project and
+integers, booleans, bytes, direct calls, and structured control. Text execution uses an unobservable
+persistent UTF-8 piece tree with a canonical flat oracle and explicit byte, scalar, grapheme, line,
+splice, and literal-search operations. One explicit-frame interpreter and independently checked
+Core IR remain the correctness route. Interactive applications use explicit semantic-project and
 selected-filesystem grants with separate publication and unknown-visibility reconciliation.
 
 Current format identities, rejected predecessors, implemented limits, and exact absences are in
@@ -160,8 +155,8 @@ Current format identities, rejected predecessors, implemented limits, and exact 
 python3 applications/lkjwork/acceptance.py --binary target/release/lkjwork
 python3 applications/lkjwork/workload.py target/release/lkjwork --profile functional
 python3 applications/lkjwork/workload.py target/release/lkjwork --profile representative
-python3 applications/lkjstudio/acceptance.py --binary target/release/lkjstudio
-python3 applications/lkjstudio/workload.py --binary target/release/lkjstudio \
+python3 applications/lkjedit/acceptance.py --binary target/release/lkjedit
+python3 applications/lkjedit/workload.py --binary target/release/lkjedit \
   --project-cli target/release/lkjscript --samples 5
 ```
 
@@ -172,13 +167,10 @@ summarized in [`docs/performance.md`](docs/performance.md).
 
 ## Verify
 
-```sh
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-cargo test --workspace --all-targets --all-features --locked
-cargo build --workspace --release --locked
-git diff --check
-```
+Use `tools/check quick`, `tools/check product`, or `tools/check full`. The wrapper runs locked,
+offline gates, retains complete bounded logs under `.artifacts/check/`, and prints aggregate success
+or bounded failure evidence. `tools/check full` includes formatting, clippy, all-target tests,
+optimized build, deep project doctors, product target tests, artifact reproduction, and acceptance.
 
 The trust model is one local operator and OS account. Native code and the narrow blob adapter are
 trusted. Graphs, JSON, documents, paths, locators, records, artifacts, manifests, outcomes, backups,

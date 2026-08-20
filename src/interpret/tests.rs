@@ -49,6 +49,200 @@ fn scalar_program() -> CoreProgram {
         }],
     }
 }
+
+#[test]
+fn text_len_reports_utf8_bytes_for_non_ascii_text() {
+    let mut program = scalar_program();
+    program.functions[0].result = I64_TYPE;
+    program.functions[0].value_types = vec![TEXT_TYPE, I64_TYPE];
+    program.functions[0].frame_cells = 2;
+    program.functions[0].blocks[0].instructions = vec![
+        Instruction::ConstText {
+            origin: node(5),
+            result: ValueId(0),
+            value: crate::schema::TextString::try_from_str("λ").expect("text"),
+        },
+        Instruction::TextLen {
+            origin: node(6),
+            result: ValueId(1),
+            value: ValueId(0),
+        },
+    ];
+    program.functions[0].blocks[0].terminator = Terminator::Return {
+        origin: node(7),
+        value: ValueId(1),
+    };
+    assert_eq!(
+        run_core_value(&program, policy(1_000)).expect("execute"),
+        RuntimeValue::I64(2)
+    );
+}
+
+#[test]
+fn text_cell_prefix_boundary_executes_in_grapheme_and_terminal_cell_units() {
+    let program = one_function_program(
+        I64_TYPE,
+        vec![
+            TEXT_TYPE, I64_TYPE, I64_TYPE, I64_TYPE, I64_TYPE, I64_TYPE, I64_TYPE,
+        ],
+        vec![
+            Instruction::ConstText {
+                origin: node(50),
+                result: ValueId(0),
+                value: crate::schema::TextString::try_from_str("a\u{301}界z").expect("text"),
+            },
+            Instruction::ConstI64 {
+                origin: node(51),
+                result: ValueId(1),
+                value: 0,
+            },
+            Instruction::ConstI64 {
+                origin: node(52),
+                result: ValueId(2),
+                value: 7,
+            },
+            Instruction::ConstI64 {
+                origin: node(53),
+                result: ValueId(3),
+                value: 0,
+            },
+            Instruction::ConstI64 {
+                origin: node(54),
+                result: ValueId(4),
+                value: 2,
+            },
+            Instruction::ConstI64 {
+                origin: node(55),
+                result: ValueId(5),
+                value: 4,
+            },
+            Instruction::TextCellPrefixBoundary {
+                origin: node(56),
+                result: ValueId(6),
+                value: ValueId(0),
+                start: ValueId(1),
+                end_exclusive: ValueId(2),
+                initial_column: ValueId(3),
+                maximum_cells: ValueId(4),
+                tab_width: ValueId(5),
+            },
+        ],
+        ValueId(6),
+    );
+    core_ir::verify(&program).expect("cell-prefix program verifies");
+    assert_eq!(
+        run_core_value(&program, policy(1_000)).expect("cell-prefix program executes"),
+        RuntimeValue::I64(3)
+    );
+}
+
+fn i64_sequence_type(element: CoreTypeId) -> CoreType {
+    CoreType {
+        origin: Some(node(8)),
+        kind: CoreTypeKind::Sequence { element },
+        layout: crate::type_layout::managed_handle_layout(),
+    }
+}
+
+#[test]
+fn bulk_text_scalar_and_repeat_instructions_verify_execute_and_reject_wrong_nominality() {
+    let sequence = CoreTypeId(PRIMITIVE_TYPE_COUNT as u32);
+    let mut types = primitives();
+    types.push(i64_sequence_type(I64_TYPE));
+    let round_trip = CoreProgram {
+        types,
+        entry: FunctionId(0),
+        functions: vec![CoreFunction {
+            origin: node(9),
+            parameters: vec![],
+            result: TEXT_TYPE,
+            value_types: vec![TEXT_TYPE, sequence, TEXT_TYPE],
+            frame_cells: 3,
+            entry: BlockId(0),
+            blocks: vec![CoreBlock {
+                origin: node(10),
+                parameters: vec![],
+                instructions: vec![
+                    Instruction::ConstText {
+                        origin: node(11),
+                        result: ValueId(0),
+                        value: crate::schema::TextString::try_from_str("é👩‍💻").expect("text"),
+                    },
+                    Instruction::TextToScalars {
+                        origin: node(12),
+                        result: ValueId(1),
+                        ty: sequence,
+                        value: ValueId(0),
+                    },
+                    Instruction::TextFromScalars {
+                        origin: node(13),
+                        result: ValueId(2),
+                        ty: sequence,
+                        value: ValueId(1),
+                    },
+                ],
+                terminator: Terminator::Return {
+                    origin: node(14),
+                    value: ValueId(2),
+                },
+            }],
+        }],
+    };
+    core_ir::verify(&round_trip).expect("bulk scalar conversion verifies");
+    assert_eq!(
+        run_core_value(&round_trip, policy(10_000)).expect("bulk scalar conversion executes"),
+        RuntimeValue::Text(RuntimeText::try_from_str("é👩‍💻").unwrap())
+    );
+
+    let mut repeat = round_trip.clone();
+    repeat.functions[0].result = I64_TYPE;
+    repeat.functions[0].value_types = vec![I64_TYPE, I64_TYPE, sequence, I64_TYPE];
+    repeat.functions[0].frame_cells = 4;
+    repeat.functions[0].blocks[0].instructions = vec![
+        Instruction::ConstI64 {
+            origin: node(15),
+            result: ValueId(0),
+            value: 65,
+        },
+        Instruction::ConstI64 {
+            origin: node(16),
+            result: ValueId(1),
+            value: 3,
+        },
+        Instruction::SequenceRepeat {
+            origin: node(17),
+            result: ValueId(2),
+            ty: sequence,
+            element: ValueId(0),
+            count: ValueId(1),
+        },
+        Instruction::SequenceLen {
+            origin: node(18),
+            result: ValueId(3),
+            ty: sequence,
+            value: ValueId(2),
+        },
+    ];
+    repeat.functions[0].blocks[0].terminator = Terminator::Return {
+        origin: node(19),
+        value: ValueId(3),
+    };
+    core_ir::verify(&repeat).expect("sequence repetition verifies");
+    assert_eq!(
+        run_core_value(&repeat, policy(10_000)).expect("sequence repetition executes"),
+        RuntimeValue::I64(3)
+    );
+
+    let mut wrong = round_trip;
+    wrong.types[usize::try_from(sequence.0).unwrap()] = i64_sequence_type(BOOL_TYPE);
+    assert_eq!(
+        core_ir::verify(&wrong)
+            .expect_err("text scalar conversion rejects a non-i64 sequence")
+            .code,
+        ErrorCode::CoreIrInvalid
+    );
+}
+
 fn product_type() -> CoreType {
     CoreType {
         origin: Some(node(10)),
@@ -371,7 +565,7 @@ fn managed_sequence_objects_match_the_canonical_allocate_new_oracle() {
     let origin = node(400);
     let elements = vec![
         RuntimeValue::I64(7),
-        RuntimeValue::Text(TextString::try_from_str("ok").unwrap()),
+        RuntimeValue::Text(RuntimeText::try_from_str("ok").unwrap()),
         RuntimeValue::Sequence {
             ty: node(401),
             elements: vec![RuntimeValue::Bool(true)],
@@ -473,6 +667,76 @@ fn sequence_concat_rejects_one_over_the_element_limit_before_allocation() {
         managed
             .concat_sequence(maximum, one, origin)
             .expect_err("one-over concatenation")
+            .code,
+        ErrorCode::PolicyExceeded
+    );
+}
+
+#[test]
+fn bulk_text_scalar_conversion_and_sequence_repeat_are_exact_and_bounded() {
+    let origin = node(404);
+    let mut managed = InvocationStore::default();
+    let source_text = RuntimeText::try_from_str("Aé👩‍💻\n").expect("source text");
+    let source = managed
+        .allocate_text(source_text.clone(), origin)
+        .expect("managed text");
+    let (scalars, work) = managed
+        .text_to_scalar_sequence(source, origin)
+        .expect("text to scalar sequence");
+    assert_eq!(work, source_text.len_bytes() + source_text.scalar_count());
+    assert_eq!(
+        managed.materialize_sequence(scalars, origin).unwrap(),
+        "Aé👩‍💻\n"
+            .chars()
+            .map(|scalar| RuntimeValue::I64(i64::from(u32::from(scalar))))
+            .collect::<Vec<_>>()
+    );
+    let (round_trip, reverse_work) = managed
+        .text_from_scalar_sequence(scalars, origin)
+        .expect("scalar sequence to text");
+    assert_eq!(managed.text(round_trip, origin).unwrap(), &source_text);
+    assert_eq!(
+        reverse_work,
+        source_text.scalar_count() + source_text.len_bytes()
+    );
+
+    let (repeated, repeat_work) = managed
+        .repeat_sequence(RuntimeValue::I64(7), 4, origin)
+        .expect("bounded repetition");
+    assert_eq!(
+        managed.materialize_sequence(repeated, origin).unwrap(),
+        vec![RuntimeValue::I64(7); 4]
+    );
+    assert!(repeat_work >= 4);
+    assert_eq!(
+        managed
+            .repeat_sequence(RuntimeValue::Unit, MAXIMUM_SEQUENCE_ELEMENTS + 1, origin)
+            .expect_err("one-over repetition")
+            .code,
+        ErrorCode::PolicyExceeded
+    );
+
+    for invalid in [-1, i64::from(0xd800_u32), i64::from(0x11_0000_u32)] {
+        let sequence = managed
+            .allocate_sequence(vec![RuntimeValue::I64(invalid)], origin)
+            .expect("invalid scalar sequence remains representable");
+        assert_eq!(
+            managed
+                .text_from_scalar_sequence(sequence, origin)
+                .expect_err("invalid Unicode scalar")
+                .code,
+            ErrorCode::RuntimeTrap
+        );
+    }
+
+    let excessive = "x".repeat(MAXIMUM_SEQUENCE_ELEMENTS + 1);
+    let excessive = managed
+        .allocate_text(RuntimeText::try_from_str(&excessive).unwrap(), origin)
+        .expect("text remains below byte policy");
+    assert_eq!(
+        managed
+            .text_to_scalar_sequence(excessive, origin)
+            .expect_err("one-over scalar sequence")
             .code,
         ErrorCode::PolicyExceeded
     );

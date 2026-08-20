@@ -8,7 +8,7 @@ durable format. Application profile meaning belongs to
 ## Identity and policy
 
 Instance contract and format version 3 bind one nonzero 128-bit `InstanceId`, one exact embedded
-application-format-8 artifact, one exact application state type, immutable grant bindings, and one
+application-format-9 artifact, one exact application state type, immutable grant bindings, and one
 serial revision chain. Deleted instance identities are tombstoned and never reused.
 
 `InstancePolicy` bounds current-state public bytes, event public bytes, total journal bytes,

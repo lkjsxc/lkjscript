@@ -1648,7 +1648,10 @@ fn operation_definition_slot(operation: &OperationKind, target: NodeId) -> Optio
         | OperationKind::SequenceAppend { .. }
         | OperationKind::SequenceReplace { .. }
         | OperationKind::SequenceSlice { .. }
-        | OperationKind::SequenceConcat { .. } => DefinitionSlot::SequenceDeclaration,
+        | OperationKind::SequenceConcat { .. }
+        | OperationKind::SequenceRepeat { .. }
+        | OperationKind::TextToScalars { .. }
+        | OperationKind::TextFromScalars { .. } => DefinitionSlot::SequenceDeclaration,
         _ => return None,
     })
 }

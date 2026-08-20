@@ -21,9 +21,9 @@ Page cache was not dropped and these are not cold-machine results. Timing uses m
 `perf_counter_ns`; stage counters use Rust monotonic durations. Process RSS, provider tokens, and
 provider prices were unavailable.
 
-## lkjstudio revision-48 release workload
+## Historical lkjstudio revision-48 predecessor workload
 
-The current workbench observations are retained in
+The superseded workbench observations are retained only as the direct predecessor baseline in
 [`20260819-lkjstudio-workload.json`](evidence/20260819-lkjstudio-workload.json). They used optimized
 revision-48 binaries on the warm Linux x86-64 host, with 20 logical CPUs visible to the harness and
 without dropping page cache. Each headless row is one complete process-inclusive sample; only
@@ -56,6 +56,80 @@ toolchain and host Cargo registry/source caches. Both semantic projects passed s
 all 29 workbench and eight `lkjwork` target cases passed; and two no-overwrite workbench builds were
 byte-identical to the checked 161,562-byte artifact. This is an initially absent-target observation,
 not a cold-host or empty-dependency-cache claim.
+
+## lkjedit revision-174 product workload
+
+The current retained receipts are
+[`20260820-lkjedit-workload.json`](evidence/20260820-lkjedit-workload.json) and
+[`20260820-lkjedit-campaign.json`](evidence/20260820-lkjedit-campaign.json). Measurements use the
+471,096-byte revision-174 artifact at snapshot
+`7e037b9e97e2f04cd2243899a30a3721f31faf30c55aa9d7d97f050d22004aa4`, optimized binaries, Linux
+7.0.0-29-generic x86-64 with glibc 2.39, Python 3.12.3, 20 visible CPUs, monotonic timing, and warm
+host caches that were not dropped. Process RSS and provider token/cache/price telemetry were
+unavailable. Headless rows are one complete process-inclusive sample; validation and orientation
+use five samples. No per-event percentile is inferred from a total.
+
+| observation | revision-174 result | reproduced predecessor |
+|---|---:|---:|
+| artifact validation | 31.014 ms median / 32.915 ms p95 | 10.875 / 11.181 ms |
+| semantic project orientation | 1,014.191 ms median / 1,020.969 ms p95 / 1,247 bytes | 354.442 / 366.365 ms / 1,239 bytes |
+| exact function query | 1,010.180 ms / 17,402 bytes | 354.875 ms / 69,761 bytes |
+| generated function proposal | 1,026.689 ms / 5,864 bytes | 357.195 ms / 189,752 bytes |
+| 10,000 mixed local events | 27,864.909 ms / completed | 26,998.427 ms |
+| 1,000 growing inserts | 3,882.714 ms / completed | 11,055.720 ms |
+| 100 tabs / 795 transitions | 2,825.568 ms / completed | no equal predecessor corpus |
+| 65,536-scalar paste | 84.220 ms / completed | 799.446 ms |
+| 1x1 resize | 52.298 ms / completed | 17.894 ms |
+
+Bulk scalar conversion, bounded sequence repetition, and cell-prefix fitting removed the earlier
+application-level scalar loops. Growing insertion improves 64.9 percent and maximum paste improves
+89.5 percent on equal corpora; the paste now beats the 250 ms campaign target and no longer exhausts
+fuel. Query and proposal responses are 75.1 and 96.9 percent smaller, respectively, although larger
+history and application authority make their complete process times slower. The mixed corpus is
+3.2 percent slower and still misses the 10-second ambition; growing insert still misses 2 seconds.
+Those misses, the 52.3 ms minimum resize, and an observed 977.90-second unoptimized duplicate
+layout replay are explicit execution-tier/runtime-boundary reversal gates. They are not hidden by
+raising fuel or reported as interaction percentiles.
+
+### Text candidates
+
+Five warm optimized prototype runs used identical 1 MiB ASCII input plus 1,000 two-byte middle
+insertions. Flat immutable UTF-8 took 4.246–4.852 ms, a persistent chunk vector took
+8.511–8.630 ms, and the selected persistent piece treap took 1.406–1.475 ms. A mutable gap buffer
+won repeated end insertion at 0.173–0.199 ms but lost because immutable undo roots and two-view
+sharing would require a second owner. The piece treap accepted a 65,536-byte splice in
+0.017–0.023 ms before separately measured canonical materialization of 0.248–0.403 ms.
+
+A persistent rope and chunked persistent sequence collapse to the selected bounded-piece-tree
+obligations for this narrow surface; retaining separate implementations would only duplicate tree
+authority. A classic original/append piece table lost because unbounded edit-piece growth needs a
+second compaction policy. Current flat text plus transient builders improved only construction and
+left middle splice, immutable undo, and viewport aggregates unresolved. Resident validated runtime
+values were retained as an independent boundary optimization; canonical flat materialization remains
+the restart/cache-loss oracle. Losing prototypes are not in the repository.
+
+Randomized differential testing uses seed `0x6c6b6a6564697434` for 2,000 splice cases and compares
+canonical bytes, scalar/grapheme/line facts, search, and materialization. A frozen 40x120 one-row
+terminal change encoded 5,019 full-frame bytes and 172 acknowledged differential bytes, a 96.57
+percent reduction. Cache miss reproduces the exact full projection, unchanged frames emit nothing,
+and output failure clears acknowledgment. Complete PTY acceptance reconstructs keyboard/mouse
+workflows and cleanup through the retained differential route.
+
+### Verification and authoring economy
+
+The compact product profile passed seven gates in 419,460 ms: format, locked optimized workspace
+build, complete 175-snapshot doctor, 12/12 target cases, no-replace artifact build, byte comparison,
+and headless plus four PTY groups. Default success was nine lines including the receipt locator. An
+injected quick-profile failure preserved its full log and emitted seven bounded diagnostic lines.
+
+The revision-172 user-visible dogfood used one orientation response (1,247 bytes), one function
+inspection (694), one task context (64,134), one generated proposal (14,932), one validate-only
+receipt (988), one apply receipt (2,731), and one affected-target receipt (16,767). The editable
+document was 14,091 bytes. Correction depth was zero: validate published nothing; apply published
+one revision and one record. Revisions 173 and 174 then used bounded 7,060-byte or smaller public
+documents to cut over four hot functions without a builder. Direct elapsed/call/byte observations
+are retained; provider tokens, cache classes, and monetary cost remain unavailable and are not
+inferred.
 
 ## Semantic-development repository workload
 
@@ -200,9 +274,9 @@ ceiling.
 ### Text
 
 First-class immutable validated UTF-8 text won over client-only bytes, a nominal wrapper, and a
-separate nominal declaration kind. It is the only design that makes invalid product text
-unrepresentable across workspace, release, application, instance, query, and JSON boundaries without
-duplicating a validator. Exact UTF-8 byte equality and no normalization keep the contract small.
+separate nominal declaration kind. Persistent piece-tree execution now avoids copying unchanged
+editor content while canonical flat UTF-8 remains the public and differential oracle. Exact UTF-8
+byte equality and no normalization keep the contract small.
 
 ### Sequences and operations
 
@@ -220,10 +294,11 @@ operator syntax lost for lack of a second domain.
 
 ### Values and memory
 
-A unified safe managed byte store remains for bytes/text. Safe immutable `Arc` sequence elements won
-over tracing GC and mutable arenas because accepted values cannot form pointer cycles and canonical
-allocate-new retained accounting remains simple. Representation sharing is invisible and cannot evade
-limits. No unsafe Rust or new dependency was introduced.
+The safe managed byte store remains for bytes. Text uses a safe persistent UTF-8 piece treap over
+immutable `Arc<str>` backing; sequences use immutable `Arc` elements. These won over tracing GC and
+mutable arenas because accepted values cannot form pointer cycles and canonical materialization
+remains a simple oracle. Representation sharing is invisible and cannot evade limits. No unsafe Rust
+was introduced; `unicode-segmentation` 1.13.3 is the one new semantic dependency.
 
 ### Responses and queries
 

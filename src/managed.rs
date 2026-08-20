@@ -229,6 +229,47 @@ impl ManagedStore {
         Ok(())
     }
 
+    /// Accounts an in-place update to a uniquely owned typed object. `visible_work` is the
+    /// newly inspected or constructed portion; unchanged retained content is not charged again.
+    pub(crate) fn replace_external_backing(
+        &mut self,
+        previous_retained: usize,
+        retained: usize,
+        visible_work: usize,
+        origin: NodeId,
+    ) -> Result<()> {
+        self.preflight_visible(visible_work, origin)?;
+        self.preflight_live_backing(retained, previous_retained, origin)?;
+        self.metrics.cumulative_visible_bytes = self
+            .metrics
+            .cumulative_visible_bytes
+            .checked_add(visible_work)
+            .ok_or_else(|| internal("managed visible-byte metric overflowed"))?;
+        let newly_retained = retained.saturating_sub(previous_retained);
+        self.metrics.cumulative_allocated_bytes = self
+            .metrics
+            .cumulative_allocated_bytes
+            .checked_add(newly_retained)
+            .ok_or_else(|| internal("managed allocation metric overflowed"))?;
+        self.metrics.live_backing_bytes = self
+            .metrics
+            .live_backing_bytes
+            .checked_sub(previous_retained)
+            .and_then(|value| value.checked_add(retained))
+            .ok_or_else(|| internal("managed live-byte metric overflowed"))?;
+        self.metrics.peak_live_backing_bytes = self
+            .metrics
+            .peak_live_backing_bytes
+            .max(self.metrics.live_backing_bytes);
+        self.metrics.peak_capacity_bytes = self.metrics.peak_capacity_bytes.max(retained);
+        self.metrics.copied_bytes = self
+            .metrics
+            .copied_bytes
+            .checked_add(visible_work)
+            .ok_or_else(|| internal("managed copied-byte metric overflowed"))?;
+        Ok(())
+    }
+
     pub(crate) fn release_external_backing(
         &mut self,
         retained: usize,

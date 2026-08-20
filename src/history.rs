@@ -237,9 +237,31 @@ impl RevisionRecord {
                     self.outcome,
                 )?;
                 if *self != expected {
+                    let mut fields = Vec::new();
+                    if self.created != expected.created {
+                        fields.push("created");
+                    }
+                    if self.deleted != expected.deleted {
+                        fields.push("deleted");
+                    }
+                    if self.modified != expected.modified {
+                        fields.push("modified");
+                    }
+                    if self.function_bodies_changed != expected.function_bodies_changed {
+                        fields.push("function_bodies_changed");
+                    }
+                    if self.target_definitions_changed != expected.target_definitions_changed {
+                        fields.push("target_definitions_changed");
+                    }
+                    if self.affected_targets != expected.affected_targets {
+                        fields.push("affected_targets");
+                    }
                     return Err(record_corrupt(
                         self,
-                        "revision record change facts disagree with its semantic diff",
+                        &format!(
+                            "revision record change facts disagree with its semantic diff: {}",
+                            fields.join(",")
+                        ),
                     ));
                 }
             }
@@ -258,17 +280,63 @@ fn affected_targets(before: &Snapshot, after: &Snapshot) -> Result<Vec<NodeId>> 
                 .map(|target| target.target),
         )
         .collect::<BTreeSet<_>>();
-    let mut affected = Vec::new();
-    for id in ids {
+    let mut affected = BTreeSet::new();
+    let mut historical = Vec::new();
+    for id in ids.iter().copied() {
+        if crate::target::historical_interactive_target(before, id).unwrap_or(false)
+            || crate::target::historical_interactive_target(after, id).unwrap_or(false)
+        {
+            historical.push(id);
+            continue;
+        }
         let old = crate::target::prepare(before, id).ok();
         let new = crate::target::prepare(after, id).ok();
         if old.as_ref().map(crate::target::PreparedTarget::bytes)
             != new.as_ref().map(crate::target::PreparedTarget::bytes)
         {
-            affected.push(id);
+            affected.insert(id);
         }
     }
-    Ok(affected)
+    loop {
+        let mut changed = false;
+        for id in historical.iter().copied() {
+            if affected.contains(&id) {
+                continue;
+            }
+            let old = before.node(id).ok();
+            let new = after.node(id).ok();
+            let definition_changed = match (old, new) {
+                (
+                    Some(crate::schema::Node::BuildTarget {
+                        definition: old, ..
+                    }),
+                    Some(crate::schema::Node::BuildTarget {
+                        definition: new, ..
+                    }),
+                ) => old != new,
+                _ => true,
+            };
+            let dependency_affected = old
+                .or(new)
+                .and_then(|node| match node {
+                    crate::schema::Node::BuildTarget { definition, .. } => Some(definition),
+                    _ => None,
+                })
+                .is_some_and(|definition| {
+                    crate::target::direct_dependencies(definition)
+                        .iter()
+                        .any(|dependency| affected.contains(dependency))
+                });
+            if definition_changed || dependency_affected {
+                affected.insert(id);
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    Ok(affected.into_iter().collect())
 }
 
 fn empty_change_digest(snapshot: &Snapshot) -> ChangeDigest {

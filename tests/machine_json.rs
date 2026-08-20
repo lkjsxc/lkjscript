@@ -202,6 +202,89 @@ fn every_closed_machine_variant_round_trips() {
             lhs: value.clone(),
             rhs: value.clone(),
         },
+        OperationDraft::TextScalarLen {
+            value: value.clone(),
+        },
+        OperationDraft::TextGraphemeLen {
+            value: value.clone(),
+        },
+        OperationDraft::TextLineCount {
+            value: value.clone(),
+        },
+        OperationDraft::TextScalarAt {
+            value: value.clone(),
+            index: value.clone(),
+        },
+        OperationDraft::TextPreviousGraphemeBoundary {
+            value: value.clone(),
+            index: value.clone(),
+        },
+        OperationDraft::TextNextGraphemeBoundary {
+            value: value.clone(),
+            index: value.clone(),
+        },
+        OperationDraft::TextLineStart {
+            value: value.clone(),
+            line: value.clone(),
+        },
+        OperationDraft::TextLineEnd {
+            value: value.clone(),
+            line: value.clone(),
+        },
+        OperationDraft::TextByteToLine {
+            value: value.clone(),
+            index: value.clone(),
+        },
+        OperationDraft::TextSlice {
+            value: value.clone(),
+            start: value.clone(),
+            end_exclusive: value.clone(),
+        },
+        OperationDraft::TextSplice {
+            value: value.clone(),
+            start: value.clone(),
+            end_exclusive: value.clone(),
+            replacement: value.clone(),
+        },
+        OperationDraft::TextFindForward {
+            value: value.clone(),
+            query: value.clone(),
+            start: value.clone(),
+        },
+        OperationDraft::TextFindBackward {
+            value: value.clone(),
+            query: value.clone(),
+            end_exclusive: value.clone(),
+        },
+        OperationDraft::TextLineEndingKind {
+            value: value.clone(),
+        },
+        OperationDraft::TextDisplayWidth {
+            value: value.clone(),
+            start: value.clone(),
+            end_exclusive: value.clone(),
+            initial_column: value.clone(),
+            tab_width: value.clone(),
+        },
+        OperationDraft::TextCellPrefixBoundary {
+            value: value.clone(),
+            start: value.clone(),
+            end_exclusive: value.clone(),
+            initial_column: value.clone(),
+            maximum_cells: value.clone(),
+            tab_width: value.clone(),
+        },
+        OperationDraft::TextFromScalar {
+            value: value.clone(),
+        },
+        OperationDraft::TextToScalars {
+            sequence: existing,
+            value: value.clone(),
+        },
+        OperationDraft::TextFromScalars {
+            sequence: existing,
+            value: value.clone(),
+        },
         OperationDraft::SequenceEmpty { sequence: existing },
         OperationDraft::SequenceLen {
             sequence: existing,
@@ -233,6 +316,11 @@ fn every_closed_machine_variant_round_trips() {
             sequence: existing,
             lhs: value.clone(),
             rhs: value.clone(),
+        },
+        OperationDraft::SequenceRepeat {
+            sequence: existing,
+            element: value.clone(),
+            count: value.clone(),
         },
     ];
     assert_eq!(drafts.len(), OperationCode::ALL.len());
@@ -357,6 +445,89 @@ fn every_closed_machine_variant_round_trips() {
             lhs: value.clone(),
             rhs: value.clone(),
         },
+        ExpressionKindDraft::TextScalarLen {
+            value: value.clone(),
+        },
+        ExpressionKindDraft::TextGraphemeLen {
+            value: value.clone(),
+        },
+        ExpressionKindDraft::TextLineCount {
+            value: value.clone(),
+        },
+        ExpressionKindDraft::TextScalarAt {
+            value: value.clone(),
+            index: value.clone(),
+        },
+        ExpressionKindDraft::TextPreviousGraphemeBoundary {
+            value: value.clone(),
+            index: value.clone(),
+        },
+        ExpressionKindDraft::TextNextGraphemeBoundary {
+            value: value.clone(),
+            index: value.clone(),
+        },
+        ExpressionKindDraft::TextLineStart {
+            value: value.clone(),
+            line: value.clone(),
+        },
+        ExpressionKindDraft::TextLineEnd {
+            value: value.clone(),
+            line: value.clone(),
+        },
+        ExpressionKindDraft::TextByteToLine {
+            value: value.clone(),
+            index: value.clone(),
+        },
+        ExpressionKindDraft::TextSlice {
+            value: value.clone(),
+            start: value.clone(),
+            end_exclusive: value.clone(),
+        },
+        ExpressionKindDraft::TextSplice {
+            value: value.clone(),
+            start: value.clone(),
+            end_exclusive: value.clone(),
+            replacement: value.clone(),
+        },
+        ExpressionKindDraft::TextFindForward {
+            value: value.clone(),
+            query: value.clone(),
+            start: value.clone(),
+        },
+        ExpressionKindDraft::TextFindBackward {
+            value: value.clone(),
+            query: value.clone(),
+            end_exclusive: value.clone(),
+        },
+        ExpressionKindDraft::TextLineEndingKind {
+            value: value.clone(),
+        },
+        ExpressionKindDraft::TextDisplayWidth {
+            value: value.clone(),
+            start: value.clone(),
+            end_exclusive: value.clone(),
+            initial_column: value.clone(),
+            tab_width: value.clone(),
+        },
+        ExpressionKindDraft::TextCellPrefixBoundary {
+            value: value.clone(),
+            start: value.clone(),
+            end_exclusive: value.clone(),
+            initial_column: value.clone(),
+            maximum_cells: value.clone(),
+            tab_width: value.clone(),
+        },
+        ExpressionKindDraft::TextFromScalar {
+            value: value.clone(),
+        },
+        ExpressionKindDraft::TextToScalars {
+            sequence: existing,
+            value: value.clone(),
+        },
+        ExpressionKindDraft::TextFromScalars {
+            sequence: existing,
+            value: value.clone(),
+        },
         ExpressionKindDraft::SequenceEmpty { sequence: existing },
         ExpressionKindDraft::SequenceLen {
             sequence: existing,
@@ -388,6 +559,11 @@ fn every_closed_machine_variant_round_trips() {
             sequence: existing,
             lhs: value.clone(),
             rhs: value.clone(),
+        },
+        ExpressionKindDraft::SequenceRepeat {
+            sequence: existing,
+            element: value.clone(),
+            count: value.clone(),
         },
     ];
     for (index, operation) in expression_variants.into_iter().enumerate() {
@@ -492,6 +668,89 @@ fn every_closed_machine_variant_round_trips() {
             lhs: ValueRef::FunctionParameter(first),
             rhs: ValueRef::FunctionParameter(second),
         },
+        OperationKind::TextScalarLen {
+            value: ValueRef::FunctionParameter(first),
+        },
+        OperationKind::TextGraphemeLen {
+            value: ValueRef::FunctionParameter(first),
+        },
+        OperationKind::TextLineCount {
+            value: ValueRef::FunctionParameter(first),
+        },
+        OperationKind::TextScalarAt {
+            value: ValueRef::FunctionParameter(first),
+            index: ValueRef::FunctionParameter(second),
+        },
+        OperationKind::TextPreviousGraphemeBoundary {
+            value: ValueRef::FunctionParameter(first),
+            index: ValueRef::FunctionParameter(second),
+        },
+        OperationKind::TextNextGraphemeBoundary {
+            value: ValueRef::FunctionParameter(first),
+            index: ValueRef::FunctionParameter(second),
+        },
+        OperationKind::TextLineStart {
+            value: ValueRef::FunctionParameter(first),
+            line: ValueRef::FunctionParameter(second),
+        },
+        OperationKind::TextLineEnd {
+            value: ValueRef::FunctionParameter(first),
+            line: ValueRef::FunctionParameter(second),
+        },
+        OperationKind::TextByteToLine {
+            value: ValueRef::FunctionParameter(first),
+            index: ValueRef::FunctionParameter(second),
+        },
+        OperationKind::TextSlice {
+            value: ValueRef::FunctionParameter(first),
+            start: ValueRef::FunctionParameter(second),
+            end_exclusive: ValueRef::FunctionParameter(second),
+        },
+        OperationKind::TextSplice {
+            value: ValueRef::FunctionParameter(first),
+            start: ValueRef::FunctionParameter(second),
+            end_exclusive: ValueRef::FunctionParameter(second),
+            replacement: ValueRef::FunctionParameter(first),
+        },
+        OperationKind::TextFindForward {
+            value: ValueRef::FunctionParameter(first),
+            query: ValueRef::FunctionParameter(first),
+            start: ValueRef::FunctionParameter(second),
+        },
+        OperationKind::TextFindBackward {
+            value: ValueRef::FunctionParameter(first),
+            query: ValueRef::FunctionParameter(first),
+            end_exclusive: ValueRef::FunctionParameter(second),
+        },
+        OperationKind::TextLineEndingKind {
+            value: ValueRef::FunctionParameter(first),
+        },
+        OperationKind::TextDisplayWidth {
+            value: ValueRef::FunctionParameter(first),
+            start: ValueRef::FunctionParameter(second),
+            end_exclusive: ValueRef::FunctionParameter(second),
+            initial_column: ValueRef::FunctionParameter(second),
+            tab_width: ValueRef::FunctionParameter(second),
+        },
+        OperationKind::TextCellPrefixBoundary {
+            value: ValueRef::FunctionParameter(first),
+            start: ValueRef::FunctionParameter(second),
+            end_exclusive: ValueRef::FunctionParameter(second),
+            initial_column: ValueRef::FunctionParameter(second),
+            maximum_cells: ValueRef::FunctionParameter(second),
+            tab_width: ValueRef::FunctionParameter(second),
+        },
+        OperationKind::TextFromScalar {
+            value: ValueRef::FunctionParameter(second),
+        },
+        OperationKind::TextToScalars {
+            sequence: first,
+            value: ValueRef::FunctionParameter(first),
+        },
+        OperationKind::TextFromScalars {
+            sequence: first,
+            value: ValueRef::FunctionParameter(first),
+        },
         OperationKind::SequenceEmpty { sequence: first },
         OperationKind::SequenceLen {
             sequence: first,
@@ -523,6 +782,11 @@ fn every_closed_machine_variant_round_trips() {
             sequence: first,
             lhs: ValueRef::FunctionParameter(first),
             rhs: ValueRef::FunctionParameter(second),
+        },
+        OperationKind::SequenceRepeat {
+            sequence: first,
+            element: ValueRef::FunctionParameter(second),
+            count: ValueRef::FunctionParameter(second),
         },
     ] {
         round_trip(&kind);
@@ -1030,7 +1294,7 @@ fn every_closed_machine_variant_round_trips() {
         RuntimeValue::Bool(true),
         RuntimeValue::I64(1),
         RuntimeValue::Bytes(ByteString::from_slice(b"x").unwrap()),
-        RuntimeValue::Text(TextString::try_from_str("x").unwrap()),
+        RuntimeValue::Text(lkjscript::RuntimeText::try_from_str("x").unwrap()),
     ] {
         round_trip(&value);
     }
@@ -1048,7 +1312,9 @@ fn every_closed_machine_variant_round_trips() {
     });
     round_trip(&RuntimeValue::Sequence {
         ty: first,
-        elements: vec![RuntimeValue::Text(TextString::try_from_str("x").unwrap())],
+        elements: vec![RuntimeValue::Text(
+            lkjscript::RuntimeText::try_from_str("x").unwrap(),
+        )],
     });
     let mut deepest = RuntimeValue::Unit;
     for _ in 1..lkjscript::interpret::MAX_RUNTIME_VALUE_DEPTH {

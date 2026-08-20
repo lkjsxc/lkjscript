@@ -32,6 +32,7 @@ pub mod query;
 pub mod release;
 pub mod runtime;
 pub mod runtime_protocol;
+pub mod runtime_text;
 pub mod schema;
 pub mod selected_filesystem;
 pub mod target;
@@ -80,9 +81,10 @@ pub use instance::{
     InstanceTransitionReceipt, InstanceTransitionStatus, PendingCommand, StateDigest,
 };
 pub use interactive_runner::{
-    HEADLESS_REPLAY_CONTRACT_VERSION, HeadlessReplayReceipt, HeadlessReplayRequest,
-    MAXIMUM_HEADLESS_ACTIONS, MAXIMUM_HEADLESS_EVENTS, MAXIMUM_HEADLESS_INPUT_BYTES,
-    decode_headless_replay, frame_digest, run_headless_replay,
+    HEADLESS_REPLAY_CONTRACT_VERSION, HeadlessActionTrace, HeadlessReplayReceipt,
+    HeadlessReplayRequest, HeadlessReplayTransition, MAXIMUM_HEADLESS_ACTIONS,
+    MAXIMUM_HEADLESS_INPUT_BYTES, MAXIMUM_HEADLESS_TRANSITIONS, decode_headless_replay,
+    frame_digest, run_headless_replay,
 };
 pub use interpret::{RunPolicy, RuntimeFieldValue, RuntimeValue};
 pub use machine::{
@@ -119,6 +121,7 @@ pub use runtime_protocol::{
     RuntimeErrorEnvelope, RuntimeRequest, RuntimeRequestEnvelope, RuntimeResponse,
     RuntimeResponseEnvelope,
 };
+pub use runtime_text::{RuntimeText, RuntimeTextError};
 pub use schema::{
     BlockArgumentDescriptor, BlockArgumentRole, ByteString, DirectReference, LiteralField,
     MatchArm, MatchArmOperationDraft, Node, NodeKind, OperandArity, OperandDescriptor, OperandUse,

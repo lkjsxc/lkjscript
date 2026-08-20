@@ -371,6 +371,11 @@ fn derive_block(
                     && last_instruction_use.get(lhs) == Some(&instruction_index)
                     && !terminator_set.contains(lhs)
             }
+            Instruction::SequenceAppend { value, .. }
+            | Instruction::SequenceReplace { value, .. } => {
+                last_instruction_use.get(value) == Some(&instruction_index)
+                    && !terminator_set.contains(value)
+            }
             _ => false,
         };
         instructions.push(InstructionOwnership {
@@ -585,8 +590,16 @@ fn instruction_operands(instruction: &Instruction) -> Vec<ValueId> {
         Instruction::NotBool { value, .. }
         | Instruction::BytesLen { value, .. }
         | Instruction::TextLen { value, .. }
+        | Instruction::TextScalarLen { value, .. }
+        | Instruction::TextGraphemeLen { value, .. }
+        | Instruction::TextLineCount { value, .. }
+        | Instruction::TextLineEndingKind { value, .. }
         | Instruction::SequenceLen { value, .. } => vec![*value],
         Instruction::BytesAt { value, index, .. }
+        | Instruction::TextScalarAt { value, index, .. }
+        | Instruction::TextPreviousGraphemeBoundary { value, index, .. }
+        | Instruction::TextNextGraphemeBoundary { value, index, .. }
+        | Instruction::TextByteToLine { value, index, .. }
         | Instruction::SequenceGet { value, index, .. } => vec![*value, *index],
         Instruction::BytesSlice {
             value,
@@ -599,7 +612,61 @@ fn instruction_operands(instruction: &Instruction) -> Vec<ValueId> {
             start,
             end_exclusive,
             ..
+        }
+        | Instruction::TextSlice {
+            value,
+            start,
+            end_exclusive,
+            ..
         } => vec![*value, *start, *end_exclusive],
+        Instruction::TextLineStart { value, line, .. }
+        | Instruction::TextLineEnd { value, line, .. } => vec![*value, *line],
+        Instruction::TextSplice {
+            value,
+            start,
+            end_exclusive,
+            replacement,
+            ..
+        } => vec![*value, *start, *end_exclusive, *replacement],
+        Instruction::TextFindForward {
+            value,
+            query,
+            start,
+            ..
+        } => vec![*value, *query, *start],
+        Instruction::TextFindBackward {
+            value,
+            query,
+            end_exclusive,
+            ..
+        } => vec![*value, *query, *end_exclusive],
+        Instruction::TextDisplayWidth {
+            value,
+            start,
+            end_exclusive,
+            initial_column,
+            tab_width,
+            ..
+        } => vec![*value, *start, *end_exclusive, *initial_column, *tab_width],
+        Instruction::TextCellPrefixBoundary {
+            value,
+            start,
+            end_exclusive,
+            initial_column,
+            maximum_cells,
+            tab_width,
+            ..
+        } => vec![
+            *value,
+            *start,
+            *end_exclusive,
+            *initial_column,
+            *maximum_cells,
+            *tab_width,
+        ],
+        Instruction::TextFromScalar { value, .. }
+        | Instruction::TextToScalars { value, .. }
+        | Instruction::TextFromScalars { value, .. } => vec![*value],
         Instruction::AddI64 { lhs, rhs, .. }
         | Instruction::LtI64 { lhs, rhs, .. }
         | Instruction::EqualI64 { lhs, rhs, .. }
@@ -610,6 +677,7 @@ fn instruction_operands(instruction: &Instruction) -> Vec<ValueId> {
         | Instruction::TextEqual { lhs, rhs, .. }
         | Instruction::TextConcat { lhs, rhs, .. }
         | Instruction::SequenceConcat { lhs, rhs, .. } => vec![*lhs, *rhs],
+        Instruction::SequenceRepeat { element, count, .. } => vec![*element, *count],
         Instruction::SequenceAppend { value, element, .. } => vec![*value, *element],
         Instruction::SequenceReplace {
             value,
@@ -685,6 +753,25 @@ fn instruction_result(instruction: &Instruction) -> ValueId {
         | Instruction::TextLen { result, .. }
         | Instruction::TextEqual { result, .. }
         | Instruction::TextConcat { result, .. }
+        | Instruction::TextScalarLen { result, .. }
+        | Instruction::TextGraphemeLen { result, .. }
+        | Instruction::TextLineCount { result, .. }
+        | Instruction::TextScalarAt { result, .. }
+        | Instruction::TextPreviousGraphemeBoundary { result, .. }
+        | Instruction::TextNextGraphemeBoundary { result, .. }
+        | Instruction::TextLineStart { result, .. }
+        | Instruction::TextLineEnd { result, .. }
+        | Instruction::TextByteToLine { result, .. }
+        | Instruction::TextSlice { result, .. }
+        | Instruction::TextSplice { result, .. }
+        | Instruction::TextFindForward { result, .. }
+        | Instruction::TextFindBackward { result, .. }
+        | Instruction::TextLineEndingKind { result, .. }
+        | Instruction::TextDisplayWidth { result, .. }
+        | Instruction::TextCellPrefixBoundary { result, .. }
+        | Instruction::TextFromScalar { result, .. }
+        | Instruction::TextToScalars { result, .. }
+        | Instruction::TextFromScalars { result, .. }
         | Instruction::SequenceEmpty { result, .. }
         | Instruction::SequenceLen { result, .. }
         | Instruction::SequenceGet { result, .. }
@@ -692,6 +779,7 @@ fn instruction_result(instruction: &Instruction) -> ValueId {
         | Instruction::SequenceReplace { result, .. }
         | Instruction::SequenceSlice { result, .. }
         | Instruction::SequenceConcat { result, .. }
+        | Instruction::SequenceRepeat { result, .. }
         | Instruction::Call { result, .. }
         | Instruction::ConstructProduct { result, .. }
         | Instruction::ProjectField { result, .. }
@@ -901,6 +989,12 @@ fn verify_block_plan(
                 if lhs != rhs
                     && last_instruction_use.get(lhs) == Some(&instruction_index)
                     && !terminator_set.contains(lhs)
+        ) || matches!(
+            instruction,
+            Instruction::SequenceAppend { value, .. }
+                | Instruction::SequenceReplace { value, .. }
+                if last_instruction_use.get(value) == Some(&instruction_index)
+                    && !terminator_set.contains(value)
         );
         if actual_instruction.reuse_left != expected_reuse {
             return Err(plan_error(

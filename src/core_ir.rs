@@ -219,6 +219,127 @@ pub(crate) enum Instruction {
         lhs: ValueId,
         rhs: ValueId,
     },
+    TextScalarLen {
+        origin: NodeId,
+        result: ValueId,
+        value: ValueId,
+    },
+    TextGraphemeLen {
+        origin: NodeId,
+        result: ValueId,
+        value: ValueId,
+    },
+    TextLineCount {
+        origin: NodeId,
+        result: ValueId,
+        value: ValueId,
+    },
+    TextScalarAt {
+        origin: NodeId,
+        result: ValueId,
+        value: ValueId,
+        index: ValueId,
+    },
+    TextPreviousGraphemeBoundary {
+        origin: NodeId,
+        result: ValueId,
+        value: ValueId,
+        index: ValueId,
+    },
+    TextNextGraphemeBoundary {
+        origin: NodeId,
+        result: ValueId,
+        value: ValueId,
+        index: ValueId,
+    },
+    TextLineStart {
+        origin: NodeId,
+        result: ValueId,
+        value: ValueId,
+        line: ValueId,
+    },
+    TextLineEnd {
+        origin: NodeId,
+        result: ValueId,
+        value: ValueId,
+        line: ValueId,
+    },
+    TextByteToLine {
+        origin: NodeId,
+        result: ValueId,
+        value: ValueId,
+        index: ValueId,
+    },
+    TextSlice {
+        origin: NodeId,
+        result: ValueId,
+        value: ValueId,
+        start: ValueId,
+        end_exclusive: ValueId,
+    },
+    TextSplice {
+        origin: NodeId,
+        result: ValueId,
+        value: ValueId,
+        start: ValueId,
+        end_exclusive: ValueId,
+        replacement: ValueId,
+    },
+    TextFindForward {
+        origin: NodeId,
+        result: ValueId,
+        value: ValueId,
+        query: ValueId,
+        start: ValueId,
+    },
+    TextFindBackward {
+        origin: NodeId,
+        result: ValueId,
+        value: ValueId,
+        query: ValueId,
+        end_exclusive: ValueId,
+    },
+    TextLineEndingKind {
+        origin: NodeId,
+        result: ValueId,
+        value: ValueId,
+    },
+    TextDisplayWidth {
+        origin: NodeId,
+        result: ValueId,
+        value: ValueId,
+        start: ValueId,
+        end_exclusive: ValueId,
+        initial_column: ValueId,
+        tab_width: ValueId,
+    },
+    TextCellPrefixBoundary {
+        origin: NodeId,
+        result: ValueId,
+        value: ValueId,
+        start: ValueId,
+        end_exclusive: ValueId,
+        initial_column: ValueId,
+        maximum_cells: ValueId,
+        tab_width: ValueId,
+    },
+    TextFromScalar {
+        origin: NodeId,
+        result: ValueId,
+        value: ValueId,
+    },
+    TextToScalars {
+        origin: NodeId,
+        result: ValueId,
+        ty: CoreTypeId,
+        value: ValueId,
+    },
+    TextFromScalars {
+        origin: NodeId,
+        result: ValueId,
+        ty: CoreTypeId,
+        value: ValueId,
+    },
     SequenceEmpty {
         origin: NodeId,
         result: ValueId,
@@ -266,6 +387,13 @@ pub(crate) enum Instruction {
         ty: CoreTypeId,
         lhs: ValueId,
         rhs: ValueId,
+    },
+    SequenceRepeat {
+        origin: NodeId,
+        result: ValueId,
+        ty: CoreTypeId,
+        element: ValueId,
+        count: ValueId,
     },
     Call {
         origin: NodeId,
@@ -316,6 +444,25 @@ impl Instruction {
             | Self::TextLen { origin, .. }
             | Self::TextEqual { origin, .. }
             | Self::TextConcat { origin, .. }
+            | Self::TextScalarLen { origin, .. }
+            | Self::TextGraphemeLen { origin, .. }
+            | Self::TextLineCount { origin, .. }
+            | Self::TextScalarAt { origin, .. }
+            | Self::TextPreviousGraphemeBoundary { origin, .. }
+            | Self::TextNextGraphemeBoundary { origin, .. }
+            | Self::TextLineStart { origin, .. }
+            | Self::TextLineEnd { origin, .. }
+            | Self::TextByteToLine { origin, .. }
+            | Self::TextSlice { origin, .. }
+            | Self::TextSplice { origin, .. }
+            | Self::TextFindForward { origin, .. }
+            | Self::TextFindBackward { origin, .. }
+            | Self::TextLineEndingKind { origin, .. }
+            | Self::TextDisplayWidth { origin, .. }
+            | Self::TextCellPrefixBoundary { origin, .. }
+            | Self::TextFromScalar { origin, .. }
+            | Self::TextToScalars { origin, .. }
+            | Self::TextFromScalars { origin, .. }
             | Self::SequenceEmpty { origin, .. }
             | Self::SequenceLen { origin, .. }
             | Self::SequenceGet { origin, .. }
@@ -323,6 +470,7 @@ impl Instruction {
             | Self::SequenceReplace { origin, .. }
             | Self::SequenceSlice { origin, .. }
             | Self::SequenceConcat { origin, .. }
+            | Self::SequenceRepeat { origin, .. }
             | Self::Call { origin, .. }
             | Self::ConstructProduct { origin, .. }
             | Self::ProjectField { origin, .. }
@@ -723,6 +871,25 @@ fn instruction_result(instruction: &Instruction) -> ValueId {
         | Instruction::TextLen { result, .. }
         | Instruction::TextEqual { result, .. }
         | Instruction::TextConcat { result, .. }
+        | Instruction::TextScalarLen { result, .. }
+        | Instruction::TextGraphemeLen { result, .. }
+        | Instruction::TextLineCount { result, .. }
+        | Instruction::TextScalarAt { result, .. }
+        | Instruction::TextPreviousGraphemeBoundary { result, .. }
+        | Instruction::TextNextGraphemeBoundary { result, .. }
+        | Instruction::TextLineStart { result, .. }
+        | Instruction::TextLineEnd { result, .. }
+        | Instruction::TextByteToLine { result, .. }
+        | Instruction::TextSlice { result, .. }
+        | Instruction::TextSplice { result, .. }
+        | Instruction::TextFindForward { result, .. }
+        | Instruction::TextFindBackward { result, .. }
+        | Instruction::TextLineEndingKind { result, .. }
+        | Instruction::TextDisplayWidth { result, .. }
+        | Instruction::TextCellPrefixBoundary { result, .. }
+        | Instruction::TextFromScalar { result, .. }
+        | Instruction::TextToScalars { result, .. }
+        | Instruction::TextFromScalars { result, .. }
         | Instruction::SequenceEmpty { result, .. }
         | Instruction::SequenceLen { result, .. }
         | Instruction::SequenceGet { result, .. }
@@ -730,6 +897,7 @@ fn instruction_result(instruction: &Instruction) -> ValueId {
         | Instruction::SequenceReplace { result, .. }
         | Instruction::SequenceSlice { result, .. }
         | Instruction::SequenceConcat { result, .. }
+        | Instruction::SequenceRepeat { result, .. }
         | Instruction::Call { result, .. }
         | Instruction::ConstructProduct { result, .. }
         | Instruction::ProjectField { result, .. }
@@ -827,6 +995,125 @@ fn verify_instruction(
             require_local(function, local, *rhs, TEXT_TYPE)?;
             Ok(TEXT_TYPE)
         }
+        Instruction::TextScalarLen { value, .. }
+        | Instruction::TextGraphemeLen { value, .. }
+        | Instruction::TextLineCount { value, .. }
+        | Instruction::TextLineEndingKind { value, .. } => {
+            require_local(function, local, *value, TEXT_TYPE)?;
+            Ok(I64_TYPE)
+        }
+        Instruction::TextScalarAt { value, index, .. }
+        | Instruction::TextPreviousGraphemeBoundary { value, index, .. }
+        | Instruction::TextNextGraphemeBoundary { value, index, .. }
+        | Instruction::TextByteToLine { value, index, .. } => {
+            require_local(function, local, *value, TEXT_TYPE)?;
+            require_local(function, local, *index, I64_TYPE)?;
+            Ok(I64_TYPE)
+        }
+        Instruction::TextLineStart { value, line, .. }
+        | Instruction::TextLineEnd { value, line, .. } => {
+            require_local(function, local, *value, TEXT_TYPE)?;
+            require_local(function, local, *line, I64_TYPE)?;
+            Ok(I64_TYPE)
+        }
+        Instruction::TextSlice {
+            value,
+            start,
+            end_exclusive,
+            ..
+        } => {
+            require_local(function, local, *value, TEXT_TYPE)?;
+            require_local(function, local, *start, I64_TYPE)?;
+            require_local(function, local, *end_exclusive, I64_TYPE)?;
+            Ok(TEXT_TYPE)
+        }
+        Instruction::TextSplice {
+            value,
+            start,
+            end_exclusive,
+            replacement,
+            ..
+        } => {
+            require_local(function, local, *value, TEXT_TYPE)?;
+            require_local(function, local, *start, I64_TYPE)?;
+            require_local(function, local, *end_exclusive, I64_TYPE)?;
+            require_local(function, local, *replacement, TEXT_TYPE)?;
+            Ok(TEXT_TYPE)
+        }
+        Instruction::TextFindForward {
+            value,
+            query,
+            start,
+            ..
+        } => {
+            require_local(function, local, *value, TEXT_TYPE)?;
+            require_local(function, local, *query, TEXT_TYPE)?;
+            require_local(function, local, *start, I64_TYPE)?;
+            Ok(I64_TYPE)
+        }
+        Instruction::TextFindBackward {
+            value,
+            query,
+            end_exclusive,
+            ..
+        } => {
+            require_local(function, local, *value, TEXT_TYPE)?;
+            require_local(function, local, *query, TEXT_TYPE)?;
+            require_local(function, local, *end_exclusive, I64_TYPE)?;
+            Ok(I64_TYPE)
+        }
+        Instruction::TextDisplayWidth {
+            value,
+            start,
+            end_exclusive,
+            initial_column,
+            tab_width,
+            ..
+        } => {
+            require_local(function, local, *value, TEXT_TYPE)?;
+            require_local(function, local, *start, I64_TYPE)?;
+            require_local(function, local, *end_exclusive, I64_TYPE)?;
+            require_local(function, local, *initial_column, I64_TYPE)?;
+            require_local(function, local, *tab_width, I64_TYPE)?;
+            Ok(I64_TYPE)
+        }
+        Instruction::TextCellPrefixBoundary {
+            value,
+            start,
+            end_exclusive,
+            initial_column,
+            maximum_cells,
+            tab_width,
+            ..
+        } => {
+            require_local(function, local, *value, TEXT_TYPE)?;
+            require_local(function, local, *start, I64_TYPE)?;
+            require_local(function, local, *end_exclusive, I64_TYPE)?;
+            require_local(function, local, *initial_column, I64_TYPE)?;
+            require_local(function, local, *maximum_cells, I64_TYPE)?;
+            require_local(function, local, *tab_width, I64_TYPE)?;
+            Ok(I64_TYPE)
+        }
+        Instruction::TextFromScalar { value, .. } => {
+            require_local(function, local, *value, I64_TYPE)?;
+            Ok(TEXT_TYPE)
+        }
+        Instruction::TextToScalars { ty, value, .. } => {
+            let element = require_sequence(program, *ty)?;
+            if element != I64_TYPE {
+                return Err(invalid("text-to-scalars result must be an i64 sequence"));
+            }
+            require_local(function, local, *value, TEXT_TYPE)?;
+            Ok(*ty)
+        }
+        Instruction::TextFromScalars { ty, value, .. } => {
+            let element = require_sequence(program, *ty)?;
+            if element != I64_TYPE {
+                return Err(invalid("text-from-scalars input must be an i64 sequence"));
+            }
+            require_local(function, local, *value, *ty)?;
+            Ok(TEXT_TYPE)
+        }
         Instruction::SequenceEmpty { ty, .. } => {
             require_sequence(program, *ty)?;
             Ok(*ty)
@@ -882,6 +1169,14 @@ fn verify_instruction(
             require_sequence(program, *ty)?;
             require_local(function, local, *lhs, *ty)?;
             require_local(function, local, *rhs, *ty)?;
+            Ok(*ty)
+        }
+        Instruction::SequenceRepeat {
+            ty, element, count, ..
+        } => {
+            let element_ty = require_sequence(program, *ty)?;
+            require_local(function, local, *element, element_ty)?;
+            require_local(function, local, *count, I64_TYPE)?;
             Ok(*ty)
         }
         Instruction::Call {

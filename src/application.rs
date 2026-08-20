@@ -1,6 +1,6 @@
 //! Independently transferable exact-release-graph applications.
 //!
-//! Application format 8 embeds one canonical exact reusable-release graph, exact exported
+//! Application format 9 embeds one canonical exact reusable-release graph, exact exported
 //! entries, an invocation profile, resource policy, and typed application cases. Source workspace
 //! identity, mutable resolver state, proposal syntax, Core IR, and runtime handles are absent.
 
@@ -8,11 +8,13 @@ mod interactive;
 
 pub use interactive::{
     INTERACTIVE_PROFILE_VERSION, InteractiveAction, InteractiveActionKind,
-    InteractiveActionOutcome, InteractiveActionOutcomeClass, InteractiveActionRoute,
-    InteractiveActionRoutes, InteractiveApplicationProfile, InteractiveEvent,
-    InteractiveEventRoutes, InteractiveExecutionObservation, InteractiveFrame, InteractiveKeyCode,
-    InteractiveKeyEvent, InteractiveKeyRoutes, InteractiveSession, InteractiveStep,
-    MAXIMUM_INTERACTIVE_COLUMNS, MAXIMUM_INTERACTIVE_FRAME_SCALARS,
+    InteractiveActionOutcome, InteractiveActionOutcomeClass, InteractiveActionRequest,
+    InteractiveActionRoute, InteractiveActionRoutes, InteractiveApplicationProfile,
+    InteractiveCursorShape, InteractiveEvent, InteractiveEventRoutes,
+    InteractiveExecutionObservation, InteractiveFrame, InteractiveKeyCode, InteractiveKeyEvent,
+    InteractiveKeyRoutes, InteractiveMouseButton, InteractiveMouseEvent, InteractiveMouseKind,
+    InteractiveMouseRoutes, InteractiveOpenEvent, InteractiveOpenRoutes, InteractiveSession,
+    InteractiveStep, MAXIMUM_INTERACTIVE_COLUMNS, MAXIMUM_INTERACTIVE_FRAME_SCALARS,
     MAXIMUM_INTERACTIVE_PASTE_SCALARS, MAXIMUM_INTERACTIVE_ROWS, MAXIMUM_INTERACTIVE_STATUS_BYTES,
     PreparedInteractiveApplication, prepare_interactive,
 };
@@ -37,7 +39,7 @@ use std::path::Path;
 use std::time::Instant;
 
 pub const APPLICATION_MAGIC: [u8; 8] = *b"LKJAPP\0\x08";
-pub const APPLICATION_FORMAT_VERSION: u16 = 8;
+pub const APPLICATION_FORMAT_VERSION: u16 = 9;
 pub const APPLICATION_CONTRACT_VERSION: u16 = 8;
 pub const APPLICATION_INTERFACE_CONTRACT_VERSION: u16 = 1;
 pub const MAXIMUM_APPLICATION_ARTIFACT_BYTES: usize = 256 * 1024 * 1024;
@@ -753,9 +755,9 @@ pub(crate) struct StatefulReplayApplication {
     event_entry: crate::ids::NodeId,
     resume_entry: crate::ids::NodeId,
     query_entry: crate::ids::NodeId,
-    event_program: crate::core_ir::CoreProgram,
-    resume_program: crate::core_ir::CoreProgram,
-    query_program: crate::core_ir::CoreProgram,
+    event_program: interpret::PreparedProgram,
+    resume_program: interpret::PreparedProgram,
+    query_program: interpret::PreparedProgram,
 }
 
 impl StatefulReplayApplication {
@@ -809,7 +811,7 @@ impl StatefulReplayApplication {
             lowering_nanoseconds,
             core_verification_nanoseconds,
             execute_nanoseconds,
-        } = interpret::run_compiled(
+        } = interpret::run_prepared(
             &self.application.flattened.snapshot,
             self.query_entry,
             &self.query_program,
@@ -860,7 +862,7 @@ impl StatefulReplayApplication {
     fn run(
         &self,
         entry: crate::ids::NodeId,
-        program: &crate::core_ir::CoreProgram,
+        program: &interpret::PreparedProgram,
         arguments: &[ApplicationValue],
     ) -> Result<StatefulTransition> {
         let public_value_started = Instant::now();
@@ -869,7 +871,7 @@ impl StatefulReplayApplication {
             .map(|value| to_runtime(&self.application.flattened, value))
             .collect::<Result<Vec<_>>>()?;
         let public_value_nanoseconds = elapsed_nanoseconds(public_value_started);
-        let result = interpret::run_compiled(
+        let result = interpret::run_prepared(
             &self.application.flattened.snapshot,
             entry,
             program,
@@ -904,9 +906,9 @@ pub(crate) fn prepare_stateful_replay_observed(
     let query_entry = application
         .flattened
         .item(profile.query_entry.release, profile.query_entry.item)?;
-    let event_program = interpret::compile_entry(&application.flattened.snapshot, event_entry)?.0;
-    let resume_program = interpret::compile_entry(&application.flattened.snapshot, resume_entry)?.0;
-    let query_program = interpret::compile_entry(&application.flattened.snapshot, query_entry)?.0;
+    let event_program = interpret::prepare_entry(&application.flattened.snapshot, event_entry)?.0;
+    let resume_program = interpret::prepare_entry(&application.flattened.snapshot, resume_entry)?.0;
+    let query_program = interpret::prepare_entry(&application.flattened.snapshot, query_entry)?.0;
     Ok(StatefulReplayApplication {
         application,
         profile,
@@ -2768,7 +2770,9 @@ fn to_runtime_bounded(
         ApplicationValue::Bool(value) => RuntimeValue::Bool(*value),
         ApplicationValue::I64(value) => RuntimeValue::I64(*value),
         ApplicationValue::Bytes(value) => RuntimeValue::Bytes(value.clone()),
-        ApplicationValue::Text(value) => RuntimeValue::Text(value.clone()),
+        ApplicationValue::Text(value) => {
+            RuntimeValue::Text(crate::runtime_text::RuntimeText::from_text(value))
+        }
         ApplicationValue::Product { ty, fields } => RuntimeValue::Product {
             ty: flattened.item(ty.release, ty.item)?,
             fields: fields
@@ -2854,7 +2858,14 @@ fn from_runtime_bounded(
         RuntimeValue::Bool(value) => ApplicationValue::Bool(*value),
         RuntimeValue::I64(value) => ApplicationValue::I64(*value),
         RuntimeValue::Bytes(value) => ApplicationValue::Bytes(value.clone()),
-        RuntimeValue::Text(value) => ApplicationValue::Text(value.clone()),
+        RuntimeValue::Text(value) => {
+            ApplicationValue::Text(value.to_text_string().map_err(|_| {
+                LkError::new(
+                    ErrorCode::ResultBytePolicyExceeded,
+                    "runtime text exceeds application value policy",
+                )
+            })?)
+        }
         RuntimeValue::Product { ty, fields } => ApplicationValue::Product {
             ty: target(*ty)?,
             fields: fields

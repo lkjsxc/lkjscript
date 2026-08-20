@@ -111,45 +111,49 @@ owner.
 
 ## Foreground interactive topology
 
-The interactive topology is a caller-owned process over immutable application-format-8 bytes. It is
+The interactive topology is a caller-owned process over immutable application-format-9 bytes. It is
 separate from durable instance authority: initialization creates one ephemeral application state;
 each accepted event or host outcome produces the next state; render observes that state; process
 exit discards it. There is no checkpoint, journal, recovery file, daemon, or publication per key.
 
 `PreparedInteractiveApplication` validates and compiles every profile role once. `InteractiveSession`
-serially invokes the exact semantic initialize, update, resume, and render owners. It allows one
-unresolved typed action and rejects further events as `authority_busy`. Host outcomes are bounded
-closed values. The application cannot call an adapter directly and the runner cannot inspect
-private state to invent behavior. Candidate state and pending-action changes become observable only
-after the candidate frame also validates and renders; any update, resume, fuel, value, or frame
-failure preserves the prior ephemeral state and pending action.
+serially invokes the exact semantic initialize, update, resume, and render owners. Application state
+may process local events while one unresolved typed action remains reachable, but a second emitted
+action rejects as `authority_busy`. Host outcomes are bounded closed values and must match the exact
+job identity. The application cannot call an adapter directly and the runner cannot inspect private
+state to invent behavior. Candidate state and pending-action changes become observable only after
+the candidate frame validates and renders; update, resume, fuel, value, or frame failure preserves
+prior ephemeral state and pending authority facts.
 
-Headless replay contract 3 is the independent deterministic product route. One strict JSON request
-binds dimensions, at most 10,000 events, and at most 10,000 ordered outcomes within 8 MiB. The runner
+Headless replay contract 4 is the independent deterministic product route. One strict JSON request
+binds dimensions, at most 20,000 transitions and at most 10,000 actions within 8 MiB. The runner
 uses the same session owner as live execution and reports event/action/change counts, initial/final
 frame digests, final frame, and a digest over the complete replay. Missing or extra outcomes,
 oversized input, trailing JSON, invalid event data, or an unresolved final action reject. Replay
 publishes no semantic, instance, file, or project state.
 
-The generic terminal runner owns terminal acquisition, event decoding, full-frame projection,
-action dispatch, signal observation, and cleanup under terminal contract 3. `WorkbenchHost` owns a
+The generic terminal runner owns terminal acquisition, event decoding, logical-frame projection,
+one bounded worker, action dispatch, signal observation, and cleanup under terminal contract 4.
+`WorkbenchHost` owns a
 process-local composition of one exact semantic-project grant and an optional selected-filesystem
 grant. It routes the application's closed actions to `ProjectHost` contract 2 and
-`SelectedFilesystem` contract 1; it has no private graph/store mutation route. Exact external
+`SelectedFilesystem` contract 2; it has no private graph/store mutation route. Exact external
 publication survives terminal output failure.
 
-The retained loop is synchronous and sequential. A potentially slow target action blocks input; no
-background job, queue, cancellation token, thread pool, or async runtime exists. This topology was
-selected because the complete workbench and 10,000-event replay meet their current gates without a
-second scheduling authority. Background work may be reconsidered only after a named operation
-misses a measured responsiveness gate and a bounded stale-result/cancellation contract is proved.
+The retained live loop has one foreground application/terminal thread and one host worker connected
+by capacity-one request/result channels. Local input continues during root search and target work.
+The worker has no application-state reference, hidden queue, retry, scheduler, or async runtime.
+Application job identity, abandonment, stale result, and possibly visible publication remain exact.
+Increase the fixed bound only after a named complete workflow proves one job insufficient and a
+bounded ordering/publication/shutdown replacement is verified.
 
 ## Topology and acceleration exclusions
 
 The supported topologies are one-shot, durable foreground session, and ephemeral interactive
-foreground session. There is no Unix-socket supervisor, automatic spawn, daemon, worker pool,
-request multiplexing, scheduler, persistent cache, generic application/Core cache, bytecode, native
-compiler, or JIT. Generic runtime cache counts and bytes are exactly zero. The product-local
+foreground session with one operational worker. There is no Unix-socket supervisor, automatic
+spawn, daemon, general worker pool, request multiplexing, scheduler, persistent cache, generic
+application/Core cache, bytecode, native compiler, or JIT. Generic runtime cache counts and bytes
+are exactly zero. The product-local
 exact-HEAD reuse above is disposable and independently differential. The explicit-frame interpreter
 remains the sole execution route and oracle.
 

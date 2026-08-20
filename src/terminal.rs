@@ -1,17 +1,23 @@
 //! Narrow native terminal adaptation for interactive application artifacts.
 //!
-//! This module owns raw-mode lifecycle, bounded host-event decoding, safe full-frame projection,
-//! and cleanup. It does not own key policy, editor state, commands, or frame meaning.
+//! This module owns raw-mode lifecycle, bounded host-event decoding, acknowledged differential
+//! projection with a full-frame oracle, one bounded host worker, and cleanup. It does not own key
+//! policy, editor state, commands, or frame meaning.
 
 use crate::application::{
-    InteractiveAction, InteractiveActionOutcome, InteractiveEvent, InteractiveFrame,
-    InteractiveKeyCode, InteractiveKeyEvent, MAXIMUM_INTERACTIVE_COLUMNS,
+    InteractiveAction, InteractiveActionOutcome, InteractiveCursorShape, InteractiveEvent,
+    InteractiveFrame, InteractiveKeyCode, InteractiveKeyEvent, InteractiveMouseButton,
+    InteractiveMouseEvent, InteractiveMouseKind, MAXIMUM_INTERACTIVE_COLUMNS,
     MAXIMUM_INTERACTIVE_PASTE_SCALARS, MAXIMUM_INTERACTIVE_ROWS, prepare_interactive,
 };
 use crate::error::{ErrorCode, LkError, Result};
-use crossterm::cursor::{Hide, MoveTo, Show};
+use crossterm::cursor::{Hide, MoveTo, SetCursorStyle, Show};
 use crossterm::event::{
-    self, DisableBracketedPaste, EnableBracketedPaste, Event, KeyCode, KeyEventKind, KeyModifiers,
+    self, DisableBracketedPaste, DisableFocusChange, EnableBracketedPaste, EnableFocusChange,
+    Event, KeyCode, KeyEventKind, KeyModifiers, MouseButton, MouseEventKind,
+};
+use crossterm::style::{
+    Attribute, Color, ResetColor, SetAttribute, SetBackgroundColor, SetForegroundColor,
 };
 use crossterm::terminal::{self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::{ExecutableCommand, QueueableCommand};
@@ -21,15 +27,131 @@ use serde::Serialize;
 use signal_hook::SigId;
 use signal_hook::consts::signal::{SIGHUP, SIGINT, SIGQUIT, SIGTERM};
 use std::io::{self, IsTerminal, Write};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{Receiver, SyncSender, TryRecvError, TrySendError, sync_channel};
+use std::thread::{self, JoinHandle};
 use std::time::Duration;
 use unicode_width::UnicodeWidthChar;
 
-pub const TERMINAL_CONTRACT_VERSION: u16 = 3;
+pub const TERMINAL_CONTRACT_VERSION: u16 = 4;
 pub const MAXIMUM_TERMINAL_FRAME_BYTES: usize = 8 * 1024 * 1024;
 pub const MAXIMUM_TERMINAL_ACTIONS: u64 = 10_000;
+pub const MAXIMUM_TERMINAL_INITIAL_EVENTS: usize = 4;
 pub const TERMINAL_POLL_MILLISECONDS: u64 = 25;
+
+struct ActionWorker {
+    requests: Option<SyncSender<crate::application::InteractiveActionRequest>>,
+    results: Receiver<Result<InteractiveActionOutcome>>,
+    thread: Option<JoinHandle<()>>,
+    pending: bool,
+}
+
+impl ActionWorker {
+    fn start(
+        mut handle_action: impl FnMut(InteractiveAction) -> Result<InteractiveActionOutcome>
+        + Send
+        + 'static,
+    ) -> Result<Self> {
+        let (request_sender, request_receiver) =
+            sync_channel::<crate::application::InteractiveActionRequest>(1);
+        let (result_sender, result_receiver) = sync_channel::<Result<InteractiveActionOutcome>>(1);
+        let thread = thread::Builder::new()
+            .name("lkjedit-host-worker".into())
+            .spawn(move || {
+                while let Ok(request) = request_receiver.recv() {
+                    let job_id = request.job_id;
+                    let result =
+                        match catch_unwind(AssertUnwindSafe(|| handle_action(request.action))) {
+                            Ok(Ok(outcome)) => Ok(outcome.with_job_id(job_id)),
+                            Ok(Err(error)) => Err(error),
+                            Err(_) => Err(LkError::new(
+                                ErrorCode::HostOutcomeUnknown,
+                                "bounded host worker panicked; external visibility may be unknown",
+                            )),
+                        };
+                    if result_sender.send(result).is_err() {
+                        break;
+                    }
+                }
+            })
+            .map_err(|error| {
+                LkError::new(
+                    ErrorCode::TerminalUnavailable,
+                    format!("cannot create bounded host worker: {error}"),
+                )
+            })?;
+        Ok(Self {
+            requests: Some(request_sender),
+            results: result_receiver,
+            thread: Some(thread),
+            pending: false,
+        })
+    }
+
+    fn submit(&mut self, request: crate::application::InteractiveActionRequest) -> Result<()> {
+        if self.pending {
+            return Err(LkError::new(
+                ErrorCode::AuthorityBusy,
+                "bounded host worker already has one pending job",
+            ));
+        }
+        let sender = self.requests.as_ref().ok_or_else(|| {
+            LkError::new(
+                ErrorCode::TerminalUnavailable,
+                "bounded host worker request channel is closed",
+            )
+        })?;
+        match sender.try_send(request) {
+            Ok(()) => {
+                self.pending = true;
+                Ok(())
+            }
+            Err(TrySendError::Full(_)) => Err(LkError::new(
+                ErrorCode::AuthorityBusy,
+                "bounded host worker request queue is full",
+            )),
+            Err(TrySendError::Disconnected(_)) => Err(LkError::new(
+                ErrorCode::TerminalUnavailable,
+                "bounded host worker request channel disconnected",
+            )),
+        }
+    }
+
+    fn try_result(&mut self) -> Result<Option<InteractiveActionOutcome>> {
+        match self.results.try_recv() {
+            Ok(Ok(outcome)) => {
+                self.pending = false;
+                Ok(Some(outcome))
+            }
+            Ok(Err(error)) => {
+                self.pending = false;
+                Err(error)
+            }
+            Err(TryRecvError::Empty) => Ok(None),
+            Err(TryRecvError::Disconnected) => Err(LkError::new(
+                ErrorCode::TerminalUnavailable,
+                "bounded host worker result channel disconnected",
+            )),
+        }
+    }
+
+    fn shutdown(&mut self, wait: bool) {
+        self.requests.take();
+        if wait && let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        } else {
+            self.thread.take();
+        }
+    }
+}
+
+impl Drop for ActionWorker {
+    fn drop(&mut self) {
+        self.shutdown(false);
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -105,7 +227,54 @@ pub fn adapt_terminal_event(event: Event) -> Result<Option<InteractiveEvent>> {
             let columns = i64::from(columns).clamp(1, MAXIMUM_INTERACTIVE_COLUMNS);
             Ok(Some(InteractiveEvent::Resize { rows, columns }))
         }
-        Event::FocusGained | Event::FocusLost | Event::Mouse(_) => Ok(None),
+        Event::FocusGained => Ok(Some(InteractiveEvent::FocusGained)),
+        Event::FocusLost => Ok(Some(InteractiveEvent::FocusLost)),
+        Event::Mouse(mouse) => {
+            if mouse
+                .modifiers
+                .intersects(KeyModifiers::SUPER | KeyModifiers::HYPER | KeyModifiers::META)
+            {
+                return Err(LkError::new(
+                    ErrorCode::TerminalDecode,
+                    "terminal mouse event uses an unsupported super, hyper, or meta modifier",
+                ));
+            }
+            let button = |value| match value {
+                MouseButton::Left => InteractiveMouseButton::Primary,
+                MouseButton::Middle => InteractiveMouseButton::Middle,
+                MouseButton::Right => InteractiveMouseButton::Secondary,
+            };
+            let (kind, button) = match mouse.kind {
+                MouseEventKind::Down(value) => (InteractiveMouseKind::Press, button(value)),
+                MouseEventKind::Up(value) => (InteractiveMouseKind::Release, button(value)),
+                MouseEventKind::Drag(value) => (InteractiveMouseKind::Drag, button(value)),
+                MouseEventKind::ScrollUp => {
+                    (InteractiveMouseKind::ScrollUp, InteractiveMouseButton::None)
+                }
+                MouseEventKind::ScrollDown => (
+                    InteractiveMouseKind::ScrollDown,
+                    InteractiveMouseButton::None,
+                ),
+                MouseEventKind::ScrollLeft => (
+                    InteractiveMouseKind::ScrollLeft,
+                    InteractiveMouseButton::None,
+                ),
+                MouseEventKind::ScrollRight => (
+                    InteractiveMouseKind::ScrollRight,
+                    InteractiveMouseButton::None,
+                ),
+                MouseEventKind::Moved => return Ok(None),
+            };
+            Ok(Some(InteractiveEvent::Mouse(InteractiveMouseEvent {
+                button,
+                kind,
+                row: i64::from(mouse.row).min(MAXIMUM_INTERACTIVE_ROWS - 1),
+                column: i64::from(mouse.column).min(MAXIMUM_INTERACTIVE_COLUMNS - 1),
+                control: mouse.modifiers.contains(KeyModifiers::CONTROL),
+                alt: mouse.modifiers.contains(KeyModifiers::ALT),
+                shift: mouse.modifiers.contains(KeyModifiers::SHIFT),
+            })))
+        }
     }
 }
 
@@ -137,8 +306,27 @@ pub fn run_terminal(application_bytes: &[u8]) -> Result<TerminalRunReceipt> {
 
 pub fn run_terminal_with_actions(
     application_bytes: &[u8],
-    mut handle_action: impl FnMut(InteractiveAction) -> Result<InteractiveActionOutcome>,
+    handle_action: impl FnMut(InteractiveAction) -> Result<InteractiveActionOutcome> + Send + 'static,
 ) -> Result<TerminalRunReceipt> {
+    run_terminal_with_actions_and_initial_events(application_bytes, Vec::new(), handle_action)
+}
+
+/// Runs one interactive application after delivering bounded deployment-selected events.
+///
+/// Initial events are ordinary application inputs. They let a product translate its launch
+/// selection into the same typed `Open` event used by headless and live workflows without giving
+/// the native runner any editor policy.
+pub fn run_terminal_with_actions_and_initial_events(
+    application_bytes: &[u8],
+    initial_events: Vec<InteractiveEvent>,
+    handle_action: impl FnMut(InteractiveAction) -> Result<InteractiveActionOutcome> + Send + 'static,
+) -> Result<TerminalRunReceipt> {
+    if initial_events.len() > MAXIMUM_TERMINAL_INITIAL_EVENTS {
+        return Err(LkError::new(
+            ErrorCode::PolicyExceeded,
+            "terminal initial-event count exceeds policy",
+        ));
+    }
     let stdin = io::stdin();
     let stdout = io::stdout();
     if !stdin.is_terminal() || !stdout.is_terminal() {
@@ -159,15 +347,67 @@ pub fn run_terminal_with_actions(
     let prepared = prepare_interactive(application_bytes)?;
     let application = prepared.digest();
     let (mut application_session, initial) = prepared.start(rows, columns)?;
+    let mut worker = ActionWorker::start(handle_action)?;
     let backend = CrosstermBackend::new(stdout.lock());
     let mut terminal_session = TerminalLease::acquire(backend)?;
     let mut events = 0_u64;
     let mut actions = 0_u64;
     let mut frames = 0_u64;
     let outcome = (|| {
-        terminal_session.write_frame(&initial.frame)?;
-        frames = frames.saturating_add(1);
+        if present_terminal_step(
+            &mut terminal_session,
+            &mut worker,
+            initial,
+            &mut actions,
+            &mut frames,
+        )? {
+            if application_session.pending_action_id().is_some() {
+                return Err(LkError::new(
+                    ErrorCode::AuthorityBusy,
+                    "interactive application requested exit while a host job is pending",
+                ));
+            }
+            return Ok(TerminalExitReason::Application);
+        }
+        for event in initial_events {
+            let step = application_session.step(event)?;
+            events = events.saturating_add(1);
+            if present_terminal_step(
+                &mut terminal_session,
+                &mut worker,
+                step,
+                &mut actions,
+                &mut frames,
+            )? {
+                if application_session.pending_action_id().is_some() {
+                    return Err(LkError::new(
+                        ErrorCode::AuthorityBusy,
+                        "interactive application requested exit while a host job is pending",
+                    ));
+                }
+                return Ok(TerminalExitReason::Application);
+            }
+        }
         loop {
+            if let Some(result) = worker.try_result()? {
+                let step = application_session.resume(result)?;
+                if present_terminal_step(
+                    &mut terminal_session,
+                    &mut worker,
+                    step,
+                    &mut actions,
+                    &mut frames,
+                )? {
+                    if application_session.pending_action_id().is_some() {
+                        return Err(LkError::new(
+                            ErrorCode::AuthorityBusy,
+                            "interactive application requested exit while a host job is pending",
+                        ));
+                    }
+                    return Ok(TerminalExitReason::Application);
+                }
+                continue;
+            }
             if signal.raised() {
                 return Ok(TerminalExitReason::Signal);
             }
@@ -205,30 +445,26 @@ pub fn run_terminal_with_actions(
             let Some(event) = adapt_terminal_event(host_event)? else {
                 continue;
             };
-            let mut step = application_session.step(event)?;
+            let step = application_session.step(event)?;
             events = events.saturating_add(1);
-            let mut requested_exit = false;
-            loop {
-                terminal_session.write_frame(&step.frame)?;
-                frames = frames.saturating_add(1);
-                requested_exit |= step.exit;
-                let Some(action) = step.action else {
-                    break;
-                };
-                if actions >= MAXIMUM_TERMINAL_ACTIONS {
+            if present_terminal_step(
+                &mut terminal_session,
+                &mut worker,
+                step,
+                &mut actions,
+                &mut frames,
+            )? {
+                if application_session.pending_action_id().is_some() {
                     return Err(LkError::new(
-                        ErrorCode::PolicyExceeded,
-                        "terminal host-action count exceeds policy",
+                        ErrorCode::AuthorityBusy,
+                        "interactive application requested exit while a host job is pending",
                     ));
                 }
-                actions = actions.saturating_add(1);
-                step = application_session.resume(handle_action(action)?)?;
-            }
-            if requested_exit {
                 return Ok(TerminalExitReason::Application);
             }
         }
     })();
+    worker.shutdown(application_session.pending_action_id().is_none());
     let cleanup = terminal_session.close();
     match (outcome, cleanup) {
         (_, Err(cleanup)) => Err(cleanup),
@@ -242,6 +478,34 @@ pub fn run_terminal_with_actions(
             reason,
         }),
     }
+}
+
+fn present_terminal_step<B: TerminalBackend>(
+    terminal: &mut TerminalLease<B>,
+    worker: &mut ActionWorker,
+    step: crate::application::InteractiveStep,
+    actions: &mut u64,
+    frames: &mut u64,
+) -> Result<bool> {
+    terminal.write_frame(&step.frame)?;
+    *frames = frames.saturating_add(1);
+    if step.exit && step.action.is_some() {
+        return Err(LkError::new(
+            ErrorCode::ProtocolMalformed,
+            "interactive application cannot request exit and a host job in one step",
+        ));
+    }
+    if let Some(action) = step.action {
+        if *actions >= MAXIMUM_TERMINAL_ACTIONS {
+            return Err(LkError::new(
+                ErrorCode::PolicyExceeded,
+                "terminal host-action count exceeds policy",
+            ));
+        }
+        worker.submit(action)?;
+        *actions = actions.saturating_add(1);
+    }
+    Ok(step.exit)
 }
 
 fn terminal_input_ended(error: &io::Error) -> bool {
@@ -284,8 +548,12 @@ trait TerminalBackend {
     fn enable_raw(&mut self) -> io::Result<()>;
     fn enter_alternate(&mut self) -> io::Result<()>;
     fn enable_paste(&mut self) -> io::Result<()>;
+    fn enable_mouse(&mut self) -> io::Result<()>;
+    fn enable_focus(&mut self) -> io::Result<()>;
     fn hide_cursor(&mut self) -> io::Result<()>;
     fn show_cursor(&mut self) -> io::Result<()>;
+    fn disable_focus(&mut self) -> io::Result<()>;
+    fn disable_mouse(&mut self) -> io::Result<()>;
     fn disable_paste(&mut self) -> io::Result<()>;
     fn leave_alternate(&mut self) -> io::Result<()>;
     fn disable_raw(&mut self) -> io::Result<()>;
@@ -294,11 +562,15 @@ trait TerminalBackend {
 
 struct CrosstermBackend<W> {
     writer: W,
+    acknowledged: Option<ProjectedFrame>,
 }
 
 impl<W> CrosstermBackend<W> {
     const fn new(writer: W) -> Self {
-        Self { writer }
+        Self {
+            writer,
+            acknowledged: None,
+        }
     }
 }
 
@@ -317,6 +589,17 @@ impl<W: Write> TerminalBackend for CrosstermBackend<W> {
         Ok(())
     }
 
+    fn enable_mouse(&mut self) -> io::Result<()> {
+        self.writer
+            .write_all(b"\x1b[?1000h\x1b[?1002h\x1b[?1006h")?;
+        self.writer.flush()
+    }
+
+    fn enable_focus(&mut self) -> io::Result<()> {
+        self.writer.execute(EnableFocusChange)?;
+        Ok(())
+    }
+
     fn hide_cursor(&mut self) -> io::Result<()> {
         self.writer.execute(Hide)?;
         Ok(())
@@ -325,6 +608,17 @@ impl<W: Write> TerminalBackend for CrosstermBackend<W> {
     fn show_cursor(&mut self) -> io::Result<()> {
         self.writer.execute(Show)?;
         Ok(())
+    }
+
+    fn disable_focus(&mut self) -> io::Result<()> {
+        self.writer.execute(DisableFocusChange)?;
+        Ok(())
+    }
+
+    fn disable_mouse(&mut self) -> io::Result<()> {
+        self.writer
+            .write_all(b"\x1b[?1006l\x1b[?1002l\x1b[?1000l")?;
+        self.writer.flush()
     }
 
     fn disable_paste(&mut self) -> io::Result<()> {
@@ -342,8 +636,18 @@ impl<W: Write> TerminalBackend for CrosstermBackend<W> {
     }
 
     fn write_frame(&mut self, frame: &InteractiveFrame) -> io::Result<()> {
-        project_frame(&mut self.writer, frame)?;
-        self.writer.flush()
+        let next = projected_frame(frame)?;
+        let bytes = differential_projection_bytes(self.acknowledged.as_ref(), &next)?;
+        if let Err(error) = self
+            .writer
+            .write_all(&bytes)
+            .and_then(|()| self.writer.flush())
+        {
+            self.acknowledged = None;
+            return Err(error);
+        }
+        self.acknowledged = Some(next);
+        Ok(())
     }
 }
 
@@ -352,6 +656,8 @@ struct TerminalLease<B: TerminalBackend> {
     raw: bool,
     alternate: bool,
     paste: bool,
+    mouse: bool,
+    focus: bool,
     cursor: bool,
     closed: bool,
 }
@@ -363,6 +669,8 @@ impl<B: TerminalBackend> TerminalLease<B> {
             raw: false,
             alternate: false,
             paste: false,
+            mouse: false,
+            focus: false,
             cursor: false,
             closed: false,
         };
@@ -377,6 +685,10 @@ impl<B: TerminalBackend> TerminalLease<B> {
         lease.alternate = true;
         lease.backend.enable_paste().map_err(terminal_output)?;
         lease.paste = true;
+        lease.backend.enable_mouse().map_err(terminal_output)?;
+        lease.mouse = true;
+        lease.backend.enable_focus().map_err(terminal_output)?;
+        lease.focus = true;
         lease.backend.hide_cursor().map_err(terminal_output)?;
         lease.cursor = true;
         Ok(lease)
@@ -395,6 +707,14 @@ impl<B: TerminalBackend> TerminalLease<B> {
         if self.cursor {
             self.cursor = false;
             record_cleanup(&mut first, self.backend.show_cursor());
+        }
+        if self.focus {
+            self.focus = false;
+            record_cleanup(&mut first, self.backend.disable_focus());
+        }
+        if self.mouse {
+            self.mouse = false;
+            record_cleanup(&mut first, self.backend.disable_mouse());
         }
         if self.paste {
             self.paste = false;
@@ -434,6 +754,21 @@ fn record_cleanup(first: &mut Option<io::Error>, result: io::Result<()>) {
 }
 
 fn project_frame(writer: &mut impl Write, frame: &InteractiveFrame) -> io::Result<()> {
+    let projected = projected_frame(frame)?;
+    write_full_projection(writer, &projected)
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ProjectedFrame {
+    rows: u16,
+    columns: u16,
+    body: Vec<Vec<u8>>,
+    status: Vec<u8>,
+    cursor: Option<(u16, u16)>,
+    cursor_shape: InteractiveCursorShape,
+}
+
+fn projected_frame(frame: &InteractiveFrame) -> io::Result<ProjectedFrame> {
     let rows = u16::try_from(frame.rows)
         .map_err(|_| io::Error::other("frame row count does not fit terminal coordinates"))?;
     let columns = u16::try_from(frame.columns)
@@ -441,57 +776,181 @@ fn project_frame(writer: &mut impl Write, frame: &InteractiveFrame) -> io::Resul
     if rows == 0 || columns == 0 {
         return Err(io::Error::other("frame dimensions must be nonzero"));
     }
-    writer.queue(Clear(ClearType::All))?.queue(MoveTo(0, 0))?;
-    let body_rows = rows.saturating_sub(1);
-    write_scalars(writer, &frame.scalars, body_rows, columns)?;
-    writer.queue(MoveTo(0, rows.saturating_sub(1)))?;
-    write_text(writer, &frame.status, columns)?;
-    if frame.cursor_visible && body_rows > 0 {
-        let (cursor_row, cursor_column) = cursor_cells(frame, body_rows, columns);
-        writer
-            .queue(MoveTo(cursor_column, cursor_row))?
-            .queue(Show)?;
-    } else {
-        writer.queue(Hide)?;
+    if frame.styles.len() != frame.scalars.len() {
+        return Err(io::Error::other(
+            "frame style count must equal frame scalar count",
+        ));
     }
-    Ok(())
-}
-
-fn write_scalars(
-    writer: &mut impl Write,
-    scalars: &[u32],
-    rows: u16,
-    columns: u16,
-) -> io::Result<()> {
-    let mut row = 0_u16;
-    let mut column = 0_u16;
-    for scalar in scalars {
-        if row >= rows {
-            break;
-        }
-        let value = char::from_u32(*scalar).unwrap_or(char::REPLACEMENT_CHARACTER);
-        if value == '\n' {
-            row = row.saturating_add(1);
-            column = 0;
-            if row < rows {
-                writer.queue(MoveTo(0, row))?;
-            }
+    if frame.styles.iter().any(|style| *style > 15) || frame.status_style > 15 {
+        return Err(io::Error::other(
+            "frame style is outside the closed palette",
+        ));
+    }
+    let body_rows = rows.saturating_sub(1);
+    let mut body = Vec::with_capacity(usize::from(body_rows));
+    let mut start = 0_usize;
+    for index in 0..=frame.scalars.len() {
+        let line_end = index == frame.scalars.len() || frame.scalars[index] == u32::from('\n');
+        if !line_end {
             continue;
         }
-        write_cell_character(writer, value, &mut column, columns)?;
+        if body.len() < usize::from(body_rows) {
+            body.push(render_scalar_line(
+                &frame.scalars[start..index],
+                &frame.styles[start..index],
+                columns,
+            )?);
+        }
+        start = index.saturating_add(1);
+        if body.len() == usize::from(body_rows) {
+            break;
+        }
     }
-    Ok(())
+    body.resize_with(usize::from(body_rows), Vec::new);
+    let status_scalars = frame.status.chars().map(u32::from).collect::<Vec<_>>();
+    let status_styles = vec![frame.status_style; status_scalars.len()];
+    let status = render_scalar_line(&status_scalars, &status_styles, columns)?;
+    let cursor = if frame.cursor_visible && body_rows > 0 {
+        Some(cursor_cells(frame, body_rows, columns))
+    } else {
+        None
+    };
+    Ok(ProjectedFrame {
+        rows,
+        columns,
+        body,
+        status,
+        cursor,
+        cursor_shape: frame.cursor_shape,
+    })
 }
 
-fn write_text(writer: &mut impl Write, text: &str, columns: u16) -> io::Result<()> {
+fn render_scalar_line(scalars: &[u32], styles: &[u8], columns: u16) -> io::Result<Vec<u8>> {
+    let estimated = scalars
+        .len()
+        .checked_mul(16)
+        .and_then(|bytes| bytes.checked_add(64))
+        .ok_or_else(|| io::Error::other("terminal row output estimate overflows"))?;
+    let mut output = BoundedOutput::with_capacity(estimated.min(MAXIMUM_TERMINAL_FRAME_BYTES));
     let mut column = 0_u16;
-    for value in text.chars() {
+    let mut current_style = 0_u8;
+    for (scalar, style) in scalars.iter().zip(styles) {
+        if column >= columns {
+            break;
+        }
+        if *style != current_style {
+            queue_palette_style(&mut output, *style)?;
+            current_style = *style;
+        }
+        let value = char::from_u32(*scalar).unwrap_or(char::REPLACEMENT_CHARACTER);
         let value = if value == '\n' {
             char::REPLACEMENT_CHARACTER
         } else {
             value
         };
-        write_cell_character(writer, value, &mut column, columns)?;
+        write_cell_character(&mut output, value, &mut column, columns)?;
+    }
+    if current_style != 0 {
+        queue_palette_style(&mut output, 0)?;
+    }
+    Ok(output.finish())
+}
+
+fn queue_palette_style(writer: &mut impl Write, style: u8) -> io::Result<()> {
+    writer
+        .queue(SetAttribute(Attribute::Reset))?
+        .queue(ResetColor)?;
+    let (foreground, background, bold) = match style {
+        0 => return Ok(()),
+        1 => (Color::Black, Some(Color::Cyan), true),
+        2 => (Color::DarkGrey, None, false),
+        3 => (Color::Yellow, None, true),
+        4 => (Color::DarkGrey, None, false),
+        5 => (Color::Cyan, None, true),
+        6 => (Color::White, Some(Color::DarkBlue), false),
+        7 => (Color::Black, Some(Color::Yellow), false),
+        8 => (Color::Blue, None, true),
+        9 => (Color::Grey, None, false),
+        10 => (Color::Black, Some(Color::Green), true),
+        11 => (Color::Black, Some(Color::Blue), true),
+        12 => (Color::Black, Some(Color::Magenta), true),
+        13 => (Color::White, Some(Color::DarkRed), true),
+        14 => (Color::Black, Some(Color::DarkYellow), true),
+        15 => (Color::Black, Some(Color::DarkCyan), true),
+        _ => {
+            return Err(io::Error::other(
+                "frame style is outside the closed palette",
+            ));
+        }
+    };
+    writer.queue(SetForegroundColor(foreground))?;
+    if let Some(background) = background {
+        writer.queue(SetBackgroundColor(background))?;
+    }
+    if bold {
+        writer.queue(SetAttribute(Attribute::Bold))?;
+    }
+    Ok(())
+}
+
+fn write_full_projection(writer: &mut impl Write, frame: &ProjectedFrame) -> io::Result<()> {
+    writer.queue(Clear(ClearType::All))?;
+    for (row, bytes) in frame.body.iter().enumerate() {
+        writer.queue(MoveTo(0, u16::try_from(row).unwrap_or(u16::MAX)))?;
+        writer.write_all(bytes)?;
+    }
+    writer.queue(MoveTo(0, frame.rows.saturating_sub(1)))?;
+    writer.write_all(&frame.status)?;
+    write_projected_cursor(writer, frame)
+}
+
+fn differential_projection_bytes(
+    acknowledged: Option<&ProjectedFrame>,
+    next: &ProjectedFrame,
+) -> io::Result<Vec<u8>> {
+    let mut output = BoundedOutput::with_capacity(4_096);
+    let Some(previous) = acknowledged else {
+        write_full_projection(&mut output, next)?;
+        return Ok(output.finish());
+    };
+    if previous.rows != next.rows || previous.columns != next.columns {
+        write_full_projection(&mut output, next)?;
+        return Ok(output.finish());
+    }
+    let mut moved = false;
+    for (row, (before, after)) in previous.body.iter().zip(&next.body).enumerate() {
+        if before == after {
+            continue;
+        }
+        output
+            .queue(MoveTo(0, u16::try_from(row).unwrap_or(u16::MAX)))?
+            .queue(Clear(ClearType::CurrentLine))?;
+        output.write_all(after)?;
+        moved = true;
+    }
+    if previous.status != next.status {
+        output
+            .queue(MoveTo(0, next.rows.saturating_sub(1)))?
+            .queue(Clear(ClearType::CurrentLine))?;
+        output.write_all(&next.status)?;
+        moved = true;
+    }
+    if moved || previous.cursor != next.cursor || previous.cursor_shape != next.cursor_shape {
+        write_projected_cursor(&mut output, next)?;
+    }
+    Ok(output.finish())
+}
+
+fn write_projected_cursor(writer: &mut impl Write, frame: &ProjectedFrame) -> io::Result<()> {
+    match frame.cursor_shape {
+        InteractiveCursorShape::Block => writer.queue(SetCursorStyle::SteadyBlock)?,
+        InteractiveCursorShape::Bar => writer.queue(SetCursorStyle::SteadyBar)?,
+        InteractiveCursorShape::Underline => writer.queue(SetCursorStyle::SteadyUnderScore)?,
+    };
+    if let Some((row, column)) = frame.cursor {
+        writer.queue(MoveTo(column, row))?.queue(Show)?;
+    } else {
+        writer.queue(Hide)?;
     }
     Ok(())
 }
@@ -669,7 +1128,7 @@ fn terminal_output(error: io::Error) -> LkError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crossterm::event::{KeyEvent, KeyEventState};
+    use crossterm::event::{KeyEvent, KeyEventState, MouseEvent};
     use std::cell::RefCell;
     use std::rc::Rc;
 
@@ -701,11 +1160,23 @@ mod tests {
         fn enable_paste(&mut self) -> io::Result<()> {
             self.call("enable_paste")
         }
+        fn enable_mouse(&mut self) -> io::Result<()> {
+            self.call("enable_mouse")
+        }
+        fn enable_focus(&mut self) -> io::Result<()> {
+            self.call("enable_focus")
+        }
         fn hide_cursor(&mut self) -> io::Result<()> {
             self.call("hide_cursor")
         }
         fn show_cursor(&mut self) -> io::Result<()> {
             self.call("show_cursor")
+        }
+        fn disable_focus(&mut self) -> io::Result<()> {
+            self.call("disable_focus")
+        }
+        fn disable_mouse(&mut self) -> io::Result<()> {
+            self.call("disable_mouse")
         }
         fn disable_paste(&mut self) -> io::Result<()> {
             self.call("disable_paste")
@@ -732,7 +1203,7 @@ mod tests {
 
     #[test]
     fn acquisition_failure_cleans_every_completed_stage_in_reverse_order() {
-        for fail_at in 1..=4 {
+        for fail_at in 1..=6 {
             let calls = Rc::new(RefCell::new(Vec::new()));
             let backend = FakeBackend {
                 calls: Rc::clone(&calls),
@@ -762,8 +1233,12 @@ mod tests {
                 "enable_raw",
                 "enter_alternate",
                 "enable_paste",
+                "enable_mouse",
+                "enable_focus",
                 "hide_cursor",
                 "show_cursor",
+                "disable_focus",
+                "disable_mouse",
                 "disable_paste",
                 "leave_alternate",
                 "disable_raw",
@@ -776,7 +1251,7 @@ mod tests {
         let calls = Rc::new(RefCell::new(Vec::new()));
         let backend = FakeBackend {
             calls: Rc::clone(&calls),
-            fail_at: Some(5),
+            fail_at: Some(7),
         };
         let mut lease = TerminalLease::acquire(backend).expect("acquire");
         assert_eq!(
@@ -785,10 +1260,13 @@ mod tests {
                     rows: 1,
                     columns: 1,
                     scalars: Vec::new(),
+                    styles: Vec::new(),
                     cursor_row: 0,
                     cursor_column: 0,
                     cursor_visible: false,
+                    cursor_shape: InteractiveCursorShape::Block,
                     status: String::new(),
+                    status_style: 0,
                 })
                 .expect_err("injected output failure")
                 .code,
@@ -801,9 +1279,13 @@ mod tests {
                 "enable_raw",
                 "enter_alternate",
                 "enable_paste",
+                "enable_mouse",
+                "enable_focus",
                 "hide_cursor",
                 "frame",
                 "show_cursor",
+                "disable_focus",
+                "disable_mouse",
                 "disable_paste",
                 "leave_alternate",
                 "disable_raw",
@@ -829,8 +1311,12 @@ mod tests {
                 "enable_raw",
                 "enter_alternate",
                 "enable_paste",
+                "enable_mouse",
+                "enable_focus",
                 "hide_cursor",
                 "show_cursor",
+                "disable_focus",
+                "disable_mouse",
                 "disable_paste",
                 "leave_alternate",
                 "disable_raw",
@@ -884,6 +1370,41 @@ mod tests {
                 .is_none()
         );
         assert!(adapt_terminal_event(Event::Resize(0, u16::MAX)).is_ok());
+
+        let mouse = adapt_terminal_event(Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Drag(MouseButton::Left),
+            column: 19,
+            row: 7,
+            modifiers: KeyModifiers::CONTROL,
+        }))
+        .expect("mouse decode")
+        .expect("retained mouse");
+        assert_eq!(
+            mouse,
+            InteractiveEvent::Mouse(InteractiveMouseEvent {
+                button: InteractiveMouseButton::Primary,
+                kind: InteractiveMouseKind::Drag,
+                row: 7,
+                column: 19,
+                control: true,
+                alt: false,
+                shift: false,
+            })
+        );
+        assert!(
+            adapt_terminal_event(Event::Mouse(MouseEvent {
+                kind: MouseEventKind::Moved,
+                column: 1,
+                row: 1,
+                modifiers: KeyModifiers::NONE,
+            }))
+            .expect("passive motion decode")
+            .is_none()
+        );
+        assert_eq!(
+            adapt_terminal_event(Event::FocusLost).expect("focus decode"),
+            Some(InteractiveEvent::FocusLost)
+        );
     }
 
     #[test]
@@ -898,10 +1419,13 @@ mod tests {
                 u32::from('\n'),
                 u32::from('z'),
             ],
+            styles: vec![0; 5],
             cursor_row: 0,
             cursor_column: 3,
             cursor_visible: true,
+            cursor_shape: InteractiveCursorShape::Block,
             status: "ok\u{1b}[31m".into(),
+            status_style: 0,
         };
         let projected = terminal_frame_bytes(&frame).expect("frame projection");
         assert!(!projected.windows(5).any(|window| window == b"\x1b[31m"));
@@ -911,5 +1435,93 @@ mod tests {
                 .any(|window| window == "\u{fffd}".as_bytes())
         );
         assert!(projected.len() <= MAXIMUM_TERMINAL_FRAME_BYTES);
+    }
+
+    #[test]
+    fn row_differential_is_exact_bounded_and_materially_smaller() {
+        let mut scalars = Vec::new();
+        for row in 0..39_u32 {
+            scalars.extend(std::iter::repeat_n(u32::from('a') + row % 20, 120));
+            if row != 38 {
+                scalars.push(u32::from('\n'));
+            }
+        }
+        let mut frame = InteractiveFrame {
+            rows: 40,
+            columns: 120,
+            styles: vec![0; scalars.len()],
+            scalars,
+            cursor_row: 20,
+            cursor_column: 60,
+            cursor_visible: true,
+            cursor_shape: InteractiveCursorShape::Block,
+            status: "NORMAL  example.txt".into(),
+            status_style: 10,
+        };
+        let first = projected_frame(&frame).expect("first projection");
+        let full = terminal_frame_bytes(&frame).expect("full frame");
+        assert_eq!(
+            differential_projection_bytes(None, &first).expect("cache miss"),
+            full
+        );
+        assert!(
+            differential_projection_bytes(Some(&first), &first)
+                .expect("unchanged frame")
+                .is_empty()
+        );
+
+        frame.scalars[120 * 20 + 20] = u32::from('Z');
+        frame.styles[120 * 20 + 20] = 7;
+        let second = projected_frame(&frame).expect("second projection");
+        let delta = differential_projection_bytes(Some(&first), &second).expect("row delta");
+        assert!(delta.len() * 5 < full.len() * 4);
+        eprintln!(
+            "terminal-row-differential full_bytes={} delta_bytes={} reduction_percent_x100={}",
+            full.len(),
+            delta.len(),
+            (full.len() - delta.len()) * 10_000 / full.len()
+        );
+        assert_eq!(
+            differential_projection_bytes(None, &second).expect("cache rebuild"),
+            terminal_frame_bytes(&frame).expect("second full frame")
+        );
+    }
+
+    #[test]
+    fn bounded_worker_rejects_a_second_job_and_correlates_the_result() {
+        let mut worker = ActionWorker::start(|_| {
+            Ok(InteractiveActionOutcome {
+                job_id: 0,
+                class: crate::application::InteractiveActionOutcomeClass::Succeeded,
+                message: "done".into(),
+                content: String::new(),
+                token: String::new(),
+            })
+        })
+        .expect("worker");
+        worker
+            .submit(crate::application::InteractiveActionRequest {
+                job_id: 41,
+                action: InteractiveAction::ProjectOrient,
+            })
+            .expect("first job");
+        assert_eq!(
+            worker
+                .submit(crate::application::InteractiveActionRequest {
+                    job_id: 42,
+                    action: InteractiveAction::ProjectOrient,
+                })
+                .expect_err("second job must reject")
+                .code,
+            ErrorCode::AuthorityBusy
+        );
+        let result = loop {
+            if let Some(result) = worker.try_result().expect("worker result") {
+                break result;
+            }
+            thread::yield_now();
+        };
+        assert_eq!(result.job_id, 41);
+        worker.shutdown(true);
     }
 }

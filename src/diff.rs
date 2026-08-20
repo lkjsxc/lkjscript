@@ -405,8 +405,16 @@ fn hash_operation(hasher: &mut blake3::Hasher, operation: &OperationKind) {
         }
         OperationKind::NotBool { value }
         | OperationKind::BytesLen { value }
-        | OperationKind::TextLen { value } => hash_value(hasher, *value),
-        OperationKind::BytesAt { value, index } => {
+        | OperationKind::TextLen { value }
+        | OperationKind::TextScalarLen { value }
+        | OperationKind::TextGraphemeLen { value }
+        | OperationKind::TextLineCount { value }
+        | OperationKind::TextLineEndingKind { value } => hash_value(hasher, *value),
+        OperationKind::BytesAt { value, index }
+        | OperationKind::TextScalarAt { value, index }
+        | OperationKind::TextPreviousGraphemeBoundary { value, index }
+        | OperationKind::TextNextGraphemeBoundary { value, index }
+        | OperationKind::TextByteToLine { value, index } => {
             hash_value(hasher, *value);
             hash_value(hasher, *index);
         }
@@ -418,6 +426,83 @@ fn hash_operation(hasher: &mut blake3::Hasher, operation: &OperationKind) {
             hash_value(hasher, *value);
             hash_value(hasher, *start);
             hash_value(hasher, *length);
+        }
+        OperationKind::TextLineStart { value, line }
+        | OperationKind::TextLineEnd { value, line } => {
+            hash_value(hasher, *value);
+            hash_value(hasher, *line);
+        }
+        OperationKind::TextSlice {
+            value,
+            start,
+            end_exclusive,
+        } => {
+            hash_value(hasher, *value);
+            hash_value(hasher, *start);
+            hash_value(hasher, *end_exclusive);
+        }
+        OperationKind::TextSplice {
+            value,
+            start,
+            end_exclusive,
+            replacement,
+        } => {
+            hash_value(hasher, *value);
+            hash_value(hasher, *start);
+            hash_value(hasher, *end_exclusive);
+            hash_value(hasher, *replacement);
+        }
+        OperationKind::TextFindForward {
+            value,
+            query,
+            start,
+        } => {
+            hash_value(hasher, *value);
+            hash_value(hasher, *query);
+            hash_value(hasher, *start);
+        }
+        OperationKind::TextFindBackward {
+            value,
+            query,
+            end_exclusive,
+        } => {
+            hash_value(hasher, *value);
+            hash_value(hasher, *query);
+            hash_value(hasher, *end_exclusive);
+        }
+        OperationKind::TextDisplayWidth {
+            value,
+            start,
+            end_exclusive,
+            initial_column,
+            tab_width,
+        } => {
+            hash_value(hasher, *value);
+            hash_value(hasher, *start);
+            hash_value(hasher, *end_exclusive);
+            hash_value(hasher, *initial_column);
+            hash_value(hasher, *tab_width);
+        }
+        OperationKind::TextCellPrefixBoundary {
+            value,
+            start,
+            end_exclusive,
+            initial_column,
+            maximum_cells,
+            tab_width,
+        } => {
+            hash_value(hasher, *value);
+            hash_value(hasher, *start);
+            hash_value(hasher, *end_exclusive);
+            hash_value(hasher, *initial_column);
+            hash_value(hasher, *maximum_cells);
+            hash_value(hasher, *tab_width);
+        }
+        OperationKind::TextFromScalar { value } => hash_value(hasher, *value),
+        OperationKind::TextToScalars { sequence, value }
+        | OperationKind::TextFromScalars { sequence, value } => {
+            hash_node(hasher, *sequence);
+            hash_value(hasher, *value);
         }
         OperationKind::SequenceEmpty { sequence } => hash_node(hasher, *sequence),
         OperationKind::SequenceLen { sequence, value } => {
@@ -468,6 +553,15 @@ fn hash_operation(hasher: &mut blake3::Hasher, operation: &OperationKind) {
             hash_node(hasher, *sequence);
             hash_value(hasher, *lhs);
             hash_value(hasher, *rhs);
+        }
+        OperationKind::SequenceRepeat {
+            sequence,
+            element,
+            count,
+        } => {
+            hash_node(hasher, *sequence);
+            hash_value(hasher, *element);
+            hash_value(hasher, *count);
         }
         OperationKind::Call {
             function,

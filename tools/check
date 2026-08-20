@@ -1,0 +1,403 @@
+#!/usr/bin/env python3
+"""Compact, bounded repository verification with retained complete child logs."""
+
+from __future__ import annotations
+
+import argparse
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
+import json
+import os
+from pathlib import Path
+import select
+import shutil
+import signal
+import subprocess
+import sys
+import time
+from typing import Any
+
+
+ROOT = Path(__file__).resolve().parents[1]
+LOG_ROOT = ROOT / ".artifacts" / "check"
+MAXIMUM_RUNS = 5
+MAXIMUM_GATE_LOG_BYTES = 64 * 1024 * 1024
+MAXIMUM_FAILURE_LINES = 120
+GATE_TIMEOUT_SECONDS = 3_600
+
+
+@dataclass(frozen=True)
+class Gate:
+    name: str
+    command: list[str]
+
+
+@dataclass
+class GateResult:
+    name: str
+    status: str
+    exit_code: int | None
+    elapsed_ms: int
+    log: str
+    log_bytes: int
+    log_truncated: bool
+    message: str
+
+
+def artifact_gate(output: Path, project: str, target: str) -> Gate:
+    return Gate(
+        f"{target}_artifact",
+        [
+            "target/release/lkjscript",
+            "target",
+            "build",
+            target,
+            "--project",
+            project,
+            "--output",
+            str(output),
+        ],
+    )
+
+
+def gates_for(profile: str, run_dir: Path) -> list[Gate]:
+    fmt = Gate("fmt", ["cargo", "fmt", "--all", "--", "--check"])
+    release = Gate(
+        "release_build",
+        ["cargo", "build", "--workspace", "--release", "--locked"],
+    )
+    product = [
+        release,
+        Gate(
+            "lkjedit_doctor",
+            [
+                "target/release/lkjscript",
+                "doctor",
+                "--project",
+                "applications/lkjedit",
+                "--deep",
+            ],
+        ),
+        Gate(
+            "lkjedit_target_test",
+            [
+                "target/release/lkjscript",
+                "target",
+                "test",
+                "lkjedit",
+                "--project",
+                "applications/lkjedit",
+            ],
+        ),
+        artifact_gate(
+            run_dir / "lkjedit.lkja",
+            "applications/lkjedit",
+            "lkjedit-application",
+        ),
+        Gate(
+            "lkjedit_artifact_compare",
+            [
+                "cmp",
+                str(run_dir / "lkjedit.lkja"),
+                "applications/lkjedit/lkjedit.lkja",
+            ],
+        ),
+        Gate(
+            "lkjedit_acceptance",
+            [
+                sys.executable,
+                "applications/lkjedit/acceptance.py",
+                "--binary",
+                "target/release/lkjedit",
+            ],
+        ),
+    ]
+    if profile == "quick":
+        return [
+            fmt,
+            Gate("library_tests", ["cargo", "test", "--lib", "--locked"]),
+        ]
+    if profile == "product":
+        return [fmt, *product]
+    return [
+        fmt,
+        Gate(
+            "clippy",
+            [
+                "cargo",
+                "clippy",
+                "--workspace",
+                "--all-targets",
+                "--all-features",
+                "--locked",
+                "--",
+                "-D",
+                "warnings",
+            ],
+        ),
+        Gate(
+            "workspace_tests",
+            [
+                "cargo",
+                "test",
+                "--workspace",
+                "--all-targets",
+                "--all-features",
+                "--locked",
+            ],
+        ),
+        *product,
+        Gate(
+            "lkjwork_doctor",
+            [
+                "target/release/lkjscript",
+                "doctor",
+                "--project",
+                "applications/lkjwork",
+                "--deep",
+            ],
+        ),
+        Gate(
+            "lkjwork_target_test",
+            [
+                "target/release/lkjscript",
+                "target",
+                "test",
+                "lkjwork",
+                "--project",
+                "applications/lkjwork",
+            ],
+        ),
+        Gate(
+            "lkjwork_acceptance",
+            [
+                sys.executable,
+                "applications/lkjwork/acceptance.py",
+                "--binary",
+                "target/release/lkjwork",
+            ],
+        ),
+        artifact_gate(run_dir / "lkjwork.lkja", "applications/lkjwork", "lkjwork"),
+        Gate(
+            "lkjwork_artifact_compare",
+            [
+                "cmp",
+                str(run_dir / "lkjwork.lkja"),
+                "applications/lkjwork/lkjwork.lkja",
+            ],
+        ),
+        Gate("diff_check", ["git", "diff", "--check"]),
+    ]
+
+
+def new_run_directory(profile: str) -> Path:
+    LOG_ROOT.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+    run_dir = LOG_ROOT / f"{stamp}-{os.getpid()}-{profile}"
+    run_dir.mkdir()
+    runs = sorted(path for path in LOG_ROOT.iterdir() if path.is_dir())
+    for expired in runs[:-MAXIMUM_RUNS]:
+        shutil.rmtree(expired)
+    return run_dir
+
+
+def relative(path: Path) -> str:
+    return str(path.relative_to(ROOT))
+
+
+def run_gate(gate: Gate, run_dir: Path, details: bool) -> GateResult:
+    log = run_dir / f"{gate.name}.log"
+    environment = os.environ.copy()
+    environment["CARGO_NET_OFFLINE"] = "true"
+    started = time.monotonic_ns()
+    written = 0
+    truncated = False
+    message = ""
+    exit_code: int | None = None
+    with log.open("wb") as output:
+        output.write(("$ " + " ".join(gate.command) + "\n").encode())
+        written = output.tell()
+        try:
+            process = subprocess.Popen(
+                gate.command,
+                cwd=ROOT,
+                env=environment,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+        except OSError as error:
+            message = f"spawn failed: {error}"
+            output.write((message + "\n").encode())
+            written = output.tell()
+            elapsed = (time.monotonic_ns() - started) // 1_000_000
+            return GateResult(
+                gate.name,
+                "unavailable",
+                None,
+                elapsed,
+                relative(log),
+                written,
+                False,
+                message,
+            )
+        assert process.stdout is not None
+        deadline = time.monotonic() + GATE_TIMEOUT_SECONDS
+        while True:
+            if time.monotonic() > deadline:
+                os.killpg(process.pid, signal.SIGTERM)
+                message = f"gate exceeded {GATE_TIMEOUT_SECONDS} seconds"
+                break
+            readable, _, _ = select.select([process.stdout], [], [], 0.25)
+            if not readable:
+                if process.poll() is not None:
+                    break
+                continue
+            chunk = os.read(process.stdout.fileno(), 65_536)
+            if not chunk:
+                break
+            available = MAXIMUM_GATE_LOG_BYTES - written
+            if len(chunk) > available:
+                if available > 0:
+                    output.write(chunk[:available])
+                    written += available
+                truncated = True
+                message = f"log exceeded {MAXIMUM_GATE_LOG_BYTES} bytes"
+                os.killpg(process.pid, signal.SIGTERM)
+                break
+            output.write(chunk)
+            written += len(chunk)
+            if details:
+                sys.stderr.buffer.write(chunk)
+                sys.stderr.buffer.flush()
+        try:
+            exit_code = process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGKILL)
+            exit_code = process.wait(timeout=10)
+            message = message or "gate did not terminate after cancellation"
+        if message:
+            output.write(("\ncheck: " + message + "\n").encode())
+            written = output.tell()
+    elapsed = (time.monotonic_ns() - started) // 1_000_000
+    if exit_code == 0 and not truncated and not message:
+        status = "passed"
+    elif truncated or message.startswith("gate exceeded") or "did not terminate" in message:
+        status = "exhausted"
+    else:
+        status = "failed"
+    return GateResult(
+        gate.name,
+        status,
+        exit_code,
+        elapsed,
+        relative(log),
+        written,
+        truncated,
+        message,
+    )
+
+
+def failure_excerpt(result: GateResult) -> list[str]:
+    lines = (ROOT / result.log).read_text(errors="replace").splitlines()
+    if len(lines) <= MAXIMUM_FAILURE_LINES:
+        return lines
+    head = MAXIMUM_FAILURE_LINES // 2
+    tail = MAXIMUM_FAILURE_LINES - head
+    omitted = len(lines) - MAXIMUM_FAILURE_LINES
+    return [
+        *lines[:head],
+        f"... {omitted} log lines omitted from summary ...",
+        *lines[-tail:],
+    ]
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Run compact, offline, repository-owned verification."
+    )
+    parser.add_argument("profile", choices=("quick", "product", "full"))
+    parser.add_argument("--machine", action="store_true")
+    parser.add_argument("--details", action="store_true")
+    parser.add_argument("--keep-going", action="store_true")
+    parser.add_argument("--inject-failure", action="store_true", help=argparse.SUPPRESS)
+    arguments = parser.parse_args()
+    if arguments.machine and arguments.details:
+        parser.error("--machine and --details are mutually exclusive")
+
+    run_dir = new_run_directory(arguments.profile)
+    gates = gates_for(arguments.profile, run_dir)
+    if arguments.inject_failure:
+        gates.append(
+            Gate(
+                "injected_failure",
+                [sys.executable, "-c", "raise SystemExit('injected check failure')"],
+            )
+        )
+    results: list[GateResult] = []
+    started = time.monotonic_ns()
+    for gate in gates:
+        result = run_gate(gate, run_dir, arguments.details)
+        results.append(result)
+        if result.status != "passed" and not arguments.keep_going:
+            break
+    elapsed_ms = (time.monotonic_ns() - started) // 1_000_000
+    unrun = len(gates) - len(results)
+    counts = {
+        "passed": sum(result.status == "passed" for result in results),
+        "failed": sum(result.status == "failed" for result in results),
+        "skipped": unrun,
+        "exhausted": sum(result.status == "exhausted" for result in results),
+        "unavailable": sum(result.status == "unavailable" for result in results),
+        "indeterminate": 0,
+    }
+    status = "passed" if counts == {
+        "passed": len(gates),
+        "failed": 0,
+        "skipped": 0,
+        "exhausted": 0,
+        "unavailable": 0,
+        "indeterminate": 0,
+    } else "failed"
+    receipt: dict[str, Any] = {
+        "version": 1,
+        "profile": arguments.profile,
+        "status": status,
+        "counts": counts,
+        "elapsed_ms": elapsed_ms,
+        "log_directory": relative(run_dir),
+        "gates": [asdict(result) for result in results],
+        "unrun_gates": [gate.name for gate in gates[len(results) :]],
+    }
+    receipt_path = run_dir / "receipt.json"
+    receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
+    receipt["receipt"] = relative(receipt_path)
+
+    if arguments.machine:
+        print(json.dumps(receipt, separators=(",", ":"), sort_keys=True))
+    else:
+        print(
+            f"check profile={arguments.profile} status={status} "
+            + " ".join(f"{name}={value}" for name, value in counts.items())
+            + f" elapsed_ms={elapsed_ms}"
+        )
+        for result in results:
+            print(
+                f"gate={result.name} status={result.status} elapsed_ms={result.elapsed_ms} "
+                f"log={result.log}"
+            )
+        if unrun:
+            print("unrun=" + ",".join(receipt["unrun_gates"]))
+        failures = [result for result in results if result.status != "passed"]
+        for result in failures:
+            print(f"failure gate={result.name} class={result.status}")
+            for line in failure_excerpt(result):
+                print(line)
+            if result.log_truncated:
+                print(f"failure_excerpt_truncated=true log={result.log}")
+        print(f"receipt={relative(receipt_path)}")
+    return 0 if status == "passed" else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

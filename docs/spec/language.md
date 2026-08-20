@@ -36,36 +36,39 @@ capacity, sharing, views, handles, and reuse are not observable. Bytes are never
 
 ### Text
 
-Every `text` value is one valid UTF-8 byte sequence. Equality is exact byte equality. No Unicode
-normalization, case folding, locale, collation, grapheme, display-width, or canonical-equivalence
-promise exists. Length is always UTF-8 bytes. Arbitrary byte slicing cannot construct text.
+Every `text` value is one valid UTF-8 byte sequence. Equality is exact byte equality. Unicode
+normalization, case folding, locale, collation, and canonical equivalence are absent. `text_len`
+means UTF-8 bytes and is never a character count. Operations that use byte indexes require explicit
+UTF-8 boundaries before producing text.
 
 Public JSON represents text as a JSON string, not base64. JSON, workspace artifacts, releases,
 applications, instance state, queries, and product bindings validate UTF-8 before acceptance.
 Controls and escape characters are valid semantic text; terminal-safe rendering is a separate client
-obligation. One text value is limited to 65,536 UTF-8 bytes, and a literal retained in semantic source
-is limited to 4,096 bytes.
+obligation. One text value is limited to 16 MiB UTF-8, and a literal retained in semantic source is
+limited to 4,096 bytes.
 
-### Editor scalar contract
+### Text units and representation
 
-`lkjstudio` deliberately adds no second language text type. Its editor content is a nominal
-immutable sequence of checked `i64` Unicode scalar values. Every insertion validates
-`char::from_u32` at the application boundary; cursor, selection, search, and line movement use
-zero-based scalar indexes. Native file adaptation decodes valid UTF-8 to scalars and re-encodes
-scalars to UTF-8 only after validation.
+The language names UTF-8 byte boundary, Unicode scalar index, extended grapheme boundary, logical
+line index, and terminal display-cell width separately. `text_scalar_len` and `text_scalar_at` use
+Unicode scalar values. Previous/next-grapheme operations accept and return byte boundaries under
+`unicode-segmentation` 1.13.3. Line start/end and byte-to-line use zero-based logical lines over LF
+while retaining CR bytes as ordinary exact content. Line-ending classification returns none, LF,
+CRLF, or mixed/lone-CR. Display width is a bounded projection operation and never becomes a text
+index. `text_cell_prefix_boundary` accepts an exact UTF-8 byte range, initial cell column, maximum
+cell count, and positive tab width; it visits complete extended grapheme clusters in order and
+returns the greatest byte boundary whose projected width fits. It never returns inside a cluster.
 
-LF is the sole semantic line break used by editor movement. A combining scalar is independently
-addressable, so editing may split a grapheme cluster. Tabs and controls remain scalars; display-cell
-width is a terminal projection and never changes the editor index. Literal search compares exact
-scalar subsequences, allows overlapping matches, uses deterministic forward order and wrap, and
-rejects an empty pattern. These are application semantics, not general language primitives.
+Slice and splice use checked half-open UTF-8 byte ranges and preserve validity. Forward/backward
+literal find is exact byte matching with explicit byte bounds. `text_from_scalar` accepts only one
+valid Unicode scalar.
 
-The editor rebuilds flat immutable sequences with empty/get/append/replace plus checked slice and
-concatenate. Slice and concatenate replaced application-level element-copy loops after the retained
-65,536-scalar paste exhausted the bounded interactive fuel policy. The allocate-new flat result
-remains the independent representation oracle. No rope, piece table, gap buffer, line index, search
-index, map, or mutable builder is retained because the complete current workload does not justify
-another representation owner.
+Execution represents text with an unobservable persistent piece treap over immutable UTF-8 backing.
+Nodes retain byte, scalar, newline, piece-count, and depth aggregates; target chunks are 4 KiB and
+derived grapheme boundaries are disposable. Public serialization and equality remain one canonical
+flat UTF-8 value. Randomized differential tests compare all retained operations with a flat oracle.
+Chunk boundaries, tree shape, backing allocation, priorities, caches, sharing, and addresses are not
+observable or semantic identity.
 
 ### Sequences
 
@@ -91,9 +94,12 @@ The closed operation set includes:
 - product construction and field projection;
 - sum construction and exhaustive `match_sum`;
 - byte length, checked index, checked slice, equality, and concatenation;
-- text byte length, equality, and concatenation;
+- text byte/scalar/grapheme length, scalar access, previous/next grapheme boundary, logical line
+  count/start/end and byte-to-line, checked UTF-8 byte slice/splice, forward/backward exact literal
+  find, line-ending classification, bounded display width and cell-prefix boundary, scalar and
+  scalar-sequence conversion, equality, and concatenation;
 - sequence empty, length, checked zero-based element access, append, replace, checked half-open
-  slice, and concatenate;
+  slice, concatenate, and bounded repetition;
 - typed `hole`; and
 - `return` and `yield` terminators.
 
@@ -102,7 +108,8 @@ be nonnegative and in range before access. Sequence append, replace, slice, and 
 new immutable value of the same exact sequence type; replacement preserves length, slice uses
 `start..end_exclusive`, and concatenate checks the combined element count before allocation. Text
 concatenation checks its result byte length before allocation and remains valid UTF-8 because both
-operands are valid UTF-8.
+operands are valid UTF-8. Text byte-range and boundary failures are stable traps distinct from scalar
+or logical-line range failure.
 
 A product constructor supplies every field exactly once. A sum match supplies every variant exactly
 once and binds a payload only for payload-bearing variants. Calls target durable function entities.
@@ -121,12 +128,13 @@ evaluates only the selected arm. `match_sum` evaluates only the selected variant
 uses explicit start, exclusive end, nonzero step, loop-index binder, and loop-carried binder; its next
 iteration receives the prior yield.
 
-Every executed instruction and transferred flat value has the common deterministic charge. Variable
-work adds a logical charge: byte/text equality charges the compared prefix, concatenation charges
-result bytes, byte slice charges result bytes, sequence length charges element count, and sequence
-append/replace/slice/concatenate charge result element count. Sequence access is checked constant
-logical work plus normal value flattening. These charges do not depend on allocation reuse,
-capacity, `Arc` counts, or serialization size.
+Every executed instruction and transferred value has the common deterministic charge. Variable work
+adds logical charges for traversed text nodes, decoded bytes/scalars, inserted bytes, created pieces,
+search comparisons, result transfer, equality prefixes, concatenation, byte slices, and sequence
+result elements. A persistent splice does not charge every unchanged byte merely because the result
+denotes the whole text. Sequence access is checked constant logical work plus normal value
+flattening. Charges do not depend on allocation reuse, capacity, `Arc` counts, tree shape, or
+serialization accidents.
 
 Calls and user-scalable control use explicit runtime frames. User depth does not consume unbounded
 native stack. Recursion and dependency traversal are bounded by explicit frames, fuel, and the
@@ -161,9 +169,11 @@ and managed objects. Lengths and counts are checked before corresponding allocat
 
 ## Managed immutable representation
 
-Bytes and text share the existing generation-checked managed byte store. The production store uses
-verified managed-reference maps, exact ownership claims, deterministic reclamation, safe immutable
-views, and uniqueness-guided concat reuse. A test-only allocate-new byte mode remains the oracle.
+Bytes use the generation-checked managed byte store. The production store uses verified
+managed-reference maps, exact ownership claims, deterministic reclamation, safe immutable views,
+and uniqueness-guided concat reuse. A test-only allocate-new byte mode remains the oracle. Text uses
+the persistent representation above and materializes canonical flat UTF-8 at public boundaries or
+when an operation explicitly requires it.
 
 Sequences use a safe invocation-local immutable object containing ordered `Arc<RuntimeValue>`
 elements. Append, replace, slice, and concatenate shallow-share immutable elements while allocating
@@ -173,10 +183,10 @@ sharing therefore cannot evade limits. Empty/append/replace/slice/concatenate/ac
 are differentially checked against canonical allocate-new encoding. Public results are deeply
 materialized once at the boundary.
 
-This representation is not language ownership. Authors cannot observe handles, generations,
-reference counts, allocation, sharing, capacity, addresses, or reuse. Accounting is exact logical
-managed accounting, not process RSS enforcement. No tracing collector is retained because accepted
-values are immutable and cannot form pointer cycles.
+These representations are not language ownership. Authors cannot observe handles, generations,
+piece/tree shape, reference counts, allocation, sharing, capacity, addresses, or reuse. Accounting
+is exact logical managed accounting, not process RSS enforcement. No tracing collector is retained
+because accepted values are immutable and cannot form pointer cycles.
 
 ## Public values and failures
 

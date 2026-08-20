@@ -451,6 +451,137 @@ fn render_operation(
         OperationKind::TextConcat { lhs, rhs } => {
             format!("text_concat({}, {})", value(*lhs), value(*rhs))
         }
+        OperationKind::TextScalarLen { value: operand } => {
+            format!("text_scalar_len({})", value(*operand))
+        }
+        OperationKind::TextGraphemeLen { value: operand } => {
+            format!("text_grapheme_len({})", value(*operand))
+        }
+        OperationKind::TextLineCount { value: operand } => {
+            format!("text_line_count({})", value(*operand))
+        }
+        OperationKind::TextScalarAt {
+            value: operand,
+            index,
+        } => format!("text_scalar_at({}, {})", value(*operand), value(*index)),
+        OperationKind::TextPreviousGraphemeBoundary {
+            value: operand,
+            index,
+        } => format!(
+            "text_previous_grapheme_boundary({}, {})",
+            value(*operand),
+            value(*index)
+        ),
+        OperationKind::TextNextGraphemeBoundary {
+            value: operand,
+            index,
+        } => format!(
+            "text_next_grapheme_boundary({}, {})",
+            value(*operand),
+            value(*index)
+        ),
+        OperationKind::TextLineStart {
+            value: operand,
+            line,
+        } => format!("text_line_start({}, {})", value(*operand), value(*line)),
+        OperationKind::TextLineEnd {
+            value: operand,
+            line,
+        } => format!("text_line_end({}, {})", value(*operand), value(*line)),
+        OperationKind::TextByteToLine {
+            value: operand,
+            index,
+        } => format!("text_byte_to_line({}, {})", value(*operand), value(*index)),
+        OperationKind::TextSlice {
+            value: operand,
+            start,
+            end_exclusive,
+        } => format!(
+            "text_slice({}, {}, {})",
+            value(*operand),
+            value(*start),
+            value(*end_exclusive)
+        ),
+        OperationKind::TextSplice {
+            value: operand,
+            start,
+            end_exclusive,
+            replacement,
+        } => format!(
+            "text_splice({}, {}, {}, {})",
+            value(*operand),
+            value(*start),
+            value(*end_exclusive),
+            value(*replacement)
+        ),
+        OperationKind::TextFindForward {
+            value: operand,
+            query,
+            start,
+        } => format!(
+            "text_find_forward({}, {}, {})",
+            value(*operand),
+            value(*query),
+            value(*start)
+        ),
+        OperationKind::TextFindBackward {
+            value: operand,
+            query,
+            end_exclusive,
+        } => format!(
+            "text_find_backward({}, {}, {})",
+            value(*operand),
+            value(*query),
+            value(*end_exclusive)
+        ),
+        OperationKind::TextLineEndingKind { value: operand } => {
+            format!("text_line_ending_kind({})", value(*operand))
+        }
+        OperationKind::TextDisplayWidth {
+            value: operand,
+            start,
+            end_exclusive,
+            initial_column,
+            tab_width,
+        } => format!(
+            "text_display_width({}, {}, {}, {}, {})",
+            value(*operand),
+            value(*start),
+            value(*end_exclusive),
+            value(*initial_column),
+            value(*tab_width)
+        ),
+        OperationKind::TextCellPrefixBoundary {
+            value: operand,
+            start,
+            end_exclusive,
+            initial_column,
+            maximum_cells,
+            tab_width,
+        } => format!(
+            "text_cell_prefix_boundary({}, {}, {}, {}, {}, {})",
+            value(*operand),
+            value(*start),
+            value(*end_exclusive),
+            value(*initial_column),
+            value(*maximum_cells),
+            value(*tab_width)
+        ),
+        OperationKind::TextFromScalar { value: operand } => {
+            format!("text_from_scalar({})", value(*operand))
+        }
+        OperationKind::TextToScalars {
+            sequence,
+            value: operand,
+        } => format!("text_to_scalars({}, {})", node(*sequence), value(*operand)),
+        OperationKind::TextFromScalars {
+            sequence,
+            value: operand,
+        } => format!(
+            "text_from_scalars({}, {})",
+            node(*sequence),
+            value(*operand)
+        ),
         OperationKind::SequenceEmpty { sequence } => format!("sequence_empty({})", node(*sequence)),
         OperationKind::SequenceLen {
             sequence,
@@ -505,6 +636,16 @@ fn render_operation(
             node(*sequence),
             value(*lhs),
             value(*rhs)
+        ),
+        OperationKind::SequenceRepeat {
+            sequence,
+            element,
+            count,
+        } => format!(
+            "sequence_repeat({}, {}, {})",
+            node(*sequence),
+            value(*element),
+            value(*count)
         ),
         OperationKind::Call {
             function,

@@ -172,6 +172,25 @@ pub enum ExpressionDraftCode {
     TextLen,
     TextEqual,
     TextConcat,
+    TextScalarLen,
+    TextGraphemeLen,
+    TextLineCount,
+    TextScalarAt,
+    TextPreviousGraphemeBoundary,
+    TextNextGraphemeBoundary,
+    TextLineStart,
+    TextLineEnd,
+    TextByteToLine,
+    TextSlice,
+    TextSplice,
+    TextFindForward,
+    TextFindBackward,
+    TextLineEndingKind,
+    TextDisplayWidth,
+    TextCellPrefixBoundary,
+    TextFromScalar,
+    TextToScalars,
+    TextFromScalars,
     SequenceEmpty,
     SequenceLen,
     SequenceGet,
@@ -179,9 +198,10 @@ pub enum ExpressionDraftCode {
     SequenceReplace,
     SequenceSlice,
     SequenceConcat,
+    SequenceRepeat,
 }
 impl ExpressionDraftCode {
-    pub const ALL: [Self; 34] = [
+    pub const ALL: [Self; 54] = [
         Self::ConstUnit,
         Self::ConstBool,
         Self::ConstI64,
@@ -209,6 +229,25 @@ impl ExpressionDraftCode {
         Self::TextLen,
         Self::TextEqual,
         Self::TextConcat,
+        Self::TextScalarLen,
+        Self::TextGraphemeLen,
+        Self::TextLineCount,
+        Self::TextScalarAt,
+        Self::TextPreviousGraphemeBoundary,
+        Self::TextNextGraphemeBoundary,
+        Self::TextLineStart,
+        Self::TextLineEnd,
+        Self::TextByteToLine,
+        Self::TextSlice,
+        Self::TextSplice,
+        Self::TextFindForward,
+        Self::TextFindBackward,
+        Self::TextLineEndingKind,
+        Self::TextDisplayWidth,
+        Self::TextCellPrefixBoundary,
+        Self::TextFromScalar,
+        Self::TextToScalars,
+        Self::TextFromScalars,
         Self::SequenceEmpty,
         Self::SequenceLen,
         Self::SequenceGet,
@@ -216,6 +255,7 @@ impl ExpressionDraftCode {
         Self::SequenceReplace,
         Self::SequenceSlice,
         Self::SequenceConcat,
+        Self::SequenceRepeat,
     ];
     pub const fn machine_name(self) -> &'static str {
         match self {
@@ -246,6 +286,25 @@ impl ExpressionDraftCode {
             Self::TextLen => "text_len",
             Self::TextEqual => "text_equal",
             Self::TextConcat => "text_concat",
+            Self::TextScalarLen => "text_scalar_len",
+            Self::TextGraphemeLen => "text_grapheme_len",
+            Self::TextLineCount => "text_line_count",
+            Self::TextScalarAt => "text_scalar_at",
+            Self::TextPreviousGraphemeBoundary => "text_previous_grapheme_boundary",
+            Self::TextNextGraphemeBoundary => "text_next_grapheme_boundary",
+            Self::TextLineStart => "text_line_start",
+            Self::TextLineEnd => "text_line_end",
+            Self::TextByteToLine => "text_byte_to_line",
+            Self::TextSlice => "text_slice",
+            Self::TextSplice => "text_splice",
+            Self::TextFindForward => "text_find_forward",
+            Self::TextFindBackward => "text_find_backward",
+            Self::TextLineEndingKind => "text_line_ending_kind",
+            Self::TextDisplayWidth => "text_display_width",
+            Self::TextCellPrefixBoundary => "text_cell_prefix_boundary",
+            Self::TextFromScalar => "text_from_scalar",
+            Self::TextToScalars => "text_to_scalars",
+            Self::TextFromScalars => "text_from_scalars",
             Self::SequenceEmpty => "sequence_empty",
             Self::SequenceLen => "sequence_len",
             Self::SequenceGet => "sequence_get",
@@ -253,6 +312,7 @@ impl ExpressionDraftCode {
             Self::SequenceReplace => "sequence_replace",
             Self::SequenceSlice => "sequence_slice",
             Self::SequenceConcat => "sequence_concat",
+            Self::SequenceRepeat => "sequence_repeat",
         }
     }
 
@@ -285,6 +345,25 @@ impl ExpressionDraftCode {
             Self::TextLen => OperationCode::TextLen,
             Self::TextEqual => OperationCode::TextEqual,
             Self::TextConcat => OperationCode::TextConcat,
+            Self::TextScalarLen => OperationCode::TextScalarLen,
+            Self::TextGraphemeLen => OperationCode::TextGraphemeLen,
+            Self::TextLineCount => OperationCode::TextLineCount,
+            Self::TextScalarAt => OperationCode::TextScalarAt,
+            Self::TextPreviousGraphemeBoundary => OperationCode::TextPreviousGraphemeBoundary,
+            Self::TextNextGraphemeBoundary => OperationCode::TextNextGraphemeBoundary,
+            Self::TextLineStart => OperationCode::TextLineStart,
+            Self::TextLineEnd => OperationCode::TextLineEnd,
+            Self::TextByteToLine => OperationCode::TextByteToLine,
+            Self::TextSlice => OperationCode::TextSlice,
+            Self::TextSplice => OperationCode::TextSplice,
+            Self::TextFindForward => OperationCode::TextFindForward,
+            Self::TextFindBackward => OperationCode::TextFindBackward,
+            Self::TextLineEndingKind => OperationCode::TextLineEndingKind,
+            Self::TextDisplayWidth => OperationCode::TextDisplayWidth,
+            Self::TextCellPrefixBoundary => OperationCode::TextCellPrefixBoundary,
+            Self::TextFromScalar => OperationCode::TextFromScalar,
+            Self::TextToScalars => OperationCode::TextToScalars,
+            Self::TextFromScalars => OperationCode::TextFromScalars,
             Self::SequenceEmpty => OperationCode::SequenceEmpty,
             Self::SequenceLen => OperationCode::SequenceLen,
             Self::SequenceGet => OperationCode::SequenceGet,
@@ -292,6 +371,7 @@ impl ExpressionDraftCode {
             Self::SequenceReplace => OperationCode::SequenceReplace,
             Self::SequenceSlice => OperationCode::SequenceSlice,
             Self::SequenceConcat => OperationCode::SequenceConcat,
+            Self::SequenceRepeat => OperationCode::SequenceRepeat,
         }
     }
 
@@ -364,6 +444,27 @@ impl ExpressionKindDraft {
             Self::TextLen { .. } => ExpressionDraftCode::TextLen,
             Self::TextEqual { .. } => ExpressionDraftCode::TextEqual,
             Self::TextConcat { .. } => ExpressionDraftCode::TextConcat,
+            Self::TextScalarLen { .. } => ExpressionDraftCode::TextScalarLen,
+            Self::TextGraphemeLen { .. } => ExpressionDraftCode::TextGraphemeLen,
+            Self::TextLineCount { .. } => ExpressionDraftCode::TextLineCount,
+            Self::TextScalarAt { .. } => ExpressionDraftCode::TextScalarAt,
+            Self::TextPreviousGraphemeBoundary { .. } => {
+                ExpressionDraftCode::TextPreviousGraphemeBoundary
+            }
+            Self::TextNextGraphemeBoundary { .. } => ExpressionDraftCode::TextNextGraphemeBoundary,
+            Self::TextLineStart { .. } => ExpressionDraftCode::TextLineStart,
+            Self::TextLineEnd { .. } => ExpressionDraftCode::TextLineEnd,
+            Self::TextByteToLine { .. } => ExpressionDraftCode::TextByteToLine,
+            Self::TextSlice { .. } => ExpressionDraftCode::TextSlice,
+            Self::TextSplice { .. } => ExpressionDraftCode::TextSplice,
+            Self::TextFindForward { .. } => ExpressionDraftCode::TextFindForward,
+            Self::TextFindBackward { .. } => ExpressionDraftCode::TextFindBackward,
+            Self::TextLineEndingKind { .. } => ExpressionDraftCode::TextLineEndingKind,
+            Self::TextDisplayWidth { .. } => ExpressionDraftCode::TextDisplayWidth,
+            Self::TextCellPrefixBoundary { .. } => ExpressionDraftCode::TextCellPrefixBoundary,
+            Self::TextFromScalar { .. } => ExpressionDraftCode::TextFromScalar,
+            Self::TextToScalars { .. } => ExpressionDraftCode::TextToScalars,
+            Self::TextFromScalars { .. } => ExpressionDraftCode::TextFromScalars,
             Self::SequenceEmpty { .. } => ExpressionDraftCode::SequenceEmpty,
             Self::SequenceLen { .. } => ExpressionDraftCode::SequenceLen,
             Self::SequenceGet { .. } => ExpressionDraftCode::SequenceGet,
@@ -371,6 +472,7 @@ impl ExpressionKindDraft {
             Self::SequenceReplace { .. } => ExpressionDraftCode::SequenceReplace,
             Self::SequenceSlice { .. } => ExpressionDraftCode::SequenceSlice,
             Self::SequenceConcat { .. } => ExpressionDraftCode::SequenceConcat,
+            Self::SequenceRepeat { .. } => ExpressionDraftCode::SequenceRepeat,
             Self::BytesLen { .. } => ExpressionDraftCode::BytesLen,
             Self::BytesAt { .. } => ExpressionDraftCode::BytesAt,
             Self::BytesSlice { .. } => ExpressionDraftCode::BytesSlice,
@@ -511,6 +613,89 @@ pub enum ExpressionKindDraft {
         lhs: ValueDraft,
         rhs: ValueDraft,
     },
+    TextScalarLen {
+        value: ValueDraft,
+    },
+    TextGraphemeLen {
+        value: ValueDraft,
+    },
+    TextLineCount {
+        value: ValueDraft,
+    },
+    TextScalarAt {
+        value: ValueDraft,
+        index: ValueDraft,
+    },
+    TextPreviousGraphemeBoundary {
+        value: ValueDraft,
+        index: ValueDraft,
+    },
+    TextNextGraphemeBoundary {
+        value: ValueDraft,
+        index: ValueDraft,
+    },
+    TextLineStart {
+        value: ValueDraft,
+        line: ValueDraft,
+    },
+    TextLineEnd {
+        value: ValueDraft,
+        line: ValueDraft,
+    },
+    TextByteToLine {
+        value: ValueDraft,
+        index: ValueDraft,
+    },
+    TextSlice {
+        value: ValueDraft,
+        start: ValueDraft,
+        end_exclusive: ValueDraft,
+    },
+    TextSplice {
+        value: ValueDraft,
+        start: ValueDraft,
+        end_exclusive: ValueDraft,
+        replacement: ValueDraft,
+    },
+    TextFindForward {
+        value: ValueDraft,
+        query: ValueDraft,
+        start: ValueDraft,
+    },
+    TextFindBackward {
+        value: ValueDraft,
+        query: ValueDraft,
+        end_exclusive: ValueDraft,
+    },
+    TextLineEndingKind {
+        value: ValueDraft,
+    },
+    TextDisplayWidth {
+        value: ValueDraft,
+        start: ValueDraft,
+        end_exclusive: ValueDraft,
+        initial_column: ValueDraft,
+        tab_width: ValueDraft,
+    },
+    TextCellPrefixBoundary {
+        value: ValueDraft,
+        start: ValueDraft,
+        end_exclusive: ValueDraft,
+        initial_column: ValueDraft,
+        maximum_cells: ValueDraft,
+        tab_width: ValueDraft,
+    },
+    TextFromScalar {
+        value: ValueDraft,
+    },
+    TextToScalars {
+        sequence: NodeTarget,
+        value: ValueDraft,
+    },
+    TextFromScalars {
+        sequence: NodeTarget,
+        value: ValueDraft,
+    },
     SequenceEmpty {
         sequence: NodeTarget,
     },
@@ -544,6 +729,11 @@ pub enum ExpressionKindDraft {
         sequence: NodeTarget,
         lhs: ValueDraft,
         rhs: ValueDraft,
+    },
+    SequenceRepeat {
+        sequence: NodeTarget,
+        element: ValueDraft,
+        count: ValueDraft,
     },
     Call {
         function: NodeTarget,
@@ -1827,6 +2017,206 @@ fn expand_transaction(
                         operation: OperationDraft::TextConcat { lhs, rhs },
                     })
                 }
+                ExpressionKindDraft::TextScalarLen { value } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::TextScalarLen { value },
+                    })
+                }
+                ExpressionKindDraft::TextGraphemeLen { value } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::TextGraphemeLen { value },
+                    })
+                }
+                ExpressionKindDraft::TextLineCount { value } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::TextLineCount { value },
+                    })
+                }
+                ExpressionKindDraft::TextScalarAt { value, index } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::TextScalarAt { value, index },
+                    })
+                }
+                ExpressionKindDraft::TextPreviousGraphemeBoundary { value, index } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::TextPreviousGraphemeBoundary { value, index },
+                    })
+                }
+                ExpressionKindDraft::TextNextGraphemeBoundary { value, index } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::TextNextGraphemeBoundary { value, index },
+                    })
+                }
+                ExpressionKindDraft::TextLineStart { value, line } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::TextLineStart { value, line },
+                    })
+                }
+                ExpressionKindDraft::TextLineEnd { value, line } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::TextLineEnd { value, line },
+                    })
+                }
+                ExpressionKindDraft::TextByteToLine { value, index } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::TextByteToLine { value, index },
+                    })
+                }
+                ExpressionKindDraft::TextSlice {
+                    value,
+                    start,
+                    end_exclusive,
+                } => edits.push(CanonicalEdit::CreateOperation {
+                    symbol: expression_symbol,
+                    block,
+                    before,
+                    operation: OperationDraft::TextSlice {
+                        value,
+                        start,
+                        end_exclusive,
+                    },
+                }),
+                ExpressionKindDraft::TextSplice {
+                    value,
+                    start,
+                    end_exclusive,
+                    replacement,
+                } => edits.push(CanonicalEdit::CreateOperation {
+                    symbol: expression_symbol,
+                    block,
+                    before,
+                    operation: OperationDraft::TextSplice {
+                        value,
+                        start,
+                        end_exclusive,
+                        replacement,
+                    },
+                }),
+                ExpressionKindDraft::TextFindForward {
+                    value,
+                    query,
+                    start,
+                } => edits.push(CanonicalEdit::CreateOperation {
+                    symbol: expression_symbol,
+                    block,
+                    before,
+                    operation: OperationDraft::TextFindForward {
+                        value,
+                        query,
+                        start,
+                    },
+                }),
+                ExpressionKindDraft::TextFindBackward {
+                    value,
+                    query,
+                    end_exclusive,
+                } => edits.push(CanonicalEdit::CreateOperation {
+                    symbol: expression_symbol,
+                    block,
+                    before,
+                    operation: OperationDraft::TextFindBackward {
+                        value,
+                        query,
+                        end_exclusive,
+                    },
+                }),
+                ExpressionKindDraft::TextLineEndingKind { value } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::TextLineEndingKind { value },
+                    })
+                }
+                ExpressionKindDraft::TextDisplayWidth {
+                    value,
+                    start,
+                    end_exclusive,
+                    initial_column,
+                    tab_width,
+                } => edits.push(CanonicalEdit::CreateOperation {
+                    symbol: expression_symbol,
+                    block,
+                    before,
+                    operation: OperationDraft::TextDisplayWidth {
+                        value,
+                        start,
+                        end_exclusive,
+                        initial_column,
+                        tab_width,
+                    },
+                }),
+                ExpressionKindDraft::TextCellPrefixBoundary {
+                    value,
+                    start,
+                    end_exclusive,
+                    initial_column,
+                    maximum_cells,
+                    tab_width,
+                } => edits.push(CanonicalEdit::CreateOperation {
+                    symbol: expression_symbol,
+                    block,
+                    before,
+                    operation: OperationDraft::TextCellPrefixBoundary {
+                        value,
+                        start,
+                        end_exclusive,
+                        initial_column,
+                        maximum_cells,
+                        tab_width,
+                    },
+                }),
+                ExpressionKindDraft::TextFromScalar { value } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::TextFromScalar { value },
+                    })
+                }
+                ExpressionKindDraft::TextToScalars { sequence, value } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::TextToScalars { sequence, value },
+                    })
+                }
+                ExpressionKindDraft::TextFromScalars { sequence, value } => {
+                    edits.push(CanonicalEdit::CreateOperation {
+                        symbol: expression_symbol,
+                        block,
+                        before,
+                        operation: OperationDraft::TextFromScalars { sequence, value },
+                    })
+                }
                 ExpressionKindDraft::SequenceEmpty { sequence } => {
                     edits.push(CanonicalEdit::CreateOperation {
                         symbol: expression_symbol,
@@ -1911,6 +2301,20 @@ fn expand_transaction(
                         operation: OperationDraft::SequenceConcat { sequence, lhs, rhs },
                     })
                 }
+                ExpressionKindDraft::SequenceRepeat {
+                    sequence,
+                    element,
+                    count,
+                } => edits.push(CanonicalEdit::CreateOperation {
+                    symbol: expression_symbol,
+                    block,
+                    before,
+                    operation: OperationDraft::SequenceRepeat {
+                        sequence,
+                        element,
+                        count,
+                    },
+                }),
                 ExpressionKindDraft::Call {
                     function,
                     arguments,
@@ -2160,8 +2564,16 @@ fn extract_inline_children(
         ExpressionKindDraft::NotBool { value }
         | ExpressionKindDraft::BytesLen { value }
         | ExpressionKindDraft::TextLen { value }
+        | ExpressionKindDraft::TextScalarLen { value }
+        | ExpressionKindDraft::TextGraphemeLen { value }
+        | ExpressionKindDraft::TextLineCount { value }
+        | ExpressionKindDraft::TextLineEndingKind { value }
         | ExpressionKindDraft::SequenceLen { value, .. } => extract(value, "value".to_owned())?,
-        ExpressionKindDraft::BytesAt { value, index } => {
+        ExpressionKindDraft::BytesAt { value, index }
+        | ExpressionKindDraft::TextScalarAt { value, index }
+        | ExpressionKindDraft::TextPreviousGraphemeBoundary { value, index }
+        | ExpressionKindDraft::TextNextGraphemeBoundary { value, index }
+        | ExpressionKindDraft::TextByteToLine { value, index } => {
             extract(value, "value".to_owned())?;
             extract(index, "index".to_owned())?;
         }
@@ -2173,6 +2585,82 @@ fn extract_inline_children(
             extract(value, "value".to_owned())?;
             extract(start, "start".to_owned())?;
             extract(length, "length".to_owned())?;
+        }
+        ExpressionKindDraft::TextLineStart { value, line }
+        | ExpressionKindDraft::TextLineEnd { value, line } => {
+            extract(value, "value".to_owned())?;
+            extract(line, "line".to_owned())?;
+        }
+        ExpressionKindDraft::TextSlice {
+            value,
+            start,
+            end_exclusive,
+        } => {
+            extract(value, "value".to_owned())?;
+            extract(start, "start".to_owned())?;
+            extract(end_exclusive, "end_exclusive".to_owned())?;
+        }
+        ExpressionKindDraft::TextSplice {
+            value,
+            start,
+            end_exclusive,
+            replacement,
+        } => {
+            extract(value, "value".to_owned())?;
+            extract(start, "start".to_owned())?;
+            extract(end_exclusive, "end_exclusive".to_owned())?;
+            extract(replacement, "replacement".to_owned())?;
+        }
+        ExpressionKindDraft::TextFindForward {
+            value,
+            query,
+            start,
+        } => {
+            extract(value, "value".to_owned())?;
+            extract(query, "query".to_owned())?;
+            extract(start, "start".to_owned())?;
+        }
+        ExpressionKindDraft::TextFindBackward {
+            value,
+            query,
+            end_exclusive,
+        } => {
+            extract(value, "value".to_owned())?;
+            extract(query, "query".to_owned())?;
+            extract(end_exclusive, "end_exclusive".to_owned())?;
+        }
+        ExpressionKindDraft::TextDisplayWidth {
+            value,
+            start,
+            end_exclusive,
+            initial_column,
+            tab_width,
+        } => {
+            extract(value, "value".to_owned())?;
+            extract(start, "start".to_owned())?;
+            extract(end_exclusive, "end_exclusive".to_owned())?;
+            extract(initial_column, "initial_column".to_owned())?;
+            extract(tab_width, "tab_width".to_owned())?;
+        }
+        ExpressionKindDraft::TextCellPrefixBoundary {
+            value,
+            start,
+            end_exclusive,
+            initial_column,
+            maximum_cells,
+            tab_width,
+        } => {
+            extract(value, "value".to_owned())?;
+            extract(start, "start".to_owned())?;
+            extract(end_exclusive, "end_exclusive".to_owned())?;
+            extract(initial_column, "initial_column".to_owned())?;
+            extract(maximum_cells, "maximum_cells".to_owned())?;
+            extract(tab_width, "tab_width".to_owned())?;
+        }
+        ExpressionKindDraft::TextFromScalar { value }
+        | ExpressionKindDraft::TextToScalars { value, .. }
+        | ExpressionKindDraft::TextFromScalars { value, .. } => {
+            extract(value, "value".to_owned())?;
         }
         ExpressionKindDraft::SequenceGet { value, index, .. } => {
             extract(value, "value".to_owned())?;
@@ -2205,6 +2693,10 @@ fn extract_inline_children(
         ExpressionKindDraft::SequenceConcat { lhs, rhs, .. } => {
             extract(lhs, "lhs".to_owned())?;
             extract(rhs, "rhs".to_owned())?;
+        }
+        ExpressionKindDraft::SequenceRepeat { element, count, .. } => {
+            extract(element, "element".to_owned())?;
+            extract(count, "count".to_owned())?;
         }
         ExpressionKindDraft::Call { arguments, .. } => {
             for (index, value) in arguments.iter_mut().enumerate() {
@@ -2554,10 +3046,18 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
             }
             OperationDraft::NotBool { value }
             | OperationDraft::BytesLen { value }
-            | OperationDraft::TextLen { value } => {
+            | OperationDraft::TextLen { value }
+            | OperationDraft::TextScalarLen { value }
+            | OperationDraft::TextGraphemeLen { value }
+            | OperationDraft::TextLineCount { value }
+            | OperationDraft::TextLineEndingKind { value } => {
                 value_reference(value, source, references)?;
             }
-            OperationDraft::BytesAt { value, index } => {
+            OperationDraft::BytesAt { value, index }
+            | OperationDraft::TextScalarAt { value, index }
+            | OperationDraft::TextPreviousGraphemeBoundary { value, index }
+            | OperationDraft::TextNextGraphemeBoundary { value, index }
+            | OperationDraft::TextByteToLine { value, index } => {
                 value_reference(value, source, references)?;
                 value_reference(index, source, references)?;
             }
@@ -2569,6 +3069,90 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
                 value_reference(value, source, references)?;
                 value_reference(start, source, references)?;
                 value_reference(length, source, references)?;
+            }
+            OperationDraft::TextLineStart { value, line }
+            | OperationDraft::TextLineEnd { value, line } => {
+                value_reference(value, source, references)?;
+                value_reference(line, source, references)?;
+            }
+            OperationDraft::TextSlice {
+                value,
+                start,
+                end_exclusive,
+            } => {
+                value_reference(value, source, references)?;
+                value_reference(start, source, references)?;
+                value_reference(end_exclusive, source, references)?;
+            }
+            OperationDraft::TextSplice {
+                value,
+                start,
+                end_exclusive,
+                replacement,
+            } => {
+                value_reference(value, source, references)?;
+                value_reference(start, source, references)?;
+                value_reference(end_exclusive, source, references)?;
+                value_reference(replacement, source, references)?;
+            }
+            OperationDraft::TextFindForward {
+                value,
+                query,
+                start,
+            } => {
+                value_reference(value, source, references)?;
+                value_reference(query, source, references)?;
+                value_reference(start, source, references)?;
+            }
+            OperationDraft::TextFindBackward {
+                value,
+                query,
+                end_exclusive,
+            } => {
+                value_reference(value, source, references)?;
+                value_reference(query, source, references)?;
+                value_reference(end_exclusive, source, references)?;
+            }
+            OperationDraft::TextDisplayWidth {
+                value,
+                start,
+                end_exclusive,
+                initial_column,
+                tab_width,
+            } => {
+                value_reference(value, source, references)?;
+                value_reference(start, source, references)?;
+                value_reference(end_exclusive, source, references)?;
+                value_reference(initial_column, source, references)?;
+                value_reference(tab_width, source, references)?;
+            }
+            OperationDraft::TextCellPrefixBoundary {
+                value,
+                start,
+                end_exclusive,
+                initial_column,
+                maximum_cells,
+                tab_width,
+            } => {
+                value_reference(value, source, references)?;
+                value_reference(start, source, references)?;
+                value_reference(end_exclusive, source, references)?;
+                value_reference(initial_column, source, references)?;
+                value_reference(maximum_cells, source, references)?;
+                value_reference(tab_width, source, references)?;
+            }
+            OperationDraft::TextFromScalar { value } => {
+                value_reference(value, source, references)?;
+            }
+            OperationDraft::TextToScalars { sequence, value }
+            | OperationDraft::TextFromScalars { sequence, value } => {
+                reference(
+                    *sequence,
+                    DraftReferenceKind::SequenceType,
+                    source,
+                    references,
+                );
+                value_reference(value, source, references)?;
             }
             OperationDraft::SequenceEmpty { sequence } => {
                 reference(
@@ -2656,6 +3240,20 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
                 );
                 value_reference(lhs, source, references)?;
                 value_reference(rhs, source, references)?;
+            }
+            OperationDraft::SequenceRepeat {
+                sequence,
+                element,
+                count,
+            } => {
+                reference(
+                    *sequence,
+                    DraftReferenceKind::SequenceType,
+                    source,
+                    references,
+                );
+                value_reference(element, source, references)?;
+                value_reference(count, source, references)?;
             }
             OperationDraft::Call {
                 function,
@@ -3092,6 +3690,10 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
             ExpressionKindDraft::NotBool { value }
             | ExpressionKindDraft::BytesLen { value }
             | ExpressionKindDraft::TextLen { value }
+            | ExpressionKindDraft::TextScalarLen { value }
+            | ExpressionKindDraft::TextGraphemeLen { value }
+            | ExpressionKindDraft::TextLineCount { value }
+            | ExpressionKindDraft::TextLineEndingKind { value }
             | ExpressionKindDraft::SequenceLen { value, .. } => {
                 structured_value(
                     value,
@@ -3102,7 +3704,11 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
                     &mut references,
                 )?;
             }
-            ExpressionKindDraft::BytesAt { value, index } => {
+            ExpressionKindDraft::BytesAt { value, index }
+            | ExpressionKindDraft::TextScalarAt { value, index }
+            | ExpressionKindDraft::TextPreviousGraphemeBoundary { value, index }
+            | ExpressionKindDraft::TextNextGraphemeBoundary { value, index }
+            | ExpressionKindDraft::TextByteToLine { value, index } => {
                 for (value, segment) in [(index, "index"), (value, "value")] {
                     structured_value(
                         value,
@@ -3113,6 +3719,174 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
                         &mut references,
                     )?;
                 }
+            }
+            ExpressionKindDraft::TextLineStart { value, line }
+            | ExpressionKindDraft::TextLineEnd { value, line } => {
+                for (value, segment) in [(line, "line"), (value, "value")] {
+                    structured_value(
+                        value,
+                        depth,
+                        source,
+                        child_draft_path(&path, segment, source)?,
+                        &mut stack,
+                        &mut references,
+                    )?;
+                }
+            }
+            ExpressionKindDraft::TextSlice {
+                value,
+                start,
+                end_exclusive,
+            } => {
+                for (value, segment) in [
+                    (end_exclusive, "end_exclusive"),
+                    (start, "start"),
+                    (value, "value"),
+                ] {
+                    structured_value(
+                        value,
+                        depth,
+                        source,
+                        child_draft_path(&path, segment, source)?,
+                        &mut stack,
+                        &mut references,
+                    )?;
+                }
+            }
+            ExpressionKindDraft::TextSplice {
+                value,
+                start,
+                end_exclusive,
+                replacement,
+            } => {
+                for (value, segment) in [
+                    (replacement, "replacement"),
+                    (end_exclusive, "end_exclusive"),
+                    (start, "start"),
+                    (value, "value"),
+                ] {
+                    structured_value(
+                        value,
+                        depth,
+                        source,
+                        child_draft_path(&path, segment, source)?,
+                        &mut stack,
+                        &mut references,
+                    )?;
+                }
+            }
+            ExpressionKindDraft::TextFindForward {
+                value,
+                query,
+                start,
+            } => {
+                for (value, segment) in [(start, "start"), (query, "query"), (value, "value")] {
+                    structured_value(
+                        value,
+                        depth,
+                        source,
+                        child_draft_path(&path, segment, source)?,
+                        &mut stack,
+                        &mut references,
+                    )?;
+                }
+            }
+            ExpressionKindDraft::TextFindBackward {
+                value,
+                query,
+                end_exclusive,
+            } => {
+                for (value, segment) in [
+                    (end_exclusive, "end_exclusive"),
+                    (query, "query"),
+                    (value, "value"),
+                ] {
+                    structured_value(
+                        value,
+                        depth,
+                        source,
+                        child_draft_path(&path, segment, source)?,
+                        &mut stack,
+                        &mut references,
+                    )?;
+                }
+            }
+            ExpressionKindDraft::TextDisplayWidth {
+                value,
+                start,
+                end_exclusive,
+                initial_column,
+                tab_width,
+            } => {
+                for (value, segment) in [
+                    (tab_width, "tab_width"),
+                    (initial_column, "initial_column"),
+                    (end_exclusive, "end_exclusive"),
+                    (start, "start"),
+                    (value, "value"),
+                ] {
+                    structured_value(
+                        value,
+                        depth,
+                        source,
+                        child_draft_path(&path, segment, source)?,
+                        &mut stack,
+                        &mut references,
+                    )?;
+                }
+            }
+            ExpressionKindDraft::TextCellPrefixBoundary {
+                value,
+                start,
+                end_exclusive,
+                initial_column,
+                maximum_cells,
+                tab_width,
+            } => {
+                for (value, segment) in [
+                    (tab_width, "tab_width"),
+                    (maximum_cells, "maximum_cells"),
+                    (initial_column, "initial_column"),
+                    (end_exclusive, "end_exclusive"),
+                    (start, "start"),
+                    (value, "value"),
+                ] {
+                    structured_value(
+                        value,
+                        depth,
+                        source,
+                        child_draft_path(&path, segment, source)?,
+                        &mut stack,
+                        &mut references,
+                    )?;
+                }
+            }
+            ExpressionKindDraft::TextFromScalar { value } => {
+                structured_value(
+                    value,
+                    depth,
+                    source,
+                    child_draft_path(&path, "value", source)?,
+                    &mut stack,
+                    &mut references,
+                )?;
+            }
+            ExpressionKindDraft::TextToScalars { sequence, value }
+            | ExpressionKindDraft::TextFromScalars { sequence, value } => {
+                reference(
+                    *sequence,
+                    DraftReferenceKind::SequenceType,
+                    source,
+                    &mut references,
+                );
+                structured_value(
+                    value,
+                    depth,
+                    source,
+                    child_draft_path(&path, "value", source)?,
+                    &mut stack,
+                    &mut references,
+                )?;
             }
             ExpressionKindDraft::BytesSlice {
                 value,
@@ -3238,6 +4012,28 @@ fn scan_explicit_symbols(operations: &[TransactionOp]) -> Result<BTreeSet<DraftS
                     &mut references,
                 );
                 for (value, segment) in [(rhs, "rhs"), (lhs, "lhs")] {
+                    structured_value(
+                        value,
+                        depth,
+                        source,
+                        child_draft_path(&path, segment, source)?,
+                        &mut stack,
+                        &mut references,
+                    )?;
+                }
+            }
+            ExpressionKindDraft::SequenceRepeat {
+                sequence,
+                element,
+                count,
+            } => {
+                reference(
+                    *sequence,
+                    DraftReferenceKind::SequenceType,
+                    source,
+                    &mut references,
+                );
+                for (value, segment) in [(count, "count"), (element, "element")] {
                     structured_value(
                         value,
                         depth,
@@ -5046,6 +5842,123 @@ fn resolve_operation(
             lhs: resolve_value(lhs, allocations, workspace)?,
             rhs: resolve_value(rhs, allocations, workspace)?,
         },
+        OperationDraft::TextScalarLen { value } => OperationKind::TextScalarLen {
+            value: resolve_value(value, allocations, workspace)?,
+        },
+        OperationDraft::TextGraphemeLen { value } => OperationKind::TextGraphemeLen {
+            value: resolve_value(value, allocations, workspace)?,
+        },
+        OperationDraft::TextLineCount { value } => OperationKind::TextLineCount {
+            value: resolve_value(value, allocations, workspace)?,
+        },
+        OperationDraft::TextScalarAt { value, index } => OperationKind::TextScalarAt {
+            value: resolve_value(value, allocations, workspace)?,
+            index: resolve_value(index, allocations, workspace)?,
+        },
+        OperationDraft::TextPreviousGraphemeBoundary { value, index } => {
+            OperationKind::TextPreviousGraphemeBoundary {
+                value: resolve_value(value, allocations, workspace)?,
+                index: resolve_value(index, allocations, workspace)?,
+            }
+        }
+        OperationDraft::TextNextGraphemeBoundary { value, index } => {
+            OperationKind::TextNextGraphemeBoundary {
+                value: resolve_value(value, allocations, workspace)?,
+                index: resolve_value(index, allocations, workspace)?,
+            }
+        }
+        OperationDraft::TextLineStart { value, line } => OperationKind::TextLineStart {
+            value: resolve_value(value, allocations, workspace)?,
+            line: resolve_value(line, allocations, workspace)?,
+        },
+        OperationDraft::TextLineEnd { value, line } => OperationKind::TextLineEnd {
+            value: resolve_value(value, allocations, workspace)?,
+            line: resolve_value(line, allocations, workspace)?,
+        },
+        OperationDraft::TextByteToLine { value, index } => OperationKind::TextByteToLine {
+            value: resolve_value(value, allocations, workspace)?,
+            index: resolve_value(index, allocations, workspace)?,
+        },
+        OperationDraft::TextSlice {
+            value,
+            start,
+            end_exclusive,
+        } => OperationKind::TextSlice {
+            value: resolve_value(value, allocations, workspace)?,
+            start: resolve_value(start, allocations, workspace)?,
+            end_exclusive: resolve_value(end_exclusive, allocations, workspace)?,
+        },
+        OperationDraft::TextSplice {
+            value,
+            start,
+            end_exclusive,
+            replacement,
+        } => OperationKind::TextSplice {
+            value: resolve_value(value, allocations, workspace)?,
+            start: resolve_value(start, allocations, workspace)?,
+            end_exclusive: resolve_value(end_exclusive, allocations, workspace)?,
+            replacement: resolve_value(replacement, allocations, workspace)?,
+        },
+        OperationDraft::TextFindForward {
+            value,
+            query,
+            start,
+        } => OperationKind::TextFindForward {
+            value: resolve_value(value, allocations, workspace)?,
+            query: resolve_value(query, allocations, workspace)?,
+            start: resolve_value(start, allocations, workspace)?,
+        },
+        OperationDraft::TextFindBackward {
+            value,
+            query,
+            end_exclusive,
+        } => OperationKind::TextFindBackward {
+            value: resolve_value(value, allocations, workspace)?,
+            query: resolve_value(query, allocations, workspace)?,
+            end_exclusive: resolve_value(end_exclusive, allocations, workspace)?,
+        },
+        OperationDraft::TextLineEndingKind { value } => OperationKind::TextLineEndingKind {
+            value: resolve_value(value, allocations, workspace)?,
+        },
+        OperationDraft::TextDisplayWidth {
+            value,
+            start,
+            end_exclusive,
+            initial_column,
+            tab_width,
+        } => OperationKind::TextDisplayWidth {
+            value: resolve_value(value, allocations, workspace)?,
+            start: resolve_value(start, allocations, workspace)?,
+            end_exclusive: resolve_value(end_exclusive, allocations, workspace)?,
+            initial_column: resolve_value(initial_column, allocations, workspace)?,
+            tab_width: resolve_value(tab_width, allocations, workspace)?,
+        },
+        OperationDraft::TextCellPrefixBoundary {
+            value,
+            start,
+            end_exclusive,
+            initial_column,
+            maximum_cells,
+            tab_width,
+        } => OperationKind::TextCellPrefixBoundary {
+            value: resolve_value(value, allocations, workspace)?,
+            start: resolve_value(start, allocations, workspace)?,
+            end_exclusive: resolve_value(end_exclusive, allocations, workspace)?,
+            initial_column: resolve_value(initial_column, allocations, workspace)?,
+            maximum_cells: resolve_value(maximum_cells, allocations, workspace)?,
+            tab_width: resolve_value(tab_width, allocations, workspace)?,
+        },
+        OperationDraft::TextFromScalar { value } => OperationKind::TextFromScalar {
+            value: resolve_value(value, allocations, workspace)?,
+        },
+        OperationDraft::TextToScalars { sequence, value } => OperationKind::TextToScalars {
+            sequence: resolve(*sequence, allocations, workspace)?,
+            value: resolve_value(value, allocations, workspace)?,
+        },
+        OperationDraft::TextFromScalars { sequence, value } => OperationKind::TextFromScalars {
+            sequence: resolve(*sequence, allocations, workspace)?,
+            value: resolve_value(value, allocations, workspace)?,
+        },
         OperationDraft::SequenceEmpty { sequence } => OperationKind::SequenceEmpty {
             sequence: resolve(*sequence, allocations, workspace)?,
         },
@@ -5097,6 +6010,15 @@ fn resolve_operation(
             sequence: resolve(*sequence, allocations, workspace)?,
             lhs: resolve_value(lhs, allocations, workspace)?,
             rhs: resolve_value(rhs, allocations, workspace)?,
+        },
+        OperationDraft::SequenceRepeat {
+            sequence,
+            element,
+            count,
+        } => OperationKind::SequenceRepeat {
+            sequence: resolve(*sequence, allocations, workspace)?,
+            element: resolve_value(element, allocations, workspace)?,
+            count: resolve_value(count, allocations, workspace)?,
         },
         OperationDraft::Call {
             function,
@@ -5312,6 +6234,8 @@ fn operation_result_types_in_nodes(
             | OperationKind::SequenceReplace { sequence, .. }
             | OperationKind::SequenceSlice { sequence, .. }
             | OperationKind::SequenceConcat { sequence, .. }
+            | OperationKind::SequenceRepeat { sequence, .. }
+            | OperationKind::TextToScalars { sequence, .. }
                 if index == 0 =>
             {
                 matches!(nodes.get(sequence), Some(Node::SequenceType { .. }))

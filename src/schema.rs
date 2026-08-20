@@ -3,6 +3,7 @@ use crate::transaction::{ExpressionKindDraft, NodeTarget};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::fmt;
+use std::sync::Arc;
 
 pub const MAXIMUM_BYTE_STRING_BYTES: usize = 64 * 1024;
 pub const MAXIMUM_BYTE_STRING_ENCODED_BYTES: usize = (MAXIMUM_BYTE_STRING_BYTES / 3) * 4
@@ -14,7 +15,7 @@ pub const MAXIMUM_BYTE_STRING_ENCODED_BYTES: usize = (MAXIMUM_BYTE_STRING_BYTES 
     };
 pub const MAXIMUM_BYTE_LITERAL_BYTES: usize = 4 * 1024;
 pub const MAXIMUM_TRANSACTION_BYTE_LITERAL_BYTES: usize = 64 * 1024;
-pub const MAXIMUM_TEXT_BYTES: usize = 64 * 1024;
+pub const MAXIMUM_TEXT_BYTES: usize = 16 * 1024 * 1024;
 pub const MAXIMUM_TEXT_LITERAL_BYTES: usize = 4 * 1024;
 pub const MAXIMUM_TRANSACTION_TEXT_LITERAL_BYTES: usize = 64 * 1024;
 pub const MAXIMUM_SEQUENCE_ELEMENTS: usize = 128 * 1024;
@@ -130,7 +131,7 @@ impl<'de> Deserialize<'de> for ByteString {
 /// Canonical immutable UTF-8 text. Equality is exact byte equality and no Unicode
 /// normalization, locale, collation, or display-width contract is implied.
 #[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
-pub struct TextString(Box<str>);
+pub struct TextString(Arc<str>);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TextStringTooLarge;
@@ -149,14 +150,14 @@ impl TextString {
         if value.len() > MAXIMUM_TEXT_BYTES {
             return Err(TextStringTooLarge);
         }
-        Ok(Self(value.into_boxed_str()))
+        Ok(Self(value.into()))
     }
 
     pub fn try_from_str(value: &str) -> Result<Self, TextStringTooLarge> {
         if value.len() > MAXIMUM_TEXT_BYTES {
             return Err(TextStringTooLarge);
         }
-        Ok(Self(value.into()))
+        Ok(Self(Arc::from(value)))
     }
 
     pub fn as_str(&self) -> &str {
@@ -173,6 +174,17 @@ impl TextString {
 
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+
+    pub(crate) fn shared(&self) -> Arc<str> {
+        self.0.clone()
+    }
+
+    pub(crate) fn from_shared(value: Arc<str>) -> Result<Self, TextStringTooLarge> {
+        if value.len() > MAXIMUM_TEXT_BYTES {
+            return Err(TextStringTooLarge);
+        }
+        Ok(Self(value))
     }
 }
 
@@ -616,6 +628,25 @@ pub enum OperationCode {
     TextLen,
     TextEqual,
     TextConcat,
+    TextScalarLen,
+    TextGraphemeLen,
+    TextLineCount,
+    TextScalarAt,
+    TextPreviousGraphemeBoundary,
+    TextNextGraphemeBoundary,
+    TextLineStart,
+    TextLineEnd,
+    TextByteToLine,
+    TextSlice,
+    TextSplice,
+    TextFindForward,
+    TextFindBackward,
+    TextLineEndingKind,
+    TextDisplayWidth,
+    TextCellPrefixBoundary,
+    TextFromScalar,
+    TextToScalars,
+    TextFromScalars,
     SequenceEmpty,
     SequenceLen,
     SequenceGet,
@@ -623,10 +654,11 @@ pub enum OperationCode {
     SequenceReplace,
     SequenceSlice,
     SequenceConcat,
+    SequenceRepeat,
 }
 
 impl OperationCode {
-    pub const ALL: [Self; 36] = [
+    pub const ALL: [Self; 56] = [
         Self::ConstUnit,
         Self::ConstI64,
         Self::ConstBool,
@@ -656,6 +688,25 @@ impl OperationCode {
         Self::TextLen,
         Self::TextEqual,
         Self::TextConcat,
+        Self::TextScalarLen,
+        Self::TextGraphemeLen,
+        Self::TextLineCount,
+        Self::TextScalarAt,
+        Self::TextPreviousGraphemeBoundary,
+        Self::TextNextGraphemeBoundary,
+        Self::TextLineStart,
+        Self::TextLineEnd,
+        Self::TextByteToLine,
+        Self::TextSlice,
+        Self::TextSplice,
+        Self::TextFindForward,
+        Self::TextFindBackward,
+        Self::TextLineEndingKind,
+        Self::TextDisplayWidth,
+        Self::TextCellPrefixBoundary,
+        Self::TextFromScalar,
+        Self::TextToScalars,
+        Self::TextFromScalars,
         Self::SequenceEmpty,
         Self::SequenceLen,
         Self::SequenceGet,
@@ -663,6 +714,7 @@ impl OperationCode {
         Self::SequenceReplace,
         Self::SequenceSlice,
         Self::SequenceConcat,
+        Self::SequenceRepeat,
     ];
 
     pub const fn stable_tag(self) -> u8 {
@@ -707,6 +759,26 @@ impl OperationCode {
             34 => Some(Self::SequenceReplace),
             35 => Some(Self::SequenceSlice),
             36 => Some(Self::SequenceConcat),
+            37 => Some(Self::TextScalarLen),
+            38 => Some(Self::TextGraphemeLen),
+            39 => Some(Self::TextLineCount),
+            40 => Some(Self::TextScalarAt),
+            41 => Some(Self::TextPreviousGraphemeBoundary),
+            42 => Some(Self::TextNextGraphemeBoundary),
+            43 => Some(Self::TextLineStart),
+            44 => Some(Self::TextLineEnd),
+            45 => Some(Self::TextByteToLine),
+            46 => Some(Self::TextSlice),
+            47 => Some(Self::TextSplice),
+            48 => Some(Self::TextFindForward),
+            49 => Some(Self::TextFindBackward),
+            50 => Some(Self::TextLineEndingKind),
+            51 => Some(Self::TextDisplayWidth),
+            52 => Some(Self::TextFromScalar),
+            53 => Some(Self::TextToScalars),
+            54 => Some(Self::TextFromScalars),
+            55 => Some(Self::SequenceRepeat),
+            56 => Some(Self::TextCellPrefixBoundary),
             _ => None,
         }
     }
@@ -746,6 +818,25 @@ impl OperationCode {
             Self::TextLen => &TEXT_LEN_DESCRIPTOR,
             Self::TextEqual => &TEXT_EQUAL_DESCRIPTOR,
             Self::TextConcat => &TEXT_CONCAT_DESCRIPTOR,
+            Self::TextScalarLen => &TEXT_SCALAR_LEN_DESCRIPTOR,
+            Self::TextGraphemeLen => &TEXT_GRAPHEME_LEN_DESCRIPTOR,
+            Self::TextLineCount => &TEXT_LINE_COUNT_DESCRIPTOR,
+            Self::TextScalarAt => &TEXT_SCALAR_AT_DESCRIPTOR,
+            Self::TextPreviousGraphemeBoundary => &TEXT_PREVIOUS_GRAPHEME_BOUNDARY_DESCRIPTOR,
+            Self::TextNextGraphemeBoundary => &TEXT_NEXT_GRAPHEME_BOUNDARY_DESCRIPTOR,
+            Self::TextLineStart => &TEXT_LINE_START_DESCRIPTOR,
+            Self::TextLineEnd => &TEXT_LINE_END_DESCRIPTOR,
+            Self::TextByteToLine => &TEXT_BYTE_TO_LINE_DESCRIPTOR,
+            Self::TextSlice => &TEXT_SLICE_DESCRIPTOR,
+            Self::TextSplice => &TEXT_SPLICE_DESCRIPTOR,
+            Self::TextFindForward => &TEXT_FIND_FORWARD_DESCRIPTOR,
+            Self::TextFindBackward => &TEXT_FIND_BACKWARD_DESCRIPTOR,
+            Self::TextLineEndingKind => &TEXT_LINE_ENDING_KIND_DESCRIPTOR,
+            Self::TextDisplayWidth => &TEXT_DISPLAY_WIDTH_DESCRIPTOR,
+            Self::TextCellPrefixBoundary => &TEXT_CELL_PREFIX_BOUNDARY_DESCRIPTOR,
+            Self::TextFromScalar => &TEXT_FROM_SCALAR_DESCRIPTOR,
+            Self::TextToScalars => &TEXT_TO_SCALARS_DESCRIPTOR,
+            Self::TextFromScalars => &TEXT_FROM_SCALARS_DESCRIPTOR,
             Self::SequenceEmpty => &SEQUENCE_EMPTY_DESCRIPTOR,
             Self::SequenceLen => &SEQUENCE_LEN_DESCRIPTOR,
             Self::SequenceGet => &SEQUENCE_GET_DESCRIPTOR,
@@ -753,6 +844,7 @@ impl OperationCode {
             Self::SequenceReplace => &SEQUENCE_REPLACE_DESCRIPTOR,
             Self::SequenceSlice => &SEQUENCE_SLICE_DESCRIPTOR,
             Self::SequenceConcat => &SEQUENCE_CONCAT_DESCRIPTOR,
+            Self::SequenceRepeat => &SEQUENCE_REPEAT_DESCRIPTOR,
         }
     }
 }
@@ -910,6 +1002,10 @@ const I64_BINARY_OPERANDS: &[OperandDescriptor] = &[
         use_mode: OperandUse::Read,
     },
 ];
+const I64_UNARY_OPERANDS: &[OperandDescriptor] = &[OperandDescriptor {
+    ty: TypeRule::Fixed(SemanticType::I64),
+    use_mode: OperandUse::Read,
+}];
 const BOOL_UNARY_OPERANDS: &[OperandDescriptor] = &[OperandDescriptor {
     ty: TypeRule::Fixed(SemanticType::Bool),
     use_mode: OperandUse::Read,
@@ -1006,6 +1102,110 @@ const TEXT_BINARY_OPERANDS: &[OperandDescriptor] = &[
         use_mode: OperandUse::Read,
     },
 ];
+const TEXT_INDEX_OPERANDS: &[OperandDescriptor] = &[
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::Text),
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::I64),
+        use_mode: OperandUse::Read,
+    },
+];
+const TEXT_RANGE_OPERANDS: &[OperandDescriptor] = &[
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::Text),
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::I64),
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::I64),
+        use_mode: OperandUse::Read,
+    },
+];
+const TEXT_SPLICE_OPERANDS: &[OperandDescriptor] = &[
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::Text),
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::I64),
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::I64),
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::Text),
+        use_mode: OperandUse::Read,
+    },
+];
+const TEXT_FIND_OPERANDS: &[OperandDescriptor] = &[
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::Text),
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::Text),
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::I64),
+        use_mode: OperandUse::Read,
+    },
+];
+const TEXT_DISPLAY_WIDTH_OPERANDS: &[OperandDescriptor] = &[
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::Text),
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::I64),
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::I64),
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::I64),
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::I64),
+        use_mode: OperandUse::Read,
+    },
+];
+const TEXT_CELL_PREFIX_BOUNDARY_OPERANDS: &[OperandDescriptor] = &[
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::Text),
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::I64),
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::I64),
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::I64),
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::I64),
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::I64),
+        use_mode: OperandUse::Read,
+    },
+];
 const SEQUENCE_UNARY_OPERANDS: &[OperandDescriptor] = &[OperandDescriptor {
     ty: TypeRule::SequenceOwner,
     use_mode: OperandUse::Read,
@@ -1027,6 +1227,16 @@ const SEQUENCE_APPEND_OPERANDS: &[OperandDescriptor] = &[
     },
     OperandDescriptor {
         ty: TypeRule::SequenceElement,
+        use_mode: OperandUse::Read,
+    },
+];
+const SEQUENCE_REPEAT_OPERANDS: &[OperandDescriptor] = &[
+    OperandDescriptor {
+        ty: TypeRule::SequenceElement,
+        use_mode: OperandUse::Read,
+    },
+    OperandDescriptor {
+        ty: TypeRule::Fixed(SemanticType::I64),
         use_mode: OperandUse::Read,
     },
 ];
@@ -1507,6 +1717,253 @@ descriptor!(
     true
 );
 descriptor!(
+    TEXT_SCALAR_LEN_DESCRIPTOR,
+    TextScalarLen,
+    "text_scalar_len",
+    37,
+    OperandArity::Fixed(1),
+    TEXT_UNARY_OPERANDS,
+    I64_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    TEXT_GRAPHEME_LEN_DESCRIPTOR,
+    TextGraphemeLen,
+    "text_grapheme_len",
+    38,
+    OperandArity::Fixed(1),
+    TEXT_UNARY_OPERANDS,
+    I64_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    TEXT_LINE_COUNT_DESCRIPTOR,
+    TextLineCount,
+    "text_line_count",
+    39,
+    OperandArity::Fixed(1),
+    TEXT_UNARY_OPERANDS,
+    I64_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    TEXT_SCALAR_AT_DESCRIPTOR,
+    TextScalarAt,
+    "text_scalar_at",
+    40,
+    OperandArity::Fixed(2),
+    TEXT_INDEX_OPERANDS,
+    I64_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    TEXT_PREVIOUS_GRAPHEME_BOUNDARY_DESCRIPTOR,
+    TextPreviousGraphemeBoundary,
+    "text_previous_grapheme_boundary",
+    41,
+    OperandArity::Fixed(2),
+    TEXT_INDEX_OPERANDS,
+    I64_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    TEXT_NEXT_GRAPHEME_BOUNDARY_DESCRIPTOR,
+    TextNextGraphemeBoundary,
+    "text_next_grapheme_boundary",
+    42,
+    OperandArity::Fixed(2),
+    TEXT_INDEX_OPERANDS,
+    I64_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    TEXT_LINE_START_DESCRIPTOR,
+    TextLineStart,
+    "text_line_start",
+    43,
+    OperandArity::Fixed(2),
+    TEXT_INDEX_OPERANDS,
+    I64_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    TEXT_LINE_END_DESCRIPTOR,
+    TextLineEnd,
+    "text_line_end",
+    44,
+    OperandArity::Fixed(2),
+    TEXT_INDEX_OPERANDS,
+    I64_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    TEXT_BYTE_TO_LINE_DESCRIPTOR,
+    TextByteToLine,
+    "text_byte_to_line",
+    45,
+    OperandArity::Fixed(2),
+    TEXT_INDEX_OPERANDS,
+    I64_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    TEXT_SLICE_DESCRIPTOR,
+    TextSlice,
+    "text_slice",
+    46,
+    OperandArity::Fixed(3),
+    TEXT_RANGE_OPERANDS,
+    TEXT_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    TEXT_SPLICE_DESCRIPTOR,
+    TextSplice,
+    "text_splice",
+    47,
+    OperandArity::Fixed(4),
+    TEXT_SPLICE_OPERANDS,
+    TEXT_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    TEXT_FIND_FORWARD_DESCRIPTOR,
+    TextFindForward,
+    "text_find_forward",
+    48,
+    OperandArity::Fixed(3),
+    TEXT_FIND_OPERANDS,
+    I64_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    TEXT_FIND_BACKWARD_DESCRIPTOR,
+    TextFindBackward,
+    "text_find_backward",
+    49,
+    OperandArity::Fixed(3),
+    TEXT_FIND_OPERANDS,
+    I64_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    TEXT_LINE_ENDING_KIND_DESCRIPTOR,
+    TextLineEndingKind,
+    "text_line_ending_kind",
+    50,
+    OperandArity::Fixed(1),
+    TEXT_UNARY_OPERANDS,
+    I64_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    TEXT_DISPLAY_WIDTH_DESCRIPTOR,
+    TextDisplayWidth,
+    "text_display_width",
+    51,
+    OperandArity::Fixed(5),
+    TEXT_DISPLAY_WIDTH_OPERANDS,
+    I64_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    TEXT_CELL_PREFIX_BOUNDARY_DESCRIPTOR,
+    TextCellPrefixBoundary,
+    "text_cell_prefix_boundary",
+    56,
+    OperandArity::Fixed(6),
+    TEXT_CELL_PREFIX_BOUNDARY_OPERANDS,
+    I64_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    TEXT_FROM_SCALAR_DESCRIPTOR,
+    TextFromScalar,
+    "text_from_scalar",
+    52,
+    OperandArity::Fixed(1),
+    I64_UNARY_OPERANDS,
+    TEXT_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    TEXT_TO_SCALARS_DESCRIPTOR,
+    TextToScalars,
+    "text_to_scalars",
+    53,
+    OperandArity::Fixed(1),
+    TEXT_UNARY_OPERANDS,
+    SEQUENCE_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    TEXT_FROM_SCALARS_DESCRIPTOR,
+    TextFromScalars,
+    "text_from_scalars",
+    54,
+    OperandArity::Fixed(1),
+    SEQUENCE_UNARY_OPERANDS,
+    TEXT_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
     SEQUENCE_EMPTY_DESCRIPTOR,
     SequenceEmpty,
     "sequence_empty",
@@ -1591,6 +2048,19 @@ descriptor!(
     36,
     OperandArity::Fixed(2),
     SEQUENCE_CONCAT_OPERANDS,
+    SEQUENCE_RESULT,
+    NO_LITERALS,
+    NO_REGIONS,
+    false,
+    true
+);
+descriptor!(
+    SEQUENCE_REPEAT_DESCRIPTOR,
+    SequenceRepeat,
+    "sequence_repeat",
+    55,
+    OperandArity::Fixed(2),
+    SEQUENCE_REPEAT_OPERANDS,
     SEQUENCE_RESULT,
     NO_LITERALS,
     NO_REGIONS,
@@ -1715,6 +2185,89 @@ pub enum OperationDraft {
         lhs: ValueDraft,
         rhs: ValueDraft,
     },
+    TextScalarLen {
+        value: ValueDraft,
+    },
+    TextGraphemeLen {
+        value: ValueDraft,
+    },
+    TextLineCount {
+        value: ValueDraft,
+    },
+    TextScalarAt {
+        value: ValueDraft,
+        index: ValueDraft,
+    },
+    TextPreviousGraphemeBoundary {
+        value: ValueDraft,
+        index: ValueDraft,
+    },
+    TextNextGraphemeBoundary {
+        value: ValueDraft,
+        index: ValueDraft,
+    },
+    TextLineStart {
+        value: ValueDraft,
+        line: ValueDraft,
+    },
+    TextLineEnd {
+        value: ValueDraft,
+        line: ValueDraft,
+    },
+    TextByteToLine {
+        value: ValueDraft,
+        index: ValueDraft,
+    },
+    TextSlice {
+        value: ValueDraft,
+        start: ValueDraft,
+        end_exclusive: ValueDraft,
+    },
+    TextSplice {
+        value: ValueDraft,
+        start: ValueDraft,
+        end_exclusive: ValueDraft,
+        replacement: ValueDraft,
+    },
+    TextFindForward {
+        value: ValueDraft,
+        query: ValueDraft,
+        start: ValueDraft,
+    },
+    TextFindBackward {
+        value: ValueDraft,
+        query: ValueDraft,
+        end_exclusive: ValueDraft,
+    },
+    TextLineEndingKind {
+        value: ValueDraft,
+    },
+    TextDisplayWidth {
+        value: ValueDraft,
+        start: ValueDraft,
+        end_exclusive: ValueDraft,
+        initial_column: ValueDraft,
+        tab_width: ValueDraft,
+    },
+    TextCellPrefixBoundary {
+        value: ValueDraft,
+        start: ValueDraft,
+        end_exclusive: ValueDraft,
+        initial_column: ValueDraft,
+        maximum_cells: ValueDraft,
+        tab_width: ValueDraft,
+    },
+    TextFromScalar {
+        value: ValueDraft,
+    },
+    TextToScalars {
+        sequence: NodeTarget,
+        value: ValueDraft,
+    },
+    TextFromScalars {
+        sequence: NodeTarget,
+        value: ValueDraft,
+    },
     SequenceEmpty {
         sequence: NodeTarget,
     },
@@ -1748,6 +2301,11 @@ pub enum OperationDraft {
         sequence: NodeTarget,
         lhs: ValueDraft,
         rhs: ValueDraft,
+    },
+    SequenceRepeat {
+        sequence: NodeTarget,
+        element: ValueDraft,
+        count: ValueDraft,
     },
     Call {
         function: NodeTarget,
@@ -1818,6 +2376,27 @@ impl OperationDraft {
             Self::TextLen { .. } => OperationCode::TextLen,
             Self::TextEqual { .. } => OperationCode::TextEqual,
             Self::TextConcat { .. } => OperationCode::TextConcat,
+            Self::TextScalarLen { .. } => OperationCode::TextScalarLen,
+            Self::TextGraphemeLen { .. } => OperationCode::TextGraphemeLen,
+            Self::TextLineCount { .. } => OperationCode::TextLineCount,
+            Self::TextScalarAt { .. } => OperationCode::TextScalarAt,
+            Self::TextPreviousGraphemeBoundary { .. } => {
+                OperationCode::TextPreviousGraphemeBoundary
+            }
+            Self::TextNextGraphemeBoundary { .. } => OperationCode::TextNextGraphemeBoundary,
+            Self::TextLineStart { .. } => OperationCode::TextLineStart,
+            Self::TextLineEnd { .. } => OperationCode::TextLineEnd,
+            Self::TextByteToLine { .. } => OperationCode::TextByteToLine,
+            Self::TextSlice { .. } => OperationCode::TextSlice,
+            Self::TextSplice { .. } => OperationCode::TextSplice,
+            Self::TextFindForward { .. } => OperationCode::TextFindForward,
+            Self::TextFindBackward { .. } => OperationCode::TextFindBackward,
+            Self::TextLineEndingKind { .. } => OperationCode::TextLineEndingKind,
+            Self::TextDisplayWidth { .. } => OperationCode::TextDisplayWidth,
+            Self::TextCellPrefixBoundary { .. } => OperationCode::TextCellPrefixBoundary,
+            Self::TextFromScalar { .. } => OperationCode::TextFromScalar,
+            Self::TextToScalars { .. } => OperationCode::TextToScalars,
+            Self::TextFromScalars { .. } => OperationCode::TextFromScalars,
             Self::SequenceEmpty { .. } => OperationCode::SequenceEmpty,
             Self::SequenceLen { .. } => OperationCode::SequenceLen,
             Self::SequenceGet { .. } => OperationCode::SequenceGet,
@@ -1825,6 +2404,7 @@ impl OperationDraft {
             Self::SequenceReplace { .. } => OperationCode::SequenceReplace,
             Self::SequenceSlice { .. } => OperationCode::SequenceSlice,
             Self::SequenceConcat { .. } => OperationCode::SequenceConcat,
+            Self::SequenceRepeat { .. } => OperationCode::SequenceRepeat,
             Self::Call { .. } => OperationCode::Call,
             Self::Hole { .. } => OperationCode::Hole,
             Self::If { .. } => OperationCode::If,
@@ -1920,6 +2500,89 @@ pub enum OperationKind {
         lhs: ValueRef,
         rhs: ValueRef,
     },
+    TextScalarLen {
+        value: ValueRef,
+    },
+    TextGraphemeLen {
+        value: ValueRef,
+    },
+    TextLineCount {
+        value: ValueRef,
+    },
+    TextScalarAt {
+        value: ValueRef,
+        index: ValueRef,
+    },
+    TextPreviousGraphemeBoundary {
+        value: ValueRef,
+        index: ValueRef,
+    },
+    TextNextGraphemeBoundary {
+        value: ValueRef,
+        index: ValueRef,
+    },
+    TextLineStart {
+        value: ValueRef,
+        line: ValueRef,
+    },
+    TextLineEnd {
+        value: ValueRef,
+        line: ValueRef,
+    },
+    TextByteToLine {
+        value: ValueRef,
+        index: ValueRef,
+    },
+    TextSlice {
+        value: ValueRef,
+        start: ValueRef,
+        end_exclusive: ValueRef,
+    },
+    TextSplice {
+        value: ValueRef,
+        start: ValueRef,
+        end_exclusive: ValueRef,
+        replacement: ValueRef,
+    },
+    TextFindForward {
+        value: ValueRef,
+        query: ValueRef,
+        start: ValueRef,
+    },
+    TextFindBackward {
+        value: ValueRef,
+        query: ValueRef,
+        end_exclusive: ValueRef,
+    },
+    TextLineEndingKind {
+        value: ValueRef,
+    },
+    TextDisplayWidth {
+        value: ValueRef,
+        start: ValueRef,
+        end_exclusive: ValueRef,
+        initial_column: ValueRef,
+        tab_width: ValueRef,
+    },
+    TextCellPrefixBoundary {
+        value: ValueRef,
+        start: ValueRef,
+        end_exclusive: ValueRef,
+        initial_column: ValueRef,
+        maximum_cells: ValueRef,
+        tab_width: ValueRef,
+    },
+    TextFromScalar {
+        value: ValueRef,
+    },
+    TextToScalars {
+        sequence: NodeId,
+        value: ValueRef,
+    },
+    TextFromScalars {
+        sequence: NodeId,
+        value: ValueRef,
+    },
     SequenceEmpty {
         sequence: NodeId,
     },
@@ -1953,6 +2616,11 @@ pub enum OperationKind {
         sequence: NodeId,
         lhs: ValueRef,
         rhs: ValueRef,
+    },
+    SequenceRepeat {
+        sequence: NodeId,
+        element: ValueRef,
+        count: ValueRef,
     },
     Call {
         function: NodeId,
@@ -2023,6 +2691,27 @@ impl OperationKind {
             Self::TextLen { .. } => OperationCode::TextLen,
             Self::TextEqual { .. } => OperationCode::TextEqual,
             Self::TextConcat { .. } => OperationCode::TextConcat,
+            Self::TextScalarLen { .. } => OperationCode::TextScalarLen,
+            Self::TextGraphemeLen { .. } => OperationCode::TextGraphemeLen,
+            Self::TextLineCount { .. } => OperationCode::TextLineCount,
+            Self::TextScalarAt { .. } => OperationCode::TextScalarAt,
+            Self::TextPreviousGraphemeBoundary { .. } => {
+                OperationCode::TextPreviousGraphemeBoundary
+            }
+            Self::TextNextGraphemeBoundary { .. } => OperationCode::TextNextGraphemeBoundary,
+            Self::TextLineStart { .. } => OperationCode::TextLineStart,
+            Self::TextLineEnd { .. } => OperationCode::TextLineEnd,
+            Self::TextByteToLine { .. } => OperationCode::TextByteToLine,
+            Self::TextSlice { .. } => OperationCode::TextSlice,
+            Self::TextSplice { .. } => OperationCode::TextSplice,
+            Self::TextFindForward { .. } => OperationCode::TextFindForward,
+            Self::TextFindBackward { .. } => OperationCode::TextFindBackward,
+            Self::TextLineEndingKind { .. } => OperationCode::TextLineEndingKind,
+            Self::TextDisplayWidth { .. } => OperationCode::TextDisplayWidth,
+            Self::TextCellPrefixBoundary { .. } => OperationCode::TextCellPrefixBoundary,
+            Self::TextFromScalar { .. } => OperationCode::TextFromScalar,
+            Self::TextToScalars { .. } => OperationCode::TextToScalars,
+            Self::TextFromScalars { .. } => OperationCode::TextFromScalars,
             Self::SequenceEmpty { .. } => OperationCode::SequenceEmpty,
             Self::SequenceLen { .. } => OperationCode::SequenceLen,
             Self::SequenceGet { .. } => OperationCode::SequenceGet,
@@ -2030,6 +2719,7 @@ impl OperationKind {
             Self::SequenceReplace { .. } => OperationCode::SequenceReplace,
             Self::SequenceSlice { .. } => OperationCode::SequenceSlice,
             Self::SequenceConcat { .. } => OperationCode::SequenceConcat,
+            Self::SequenceRepeat { .. } => OperationCode::SequenceRepeat,
             Self::Call { .. } => OperationCode::Call,
             Self::Hole { .. } => OperationCode::Hole,
             Self::If { .. } => OperationCode::If,
@@ -2090,7 +2780,72 @@ impl OperationKind {
                 | Self::TextConcat { rhs, .. },
                 1,
             ) => Some(*rhs),
-            (Self::NotBool { value } | Self::TextLen { value }, 0) => Some(*value),
+            (
+                Self::NotBool { value }
+                | Self::TextLen { value }
+                | Self::TextScalarLen { value }
+                | Self::TextGraphemeLen { value }
+                | Self::TextLineCount { value }
+                | Self::TextLineEndingKind { value },
+                0,
+            ) => Some(*value),
+            (
+                Self::TextFromScalar { value }
+                | Self::TextToScalars { value, .. }
+                | Self::TextFromScalars { value, .. },
+                0,
+            ) => Some(*value),
+            (
+                Self::TextScalarAt { value, .. }
+                | Self::TextPreviousGraphemeBoundary { value, .. }
+                | Self::TextNextGraphemeBoundary { value, .. }
+                | Self::TextLineStart { value, .. }
+                | Self::TextLineEnd { value, .. }
+                | Self::TextByteToLine { value, .. }
+                | Self::TextSlice { value, .. }
+                | Self::TextSplice { value, .. }
+                | Self::TextFindForward { value, .. }
+                | Self::TextFindBackward { value, .. }
+                | Self::TextDisplayWidth { value, .. }
+                | Self::TextCellPrefixBoundary { value, .. },
+                0,
+            ) => Some(*value),
+            (
+                Self::TextScalarAt { index, .. }
+                | Self::TextPreviousGraphemeBoundary { index, .. }
+                | Self::TextNextGraphemeBoundary { index, .. }
+                | Self::TextByteToLine { index, .. },
+                1,
+            ) => Some(*index),
+            (Self::TextLineStart { line, .. } | Self::TextLineEnd { line, .. }, 1) => Some(*line),
+            (
+                Self::TextSlice { start, .. }
+                | Self::TextSplice { start, .. }
+                | Self::TextDisplayWidth { start, .. }
+                | Self::TextCellPrefixBoundary { start, .. },
+                1,
+            ) => Some(*start),
+            (
+                Self::TextSlice { end_exclusive, .. }
+                | Self::TextSplice { end_exclusive, .. }
+                | Self::TextDisplayWidth { end_exclusive, .. }
+                | Self::TextCellPrefixBoundary { end_exclusive, .. },
+                2,
+            ) => Some(*end_exclusive),
+            (Self::TextSplice { replacement, .. }, 3) => Some(*replacement),
+            (Self::TextFindForward { query, .. } | Self::TextFindBackward { query, .. }, 1) => {
+                Some(*query)
+            }
+            (Self::TextFindForward { start, .. }, 2) => Some(*start),
+            (Self::TextFindBackward { end_exclusive, .. }, 2) => Some(*end_exclusive),
+            (
+                Self::TextDisplayWidth { initial_column, .. }
+                | Self::TextCellPrefixBoundary { initial_column, .. },
+                3,
+            ) => Some(*initial_column),
+            (Self::TextDisplayWidth { tab_width, .. }, 4) => Some(*tab_width),
+            (Self::TextCellPrefixBoundary { maximum_cells, .. }, 4) => Some(*maximum_cells),
+            (Self::TextCellPrefixBoundary { tab_width, .. }, 5) => Some(*tab_width),
             (Self::BytesLen { value }, 0) => Some(*value),
             (Self::BytesAt { value, .. }, 0) => Some(*value),
             (Self::BytesAt { index, .. }, 1) => Some(*index),
@@ -2110,6 +2865,8 @@ impl OperationKind {
             (Self::SequenceSlice { end_exclusive, .. }, 2) => Some(*end_exclusive),
             (Self::SequenceConcat { lhs, .. }, 0) => Some(*lhs),
             (Self::SequenceConcat { rhs, .. }, 1) => Some(*rhs),
+            (Self::SequenceRepeat { element, .. }, 0) => Some(*element),
+            (Self::SequenceRepeat { count, .. }, 1) => Some(*count),
             (Self::Call { arguments, .. }, index) => arguments.get(index).copied(),
             (Self::If { condition, .. }, 0) => Some(*condition),
             (Self::ForI64 { start, .. }, 0) => Some(*start),
@@ -2201,7 +2958,79 @@ impl OperationKind {
                 | Self::TextConcat { rhs, .. },
                 1,
             ) => *rhs = replacement,
-            (Self::NotBool { value } | Self::TextLen { value }, 0) => *value = replacement,
+            (
+                Self::NotBool { value }
+                | Self::TextLen { value }
+                | Self::TextScalarLen { value }
+                | Self::TextGraphemeLen { value }
+                | Self::TextLineCount { value }
+                | Self::TextLineEndingKind { value },
+                0,
+            ) => *value = replacement,
+            (
+                Self::TextFromScalar { value }
+                | Self::TextToScalars { value, .. }
+                | Self::TextFromScalars { value, .. },
+                0,
+            ) => *value = replacement,
+            (
+                Self::TextScalarAt { value, .. }
+                | Self::TextPreviousGraphemeBoundary { value, .. }
+                | Self::TextNextGraphemeBoundary { value, .. }
+                | Self::TextLineStart { value, .. }
+                | Self::TextLineEnd { value, .. }
+                | Self::TextByteToLine { value, .. }
+                | Self::TextSlice { value, .. }
+                | Self::TextSplice { value, .. }
+                | Self::TextFindForward { value, .. }
+                | Self::TextFindBackward { value, .. }
+                | Self::TextDisplayWidth { value, .. }
+                | Self::TextCellPrefixBoundary { value, .. },
+                0,
+            ) => *value = replacement,
+            (
+                Self::TextScalarAt { index, .. }
+                | Self::TextPreviousGraphemeBoundary { index, .. }
+                | Self::TextNextGraphemeBoundary { index, .. }
+                | Self::TextByteToLine { index, .. },
+                1,
+            ) => *index = replacement,
+            (Self::TextLineStart { line, .. } | Self::TextLineEnd { line, .. }, 1) => {
+                *line = replacement
+            }
+            (
+                Self::TextSlice { start, .. }
+                | Self::TextSplice { start, .. }
+                | Self::TextDisplayWidth { start, .. }
+                | Self::TextCellPrefixBoundary { start, .. },
+                1,
+            ) => *start = replacement,
+            (
+                Self::TextSlice { end_exclusive, .. }
+                | Self::TextSplice { end_exclusive, .. }
+                | Self::TextDisplayWidth { end_exclusive, .. }
+                | Self::TextCellPrefixBoundary { end_exclusive, .. },
+                2,
+            ) => *end_exclusive = replacement,
+            (
+                Self::TextSplice {
+                    replacement: value, ..
+                },
+                3,
+            ) => *value = replacement,
+            (Self::TextFindForward { query, .. } | Self::TextFindBackward { query, .. }, 1) => {
+                *query = replacement
+            }
+            (Self::TextFindForward { start, .. }, 2) => *start = replacement,
+            (Self::TextFindBackward { end_exclusive, .. }, 2) => *end_exclusive = replacement,
+            (
+                Self::TextDisplayWidth { initial_column, .. }
+                | Self::TextCellPrefixBoundary { initial_column, .. },
+                3,
+            ) => *initial_column = replacement,
+            (Self::TextDisplayWidth { tab_width, .. }, 4) => *tab_width = replacement,
+            (Self::TextCellPrefixBoundary { maximum_cells, .. }, 4) => *maximum_cells = replacement,
+            (Self::TextCellPrefixBoundary { tab_width, .. }, 5) => *tab_width = replacement,
             (Self::BytesLen { value }, 0) => *value = replacement,
             (Self::BytesAt { value, .. }, 0) => *value = replacement,
             (Self::BytesAt { index, .. }, 1) => *index = replacement,
@@ -2221,6 +3050,8 @@ impl OperationKind {
             (Self::SequenceSlice { end_exclusive, .. }, 2) => *end_exclusive = replacement,
             (Self::SequenceConcat { lhs, .. }, 0) => *lhs = replacement,
             (Self::SequenceConcat { rhs, .. }, 1) => *rhs = replacement,
+            (Self::SequenceRepeat { element, .. }, 0) => *element = replacement,
+            (Self::SequenceRepeat { count, .. }, 1) => *count = replacement,
             (Self::Call { arguments, .. }, index) if index < arguments.len() => {
                 arguments[index] = replacement
             }
@@ -2257,7 +3088,10 @@ impl OperationKind {
             | Self::SequenceAppend { .. }
             | Self::SequenceReplace { .. }
             | Self::SequenceSlice { .. }
-            | Self::SequenceConcat { .. } => 1,
+            | Self::SequenceConcat { .. }
+            | Self::SequenceRepeat { .. }
+            | Self::TextToScalars { .. }
+            | Self::TextFromScalars { .. } => 1,
             Self::ConstructProduct { fields, .. } => 1 + fields.len(),
             Self::MatchSum { arms, .. } => arms.len(),
             _ => 0,
@@ -2281,7 +3115,10 @@ impl OperationKind {
                 | Self::SequenceAppend { sequence, .. }
                 | Self::SequenceReplace { sequence, .. }
                 | Self::SequenceSlice { sequence, .. }
-                | Self::SequenceConcat { sequence, .. },
+                | Self::SequenceConcat { sequence, .. }
+                | Self::SequenceRepeat { sequence, .. }
+                | Self::TextToScalars { sequence, .. }
+                | Self::TextFromScalars { sequence, .. },
                 0,
             ) => Some(*sequence),
             _ => None,
@@ -2381,7 +3218,10 @@ impl OperationKind {
                 | Self::SequenceAppend { sequence, .. }
                 | Self::SequenceReplace { sequence, .. }
                 | Self::SequenceSlice { sequence, .. }
-                | Self::SequenceConcat { sequence, .. } => Some(SemanticType::Nominal(*sequence)),
+                | Self::SequenceConcat { sequence, .. }
+                | Self::SequenceRepeat { sequence, .. }
+                | Self::TextToScalars { sequence, .. }
+                | Self::TextFromScalars { sequence, .. } => Some(SemanticType::Nominal(*sequence)),
                 _ => None,
             },
             TypeRule::CallTargetParameter

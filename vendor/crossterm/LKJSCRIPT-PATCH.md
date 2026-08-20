@@ -1,7 +1,7 @@
 # lkjscript crossterm patch
 
 This directory is the published `crossterm` 0.29.0 crate source retained under its MIT license.
-It is the exact terminal input/output dependency consumed by the native `lkjstudio` runner.
+It is the exact terminal input/output dependency consumed by the native `lkjedit` runner.
 
 `src/event/source/unix/mio.rs` has one local correctness patch. A zero-byte terminal read returns
 `UnexpectedEof`, and an error other than `WouldBlock` or `Interrupted` is returned to the caller.

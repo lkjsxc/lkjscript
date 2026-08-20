@@ -13,7 +13,7 @@ use crate::schema::{NodeKind, OperationCode, SemanticType};
 use crate::transaction::{MAX_RETURNED_BINDINGS, TransactionOpCode};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-pub const MACHINE_SCHEMA_IDENTITY: &str = "lkjscript-machine-schema-v13";
+pub const MACHINE_SCHEMA_IDENTITY: &str = "lkjscript-machine-schema-v14";
 const MACHINE_SCHEMA_DIGEST_DOMAIN: &str = "lkjscript.machine-schema.digest.v2";
 
 fn scalar_types() -> Vec<MachineScalarDescription> {
@@ -355,10 +355,107 @@ fn expression_variant(code: crate::transaction::ExpressionDraftCode) -> DraftVar
                 draft_field("rhs", T::Value, true, false),
             ],
         ),
-        C::NotBool | C::TextLen => (
+        C::NotBool
+        | C::TextLen
+        | C::TextScalarLen
+        | C::TextGraphemeLen
+        | C::TextLineCount
+        | C::TextLineEndingKind => (
             PayloadShapeKind::Record,
             None,
             vec![draft_field("value", T::Value, true, false)],
+        ),
+        C::TextScalarAt
+        | C::TextPreviousGraphemeBoundary
+        | C::TextNextGraphemeBoundary
+        | C::TextByteToLine => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("value", T::Value, true, false),
+                draft_field("index", T::Value, true, false),
+            ],
+        ),
+        C::TextLineStart | C::TextLineEnd => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("value", T::Value, true, false),
+                draft_field("line", T::Value, true, false),
+            ],
+        ),
+        C::TextSlice => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("value", T::Value, true, false),
+                draft_field("start", T::Value, true, false),
+                draft_field("end_exclusive", T::Value, true, false),
+            ],
+        ),
+        C::TextSplice => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("value", T::Value, true, false),
+                draft_field("start", T::Value, true, false),
+                draft_field("end_exclusive", T::Value, true, false),
+                draft_field("replacement", T::Value, true, false),
+            ],
+        ),
+        C::TextFindForward => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("value", T::Value, true, false),
+                draft_field("query", T::Value, true, false),
+                draft_field("start", T::Value, true, false),
+            ],
+        ),
+        C::TextFindBackward => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("value", T::Value, true, false),
+                draft_field("query", T::Value, true, false),
+                draft_field("end_exclusive", T::Value, true, false),
+            ],
+        ),
+        C::TextDisplayWidth => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("value", T::Value, true, false),
+                draft_field("start", T::Value, true, false),
+                draft_field("end_exclusive", T::Value, true, false),
+                draft_field("initial_column", T::Value, true, false),
+                draft_field("tab_width", T::Value, true, false),
+            ],
+        ),
+        C::TextCellPrefixBoundary => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("value", T::Value, true, false),
+                draft_field("start", T::Value, true, false),
+                draft_field("end_exclusive", T::Value, true, false),
+                draft_field("initial_column", T::Value, true, false),
+                draft_field("maximum_cells", T::Value, true, false),
+                draft_field("tab_width", T::Value, true, false),
+            ],
+        ),
+        C::TextFromScalar => (
+            PayloadShapeKind::Record,
+            None,
+            vec![draft_field("value", T::Value, true, false)],
+        ),
+        C::TextToScalars | C::TextFromScalars => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("sequence", T::NodeTarget, true, false),
+                draft_field("value", T::Value, true, false),
+            ],
         ),
         C::SequenceEmpty => (
             PayloadShapeKind::Record,
@@ -418,6 +515,15 @@ fn expression_variant(code: crate::transaction::ExpressionDraftCode) -> DraftVar
                 draft_field("sequence", T::NodeTarget, true, false),
                 draft_field("lhs", T::Value, true, false),
                 draft_field("rhs", T::Value, true, false),
+            ],
+        ),
+        C::SequenceRepeat => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("sequence", T::NodeTarget, true, false),
+                draft_field("element", T::Value, true, false),
+                draft_field("count", T::Value, true, false),
             ],
         ),
         C::BytesLen => (
@@ -554,10 +660,107 @@ fn operation_variant(code: OperationCode) -> DraftVariantDescription {
                 draft_field("rhs", T::Value, true, false),
             ],
         ),
-        C::NotBool | C::TextLen => (
+        C::NotBool
+        | C::TextLen
+        | C::TextScalarLen
+        | C::TextGraphemeLen
+        | C::TextLineCount
+        | C::TextLineEndingKind => (
             PayloadShapeKind::Record,
             None,
             vec![draft_field("value", T::Value, true, false)],
+        ),
+        C::TextScalarAt
+        | C::TextPreviousGraphemeBoundary
+        | C::TextNextGraphemeBoundary
+        | C::TextByteToLine => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("value", T::Value, true, false),
+                draft_field("index", T::Value, true, false),
+            ],
+        ),
+        C::TextLineStart | C::TextLineEnd => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("value", T::Value, true, false),
+                draft_field("line", T::Value, true, false),
+            ],
+        ),
+        C::TextSlice => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("value", T::Value, true, false),
+                draft_field("start", T::Value, true, false),
+                draft_field("end_exclusive", T::Value, true, false),
+            ],
+        ),
+        C::TextSplice => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("value", T::Value, true, false),
+                draft_field("start", T::Value, true, false),
+                draft_field("end_exclusive", T::Value, true, false),
+                draft_field("replacement", T::Value, true, false),
+            ],
+        ),
+        C::TextFindForward => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("value", T::Value, true, false),
+                draft_field("query", T::Value, true, false),
+                draft_field("start", T::Value, true, false),
+            ],
+        ),
+        C::TextFindBackward => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("value", T::Value, true, false),
+                draft_field("query", T::Value, true, false),
+                draft_field("end_exclusive", T::Value, true, false),
+            ],
+        ),
+        C::TextDisplayWidth => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("value", T::Value, true, false),
+                draft_field("start", T::Value, true, false),
+                draft_field("end_exclusive", T::Value, true, false),
+                draft_field("initial_column", T::Value, true, false),
+                draft_field("tab_width", T::Value, true, false),
+            ],
+        ),
+        C::TextCellPrefixBoundary => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("value", T::Value, true, false),
+                draft_field("start", T::Value, true, false),
+                draft_field("end_exclusive", T::Value, true, false),
+                draft_field("initial_column", T::Value, true, false),
+                draft_field("maximum_cells", T::Value, true, false),
+                draft_field("tab_width", T::Value, true, false),
+            ],
+        ),
+        C::TextFromScalar => (
+            PayloadShapeKind::Record,
+            None,
+            vec![draft_field("value", T::Value, true, false)],
+        ),
+        C::TextToScalars | C::TextFromScalars => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("sequence", T::NodeTarget, true, false),
+                draft_field("value", T::Value, true, false),
+            ],
         ),
         C::SequenceEmpty => (
             PayloadShapeKind::Record,
@@ -617,6 +820,15 @@ fn operation_variant(code: OperationCode) -> DraftVariantDescription {
                 draft_field("sequence", T::NodeTarget, true, false),
                 draft_field("lhs", T::Value, true, false),
                 draft_field("rhs", T::Value, true, false),
+            ],
+        ),
+        C::SequenceRepeat => (
+            PayloadShapeKind::Record,
+            None,
+            vec![
+                draft_field("sequence", T::NodeTarget, true, false),
+                draft_field("element", T::Value, true, false),
+                draft_field("count", T::Value, true, false),
             ],
         ),
         C::BytesLen => (
@@ -959,6 +1171,112 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
                     record_payload(&[("lhs", "value_ref", true), ("rhs", "value_ref", true)]),
                 ),
                 variant_payload(
+                    "text_scalar_len",
+                    record_payload(&[("value", "value_ref", true)]),
+                ),
+                variant_payload(
+                    "text_grapheme_len",
+                    record_payload(&[("value", "value_ref", true)]),
+                ),
+                variant_payload(
+                    "text_line_count",
+                    record_payload(&[("value", "value_ref", true)]),
+                ),
+                variant_payload(
+                    "text_scalar_at",
+                    record_payload(&[("value", "value_ref", true), ("index", "value_ref", true)]),
+                ),
+                variant_payload(
+                    "text_previous_grapheme_boundary",
+                    record_payload(&[("value", "value_ref", true), ("index", "value_ref", true)]),
+                ),
+                variant_payload(
+                    "text_next_grapheme_boundary",
+                    record_payload(&[("value", "value_ref", true), ("index", "value_ref", true)]),
+                ),
+                variant_payload(
+                    "text_line_start",
+                    record_payload(&[("value", "value_ref", true), ("line", "value_ref", true)]),
+                ),
+                variant_payload(
+                    "text_line_end",
+                    record_payload(&[("value", "value_ref", true), ("line", "value_ref", true)]),
+                ),
+                variant_payload(
+                    "text_byte_to_line",
+                    record_payload(&[("value", "value_ref", true), ("index", "value_ref", true)]),
+                ),
+                variant_payload(
+                    "text_slice",
+                    record_payload(&[
+                        ("value", "value_ref", true),
+                        ("start", "value_ref", true),
+                        ("end_exclusive", "value_ref", true),
+                    ]),
+                ),
+                variant_payload(
+                    "text_splice",
+                    record_payload(&[
+                        ("value", "value_ref", true),
+                        ("start", "value_ref", true),
+                        ("end_exclusive", "value_ref", true),
+                        ("replacement", "value_ref", true),
+                    ]),
+                ),
+                variant_payload(
+                    "text_find_forward",
+                    record_payload(&[
+                        ("value", "value_ref", true),
+                        ("query", "value_ref", true),
+                        ("start", "value_ref", true),
+                    ]),
+                ),
+                variant_payload(
+                    "text_find_backward",
+                    record_payload(&[
+                        ("value", "value_ref", true),
+                        ("query", "value_ref", true),
+                        ("end_exclusive", "value_ref", true),
+                    ]),
+                ),
+                variant_payload(
+                    "text_line_ending_kind",
+                    record_payload(&[("value", "value_ref", true)]),
+                ),
+                variant_payload(
+                    "text_display_width",
+                    record_payload(&[
+                        ("value", "value_ref", true),
+                        ("start", "value_ref", true),
+                        ("end_exclusive", "value_ref", true),
+                        ("initial_column", "value_ref", true),
+                        ("tab_width", "value_ref", true),
+                    ]),
+                ),
+                variant_payload(
+                    "text_cell_prefix_boundary",
+                    record_payload(&[
+                        ("value", "value_ref", true),
+                        ("start", "value_ref", true),
+                        ("end_exclusive", "value_ref", true),
+                        ("initial_column", "value_ref", true),
+                        ("maximum_cells", "value_ref", true),
+                        ("tab_width", "value_ref", true),
+                    ]),
+                ),
+                variant_payload(
+                    "text_from_scalar",
+                    record_payload(&[("value", "value_ref", true)]),
+                ),
+                variant_payload(
+                    "text_to_scalars",
+                    record_payload(&[("sequence", "node_id", true), ("value", "value_ref", true)]),
+                ),
+                variant_payload(
+                    "text_from_scalars",
+                    record_payload(&[("sequence", "node_id", true), ("value", "value_ref", true)]),
+                ),
+                variant_payload(
                     "sequence_empty",
                     record_payload(&[("sequence", "node_id", true)]),
                 ),
@@ -1006,6 +1324,14 @@ fn semantic_variants() -> Vec<NamedVariantDescription> {
                         ("sequence", "node_id", true),
                         ("lhs", "value_ref", true),
                         ("rhs", "value_ref", true),
+                    ]),
+                ),
+                variant_payload(
+                    "sequence_repeat",
+                    record_payload(&[
+                        ("sequence", "node_id", true),
+                        ("element", "value_ref", true),
+                        ("count", "value_ref", true),
                     ]),
                 ),
             ],
@@ -1330,18 +1656,89 @@ fn transaction_records() -> Vec<NamedPayloadDescription> {
             ],
         ),
         named_record(
+            "target_interactive_mouse_routes",
+            &[
+                ("button", "target_item", true),
+                ("button_none_variant", "target_item", true),
+                ("button_primary_variant", "target_item", true),
+                ("button_middle_variant", "target_item", true),
+                ("button_secondary_variant", "target_item", true),
+                ("kind", "target_item", true),
+                ("press_variant", "target_item", true),
+                ("release_variant", "target_item", true),
+                ("drag_variant", "target_item", true),
+                ("scroll_up_variant", "target_item", true),
+                ("scroll_down_variant", "target_item", true),
+                ("scroll_left_variant", "target_item", true),
+                ("scroll_right_variant", "target_item", true),
+                ("event", "target_item", true),
+                ("event_button_field", "target_item", true),
+                ("event_kind_field", "target_item", true),
+                ("event_row_field", "target_item", true),
+                ("event_column_field", "target_item", true),
+                ("event_control_field", "target_item", true),
+                ("event_alt_field", "target_item", true),
+                ("event_shift_field", "target_item", true),
+            ],
+        ),
+        named_record(
+            "target_interactive_open_routes",
+            &[
+                ("event", "target_item", true),
+                ("event_path_field", "target_item", true),
+                ("event_directory_field", "target_item", true),
+                ("event_project_field", "target_item", true),
+            ],
+        ),
+        named_record(
+            "target_interactive_action_route",
+            &[
+                ("variant", "target_item", true),
+                ("kind", "interactive_action_kind", true),
+            ],
+        ),
+        named_record(
+            "target_interactive_action_routes",
+            &[
+                ("action", "target_item", true),
+                ("update_action_field", "target_item", true),
+                ("update_action_id_field", "target_item", true),
+                ("routes", "list<target_interactive_action_route>", true),
+                ("file_save_payload", "target_item", true),
+                ("file_save_origin_field", "target_item", true),
+                ("file_save_content_field", "target_item", true),
+                ("file_save_create_field", "target_item", true),
+                ("file_search_payload", "target_item", true),
+                ("file_search_start_field", "target_item", true),
+                ("file_search_query_field", "target_item", true),
+                ("outcome", "target_item", true),
+                ("outcome_job_id_field", "target_item", true),
+                ("outcome_class_field", "target_item", true),
+                ("outcome_message_field", "target_item", true),
+                ("outcome_content_field", "target_item", true),
+                ("outcome_token_field", "target_item", true),
+                ("resume", "target_item", true),
+            ],
+        ),
+        named_record(
             "target_interactive_event_routes",
             &[
                 ("event", "target_item", true),
                 ("key_variant", "target_item", true),
                 ("paste_variant", "target_item", true),
                 ("resize_variant", "target_item", true),
+                ("mouse_variant", "target_item", true),
+                ("focus_gained_variant", "target_item", true),
+                ("focus_lost_variant", "target_item", true),
+                ("open_variant", "target_item", true),
                 ("close_variant", "target_item", true),
                 ("size", "target_item", true),
                 ("size_rows_field", "target_item", true),
                 ("size_columns_field", "target_item", true),
                 ("scalars", "target_item", true),
                 ("key", "target_interactive_key_routes", true),
+                ("mouse", "target_interactive_mouse_routes", true),
+                ("open", "target_interactive_open_routes", true),
             ],
         ),
         named_record(
@@ -1360,11 +1757,15 @@ fn transaction_records() -> Vec<NamedPayloadDescription> {
                 ("frame_rows_field", "target_item", true),
                 ("frame_columns_field", "target_item", true),
                 ("frame_scalars_field", "target_item", true),
+                ("frame_styles_field", "target_item", true),
                 ("frame_cursor_row_field", "target_item", true),
                 ("frame_cursor_column_field", "target_item", true),
                 ("frame_cursor_visible_field", "target_item", true),
+                ("frame_cursor_shape_field", "target_item", true),
                 ("frame_status_field", "target_item", true),
+                ("frame_status_style_field", "target_item", true),
                 ("events", "target_interactive_event_routes", true),
+                ("actions", "target_interactive_action_routes", false),
             ],
         ),
         named_record(
@@ -1521,6 +1922,35 @@ fn transaction_variants() -> Vec<NamedVariantDescription> {
                 ("runtime_trap", 1),
                 ("byte_index_out_of_bounds", 2),
                 ("byte_slice_out_of_bounds", 3),
+            ],
+        ),
+        unit_variants(
+            "interactive_action_kind",
+            [
+                ("none", 1),
+                ("project_orient", 2),
+                ("project_summary", 3),
+                ("project_children", 4),
+                ("project_function", 5),
+                ("project_callers", 6),
+                ("project_callees", 7),
+                ("project_targets", 8),
+                ("project_blockers", 9),
+                ("project_proposal", 10),
+                ("project_history", 11),
+                ("project_record", 12),
+                ("project_diff", 13),
+                ("project_validate", 14),
+                ("project_apply", 15),
+                ("project_target_list", 16),
+                ("project_target_test", 17),
+                ("project_target_build", 18),
+                ("project_target_run", 19),
+                ("filesystem_list", 20),
+                ("filesystem_search", 21),
+                ("filesystem_read", 22),
+                ("filesystem_save", 23),
+                ("filesystem_reconcile", 24),
             ],
         ),
         unit_variants("transaction_mode", [("commit", 1), ("validate_only", 2)]),

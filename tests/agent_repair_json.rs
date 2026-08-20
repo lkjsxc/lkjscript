@@ -209,6 +209,20 @@ fn real_json_cli_repairs_hole_and_operand_across_direct_reopen() {
             OperationCode::BytesLen,
             OperationCode::BytesAt,
             OperationCode::TextLen,
+            OperationCode::TextScalarLen,
+            OperationCode::TextGraphemeLen,
+            OperationCode::TextLineCount,
+            OperationCode::TextScalarAt,
+            OperationCode::TextPreviousGraphemeBoundary,
+            OperationCode::TextNextGraphemeBoundary,
+            OperationCode::TextLineStart,
+            OperationCode::TextLineEnd,
+            OperationCode::TextByteToLine,
+            OperationCode::TextFindForward,
+            OperationCode::TextFindBackward,
+            OperationCode::TextLineEndingKind,
+            OperationCode::TextDisplayWidth,
+            OperationCode::TextCellPrefixBoundary,
             OperationCode::SequenceLen,
         ]
     );
@@ -293,7 +307,14 @@ fn real_json_cli_repairs_hole_and_operand_across_direct_reopen() {
             OperationCode::BytesLen,
             OperationCode::BytesAt,
             OperationCode::TextLen,
-            OperationCode::SequenceLen,
+            OperationCode::TextScalarLen,
+            OperationCode::TextGraphemeLen,
+            OperationCode::TextLineCount,
+            OperationCode::TextScalarAt,
+            OperationCode::TextPreviousGraphemeBoundary,
+            OperationCode::TextNextGraphemeBoundary,
+            OperationCode::TextLineStart,
+            OperationCode::TextLineEnd,
         ]
     );
 

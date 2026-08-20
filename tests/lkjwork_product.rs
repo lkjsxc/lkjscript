@@ -1173,7 +1173,7 @@ fn text_and_attachment_one_over_limits_reject_without_publication() {
         0,
     );
     let before = snapshot_tree(&project.join(".lkjwork"));
-    let oversized = "x".repeat(lkjscript::schema::MAXIMUM_TEXT_BYTES + 1);
+    let oversized = "x".repeat(64 * 1024 + 1);
     let response = project_machine(&binary, &project, &["add", &oversized], 2);
     assert_eq!(response["error"]["code"], "input_limit");
     assert_eq!(before, snapshot_tree(&project.join(".lkjwork")));

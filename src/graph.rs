@@ -548,6 +548,8 @@ fn operation_identity_shape_is_stable(
                     | crate::schema::OperationKind::SequenceReplace { .. }
                     | crate::schema::OperationKind::SequenceSlice { .. }
                     | crate::schema::OperationKind::SequenceConcat { .. }
+                    | crate::schema::OperationKind::SequenceRepeat { .. }
+                    | crate::schema::OperationKind::TextToScalars { .. }
             ),
             _ => true,
         }
@@ -608,7 +610,9 @@ pub(crate) fn operation_result_type(
         | crate::schema::OperationKind::SequenceAppend { sequence, .. }
         | crate::schema::OperationKind::SequenceReplace { sequence, .. }
         | crate::schema::OperationKind::SequenceSlice { sequence, .. }
-        | crate::schema::OperationKind::SequenceConcat { sequence, .. } => matches!(
+        | crate::schema::OperationKind::SequenceConcat { sequence, .. }
+        | crate::schema::OperationKind::SequenceRepeat { sequence, .. }
+        | crate::schema::OperationKind::TextToScalars { sequence, .. } => matches!(
             snapshot.nodes.get(sequence),
             Some(Node::SequenceType { .. })
         )

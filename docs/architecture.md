@@ -132,24 +132,28 @@ unknown output visibility after a visibility-capable step. Builds never mutate p
 `src/release/` projects one selected package closure into canonical release format 2. Workspace and
 revision identities disappear; exact release-local nominal identity, dependencies/imports, exports,
 and cases remain. `src/application.rs` composes one complete exact release graph into application
-format 8, validates profiles and host requirements, exposes a bounded interface description, and
-owns public application-value conversion.
+contract 8 and internal format 9, validates profiles and host requirements, exposes a bounded
+interface description, and owns public application-value conversion. Internal format 8 rejects.
 
-`src/application/interactive.rs` owns interactive-profile-2 validation and the application-owned
-initialize/update/resume/render route. State, events, frames, action intent, outcome consumption,
-exit, and one-pending-action policy are semantic values. `src/interactive_runner.rs` owns bounded
-deterministic headless replay over the same route. Interactive state is foreground-ephemeral and is
-not an instance revision, development revision, terminal session, or file version. A step or resume
-replaces that state only after candidate update, policy validation, and frame rendering all succeed;
-failure preserves the prior ephemeral state and pending action.
+`src/application/interactive.rs` owns interactive-profile-3 validation and the application-owned
+initialize/update/resume/render route. State, keys, paste, resize, mouse, focus, deployment-open
+events, abstract styled frames, action intent, exact job identity, outcome consumption, and exit are
+semantic values. `src/interactive_runner.rs` owns bounded deterministic headless replay 4 over the
+same route. Interactive state is foreground-ephemeral and is not an instance revision, development
+revision, terminal session, or file version. A step or resume replaces that state only after
+candidate update, policy validation, and frame rendering all succeed; failure preserves prior
+ephemeral state and pending authority facts.
 
 `src/compile.rs`, `src/core_ir.rs`, and `src/interpret.rs` lower the complete selected closure and run
 one explicit-frame interpreter. Core IR and ownership plans are derived and independently checked.
-Bytes/text use a generation-checked managed store; nominal sequences use immutable `Arc` elements.
-Checked sequence slice and concatenate shallow-share elements internally but charge exact flat
-allocate-new logical results and retain that route as their differential oracle. Visible
-cells/bytes, retained bytes, values, depth, items, frames, and fuel are separately bounded. No
-semantic value exposes allocation, sharing, address, or representation identity.
+Bytes use a generation-checked managed store; nominal sequences use immutable `Arc` elements.
+`src/runtime_text.rs` represents text as an unobservable persistent UTF-8 piece treap over immutable
+backings with byte/scalar/newline aggregates and disposable grapheme boundaries. Splice touches
+split paths and new chunks instead of copying unchanged text. Canonical flat UTF-8 serialization and
+materialization remain the independent oracle, and randomized tests compare bytes, scalar/grapheme
+boundaries, lines, slices, splices, search, and equality. Visible cells/bytes, retained bytes,
+values, depth, items, frames, and fuel are separately bounded. No semantic value exposes allocation,
+piece/tree shape, sharing, address, or representation identity.
 
 ## Product instances and host authority
 
@@ -196,32 +200,39 @@ PROJECT/.lkjwork/
 
 This product state is independent from the semantic development project and its history.
 
-## lkjstudio packaging and host boundaries
+## lkjedit packaging and host boundaries
 
-`applications/lkjstudio/.lkjscript` is the checked semantic development repository for the
-workbench. Its meaning graph owns the editor model, key-to-command/action policy, host-outcome
-transition, rendering content, exact release/application/product targets, and target cases.
-`lkjscript target build lkjstudio` reproduces the checked application artifact. There is no native
-builder, generated semantic source, or generated binding file.
+`applications/lkjedit/.lkjscript` is the checked semantic development repository for the editor.
+Its meaning graph owns the Vim-like command state, buffer/view/tab/tile/layout model, key and mouse
+policy, explorer/search behavior, save/conflict decisions, pending jobs, host-outcome transition,
+logical frames, exact release/application/product targets, and target cases. `lkjscript target build
+lkjedit-application` reproduces the checked application artifact. There is no native builder,
+generated semantic source, migration fixture, or generated binding file.
 
-`src/bin/lkjstudio.rs` owns deployment parsing, bounded artifact read, project/root selection, and
-terminal versus headless process topology. `src/terminal.rs` owns only terminal decoding,
-Unicode-width full-frame emission, live-resource lifecycle, signals, EOF, and cleanup. It cannot
-decode private editor state. Raw ANSI exists only inside this adapter and never crosses the
-application boundary.
+`src/bin/lkjedit.rs` owns closed deployment grammar, root/file/project selection, embedded checked
+package loading, and terminal versus headless process topology. Normal launch has no artifact
+argument. `src/terminal.rs` owns only crossterm event acquisition/decoding, abstract-style and
+Unicode-cell projection, acknowledged row-differential emission with full-frame fallback, bounded
+worker mechanics, live-resource lifecycle, signals, EOF, and cleanup. It cannot decode private
+editor state or choose a Vim/layout/search decision. ANSI exists only inside this adapter and never
+crosses the application boundary.
 
 `src/project_host.rs` binds one exact workspace grant and routes closed explorer/proposal/history/
 target requests into the same `Project` owner used by the public CLI. It has no persistence or
 transaction bypass. `src/selected_filesystem.rs` pins one Linux directory descriptor and owns
-bounded path/list/read/save/reconcile behavior. `src/workbench_host.rs` composes these two grants,
-converts bounded UTF-8 file observations, and returns closed outcomes. Project publication,
-filesystem publication, foreground editor state, and terminal presentation remain separate
-authority domains.
+bounded path/list/stable-read/recursive-search/atomic-save/reconcile behavior. Replacement preserves
+the observed ordinary mode; create uses explicit mode 0644. `src/workbench_host.rs`
+composes project and filesystem grants, converts bounded UTF-8 observations, and returns closed
+outcomes. Project publication, filesystem publication, foreground editor state, job execution, and
+terminal presentation remain separate authority domains.
 
-The retained interactive topology is one sequential foreground loop and one full frame per semantic
-step. A daemon, durable-per-key instance, hybrid checkpoint store, patch renderer, background job,
-and async runtime all lost because they add authority without improving the complete current
-workflow. Output failure cleans the terminal but never rolls back a completed host publication.
+The retained interactive topology is one foreground application/terminal thread and one worker
+thread connected by capacity-one request/result channels. Local semantic steps continue while one
+host job executes. Application state retains the exact job and routes or abandons its result by
+identity; the worker never holds private application state and performs no retry. A daemon,
+durable-per-key editor instance, hybrid checkpoint store, general scheduler, unbounded pool, and
+async runtime remain rejected. Output failure never advances the acknowledged render cache and
+never rolls back a completed host publication.
 
 ## Trust boundary and absences
 
@@ -233,6 +244,7 @@ authority decoder is closed, bounded, canonical, and consumes all input. Termina
 independent of text semantics.
 
 There is no native sandbox, network, multi-user authorization, secrets system, ambient/broad
-filesystem interface, application-supplied terminal escape interface, child-process interface,
-daemon, scheduler, background worker, database, general VCS, package registry, build hook, build
-cache, bytecode/JIT/native tier, automatic migration, or compatibility path.
+filesystem interface, application-supplied terminal escape interface, child-process editor
+interface, daemon, general scheduler, unbounded worker pool, database, general VCS, package
+registry, build hook, build cache, bytecode/JIT/native tier, automatic migration, or compatibility
+path. The one bounded `lkjedit` host worker is operational adaptation, not semantic authority.

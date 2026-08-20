@@ -120,7 +120,15 @@ pub fn decode_with_policy(bytes: &[u8], policy: DecodePolicy) -> Result<Snapshot
     let mut expected = [0_u8; SnapshotHash::BYTE_LEN];
     expected.copy_from_slice(encoded_hash);
     let expected = SnapshotHash::from_bytes(expected);
-    if expected != computed || snapshot.hash() != computed {
+    if expected != computed {
+        return Err(LkError::new(
+            ErrorCode::ArtifactCorrupt,
+            "artifact snapshot hash is invalid",
+        )
+        .for_workspace(snapshot.workspace())
+        .at_revision(snapshot.revision()));
+    }
+    if snapshot.hash() != computed {
         return Err(LkError::new(
             ErrorCode::ArtifactCorrupt,
             "artifact snapshot hash is invalid",
@@ -519,7 +527,95 @@ pub(crate) fn put_operation(writer: &mut Writer, operation: &OperationKind) -> R
         }
         OperationKind::NotBool { value }
         | OperationKind::BytesLen { value }
-        | OperationKind::TextLen { value } => put_value(writer, *value),
+        | OperationKind::TextLen { value }
+        | OperationKind::TextScalarLen { value }
+        | OperationKind::TextGraphemeLen { value }
+        | OperationKind::TextLineCount { value }
+        | OperationKind::TextLineEndingKind { value } => put_value(writer, *value),
+        OperationKind::TextScalarAt { value, index }
+        | OperationKind::TextPreviousGraphemeBoundary { value, index }
+        | OperationKind::TextNextGraphemeBoundary { value, index }
+        | OperationKind::TextByteToLine { value, index } => {
+            put_value(writer, *value);
+            put_value(writer, *index);
+        }
+        OperationKind::TextLineStart { value, line }
+        | OperationKind::TextLineEnd { value, line } => {
+            put_value(writer, *value);
+            put_value(writer, *line);
+        }
+        OperationKind::TextSlice {
+            value,
+            start,
+            end_exclusive,
+        } => {
+            put_value(writer, *value);
+            put_value(writer, *start);
+            put_value(writer, *end_exclusive);
+        }
+        OperationKind::TextSplice {
+            value,
+            start,
+            end_exclusive,
+            replacement,
+        } => {
+            put_value(writer, *value);
+            put_value(writer, *start);
+            put_value(writer, *end_exclusive);
+            put_value(writer, *replacement);
+        }
+        OperationKind::TextFindForward {
+            value,
+            query,
+            start,
+        } => {
+            put_value(writer, *value);
+            put_value(writer, *query);
+            put_value(writer, *start);
+        }
+        OperationKind::TextFindBackward {
+            value,
+            query,
+            end_exclusive,
+        } => {
+            put_value(writer, *value);
+            put_value(writer, *query);
+            put_value(writer, *end_exclusive);
+        }
+        OperationKind::TextDisplayWidth {
+            value,
+            start,
+            end_exclusive,
+            initial_column,
+            tab_width,
+        } => {
+            put_value(writer, *value);
+            put_value(writer, *start);
+            put_value(writer, *end_exclusive);
+            put_value(writer, *initial_column);
+            put_value(writer, *tab_width);
+        }
+        OperationKind::TextCellPrefixBoundary {
+            value,
+            start,
+            end_exclusive,
+            initial_column,
+            maximum_cells,
+            tab_width,
+        } => {
+            put_value(writer, *value);
+            put_value(writer, *start);
+            put_value(writer, *end_exclusive);
+            put_value(writer, *initial_column);
+            put_value(writer, *maximum_cells);
+            put_value(writer, *tab_width);
+        }
+        OperationKind::TextFromScalar { value } => put_value(writer, *value),
+        OperationKind::TextToScalars { sequence, value }
+        | OperationKind::TextFromScalars { sequence, value } => {
+            put_node_id(writer, *sequence);
+            put_value(writer, *value);
+        }
         OperationKind::BytesAt { value, index } => {
             put_value(writer, *value);
             put_value(writer, *index);
@@ -582,6 +678,15 @@ pub(crate) fn put_operation(writer: &mut Writer, operation: &OperationKind) -> R
             put_node_id(writer, *sequence);
             put_value(writer, *lhs);
             put_value(writer, *rhs);
+        }
+        OperationKind::SequenceRepeat {
+            sequence,
+            element,
+            count,
+        } => {
+            put_node_id(writer, *sequence);
+            put_value(writer, *element);
+            put_value(writer, *count);
         }
         OperationKind::Call {
             function,
@@ -754,6 +859,91 @@ pub(crate) fn read_operation(
             lhs: read_value(reader, workspace)?,
             rhs: read_value(reader, workspace)?,
         }),
+        OperationCode::TextScalarLen => Ok(OperationKind::TextScalarLen {
+            value: read_value(reader, workspace)?,
+        }),
+        OperationCode::TextGraphemeLen => Ok(OperationKind::TextGraphemeLen {
+            value: read_value(reader, workspace)?,
+        }),
+        OperationCode::TextLineCount => Ok(OperationKind::TextLineCount {
+            value: read_value(reader, workspace)?,
+        }),
+        OperationCode::TextScalarAt => Ok(OperationKind::TextScalarAt {
+            value: read_value(reader, workspace)?,
+            index: read_value(reader, workspace)?,
+        }),
+        OperationCode::TextPreviousGraphemeBoundary => {
+            Ok(OperationKind::TextPreviousGraphemeBoundary {
+                value: read_value(reader, workspace)?,
+                index: read_value(reader, workspace)?,
+            })
+        }
+        OperationCode::TextNextGraphemeBoundary => Ok(OperationKind::TextNextGraphemeBoundary {
+            value: read_value(reader, workspace)?,
+            index: read_value(reader, workspace)?,
+        }),
+        OperationCode::TextLineStart => Ok(OperationKind::TextLineStart {
+            value: read_value(reader, workspace)?,
+            line: read_value(reader, workspace)?,
+        }),
+        OperationCode::TextLineEnd => Ok(OperationKind::TextLineEnd {
+            value: read_value(reader, workspace)?,
+            line: read_value(reader, workspace)?,
+        }),
+        OperationCode::TextByteToLine => Ok(OperationKind::TextByteToLine {
+            value: read_value(reader, workspace)?,
+            index: read_value(reader, workspace)?,
+        }),
+        OperationCode::TextSlice => Ok(OperationKind::TextSlice {
+            value: read_value(reader, workspace)?,
+            start: read_value(reader, workspace)?,
+            end_exclusive: read_value(reader, workspace)?,
+        }),
+        OperationCode::TextSplice => Ok(OperationKind::TextSplice {
+            value: read_value(reader, workspace)?,
+            start: read_value(reader, workspace)?,
+            end_exclusive: read_value(reader, workspace)?,
+            replacement: read_value(reader, workspace)?,
+        }),
+        OperationCode::TextFindForward => Ok(OperationKind::TextFindForward {
+            value: read_value(reader, workspace)?,
+            query: read_value(reader, workspace)?,
+            start: read_value(reader, workspace)?,
+        }),
+        OperationCode::TextFindBackward => Ok(OperationKind::TextFindBackward {
+            value: read_value(reader, workspace)?,
+            query: read_value(reader, workspace)?,
+            end_exclusive: read_value(reader, workspace)?,
+        }),
+        OperationCode::TextLineEndingKind => Ok(OperationKind::TextLineEndingKind {
+            value: read_value(reader, workspace)?,
+        }),
+        OperationCode::TextDisplayWidth => Ok(OperationKind::TextDisplayWidth {
+            value: read_value(reader, workspace)?,
+            start: read_value(reader, workspace)?,
+            end_exclusive: read_value(reader, workspace)?,
+            initial_column: read_value(reader, workspace)?,
+            tab_width: read_value(reader, workspace)?,
+        }),
+        OperationCode::TextCellPrefixBoundary => Ok(OperationKind::TextCellPrefixBoundary {
+            value: read_value(reader, workspace)?,
+            start: read_value(reader, workspace)?,
+            end_exclusive: read_value(reader, workspace)?,
+            initial_column: read_value(reader, workspace)?,
+            maximum_cells: read_value(reader, workspace)?,
+            tab_width: read_value(reader, workspace)?,
+        }),
+        OperationCode::TextFromScalar => Ok(OperationKind::TextFromScalar {
+            value: read_value(reader, workspace)?,
+        }),
+        OperationCode::TextToScalars => Ok(OperationKind::TextToScalars {
+            sequence: read_node_id(reader, workspace)?,
+            value: read_value(reader, workspace)?,
+        }),
+        OperationCode::TextFromScalars => Ok(OperationKind::TextFromScalars {
+            sequence: read_node_id(reader, workspace)?,
+            value: read_value(reader, workspace)?,
+        }),
         OperationCode::SequenceEmpty => Ok(OperationKind::SequenceEmpty {
             sequence: read_node_id(reader, workspace)?,
         }),
@@ -787,6 +977,11 @@ pub(crate) fn read_operation(
             sequence: read_node_id(reader, workspace)?,
             lhs: read_value(reader, workspace)?,
             rhs: read_value(reader, workspace)?,
+        }),
+        OperationCode::SequenceRepeat => Ok(OperationKind::SequenceRepeat {
+            sequence: read_node_id(reader, workspace)?,
+            element: read_value(reader, workspace)?,
+            count: read_value(reader, workspace)?,
         }),
         OperationCode::Call => {
             let function = read_node_id(reader, workspace)?;
@@ -1258,6 +1453,89 @@ mod tests {
                 lhs: ValueRef::BlockArgument(first),
                 rhs: ValueRef::BlockArgument(second),
             },
+            OperationKind::TextScalarLen {
+                value: ValueRef::BlockArgument(first),
+            },
+            OperationKind::TextGraphemeLen {
+                value: ValueRef::BlockArgument(first),
+            },
+            OperationKind::TextLineCount {
+                value: ValueRef::BlockArgument(first),
+            },
+            OperationKind::TextScalarAt {
+                value: ValueRef::BlockArgument(first),
+                index: ValueRef::BlockArgument(second),
+            },
+            OperationKind::TextPreviousGraphemeBoundary {
+                value: ValueRef::BlockArgument(first),
+                index: ValueRef::BlockArgument(second),
+            },
+            OperationKind::TextNextGraphemeBoundary {
+                value: ValueRef::BlockArgument(first),
+                index: ValueRef::BlockArgument(second),
+            },
+            OperationKind::TextLineStart {
+                value: ValueRef::BlockArgument(first),
+                line: ValueRef::BlockArgument(second),
+            },
+            OperationKind::TextLineEnd {
+                value: ValueRef::BlockArgument(first),
+                line: ValueRef::BlockArgument(second),
+            },
+            OperationKind::TextByteToLine {
+                value: ValueRef::BlockArgument(first),
+                index: ValueRef::BlockArgument(second),
+            },
+            OperationKind::TextSlice {
+                value: ValueRef::BlockArgument(first),
+                start: ValueRef::BlockArgument(second),
+                end_exclusive: ValueRef::BlockArgument(first),
+            },
+            OperationKind::TextSplice {
+                value: ValueRef::BlockArgument(first),
+                start: ValueRef::BlockArgument(second),
+                end_exclusive: ValueRef::BlockArgument(first),
+                replacement: ValueRef::BlockArgument(second),
+            },
+            OperationKind::TextFindForward {
+                value: ValueRef::BlockArgument(first),
+                query: ValueRef::BlockArgument(second),
+                start: ValueRef::BlockArgument(first),
+            },
+            OperationKind::TextFindBackward {
+                value: ValueRef::BlockArgument(first),
+                query: ValueRef::BlockArgument(second),
+                end_exclusive: ValueRef::BlockArgument(first),
+            },
+            OperationKind::TextLineEndingKind {
+                value: ValueRef::BlockArgument(first),
+            },
+            OperationKind::TextDisplayWidth {
+                value: ValueRef::BlockArgument(first),
+                start: ValueRef::BlockArgument(second),
+                end_exclusive: ValueRef::BlockArgument(first),
+                initial_column: ValueRef::BlockArgument(second),
+                tab_width: ValueRef::BlockArgument(first),
+            },
+            OperationKind::TextCellPrefixBoundary {
+                value: ValueRef::BlockArgument(first),
+                start: ValueRef::BlockArgument(second),
+                end_exclusive: ValueRef::BlockArgument(first),
+                initial_column: ValueRef::BlockArgument(second),
+                maximum_cells: ValueRef::BlockArgument(first),
+                tab_width: ValueRef::BlockArgument(second),
+            },
+            OperationKind::TextFromScalar {
+                value: ValueRef::BlockArgument(first),
+            },
+            OperationKind::TextToScalars {
+                sequence: first,
+                value: ValueRef::BlockArgument(second),
+            },
+            OperationKind::TextFromScalars {
+                sequence: first,
+                value: ValueRef::BlockArgument(second),
+            },
             OperationKind::SequenceEmpty { sequence: first },
             OperationKind::SequenceLen {
                 sequence: first,
@@ -1289,6 +1567,11 @@ mod tests {
                 sequence: first,
                 lhs: ValueRef::BlockArgument(first),
                 rhs: ValueRef::BlockArgument(second),
+            },
+            OperationKind::SequenceRepeat {
+                sequence: first,
+                element: ValueRef::BlockArgument(first),
+                count: ValueRef::BlockArgument(second),
             },
         ];
         assert_eq!(operations.len(), OperationCode::ALL.len());

@@ -76,7 +76,7 @@ specified in [`instance.md`](instance.md).
 
 ### Interactive profile
 
-Interactive profile version 2 maps exact release items to application-owned `State`, `Event`,
+Interactive profile version 3 maps exact release items to application-owned `State`, `Event`,
 `UpdateResult`, `Frame`, `Action`, and `Outcome` types and to initialize, update, resume, and render
 functions. The conceptual roles are:
 
@@ -87,24 +87,34 @@ resume     : (State, Outcome) -> UpdateResult
 render     : State -> Frame
 ```
 
-`UpdateResult` contains an exact next state, changed/exit booleans, and one closed action. The
+`UpdateResult` contains an exact next state, changed/exit booleans, one closed action, and the exact
+nonnegative application job identity assigned to a non-`none` action. The
 application action vocabulary is `none`, bounded semantic-project reads/mutations/target actions,
-and bounded selected-filesystem list/read/save/reconcile actions. Action payloads are data only;
+and bounded selected-filesystem list/search/read/save/reconcile actions. Action payloads are data only;
 the application receives no path authority, project handle, terminal handle, file descriptor,
 thread, or OS object. The native runner may execute at most one action at a time, then supplies one
-typed outcome through `resume`. Input while an action is unresolved rejects; possible external
-visibility remains an explicit outcome and is never retried by application semantics.
+typed outcome through `resume`. Local events may continue while the exact pending identity remains
+reachable. A second action reports bounded authority-busy rather than forming a hidden queue. A
+resume applies only to the matching reachable job; duplicate, foreign, stale, wrong-variant, or
+excessive results reject before state mutation. Possible external visibility remains an explicit
+outcome and is never retried by application semantics.
 
-The event vocabulary is key, paste, resize, and close. A key contains one closed code, optional
-character scalar, control/alt/shift flags, and repeat state. Paste is one event. Rows and columns are
-1 through 1,000, a paste contains at most 65,536 Unicode scalars, a frame at most 131,072 scalars,
-and status at most 4,096 UTF-8 bytes. Invalid scalars, foreign nominal values, excessive dimensions,
-malformed action routes, or wrong function signatures reject during preparation or event decoding.
+The event vocabulary is key, paste, resize, mouse, focus gained/lost, deployment open, and close. A
+key contains one closed code, optional character scalar, control/alt/shift flags, and repeat state.
+Mouse contains a closed button and press/release/drag/scroll kind, terminal-cell row/column, and
+modifiers. Open carries a bounded deployment-relative path plus directory/project facts; it is an
+initial selection proposal, not semantic identity. Paste is one event. Rows and columns are 1
+through 1,000, a paste contains at most 65,536 Unicode scalars, a frame at most 131,072 scalars, and
+status at most 4,096 UTF-8 bytes. Invalid scalars, foreign nominal values, excessive dimensions,
+coordinates, malformed routes, or wrong function signatures reject during preparation or decoding.
 
-A frame contains bounded rows/columns, semantic Unicode scalars, cursor row/column/visibility, and
-status. It contains no raw terminal escape sequence. Rendering is a pure application query over
-foreground state and publishes nothing. The runner's cell width, clipping, escaping, and terminal
-lifecycle are specified in [`terminal.md`](terminal.md).
+A frame contains bounded rows/columns, semantic Unicode scalars, one abstract style per scalar,
+cursor row/column/visibility/shape, status text, and status style. Styles are integers 0 through 15
+whose product meaning is closed by the application; the terminal maps them to a safe abstract
+palette. A frame contains no raw terminal escape sequence or terminal color number. Rendering is a
+pure application query over foreground state and publishes nothing. Cell width, clipping, control
+escaping, differential projection, and terminal lifecycle are specified in
+[`terminal.md`](terminal.md).
 
 An event step or action resume is transactional within the ephemeral session: the runtime computes
 and validates a candidate state, pending-action state, and rendered frame before replacing the prior
@@ -115,13 +125,13 @@ publication that already occurred.
 Interactive state is explicitly ephemeral. Events do not create development revisions or durable
 instance revisions. Process exit loses unsaved state. Semantic-project publication and filesystem
 publication occur only through separate host action owners and cannot be rolled back by a later
-frame or output failure. Headless replay contract 3 invokes the same functions sequentially for at
-most 10,000 events and outcomes and returns exact frame/action digests.
+frame or output failure. Headless replay contract 4 invokes the same functions for at most 20,000
+events/outcomes and 10,000 emitted actions and returns exact frame/action/replay digests.
 
-Historical profile version 1 is accepted only while validating immutable development snapshots that
-predate the direct cutover. Current target normalization, application-format-8 preparation, and
-interactive execution require version 2. This is history reconstruction, not an artifact or mutation
-compatibility path.
+Historical profile versions may be decoded only by immutable historical snapshot validation where
+needed to inspect their own record. Current target normalization, application-format-9 preparation,
+and interactive execution require version 3. No predecessor profile can produce or execute a
+current artifact.
 
 ## Host requirements
 
@@ -150,19 +160,20 @@ resume case when imports exist, and cases covering `declined`, `unchanged`, `com
 Suite fuel is capped at 100,000,000. A skipped, incomplete, exhausted, malformed, or engine-failed
 case does not pass.
 
-## Artifact version 8
+## Artifact format 9
 
 The sole successful application encoding is:
 
-- magic `LKJAPP\0\x08` and little-endian format `8`;
+- contract 8 magic `LKJAPP\0\x08` and little-endian internal format `9`;
 - semantic schema `lkjscript-tsm008` from the workspace artifact owner;
 - bounded canonical release graph, exact root/entry/profile/policy/cases; and
 - a domain-separated digest over the canonical payload.
 
 The decoder checks lengths before allocation, requires canonical re-encoding, reconstructs and
 validates the exact graph/profile, compiles every required entry, and runs the immutable cases.
-Application format 7 and every predecessor reject directly; no reader, migration, edition, alias,
-or fallback remains.
+Application internal format 8 and every predecessor reject directly; no reader, migration, edition,
+alias, or fallback remains. The unchanged magic identifies application contract 8, not the internal
+format field.
 
 ## Derivation, self-description, execution, and inspection
 
