@@ -13,11 +13,13 @@ combined stdout/stderr retained-byte maximum per gate. They use new process grou
 cancellation, log excess, command absence, nonzero exit, and success remain distinct statuses.
 After the first non-pass, remaining gates are explicitly `unrun`.
 
-Every run has a new directory under `.artifacts/check/`; the newest eight are retained. Each gate
-has separate stdout and stderr logs, exit status, command vector, elapsed nanoseconds, byte counts,
-and a SHA-256 output fingerprint. Failure output contains bounded head/tail excerpts and exact log
-locators. Default all-pass output is one aggregate line plus receipt. `--machine` emits one compact
-JSON object; `--details` is an explicit human expansion.
+Every run has a new directory under `.artifacts/check/`; the newest eight ordinary profile runs and
+the newest eight `self-test-` runs are retained independently. Rotation recognizes only the exact
+contract-2 timestamp/process naming shape and never deletes predecessor or foreign directories.
+Each gate has separate stdout and stderr logs, exit status, command vector, elapsed nanoseconds,
+byte counts, and a SHA-256 output fingerprint. Failure output contains bounded head/tail excerpts
+and exact log locators. Default all-pass output is one aggregate line plus receipt. `--machine`
+emits one compact JSON object; `--details` is an explicit human expansion.
 
 Receipt contract 2 records profile, selected/completed/passed/unrun gates, Git head, SHA-256 over
 Git status and every tracked/untracked nonignored input byte, Rust/Cargo/Python/platform facts,
@@ -26,9 +28,10 @@ all gates even when an identical pass receipt exists; ordinary compiler caches m
 without becoming authority.
 
 `--self-test` independently exercises success with separate streams, exit 7, unavailable command,
-timeout cleanup, and log overflow. Full includes that self-test, format, clippy, all-target locked
-tests, release build, both package differential suites, both deep authority doctors, deterministic
-artifact reproduction, live PostgreSQL service acceptance, and `git diff --check HEAD`.
+timeout cleanup, log overflow, and ordinary/self-test/predecessor retention classification. Full
+includes that self-test, format, clippy, all-target locked tests, release build, both package
+differential suites, both deep authority doctors, deterministic artifact reproduction, live
+PostgreSQL service acceptance, and `git diff --check HEAD`.
 
 The service profile requires Docker and an already available `postgres:16-alpine` image. Absence is
 a failed/unavailable verification fact, never a skip converted to success. Complete service logs,

@@ -436,12 +436,36 @@ def select_changed() -> tuple[tuple[str, ...], dict[str, Any]]:
     return names, {"paths": paths, "reasons": reasons, "widened_to_full": widen_full}
 
 
-def rotate_runs(current: Path) -> None:
+def managed_run(path: Path, prefix: str) -> bool:
+    name = path.name
+    if prefix:
+        if not name.startswith(prefix):
+            return False
+        name = name[len(prefix) :]
+    elif name.startswith("self-test-"):
+        return False
+    stamp, separator, process_id = name.rpartition("-")
+    return bool(
+        separator
+        and process_id.isdigit()
+        and len(stamp) == 23
+        and stamp[:8].isdigit()
+        and stamp[8] == "T"
+        and stamp[9:15].isdigit()
+        and stamp[15] == "."
+        and stamp[16:22].isdigit()
+        and stamp[22] == "Z"
+    )
+
+
+def rotate_runs(current: Path, prefix: str) -> None:
     candidates = sorted(
         (
             path
             for path in LOG_ROOT.iterdir()
-            if path.is_dir() and path.resolve() != current.resolve()
+            if path.is_dir()
+            and path.resolve() != current.resolve()
+            and managed_run(path, prefix)
         ),
         key=lambda path: path.stat().st_mtime_ns,
         reverse=True,
@@ -456,7 +480,7 @@ def new_run_directory(prefix: str = "") -> Path:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
     directory = LOG_ROOT / f"{prefix}{stamp}-{os.getpid()}"
     directory.mkdir(parents=True)
-    rotate_runs(directory)
+    rotate_runs(directory, prefix)
     return directory
 
 
@@ -487,13 +511,23 @@ def self_test(machine: bool) -> int:
     expected = ("passed", "failed", "unavailable", "exhausted", "exhausted")
     results = [run_gate(gate, directory) for gate in fixtures]
     actual = tuple(result["status"] for result in results)
-    passed = actual == expected
+    retention_actual = (
+        managed_run(Path("20260821T000000.000000Z-123"), ""),
+        managed_run(Path("20260821T000000.000000Z-123-full"), ""),
+        managed_run(Path("NOT-TZ-123"), ""),
+        managed_run(Path("self-test-20260821T000000.000000Z-123"), ""),
+        managed_run(Path("self-test-20260821T000000.000000Z-123"), "self-test-"),
+    )
+    retention_expected = (True, False, False, False, True)
+    passed = actual == expected and retention_actual == retention_expected
     receipt = {
         "contract_version": CHECK_CONTRACT_VERSION,
         "kind": "checker_self_test",
         "status": "passed" if passed else "failed",
         "expected": expected,
         "actual": actual,
+        "retention_expected": retention_expected,
+        "retention_actual": retention_actual,
         "gates": results,
     }
     receipt_path = directory / "receipt.json"

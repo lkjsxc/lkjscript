@@ -1,7 +1,8 @@
 # General-platform campaign ledger
 
-Status: active evidence ledger, started 2026-08-21 UTC. This file records reproduced facts and
-decision gates for the campaign in `prompts/202608211949.md`; it is not semantic authority.
+Status: completed implementation evidence ledger, started and finalized 2026-08-21 UTC. This file
+records reproduced facts and decision gates for the campaign in `prompts/202608211949.md`; it is not
+semantic authority.
 
 ## Starting authority
 
@@ -44,9 +45,11 @@ All commands ran from the starting checkout with locked dependencies.
 
 The full profile's dominant gates were workspace tests (537.914 s), complete `lkjedit` doctor
 (108.278 s), and `lkjedit` acceptance (75.424 s). `lkjwork` complete doctor and acceptance took
-2.167 s and 3.108 s. Complete child logs are retained by `tools/check`; the current tool exposes
-only `quick`, `product`, and `full`, prints one line per gate in human mode, has no accepted affected
-gate model, and does not reuse a complete pass receipt.
+2.167 s and 3.108 s. The original checker retained complete child logs when run, but an initial
+contract-2 retention defect later removed the predecessor receipt directories; those raw logs are
+unavailable. The aggregate observations above were captured before cutover. The predecessor tool
+exposed only `quick`, `product`, and `full`, printed one line per gate in human mode, had no accepted
+affected-gate model, and did not reuse a complete pass receipt.
 
 ## Current authority and formats
 
@@ -367,9 +370,12 @@ program size and task differ, so no token or cost saving is inferred.
   environment, close to but not identical with the retained historical observations.
 - `/usr/bin/time` is unavailable; process RSS remains unavailable.
 
-## Publication plan
+## Publication result and evidence closure
 
-Changes will be dependency-closed and staged by explicit path only. The intended publication is
-the current `main` branch to `origin/main`, with no force push, amend, rebase, merge, or release.
-The unrelated `package-lock.json` remains unstaged. Push is gated on current full verification,
-fresh-checkout reproduction, staged/unstaged diff inspection, and remote-ref verification.
+The dependency-closed implementation commit
+`349127e11668d7cd5974fd1be087197d2709c77b` was pushed as a fast-forward from
+`cc9b465227237a1600e9f2cb4e8e7f85ae59093a` to `origin/main`; local, upstream, and remote refs were
+verified equal. No force push, amend, rebase, merge, or release occurred. The unrelated
+`package-lock.json` remained unchanged and unstaged. This retained correction records the later
+discovery of the predecessor-log retention loss; its final commit and remote-ref verification are
+reported in the campaign handoff.

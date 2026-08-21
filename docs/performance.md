@@ -13,8 +13,11 @@ At starting commit `cc9b465227237a1600e9f2cb4e8e7f85ae59093a`, release `lkjedit`
 bytes; an exact function query emitted 37,897 bytes. Its public backup retained 51,704,083 bytes.
 
 The predecessor full check passed 15 gates in 730.608 s. Workspace tests took 537.914 s, editor
-deep doctor 108.278 s, and editor acceptance 75.424 s. Its receipt is
-`.artifacts/check/20260821T122930.983038Z-4129073-full/receipt.json` in the campaign worktree.
+deep doctor 108.278 s, and editor acceptance 75.424 s. Its contract-1 receipt was captured at
+`.artifacts/check/20260821T122930.983038Z-4129073-full/receipt.json`; an initial contract-2 retention
+defect later removed that directory, so the raw predecessor receipt and child logs are unavailable.
+The reproduced aggregate measurements remain in the campaign ledger and are not upgraded into
+stronger evidence.
 
 These workloads are retained baseline evidence only: the products and implementation were deleted,
 so the service cutover is not presented as an equal editor-performance improvement.
@@ -74,9 +77,10 @@ names modules, declarations, exact dependencies, targets, and expansion commands
 
 `tools/check` contract 2 supports `focused`, exact conservative `changed`, `product`, `service`, and
 `full`. Default all-pass output is one line plus a receipt locator. Each gate keeps separate logs,
-bounded to 64 MiB combined; the newest eight runs are retained. Pass receipts are keyed by current
-worktree digest, Git head, command, toolchain, and selected environment facts, but no cross-run pass
-reuse is implemented. Uncertain changes widen to full.
+bounded to 64 MiB combined; the newest eight ordinary runs and newest eight self-tests are retained
+independently, while foreign/predecessor directories are never rotated. Pass receipts are keyed by
+current worktree digest, Git head, command, toolchain, and selected environment facts, but no
+cross-run pass reuse is implemented. Uncertain changes widen to full.
 
 There is no equal-task old/new edit study with provider request counts or correction depth. The
 available old graph queries and current source-module commands differ in task and program size, so
