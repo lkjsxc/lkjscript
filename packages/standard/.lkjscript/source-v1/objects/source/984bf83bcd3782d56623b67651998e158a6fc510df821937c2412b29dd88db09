@@ -1,0 +1,54 @@
+; Pure deterministic primitives selected by interactive, service, worker, and toolchain consumers.
+(module core
+  (export
+    add subtract multiply divide i64-equal less less-equal i64-to-text i64-parse
+    bool-not bool-and bool-or
+    text-concat text-equal text-contains text-starts-with text-empty text-length text-from-static
+    bytes-from-text bytes-to-text bytes-concat bytes-equal bytes-length bytes-blake3 bytes-to-hex
+    html-escape-text json-string
+    query-contains query-get-or text-list-get text-list-append text-list-length)
+
+  (extern add ((left I64) (right I64)) I64 core.i64.add)
+  (extern subtract ((left I64) (right I64)) I64 core.i64.subtract)
+  (extern multiply ((left I64) (right I64)) I64 core.i64.multiply)
+  (extern divide ((left I64) (right I64)) I64 core.i64.divide)
+  (extern i64-equal ((left I64) (right I64)) Bool core.i64.equal)
+  (extern less ((left I64) (right I64)) Bool core.i64.less)
+  (extern less-equal ((left I64) (right I64)) Bool core.i64.less-equal)
+  (extern i64-to-text ((value I64)) Text core.i64.to-text)
+  (extern i64-parse ((value Text)) I64 core.i64.parse)
+
+  (extern bool-not ((value Bool)) Bool core.bool.not)
+  (extern bool-and ((left Bool) (right Bool)) Bool core.bool.and)
+  (extern bool-or ((left Bool) (right Bool)) Bool core.bool.or)
+
+  (extern text-concat ((left Text) (right Text)) Text core.text.concat)
+  (extern text-equal ((left Text) (right Text)) Bool core.text.equal)
+  (extern text-contains ((value Text) (needle Text)) Bool core.text.contains)
+  (extern text-starts-with ((value Text) (prefix Text)) Bool core.text.starts-with)
+  (extern text-empty ((value Text)) Bool core.text.empty)
+  (extern text-length ((value Text)) I64 core.text.length)
+  (extern text-from-static ((value StaticText)) Text core.text.from-static)
+
+  (extern bytes-from-text ((value Text)) Bytes core.bytes.from-text)
+  (extern bytes-to-text ((value Bytes)) Text core.bytes.to-text)
+  (extern bytes-concat ((left Bytes) (right Bytes)) Bytes core.bytes.concat)
+  (extern bytes-equal ((left Bytes) (right Bytes)) Bool core.bytes.equal)
+  (extern bytes-length ((value Bytes)) I64 core.bytes.length)
+  (extern bytes-blake3 ((value Bytes)) Bytes core.bytes.blake3)
+  (extern bytes-to-hex ((value Bytes)) Text core.bytes.to-hex)
+
+  (extern html-escape-text ((value Text)) Text core.html.escape-text)
+  (extern json-string ((value Text)) Text core.json.string)
+
+  (extern query-contains
+    ((parameters (Map Text (List Text))) (name Text))
+    Bool
+    core.map.contains)
+  (extern query-get-or
+    ((parameters (Map Text (List Text))) (name Text) (default (List Text)))
+    (List Text)
+    core.map.get-or)
+  (extern text-list-get ((values (List Text)) (index I64)) Text core.list.get)
+  (extern text-list-append ((values (List Text)) (value Text)) (List Text) core.list.append)
+  (extern text-list-length ((values (List Text))) I64 core.list.length))

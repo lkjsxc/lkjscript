@@ -1,250 +1,100 @@
 # Current architecture
 
-`lkjscript` is a meaning-first semantic development and application platform. One immutable typed
-representation owns accepted meaning in each authority domain. JSON, semantic documents, context
-capsules, renderings, indexes, caches, Core IR, native descriptors, artifacts, and evidence have only
-their explicitly narrower proposal, derived, or distribution roles.
-
-## Authority flow
+This document maps the current implementation. Normative behavior is owned by `docs/spec/` and the
+executable validators; application policy is owned by maintained `.lkj` modules.
 
 ```text
-project locator (.lkjscript/project)
-                 |
-                 v
-semantic repository -- HEAD --> exact development revision + revision record
-                 |                         |
-                 |                         +-- typed program graph
-                 |                         +-- exact build-target graph
-                 |                                      |
-                 |                              deterministic lowering
-                 |                                      v
-                 |                          release --> application
-                 |                                    /          \
-                 |                        durable instance    foreground session
-                 |                              + grants      + explicit grants
-                 |                                  |                |
-                 +-- immutable history       durable state     frame + host actions
+canonical source + exact package descriptor
+        │
+        ▼
+bounded parser ──► typed semantic model ──► deterministic component artifact
+                                                 │
+                                                 ▼
+                                      prepared bytecode + AST oracle
+                                                 │
+                               ┌─────────────────┴─────────────────┐
+                               ▼                                   ▼
+                    in-memory test dispatch             resident HTTP/worker
+                               │                                   │
+                               └──────── typed requirements ───────┘
+                                                 │
+                                                 ▼
+                                  deployment grants and adapters
 ```
 
-Project identity, revision identity, target identity, release identity, application identity,
-instance identity, grants, and deployment paths are distinct. Git transports outer-repository files;
-it does not own semantic history. Paths locate authority; names resolve only within one exact
-revision. Digests establish equality/integrity under their domains and imply no provenance,
-authorization, signature, or freshness.
+| Layer | Current owner | Owns | Does not own |
+|---|---|---|---|
+| Authored authority | `.lkj`, `lkjscript.package.json`, `.lkjscript/source-v1` | module bytes, exact package metadata, immutable accepted revisions | derived semantic facts, compiled code, grants |
+| Parser and semantics | `syntax.rs`, `language.rs`, `semantic.rs`, `intrinsic_contract.rs` | spans, declarations, types, effects, owner identity, closed extern validation | source publication, paths as identity, host handles |
+| Artifact and preparation | `artifact.rs`, `execution/` | exact package closure, component/port preparation, bytecode, independent AST oracle | credentials, listeners, domain persistence |
+| Component model | authored `component`, requirement, port, and target declarations | typed entry ports and required operations/limits | runner mechanics and deployment bindings |
+| Runtime | `runtime.rs`, `http.rs`, `worker.rs`, `stream.rs` | bounded admission, task identity, execution, cancellation, shutdown, transport adaptation | route policy, SQL choice, object keys, worker meaning |
+| Capabilities | `execution/capability.rs` plus generic adapters | requirement/grant equality, operation accounting, task resources, generic external mechanics | application authorization or cross-authority atomicity |
+| Deployment | `deployment.rs` and deployment JSON | concrete adapters, environment secret bindings, limits, listener and topology | program semantic identity or application policy |
+| Application | `applications/lkjournal/src/*.lkj` | routes, schemas, SQL, auth policy, rendering, object and job transitions | sockets, database driver, OS randomness, secret acquisition |
+| Development tools | `cli.rs`, `workspace.rs`, `tools/check` | discovery, exact apply, build/test/inspect, compact verification evidence | a second editable program truth |
 
-## Project discovery and repository
+## Authority and identity
 
-`src/project.rs` owns initialization, strict locator decoding, explicit selection, bounded parent
-discovery, project-level reads/changes, backup, and response preflight. A marker contains only its
-version, exact workspace identity, and checksum. The repository is stored under
-`.lkjscript/repository` and reuses the existing single-workspace owner rather than introducing a
-second project graph.
+Canonical textual modules won the authored-authority comparison. They give local diffs, comments,
+source spans, task-sized loading, ordinary merge behavior, and independent reconstruction without a
+private builder. The typed meaning graph remains a derived semantic representation. A canonical
+structured AST was rejected as a maintained form because it retained graph-sized edit payloads;
+dual source/graph authority was rejected outright.
 
-Initialization stages a complete private `.lkjscript` directory, creates revision zero, writes the
-marker, synchronizes, and publishes with no replacement. Opening validates every directory/marker
-kind, requires exactly the marker-selected workspace, and asks `src/persistence.rs` to decode the
-complete selected closure. Nested discoverable authorities are ambiguous unless one is selected
-explicitly. Symlinks, nonregular files, lexical parent traversal, malformed locators, and foreign
-identity reject.
+Package identity is an explicit nonzero 32-character lowercase hexadecimal value. A declaration
+owner is `(package_id, module_name, declaration_name)`. File paths are locators only. Renaming or
+moving a module or declaration replaces that semantic owner; the current language has no declared
+continuity operation. A package dependency binds exact package identity, semantic revision digest,
+and artifact digest. Builds never resolve ambient directories or mutable versions.
 
-The current conservative topology holds the engine lock for the lifetime of an opened project,
-including reads. This proves one authority owner and exact snapshot lifetime but leaves concurrent
-readers as a measured future optimization.
+The source store deduplicates immutable source and dependency objects and commits a revision by one
+atomic `HEAD.json` replacement after all objects, manifest, record, and revision index are durable.
+Unreachable objects from an interrupted pre-HEAD publication are harmless and are not current
+authority. Validation and no-change do not publish.
 
-## Meaning graph and change normalization
+## Language and execution
 
-`src/schema.rs` owns the closed node/type/operation vocabulary, now including durable build-target
-nodes. `src/graph.rs` owns snapshots and durable/local identity domains. `src/validate.rs` owns graph,
-type, scope, dominance, target, and completeness invariants. `src/transaction.rs` is the one change
-normalizer and allocator. Validation and commit prepare the same exact candidate; allocation is
-provisional until publication.
+The core is expression-oriented and deterministic. Pure functions cannot perform capabilities.
+Task functions declare capability aliases, and semantic closure analysis ensures every direct and
+indirect operation is present in the component requirement. Transactions are lexical task scopes;
+their native handles are never language values. Streams, secrets, functions, and all runtime
+resource values are non-durable.
 
-A project JSON change is a thin exact-project/base envelope around the transaction operations.
-`src/workbench/query_plan.rs` owns the closed revision-bound semantic explorer projections and
-opaque continuations without an index or cache. The semantic document parser in
-`src/workbench/document.rs` offers a human-editable proposal with proposal-local symbols and optional
-packet aliases; generated function proposals spell exact IDs and require no packet. Context
-construction and views also live under `src/workbench/`. None of these representations is authority,
-and every proposal passes through the transaction owner. Omission never means deletion.
-Whole-function replacement remains the simple oracle; fine-grained operation replacement and
-typed-hole refinement remain available.
+Preparation lowers functions to compact bytecode. The production VM and the separate AST evaluator
+share types and values but do not share instruction dispatch; package tests compare their results,
+traps, and instruction observations. Compiler indexes and bytecode offsets are disposable and never
+semantic identity.
 
-`src/bin/lkjscript/project.rs` owns the public one-shot grammar and a strict correlated JSON-lines
-foreground session. The session may retain one exact context capsule, but aliases expire on any HEAD
-advance and restart loses all handles. A published transaction receipt carries fixed bounded
-continuation facts from the project/history owner; those facts do not keep local aliases alive. The
-raw engine RPC is retained solely as a lower-level conformance/embedding transport, not an alternate
-semantic project.
+One `ResidentDeployment` is used by live HTTP, workers, and in-memory component tests. A bounded
+admission semaphore rejects overload, a worker semaphore bounds active execution, every task has a
+runtime identity and cooperative control, and shutdown stops admission before drain/cancel/adapter
+cleanup. The language cannot observe worker count or scheduler order.
 
-## Automatic development history
+## Capability and deployment boundary
 
-`src/history.rs` owns canonical revision records and semantic history summaries. Every genesis,
-accepted mutation, or restoration record binds project identity, exact parent/result snapshot,
-parent record, accepted change-set digest, semantic diff digest, change counts, created/deleted/
-modified durable identities, function-body changes, target-definition changes, affected targets,
-and publication outcome.
+An artifact contains the exact interface owner, operation set, and semantic limits required by each
+component. A deployment grant adds adapter kind, sharing domain, descriptor digest, authority
+revision, concrete limits, and an opaque adapter. Preparation rejects absent, duplicate, foreign,
+under-scoped, or over-limit grants before work is admitted.
 
-`src/persistence.rs` publishes an immutable canonical snapshot and record before replacing HEAD.
-HEAD10 binds the exact current revision, graph hash, record digest, and retained idempotency receipt.
-Failure before HEAD leaves old authority; visibility-capable failure is unknown and never silently
-repeated. Ordinary open validates every retained path, every compact record, their contiguous links,
-HEAD, the selected graph, and the retained idempotency receipt without decoding unrelated historical
-graphs. Historical selection validates the exact requested artifact against its record. Deep doctor
-loads every snapshot, checks every adjacent identity transition, and recomputes every record's exact
-semantic diff facts. Log reads compact summaries; show expands one record; diff compares exact
-endpoint graphs without inferring identity from names or structure.
+Expected domain results are values. Execution failures are closed as trap, capability,
+possible-visibility, resource, cancelled, or infrastructure. Possibly visible operations are never
+silently made retryable. Cancellation and deadlines are runtime observations, not deterministic
+instruction fuel.
 
-Restoration copies only legally retained meaning from a historical snapshot into a new candidate at
-the next revision. Current allocation frontier and tombstones remain authoritative. Any historical
-durable identity absent now would be resurrected, so the automatic restoration rejects; a caller
-must author an explicit create/rewrite/delete proposal with new identities.
+The maintained service binds configuration, secret verification, wall clock, secure randomness,
+UUID generation, Argon2 password hashing, PostgreSQL, byte streams, named object storage, and a
+durable queue. Test adapters are deterministic and disjoint from live PostgreSQL, local object, and
+OS entropy implementations.
 
-Full canonical snapshots remain the selected persistence design. They provide simple independent
-reconstruction, arbitrary diff, backup, corruption localization, and exact historical reads. The
-retained 100-change `lkjwork` workload occupies 21,580,665 bytes; ordinary current open is 3.224 s
-after lazy historical decoding, while complete deep reconstruction is 332.369 s. Journals,
-content-addressed objects, Merkle sharing, packing, and garbage collection therefore remain rejected
-complexity for ordinary use, with deep-audit time and retained bytes recorded as explicit reversal
-gates rather than hidden behind every command.
+## Product boundary
 
-## Build-target graph and derivation
+`lkjournal` is a consumer, not architecture. A test scans generic native sources for its product
+vocabulary. Its route strings, tables, SQL statements, actor ownership, session expiry, HTML, object
+key policy, and queue behavior occur only in authored application modules. The generic binary
+locates an artifact and deployment descriptor, validates them, and invokes the selected port.
 
-`src/target.rs` owns build-target schemas, dependency cycles, exact reference validation, target
-summaries, and lowering. A target is a durable root-owned graph node. Release targets select exact
-package roots, exports, target dependencies/imports, metadata, and immutable cases. Application
-targets select exact release targets, entries, pure/stream/stateful profiles, nominal mappings,
-requirements, resource policies, and cases. Product targets select an exact application target for
-native packaging.
-
-Every accepted project candidate validates and prepares every retained target. This makes an invalid
-distribution impossible to publish and keeps a single correctness route. It is deliberately eager;
-target-impact analysis identifies downstream products, but selective validation/caching is not yet
-authority. Target edges use durable IDs and cycles reject before publication.
-
-Target lowering builds `ReleaseBuildRequest` and `ApplicationBuildRequest` values in memory from the
-validated graph, then calls the existing release/application owners. No shell, Python, Rust callback,
-ambient file, mutable coordinate, deployment path, or grant enters target meaning. Build responses
-are preflighted before output. Publication is explicit, no-overwrite, synchronized, and may report
-unknown output visibility after a visibility-capable step. Builds never mutate project history.
-
-## Release, application, and execution
-
-`src/release/` projects one selected package closure into canonical release format 2. Workspace and
-revision identities disappear; exact release-local nominal identity, dependencies/imports, exports,
-and cases remain. `src/application.rs` composes one complete exact release graph into application
-contract 8 and internal format 9, validates profiles and host requirements, exposes a bounded
-interface description, and owns public application-value conversion. Internal format 8 rejects.
-
-`src/application/interactive.rs` owns interactive-profile-3 validation and the application-owned
-initialize/update/resume/render route. State, keys, paste, resize, mouse, focus, deployment-open
-events, abstract styled frames, action intent, exact job identity, outcome consumption, and exit are
-semantic values. `src/interactive_runner.rs` owns bounded deterministic headless replay 4 over the
-same route. Interactive state is foreground-ephemeral and is not an instance revision, development
-revision, terminal session, or file version. A step or resume replaces that state only after
-candidate update, policy validation, and frame rendering all succeed; failure preserves prior
-ephemeral state and pending authority facts.
-
-`src/compile.rs`, `src/core_ir.rs`, and `src/interpret.rs` lower the complete selected closure and run
-one explicit-frame interpreter. Core IR and ownership plans are derived and independently checked.
-Bytes use a generation-checked managed store; nominal sequences use immutable `Arc` elements.
-`src/runtime_text.rs` represents text as an unobservable persistent UTF-8 piece treap over immutable
-backings with byte/scalar/newline aggregates and disposable grapheme boundaries. Splice touches
-split paths and new chunks instead of copying unchanged text. Canonical flat UTF-8 serialization and
-materialization remain the independent oracle, and randomized tests compare bytes, scalar/grapheme
-boundaries, lines, slices, splices, search, and equality. Visible cells/bytes, retained bytes,
-values, depth, items, frames, and fuel are separately bounded. No semantic value exposes allocation,
-piece/tree shape, sharing, address, or representation identity.
-
-## Product instances and host authority
-
-`src/instance.rs` exclusively owns instance selection, state transitions, pure queries, history,
-checkpoints, idempotency, grants, commands, attempts, outcomes, and publication. Declined/unchanged
-decisions publish nothing; completed/suspended decisions publish exactly one hash-linked record.
-Genesis and every 64th revision carry full semantic checkpoints; a HEAD-bound bounded manifest
-accelerates current access. Missing/corrupt acceleration falls back to full replay, while deep doctor
-reexecutes the whole chain.
-
-Applications declare host-interface requirements. Instances bind those requirements to exact
-deployment grants. The only durable-instance interface is the bounded immutable blob namespace. A
-visibility-capable put records an attempt before host work; known failure, known success, possible
-visibility, and reconciliation remain distinct. Adapters cannot invent command intent, semantic
-state, or application responses.
-
-`src/runtime.rs` and `src/runtime_protocol.rs` provide one-shot and foreground-session adapters over
-the same instance owner. There is one synchronous lock and no daemon, hidden queue, scheduler, worker,
-async runtime, or retry engine.
-
-## lkjwork packaging
-
-`applications/lkjwork/.lkjscript` is the checked semantic development repository. It contains the
-imported product history, first-class release/application/product targets, three dogfood revisions
-for `why`, and two dogfood revisions for the application-owned blocked-task summary. `lkjscript
-target build lkjwork` deterministically reproduces
-`applications/lkjwork/lkjwork.lkja`; no graph builder or generated binding file remains.
-
-`src/bin/lkjwork/bindings.rs` constructs and decodes application-owned values only after discovering
-the exact exported types, fields, variants, and functions through the validated artifact interface.
-`src/bin/lkjwork/project.rs` owns private product locator/deployment handling, grant construction,
-attachment routing, and backup/restore. `render.rs` owns deterministic JSON and escaped bounded human
-rendering. The client never decodes private state or recomputes readiness, blockers, filters,
-ordering, context, export, or `why` policy.
-
-An installed product project remains:
-
-```text
-PROJECT/.lkjwork/
-  locator
-  instance-store/
-  blobs/
-```
-
-This product state is independent from the semantic development project and its history.
-
-## lkjedit packaging and host boundaries
-
-`applications/lkjedit/.lkjscript` is the checked semantic development repository for the editor.
-Its meaning graph owns the Vim-like command state, buffer/view/tab/tile/layout model, key and mouse
-policy, explorer/search behavior, save/conflict decisions, pending jobs, host-outcome transition,
-logical frames, exact release/application/product targets, and target cases. `lkjscript target build
-lkjedit-application` reproduces the checked application artifact. There is no native builder,
-generated semantic source, migration fixture, or generated binding file.
-
-`src/bin/lkjedit.rs` owns closed deployment grammar, root/file/project selection, embedded checked
-package loading, and terminal versus headless process topology. Normal launch has no artifact
-argument. `src/terminal.rs` owns only crossterm event acquisition/decoding, abstract-style and
-Unicode-cell projection, acknowledged row-differential emission with full-frame fallback, bounded
-worker mechanics, live-resource lifecycle, signals, EOF, and cleanup. It cannot decode private
-editor state or choose a Vim/layout/search decision. ANSI exists only inside this adapter and never
-crosses the application boundary.
-
-`src/project_host.rs` binds one exact workspace grant and routes closed explorer/proposal/history/
-target requests into the same `Project` owner used by the public CLI. It has no persistence or
-transaction bypass. `src/selected_filesystem.rs` pins one Linux directory descriptor and owns
-bounded path/list/stable-read/recursive-search/atomic-save/reconcile behavior. Replacement preserves
-the observed ordinary mode; create uses explicit mode 0644. `src/workbench_host.rs`
-composes project and filesystem grants, converts bounded UTF-8 observations, and returns closed
-outcomes. Project publication, filesystem publication, foreground editor state, job execution, and
-terminal presentation remain separate authority domains.
-
-The retained interactive topology is one foreground application/terminal thread and one worker
-thread connected by capacity-one request/result channels. Local semantic steps continue while one
-host job executes. Application state retains the exact job and routes or abandons its result by
-identity; the worker never holds private application state and performs no retry. A daemon,
-durable-per-key editor instance, hybrid checkpoint store, general scheduler, unbounded pool, and
-async runtime remain rejected. Output failure never advances the acknowledged render cache and
-never rolls back a completed host publication.
-
-## Trust boundary and absences
-
-The bootstrap trust boundary is one local operator/OS account, Rust implementation, validated
-artifacts, and the narrow blob/project/selected-filesystem/terminal adapters. Graph bytes, JSON,
-documents, text, paths, locators, records, artifacts, manifests, terminal bytes, paste, dimensions,
-directory entries, file content/metadata, outcomes, backups, and blobs are hostile input. Every
-authority decoder is closed, bounded, canonical, and consumes all input. Terminal safety is
-independent of text semantics.
-
-There is no native sandbox, network, multi-user authorization, secrets system, ambient/broad
-filesystem interface, application-supplied terminal escape interface, child-process editor
-interface, daemon, general scheduler, unbounded worker pool, database, general VCS, package
-registry, build hook, build cache, bytecode/JIT/native tier, automatic migration, or compatibility
-path. The one bounded `lkjedit` host worker is operational adaptation, not semantic authority.
+The old typed/bytes/stateful/interactive profile worlds, graph projects, application contract 8,
+runtime contract 2, and product-specific native binaries were removed. No current decoder or runner
+falls back to them.

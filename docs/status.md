@@ -1,132 +1,118 @@
-# Implemented status
+# Current status
 
-This file describes the current checkout. Normative contracts under `docs/spec/`, executable
-validation, and the checked semantic projects outrank this summary.
+Status date: 2026-08-21 UTC. This file describes implemented checkout reality, not future intent.
 
-## Semantic development and distribution
+## Maintained authorities
 
-One discoverable semantic project owns one validated typed meaning graph, selected HEAD, immutable
-full snapshots, canonical revision records, durable allocation/tombstones, semantic diff, and a
-first-class target graph. The strict marker binds one workspace. Relative and absolute project
-locators are deployment facts; symlinked/nonregular markers, unsafe traversal, nested ambiguity,
-foreign binding, malformed objects, and corrupt continuity reject.
+| Authority | Current identity |
+|---|---|
+| `packages/standard` | package `10000000000000000000000000000001`, revision 5, record `9766c0b08788b8326757091526fddd50bceb4ec618874e4023d0fc972a3e8c49`, semantic `d0fe09ea464351240e77248f35b293653b198b238f0688b05c372903cd04630a` |
+| `applications/lkjournal` | package `20000000000000000000000000000001`, revision 7, record `e85d84f4bd23c1cb768b8387805710939fd1347a6604bd2ac7d3886b2aaf7beb`, semantic `cdbd18f4be55897dcd27b6601cf03e818d666e8ca90789ad02d86f4c4a4bce53` |
+| checked service artifact | component artifact digest `eec4c68b121bfa4bdf4af2b01e712040d9e40907e92bf490e345da75bb682af4`, 41,587 bytes |
+| checked standard dependency | package artifact digest `a09712fe34ccc0315fdf6e55bbddf8e4ba433093a140075fa2d704d3876a8cab`, 9,602 bytes |
 
-The public CLI implements initialization, compact orientation with known-digest reuse, status,
-historical inspection, closed paginated semantic queries, generated function proposals, targeted
-context, JSON/document validation and apply, log/show/diff/forward restoration, target
-list/show/test/build/run, shallow/deep doctor, no-replace backup, and a correlated caller-owned
-foreground session. Ordinary commands discover workspace/revision/schema facts. Raw engine RPC is a
-separate conformance surface.
+`lkjournal` exposes HTTP target `serve` and worker target `work`. It has 11 accepted package tests
+across its exact closure. `standard` has three package tests.
 
-Every accepted mutation publishes exactly one immutable revision and record. Validate-only,
-rejection, stale/foreign input, no-change, and read-only work publish nothing. Candidate validation,
-affected targets, artifact preparation, and response bounds preflight before publication. A receipt
-reports exact result revision/snapshot/record, accepted-change and diff digests, changed functions,
-affected targets, returned bindings, and session-alias invalidation. No mutation is silently retried.
+## Current contract identities
 
-Durable target kinds are reusable release, application, and native product. Exact graph IDs own
-target identity and edges; names are revision-bound lookup metadata. Build/test/run select one exact
-revision and never publish development history. There is no semantic build script, arbitrary hook,
-ambient file dependency, mutable coordinate, generated semantic source, or private builder.
+All listed identities have only version 1. Unknown fields, wrong versions, trailing input, foreign
+identity, and contract-specific excess reject.
 
-Release format 2 is the reusable closure authority. Application contract 8 now uses internal format
-9 under magic `LKJAPP\0\x08`; it directly rejects internal format 8. Interactive profile 3 binds
-application-owned initialize/update/resume/render, styled frames, mouse/focus/open events, and typed
-job outcomes. Headless replay 4 executes those same roles for at most 20,000 transitions.
+| Domain | Identity or encoding |
+|---|---|
+| Source authority | source project contract 1, `.lkjscript/source-v1` |
+| Package | package contract 1, `lkjscript.package.json` |
+| Workspace projection | workspace and CLI contract 1, strict JSON output |
+| Component artifact | artifact contract 1, canonical JSON `.lkja` |
+| Capability grant | capability grant contract 1 |
+| Deployment | deployment contract 1, strict JSON descriptor |
+| Execution | `bytecode_v1` production and `reference_ast_v1` oracle |
+| Resident topology | resident runtime contract 1 |
+| HTTP server | HTTP adapter contract 1 |
+| Typed JSON | JSON contract 1 |
+| Streams | stream contract 1 |
+| PostgreSQL | PostgreSQL adapter contract 1 |
+| Object storage | object adapter contract 1 |
+| Durable queue and worker | queue contract 1 and worker contract 1 |
+| Configuration | configuration adapter contract 1 |
+| Secrets | secret catalog and verifier contract 1 |
+| Clock/random/identifier/password | security adapter contract 1 |
 
-## lkjedit ordinary editor
+Runner kinds are `command`, `http`, `interactive`, `batch`, `worker`, and `test`. They are target
+metadata over one component/port model, not separate application formats. HTTP and worker have live
+generic runners; pure command target execution and tests use the same prepared functions. No
+current interactive or batch transport adapter is maintained.
 
-`applications/lkjedit/.lkjscript` is the sole maintained editor program/build authority. It is
-workspace `6ee361b40e2ce5041d64321d79c3db0d`, revision 174, snapshot
-`7e037b9e97e2f04cd2243899a30a3721f31faf30c55aa9d7d97f050d22004aa4`, record
-`aa634314469c3712fd4fca1976d07ce20073c5162a4109abaec94c6dabfe107b`, with 10,926 graph nodes,
-1,217 durable identities, 9,709 function-local references, three targets, 12 passing target cases,
-and no blockers. Revision 172 is the user-visible public-CLI dogfood change; revisions 173 and 174
-cut rendering over to the new bulk text/sequence and bounded cell-prefix operations. Each was
-validated without publication and then applied exactly once.
+## Implemented language
 
-The final target artifact is 471,096 bytes. Its file SHA-256 is
-`95cb525cea6440164e9eac58383fc194d79fc2b6df9baeadfc75309083e8338a`, application digest
-`109577058354605dbcb8c6ca45a17476a2a7a8cf3689d3499ecc611ff76e8ef5`, graph digest
-`aebf4631e05840953a7d493999c610f18b189ad4bc31bd0eaf0fe3ab9608d2d3`, and root release
-`13e49b20e4e2d5dbec7baf6a371d7ac9563b746547bb5af7b11d16c739c2b7ab`.
+The value/type surface includes unit, bool, checked signed i64, immutable bytes, UTF-8 text,
+compile-time `StaticText`, opaque secret/resource values, nominal and structural records, nominal
+variants, homogeneous lists, deterministically ordered maps, option, result, stream, and function
+types. Map keys are bool, i64, bytes, or text; iteration follows their defined total order. Runtime
+values are bounded to depth 256 and 1,000,000 collection items.
 
-Application meaning owns the normalized split tree and integer weights; tile/tab/view/buffer/file
-origin identities; heterogeneous tab lifecycle; Vim-like parser/modes/keymap; buffer content,
-line-ending policy, register, dirty/conflict/reconciliation state, and undo/redo; independent view
-cursor/selection/viewport; explorer and current/root search policy; mouse hit interpretation, tab
-and splitter drag state; pending-job intent and outcome integration; close/exit policy; and logical
-styled frames. Multiple views share one buffer without sharing view state.
+Declarations include records, variants, interfaces, closed externs, pure/task functions, constants,
+components, and tests. Expressions include lazy conditionals, lexical binding, sequencing, calls,
+records/fields, variants/matching, lists, maps, function references, capability performance, and
+lexical transactions. There is no implicit coercion, floating point, mutation-visible collection,
+closure capture, generics, traits, set, or user-visible scheduler primitive.
 
-The native product loads the embedded checked package, validates it, acquires and cleans the
-terminal, decodes closed key/paste/resize/SGR-mouse/focus events, projects abstract styles and safe
-Unicode cells, performs acknowledged row-differential output with full-frame fallback, grants one
-selected root and optional semantic project, and runs one capacity-one worker. It does not interpret
-Vim commands, content kinds, dirty policy, drop zones, search presentation, or semantic drafts.
+## Implemented service mechanics
 
-Selected-filesystem 2 pins one Linux directory descriptor and confines UTF-8 components with
-`openat2` beneath/no-magiclink/no-symlink/no-mount-crossing policy. It provides digest-bound sorted
-directory pages, stable UTF-8 regular-file reads, bounded deterministic recursive literal search,
-no-replace create, expected-base atomic replace, ordinary-mode preservation, explicit conflict,
-known failure, unknown visibility, and independent reconciliation. New files use deterministic mode
-0644. No possibly visible write is repeated.
+- Strict HTTP/1 request decoding, query decoding, header validation, bounded request-body streams,
+  whole bounded responses, overload mapping, in-memory dispatch, and graceful shutdown.
+- Strict JSON with duplicate-field, unknown typed-field, non-i64 number, depth, item, string, total
+  byte, and trailing-input rejection.
+- Parameterized PostgreSQL statements using unforgeable `StaticText`, typed parameters and row
+  schemas, bounded pools/rows, lexical transactions, checksummed ordered migrations, rollback, and
+  classified PostgreSQL failures. PostgreSQL-backed deployments establish a reusable connection
+  under bounded retry before publishing readiness.
+- Typed configuration, environment-bound redacted secrets, constant-time secret verification,
+  wall clock, deterministic test clocks, OS secure randomness, deterministic test randomness,
+  canonical UUID v4, and bounded Argon2 password hashing.
+- Task-scoped bounded byte streams with backpressure and cleanup; memory, local, and S3-compatible
+  named object adapters with no-replace publication, checksum facts, streaming multipart upload,
+  range/whole read operations, and reconciliation.
+- Memory and PostgreSQL durable queues with exact idempotency key, attempt identity, lease,
+  heartbeat, completion, failure/retry, cancellation, inspection, and stale-completion rejection;
+  bounded resident workers.
 
-Runtime text is an unobservable persistent UTF-8 piece treap with bounded 4 KiB target chunks,
-structural sharing, byte/scalar/newline aggregates, and disposable extended-grapheme boundaries from
-`unicode-segmentation` 1.13.3. Canonical flat UTF-8 materialization remains the independent oracle.
-The language names byte, scalar, grapheme, line, terminal-width, splice, slice, and literal-search
-operations separately. A bounded cell-prefix operation returns only complete grapheme boundaries
-that fit the requested terminal-cell budget. Unicode normalization and locale behavior remain
-absent.
+Global hard maxima include 128 MiB artifacts, 1 MiB package descriptors, 4,096 modules, 1,024
+dependencies/targets/grants, 4,096 active runtime tasks, 65,536 queued tasks, 64 MiB HTTP bodies,
+1 MiB stream chunks, 65,536 live streams, 1,024 database connections, 1,000,000 rows, 16 GiB
+objects, 16 MiB queue payloads/results, 24-hour leases, 64 KiB secrets, 1 MiB random requests, and
+1,024-byte passwords. Deployment descriptors select smaller values for `lkjournal`.
 
-The prior active editor/workbench product and all active `lkjstudio` paths, binary, artifact, native
-entry point, instructions, target names, and compatibility aliases are deleted. Historical Git and
-clearly dated evidence remain the archive.
+## Direct cutover
 
-## lkjwork dogfood
+The active tree contains no graph-authored project engine, semantic proposal mutation path,
+application profile reader, stateful instance format, predecessor runtime protocol, `lkjedit`,
+`lkjwork`, application-specific native binary, vendored terminal stack, or compatibility alias.
+Opening a predecessor `.lkjscript/project` rejects with `source_predecessor_rejected`; artifact and
+descriptor decoders reject predecessor versions directly. Historical code and evidence remain in
+Git and the campaign ledger, not in a current reader.
 
-`applications/lkjwork/.lkjscript` remains workspace `6894b57786a7e1ef14370d2da3a3cf33`,
-revision 9, snapshot `4ae531e41c93b69583ee14c44837ce1d5f6748e427d3a02f60c7164b2174eec1`,
-record `fb28346946daef184262e06781ee42c537913d63ba313ef50834744458f30561`, with three targets,
-eight cases, and no blockers. Its format-9 checked artifact is 170,545 bytes with file SHA-256
-`a1473c270df99aa6ccdebba85a6c99e23f2f2da668b5a2955f28098c5561c57f`.
+The two old products were deliberately deleted rather than kept on incompatible parallel profiles.
+Their user value is not claimed as migrated. The reproduced editor append, viewport, explorer,
+status, visual-boundary, split, and large-file debts therefore remain historical unresolved product
+evidence, not fixed defects.
 
-## Active identities and rejected predecessors
+## Known limits
 
-| boundary | active identity | directly rejected predecessor |
-|---|---|---|
-| raw workspace protocol / schema | 14 / `lkjscript-machine-schema-v14` | protocol/schema 13 and older |
-| semantic project / marker | 1 / `LKJPROJ1` | every other version |
-| project change / machine / session | 2 / 3 / 3 | machine/session 2 and older; change 1 |
-| semantic query / change continuation | 1 / 1 | every other version |
-| workbench / context / edit document | 2 / 2 / 2 | context/document 1 and `plan` |
-| revision record | 1 / `LKJREC01` | every other version |
-| workspace artifact / HEAD | 8 / `LKJTSM\0\x08` / `LKJHDA10` | format 7 / `LKJHEAD9` and older |
-| target / reusable release | 1 / 2 (`LKJREL\0\x02`) | every other target/release version |
-| application contract / format / interface | 8 / 9 (`LKJAPP\0\x08`) / 1 | internal format 8 and older contracts |
-| interactive / headless / terminal | 3 / 4 / 4 | profile 2, replay 3, terminal 3 |
-| project host / workbench host / selected filesystem | 2 / 2 / 2 | selected filesystem 1; other versions |
-| durable instance / runtime session | 3 (`LKJINS\0\x03`) / 2 | instance 2; other session versions |
-
-There are no editions, compatibility readers, dual success paths, migration modes, old launch
-aliases, or builder fallbacks. Historical snapshots retain only the validator needed to inspect
-their own history and cannot produce a predecessor current artifact.
-
-## Verification, trust, and known limits
-
-`tools/check` owns compact `quick`, `product`, and `full` profiles. It runs locked offline commands,
-retains bounded complete logs under ignored `.artifacts/check/`, prints aggregate passing output,
-and reports bounded failure excerpts plus exact log locators. Machine mode emits one uncontaminated
-versioned JSON result. A skipped, unavailable, exhausted, or indeterminate gate is never a pass.
-
-The verified deployment is Linux x86-64 under one trusted local operator and OS account. Trusted
-code is first-party Rust plus selected terminal/filesystem dependencies. Semantic projects,
-records, artifacts, proposals, terminal bytes, paste, dimensions, paths, files/metadata, search
-results, origin/reconciliation tokens, host outcomes, and logs are hostile bounded input.
-
-There is no network, multi-user authorization, encryption/signature/provenance, hostile-native-code
-sandbox, broad ambient filesystem, secret store, shell/child-process editor interface, database,
-daemon, general async runtime, automatic semantic merge/branch/rebase, GUI, binary editor, syntax
-highlighting, clipboard, plugin system, file watch, persistent unsaved-editor recovery, or
-cross-platform product claim. Provider token/cache/price telemetry is unavailable; no tokens or
-money are inferred from byte measurements.
+- The language and current native adapters are trusted; this is not a hostile-code sandbox.
+- HTTP is currently HTTP/1 without TLS termination, response streams, trailers, multipart, cookies,
+  compression, WebSocket, or outbound client authority.
+- URL support is bounded query decoding, not a complete URI/form library. HTML support is text
+  escaping plus literal authored markup, not a typed multi-context template system. Markdown is
+  stored as text; no parser or sanitizer is implemented.
+- PostgreSQL uses `NoTls`; driver cancellation is cooperative only at operation boundaries. No
+  production PostgreSQL integration is run without the explicit service profile.
+- S3-compatible code has deterministic adapter tests but no retained live S3 conformance receipt.
+  The local object backend validates but cannot persist provider content-type attributes.
+- Configuration is a validated deployment map, not a schema declaration language with watches.
+  Secret rotation is observed only by restart.
+- There is no general filesystem, terminal, subprocess, HTTP client, metrics exporter, structured
+  logging sink, distributed tracing, calendar scheduler, package registry, FFI, or GUI.
+- Only Linux x86-64 has fresh-checkout evidence. No sandbox, multi-node coordination, distributed
+  transaction, or multi-tenant operator isolation is claimed.

@@ -1,0 +1,5 @@
+; Civil time is explicit and independently fakeable.
+(module clock
+  (export WallClock)
+  (interface WallClock
+    (operation utc-milliseconds () I64 idempotent no-visibility)))

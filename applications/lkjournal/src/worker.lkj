@@ -1,0 +1,44 @@
+; One bounded worker step. Deployment policy decides how many resident workers call this port.
+(module worker
+  (import clock std.clock)
+  (import core std.core)
+  (import jobs std.queue)
+  (export Worker run)
+
+  (extern lease-get
+    ((leases (List (Record
+      (job_id Text) (attempt_id Text) (payload Bytes)
+      (attempt_number I64) (lease_until_milliseconds I64))))
+     (index I64))
+    (Record
+      (job_id Text) (attempt_id Text) (payload Bytes)
+      (attempt_number I64) (lease_until_milliseconds I64))
+    core.list.get)
+  (extern lease-count
+    ((leases (List (Record
+      (job_id Text) (attempt_id Text) (payload Bytes)
+      (attempt_number I64) (lease_until_milliseconds I64)))))
+    I64
+    core.list.length)
+
+  (task run () Bool
+    (requires (clock clock.WallClock) (jobs jobs.DurableQueue))
+    (let ((now (perform clock utc-milliseconds))
+          (leases (perform jobs claim "lkjournal-worker" now 30000)))
+      (if (call core.i64-equal (call lease-count leases) 0)
+          false
+          (let ((lease (call lease-get leases 0)))
+            (perform jobs complete
+              (field lease job_id)
+              (field lease attempt_id)
+              "lkjournal-worker"
+              now
+              (field lease payload))))))
+
+  (component Worker
+    (require clock clock.WallClock (operations utc-milliseconds)
+      (limit maximum_calls 4) (limit maximum_output_bytes 64))
+    (require jobs jobs.DurableQueue (operations claim complete fail heartbeat)
+      (limit maximum_calls 8) (limit maximum_input_bytes 1048576)
+      (limit maximum_output_bytes 1048576))
+    (port run (Function () Bool) (function run))))

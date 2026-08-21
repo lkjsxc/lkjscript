@@ -1,0 +1,28 @@
+; Parameterized PostgreSQL boundary. SQL text must originate in accepted source.
+(module database
+  (export SqlValue SqlType Database sql-row-get sql-rows-get sql-rows-length)
+  (variant SqlValue
+    (Bool Bool) (I64 I64) (Text Text) (Bytes Bytes)
+    (NullBool) (NullI64) (NullText) (NullBytes))
+  (variant SqlType (Bool) (I64) (Text) (Bytes))
+  (interface Database
+    (operation execute
+      ((statement StaticText) (parameters (List SqlValue)))
+      I64
+      idempotent-with-key possible-visibility)
+    (operation query
+      ((statement StaticText) (parameters (List SqlValue))
+       (columns (List SqlType)) (maximum-rows I64))
+      (List (List SqlValue))
+      idempotent no-visibility)
+    (operation migration
+      ((migration-id I64) (checksum StaticText) (statement StaticText))
+      Bool
+      idempotent-with-key possible-visibility)
+    (operation transaction () Unit idempotent-with-key possible-visibility))
+  (extern sql-row-get ((row (List SqlValue)) (index I64)) SqlValue core.list.get)
+  (extern sql-rows-get
+    ((rows (List (List SqlValue))) (index I64))
+    (List SqlValue)
+    core.list.get)
+  (extern sql-rows-length ((rows (List (List SqlValue)))) I64 core.list.length))

@@ -1,0 +1,62 @@
+{
+  "contract_version": 1,
+  "artifact": "lkjournal.lkja",
+  "target": "work",
+  "listen": null,
+  "runtime": {
+    "contract_version": 1,
+    "maximum_concurrent_tasks": 2,
+    "maximum_queued_tasks": 0,
+    "request_deadline_milliseconds": 30000,
+    "shutdown_grace_milliseconds": 30000,
+    "cancellation_grace_milliseconds": 5000
+  },
+  "execution": {
+    "instruction_fuel": 10000000,
+    "maximum_call_depth": 4096,
+    "maximum_value_stack": 1000000
+  },
+  "http": null,
+  "worker": {
+    "contract_version": 1,
+    "maximum_workers": 2,
+    "idle_wait_milliseconds": 250
+  },
+  "streams": {
+    "maximum_chunk_bytes": 65536,
+    "maximum_buffered_chunks": 8,
+    "maximum_total_bytes": 67108864,
+    "maximum_live_streams": 64
+  },
+  "configuration": {},
+  "secrets": [
+    { "name": "database-url", "variable": "LKJOURNAL_DATABASE_URL" }
+  ],
+  "grants": [
+    {
+      "requirement": "clock",
+      "sharing_domain": "process-clock",
+      "authority_revision": "1111111111111111111111111111111111111111111111111111111111111111",
+      "adapter": { "kind": "wall_clock" }
+    },
+    {
+      "requirement": "jobs",
+      "sharing_domain": "journal-database",
+      "authority_revision": "5555555555555555555555555555555555555555555555555555555555555555",
+      "adapter": {
+        "kind": "durable_queue_postgres",
+        "connection_secret": "database-url",
+        "namespace": "lkjournal",
+        "maximum_connections": 4,
+        "maximum_wait_milliseconds": 5000,
+        "statement_timeout_milliseconds": 15000,
+        "limits": {
+          "maximum_payload_bytes": 1048576,
+          "maximum_result_bytes": 1048576,
+          "maximum_lease_milliseconds": 300000,
+          "maximum_attempts": 20
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "contract_version": 1,
+  "package_id": "20000000000000000000000000000001",
+  "name": "lkjournal",
+  "modules": [
+    { "name": "domain", "path": "src/domain.lkj" },
+    { "name": "service", "path": "src/service.lkj" },
+    { "name": "worker", "path": "src/worker.lkj" }
+  ],
+  "dependencies": [
+    {
+      "alias": "std",
+      "package_id": "10000000000000000000000000000001",
+      "revision_digest": "f2f184a9e156f7d38b440322e13472525416edf1886ebf290bc0c6618bf05c91",
+      "artifact_digest": "0099c305305740b9033bb4687615297f68fa7f02400465c65860370b38057f55",
+      "artifact": "dependencies/standard.lkja"
+    }
+  ],
+  "targets": [
+    { "name": "serve", "component": "service.Web", "port": "request", "runner": "http" },
+    { "name": "work", "component": "worker.Worker", "port": "run", "runner": "worker" }
+  ]
+}

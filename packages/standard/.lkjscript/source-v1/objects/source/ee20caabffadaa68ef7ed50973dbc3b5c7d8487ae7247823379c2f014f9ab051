@@ -1,0 +1,6 @@
+; Least-authority secret verification. Deployment values never become semantic values.
+(module secret
+  (export SecretVerifier)
+
+  (interface SecretVerifier
+    (operation matches ((candidate Bytes)) Bool idempotent no-visibility)))

@@ -1,0 +1,142 @@
+{
+  "contract_version": 1,
+  "artifact": "lkjournal.lkja",
+  "target": "serve",
+  "listen": "127.0.0.1:8080",
+  "runtime": {
+    "contract_version": 1,
+    "maximum_concurrent_tasks": 16,
+    "maximum_queued_tasks": 64,
+    "request_deadline_milliseconds": 30000,
+    "shutdown_grace_milliseconds": 30000,
+    "cancellation_grace_milliseconds": 5000
+  },
+  "execution": {
+    "instruction_fuel": 10000000,
+    "maximum_call_depth": 4096,
+    "maximum_value_stack": 1000000
+  },
+  "http": {
+    "contract_version": 1,
+    "maximum_request_body_bytes": 8388608,
+    "maximum_response_body_bytes": 4194304,
+    "maximum_header_bytes": 32768,
+    "maximum_headers": 128
+  },
+  "worker": null,
+  "streams": {
+    "maximum_chunk_bytes": 65536,
+    "maximum_buffered_chunks": 8,
+    "maximum_total_bytes": 67108864,
+    "maximum_live_streams": 1024
+  },
+  "configuration": {
+    "initial-actor": { "kind": "text", "value": "operator" },
+    "service-title": { "kind": "text", "value": "lkjournal" }
+  },
+  "secrets": [
+    { "name": "bootstrap-token", "variable": "LKJOURNAL_BOOTSTRAP_TOKEN" },
+    { "name": "database-url", "variable": "LKJOURNAL_DATABASE_URL" }
+  ],
+  "grants": [
+    {
+      "requirement": "bootstrap",
+      "sharing_domain": "service-bootstrap",
+      "authority_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "adapter": {
+        "kind": "secret_verifier",
+        "secret": "bootstrap-token",
+        "maximum_candidate_bytes": 512
+      }
+    },
+    {
+      "requirement": "clock",
+      "sharing_domain": "process-clock",
+      "authority_revision": "1111111111111111111111111111111111111111111111111111111111111111",
+      "adapter": { "kind": "wall_clock" }
+    },
+    {
+      "requirement": "config",
+      "sharing_domain": "service-config",
+      "authority_revision": "2222222222222222222222222222222222222222222222222222222222222222",
+      "adapter": { "kind": "configuration" }
+    },
+    {
+      "requirement": "db",
+      "sharing_domain": "journal-database",
+      "authority_revision": "3333333333333333333333333333333333333333333333333333333333333333",
+      "adapter": {
+        "kind": "postgres",
+        "connection_secret": "database-url",
+        "maximum_connections": 16,
+        "maximum_wait_milliseconds": 5000,
+        "statement_timeout_milliseconds": 15000
+      }
+    },
+    {
+      "requirement": "identifiers",
+      "sharing_domain": "process-identifiers",
+      "authority_revision": "4444444444444444444444444444444444444444444444444444444444444444",
+      "adapter": { "kind": "identifier" }
+    },
+    {
+      "requirement": "jobs",
+      "sharing_domain": "journal-database",
+      "authority_revision": "5555555555555555555555555555555555555555555555555555555555555555",
+      "adapter": {
+        "kind": "durable_queue_postgres",
+        "connection_secret": "database-url",
+        "namespace": "lkjournal",
+        "maximum_connections": 8,
+        "maximum_wait_milliseconds": 5000,
+        "statement_timeout_milliseconds": 15000,
+        "limits": {
+          "maximum_payload_bytes": 1048576,
+          "maximum_result_bytes": 1048576,
+          "maximum_lease_milliseconds": 300000,
+          "maximum_attempts": 20
+        }
+      }
+    },
+    {
+      "requirement": "objects",
+      "sharing_domain": "journal-objects",
+      "authority_revision": "6666666666666666666666666666666666666666666666666666666666666666",
+      "adapter": {
+        "kind": "object_local",
+        "root": "state/objects",
+        "prefix": "lkjournal",
+        "limits": {
+          "maximum_object_bytes": 1073741824,
+          "maximum_whole_read_bytes": 4194304
+        }
+      }
+    },
+    {
+      "requirement": "passwords",
+      "sharing_domain": "process-password-policy",
+      "authority_revision": "7777777777777777777777777777777777777777777777777777777777777777",
+      "adapter": {
+        "kind": "password_hash",
+        "policy": {
+          "memory_kibibytes": 19456,
+          "iterations": 2,
+          "lanes": 1,
+          "output_bytes": 32
+        }
+      }
+    },
+    {
+      "requirement": "random",
+      "sharing_domain": "process-random",
+      "authority_revision": "8888888888888888888888888888888888888888888888888888888888888888",
+      "adapter": { "kind": "secure_random" }
+    },
+    {
+      "requirement": "streams",
+      "sharing_domain": "service-streams",
+      "authority_revision": "9999999999999999999999999999999999999999999999999999999999999999",
+      "adapter": { "kind": "byte_stream" }
+    }
+  ]
+}

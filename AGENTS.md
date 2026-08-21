@@ -11,1518 +11,759 @@ evidence, and handoffs.
 
 ## Mission
 
-Build `lkjscript` as a meaning-first, agent-native semantic software platform that can produce
-ordinary, useful, high-performance applications rather than only language demonstrations.
+Build `lkjscript` into a general-purpose, meaning-oriented programming language and application
+platform. It must support substantially different classes of useful software without requiring
+application-specific Rust to own ordinary application policy.
 
-The primary editable authority for an lkjscript program is one validated typed meaning graph with
-exact immutable development history.
+The language, package model, compiler, runtime, capability system, application model, development
+tools, and deployment boundaries must form one coherent system. No current application, including
+`lkjedit`, `lkjwork`, or a future `kjxlkj`-like service, is the architecture.
 
-Coding agents and humans must be able to discover, inspect, change, validate, test, build, run,
-package, diagnose, recover, and evolve useful software through the public `lkjscript` CLI without
-maintaining a custom graph-construction program.
+Existing applications are forcing functions and regression consumers. They may reveal missing
+general capabilities, but product vocabulary must not leak into universal contracts unless the
+concept is independently general.
 
-Humans remain first-class for intent, product judgment, governance, security policy, explanation,
-review, operations, and acceptance.
+Preserve current mechanisms only when they remain the strongest long-term design after comparison.
+The semantic graph, source-free authoring, immutable project history, closed application profiles,
+foreground topology, one-command suspension, current artifact families, and current native shells
+are all provisional.
 
-Coding agents are first-class program authors and maintainers.
+Optimize for the best coherent system over a long horizon, not for compatibility, recent effort,
+short-term diff size, or the survival of a successful past campaign.
 
-The current representative ordinary application is `lkjedit`: a Vim-like, mouse-capable, tiled text
-editor whose explorer, search results, semantic tools, output views, and text editors all participate
-in one ordinary tab-and-tile model.
+## Primary objectives
 
-`lkjedit` is a forcing function, not permission to special-case one product in every layer.
+1. Make ordinary application policy expressible in lkjscript across interactive, service, batch,
+   worker, and durable workflow software.
+2. Keep host authority explicit through typed capability requirements and deployment grants.
+3. Make common application construction natural, modular, reusable, inspectable, testable, and
+   efficient for both coding agents and humans.
+4. Retain one exact semantic and publication owner for every authority domain.
+5. Reach asymptotically sound execution, storage, compilation, and interaction performance while
+   preserving independent correctness oracles.
+6. Minimize repeated model context, command output, correction depth, and unnecessary verification
+   work without weakening evidence.
+7. Delete superseded formats, profiles, adapters, applications, builders, aliases, and documentation
+   after direct cutover.
 
-Optimize jointly for:
+## General-purpose success criterion
 
-- semantic correctness;
-- complete useful products;
-- one coherent authority model;
-- direct CLI-native authoring;
-- compact exact agent interactions;
-- weak-model success;
-- low correction depth;
-- low provider and operator cost when measured;
-- deterministic artifacts;
-- explicit authority;
-- recoverable publication;
-- bounded resource use;
-- interactive responsiveness;
-- maintainable ownership;
-- independently checkable evidence;
-- simple correctness oracles;
-- long-term execution performance;
-- deletion of superseded mechanisms.
+A platform change is not general merely because it removes an editor-specific name. It is general
+only when its semantics and ownership remain natural for materially different consumers.
 
-Do not optimize for novelty, feature count, benchmark theater, syntax fashion, roadmap inertia,
-historical compatibility, sunk cost, or preservation of an implementation merely because it was
-difficult to create.
+At minimum, major application-model decisions must be evaluated against three distinct shapes: an
+interactive foreground application, a long-running request-driven service, and a batch or durable
+worker workflow.
 
-## North star
+- Interactive evidence may come from `lkjedit`, but editor layout, tabs, buffers, Vim modes, and
+  terminal cells remain product concepts.
+- Durable command and query evidence may come from `lkjwork`, but task, priority, label, and
+  dependency vocabulary remains product meaning.
+- Service evidence may be informed by `kjxlkj`, but users, notes, media, routes, PostgreSQL, S3, and
+  transcription remain consumer requirements rather than universal language primitives.
+- A capability may have one initial consumer only when its external contract is already
+  independently general, its boundary is narrow, and no product-specific policy enters the adapter.
+- A universal abstraction that cannot explain its second plausible consumer is presumptively
+  premature.
 
-A coding agent should be able to enter an ordinary project directory and use public `lkjscript`
-commands to:
+## What lkjscript is not
 
-1. discover the exact semantic project and selected revision;
-2. obtain compact orientation without loading the whole graph, schema, prompt, or history;
-3. request only the typed subgraph, constraints, examples, and target facts relevant to one task;
-4. prepare one bounded exact semantic change;
-5. validate through the same owner that would publish it;
-6. publish exactly one immutable revision and canonical revision record;
-7. receive enough exact continuation state to avoid rediscovering unchanged meaning;
-8. inspect semantic diff, impact, diagnostics, history, and target status;
-9. build, test, run, and package a named target derived from the selected revision;
-10. recover after interruption, stale state, output loss, or unknown publication without unsafe retry;
-11. continue without reading or regenerating a large construction script;
-12. finish with compact verification output and separately retained detailed logs.
-
-An ordinary user should be able to launch an lkjscript application without understanding semantic
-graph internals, artifact identities, internal workspace paths, or host adapter plumbing.
-
-The meaning graph is the center.
-
-Text documents, command streams, JSON, rendered source-like views, TUI views, generated bindings,
-compiled forms, indexes, caches, artifacts, logs, and Git diffs are proposals, views, distribution
-objects, operational records, or derived state according to explicit contracts.
-
-None silently becomes a second editable source of truth.
+- It is not an editor construction kit.
+- It is not a work-ledger framework.
+- It is not a `kjxlkj` implementation hidden in the runtime.
+- It is not a conventional language recreated feature by feature without a coherent semantic model.
+- It is not a graph database whose public purpose is to expose graph mechanics.
+- It is not a Rust application with semantic policy sprinkled into artifacts.
+- It is not a collection of unrelated invocation profiles and host adapters.
+- It is not a compatibility museum.
+- It is not a benchmark suite with no maintained ordinary applications.
+- It is not a sandbox merely because application semantics lack raw pointers.
 
 ## Authority and precedence
-
-When active artifacts disagree, use this order:
 
 1. The active user task.
 2. This root `AGENTS.md`.
 3. An explicitly selected active campaign prompt.
-4. Accepted normative files under `docs/spec/`.
-5. Executable contracts and focused invariant tests.
-6. The accepted semantic development repository and its exact revision records.
+4. Accepted normative specifications under `docs/spec/`.
+5. Executable validators, focused invariant tests, and public black-box contracts.
+6. The selected maintained authored program authority and its immutable accepted history.
 7. Generated descriptions mechanically derived from one executable owner.
 8. `docs/status.md`.
 9. `docs/architecture.md`.
-10. Current structured evidence and `docs/performance.md`.
+10. Structured evidence and `docs/performance.md`.
 11. `docs/roadmap.md`.
-12. `README.md`.
-13. Comments, examples, historical prompts, branches, pull requests, commits, issues, and
-    discussions.
+12. `README.md` and application READMEs.
+13. Historical prompts, commits, branches, pull requests, issues, discussions, comments, and
+    remembered plans.
 
-Newer verified checkout state outranks older plans, remembered repository state, and the baseline
-recorded in a campaign prompt.
+A newer verified checkout outranks stale facts in a prompt. A campaign prompt defines objectives,
+hypotheses, gates, and authorization for one campaign; it does not become permanent semantic
+authority.
 
-A campaign prompt owns one campaign's objectives, hypotheses, gates, and handoff. It does not become
-permanent semantic authority.
+When behavior changes, update the owning specification, implementation, executable oracle, current
+status, and affected user documentation in the same verified cutover.
 
-An old prompt is historical evidence unless the active task explicitly selects it.
+## Autonomy and engineering responsibility
 
-When accepted behavior changes, update the owning specification and executable contract in the same
-verified milestone.
+Resolve ordinary engineering choices from the checkout, current requirements, complete workflows,
+bounded prototypes, and measured evidence. Do not ask the user to choose between implementation
+details that the repository can decide.
 
-Do not let generated documentation, a checked artifact, a test fixture, a benchmark receipt, or a
-commit message silently outrank the semantic owner that produced it.
+Do not stop at a report when a safe dependency-closed implementation is authorized and feasible. Do
+not scatter speculative partial architecture across the active tree.
 
-## Autonomy and decision responsibility
+Large changes are permitted. A large rewrite is justified only when it converges the repository on
+one stronger model and carries its consumers, tests, documentation, and deletion work through
+completion.
 
-Resolve ordinary engineering decisions from the checkout, active requirements, complete product
-workflows, bounded prototypes, and measured evidence.
-
-Do not ask the user to choose between implementation details that the repository can answer.
-
-Do not stop at a report when a safe dependency-closed implementation is authorized and feasible.
-
-Do not scatter speculative partial architecture.
-
-A bold change is acceptable when it converges the repository on one stronger design and completes
-the consumer that justifies it.
-
-A large rewrite is not automatically bold or correct. Preserve independently valuable invariants,
-or replace them with stronger verified contracts.
+Preserve independently valuable invariants even when replacing their implementation. Explicit
+authority, hostile decoding, deterministic semantics, bounded work, publication classification, and
+independent reconstruction are examples of invariants rather than historical code.
 
 ## Repository safety
 
-Before editing, inspect the actual checkout:
+Before editing, inspect the actual checkout and every applicable instruction file.
 
 ```sh
 git status --short
+git status --branch --short
 git branch --show-current
 git rev-parse HEAD
-git log -5 --oneline
+git log -8 --oneline
 git remote -v
-git status --branch --short
+git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true
 find .. -name AGENTS.md -print
 ```
 
-Read every applicable instruction file.
-
-Preserve unrelated modified and untracked work.
-
-Reading in-scope files, editing in-scope files, and running non-destructive validation are authorized
-for implementation tasks unless the active task says otherwise.
-
-Do not reset, clean, overwrite unrelated files, amend, rebase, merge, force-push, publish a release,
-close a pull request, or alter unrelated remote state without explicit authorization for that exact
-action.
-
-Repository permissions are not user authorization.
-
-When an active task authorizes staging, commits, or pushes:
-
-- inspect the complete staged and unstaged diff first;
-- stage only exact in-scope paths with explicit path arguments;
-- never use `git add .`, `git add -A`, or `git add --all`;
-- preserve unrelated work;
-- use coherent commit boundaries;
-- never amend or force-push;
-- push only the intended current branch to its configured or explicitly selected remote branch;
-- verify the resulting local commit and remote ref;
-- report every requested publication action not completed.
-
-Never commit credentials, secrets, private transcripts, hidden model reasoning, personal data, raw
-provider events, unrelated user files, disposable benchmark payloads, or generated corpora with
-unclear licensing.
-
-Keep scratch state, destructive experiments, unsanitized measurements, downloaded research, and
-losing prototypes outside the repository unless a retained artifact has a named consumer.
-
-Report partial completion, unavailable tools, failed verification, uncertain outcomes, and
-irreproducible observations explicitly.
+- Preserve unrelated modified and untracked work.
+- Do not reset, clean, overwrite, amend, rebase, merge, force-push, publish a release, delete remote
+  state, or alter unrelated paths without exact authorization.
+- Repository permissions are not authorization.
+- When staging is authorized, stage only explicit in-scope paths. Never use `git add .`, `git add
+  -A`, or `git add --all`.
+- Inspect staged and unstaged diffs before every commit.
+- Use coherent commits and verify local and remote refs after any authorized push.
+- Never commit credentials, secrets, private transcripts, hidden model reasoning, raw provider
+  events, personal data, unrelated user files, or unlicensed corpora.
+- Keep scratch state, downloaded research, destructive experiments, and losing prototypes outside
+  the repository unless a retained artifact has a named consumer.
+- Report unavailable tools, failed verification, unknown publication, partial completion, and every
+  requested action not performed.
 
 ## Backward compatibility
 
-Backward compatibility is absent unless the active user explicitly requires it.
-
-Use incompatible-change freedom to converge on one coherent design.
-
-After cutover, delete old readers, writers, aliases, fallbacks, compatibility tests, migration-only
-code, stale examples, dormant flags, duplicate protocols, superseded applications, and superseded
-documentation.
-
-Do not introduce editions, dual success paths, hidden fallback, automatic old-format adoption,
-silent migration, or renamed aliases as insurance.
-
-A direct break still requires:
-
-- one complete replacement;
-- exact rejection of predecessors;
-- focused negative tests;
-- updated normative documentation;
-- updated current-state documentation;
-- a verified current first-party application;
-- deletion of the old normal path.
-
-Incompatible-change freedom is not permission for an unverified rewrite.
-
-Immutable historical development snapshots may retain the exact validator needed to inspect their
-own history only when that route cannot produce, publish, or execute a predecessor current artifact.
-
-History reconstruction is not compatibility.
-
-## Meaning graph as development authority
-
-Each accepted project revision has one authoritative typed meaning graph.
-
-The graph may include program declarations, function bodies, tests, build targets, release
-projections, application composition, interface-role declarations, and other development meaning
-only when their authority domain and consumer are explicit.
-
-Names, formatting, source positions, file paths, command order, generated indexes, renderings, and
-deployment layout are not semantic identity.
-
-A human-readable document is a proposal or view. It may be convenient and editable, but accepted
-meaning never depends on preserving, reparsing, or diffing its formatting.
-
-A command stream is a proposal and may be retained as an exact recipe or audit fact. It is not
-current program authority.
-
-A checked application artifact may be immutable distribution authority under its specification. It
-is not maintained development authority.
-
-A custom Python, shell, Rust, macro, build-script, generated source, serialized fixture, or opaque
-blob that reconstructs the graph is not maintained semantic source.
-
-Temporary migration code must be isolated, independently checked, and deleted after direct cutover.
-
-Every maintained first-party lkjscript application must have a public-CLI-native path from its
-tracked semantic project to validated targets and distribution artifacts.
-
-Derived views may be regenerated or discarded without changing accepted meaning.
-
-## Ordinary applications as platform proof
-
-A platform capability is not complete merely because a unit test or synthetic sample can invoke it.
-
-For substantial language, runtime, terminal, filesystem, build, or authoring changes, select one
-complete ordinary user workflow and close it end to end.
-
-An ordinary application:
-
-- has a user-valued purpose independent of testing lkjscript;
-- runs through supported public packaging and deployment paths;
-- owns its domain policy in lkjscript meaning;
-- uses host adapters only for explicit external mechanics and authority;
-- has black-box acceptance tests;
-- has measured representative workloads;
-- has exact error and recovery behavior;
-- can be reproduced from a fresh checkout;
-- does not require a custom semantic builder;
-- does not require users to know internal IDs or artifact paths for normal launch.
-
-A representative product may reveal a general capability. Generalize only after identifying the
-shared semantic obligation and at least one concrete consumer.
-
-Do not make a product generic by moving its policy into native code.
-
-Do not make the platform product-specific by naming editor concepts in unrelated universal
-contracts when a narrower interactive or text contract is sufficient.
-
-## Self-hosting gradient
-
-Prefer building lkjscript development tools as lkjscript applications when the current language and
-runtime can own their policy.
-
-Use native code only for bootstrap, operating-system adaptation, terminal integration, selected
-filesystem authority, explicit resource handling, artifact embedding or deployment, and
-independently justified performance boundaries.
-
-A native shell must not become the hidden owner of application state transitions, layout policy,
-edit policy, mode policy, key bindings, tab behavior, search ordering, project selection policy,
-undo semantics, or domain decisions.
-
-A first-party semantic tool must be authored and evolved through the same public CLI that ordinary
-agents use.
-
-A bootstrap exception is temporary. Record why it exists, what exact capability blocks removal, and
-the cutover condition.
-
-Self-hosting is a gradient, not a slogan.
-
-Do not move a boundary into lkjscript merely to increase a percentage.
-
-The winning boundary minimizes duplicate authority while preserving exact validation, performance,
-recovery, and independent testing.
-
-## Semantic development repository
-
-A semantic development repository owns one project continuity and immutable accepted development
-history.
-
-It exposes exact workspace identity, selected revision, immutable revision objects, canonical
-revision records, parent continuity, durable allocation, tombstones, semantic diff facts, named
-targets, validation, history, diagnosis, backup, and reconstruction.
-
-Git owns collaboration and distribution of repository files.
-
-The semantic repository owns accepted evolution of lkjscript meaning.
-
-Neither is inferred from the other.
-
-Do not require agents to reverse-engineer semantic history from binary Git diffs.
-
-Do not use a Git commit hash as workspace, entity, revision, release, application, instance,
-authorization, capability, buffer, tab, view, job, file-origin, or terminal-session identity.
-
-Tracked first-party semantic repositories must be portable, bounded, deterministic under their trust
-model, and usable from a fresh checkout through public commands.
-
-A project path is a locator. It is not semantic identity.
-
-Branching, merging, rebasing, distributed synchronization, and conflict-free replication require
-current consumers and exact semantics.
-
-Do not copy Git features speculatively.
-
-## Public semantic CLI
-
-The public `lkjscript` CLI is the primary development interface.
-
-Raw constructors, private library calls, test-only builders, custom generators, and direct store
-mutation are not acceptable first-party authoring paths.
-
-Human mode provides deterministic bounded help, orientation, status, inspection, history, diff,
-validation, build, test, run, recovery, and actionable errors.
-
-Machine mode provides one strict versioned typed contract with exact framing, request correlation,
-stable error classes, explicit omissions, and no progress contamination.
-
-A caller-owned foreground session may reuse validated state, contexts, and local handles.
-
-It is not authority, a daemon, a queue, or a scheduler.
-
-Ordinary commands discover a project from the current directory or an explicit relative or absolute
-path.
-
-Users must not supply workspace IDs, current revisions, schema digests, internal state paths,
-artifact IDs, or generated binding constants for ordinary work when the CLI can discover them
-exactly.
-
-Convenience never weakens exactness.
-
-The CLI must preserve all of these invariants:
-
-- project discovery resolves to one exact workspace;
-- reads report the exact selected revision;
-- mutations bind an exact expected revision;
-- stale state rejects;
-- no mutation is silently retried;
-- selectors reject ambiguity;
-- session-local handles never persist as semantic identity;
-- all accepted changes pass the same typed validator;
-- validate-only and commit use the same normalization and candidate path;
-- output preflight happens before publication where output size can reject;
-- output failure cannot retroactively undo accepted authority;
-- compact output never omits failure classification or continuation facts.
-
-## Quiet, exact command output
-
-Passing commands must default to compact output.
-
-A command that executes hundreds or thousands of successful checks must not print one line per
-passing check unless the caller explicitly requests full detail.
-
-Default successful output should contain:
-
-- command or profile identity;
-- exact selected project or target when relevant;
-- total passed, failed, skipped, exhausted, unavailable, and indeterminate counts;
-- elapsed time and directly observed resource totals when available;
-- exact artifact, revision, or result identity when relevant;
-- one stable log or receipt locator when retained.
-
-Default failure output should contain:
-
-- stable failure class;
-- failing check identifiers;
-- bounded actionable diagnostics;
-- bounded context around the first or selected failures;
-- exact path to complete retained logs;
-- explicit truncation and continuation facts.
-
-Detailed logs may be written to an ignored artifact directory or an explicitly selected path.
-
-A compact terminal summary and complete log are separate projections of one result.
-
-Never require a coding agent to ingest full passing output to determine success.
-
-Machine output must remain closed, typed, deterministic, and independently parseable.
-
-A `--verbose`, `--details`, or equivalent explicit mode may expose complete per-case output.
-
-Do not suppress warnings, skipped cases, exhaustion, cancellation, unavailable tools, or
-indeterminate outcomes merely to be concise.
-
-## Human, machine, and interactive surfaces
-
-One semantic owner may have human, machine, and interactive projections, but those projections must
-not define competing semantics.
-
-Human output is bounded, escaped, deterministic, and useful without requiring machine-field
-archaeology.
-
-Machine output is closed, versioned, correlated, deterministic, and complete about omissions and
-continuations.
-
-Interactive views are derived from exact revisions or explicit ephemeral state.
-
-A TUI must never make rendered rows, cursor coordinates, pane order, tab order, cached labels, or
-terminal colors semantic project identity.
-
-A source-like editor view must carry exact base and context facts and normalize through the
-transaction owner.
-
-Formatting-only changes that normalize to the same meaning publish no semantic revision.
-
-Interactive convenience must expose stale state, conflicts, unknown outcomes, and validation
-failures rather than silently hiding them.
-
-## Project discovery and paths
-
-Relative paths are normal public input.
-
-Resolve paths against one documented base, canonicalize and revalidate authority boundaries, reject
-unsafe traversal and substitution, and keep paths out of semantic identity.
-
-Discovery must find exactly one strict marker under a bounded parent-walk policy.
-
-Reject symlinked markers, unsafe traversal, ambiguous nested authorities, nonregular files, foreign
-workspace bindings, malformed locators, and path substitution.
-
-Canonical paths are deployment facts and may change without changing semantic identity.
-
-When an exact file is selected, bind the selected authority or content facts required to prevent
-time-of-check/time-of-use substitution.
-
-Build outputs, backups, imported documents, selected filesystem roots, and installed application
-resources remain explicit deployment inputs.
-
-## Context and semantic graph queries
-
-Context budget is a correctness, latency, and provider-cost constraint.
-
-Do not make routine agents request a global graph, full schema, full history, full prompt, or full
-target closure.
-
-Provide compact orientation, typed task-scoped context, on-demand expansion, stable projections,
-exact digests, continuations, and explicit omissions.
-
-A context object is a disposable observation bound to one exact project, revision, schema, query
-plan, bounds, and result digest.
-
-A context alias or handle is session-local and revision-bound.
-
-It is never durable entity identity.
-
-Known-digest reuse may return unchanged only when every bound fact agrees.
-
-Queries must state traversal direction, ordering, page bounds, projection, truncation, and
-continuation.
-
-Graph queries must use a closed bounded vocabulary rather than an ambient general database language
-unless a complete consumer proves the need.
-
-After exact owners are identified, stop broad discovery unless evidence invalidates the ownership
-map.
-
-Context response growth, repeated rediscovery, correction depth, source bytes opened, commands,
-processes, and elapsed time are measured on complete tasks.
-
-## CLI-native change model
-
-A semantic change may be one high-level command, one bounded atomic bundle, or one request in a
-foreground session.
-
-The change model must support multi-entity atomicity when no valid intermediate revision exists.
-
-Draft state is not accepted meaning.
-
-If an interactive draft exists, define its owner, lifetime, bounds, crash behavior, identity domain,
-validation points, and retention.
-
-Use exact base-bound selectors.
-
-Friendly names resolve only when unambiguous in the selected revision.
-
-Function-local references remain function- and revision-bound unless a concrete continuity consumer
-justifies more.
-
-A local edit selector may use exact base-local identity or a structural precondition without
-granting durable cross-revision identity.
-
-Prefer bounded subgraph edits and declaration-level operations over resending a large application
-when they materially reduce context and correction risk.
-
-Retain whole-function replacement as a simple independent oracle and escape hatch.
-
-Validate-only and commit share parsing, normalization, semantic validation, target validation,
-artifact preflight, response preflight, and relevant resource checks.
-
-A successful apply may return a bounded continuation or context delta only when it is exact,
-preflighted, idempotency-bound, and measurably useful.
-
-Do not preserve a second edit protocol merely for compatibility.
-
-## Automatic development history
-
-Every successful public semantic mutation publishes exactly one immutable revision and one canonical
-revision record.
-
-Validation-only, rejection, semantic no-change, stale input, failed prepublication, and read-only
-work publish no revision.
-
-A revision record binds workspace, exact base and result, parent and result snapshots, accepted
-change digest, exact semantic diff facts, durable entity changes, function-body changes, target
-changes, and publication outcome.
-
-Optional intent, actor, tool, or observed time is bounded untrusted metadata and cannot affect
-semantic identity unless a future specification deliberately assigns that role.
-
-Do not store hidden chain of thought, provider transcripts, prompts, credentials, or secrets as
-revision metadata.
-
-Normal accepted changes record themselves without requiring a manually authored commit message.
-
-History is append-only.
-
-Revert or restoration publishes a new validated revision and never rewrites accepted history.
-
-Product undo and editor undo are application semantics and must not move semantic project HEAD
-backward.
-
-## Build targets and deterministic derivation
-
-Build configuration for maintained lkjscript software belongs in an exact versioned target graph.
-
-Do not hide build meaning in Python dictionaries, shell sequences, Cargo build scripts, private Rust
-code, generated manifests, or undocumented command arguments.
-
-Target identity and edges use exact semantic identities.
-
-Target names are lookup metadata.
-
-A build selects one exact project revision and exact dependency artifacts.
-
-No target resolves `latest`, mutable registry coordinates, ambient files, or unverified paths at the
-semantic boundary.
-
-Release and application artifacts remain separate immutable authority domains.
-
-Target declarations do not silently become runtime grants, instance state, deployment authority, or
-executable identity.
-
-Generated bindings are derived views.
-
-Prefer direct validated artifact descriptors when they are simpler.
-
-A checked derived artifact is allowed only when packaging needs it and a public target build
-reproduces it exactly or deliberately replaces it under a new specified identity.
-
-Build, test, and run never publish a development revision.
-
-Selective validation, caching, incremental lowering, bytecode, and native tiers are optimizations
-and require an independent full oracle.
-
-## Prohibition on semantic build scripts
-
-Do not retain `build.py`, `generate.py`, shell heredocs, private Rust builders, macros, `build.rs`,
-generated source, opaque binary fixtures, or similar programs as the primary way to construct or
-evolve maintained meaning.
-
-Do not replace one graph builder with another language, a larger fixture, generated source, or
-opaque serialized graph.
-
-Acceptance, workload, fault-injection, and measurement scripts may remain when they exercise public
-boundaries and do not own application meaning or build configuration.
-
-## Application-first closure
-
-Every substantial platform campaign selects a valuable complete application or user workflow.
-
-The application owns domain state, validation, ordering, decisions, commands, layout, input policy,
-and typed outcomes in lkjscript semantics.
-
-A host client may own transport, terminal adaptation, rendering mechanics, selected resource
-authority, process lifecycle, bounded background execution, and independent assertions.
-
-A host client may not own hidden business state, edit policy, mode policy, layout policy, tab
-behavior, ordering, query semantics, or domain decisions.
-
-Build the smallest complete product slice first.
-
-Add language, runtime, storage, interface, or tooling mechanisms only for an exact blocker revealed
-by the slice.
-
-Return to the product immediately after closing each blocker.
-
-A capability is incomplete when the host reconstructs private state, suppresses invalid requests,
-parses opaque responses for domain meaning, or remains the real workflow controller.
-
-Run the completed product from a fresh checkout through public release binaries.
-
-Dogfood the semantic CLI on a real maintained-application change before completion.
-
-Delete productless infrastructure, losing prototypes, stale examples, and intermediate artifacts
-without a retained consumer.
-
-## Interactive application architecture
-
-Interactive software separates:
-
-- accepted semantic program meaning;
-- ephemeral foreground application state;
-- durable application state;
-- external resource authority;
-- background operational work;
-- rendered presentation;
-- deployment state.
-
-Do not publish a durable application revision for every key or mouse event merely because a durable
-instance mechanism exists.
-
-Do not claim crash durability for ephemeral state.
-
-Select pure foreground, durable, or hybrid interaction topology from a complete latency, recovery,
-and authority comparison.
-
-A foreground interactive session is caller-owned and disappears on process exit unless an explicit
-recovery authority exists.
-
-An application-defined update function owns state transition and action intent.
-
-An application-defined render function owns semantic frame content.
-
-A native runner owns terminal acquisition, event decoding, frame projection, safe differential
-emission, signal handling, and cleanup.
-
-The runner must not interpret application domain state to decide behavior.
-
-External actions are closed typed requests with explicit outcomes.
-
-Possible external visibility stops automatic retry and enters an explicit reconciliation state.
-
-Input queues, action queues, render queues, and background work are bounded.
-
-Event ordering, coalescing, cancellation, stale results, shutdown, and restart are specified.
-
-A responsive foreground session may continue processing input while one bounded external action is
-running only when the action has an exact ephemeral identity and application-owned pending state.
-
-## Universal tab-and-tile model
-
-A tab is one ordinary layout item.
-
-Explorer, search, text editor, semantic explorer, proposal, history, output, diagnostics, and help
-views use the same tab movement, ordering, focus, close, drag, and split operations.
-
-A special content kind may have different domain behavior.
-
-It must not bypass the common tab-and-tile lifecycle.
-
-Keep these domains distinct:
-
-- layout tree identity;
-- tile identity;
-- tab identity;
-- view identity;
-- buffer identity;
-- file-origin identity;
-- search-job identity;
-- project-query identity;
-- terminal hit region;
-- rendered position.
-
-A tab references one view.
-
-An editor view references one buffer and owns viewport-local state.
-
-Multiple editor views may reference one buffer.
-
-Closing one view does not close the buffer while another view retains it.
-
-A buffer owns text, dirty state, edit history, file origin, and save/conflict state.
-
-A file path is not a buffer, view, or tab identity.
-
-The layout is a bounded normalized split tree.
-
-An internal split has one orientation, ordered children, and bounded size allocation.
-
-A leaf has one ordered tab stack and one selected tab.
-
-Empty leaves collapse deterministically.
-
-Single-child splits normalize away.
-
-Size ratios or weights use exact bounded integer or fixed-point semantics, never host floating-point
-accident.
-
-Layout normalization is idempotent.
-
-Keyboard and mouse operations invoke the same application-owned layout commands.
-
-A tab drag has explicit source, pointer origin, threshold, current target, preview, cancellation, and
-drop semantics.
-
-Dropping on a tab strip reorders or moves the tab.
-
-Dropping on a content center joins the target stack.
-
-Dropping on a content edge creates a split in the corresponding direction.
-
-Dropping outside valid regions cancels without changing layout.
-
-Splitter dragging is clamped by minimum tile dimensions and deterministic rounding.
-
-Host hit testing may expose terminal coordinates only.
-
-The application owns the semantic mapping from current layout geometry to a command.
-
-## Buffer, view, and file semantics
-
-Buffer identity is distinct from file path, content digest, tab position, view identity, and display
-name.
-
-View state includes cursor, selection, preferred column, viewport, mode-local state, and transient
-search state only when those are deliberately per-view.
-
-Buffer state includes content, line-ending policy, dirty status, edit history, file origin, and
-conflict state.
-
-Two views of one buffer observe the same accepted edit sequence.
-
-Per-view cursor and viewport state remain independent.
-
-Buffer allocation is monotonic within its application session and identities are not silently
-reused.
-
-Closing a dirty buffer requires an application-owned decision.
-
-Force close is explicit and never confused with save.
-
-Opening an already-open exact file selects or creates a view according to one documented policy.
-
-A file origin is a deployment locator plus exact observed base facts.
-
-It is not buffer identity.
-
-External modification produces an application-visible decision: reload, keep, compare, save-as,
-overwrite under an explicit new base, or cancel.
-
-No path spelling, digest, inode, timestamp, or tab label becomes buffer identity.
-
-## Text and Unicode semantics
-
-Never call byte offsets character offsets.
-
-For each operation, name the exact indexing unit:
-
-- UTF-8 byte boundary;
-- Unicode scalar index;
-- extended grapheme cluster index;
-- logical line index;
-- line-local scalar or grapheme column;
-- terminal cell column.
-
-Every accepted text value is valid UTF-8.
-
-Every text edit preserves valid UTF-8 or returns a typed rejection.
-
-Text equality remains exact UTF-8 byte equality unless a narrower operation explicitly specifies
-another comparison.
-
-Normalization, case folding, locale collation, and canonical equivalence are absent unless a current
-consumer specifies them exactly.
-
-A user-facing editor should treat extended grapheme clusters as the default cursor and deletion unit
-when the retained segmentation implementation, Unicode version, performance, and terminal projection
-are specified and differentially tested.
-
-Byte-oriented operations remain available for file identity, offsets in external protocols, and
-exact search evidence.
-
-Line break handling is explicit.
-
-Preserve the file's observed LF or CRLF convention where representable.
-
-Define behavior for mixed line endings and a final missing line terminator.
-
-Do not silently normalize line endings during ordinary open and save.
-
-Cursor, anchor, selection, replacement, end-of-buffer, preferred column, wrapping, movement, and
-line-boundary behavior are exact.
-
-Selection direction and collapsed-selection behavior are explicit.
-
-Undo and redo define retention, bounds, grouping, branching after undo, external action interaction,
-and crash behavior.
-
-Editor undo is not semantic project restoration and is not filesystem rollback.
-
-Search defines exact matching unit, overlap, ordering, case behavior, normalization behavior,
-bounds, and continuation.
-
-Syntax highlighting, diagnostics, line indexes, grapheme indexes, and search indexes are derived and
-disposable.
-
-Text representation is unobservable.
-
-Retain a rope, piece tree, gap buffer, line tree, chunk table, or structural sharing only when the
-complete editor workload beats the simple canonical oracle and cache miss or reconstruction remains
-correct.
-
-## Vim-like interaction policy
-
-`lkjedit` is Vim-like.
-
-Do not claim full Vim compatibility unless an explicit conformance corpus proves it.
-
-Modes, counts, operators, motions, registers, command-line input, search, undo grouping, and
-selection behavior belong to application meaning.
-
-The native host decodes keys and mouse events.
-
-It does not implement Vim commands.
-
-At minimum, a useful retained product should specify and test:
-
-- Normal mode;
-- Insert mode;
-- characterwise Visual mode;
-- linewise Visual mode;
-- command-line mode;
-- forward search input;
-- counts on supported motions and edits;
-- insertion before and after the cursor;
-- line opening above and below;
-- character, word, line, document, and viewport movement;
-- delete, change, yank, paste, undo, and redo;
-- buffer write, close, quit, split, tab, explorer, and search commands;
-- exact dirty-buffer and external-conflict behavior;
-- keyboard equivalents for every essential mouse-only layout action.
-
-Unsupported Vim syntax must reject or remain literal according to an exact policy.
-
-Do not silently implement a near-match with materially different destructive behavior.
-
-## Terminal input boundary
-
-Applications do not emit raw terminal escape sequences.
-
-Terminal input is decoded into one closed bounded event vocabulary.
-
-Key code, modifiers, press, repeat, release, paste, focus, mouse button, mouse action, coordinates,
-scroll direction, and resize are distinct when supported.
-
-Unknown or malformed escape sequences do not become arbitrary application bytes.
-
-Mouse support uses one explicit negotiated encoding and capture policy.
-
-Enable capture only after terminal acquisition succeeds.
-
-Disable every acquired mouse mode during cleanup.
-
-Coordinates are bounded terminal cells.
-
-The terminal adapter does not decide which tab, splitter, editor position, or command a coordinate
-means.
-
-Resize dimensions are explicit, bounded, and tested at zero, minimum, odd, typical, and excessive
-sizes.
-
-Frames use a closed cell, row, span, or style model with exact clipping and cursor semantics.
-
-Display width, combining marks, wide characters, control characters, invalid terminal responses, and
-clipping have explicit behavior.
-
-Terminal output is escaped by construction.
-
-Acquire, raw mode, alternate screen, paste, mouse capture, focus capture, cursor visibility, signal
-handling, suspension, EOF, panic, output error, and normal close all have tested cleanup behavior.
-
-A terminal process boundary is not a sandbox.
-
-Do not add a general terminal framework without a complete retained application.
-
-## Frame and rendering policy
-
-Application meaning owns the complete logical frame or an equivalent exact bounded presentation
-model.
-
-The host may retain a derived prior frame and emit only changed cells, rows, or spans.
-
-The full logical frame remains the correctness oracle.
-
-A differential renderer must reconstruct exactly the full-frame result after:
-
-- first render;
-- resize;
-- style change;
-- wide or combining text;
-- clipping;
-- cursor movement;
-- scroll;
-- tab drag preview;
-- cache loss;
-- output interruption;
-- restart.
-
-Style is a bounded closed semantic palette or style descriptor.
-
-Applications never supply ANSI.
-
-Missing or corrupt render cache falls back to full rendering.
-
-Differential output never changes application state, publication state, input order, or
-acknowledgment.
-
-Measure complete input-to-visible-frame latency, not only renderer execution.
-
-## Selected filesystem boundary
-
-Ambient broad filesystem authority is forbidden.
-
-A filesystem grant selects one exact root and explicit operation classes under a documented trust
-model.
-
-Semantic paths are ordered validated relative components, not unchecked host strings.
-
-Define encoding, separator, dot, dot-dot, empty component, reserved name, symlink, hard-link, mount,
-case-sensitivity, and normalization behavior.
-
-Directory listing defines ordering, pagination, metadata, truncation, races, and inaccessible
-entries.
-
-Recursive traversal defines root inclusion, depth, entry, file, byte, result, time, cancellation, and
-continuation bounds.
-
-File read binds exact observed type, size, content digest or equivalent version fact, and maximum
-bytes.
-
-File write uses explicit expected-base semantics and no-clobber or atomic-replace publication.
-
-An editor replacement preserves the observed ordinary permission bits unless an explicit save policy
-says otherwise.
-
-A new file uses one explicit deterministic creation mode under the deployment policy.
-
-Do not silently replace an executable file with mode `0600`.
-
-Conflict, absence, permission denial, invalid type, excessive input, I/O failure, known success,
-known failure, and unknown visibility are distinct.
-
-A possibly visible write is never silently repeated.
-
-Reconciliation determines present, absent, conflicting, or indeterminate state from independently
-observed facts.
-
-Temporary files, synchronization, rename, directory synchronization, cleanup, and crash points are
-tested.
-
-The filesystem adapter cannot invent editor state, project meaning, layout, search policy, or user
-intent.
-
-## Search boundary
-
-Current-buffer search may remain pure application or runtime text semantics.
-
-Selected-root search is an explicit filesystem observation.
-
-A root search request binds:
-
-- selected root grant;
-- validated relative start path;
-- exact literal or accepted pattern contract;
-- case and normalization policy;
-- file-size and total-byte limits;
-- maximum directories, files, matches, and snippet bytes;
-- deterministic traversal and result order;
-- continuation identity;
-- cancellation or abandonment behavior.
-
-A search result binds relative path, exact observed file facts, byte range, line facts when
-available, and escaped bounded preview.
-
-Opening a search result revalidates the file.
-
-A stale result never authorizes an edit or save.
-
-Search results are ordinary tabs.
-
-A search tab may outlive its job.
-
-Closing the tab does not imply that an already visible external operation was rolled back.
-
-Do not add a persistent project-wide index until a complete workload proves that rebuilding,
-invalidation, storage, corruption, and fallback complexity pays rent.
-
-## Semantic project host boundary
-
-An lkjscript application that operates on another semantic project needs one explicit project grant.
-
-The grant binds exact workspace identity, locator policy, allowed read and mutation classes, limits,
-and applicable authority revision.
-
-Project reads return exact revision-bound typed results.
-
-Project mutations carry exact expected revision and idempotency facts.
-
-The application may propose project actions.
-
-The project owner alone validates and publishes them.
-
-Cross-authority atomicity between application state, project history, files, terminal output, and
-background jobs is absent unless explicitly proved.
-
-A pending cross-authority action records enough facts to avoid duplicate execution and to reconcile
-after interruption.
-
-The project adapter does not expose private store mutation, raw lock manipulation, or unvalidated
-graph insertion.
-
-A project path is deployment state and cannot substitute for the granted workspace identity.
-
-Semantic project explorer, proposal, history, diff, diagnostics, and target output may be ordinary
-tabs in an editor.
-
-They do not receive special layout authority.
-
-## Host interfaces and grants
-
-Pure deterministic computation remains the default.
-
-Ambient host authority is forbidden.
-
-Applications declare exact host-interface requirements but never grants.
-
-Instances or foreground runners bind requirements to exact grants.
-
-A grant binds sharing domain, interface identity, adapter kind, bounded descriptor, applicable
-authority revision, and limits.
-
-Host requests and outcomes are closed typed values.
-
-Opaque bytes are permitted only when the interface deliberately defines and bounds them.
-
-An adapter cannot invent semantic state, application response, command intent, layout, or authority.
-
-Live resources require explicit acquire, use, transfer, consume, close, cancellation, timeout,
-crash, and cleanup semantics.
-
-Expected workflow outcomes may be nominal data.
-
-Corruption, denial, exhaustion, infrastructure failure, stale state, conflict, and unknown
-visibility remain distinguishable.
-
-Non-idempotent work is never silently retried after possible partial execution.
-
-Time, randomness, scheduling observations, terminal input, filesystem observations, and host
-observations are explicit when observable.
-
-## Bounded background work
-
-A foreground terminal loop may use one or more bounded native workers only for explicit external
-actions whose domain policy remains in application meaning.
-
-Do not add a general async runtime, executor, scheduler, actor system, or daemon merely to prevent
-one editor action from blocking input.
-
-A worker design states:
-
-- exact job identity domain;
-- application request and result types;
-- queue capacity;
-- worker count;
-- admission and overload behavior;
-- ordering;
-- cancellation points;
-- non-cancellable visibility boundaries;
-- panic containment;
-- stale-result handling;
-- tab or view closure behavior;
-- terminal shutdown behavior;
-- process-exit behavior;
-- test oracle.
-
-A bounded synchronous channel is preferable to an unbounded hidden queue.
-
-A save that may already be visible is not cancelled or retried merely because the user closed a tab.
-
-A result reenters application meaning through one typed route.
-
-The host does not update editor state directly.
-
-Local key and mouse input may continue while a read-only search, listing, build, test, or query runs
-when application state can represent the pending job exactly.
-
-## Mutation and query separation
-
-Mutations and observations are separate semantic contracts.
-
-A project mutation may reject, validate without publication, or publish exactly one revision and
-record.
-
-An application mutation may decline, report unchanged, publish one completed state, or publish one
-suspended state and command under its profile.
-
-A pure query returns a typed value without publishing semantic or durable state.
-
-A query must not be implemented as a no-op event.
-
-A product client must not decode private state as a second query authority.
-
-Query output failure has no rollback meaning because no semantic publication occurred.
-
-Pagination, ordering, truncation, omissions, revision binding, and result digests are exact and
-bounded.
-
-## Identity and continuity
-
-Assign durable identity only for a concrete continuity, reference, repair, history, sharing, import,
-export, target, instance, product, or operational consumer.
-
-Names, formatting, positions, order, paths, hashes, compiler indexes, artifact offsets, storage keys,
-runtime handles, queue positions, process IDs, and addresses are not semantic identity unless a
-closed contract assigns a narrower role.
-
-Workspace, revision, revision record, change, build target, release, application, instance, product
-entity, command, outcome, grant, interface, adapter, deployment, executable, checkpoint, backup,
-cache entry, session handle, buffer, view, tab, tile, layout node, file origin, search job, terminal
-session, and runtime handle are distinct domains.
-
-A digest is never implicitly continuity, provenance, authorization, signature, freshness, or
-capability identity.
-
-Identity-preserving change requires an explicit validated rule.
-
-Deleted durable identities are not silently reused.
-
-Multiple exact versions may coexist only when references remain unambiguous.
-
-Function-local identities remain bound to one function and exact revision unless a real continuity
-consumer justifies more.
-
-## Publication and durability
-
-Published revisions, records, releases, applications, instance records, host outcomes, authoritative
-checkpoints, backups, and other declared durable objects are immutable within their domains.
-
-Every durable namespace has one publication authority.
-
-One successful publication creates exactly one accepted durable outcome.
-
-Rejection and validate-only publish nothing and consume no durable identity.
-
-Semantic no-change does not consume a revision merely to return a response.
-
-Success is acknowledged only after the documented synchronization boundary.
-
-A possibly visible but unconfirmed outcome is reported as unknown and never silently retried.
-
-Recovery, replay, retention, checkpointing, compaction, corruption, backup, restore, deletion, and
-garbage collection are explicit and validated.
-
-Semantic state publication and externally visible host work remain separate unless atomicity is
-proved.
-
-Output failure cannot retroactively undo accepted authority.
-
-Related durable objects must not become independently visible in conflicting combinations.
-
-## Values, language, and representation
-
-Add a language or value capability only for a complete current application or the semantic
-development CLI itself.
-
-Text and variable-length collections require exact validation, canonical encoding, bounds,
-deterministic equality and ordering, and a current consumer.
-
-Do not add a conventional source language merely to replace a graph-construction script.
-
-Do not add generics, traits, macros, maps, sets, iterators, mutable builders, normalization,
-formatting, reflection, or operator syntax without an exact blocker and complete end-to-end use.
-
-Representation, sharing, allocation, reclamation, line aggregates, grapheme indexes, checkpoints,
-caches, IR, bytecode, profiles, and native code are unobservable or derived unless deliberately
-promoted by specification.
-
-A simple independent allocation, execution, reconstruction, and build route remains the oracle for
-optimized values, storage, caches, compaction, and execution tiers.
-
-Cache miss, eviction, missing derived state, and process restart remain correct.
-
-Full snapshots, deltas, journals, object stores, databases, collectors, bytecode, JITs, schedulers,
-and supervisors must beat simpler safe designs on a representative complete workload.
-
-## Execution, scheduling, and concurrency
-
-One simple executable route remains the correctness oracle.
-
-Faster tiers are differential until direct cutover is justified.
-
-Values, traps, order, state transitions, host requests, resource semantics, and diagnostics remain
-stable across tiers unless accepted semantics deliberately change.
-
-Operational scheduling and language semantics are separate.
-
-Deterministic fuel is not wall-clock time.
-
-A scheduler may use time, priority, quota, or load only when those choices do not silently change
-semantic results.
-
-Observable interruption, yield, cancellation, or timeout requires an accepted contract.
-
-Per-project and per-instance mutations remain serial unless a stronger model is specified and
-proved.
-
-Pure queries may run concurrently only after snapshot isolation, lifetime, ordering, admission,
-shutdown, and mutation interaction are proved.
-
-Cross-project, cross-instance, or background-job parallelism requires exact isolation, bounded
-queues, deterministic per-authority order, overload behavior, safe shutdown, and differential tests
-against serial execution.
-
-## Fuel and work accounting
-
-One scalar fuel number is permitted only when it remains a predictable semantic work bound rather
-than a substitute for every resource class.
-
-Keep these separate when they differ:
-
-- executed instruction work;
-- traversed text bytes or scalars;
-- allocated logical result bytes;
-- retained backing bytes;
-- live values and objects;
-- call frames;
-- collection elements;
-- output cells and bytes;
-- host actions;
-- queued jobs;
-- wall-clock operational deadlines.
-
-A persistent or structurally shared text operation should charge touched semantic work and newly
-created logical structure.
-
-It must not automatically charge the entire unchanged document merely because the result denotes the
-whole document.
-
-Representation sharing cannot evade retained logical accounting.
-
-A fixed enormous fuel budget that exists only to make one common edit pass is a reversal signal.
-
-Expose bounded stage or resource breakdowns when they materially improve diagnosis without flooding
-normal output.
+Backward compatibility is absent unless the active user explicitly requires it. Do not spend design
+budget preserving old source, semantic repositories, artifacts, protocols, commands, profiles,
+applications, instances, deployment layouts, or generated views.
+
+- Prefer one direct current path over dual readers, dual writers, editions, aliases, migrations, or
+  fallback.
+- Reject superseded current formats exactly and test the rejection.
+- Delete old normal paths after the replacement is verified.
+- Historical immutable data may retain the minimum decoder needed to inspect its own history only
+  when that route cannot create or execute a predecessor current artifact.
+- History reconstruction is not compatibility.
+- Incompatible-change freedom is not permission to leave the repository between architectures.
+
+## Zero-based design
+
+Treat every substantial mechanism as provisional. Re-evaluate assumptions when a new application
+class, scale, performance target, authoring workflow, or security model invalidates the evidence
+that selected the mechanism.
+
+- Do not preserve a semantic graph as primary authority merely because the project is meaning-first.
+- Do not replace the semantic graph merely because textual source is conventional.
+- Do not preserve source-free authoring merely because it once reduced generator duplication.
+- Do not introduce source files merely to obtain familiar syntax while retaining all old graph
+  complexity underneath.
+- Do not preserve closed application profiles if one component and capability model is clearer.
+- Do not introduce a general effect system if explicit typed workflows remain simpler for all named
+  consumers.
+- Do not preserve a synchronous runtime when a service consumer requires bounded concurrency.
+- Do not introduce an async runtime merely because a dependency uses futures internally.
+- Do not preserve a pure interpreter as the only production tier when execution dominates complete
+  workflows.
+- Do not add a JIT before a simpler bytecode or specialized interpreter has been evaluated.
+
+For every foundational choice, compare retention, replacement, simplification, and deletion. Record
+the consumer, obligations, alternatives, evidence, selected design, direct-cutover deletions, and
+reversal gate.
+
+## Architecture layers
+
+Keep ownership boundaries explicit. The exact layer names may change, but the final architecture
+must make these responsibilities distinguishable and prevent circular authority.
+
+| Layer | Owns | Must not own |
+|---|---|---|
+| Authored program authority | Modules, declarations, tests, package metadata, capability requirements, application composition | Formatting caches, compiled code, deployment grants |
+| Semantic model | Types, scopes, identity, effect/capability typing, validated meaning | File paths, host handles, caches |
+| Compiler and IR | Lowering, verification, specialization, diagnostics | Durable semantic identity unless explicitly specified |
+| Runtime execution | Frames, values, tasks, resource accounting, scheduling policy | Application-specific business decisions |
+| Application/component model | Typed ports, lifecycle, handlers, state transitions, declared requirements | OS authority and deployment secrets |
+| Capability adapters | Generic external mechanics under exact grants | Hidden application policy |
+| Deployment | Concrete endpoints, credentials, resource placement, process topology, quotas | Program semantic identity |
+| Development tools | Discovery, context, change, validation, history, build, test, run, diagnosis | A second editable program authority |
+
+Dependency direction must remain legible. A lower layer may expose a general mechanism; it must not
+import a higher-level product concept to make one application pass.
+
+## Authored representation and semantic authority
+
+Each accepted project revision has exactly one maintained authored authority. It may be canonical
+text modules, a structured syntax tree, a typed semantic graph, or another deliberately selected
+form. The selection is architectural, not ideological.
+
+- The authored form must support local edits, modular loading, exact diagnostics, deterministic
+  builds, reusable packages, reviewable history, and bounded agent context.
+- A derived typed graph or IR may remain central to validation and execution without being the only
+  editable representation.
+- A source-like document is not automatically authority. State whether it is authoritative, a
+  proposal, or a rendering.
+- Formatting-only changes must have an exact policy: accepted source history, semantic no-change, or
+  derived-view no-change.
+- Do not maintain source and graph as independently editable truths.
+- Do not require a custom Python, shell, Rust, macro, build script, generated source, or opaque
+  fixture to reconstruct maintained program meaning.
+- Lossless round-trip claims require property tests over comments, names, modules, declarations, and
+  every syntax form that is semantically retained.
+- If semantic identity survives source movement or renaming, define the exact continuity rule rather
+  than inferring identity from position.
+- If semantic identity does not survive an edit, do not fabricate continuity merely to produce a
+  pleasant diff.
+- Keep the simplest complete import/export and backup oracle for the selected authority.
+
+Evaluate authoring on complete tasks: orientation, locating owners, adding a type, changing a
+handler, refactoring across modules, resolving an error, reviewing a diff, merging independent work,
+and reproducing a build from a fresh checkout.
+
+## Semantic identity
+
+Assign durable identity only for a concrete continuity, reference, sharing, history, repair, import,
+export, deployment, or operational consumer. Names, positions, paths, hashes, indexes, process IDs,
+addresses, and rendered coordinates are not automatically identity.
+
+- Every identity domain has one owner, canonical encoding, equality rule, allocation rule, retention
+  rule, deletion rule, nonreuse policy, and diagnostic spelling.
+- Reject foreign-domain values even when bytes and display names match.
+- A digest establishes equality or integrity only under its exact domain. It does not imply
+  provenance, authorization, freshness, or capability.
+- Function-local and compiler-local identities must not leak into durable public contracts without a
+  continuity consumer.
+- Renaming metadata must not silently change identity when references are intended to survive.
+- Structural equality must not silently become nominal equality.
+- Deployment locators remain outside semantic identity.
+
+## Modules, packages, and reuse
+
+A general-purpose language needs reusable program structure. Packages and modules must be
+first-class accepted meaning rather than conventions reconstructed by build scripts.
+
+- Define module identity, package identity, namespace rules, visibility, imports, exports, cycles,
+  initialization, and diagnostics.
+- Dependencies bind exact immutable identities or content under one deterministic resolution
+  contract.
+- No accepted build resolves `latest`, mutable tags, ambient local directories, or undeclared
+  network state.
+- Package composition must not require application artifacts to embed unrelated development history.
+- Separate semantic dependencies from deployment adapters and credentials.
+- Support small task-scoped loading so an agent need not ingest a complete package graph.
+- Refactoring across modules must preserve or deliberately replace semantic identities under exact
+  rules.
+- Generic reusable libraries must not require a native wrapper per application.
+- Versioning is allowed only when it represents simultaneous exact packages, not compatibility
+  editions inside one package.
+- A package registry is optional infrastructure, not a prerequisite for local deterministic
+  composition.
+
+## Language design
+
+Language features must make materially useful programs simpler, safer, and more reusable. A feature
+must pay for its semantic, compiler, runtime, tooling, documentation, and agent-context cost.
+
+- Prefer a small orthogonal core plus libraries over a large list of product-shaped primitives.
+- Do not confuse minimality with forcing every common algorithm through verbose low-level graph
+  construction.
+- Provide exact data modeling for records, variants, sequences, optional values, errors, and the
+  collection shapes required by ordinary applications.
+- Evaluate maps, sets, iterators, folds, closures, type parameters, interfaces, traits, pattern
+  matching, and builders by complete consumer workflows rather than convention.
+- Avoid implicit coercion, ambient overload resolution, hidden allocation, and order-dependent
+  inference.
+- Make evaluation order, equality, ordering, overflow, indexing, Unicode, and serialization
+  explicit.
+- Keep representation unobservable unless a consumer requires a representation-level contract.
+- User-controlled recursion and traversal must not consume unbounded native stack.
+- Compilation errors must identify the authored owner and relevant exact context, not only dense IR
+  indexes.
+- Incomplete or hole-bearing programs may be accepted only under a clear build and execution rule.
+
+## Types, errors, and effects
+
+Separate expected domain outcomes, semantic traps, capability failures, resource exhaustion,
+cancellation, corruption, and infrastructure failure. Do not flatten them into text or one generic
+error.
+
+- Expected application outcomes should be ordinary typed values.
+- A trap represents a violated semantic operation contract and publishes no authority by itself.
+- Capability failures use closed typed classes and preserve retryability and possible visibility.
+- Cancellation is observable only when its boundary and state effects are specified.
+- Timeout is an operational observation unless program semantics deliberately consume it.
+- Effectful code must make required capabilities statically or structurally discoverable.
+- A pure function must remain independent of deployment grants, time, randomness, scheduling, and
+  external state.
+- Do not encode every effect as an opaque byte command merely to preserve a pure core.
+- Do not allow direct ambient host calls that bypass typed requirements, grants, resource
+  accounting, and test adapters.
+- If an effect system is introduced, define effect polymorphism, handling, sequencing, failure,
+  cancellation, and serialization before broad use.
+
+## Capability model
+
+External authority is represented by application requirements and deployment grants. Requirements
+describe what a component may ask for; grants bind that requirement to concrete authority and
+limits.
+
+- Applications never embed credentials, live handles, deployment paths, sockets, file descriptors,
+  database pools, or cloud clients as semantic values.
+- A requirement identifies one exact interface contract and operation set.
+- A grant identifies adapter kind, sharing domain, descriptor, limits, authority revision, and
+  lifecycle.
+- Adapters expose generic mechanics and may not invent application state, policy, ordering, or
+  responses.
+- Capabilities are least-authority and operation-scoped where practical.
+- Every non-idempotent operation distinguishes known failure, known success, possible visibility,
+  and reconciliation.
+- Capabilities are testable through deterministic fakes that are disjoint from production
+  implementation.
+- Capability composition must not create hidden cross-authority atomicity.
+- A capability contract states whether values, handles, streams, transactions, and tasks may cross a
+  call, suspension, thread, process, restart, or durable boundary.
+- The runtime must reject an unsatisfied requirement before accepting work that depends on it.
+
+## Live resources and lifetimes
+
+Files, sockets, request bodies, response streams, database transactions, object reads, processes,
+timers, terminal sessions, and similar live resources need explicit lifetime semantics.
+
+- Define acquisition, ownership, borrowing or transfer, use, close, cancellation, timeout, panic,
+  process exit, and cleanup.
+- Do not expose raw native handles to application semantics.
+- A live resource may not enter durable state unless represented by a separate serializable locator
+  and revalidation contract.
+- Finalization must not depend on nondeterministic garbage collection.
+- Lexical scope, explicit region, linear capability, affine handle, or runtime-owned task scope are
+  all candidates; select one coherent model.
+- Failure during cleanup is reported under an exact precedence policy.
+- Resource counts and retained bytes are bounded independently from instruction fuel.
+- A leaked application reference must not silently keep unbounded host authority alive.
+
+## Unified application and component model
+
+Prefer one component model with typed entry ports and declared capabilities over a growing list of
+mutually special application profiles. CLI, service, interactive, batch, test, and worker behavior
+should be runners or compositions of shared semantics where possible.
+
+- A component declares exports, imports, state ownership, capability requirements, lifecycle hooks,
+  and resource policy.
+- Typed handlers receive explicit inputs and return typed outputs or effectful tasks under one
+  specified execution model.
+- Pure, ephemeral stateful, durable stateful, request-driven, event-driven, streaming, and scheduled
+  work must be expressible without product-shaped native code.
+- A runner adapts external transport and lifecycle; it does not own hidden domain policy.
+- Application composition resolves exact component interfaces before deployment.
+- No runner may inspect private application state to decide business behavior.
+- Profiles may remain as derived packaging conveniences only when they do not define competing
+  semantics.
+- Headless and live execution use the same component owners and differ only in adapters and
+  observations.
+- Tests invoke the same prepared component contract used by production.
+- A component artifact contains requirements, not grants or secrets.
+
+## Execution topology
+
+One-shot processes, foreground sessions, resident services, worker pools, and embedded execution are
+operational topologies. They must not create separate semantic implementations.
+
+- One exact runtime kernel owns admission, preparation, execution, capability routing, and
+  observations.
+- Resident service topology is required when complete service workflows cannot be implemented
+  efficiently through one-shot execution.
+- Per-authority mutation order remains explicit even when independent requests execute concurrently.
+- Queues are bounded and observable; hidden unbounded queues are forbidden.
+- Restart reconstructs semantic authority from durable owners and may discard only documented
+  disposable acceleration.
+- Graceful shutdown defines admission stop, in-flight work, cancellation, non-cancellable
+  publication, drain bounds, cleanup, and exit status.
+- A daemon or supervisor authenticates and authorizes requests under its deployment model.
+- A process boundary is neither identity nor sandbox.
+- Operational reuse, caches, and pools never become semantic authority.
+
+## Interactive applications
+
+Interactive applications remain important but do not define the universal model. Terminal events,
+logical frames, tabs, buffers, and editor modes belong to an interactive library or application.
+
+- Application meaning owns interaction policy; adapters own input decoding, safe output, device
+  lifecycle, and resource grants.
+- Ephemeral foreground state is distinct from durable application state.
+- Rendering is a projection of application state and cannot roll back external publication.
+- Input, action, render, and worker queues are bounded.
+- Large files, many views, resize, search, and split layout must be measured end to end when
+  `lkjedit` remains a maintained consumer.
+- Do not elevate one editor optimization into a universal value representation without another
+  consumer or a clear language-level obligation.
+- Product defects are not evidence that the general architecture is wrong, but recurring workarounds
+  are evidence that a boundary may be wrong.
+
+## Service applications
+
+A service application is a long-running component graph that accepts concurrent external requests,
+uses explicit capabilities, and produces bounded responses or streams.
+
+- Routing, request decoding, authentication context, handler selection, response construction, and
+  middleware policy belong to application meaning or reusable lkjscript libraries.
+- Socket acceptance, TLS, HTTP parsing, connection limits, kernel I/O, and generic protocol
+  adaptation belong to trusted runtime adapters.
+- Request bodies and responses have exact byte, item, time, and concurrency bounds.
+- Streaming uses backpressure and cancellation; buffering the entire stream is not an implicit
+  fallback.
+- Per-request state, shared immutable state, durable state, and deployment resources are distinct.
+- Graceful shutdown and readiness are explicit.
+- A service runner cannot embed product routes, database schema, auth roles, or HTML layout.
+- HTTP is an initial important adapter, not the definition of service semantics.
+
+## Durable state and workflows
+
+Durable application state, database state, object storage, queues, and workflow continuations are
+separate authorities. Cross-authority atomicity exists only when one owner proves it.
+
+- Every durable mutation has an exact base, idempotency rule, publication boundary, record or
+  transaction outcome, and restart behavior.
+- Pure queries publish nothing.
+- A durable workflow records only serializable semantic continuation facts, never live handles or
+  native stack state.
+- Retry policy is explicit and class-specific.
+- Possible external visibility blocks blind retry.
+- Checkpoints, journals, snapshots, compaction, retention, deletion, garbage collection, backup, and
+  restore have one owner.
+- A durable queue defines claim, lease, heartbeat, completion, retry, cancellation, dead-letter,
+  ordering, and duplicate behavior.
+- Application undo, semantic project history, database rollback, and workflow compensation are not
+  interchangeable.
+
+## Concurrency, asynchronous work, and scheduling
+
+Concurrency is an operational and semantic design area, not a library checkbox. Introduce it where
+complete workloads require overlap, isolation, or throughput.
+
+- Define task identity, parent scope, admission, scheduling, ordering, wakeup, cancellation,
+  deadline, panic containment, result delivery, and shutdown.
+- Structured concurrency is preferred over detached tasks without an owner.
+- Deterministic pure computation remains deterministic regardless of scheduler choice.
+- Observable races require an explicit semantic model; otherwise isolate mutation authorities.
+- Concurrent capability calls preserve per-resource rules and do not reorder visible effects
+  silently.
+- Backpressure propagates rather than forming unbounded memory.
+- A worker count is a deployment policy, not application semantic identity, unless the program
+  deliberately observes it.
+- Do not use wall-clock timeout as deterministic instruction fuel.
+- Test serial, maximally interleaved, cancellation, overload, shutdown, and restart routes.
+
+## Relational data and transactions
+
+Database support should be a generic capability and library surface, not application-specific Rust
+or a database hidden inside the language core.
+
+- Separate query text or query representation, typed parameters, typed rows, transaction scope,
+  connection pool, and deployment credentials.
+- Validate parameter and result schemas before invoking application handlers.
+- Define nullability, numeric ranges, text encoding, timestamps, bytes, arrays, JSON, row counts,
+  and truncation.
+- A transaction handle cannot escape its task scope or enter durable state.
+- Commit success, rollback success, serialization failure, constraint failure, connection loss,
+  timeout, cancellation, and unknown commit visibility are distinct.
+- Migrations are exact deployment inputs with ordering, checksums, atomicity, and rollback policy.
+- Do not build a universal ORM before query and schema consumers justify it.
+- Use prepared or otherwise safe parameter binding; application text must not be interpolated into
+  SQL by convention.
+- Pool exhaustion is bounded admission, not an unbounded wait.
+
+## Filesystem and object storage
+
+Local filesystem and object storage are different capability families. Both require exact locators,
+least authority, bounded transfer, and publication classification.
+
+- Filesystem paths are validated components under an exact root or selected authority.
+- Object keys are validated opaque or structured names under a bucket/prefix grant.
+- Reads support bounded whole values and streaming where complete consumers require it.
+- Writes define no-replace, expected-base replace, multipart, checksum, metadata, range, and
+  reconciliation behavior as applicable.
+- Delete, copy, rename, list, and version operations are separate grants.
+- Symlink, hard-link, mount, case, normalization, and traversal behavior are explicit for local
+  filesystems.
+- S3 compatibility is an adapter contract, not an object-storage semantic assumption.
+- Application policies such as media visibility, note ownership, or editor dirty state remain
+  outside adapters.
+
+## Network and HTTP
+
+Network access is ambient authority unless mediated by exact grants. Server and client interfaces
+must be closed, bounded, testable, and separate from application policy.
+
+- An outbound grant restricts schemes, hosts, ports, methods, redirects, DNS behavior, TLS policy,
+  byte limits, and deadlines.
+- An inbound service grant restricts listeners, protocols, connection limits, request limits, and
+  shutdown.
+- HTTP contracts distinguish method, URI components, headers, body stream, trailers, status, and
+  response stream.
+- Header names and values have canonical validation and size limits.
+- Redirects, retries, proxy behavior, compression, decompression, range requests, and caching are
+  explicit.
+- WebSocket, server-sent events, raw TCP, UDP, and WebRTC are separate capability contracts.
+- Do not expose arbitrary sockets when a narrower application contract suffices.
+- Network failures never become application-specific strings at the adapter boundary.
+
+## Time, randomness, secrets, cryptography, and identity
+
+These mechanisms are explicit capabilities or standard libraries with precise trust and
+nondeterminism boundaries.
+
+- Wall-clock time, monotonic time, calendar conversion, and scheduling deadlines are distinct.
+- Time zones, UTC, leap seconds, precision, truncation, and serialization are specified.
+- Secure randomness and deterministic test randomness are separate.
+- Identifiers such as UUID or ULID define generation, parsing, canonical spelling, ordering, and
+  collision assumptions.
+- Secrets enter through deployment grants and are never serialized into application artifacts,
+  semantic history, logs, or diagnostics.
+- Secret values use redacted diagnostics and restricted conversions.
+- Password hashing is a generic security adapter or library with parameter policy, upgrade path,
+  verification behavior, and side-channel awareness.
+- Hashing, MAC, signatures, encryption, and password hashing are distinct primitives.
+- Authentication establishes an actor context; authorization remains application policy over typed
+  identities and grants.
+- Sessions define token generation, storage, rotation, expiry, revocation, CSRF, cookie, and replay
+  behavior.
+
+## Serialization and markup
+
+Serialization is a typed boundary. Textual convenience must not create ambiguous or partially
+validated values.
+
+- JSON, URL encoding, forms, multipart, headers, binary codecs, and application artifacts have
+  independent closed contracts.
+- Unknown fields, duplicate fields, invalid Unicode, noncanonical encodings, excessive depth,
+  excessive items, truncation, and trailing bytes reject according to each contract.
+- Encoding is deterministic where bytes participate in identity or caching.
+- Schema derivation must not silently expose private fields or unstable names.
+- HTML construction escapes by default and distinguishes text, attribute, URL, CSS, and script
+  contexts.
+- Markdown parsing and sanitization are reusable libraries or generic adapters, not hard-coded
+  product behavior.
+- Raw trusted HTML is an explicit narrow type or capability, never an ordinary text convention.
+- Streaming decoders bound retained state and report exact offsets.
+
+## Build, package, and deployment
+
+Build and deployment meaning must be explicit, deterministic, and separate. A package artifact
+describes runnable meaning and requirements; deployment binds concrete resources.
+
+- Build targets are accepted program meaning, not shell scripts or private callbacks.
+- Builds select exact revisions and exact dependency identities.
+- Artifacts exclude secrets, mutable coordinates, ambient paths, and live handles.
+- A product target may package generic native runners and adapters without adding product policy to
+  Rust.
+- Deployment configuration has a typed schema, source precedence, redaction, validation, and startup
+  failure policy.
+- Environment variables are deployment input, not semantic identity.
+- Health and readiness report runtime state without claiming external dependency success unless
+  checked.
+- Container images, system services, and native binaries are deployment projections and remain
+  reproducible.
+- Cross-platform claims require execution and acceptance on each claimed platform.
+
+## Compiler and runtime
+
+Keep one independently checkable execution route. Faster representations and tiers are derived until
+their equivalence, invalidation, failure behavior, and operational value are proved.
+
+- The reference interpreter or evaluator remains the semantic oracle unless deliberately replaced by
+  an even simpler formalized route.
+- A bytecode or register VM is preferred before JIT complexity when it closes the dominant execution
+  cost.
+- A JIT or native tier requires stable IR, deoptimization or fallback policy, code memory
+  accounting, cache identity, security analysis, and differential tests.
+- Compilation selects only reachable exact meaning unless whole-program work is required by the
+  optimization.
+- Incremental compilation and caches bind every semantic input, toolchain identity, target policy,
+  and dependency.
+- Cache miss, eviction, corruption, and process restart remain correct.
+- Prepared program dispatch must not repeat validation, lowering, or allocation that can safely be
+  reused within one exact application.
+- Diagnostics map optimized execution back to authored owners.
+- Do not inflate fuel to mask an algorithmic or dispatch defect.
+
+## Memory and value representation
+
+Choose memory management from the value model and complete workloads. Ownership, reference counting,
+arenas, tracing collection, regions, persistent structures, and copying are implementation choices
+unless promoted by semantics.
+
+- Accepted semantics expose no unchecked memory access or manual deallocation.
+- Representation identity, addresses, capacities, reference counts, generations, and sharing remain
+  unobservable by default.
+- Live resources must not depend on tracing finalization.
+- Persistent values require exact logical and retained accounting so sharing cannot evade limits.
+- Cyclic values require an explicit semantic and collector design; do not accidentally introduce
+  cycles through host handles.
+- Large text, bytes, maps, sequences, and trees need asymptotically sound operations for named
+  workloads.
+- Every optimized representation retains a canonical materialization or independent model.
+- Process RSS observations are not semantic memory accounting.
 
 ## Resource governance
 
-Semantic limits and operational limits are separate.
+Instruction work, value size, retained memory, live resources, I/O bytes, queue depth, concurrency,
+wall-clock deadlines, and durable storage are separate resource classes.
 
-Semantic limits include fuel, frames, value depth, item count, text bytes, collection elements,
-graph expansion, transaction operations, revision record size, target closure, state size, query
-work, response size, layout nodes, tabs, buffers, views, undo entries, and render cells.
-
-Operational limits include queue capacity, concurrent compilation, cache bytes, aggregate memory,
-open files, terminal events, adapter operations, process count, CPU share, temporary publication
-bytes, selected roots, project count, and deployment quotas.
-
-Each limit states accounting unit, owner, reservation and release points, peak and retained
-accounting, source, rejection class, retryability, observability, restart behavior, and publication
-interaction.
-
-Check lengths, counts, depth, and reservations before allocation or corresponding work.
-
-Do not present allocator observations as exact semantic accounting.
-
-Shared backing storage, checkpoints, caches, embedded artifacts, target outputs, undo roots, and
-render caches must not bypass limits.
-
-Overload rejects, queues within a bound, or sheds work under an explicit policy.
-
-Never create an unbounded hidden queue.
-
-OS controls may strengthen containment but do not replace semantic or runtime accounting.
+- Each limit names its unit, owner, source, reservation point, release point, peak accounting,
+  retained accounting, rejection class, retryability, observability, and restart behavior.
+- Check bounds before corresponding allocation or irreversible work.
+- One scalar fuel number may bound deterministic instruction work; it must not pretend to govern
+  every resource.
+- Shared backing, caches, compiled code, streams, transactions, workers, and undo roots remain
+  accounted.
+- Overload rejects, queues within an exact bound, or sheds work under an explicit policy.
+- Resource exhaustion never becomes success, skip, or semantic no-change.
+- OS limits may strengthen containment but do not replace semantic and runtime admission.
 
 ## Long-term performance
 
-Correctness is necessary and not sufficient for an interactive product.
+Correctness is necessary and insufficient. Measure complete optimized workflows, identify dominant
+stages, and prefer asymptotic correction before micro-optimization.
 
-Measure complete workflows in optimized builds.
-
-Separate:
-
-- startup;
-- artifact validation;
-- application initialization;
-- input decode;
-- semantic update;
-- host action;
-- render construction;
-- frame diff;
-- terminal encode;
-- terminal write and flush;
-- file publication;
-- search traversal;
-- project open;
-- compilation and execution.
-
-Do not optimize a stage that does not dominate the complete workflow.
-
-Preserve an independent simple route for every optimized representation or execution tier.
-
-Prefer changes that improve asymptotic behavior before micro-optimizing constants.
-
-Avoid full-document copying, full-history decode, full-target rebuild, full-frame terminal output,
-and per-command process startup when representative evidence shows they dominate.
-
-A bytecode, specialized interpreter, JIT, native tier, persistent index, render cache, or worker
-must have:
-
-- a named complete consumer;
-- a reproduced baseline;
-- an independent oracle;
-- a measurable target;
-- bounded failure and fallback behavior;
-- exact cache invalidation;
-- a deletion or reversal gate.
-
-Do not weaken semantic limits or inflate fuel merely to hide an algorithmic defect.
+- Separate authoring, project open, parsing, validation, type checking, lowering, compilation,
+  execution, host I/O, serialization, rendering, publication, and cleanup.
+- Measure startup, steady-state, p50, p95, worst retained cases, throughput, tail latency, memory,
+  storage, output bytes, and correction depth where applicable.
+- Do not call a stage optimization a product speedup until the complete equal workload improves.
+- Do not call warm measurements cold.
+- Do not infer token cost from bytes or monetary cost without exact provider telemetry.
+- Set reversal gates for every cache, index, scheduler, worker pool, execution tier, persistent
+  representation, and storage format.
+- Keep slow independent oracles available to verify optimized paths even when they are not the
+  production default.
 
 ## Security and trust
 
-Accepted semantics cannot express unchecked memory access.
+Write a threat model before expanding trust. Memory safety, authority, authentication,
+authorization, path safety, protocol safety, resource exhaustion, supply chain, secret handling, and
+hostile code isolation are separate contracts.
 
-User-controlled depth does not consume unbounded native stack.
+- Treat authored programs, semantic repositories, artifacts, records, packages, configuration,
+  paths, database rows, network bytes, terminal input, object metadata, logs, caches, and adapter
+  outcomes as hostile input at their boundaries.
+- Decode closed formats completely and reject truncation, trailing input, noncanonical form, foreign
+  identity, and excess before allocation.
+- A process, container, user account, private directory, capability token, or semantic project is
+  not automatically a sandbox.
+- Application code must receive only granted authority.
+- Native dependencies expand the trusted computing base and require a complete-workflow benefit.
+- Secrets and sensitive content are absent from default logs, test fixtures, evidence, and
+  diagnostics.
+- Multi-user service support requires actor authentication, authorization, tenancy isolation, audit
+  policy, session security, and denial tests.
+- Hostile native plugins or arbitrary child processes require a separately proved isolation model.
+- No local unsafe Rust is permitted unless the active user explicitly authorizes a narrowly
+  justified replacement with an isolated safe contract and independent tests.
 
-No local unsafe Rust is permitted unless the active user explicitly authorizes a replacement after a
-concrete need, isolated ownership, safe public contract, and independent tests are recorded.
+## Public development interface
 
-Memory safety, exhaustion, stack safety, cleanup, aliasing, concurrency, permissions, path safety,
-terminal safety, crash consistency, supply-chain trust, and hostile-code isolation are separate
-contracts.
+The public `lkjscript` CLI and any accepted source/module tools are the normal authoring interface.
+Private constructors and custom generators cannot remain the only practical route.
 
-Treat bytes, text, paths, locators, filesystem metadata, semantic repositories, revision records,
-artifacts, instance files, checkpoints, backups, caches, profiles, IPC peers, terminal events, paste,
-mouse coordinates, search patterns, and adapter outcomes as hostile input.
+- An agent can discover the exact project and selected revision from an ordinary directory.
+- Orientation is compact and identifies commands for bounded expansion.
+- Context queries return only task-relevant modules, declarations, types, effects, capabilities,
+  tests, targets, and diagnostics.
+- Mutations or source changes bind an exact base and validate through the same owner that publishes.
+- Accepted changes create exact immutable history under the selected authority model.
+- Stale state rejects without silent retry.
+- Build, test, run, package, diagnose, backup, and recover use public commands.
+- Friendly names resolve only when unambiguous.
+- Session-local handles expire with their exact revision and never become durable identity.
+- The CLI must not require users to supply discoverable internal IDs, artifact paths, schema
+  digests, or store paths for ordinary work.
 
-A process boundary creates neither semantic authority nor a sandbox.
+## Agent context and provider economy
 
-A runtime supervisor authenticates and authorizes every request under its deployment model.
+Context budget is a correctness, latency, and cost constraint. Optimize complete task success rather
+than raw byte minimization.
 
-A path, socket, UID, environment variable, or connection is not sufficient semantic authority by
-itself.
+- Keep durable global principles in this file and volatile campaign detail in active prompts,
+  status, evidence, or generated orientation.
+- Provide task-scoped source and semantic context, on-demand expansion, exact digests,
+  continuations, and explicit omissions.
+- Stop broad discovery after exact owners are identified unless new evidence invalidates the map.
+- Support known-digest and unchanged responses for every expensive stable projection where
+  correctness permits.
+- Prefer local modules and stable interfaces that reduce unrelated source loading.
+- Measure request count, response bytes, files opened, source bytes, schema bytes, process count,
+  repeated discovery, correction depth, elapsed time, and test invocations.
+- Record provider token classes, cache classes, model identity, dated prices, and money only when
+  directly exposed.
+- Never infer tokens from bytes.
+- A larger exact response is justified when it avoids a more expensive correction or rediscovery
+  cycle.
 
-Write the threat model before multi-user access, untrusted native code, broad filesystem or network
-access, child processes, secrets, terminal control beyond trusted local use, or remote
-synchronization.
+## Quiet and exact command output
 
-Large input, work, state, history, graph, output, queue, cache, diagnostics, and metrics are bounded,
-paginated, chunked, streamed, or policy-controlled.
+Passing commands default to compact output. Complete logs are retained separately under an exact
+locator when they have diagnostic value.
 
-Human terminal output is escaped and bounded.
+- Do not print one line per passing test, case, target, file, module, or benchmark by default.
+- A success summary includes command/profile, selected project or target, aggregate counts, elapsed
+  time, exact result identity, and a log or receipt locator when retained.
+- Failure output includes stable class, failing identifiers, bounded actionable excerpts, truncation
+  facts, and complete log locators.
+- Warnings, skipped work, cancellation, exhaustion, unavailable tools, indeterminate outcomes, and
+  unknown visibility remain visible.
+- Machine mode emits one strict versioned response without progress contamination.
+- Full detail requires an explicit flag or reading the retained log.
+- Do not achieve compactness by discarding the only complete diagnostic copy.
+- A coding agent must be able to determine success without ingesting all passing output.
 
-Machine output is framed separately and never contaminated by progress text.
+## Change-aware verification
 
-Compactness never weakens validation, authorization, identity, durability, diagnostics, or
-verification.
+Verification should avoid repeated irrelevant work while retaining a full independent gate.
+Selection and caching are derived optimizations, not excuses to skip required evidence.
 
-## Agent and provider economy
+- Provide focused, changed, product, and full profiles when their ownership can be made exact.
+- A changed profile derives affected gates from accepted dependency and ownership facts, not
+  filename heuristics alone.
+- A cached pass binds command, source inputs, generated inputs, toolchain, environment facts, target
+  policy, dependencies, and prior result digest.
+- Cache miss, stale metadata, corruption, and uncertainty rerun rather than assume success.
+- The final campaign still runs the required full and fresh-checkout gates.
+- Retain complete stdout and stderr with exact framing and bounded retention.
+- Do not transform unavailable, skipped, exhausted, cancelled, or indeterminate work into pass.
 
-Context budget is part of correctness, latency, and cost.
+## Testing
 
-This root policy has no arbitrary byte ceiling, but every durable instruction pays recurring context
-rent.
+Tests are executable contracts. Select unit, property, differential, integration, acceptance, fault,
+performance, and fresh-deployment tests according to the risk and authority boundary.
 
-Keep permanent rules here and volatile campaign facts in the active prompt, status, evidence, or
-generated orientation.
-
-State durable principles once.
-
-Prefer compact orientation, task-scoped graph queries, exact on-demand expansion, bounded review,
-stable diagnostics, validate/apply parity, delta receipts, digest reuse, session-local handles,
-quiet passing checks, and explicit omissions.
-
-Build a compact campaign ledger instead of repeatedly reading a long prompt.
-
-Expose only relevant schema roots and tools.
-
-Add prompt rules, examples, schemas, or context only for a measured failure mode.
-
-A larger response is justified when it prevents more expensive rediscovery or correction.
-
-Byte minimization alone is not the objective.
-
-Compare equal tasks using semantic success, unintended changes, correction depth, repeated discovery,
-action bytes, observation bytes, request count, process count, files opened, source bytes opened,
-schema bytes, build invocations, elapsed time, and failure quality.
-
-Record provider model identity, token classes, cache classes, dated prices, and monetary cost only
-when directly exposed.
-
-Bytes are not tokens.
-
-Never infer provider cost from bytes.
-
-Do not claim API-cost savings without exact comparable telemetry.
-
-Measured reductions in bytes, calls, processes, files opened, correction depth, or elapsed time may
-be claimed precisely.
-
-## Code ownership and dependencies
-
-`docs/spec/` owns accepted contracts.
-
-`docs/architecture.md` owns components and trust boundaries.
-
-`docs/status.md` owns implemented reality.
-
-`docs/performance.md` and structured evidence own measurements.
-
-`docs/roadmap.md` owns unresolved consumer-driven reversal gates.
-
-`README.md` owns concise orientation.
-
-Application READMEs own product-specific user contracts.
-
-Campaign prompts are temporary execution artifacts.
-
-Keep one executable owner for every type, field, operation, query, error, limit, format, interface,
-grant, resource, command, target, record, machine descriptor, input event, layout command, and job
-outcome.
-
-Derive views only when staleness cannot be silent.
-
-Organize code around stable ownership and changed-together behavior.
-
-Split large files when bounded review, agent context, test isolation, compile locality, or ownership
-clarity improves without duplicating invariants.
-
-Do not preserve arbitrary file-size or directory-count limits.
-
-Prefer the standard library and existing dependencies.
-
-A new dependency must repay supply-chain, build, binary, audit, operational, and maintenance cost on
-the complete workflow.
-
-Vendor or patch a dependency only for a reproduced defect with exact scope, upstream relation,
-retention reason, and differential tests.
-
-Git history is the archive for deleted repository material.
-
-Delete stale active-tree copies and losing generated paths.
-
-## Testing and verification
-
-Acceptance tests have exact immutable input, oracle, policy, selection, order, and result.
-
-Skipped, exhausted, cancelled, unavailable, or indeterminate tests do not pass.
-
-For changed boundaries, cover every applicable case:
-
-- canonical success;
-- repeated success;
-- validate-only parity;
-- semantic no-change;
-- no-publication outcomes;
-- pure-query no-write behavior;
-- revision-record atomicity;
-- stale and future base;
-- duplicate and idempotency conflict;
-- wrong identity domain;
-- malformed input;
-- truncated input;
-- trailing input;
-- oversized input and output;
-- exact and one-over limits;
-- ambiguous selectors;
-- foreign authority;
-- corruption;
-- restart;
-- interrupted publication;
-- unknown visibility;
-- reconciliation;
-- output failure;
-- cleanup;
-- concurrent access;
-- authority busy;
-- overload;
-- replay;
-- cache miss, hit, eviction, and corruption;
-- checkpoint and reconstruction differential;
-- build-target determinism;
-- generated-view stale detection;
-- artifact reproduction;
-- backup and restore;
-- relative-path and discovery safety;
-- terminal resize and cleanup;
-- mouse enable, decode, drag, and cleanup;
-- layout normalization;
-- buffer/view/tab identity separation;
-- Unicode and line-ending behavior;
-- filesystem substitution and conflict;
-- background job ordering and stale results;
-- public CLI workflows;
-- first-party application dogfooding;
-- compact passing output and bounded failure output.
-
-Use a simple independent reference model where semantics become substantial.
-
-Run narrow checks first, then the full repository gates.
+- Use independent reference models where semantics are substantial.
+- Test canonical success, repeated success, no-change, stale state, malformed input, one-over
+  limits, foreign identity, corruption, restart, interruption, possible visibility, reconciliation,
+  output failure, cleanup, overload, and cancellation.
+- Test every optimized path against its simple oracle.
+- Test service concurrency, transaction isolation, worker claims, stream backpressure, shutdown, and
+  multi-user denial where introduced.
+- Test both deterministic fakes and production adapters through shared conformance suites.
+- A skipped, unavailable, exhausted, cancelled, or indeterminate test is not a pass.
+- Do not weaken an invariant test to fit an implementation.
+- Run narrow checks first and complete gates before handoff.
 
 ```sh
 cargo fmt --all -- --check
@@ -1532,493 +773,3369 @@ cargo build --workspace --release --locked
 git diff --check
 ```
 
-Run every affected retained public workflow and every selected complete application.
-
-Use Miri, sanitizers, mutation tests, property tests, fuzzing, model checking, crash injection,
-filesystem fault injection, pseudo-terminal tests, or cross-platform execution when they target a
-real risk and are available.
-
-State scope and limitations.
-
-Do not weaken an invariant test to make implementation pass.
-
-Change specification, implementation, and oracle together when behavior deliberately changes.
-
-## Verification output contract
-
-Provide a repository-owned verification entry point with at least focused, product, and full
-profiles when doing so materially reduces repeated command and output cost.
-
-The entry point must:
-
-- execute exact documented commands;
-- preserve each command's exit status;
-- retain complete stdout and stderr separately or with exact framing;
-- print a compact deterministic summary on success;
-- print only bounded failure excerpts by default;
-- report the complete log paths;
-- support an explicit full-detail mode;
-- reject unknown profiles and arguments;
-- never transform skipped or unavailable checks into success;
-- run without network unless a profile explicitly declares network use;
-- remain an operational harness rather than semantic authority.
-
-A passing full profile should normally fit within a small terminal screen.
-
-Do not achieve compactness by piping through a filter that discards the only copy of diagnostics.
-
 ## Evidence and claims
 
-Evidence is not semantic authority.
+Evidence is not semantic authority. Claims must be no stronger than reproduced observations and the
+current checkout.
 
-Record exact environment, commit, command, input corpus, output, raw observations, units, sample
-selection, warm or cold classification, and unavailable data.
+- Record exact commit, environment, toolchain, command, corpus, configuration, sample selection,
+  units, output, and unavailable data.
+- Distinguish warm and cold, one-shot and resident, elapsed and summed child time, logical
+  accounting and RSS, throughput and latency, median and tail.
+- Retain serious losing alternatives and reversal gates.
+- Do not call a digest provenance or a process a sandbox.
+- Do not call compile success cross-platform support.
+- Do not claim API-cost savings without exact provider telemetry.
+- Measured reductions in bytes, requests, processes, files opened, correction depth, storage, CPU
+  time, or elapsed time may be claimed exactly.
 
-Do not infer tokens from bytes.
+## First-party applications
 
-Do not infer cost without exact model-specific token and dated price telemetry.
+First-party applications prove the platform but do not define it. Every maintained application must
+use public authoring, build, package, run, diagnosis, and recovery paths.
 
-Do not call a warm-host sample cold.
+- Application policy belongs in lkjscript unless a generic native boundary is independently
+  justified.
+- No maintained application may require a custom graph builder, generated semantic source, private
+  Rust business logic, or opaque binding constants.
+- An application-specific native shell must be reduced to generic packaging and adapters or deleted.
+- A useful application has user-valued behavior, black-box acceptance, representative workloads,
+  exact error and recovery behavior, and fresh-checkout reproduction.
+- When a new capability is added for one application, identify the general semantic obligation and
+  test a second distinct shape or a generic adapter conformance contract.
+- Delete synthetic applications and fixtures that no longer provide independent coverage.
 
-Do not call summed command waits wall-clock time.
+## Current product caution
 
-Do not call logical accounting RSS enforcement.
+`lkjedit` is a secondary interactive forcing function, not the north star. Its existing semantic
+ownership may contain valuable general patterns, but editor-specific state and UI policy must not
+occupy universal language or runtime contracts.
 
-Do not call a digest provenance, signature, authorization, or freshness.
+Known product-quality concerns include confusing explorer interaction, number-based selection,
+missing automatic scrolling, severe split and large-file slowdown, unclear tabs, weak status
+information, indistinct visual boundaries, and incorrect append-at-line-end behavior. Treat these as
+real acceptance debt when touching the product. Do not mistake the existence of an artifact or
+passing narrow cases for a satisfactory editor.
 
-Do not call a process, worker, container, private directory, or project locator a sandbox.
+`lkjwork` is a secondary durable-state and query consumer. Preserve its user value only when it
+remains useful; do not preserve its current application profile or native bindings for
+compatibility.
 
-Do not call compile success cross-platform support.
+## Native code policy
 
-Do not claim full-history validation from a current-state check.
+Rust is the bootstrap and trusted adaptation language. Ordinary application behavior should not
+require application-specific Rust.
 
-Do not call a terminal smoke test a production editor.
+- Generic runtime adapters may use Rust for OS, protocol, database, cryptography, terminal, network,
+  storage, and process mechanics.
+- A generic adapter exposes a stable typed capability contract and reusable conformance tests.
+- Application-specific route tables, SQL policy, schema decisions, access rules, rendering
+  decisions, job state machines, and domain responses belong in lkjscript.
+- Performance-critical generic primitives may be native when semantics remain exact, the simple
+  oracle is retained, and multiple consumers benefit.
+- Every native exception records the blocker preventing lkjscript ownership and the condition for
+  removal.
+- Do not increase the percentage of lkjscript code as a vanity metric; minimize duplicate authority
+  and product-specific native policy.
 
-Do not call mouse decoding draggable tabs until application-owned hit testing, drag state, movement,
-split drop, cancellation, and PTY acceptance all pass.
+## Code ownership and repository structure
 
-Do not call a text editor Vim-compatible merely because it has modes and `hjkl`.
+Organize code around stable owners and changed-together behavior. Large files and directories are
+signals to inspect, not automatic violations.
 
-Retain bounded evidence for serious losing alternatives, not only the selected result.
+- `docs/spec/` owns accepted observable contracts.
+- `docs/architecture.md` owns current components, dependency direction, and trust boundaries.
+- `docs/status.md` owns implemented reality and active format identities.
+- `docs/performance.md` and structured evidence own observations.
+- `docs/roadmap.md` owns unresolved evidence-gated decisions.
+- `README.md` owns concise user and contributor orientation.
+- Application READMEs own product-specific behavior.
+- Campaign prompts are historical execution artifacts after completion.
+- Keep one executable owner for every type, operation, format, interface, grant, limit, failure
+  class, resource, target, record, and protocol field.
+- Split files when it improves ownership clarity, bounded review, compile locality, test isolation,
+  or agent context without duplicating invariants.
+- Prefer the standard library and existing dependencies; every dependency must repay supply-chain
+  and maintenance cost on a complete workflow.
+- Git history is the archive. Delete stale active-tree copies.
 
-Claims must be no stronger than the checkout and reproduced evidence.
+## Decision record
 
-## Decision standard
+Before retaining a substantial design, record all of the following.
 
-Treat every historical mechanism as provisional except enduring semantic, safety, and authority
-contracts in the effective instructions.
-
-Do not preserve a mechanism because it was difficult, planned, shipped recently, or heavily tested.
-
-Reproduce relevant evidence before reversing working behavior.
-
-Prefer complete useful verticals over isolated features.
-
-Prefer one exact path over parallel convenience paths.
-
-Prefer explicit domains over overloaded names.
-
-Prefer direct semantic CLI operations over custom construction code.
-
-Prefer automatic immutable history over manual reconstruction.
-
-Prefer one topology-neutral owner over duplicated process adapters.
-
-Prefer local features over platforms built for one consumer.
-
-Prefer deletion over permanent deprecation.
-
-Prefer bounded prototypes over speculative architecture.
-
-Prefer high-leverage corrections over accumulated exceptions.
-
-Prefer asymptotic corrections over larger limits.
-
-Prefer one generic tab lifecycle over special sidebar behavior.
-
-Prefer one typed input event vocabulary over native policy.
-
-Prefer one retained editor product over parallel `lkjstudio` and `lkjedit` products when the latter
-is the direct successor.
-
-Every retained abstraction, dependency, process, artifact, identity, schema, cache, optimization,
-service, scheduler, worker, framework, source form, or generator needs a named current consumer.
-
-Complexity must pay rent in a representative end-to-end workflow.
-
-Before retaining a substantial choice, record:
-
-- consumer;
-- obligations;
-- reproduced baseline;
-- serious alternatives, including deletion;
-- expected benefit;
-- measured result;
-- semantic and operational costs;
-- independent oracle;
-- direct-cutover deletions;
-- stop rule;
-- reversal condition.
-
-Delete losing prototypes completely.
-
-Current absences are not permanent prohibitions without semantic reason.
+- Named current consumers.
+- Semantic and operational obligations.
+- Reproduced baseline.
+- Retention, replacement, simplification, and deletion alternatives.
+- Expected benefit.
+- Measured result.
+- Security and trust impact.
+- Resource and performance impact.
+- Authoring and agent-context impact.
+- Independent oracle.
+- Direct-cutover deletions.
+- Stop rule.
+- Reversal condition.
 
 ## Change workflow
 
-1. Inspect checkout, instructions, branch, commit, remotes, and unrelated work.
-2. Identify authoritative owners and active format identities.
-3. Select the valuable complete application workflow and freeze an independent oracle.
-4. Reproduce current public authoring, build, run, recovery, product, and performance paths.
-5. Create a compact campaign ledger with outcomes, non-goals, alternatives, stop rules, and
-   verification state.
-6. Build the smallest complete semantic-CLI slice.
-7. Use it immediately on a real maintained application.
-8. Prototype uncertain questions in the smallest dependency-closed form.
-9. Select one coherent design from evidence.
-10. Implement the full vertical across semantic model, persistence, protocol, CLI, targets, product,
-    tests, documentation, and operational tooling.
-11. Publish semantic changes through the public path and inspect automatic history.
-12. Cut over directly and delete builders, duplicate surfaces, compatibility paths, and stale facts.
-13. Run focused, full, representative, restart, corruption, publication, interaction, and product
-    checks.
-14. Measure equal authoring and product tasks and record only supported savings.
-15. Dogfood from a fresh checkout.
-16. Inspect the final diff and staged scope.
-17. Perform only the explicitly authorized Git publication actions.
-18. Leave a compact exact handoff.
+1. Inspect checkout, instructions, branch, commit, upstream, unrelated work, and tool availability.
+2. Map current authored authority, semantic owners, runtime owners, format identities, native
+   policy, and complete consumers.
+3. Freeze complete authoring, interactive, service, worker, and durability baselines relevant to the
+   task.
+4. Create a compact campaign ledger and stop rereading the complete campaign prompt once the needed
+   facts are extracted.
+5. Prototype the highest-risk architecture choices in dependency-closed form.
+6. Select one coherent design from evidence.
+7. Update specifications before or with implementation so the target contract remains explicit.
+8. Implement the complete vertical through authoring, semantics, compiler, runtime, capabilities,
+   packaging, tools, tests, applications, and documentation.
+9. Dogfood the public authoring route on a real maintained program change.
+10. Cut over directly and delete superseded paths.
+11. Run focused, property, differential, integration, product, performance, fault, restart,
+    corruption, and full checks as applicable.
+12. Reproduce from a fresh checkout and ordinary deployment path.
+13. Inspect final diffs and exact staging scope.
+14. Perform only authorized Git publication actions.
+15. Leave a compact exact handoff with unsupported claims and remaining limits stated explicitly.
 
-Do not stop at a report when a safe complete implementation is authorized and feasible.
+## Completion standard
 
-Do not scatter partial architecture.
+A capability is complete only when its semantics, public authoring, compilation, runtime route,
+capability grants, resource bounds, failures, tests, diagnostics, packaging, deployment,
+documentation, maintained consumer, and fresh-checkout reproduction agree.
 
-Do not ask the user to decide ordinary engineering details that checkout evidence can resolve.
+- No private builder or hidden product policy remains.
+- No predecessor normal path remains.
+- Passing output is compact and complete logs are locatable.
+- Failure, cancellation, overload, interruption, restart, and possible visibility are tested.
+- The complete workflow meets its explicit performance and resource gate.
+- The independent oracle remains available.
+- Known absences and reversal gates are documented.
 
-## Completion and handoff
+Before finishing, report the exact starting and ending state, selected design, serious rejected
+alternatives, changed authorities and formats, language and application-model changes, capability
+contracts, native boundaries, application migrations, deletions, verification, performance, security
+assumptions, agent-economy observations, Git actions, and every requested action not performed.
 
-A semantic-development capability is complete only when it is:
+## Capability contract audit catalog
 
-- discoverable from an ordinary project directory;
-- usable through supported public human and machine CLI contracts;
-- exact-base-bound;
-- automatically recorded as immutable revision history;
-- validated by one semantic owner;
-- boundedly inspectable and diffable;
-- buildable through first-class target declarations;
-- reproducible from a fresh checkout without a custom graph builder;
-- covered by independent oracles;
-- restart, corruption, limit, path, and publication tested;
-- resource-accounted where applicable;
-- documented by one owner;
-- exercised by a useful first-party application;
-- measured end to end;
-- free of superseded paths.
+Use the following catalog as a permanent review aid. It does not require every capability to be
+implemented immediately. It defines the minimum questions when a capability enters the system.
 
-An interactive editor product is complete only when:
+### 1. command-line process boundary
 
-- normal launch does not require internal artifact plumbing;
-- keyboard editing is useful;
-- mouse selection, tab drag, and split drop are real product workflows;
-- explorer and search are ordinary tabs;
-- all essential layout actions have keyboard equivalents;
-- buffer, view, tab, tile, and file identities remain distinct;
-- dirty, conflict, save, unknown visibility, and reconciliation behavior are explicit;
-- Unicode and line-ending behavior are documented and tested;
-- local input remains responsive under representative file and layout workloads;
-- terminal acquisition and cleanup are fault-tested;
-- the application meaning, not native glue, owns editor policy;
-- a fresh checkout reproduces the checked product.
+- Purpose: adapt arguments, standard input, standard output, standard error, exit status, and
+  process lifecycle.
+- Application or semantic owner: typed command arguments, command behavior, and domain output.
+- Trusted native or deployment owner: OS argument acquisition, byte streams, signal delivery, and
+  process exit.
+- Operation surface to evaluate: read bounded arguments; read bounded stdin; emit framed human or
+  machine output; flush; observe shutdown.
+- Failure classes to keep distinct: malformed arguments, excessive input, broken pipe, output
+  failure, signal, and cleanup failure.
+- Known or plausible consumers: `lkjscript`, batch tools, service administration, and packaged
+  applications.
+- Current priority: foundational.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
 
-Before finishing, report:
+### 2. terminal session
 
-- exact starting and ending state;
-- selected design and serious rejected alternatives;
-- changed authority and format contracts;
-- automatic-history behavior;
-- CLI workflows;
-- interactive-session behavior;
-- terminal, filesystem, project, and job grants;
-- layout, tab, view, buffer, and file-origin behavior;
-- text representation and Unicode contract;
-- build-target and packaging behavior;
-- first-party application migration or creation;
-- deleted builders, products, and stale paths;
-- validation commands and exact results;
-- representative product and authoring-economy evidence;
-- provider telemetry only when directly exposed;
-- known limits and trust assumptions;
-- reversal gates;
-- Git commits and remote publication outcome when authorized;
-- every requested action not performed.
+- Purpose: adapt a live terminal without giving applications raw escape authority.
+- Application or semantic owner: interaction state, commands, logical frame content, cursor intent,
+  and product policy.
+- Trusted native or deployment owner: raw mode, event decoding, safe projection, differential
+  output, signals, and cleanup.
+- Operation surface to evaluate: acquire; decode key/paste/mouse/resize/focus; render logical frame;
+  suspend; resume; close.
+- Failure classes to keep distinct: decode failure, unsupported capability, output failure, EOF,
+  signal, panic, and cleanup failure.
+- Known or plausible consumers: `lkjedit` and future terminal applications.
+- Current priority: existing secondary.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
 
-Claims must be no stronger than the checkout and reproduced evidence.
+### 3. selected local filesystem
 
-## Durable identity audit table
+- Purpose: grant bounded local file and directory authority under an exact root.
+- Application or semantic owner: which files to open, edit, search, create, rename, delete, or
+  present.
+- Trusted native or deployment owner: path confinement, descriptors, metadata, atomic publication,
+  and platform adaptation.
+- Operation surface to evaluate: list; stat; read; stream; search; create; expected-base replace;
+  rename; delete; reconcile.
+- Failure classes to keep distinct: absence, conflict, invalid type, permission denial, excessive
+  data, I/O failure, and unknown visibility.
+- Known or plausible consumers: editors, build tools, import/export, backup, and local data
+  applications.
+- Current priority: existing and extensible.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
 
-### workspace
+### 4. immutable blob namespace
 
-- Continuity: semantic project continuity.
-- It is not interchangeable with: path or Git commit.
-- Define allocation, equality, retention, deletion, nonreuse, and diagnostic spelling.
-- Reject foreign-domain values even when their bytes or display names match.
-- Keep deployment locators and rendered positions outside identity.
+- Purpose: publish and inspect content-addressed immutable bytes.
+- Application or semantic owner: blob purpose, reference, retention intent, and domain response.
+- Trusted native or deployment owner: blob path or service adaptation, no-replace publication,
+  digest verification, and reconciliation.
+- Operation surface to evaluate: put immutable blob; inspect presence; read bounded blob; reconcile
+  uncertain publication.
+- Failure classes to keep distinct: already present, digest conflict, known failure, possible
+  visibility, timeout, and corruption.
+- Known or plausible consumers: durable instances, attachments, packages, caches, and object
+  abstractions.
+- Current priority: existing generic seed.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
 
-### revision
+### 5. deployment configuration
 
-- Continuity: one accepted project state.
-- It is not interchangeable with: timestamp or sequence position outside its owner.
-- Define allocation, equality, retention, deletion, nonreuse, and diagnostic spelling.
-- Reject foreign-domain values even when their bytes or display names match.
-- Keep deployment locators and rendered positions outside identity.
+- Purpose: bind typed runtime configuration without making environment state semantic identity.
+- Application or semantic owner: configuration schema, defaults, required fields, and application
+  policy.
+- Trusted native or deployment owner: environment, files, command flags, secret references, and
+  deployment-source precedence.
+- Operation surface to evaluate: load; merge under declared precedence; validate; inspect redacted
+  values; watch only when specified.
+- Failure classes to keep distinct: missing value, malformed value, conflicting sources, forbidden
+  source, and redaction failure.
+- Known or plausible consumers: all packaged applications and runtime topologies.
+- Current priority: required for service platform.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
 
-### revision record
+### 6. secret store
+
+- Purpose: provide sensitive deployment values under least authority.
+- Application or semantic owner: which named secret is required and how its absence affects
+  application behavior.
+- Trusted native or deployment owner: secret acquisition, protected memory best effort, redaction,
+  rotation observation, and cleanup.
+- Operation surface to evaluate: resolve exact secret; use through narrow adapter; compare or derive
+  only when contract permits; close.
+- Failure classes to keep distinct: missing, denied, expired, rotated, malformed, provider
+  unavailable, and cleanup failure.
+- Known or plausible consumers: database, object storage, outbound APIs, sessions, signing, and
+  password-reset services.
+- Current priority: required for service platform.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 7. wall clock
+
+- Purpose: observe civil time explicitly.
+- Application or semantic owner: expiry, timestamps, user-visible time policy, and domain
+  comparisons.
+- Trusted native or deployment owner: OS clock observation and conversion primitives.
+- Operation surface to evaluate: observe UTC instant; convert under explicit timezone data; format
+  under explicit policy.
+- Failure classes to keep distinct: clock unavailable, out-of-range instant, unsupported timezone,
+  and conversion failure.
+- Known or plausible consumers: sessions, snapshots, audit events, cache expiry, jobs, and service
+  responses.
+- Current priority: required for service platform.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 8. monotonic clock and deadlines
+
+- Purpose: bound operational waiting and measure elapsed stages without entering semantic identity.
+- Application or semantic owner: whether a caller requests an observable timeout or cancellation
+  policy.
+- Trusted native or deployment owner: monotonic observation, timers, wakeups, and deadline
+  enforcement.
+- Operation surface to evaluate: create deadline; wait; observe elapsed; cancel wait; expire task.
+- Failure classes to keep distinct: deadline exceeded, cancellation, timer resource exhaustion, and
+  shutdown.
+- Known or plausible consumers: network, database, object storage, workers, tests, and telemetry.
+- Current priority: required with asynchronous runtime.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 9. secure randomness
+
+- Purpose: generate unpredictable bytes through explicit authority.
+- Application or semantic owner: token length, identifier policy, and use of the generated value.
+- Trusted native or deployment owner: operating-system cryptographic randomness.
+- Operation surface to evaluate: fill bounded bytes; generate typed token through library
+  composition.
+- Failure classes to keep distinct: entropy source unavailable, excessive request, and cancellation
+  before use.
+- Known or plausible consumers: sessions, CSRF, password reset, API tokens, nonces, and identifiers.
+- Current priority: required for service platform.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 10. deterministic randomness
+
+- Purpose: support reproducible algorithms and tests without pretending to be cryptographically
+  secure.
+- Application or semantic owner: seed, algorithm identity, stream splitting, and deterministic
+  consumption order.
+- Trusted native or deployment owner: none required beyond efficient generic primitives.
+- Operation surface to evaluate: initialize; draw integer or bytes; split stream; serialize state
+  only when specified.
+- Failure classes to keep distinct: invalid range, excessive output, unsupported algorithm identity.
+- Known or plausible consumers: property tests, simulations, procedural applications, and
+  deterministic fixtures.
+- Current priority: general library.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 11. identifier generation
+
+- Purpose: produce canonical unique identifiers under an explicit algorithm.
+- Application or semantic owner: identifier domain, display, ordering, and continuity policy.
+- Trusted native or deployment owner: clock and secure-random combination when required.
+- Operation surface to evaluate: generate; parse; format; compare; extract only specified fields.
+- Failure classes to keep distinct: malformed spelling, unavailable time or randomness, and
+  collision handling.
+- Known or plausible consumers: resources, users, jobs, sessions, artifacts, and application
+  entities.
+- Current priority: required for service platform.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 12. cryptographic hashing
+
+- Purpose: compute explicit integrity or lookup digests without granting provenance.
+- Application or semantic owner: domain separation, algorithm, digest use, and equality policy.
+- Trusted native or deployment owner: constant-space optimized implementation.
+- Operation surface to evaluate: hash bounded bytes or stream; incremental update; finalize; parse
+  and format digest.
+- Failure classes to keep distinct: unsupported algorithm, excessive stream, cancellation, and
+  malformed digest.
+- Known or plausible consumers: artifacts, object keys, cache keys, tokens, external URL
+  normalization, and evidence.
+- Current priority: existing and extensible.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 13. password hashing
+
+- Purpose: derive and verify password hashes under a deployment security policy.
+- Application or semantic owner: credential lifecycle, authentication response, upgrade decision,
+  and authorization policy.
+- Trusted native or deployment owner: Argon2 or selected algorithm, secure randomness, constant-time
+  verification, and resource limits.
+- Operation surface to evaluate: hash password; verify; inspect parameters; recommend upgrade.
+- Failure classes to keep distinct: mismatch, malformed hash, resource exhaustion, unsupported
+  parameters, and infrastructure failure.
+- Known or plausible consumers: local user authentication and password reset.
+- Current priority: required for a multi-user reference service.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 14. structured logging
+
+- Purpose: record bounded operational events without becoming application authority.
+- Application or semantic owner: event names and safe application fields when explicitly emitted.
+- Trusted native or deployment owner: timestamps, sinks, framing, rotation, filtering, and
+  deployment integration.
+- Operation surface to evaluate: emit event; attach trace context; flush; rotate; inspect
+  dropped-event counters.
+- Failure classes to keep distinct: sink unavailable, event rejected, excessive field, redaction
+  failure, and flush failure.
+- Known or plausible consumers: runtime, services, workers, adapters, and verification.
+- Current priority: required for resident runtime.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 15. metrics
+
+- Purpose: expose aggregate operational observations without changing semantic behavior.
+- Application or semantic owner: stable metric meaning and dimensions chosen by reusable libraries
+  or applications.
+- Trusted native or deployment owner: collection, aggregation, scrape or export, and cardinality
+  limits.
+- Operation surface to evaluate: counter; gauge; histogram; snapshot; export.
+- Failure classes to keep distinct: invalid metric, cardinality exhaustion, exporter failure, and
+  dropped observation.
+- Known or plausible consumers: service runtime, workers, database pools, queues, and performance
+  evidence.
+- Current priority: required for service operability.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 16. distributed trace context
+
+- Purpose: propagate bounded correlation across capability calls.
+- Application or semantic owner: none beyond explicitly surfaced correlation when application policy
+  requires it.
+- Trusted native or deployment owner: context parsing, propagation, span timing, sampling, and
+  export.
+- Operation surface to evaluate: accept context; create child span; annotate safe fields; close;
+  export.
+- Failure classes to keep distinct: malformed context, sampling drop, exporter failure, and
+  cardinality exhaustion.
+- Known or plausible consumers: HTTP services, database calls, object storage, and outbound
+  providers.
+- Current priority: later generic observability.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 17. JSON codec
+
+- Purpose: convert between typed values and strict JSON at public boundaries.
+- Application or semantic owner: schema, field names, optionality, unknown-field policy, and numeric
+  interpretation.
+- Trusted native or deployment owner: bounded parser and encoder.
+- Operation surface to evaluate: decode exact type; encode exact type; stream when required; report
+  path and offset.
+- Failure classes to keep distinct: malformed syntax, duplicate field, unknown field, invalid
+  Unicode, range, depth, size, and trailing input.
+- Known or plausible consumers: CLI machine mode, HTTP APIs, configuration, database JSON, and
+  provider adapters.
+- Current priority: required.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 18. URL and form codec
+
+- Purpose: parse and construct URI components and form payloads without string conventions.
+- Application or semantic owner: route variables, query policy, allowed schemes, and application
+  validation.
+- Trusted native or deployment owner: standards-compliant parsing, normalization, and percent
+  encoding.
+- Operation surface to evaluate: parse URI; resolve relative reference; encode/decode query;
+  encode/decode form.
+- Failure classes to keep distinct: malformed URI, forbidden scheme, invalid percent encoding,
+  excessive component, and ambiguous normalization.
+- Known or plausible consumers: HTTP server/client, redirects, object links, and external embeds.
+- Current priority: required for service platform.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 19. multipart codec
+
+- Purpose: accept and emit bounded multipart bodies with streaming parts.
+- Application or semantic owner: accepted fields, media policy, and application ownership of
+  uploaded resources.
+- Trusted native or deployment owner: boundary parsing, temporary spill policy, stream management,
+  and cleanup.
+- Operation surface to evaluate: iterate parts; read field; stream file; reject excess; emit
+  multipart when needed.
+- Failure classes to keep distinct: malformed boundary, duplicate field, excessive headers,
+  excessive part, disk exhaustion, cancellation, and cleanup failure.
+- Known or plausible consumers: file and media uploads, forms, and outbound provider APIs.
+- Current priority: required for media-capable service.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 20. HTML construction and escaping
+
+- Purpose: build safe server-rendered markup with context-correct escaping.
+- Application or semantic owner: page structure, components, labels, navigation, and application
+  presentation.
+- Trusted native or deployment owner: efficient escaping and optional template compilation.
+- Operation surface to evaluate: construct text nodes; attributes; URLs; fragments; trusted narrow
+  nodes; stream output.
+- Failure classes to keep distinct: invalid trusted fragment, excessive output, invalid URL context,
+  and rendering exhaustion.
+- Known or plausible consumers: server-rendered services and generated documentation.
+- Current priority: required for a server-rendered reference service.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 21. Markdown parsing and sanitization
+
+- Purpose: turn Markdown into a safe typed or rendered representation.
+- Application or semantic owner: enabled syntax, link policy, embed policy, and product
+  presentation.
+- Trusted native or deployment owner: parser, sanitizer, and optimized rendering primitives.
+- Operation surface to evaluate: parse; inspect nodes; sanitize links and HTML; render; extract
+  plain text.
+- Failure classes to keep distinct: excessive nesting, excessive output, invalid link, unsupported
+  extension, and sanitizer rejection.
+- Known or plausible consumers: note systems, documentation tools, previews, and content
+  applications.
+- Current priority: required for a note-service forcing function.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 22. HTTP server
+
+- Purpose: accept bounded HTTP requests and dispatch typed handlers.
+- Application or semantic owner: route table, middleware order, authentication, authorization,
+  handler behavior, and response content.
+- Trusted native or deployment owner: listeners, TLS boundary, HTTP parsing, connection lifecycle,
+  body streams, and generic compression.
+- Operation surface to evaluate: bind listener; accept; decode request; dispatch; stream response;
+  graceful shutdown.
+- Failure classes to keep distinct: bind failure, malformed request, size limit, timeout,
+  disconnect, overload, handler failure, and shutdown.
+- Known or plausible consumers: resource services, APIs, webhooks, dashboards, and local development
+  servers.
+- Current priority: required campaign capability.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 23. HTTP client
+
+- Purpose: perform outbound bounded HTTP operations under an exact network grant.
+- Application or semantic owner: endpoint choice, request data, domain retry decision, and response
+  interpretation.
+- Trusted native or deployment owner: DNS, TLS, connection pooling, protocol framing, streaming, and
+  redirect mechanics.
+- Operation surface to evaluate: send request; stream upload; stream response; cancel; close pool.
+- Failure classes to keep distinct: DNS, TLS, connect, protocol, status policy, timeout,
+  cancellation, size, redirect, and unknown request visibility.
+- Known or plausible consumers: LLM providers, external embeds, webhooks, object adapters, and
+  service integrations.
+- Current priority: required after server vertical.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 24. WebSocket
+
+- Purpose: exchange bounded framed messages over a long-lived upgraded connection.
+- Application or semantic owner: session protocol, actor policy, message meaning, and close
+  behavior.
+- Trusted native or deployment owner: upgrade, framing, ping/pong, backpressure, and socket
+  lifecycle.
+- Operation surface to evaluate: accept or connect; send; receive; close; observe peer close.
+- Failure classes to keep distinct: upgrade failure, invalid frame, excessive message, backpressure,
+  disconnect, timeout, and shutdown.
+- Known or plausible consumers: live status, collaborative features, event streams, and control
+  channels.
+- Current priority: later unless selected service slice requires it.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 25. streaming byte transport
+
+- Purpose: move large or unbounded-by-single-value data with bounded retained memory.
+- Application or semantic owner: chunk interpretation, completion, cancellation, and domain checksum
+  policy.
+- Trusted native or deployment owner: buffers, readiness, wakeups, backpressure, and transport
+  cleanup.
+- Operation surface to evaluate: read chunk; write chunk; flush; close; cancel; compute bounded
+  transforms.
+- Failure classes to keep distinct: producer failure, consumer failure, cancellation, timeout, size
+  limit, and cleanup failure.
+- Known or plausible consumers: HTTP bodies, object storage, file I/O, compression, media, and
+  providers.
+- Current priority: required campaign capability.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 26. compression
+
+- Purpose: compress or decompress bounded streams under an explicit algorithm.
+- Application or semantic owner: content negotiation and whether compression is acceptable for the
+  domain.
+- Trusted native or deployment owner: algorithm implementation and streaming buffers.
+- Operation surface to evaluate: encode; decode; negotiate supported algorithms; bound expanded
+  bytes.
+- Failure classes to keep distinct: malformed stream, expansion limit, unsupported algorithm,
+  cancellation, and output failure.
+- Known or plausible consumers: HTTP, artifacts, backups, and object transfer.
+- Current priority: generic adapter after streaming.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 27. relational database session
+
+- Purpose: execute typed parameterized statements against a granted relational database.
+- Application or semantic owner: queries, row interpretation, constraints, domain transactions, and
+  application policy.
+- Trusted native or deployment owner: driver protocol, connection pool, prepared statements, TLS,
+  and cancellation.
+- Operation surface to evaluate: acquire session; execute; query rows; stream rows; begin
+  transaction; close.
+- Failure classes to keep distinct: pool exhausted, connection, protocol, syntax, constraint,
+  serialization, timeout, cancellation, and unknown commit visibility.
+- Known or plausible consumers: multi-user services, analytics, search, sessions, audit, and durable
+  queues.
+- Current priority: required campaign capability.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 28. database migration
+
+- Purpose: apply exact ordered schema changes as deployment authority.
+- Application or semantic owner: migration declarations, application schema expectation, and cutover
+  policy.
+- Trusted native or deployment owner: database locks, transaction execution, checksum table, and
+  operational reporting.
+- Operation surface to evaluate: inspect current version; validate sequence; apply; verify; report.
+- Failure classes to keep distinct: checksum mismatch, divergent history, lock failure, statement
+  failure, partial visibility, and incompatible live state.
+- Known or plausible consumers: service deployment and durable database-backed applications.
+- Current priority: required before production service claim.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 29. object storage
+
+- Purpose: store and retrieve named immutable or versioned objects under bucket and prefix grants.
+- Application or semantic owner: key policy, metadata, visibility, retention, and application
+  references.
+- Trusted native or deployment owner: S3-compatible protocol, credentials, retries, multipart,
+  ranges, checksums, and connection reuse.
+- Operation surface to evaluate: ensure namespace; put; multipart put; get; range get; head; list;
+  copy; delete; reconcile.
+- Failure classes to keep distinct: not found, conflict, denied, checksum mismatch, timeout,
+  cancellation, partial multipart, and unknown visibility.
+- Known or plausible consumers: media, backups, large attachments, artifacts, and service data.
+- Current priority: required campaign capability.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 30. durable queue
+
+- Purpose: coordinate durable asynchronous jobs with bounded concurrency and explicit retry.
+- Application or semantic owner: job payload, state machine, retry policy, cancellation, result, and
+  domain idempotency.
+- Trusted native or deployment owner: atomic claim, lease, heartbeat, persistence, wakeup, and
+  worker admission.
+- Operation surface to evaluate: enqueue; claim; heartbeat; complete; fail; retry; cancel; inspect;
+  reap stale claim.
+- Failure classes to keep distinct: duplicate, conflict, lease lost, storage failure, cancellation,
+  exhaustion, poison payload, and indeterminate completion.
+- Known or plausible consumers: transcription, media derivatives, email, indexing, imports, and
+  maintenance.
+- Current priority: required campaign capability.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 31. scheduled timer and recurring work
+
+- Purpose: trigger bounded work from explicit time policies.
+- Application or semantic owner: schedule, catch-up, missed-run, idempotency, and domain behavior.
+- Trusted native or deployment owner: timer persistence or wakeup, clock observation, and leader
+  coordination.
+- Operation surface to evaluate: register; cancel; inspect due work; claim occurrence; complete
+  occurrence.
+- Failure classes to keep distinct: clock error, duplicate occurrence, missed deadline, storage
+  failure, and shutdown.
+- Known or plausible consumers: cache refresh, cleanup, reports, session expiry, and maintenance.
+- Current priority: later after durable queue.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 32. bounded worker pool
+
+- Purpose: execute independent tasks concurrently under deployment limits.
+- Application or semantic owner: task graph, result handling, cancellation, and domain retry.
+- Trusted native or deployment owner: threads or async tasks, queues, scheduling, panic containment,
+  and shutdown.
+- Operation surface to evaluate: admit task; execute; cancel; collect; drain; close.
+- Failure classes to keep distinct: overload, panic, cancellation, deadline, stale result, and
+  shutdown timeout.
+- Known or plausible consumers: services, object transforms, searches, compilation, and durable
+  jobs.
+- Current priority: required with resident service.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 33. cache
+
+- Purpose: reuse disposable derived values under exact invalidation.
+- Application or semantic owner: whether stale data is acceptable and how cache absence affects
+  behavior.
+- Trusted native or deployment owner: storage, eviction, concurrency, serialization, and metrics.
+- Operation surface to evaluate: lookup; populate; invalidate; evict; inspect; clear.
+- Failure classes to keep distinct: miss, corrupt entry, capacity exhaustion, unavailable backend,
+  and population race.
+- Known or plausible consumers: compiled code, parsed templates, external embeds, rendered pages,
+  and query acceleration.
+- Current priority: evidence-gated.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 34. semantic project host
+
+- Purpose: let an application inspect or propose changes to another exact semantic project.
+- Application or semantic owner: project query, proposal, review, and application presentation.
+- Trusted native or deployment owner: project discovery, locking, validation, publication, and
+  bounded transport.
+- Operation surface to evaluate: orient; query; validate; apply; history; diff; target; reconcile.
+- Failure classes to keep distinct: stale base, foreign project, ambiguity, corruption, busy
+  authority, output failure, and unknown publication.
+- Known or plausible consumers: `lkjedit`, development tools, and future semantic automation.
+- Current priority: existing secondary.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 35. child process
+
+- Purpose: run a narrowly granted external executable when no safer adapter suffices.
+- Application or semantic owner: command intent, arguments, input, expected output, and domain
+  interpretation.
+- Trusted native or deployment owner: spawn, environment isolation, pipes, signals, limits, wait,
+  and cleanup.
+- Operation surface to evaluate: spawn exact executable; stream input/output; signal; wait; cancel;
+  close.
+- Failure classes to keep distinct: not found, denied, spawn failure, output limit, timeout, signal,
+  nonzero exit, and cleanup failure.
+- Known or plausible consumers: tool integration and constrained build workflows only.
+- Current priority: not required; threat-model before addition.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 36. image and media transform
+
+- Purpose: perform reusable bounded decoding, validation, and transformation of media.
+- Application or semantic owner: accepted media kinds, derivative policy, quality, dimensions, and
+  product use.
+- Trusted native or deployment owner: codec libraries, CPU-intensive transforms, streaming, and
+  memory limits.
+- Operation surface to evaluate: inspect; decode; resize; transcode; encode; extract metadata.
+- Failure classes to keep distinct: malformed media, unsupported codec, dimension bomb, resource
+  exhaustion, cancellation, and encoder failure.
+- Known or plausible consumers: media services, document tools, previews, and asset pipelines.
+- Current priority: standard library or adapter after core service.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+### 37. live media transport
+
+- Purpose: relay real-time audio or video under explicit session authority.
+- Application or semantic owner: rooms, membership, publication policy, controls, and product
+  presentation.
+- Trusted native or deployment owner: WebRTC or selected transport, codecs, ICE, congestion, and
+  connection lifecycle.
+- Operation surface to evaluate: create session; publish track; subscribe; signal; close.
+- Failure classes to keep distinct: negotiation, network, codec, authorization, overload,
+  disconnect, and cleanup.
+- Known or plausible consumers: future live applications including a possible `kjxlkj` live surface.
+- Current priority: explicitly outside initial foundation unless selected by evidence.
+- The requirement and grant must be exact, typed, bounded, inspectable, and independently testable.
+- Live handles, credentials, deployment locators, and adapter-internal state must not become durable
+  application values.
+- Production and deterministic fake adapters must share a conformance suite while remaining
+  implementation-disjoint.
+- Document idempotency, possible visibility, retry, cancellation, cleanup, restart, and resource
+  accounting before production use.
+- Reject any product-specific policy that migrates into this adapter merely to reduce lkjscript
+  code.
+
+## Identity audit catalog
+
+When adding or changing one of these domains, write its allocation, canonical spelling, equality,
+scope, retention, deletion, nonreuse, foreign-domain rejection, and recovery rules.
+
+### 1. project
+
+- Continuity: one maintained development authority.
+- It is not interchangeable with: path, Git repository, or package.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
+
+### 2. project revision
+
+- Continuity: one accepted authored and semantic state.
+- It is not interchangeable with: wall-clock time or Git commit.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
+
+### 3. revision record
 
 - Continuity: canonical facts about one accepted transition.
-- It is not interchangeable with: log line.
-- Define allocation, equality, retention, deletion, nonreuse, and diagnostic spelling.
-- Reject foreign-domain values even when their bytes or display names match.
-- Keep deployment locators and rendered positions outside identity.
+- It is not interchangeable with: human log line.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
 
-### target
+### 4. module
 
-- Continuity: one exact build derivation root.
-- It is not interchangeable with: target name alone.
-- Define allocation, equality, retention, deletion, nonreuse, and diagnostic spelling.
-- Reject foreign-domain values even when their bytes or display names match.
-- Keep deployment locators and rendered positions outside identity.
+- Continuity: one authored namespace and loading unit.
+- It is not interchangeable with: file path alone.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
 
-### release
+### 5. package
 
-- Continuity: one reusable semantic closure.
-- It is not interchangeable with: workspace identity.
-- Define allocation, equality, retention, deletion, nonreuse, and diagnostic spelling.
-- Reject foreign-domain values even when their bytes or display names match.
-- Keep deployment locators and rendered positions outside identity.
+- Continuity: one exact reusable authored and semantic closure.
+- It is not interchangeable with: registry coordinate alone.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
 
-### application
+### 6. declaration
 
-- Continuity: one runnable exact release world.
-- It is not interchangeable with: artifact path.
-- Define allocation, equality, retention, deletion, nonreuse, and diagnostic spelling.
-- Reject foreign-domain values even when their bytes or display names match.
-- Keep deployment locators and rendered positions outside identity.
+- Continuity: one durable semantic entity when continuity is required.
+- It is not interchangeable with: name or source position.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
 
-### instance
+### 7. local binding
 
-- Continuity: durable product-state continuity.
+- Continuity: one scope-local value origin.
+- It is not interchangeable with: durable declaration identity.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
+
+### 8. type
+
+- Continuity: one exact structural or nominal contract.
+- It is not interchangeable with: display spelling alone.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
+
+### 9. effect or capability requirement
+
+- Continuity: one exact requested interface contract.
+- It is not interchangeable with: deployment grant.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
+
+### 10. capability grant
+
+- Continuity: one concrete bounded external authority binding.
+- It is not interchangeable with: interface requirement.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
+
+### 11. adapter
+
+- Continuity: one implementation kind for a capability.
+- It is not interchangeable with: application behavior.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
+
+### 12. component
+
+- Continuity: one composable application unit.
 - It is not interchangeable with: process.
-- Define allocation, equality, retention, deletion, nonreuse, and diagnostic spelling.
-- Reject foreign-domain values even when their bytes or display names match.
-- Keep deployment locators and rendered positions outside identity.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
 
-### layout node
+### 13. application
 
-- Continuity: one ephemeral split-tree node.
-- It is not interchangeable with: screen rectangle.
-- Define allocation, equality, retention, deletion, nonreuse, and diagnostic spelling.
-- Reject foreign-domain values even when their bytes or display names match.
-- Keep deployment locators and rendered positions outside identity.
+- Continuity: one exact runnable component closure.
+- It is not interchangeable with: artifact path or product install.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
 
-### tile
+### 14. application artifact
 
-- Continuity: one tab-stack container.
-- It is not interchangeable with: pane coordinates.
-- Define allocation, equality, retention, deletion, nonreuse, and diagnostic spelling.
-- Reject foreign-domain values even when their bytes or display names match.
-- Keep deployment locators and rendered positions outside identity.
+- Continuity: one immutable distribution object.
+- It is not interchangeable with: development workspace.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
 
-### tab
+### 15. deployment
 
-- Continuity: one movable layout item.
+- Continuity: one concrete binding of artifacts, grants, config, and topology.
+- It is not interchangeable with: application identity.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
+
+### 16. runtime process
+
+- Continuity: one operational execution lifetime.
+- It is not interchangeable with: durable instance.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
+
+### 17. runtime task
+
+- Continuity: one admitted structured unit of execution.
+- It is not interchangeable with: thread ID or queue position.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
+
+### 18. request
+
+- Continuity: one inbound operation and response lifecycle.
+- It is not interchangeable with: connection.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
+
+### 19. connection
+
+- Continuity: one transport lifecycle.
+- It is not interchangeable with: authenticated actor.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
+
+### 20. stream
+
+- Continuity: one ordered bounded-flow lifetime.
+- It is not interchangeable with: complete byte value.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
+
+### 21. transaction
+
+- Continuity: one database atomicity scope.
+- It is not interchangeable with: durable application revision.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
+
+### 22. database row
+
+- Continuity: one database-owned entity continuity.
+- It is not interchangeable with: application nominal value without mapping.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
+
+### 23. object
+
+- Continuity: one object-storage key/version continuity.
+- It is not interchangeable with: local file path.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
+
+### 24. queue job
+
+- Continuity: one durable asynchronous work item.
+- It is not interchangeable with: worker task.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
+
+### 25. job attempt
+
+- Continuity: one claim and execution attempt.
+- It is not interchangeable with: job identity.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
+
+### 26. timer occurrence
+
+- Continuity: one scheduled trigger occurrence.
+- It is not interchangeable with: wall-clock timestamp alone.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
+
+### 27. user
+
+- Continuity: one authenticated principal continuity.
+- It is not interchangeable with: email or username spelling.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
+
+### 28. session
+
+- Continuity: one authenticated session lifecycle.
+- It is not interchangeable with: user.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
+
+### 29. service account
+
+- Continuity: one non-human principal continuity.
+- It is not interchangeable with: API token.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
+
+### 30. API token
+
+- Continuity: one revocable credential continuity.
+- It is not interchangeable with: service account.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
+
+### 31. secret
+
+- Continuity: one deployment-sensitive value binding.
+- It is not interchangeable with: ordinary text.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
+
+### 32. terminal session
+
+- Continuity: one acquired terminal lifecycle.
+- It is not interchangeable with: interactive application state.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
+
+### 33. filesystem root
+
+- Continuity: one granted path authority.
+- It is not interchangeable with: canonical path string.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
+
+### 34. file observation
+
+- Continuity: one exact observed external file base.
+- It is not interchangeable with: buffer or path.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
+
+### 35. buffer
+
+- Continuity: one editable content continuity.
+- It is not interchangeable with: file observation.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
+
+### 36. view
+
+- Continuity: one presentation and local interaction continuity.
 - It is not interchangeable with: buffer.
-- Define allocation, equality, retention, deletion, nonreuse, and diagnostic spelling.
-- Reject foreign-domain values even when their bytes or display names match.
-- Keep deployment locators and rendered positions outside identity.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
 
-### view
+### 37. tab or layout item
 
-- Continuity: one content presentation and local interaction state.
-- It is not interchangeable with: tab label.
-- Define allocation, equality, retention, deletion, nonreuse, and diagnostic spelling.
-- Reject foreign-domain values even when their bytes or display names match.
-- Keep deployment locators and rendered positions outside identity.
+- Continuity: one movable interactive item.
+- It is not interchangeable with: rendered coordinates.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
 
-### buffer
+### 38. render cache
 
-- Continuity: one editable text continuity.
-- It is not interchangeable with: file path.
-- Define allocation, equality, retention, deletion, nonreuse, and diagnostic spelling.
-- Reject foreign-domain values even when their bytes or display names match.
-- Keep deployment locators and rendered positions outside identity.
-
-### file origin
-
-- Continuity: one observed external file base.
-- It is not interchangeable with: buffer.
-- Define allocation, equality, retention, deletion, nonreuse, and diagnostic spelling.
-- Reject foreign-domain values even when their bytes or display names match.
-- Keep deployment locators and rendered positions outside identity.
-
-### search job
-
-- Continuity: one bounded external observation request.
-- It is not interchangeable with: search tab.
-- Define allocation, equality, retention, deletion, nonreuse, and diagnostic spelling.
-- Reject foreign-domain values even when their bytes or display names match.
-- Keep deployment locators and rendered positions outside identity.
-
-### host action
-
-- Continuity: one explicit external request.
-- It is not interchangeable with: keyboard event.
-- Define allocation, equality, retention, deletion, nonreuse, and diagnostic spelling.
-- Reject foreign-domain values even when their bytes or display names match.
-- Keep deployment locators and rendered positions outside identity.
-
-### terminal session
-
-- Continuity: one acquired live terminal lifecycle.
-- It is not interchangeable with: application state.
-- Define allocation, equality, retention, deletion, nonreuse, and diagnostic spelling.
-- Reject foreign-domain values even when their bytes or display names match.
-- Keep deployment locators and rendered positions outside identity.
-
-### render cache
-
-- Continuity: one disposable prior-frame optimization.
+- Continuity: one disposable previous-output optimization.
 - It is not interchangeable with: logical frame.
-- Define allocation, equality, retention, deletion, nonreuse, and diagnostic spelling.
-- Reject foreign-domain values even when their bytes or display names match.
-- Keep deployment locators and rendered positions outside identity.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
 
-## Durable layout invariants
+### 39. compiled unit
 
-1. Every reachable tab belongs to exactly one live tile.
-2. Every live tile contains at least one tab after normalization.
-3. Every selected-tab reference names a tab in its own tile.
-4. Every non-root layout node has exactly one parent.
-5. No split node has fewer than two children after normalization.
-6. No split node directly contains a child split of the same orientation after canonical flattening unless weights require a documented distinction.
-7. No layout operation duplicates or loses a tab.
-8. Moving a tab preserves its tab and view identity.
-9. Splitting with a tab moves or clones only according to an explicit command; drag-drop defaults to move.
-10. Closing a tab never destroys a buffer retained by another view.
-11. Closing the final view of a dirty buffer enters an explicit decision state.
-12. A cancelled drag leaves the canonical layout unchanged.
-13. A failed render leaves application layout state unchanged under transactional interactive-step semantics.
-14. Resize recomputes geometry without changing layout identity or weights.
-15. Minimum dimensions clamp geometry but do not silently delete tabs.
-16. Hit regions are derived from the exact rendered geometry for the same state.
-17. Mouse and keyboard variants of one command pass through one semantic owner.
-18. A tab strip overflow policy is deterministic and keyboard-accessible.
-19. Focus always names one reachable tile and one selected tab.
-20. Layout normalization is deterministic and idempotent.
+- Continuity: one derived executable form bound to exact semantic inputs.
+- It is not interchangeable with: semantic declaration.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
 
-## Durable editor invariants
+### 40. cache entry
 
-1. Content is valid UTF-8 at every accepted state.
-2. Byte, scalar, grapheme, line, and terminal-cell units are never conflated.
-3. A cursor is always at a valid boundary for the active movement contract.
-4. An anchor and cursor define one exact directed selection.
-5. A replacement validates both range and inserted text before changing state.
-6. One user edit creates one documented undo group unless command semantics group more.
-7. A new edit after undo discards or branches redo according to one explicit policy.
-8. Undo never changes file-origin evidence by itself.
-9. Save success updates file-origin evidence only from the host's exact published observation.
-10. Unknown save visibility blocks automatic retry and preserves reconciliation data.
-11. Reload replaces content only after the user-visible policy accepts external state.
-12. Two views of one buffer observe one content and undo history.
-13. View-local cursor movement does not dirty the buffer.
-14. Formatting or render cache changes do not dirty the buffer.
-15. Search highlights are derived and do not edit content.
-16. Line-ending policy is preserved across ordinary open and save.
-17. A file without a final terminator is not silently given one.
-18. Unsupported non-UTF-8 input produces a typed product outcome.
-19. Oversized content rejects before unbounded allocation.
-20. Closing a dirty final view requires explicit save, discard, or cancel.
+- Continuity: one disposable derived value under exact invalidation.
+- It is not interchangeable with: authority.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
 
-## Durable failure classification examples
+### 41. backup
 
-### `proposal_rejected`
+- Continuity: one immutable recoverable copy under an exact contract.
+- It is not interchangeable with: live project.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
 
-- Meaning: The request is well-framed but semantically invalid.
-- Required behavior: No publication.
-- Keep domain failure distinct from transport, output, and cleanup failure.
-- Include bounded exact identity and continuation facts when applicable.
+### 42. evidence receipt
 
-### `malformed_input`
+- Continuity: one observation record for an exact run.
+- It is not interchangeable with: semantic authority.
+- State the owning layer and the exact point at which the identity is allocated.
+- State whether equality is nominal, structural, digest-based, sequence-based, or deployment-local.
+- State whether the identity survives rename, movement, serialization, restart, backup, restore, and
+  import.
+- State retention, tombstone, reuse, and garbage-collection behavior.
+- Reject bytes from another identity domain even when their printed form matches.
+- Keep paths, positions, indexes, addresses, process IDs, and timestamps outside identity unless the
+  contract explicitly says otherwise.
 
-- Meaning: The input violates its closed syntax or encoding.
-- Required behavior: No domain work starts.
-- Keep domain failure distinct from transport, output, and cleanup failure.
-- Include bounded exact identity and continuation facts when applicable.
+## Failure classification catalog
 
-### `stale_base`
+Use stable typed classes across human output, machine output, tests, adapters, and evidence. A
+domain may refine these classes, but it must not collapse materially different retry or publication
+behavior.
 
-- Meaning: The exact expected authority revision no longer matches.
-- Required behavior: No implicit refresh or retry.
-- Keep domain failure distinct from transport, output, and cleanup failure.
-- Include bounded exact identity and continuation facts when applicable.
+### 1. `malformed_input`
 
-### `authority_busy`
+- Meaning: closed syntax, encoding, or framing is invalid.
+- Required behavior: perform no domain work.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
 
-- Meaning: The bounded owner or queue cannot admit the request.
-- Required behavior: Reject or expose a retryable operational outcome.
-- Keep domain failure distinct from transport, output, and cleanup failure.
-- Include bounded exact identity and continuation facts when applicable.
+### 2. `noncanonical_input`
 
-### `resource_exhausted`
+- Meaning: input decodes but violates canonical form.
+- Required behavior: reject before identity or publication use.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
 
-- Meaning: An exact semantic or operational bound is exceeded.
-- Required behavior: Report unit, limit, and observed request.
-- Keep domain failure distinct from transport, output, and cleanup failure.
-- Include bounded exact identity and continuation facts when applicable.
+### 3. `unsupported_version`
 
-### `filesystem_conflict`
+- Meaning: the exact contract or format is not current.
+- Required behavior: reject without compatibility fallback.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
 
-- Meaning: The selected file or directory no longer matches observed base facts.
-- Required behavior: Require user policy.
-- Keep domain failure distinct from transport, output, and cleanup failure.
-- Include bounded exact identity and continuation facts when applicable.
+### 4. `foreign_identity`
 
-### `unknown_visibility`
+- Meaning: a value belongs to another authority or identity domain.
+- Required behavior: reject before lookup or mutation.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
 
-- Meaning: External publication may have become visible.
-- Required behavior: Never retry automatically; reconcile.
-- Keep domain failure distinct from transport, output, and cleanup failure.
-- Include bounded exact identity and continuation facts when applicable.
+### 5. `ambiguous_selector`
 
-### `terminal_decode`
+- Meaning: a friendly selector resolves to more than one exact target.
+- Required behavior: require a more exact selector.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
 
-- Meaning: Host input cannot be decoded under the active contract.
-- Required behavior: Preserve application state and clean up if terminating.
-- Keep domain failure distinct from transport, output, and cleanup failure.
-- Include bounded exact identity and continuation facts when applicable.
+### 6. `missing_authority`
 
-### `terminal_output`
+- Meaning: the required project, package, instance, grant, or resource is absent.
+- Required behavior: report the missing domain exactly.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
 
-- Meaning: Logical frame projection or write failed.
-- Required behavior: Do not roll back external publications.
-- Keep domain failure distinct from transport, output, and cleanup failure.
-- Include bounded exact identity and continuation facts when applicable.
+### 7. `authority_denied`
 
-### `terminal_cleanup`
+- Meaning: the caller lacks the exact grant or authorization.
+- Required behavior: perform no denied operation.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
 
-- Meaning: A live terminal stage is not known restored.
-- Required behavior: Attempt all remaining cleanup and report precedence.
-- Keep domain failure distinct from transport, output, and cleanup failure.
-- Include bounded exact identity and continuation facts when applicable.
+### 8. `authority_busy`
 
-### `job_stale`
+- Meaning: bounded admission cannot accept the operation.
+- Required behavior: reject or expose an exact retryable operational outcome.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
 
-- Meaning: A background result no longer matches its application pending state.
-- Required behavior: Discard or present explicitly; never mutate unrelated state.
-- Keep domain failure distinct from transport, output, and cleanup failure.
-- Include bounded exact identity and continuation facts when applicable.
+### 9. `stale_base`
 
-### `corrupt_authority`
+- Meaning: the expected authority revision or observation no longer matches.
+- Required behavior: do not refresh or retry silently.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
 
-- Meaning: Retained authority fails canonical validation.
-- Required behavior: Fail closed and preserve evidence.
-- Keep domain failure distinct from transport, output, and cleanup failure.
-- Include bounded exact identity and continuation facts when applicable.
+### 10. `semantic_rejection`
+
+- Meaning: well-framed authored meaning violates the language or application contract.
+- Required behavior: publish nothing.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 11. `incomplete_program`
+
+- Meaning: the selected execution closure contains a hole or missing body.
+- Required behavior: do not execute.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 12. `invalid_derived_ir`
+
+- Meaning: compiler output fails independent verification.
+- Required behavior: fail closed and preserve the authored authority.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 13. `runtime_trap`
+
+- Meaning: an exact language operation contract is violated.
+- Required behavior: publish no external authority by itself.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 14. `resource_exhausted`
+
+- Meaning: a named semantic or operational limit is exceeded.
+- Required behavior: report unit, limit, and requested amount.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 15. `overload`
+
+- Meaning: queue, worker, connection, or pool admission is saturated.
+- Required behavior: apply the documented reject, queue, or shed policy.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 16. `cancelled`
+
+- Meaning: the owning scope requested cancellation before the non-cancellable boundary.
+- Required behavior: run specified cleanup and return cancellation.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 17. `deadline_exceeded`
+
+- Meaning: an operational deadline expired.
+- Required behavior: distinguish from deterministic fuel exhaustion.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 18. `timeout_unknown`
+
+- Meaning: a timed operation may have crossed an external visibility boundary.
+- Required behavior: do not retry automatically.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 19. `known_previsibility_failure`
+
+- Meaning: external work is known not to have become visible.
+- Required behavior: allow policy-controlled retry.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 20. `unknown_visibility`
+
+- Meaning: external publication may be visible but is not confirmed.
+- Required behavior: require reconciliation.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 21. `conflict`
+
+- Meaning: external or durable state no longer matches the exact expected base.
+- Required behavior: require explicit application policy.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 22. `duplicate_idempotent`
+
+- Meaning: the exact operation was already completed with the same intent.
+- Required behavior: return the prior exact outcome.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 23. `idempotency_conflict`
+
+- Meaning: an idempotency key was reused for different intent.
+- Required behavior: reject and preserve evidence.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 24. `not_found`
+
+- Meaning: the selected external object or row is absent.
+- Required behavior: return an exact expected outcome when domain-appropriate.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 25. `permission_denied`
+
+- Meaning: the external system denied the operation.
+- Required behavior: keep distinct from application authorization.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 26. `constraint_violation`
+
+- Meaning: a database or external invariant rejects the requested mutation.
+- Required behavior: map through a closed typed boundary.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 27. `serialization_failure`
+
+- Meaning: a concurrent transaction cannot commit under the selected isolation.
+- Required behavior: apply only the declared retry policy.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 28. `connection_failure`
+
+- Meaning: a transport or database connection could not be established or was lost.
+- Required behavior: classify visibility and retryability.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 29. `protocol_failure`
+
+- Meaning: a peer violated the selected protocol contract.
+- Required behavior: close or reject under the protocol policy.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 30. `checksum_mismatch`
+
+- Meaning: received or retained bytes do not match the expected digest.
+- Required behavior: fail closed and preserve evidence.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 31. `corrupt_authority`
+
+- Meaning: durable authority fails canonical validation.
+- Required behavior: fail closed and do not repair silently.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 32. `cache_corrupt`
+
+- Meaning: disposable acceleration is invalid.
+- Required behavior: discard and fall back to the independent owner.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 33. `cache_miss`
+
+- Meaning: disposable acceleration is absent.
+- Required behavior: recompute without changing semantics.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 34. `output_failure`
+
+- Meaning: the result could not be fully encoded, written, or flushed.
+- Required behavior: do not roll back already accepted authority.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 35. `cleanup_failure`
+
+- Meaning: a live resource is not known to be restored or closed.
+- Required behavior: attempt remaining cleanup and report precedence.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 36. `worker_panic`
+
+- Meaning: a native worker failed unexpectedly.
+- Required behavior: contain it, classify in-flight work, and preserve process policy.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 37. `stale_result`
+
+- Meaning: an asynchronous result no longer matches reachable pending state.
+- Required behavior: discard or expose explicitly without mutating unrelated state.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 38. `shutdown`
+
+- Meaning: the runtime is stopping admission or execution.
+- Required behavior: apply the documented drain and cancellation policy.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 39. `unavailable_dependency`
+
+- Meaning: a required tool, adapter, service, or platform is unavailable.
+- Required behavior: never report pass.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+### 40. `indeterminate`
+
+- Meaning: the system lacks enough evidence to classify the outcome safely.
+- Required behavior: preserve uncertainty and provide a recovery route.
+- State whether semantic or external publication occurred.
+- State retryability, reconciliation, cancellation, and cleanup implications.
+- Include bounded exact identity and continuation facts where applicable.
+- Keep this class distinct from transport text, application display messages, and unrelated cleanup
+  failures.
+
+## Cross-boundary verification catalog
+
+Apply every relevant dimension below to each changed authority, format, capability, runtime
+topology, and maintained application. Mark irrelevant dimensions explicitly in the campaign ledger
+rather than silently ignoring them.
+
+### 1. empty input and minimum valid input
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 2. typical valid input
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 3. maximum exact valid input
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 4. one unit over every bound
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 5. repeated identical success
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 6. semantic no-change
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 7. validate-only parity
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 8. stale expected base
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 9. future or nonexistent base
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 10. foreign authority identity
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 11. foreign nominal type with equal shape
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 12. ambiguous friendly selector
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 13. unknown field or operation
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 14. duplicate field or member
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 15. truncated encoding
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 16. trailing encoding
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 17. invalid UTF-8
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 18. noncanonical integer, digest, identifier, or path spelling
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 19. excessive nesting and recursion
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 20. excessive collection items
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 21. excessive visible bytes
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 22. excessive retained bytes
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 23. fuel exhaustion
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 24. frame or stack exhaustion
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 25. queue saturation
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 26. worker saturation
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 27. connection-pool saturation
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 28. stream backpressure
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 29. consumer cancellation
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 30. producer cancellation
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 31. deadline before external visibility
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 32. deadline after possible external visibility
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 33. known external failure
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 34. unknown external visibility
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 35. reconciliation present
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 36. reconciliation absent
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 37. reconciliation indeterminate
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 38. output encoding failure before publication
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 39. output write failure after publication
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 40. cleanup failure after success
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 41. cleanup failure after domain failure
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 42. process restart before work
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 43. process restart during disposable acceleration
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 44. process restart after durable publication
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 45. cache miss
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 46. cache hit
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 47. cache eviction
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 48. cache corruption
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 49. old format direct rejection
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 50. corrupt current authority
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 51. corrupt unrelated historical authority
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 52. backup and restore
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 53. fresh-checkout reproduction
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 54. deterministic repeated build
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 55. parallel independent requests
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 56. conflicting concurrent mutations
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 57. maximally interleaved task schedule
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 58. graceful shutdown with no work
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 59. graceful shutdown with in-flight idempotent work
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 60. graceful shutdown with in-flight possibly visible work
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 61. authentication failure
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 62. authorization denial
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 63. cross-tenant access denial
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 64. secret redaction
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 65. log and metric cardinality bounds
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 66. database transaction rollback
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 67. database serialization retry boundary
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 68. object multipart interruption
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 69. durable queue duplicate delivery
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 70. durable queue lease loss
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 71. worker stale completion
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 72. HTTP malformed request
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 73. HTTP oversized header
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 74. HTTP oversized body
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 75. HTTP client redirect restriction
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 76. HTTP disconnect during response stream
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 77. terminal malformed sequence
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 78. terminal output failure and cleanup
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 79. filesystem path substitution
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 80. filesystem symlink or mount escape
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 81. editor large-file and viewport behavior
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 82. agent-oriented compact success output
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+### 83. bounded failure excerpt with complete retained log
+
+- Define the exact immutable fixture or generated corpus.
+- Define the independent expected semantic result and publication result.
+- Define the expected stable failure or success class.
+- Define exact resource, timing, ordering, and cleanup observations when relevant.
+- Exercise the public production boundary, not only a private helper.
+- Retain a focused regression when this dimension has caused or could cause a serious failure.
+
+## Performance measurement catalog
+
+### 1. project discovery
+
+- Separate stages: directory traversal, marker validation, and authority selection.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 2. project open
+
+- Separate stages: current authority decode, history checks, indexes, and locks.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 3. task orientation
+
+- Separate stages: initial bytes, files, commands, and latency needed to identify owners.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 4. task-scoped context
+
+- Separate stages: relevant source and semantic bytes, omissions, and expansion calls.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 5. edit validation
+
+- Separate stages: parse, normalization, type checking, impact, and response preflight.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 6. edit publication
+
+- Separate stages: durable writes, synchronization, record creation, and output.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 7. history query
+
+- Separate stages: record loading, diff, pagination, and reconstruction.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 8. package resolution
+
+- Separate stages: dependency loading, identity validation, and closure selection.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 9. parsing
+
+- Separate stages: source bytes, syntax tree allocation, errors, and incremental reuse.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 10. semantic validation
+
+- Separate stages: scope, type, effect, capability, and target validation.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 11. lowering
+
+- Separate stages: reachable closure discovery, IR construction, and verification.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 12. prepared application startup
+
+- Separate stages: artifact decode, validation, compilation, and adapter binding.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 13. interpreter dispatch
+
+- Separate stages: instructions, branches, calls, values, and frame traffic.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 14. optimized execution
+
+- Separate stages: bytecode, specialization, compiled code, and deoptimization.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 15. value materialization
+
+- Separate stages: copying, sharing, serialization, and boundary conversion.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 16. text editing
+
+- Separate stages: splice, undo, line navigation, grapheme work, and viewport extraction.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 17. interactive event
+
+- Separate stages: decode through visible frame flush.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 18. render construction
+
+- Separate stages: logical frame or scene projection.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 19. terminal emission
+
+- Separate stages: diff, encoding, write, flush, and acknowledgment.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 20. service request
+
+- Separate stages: accept through complete response or stream close.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 21. route dispatch
+
+- Separate stages: method/path matching, middleware, and handler selection.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 22. request body streaming
+
+- Separate stages: retained memory, backpressure, and cancellation.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 23. database query
+
+- Separate stages: pool wait, prepare, execute, row decode, and handler use.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 24. database transaction
+
+- Separate stages: begin through commit or rollback including contention.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 25. object read
+
+- Separate stages: request, first byte, throughput, checksum, and close.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 26. object write
+
+- Separate stages: upload, multipart, checksum, commit, and reconciliation.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 27. durable queue
+
+- Separate stages: enqueue, claim latency, execution, completion, retry, and backlog.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 28. worker throughput
+
+- Separate stages: admission, concurrency, CPU, memory, failures, and drain.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 29. shutdown
+
+- Separate stages: stop admission, in-flight completion, cancellation, cleanup, and exit.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 30. verification
+
+- Separate stages: selected gates, repeated work, logs, success bytes, and failure quality.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+### 31. fresh build
+
+- Separate stages: toolchain, dependency, compile, package, artifact reproduction, and install.
+- Freeze an equal complete workload and exact environment before optimization.
+- Measure optimized production builds and retain raw receipts.
+- Record latency, throughput, CPU time, retained memory or logical accounting, bytes, calls, and
+  dominant stage as available.
+- Compare against the simple independent oracle and the reproduced predecessor.
+- Set a quantitative keep, stop, and reversal gate before retaining complexity.
+- Do not attribute whole-workflow improvement to one stage without stage evidence.
+
+## Architectural anti-pattern catalog
+
+### 1. Do not retain a design whose justification is adding a product noun to the language schema.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 2. Do not retain a design whose justification is moving application policy into a native adapter.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 3. Do not retain a design whose justification is keeping a private builder because public authoring is inconvenient.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 4. Do not retain a design whose justification is maintaining both source and graph as editable truth.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 5. Do not retain a design whose justification is preserving a format reader for reassurance.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 6. Do not retain a design whose justification is introducing editions instead of direct cutover.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 7. Do not retain a design whose justification is encoding all effects as opaque bytes.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 8. Do not retain a design whose justification is granting ambient filesystem or network access.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 9. Do not retain a design whose justification is using environment variables as semantic identity.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 10. Do not retain a design whose justification is using a digest as authorization or provenance.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 11. Do not retain a design whose justification is using a process boundary as a sandbox claim.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 12. Do not retain a design whose justification is using one scalar fuel value for memory, I/O, queues, and time.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 13. Do not retain a design whose justification is raising limits to hide an asymptotic defect.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 14. Do not retain a design whose justification is optimizing a microbenchmark while the complete workflow regresses.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 15. Do not retain a design whose justification is adding async without cancellation and structured ownership.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 16. Do not retain a design whose justification is adding a worker pool with an unbounded queue.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 17. Do not retain a design whose justification is retrying after possible external visibility.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 18. Do not retain a design whose justification is letting a transaction handle escape its scope.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 19. Do not retain a design whose justification is serializing a live resource into durable state.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 20. Do not retain a design whose justification is using wall-clock time as deterministic semantics accidentally.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 21. Do not retain a design whose justification is logging secrets or private content by default.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 22. Do not retain a design whose justification is printing every passing test to a coding agent.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 23. Do not retain a design whose justification is discarding full diagnostics to make output compact.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 24. Do not retain a design whose justification is caching without exact input identity and fallback.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 25. Do not retain a design whose justification is calling skipped or unavailable verification a pass.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 26. Do not retain a design whose justification is adding a package registry before exact local package composition.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 27. Do not retain a design whose justification is building an ORM before typed query boundaries are proven.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 28. Do not retain a design whose justification is building a plugin system before a trust and capability model.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 29. Do not retain a design whose justification is adding WebRTC to the core because one product mentions live media.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 30. Do not retain a design whose justification is keeping application-specific Rust bindings as the real API.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 31. Do not retain a design whose justification is calling an artifact-reproduction test a satisfactory product.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 32. Do not retain a design whose justification is treating `lkjedit` acceptance as general-language acceptance.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 33. Do not retain a design whose justification is treating `kjxlkj` schema as standard-library semantics.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 34. Do not retain a design whose justification is treating a recent design as permanent because it was expensive.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 35. Do not retain a design whose justification is leaving obsolete docs or tests active after cutover.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 36. Do not retain a design whose justification is splitting code by arbitrary line limits while duplicating owners.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 37. Do not retain a design whose justification is combining unrelated authority domains for atomicity convenience.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 38. Do not retain a design whose justification is making failures strings that callers must parse.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 39. Do not retain a design whose justification is letting machine output mix with progress text.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.
+
+### 40. Do not retain a design whose justification is claiming token or monetary savings from byte counts.
+
+- Identify the underlying consumer obligation instead.
+- Choose the narrowest coherent semantic owner.
+- Keep external mechanics in a generic adapter with explicit grants.
+- Preserve an independent oracle and exact failure behavior.
+- Delete the workaround when the replacement is complete.

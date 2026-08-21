@@ -12,5 +12,5 @@ __pycache__/
 /.pi/
 /.pi-subagents/
 
-# Semantic project operational state
-/applications/*/.lkjscript/repository/lkjscript.engine.lock
+# Source-project operational locks and deployment state
+**/.lkjscript/source-v1/LOCK
