@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
@@ -11,34 +12,75 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import selectors
 import shutil
 import signal
+import stat
 import subprocess
 import sys
+import tempfile
 import time
 from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
 LOG_ROOT = ROOT / ".artifacts" / "check"
-CHECK_CONTRACT_VERSION = 2
+CACHE_ROOT = LOG_ROOT / "cache"
+CHECK_CONTRACT_VERSION = 3
+CACHE_CONTRACT_VERSION = 1
 DEFAULT_TIMEOUT_SECONDS = 3_600.0
 DEFAULT_MAXIMUM_LOG_BYTES = 64 * 1024 * 1024
 MAXIMUM_RETAINED_RUNS = 8
 MAXIMUM_FAILURE_EXCERPT_BYTES = 2_048
+DEFAULT_MAXIMUM_WORKERS = min(4, max(1, os.cpu_count() or 1))
+MAXIMUM_WORKERS = 8
+MAXIMUM_CACHE_RECORD_BYTES = 1024 * 1024
+MAXIMUM_CACHE_ENTRIES_PER_GATE = 16
+MAXIMUM_CACHE_BYTES = 512 * 1024 * 1024
+GATE_NAME = re.compile(r"[a-z][a-z0-9_]*\Z")
 
 
 @dataclass(frozen=True)
 class Gate:
     name: str
     command: tuple[str, ...]
+    dependencies: tuple[str, ...] = ()
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
     maximum_log_bytes: int = DEFAULT_MAXIMUM_LOG_BYTES
+    cacheable: bool = True
+    identity_command: tuple[str, ...] | None = None
+    required_outputs: tuple[str, ...] = ()
 
 
-def cargo_gate(name: str, *arguments: str) -> Gate:
-    return Gate(name, ("cargo", *arguments))
+@dataclass(frozen=True)
+class InputSnapshot:
+    digest_sha256: str
+    git_head: str
+    cargo_lock_sha256: str
+    file_count: int
+    total_bytes: int
+    entries: tuple[dict[str, Any], ...]
+
+
+@dataclass(frozen=True)
+class RuntimeIdentity:
+    digest_sha256: str
+    toolchain: dict[str, str]
+    platform: dict[str, str]
+    environment_sha256: str
+    environment_names: tuple[str, ...]
+    executable_identities: dict[str, dict[str, Any]]
+
+
+@dataclass(frozen=True)
+class CacheLookup:
+    result: dict[str, Any] | None
+    reason: str
+
+
+def cargo_gate(name: str, *arguments: str, dependencies: tuple[str, ...] = ()) -> Gate:
+    return Gate(name, ("cargo", *arguments), dependencies=dependencies)
 
 
 def binary() -> str:
@@ -47,8 +89,9 @@ def binary() -> str:
 
 def base_gates(run_directory: Path) -> dict[str, Gate]:
     outputs = run_directory / "outputs"
-    outputs.mkdir()
+    outputs.mkdir(exist_ok=True)
     standard_output = outputs / "standard.lkja"
+    builtin_output = outputs / "builtin-standard.lkja"
     application_output = outputs / "lkjournal.lkja"
     return {
         "fmt": cargo_gate("fmt", "fmt", "--all", "--", "--check"),
@@ -78,23 +121,28 @@ def base_gates(run_directory: Path) -> dict[str, Gate]:
             "--all-features",
             "--locked",
         ),
-        "release_build": cargo_gate(
-            "release_build", "build", "--workspace", "--release", "--locked"
+        "release_build": Gate(
+            "release_build",
+            ("cargo", "build", "--workspace", "--release", "--locked"),
+            required_outputs=(binary(),),
         ),
         "checker_self_test": Gate(
             "checker_self_test", (str(ROOT / "tools" / "check"), "--self-test", "--machine")
         ),
         "standard_package_test": Gate(
             "standard_package_test",
-            (binary(), "--project", "packages/standard", "semantic", "test"),
+            (binary(), "--project", "packages/standard", "check"),
+            dependencies=("release_build",),
         ),
         "application_package_test": Gate(
             "application_package_test",
-            (binary(), "--project", "applications/lkjournal", "semantic", "test"),
+            (binary(), "--project", "applications/lkjournal", "check"),
+            dependencies=("release_build",),
         ),
         "standard_deep_doctor": Gate(
             "standard_deep_doctor",
-            (binary(), "--project", "packages/standard", "semantic", "doctor", "--deep"),
+            (binary(), "--project", "packages/standard", "doctor", "--deep"),
+            dependencies=("release_build",),
         ),
         "application_deep_doctor": Gate(
             "application_deep_doctor",
@@ -102,10 +150,10 @@ def base_gates(run_directory: Path) -> dict[str, Gate]:
                 binary(),
                 "--project",
                 "applications/lkjournal",
-                "semantic",
                 "doctor",
                 "--deep",
             ),
+            dependencies=("release_build",),
         ),
         "standard_artifact_build": Gate(
             "standard_artifact_build",
@@ -113,17 +161,71 @@ def base_gates(run_directory: Path) -> dict[str, Gate]:
                 binary(),
                 "--project",
                 "packages/standard",
-                "semantic",
                 "build",
                 "--output",
                 str(standard_output),
             ),
+            dependencies=("release_build",),
+            cacheable=False,
+            identity_command=(
+                binary(),
+                "--project",
+                "packages/standard",
+                "build",
+                "--output",
+                "$RUN/outputs/standard.lkja",
+            ),
+            required_outputs=(str(standard_output),),
         ),
         "standard_artifact_compare": Gate(
             "standard_artifact_compare",
             (
                 "cmp",
                 str(standard_output),
+                str(ROOT / "applications/lkjournal/dependencies/standard.lkja"),
+            ),
+            dependencies=("standard_artifact_build",),
+            cacheable=False,
+            identity_command=(
+                "cmp",
+                "$RUN/outputs/standard.lkja",
+                str(ROOT / "applications/lkjournal/dependencies/standard.lkja"),
+            ),
+        ),
+        "builtin_package_export": Gate(
+            "builtin_package_export",
+            (
+                binary(),
+                "package",
+                "builtin",
+                "export",
+                "--output",
+                str(builtin_output),
+            ),
+            dependencies=("release_build",),
+            cacheable=False,
+            identity_command=(
+                binary(),
+                "package",
+                "builtin",
+                "export",
+                "--output",
+                "$RUN/outputs/builtin-standard.lkja",
+            ),
+            required_outputs=(str(builtin_output),),
+        ),
+        "builtin_package_compare": Gate(
+            "builtin_package_compare",
+            (
+                "cmp",
+                str(builtin_output),
+                str(ROOT / "applications/lkjournal/dependencies/standard.lkja"),
+            ),
+            dependencies=("builtin_package_export",),
+            cacheable=False,
+            identity_command=(
+                "cmp",
+                "$RUN/outputs/builtin-standard.lkja",
                 str(ROOT / "applications/lkjournal/dependencies/standard.lkja"),
             ),
         ),
@@ -133,19 +235,38 @@ def base_gates(run_directory: Path) -> dict[str, Gate]:
                 binary(),
                 "--project",
                 "applications/lkjournal",
-                "semantic",
                 "build",
                 "--output",
                 str(application_output),
             ),
+            dependencies=("release_build",),
+            cacheable=False,
+            identity_command=(
+                binary(),
+                "--project",
+                "applications/lkjournal",
+                "build",
+                "--output",
+                "$RUN/outputs/lkjournal.lkja",
+            ),
+            required_outputs=(str(application_output),),
         ),
         "application_artifact_compare": Gate(
             "application_artifact_compare",
             ("cmp", str(application_output), str(ROOT / "applications/lkjournal/lkjournal.lkja")),
+            dependencies=("application_artifact_build",),
+            cacheable=False,
+            identity_command=(
+                "cmp",
+                "$RUN/outputs/lkjournal.lkja",
+                str(ROOT / "applications/lkjournal/lkjournal.lkja"),
+            ),
         ),
         "service_acceptance": Gate(
             "service_acceptance",
             (str(ROOT / "tools" / "service-acceptance"), "--binary", binary()),
+            dependencies=("release_build",),
+            cacheable=False,
         ),
         "diff_check": Gate("diff_check", ("git", "diff", "--check", "HEAD", "--")),
     }
@@ -168,6 +289,8 @@ PROFILES: dict[str, tuple[str, ...]] = {
         "application_deep_doctor",
         "standard_artifact_build",
         "standard_artifact_compare",
+        "builtin_package_export",
+        "builtin_package_compare",
         "application_artifact_build",
         "application_artifact_compare",
         "diff_check",
@@ -185,6 +308,8 @@ PROFILES: dict[str, tuple[str, ...]] = {
         "application_deep_doctor",
         "standard_artifact_build",
         "standard_artifact_compare",
+        "builtin_package_export",
+        "builtin_package_compare",
         "application_artifact_build",
         "application_artifact_compare",
         "service_acceptance",
@@ -195,6 +320,293 @@ PROFILES: dict[str, tuple[str, ...]] = {
 
 def relative(path: Path) -> str:
     return str(path.relative_to(ROOT))
+
+
+def canonical_bytes(value: Any) -> bytes:
+    return json.dumps(value, ensure_ascii=True, separators=(",", ":"), sort_keys=True).encode(
+        "utf-8"
+    )
+
+
+def digest_value(value: Any) -> str:
+    return hashlib.sha256(canonical_bytes(value)).hexdigest()
+
+
+def digest_file(path: Path) -> tuple[str, int]:
+    digest = hashlib.sha256()
+    size = 0
+    with path.open("rb") as source:
+        while chunk := source.read(1024 * 1024):
+            digest.update(chunk)
+            size += len(chunk)
+    return digest.hexdigest(), size
+
+
+def path_label(path: Path) -> str:
+    try:
+        return relative(path)
+    except ValueError:
+        return str(path)
+
+
+def output_proof(raw_path: str) -> dict[str, Any]:
+    path = Path(raw_path)
+    if not path.is_absolute():
+        path = ROOT / path
+    label = path_label(path)
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return {"path": label, "kind": "missing"}
+    mode = stat.S_IMODE(metadata.st_mode)
+    if path.is_symlink():
+        target = os.fsencode(os.readlink(path))
+        return {
+            "path": label,
+            "kind": "symlink",
+            "mode": mode,
+            "bytes": len(target),
+            "sha256": hashlib.sha256(target).hexdigest(),
+        }
+    if path.is_file():
+        digest, size = digest_file(path)
+        return {
+            "path": label,
+            "kind": "file",
+            "mode": mode,
+            "bytes": size,
+            "sha256": digest,
+        }
+    return {"path": label, "kind": "unsupported", "mode": mode}
+
+
+def relevant_untracked_path(raw_path: bytes) -> bool:
+    components = raw_path.split(b"/")
+    return b"target" not in components and b".artifacts" not in components
+
+
+def listed_paths(arguments: list[str]) -> list[bytes]:
+    result = subprocess.run(
+        ["git", "ls-files", *arguments, "-z"],
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            "git input enumeration failed: "
+            + result.stderr.decode("utf-8", errors="replace").strip()
+        )
+    return [item for item in result.stdout.split(b"\0") if item]
+
+
+def capture_input_snapshot() -> InputSnapshot:
+    tracked = set(listed_paths(["--cached"]))
+    untracked = {
+        item
+        for item in listed_paths(["--others", "--exclude-standard"])
+        if relevant_untracked_path(item)
+    }
+    entries: list[dict[str, Any]] = []
+    total_bytes = 0
+    for raw_path in sorted(tracked | untracked):
+        path = ROOT / os.fsdecode(raw_path)
+        label = os.fsdecode(raw_path)
+        source = "tracked" if raw_path in tracked else "untracked"
+        try:
+            metadata = path.lstat()
+        except FileNotFoundError:
+            entries.append({"path": label, "source": source, "kind": "missing"})
+            continue
+        mode = stat.S_IMODE(metadata.st_mode)
+        if path.is_symlink():
+            target = os.fsencode(os.readlink(path))
+            total_bytes += len(target)
+            entries.append(
+                {
+                    "path": label,
+                    "source": source,
+                    "kind": "symlink",
+                    "mode": mode,
+                    "bytes": len(target),
+                    "sha256": hashlib.sha256(target).hexdigest(),
+                }
+            )
+        elif path.is_file():
+            digest, size = digest_file(path)
+            total_bytes += size
+            entries.append(
+                {
+                    "path": label,
+                    "source": source,
+                    "kind": "file",
+                    "mode": mode,
+                    "bytes": size,
+                    "sha256": digest,
+                }
+            )
+        elif path.is_dir():
+            # A tracked directory is a gitlink/submodule. Its checked-out commit is
+            # an operational input even though its contents belong to another tree.
+            head = checked_output(["git", "-C", str(path), "rev-parse", "HEAD"])
+            entries.append(
+                {
+                    "path": label,
+                    "source": source,
+                    "kind": "gitlink",
+                    "mode": mode,
+                    "head": head,
+                }
+            )
+        else:
+            entries.append(
+                {"path": label, "source": source, "kind": "unsupported", "mode": mode}
+            )
+    cargo_lock = next((entry for entry in entries if entry["path"] == "Cargo.lock"), None)
+    cargo_lock_digest = (
+        str(cargo_lock.get("sha256", "missing")) if cargo_lock is not None else "missing"
+    )
+    git_head = checked_output(["git", "rev-parse", "HEAD"])
+    digest = digest_value({"git_head": git_head, "files": entries})
+    return InputSnapshot(
+        digest_sha256=digest,
+        git_head=git_head,
+        cargo_lock_sha256=cargo_lock_digest,
+        file_count=len(entries),
+        total_bytes=total_bytes,
+        entries=tuple(entries),
+    )
+
+
+def environment_identity() -> tuple[str, tuple[str, ...]]:
+    effective = os.environ.copy()
+    effective["CARGO_NET_OFFLINE"] = "true"
+    names = sorted(effective)
+    hashed_values = []
+    for name in names:
+        # The aggregate binds values without retaining them individually. This
+        # includes external service configuration and secret-bearing variables;
+        # neither values nor per-value digests enter receipts or stdout.
+        hashed_values.append(
+            {"name": name, "value_sha256": hashlib.sha256(os.fsencode(effective[name])).hexdigest()}
+        )
+    return digest_value(hashed_values), tuple(names)
+
+
+def executable_identity(command: str) -> dict[str, Any]:
+    candidate: Path | None
+    if os.sep in command:
+        candidate = Path(command)
+        if not candidate.is_absolute():
+            candidate = ROOT / candidate
+    else:
+        resolved = shutil.which(command)
+        candidate = Path(resolved) if resolved is not None else None
+    if candidate is None:
+        return {"command": command, "kind": "unavailable"}
+    try:
+        resolved_path = candidate.resolve(strict=True)
+    except FileNotFoundError:
+        return {"command": command, "kind": "unavailable", "path": str(candidate)}
+    proof = output_proof(str(resolved_path))
+    proof["command"] = command
+    proof["resolved_path"] = str(resolved_path)
+    return proof
+
+
+def capture_runtime_identity(gates: dict[str, Gate], names: tuple[str, ...]) -> RuntimeIdentity:
+    commands = sorted({gates[name].command[0] for name in names})
+    executables = {command: executable_identity(command) for command in commands}
+    environment_digest, environment_names = environment_identity()
+    toolchain = {
+        "rustc": checked_output(["rustc", "-Vv"]),
+        "cargo": checked_output(["cargo", "-V"]),
+        "python": sys.version.splitlines()[0],
+    }
+    platform_identity = {
+        "os": platform.system(),
+        "release": platform.release(),
+        "machine": platform.machine(),
+    }
+    identity = {
+        "toolchain": toolchain,
+        "platform": platform_identity,
+        "environment_sha256": environment_digest,
+        "environment_names": list(environment_names),
+    }
+    return RuntimeIdentity(
+        digest_sha256=digest_value(identity),
+        toolchain=toolchain,
+        platform=platform_identity,
+        environment_sha256=environment_digest,
+        environment_names=environment_names,
+        executable_identities=executables,
+    )
+
+
+def validate_gate_graph(gates: dict[str, Gate]) -> None:
+    command_owners: dict[tuple[Any, ...], str] = {}
+    for name, gate in gates.items():
+        if name != gate.name or GATE_NAME.fullmatch(name) is None:
+            raise RuntimeError(f"invalid gate identity: {name!r}")
+        for dependency in gate.dependencies:
+            if dependency not in gates:
+                raise RuntimeError(f"gate {name} has unknown dependency {dependency}")
+        command_key = (
+            gate.identity_command or gate.command,
+            gate.timeout_seconds,
+            gate.maximum_log_bytes,
+            gate.required_outputs,
+        )
+        previous = command_owners.get(command_key)
+        if previous is not None:
+            raise RuntimeError(
+                f"equivalent gates {previous} and {name} must be one shared DAG node"
+            )
+        command_owners[command_key] = name
+
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(name: str) -> None:
+        if name in visiting:
+            raise RuntimeError(f"verification DAG contains a cycle at {name}")
+        if name in visited:
+            return
+        visiting.add(name)
+        for dependency in gates[name].dependencies:
+            visit(dependency)
+        visiting.remove(name)
+        visited.add(name)
+
+    for name in gates:
+        visit(name)
+
+
+def dependency_closure(
+    gates: dict[str, Gate], requested_names: tuple[str, ...]
+) -> tuple[str, ...]:
+    validate_gate_graph(gates)
+    requested = set(requested_names)
+    unknown = requested - gates.keys()
+    if unknown:
+        raise RuntimeError("unknown selected gates: " + ", ".join(sorted(unknown)))
+
+    selected: set[str] = set()
+
+    def add(name: str) -> None:
+        if name in selected:
+            return
+        for dependency in gates[name].dependencies:
+            add(dependency)
+        selected.add(name)
+
+    for name in requested_names:
+        add(name)
+    # Registry order is the stable receipt and presentation order. The scheduler
+    # may execute independent nodes in any order without affecting this order.
+    return tuple(name for name in gates if name in selected)
 
 
 def terminate(process: subprocess.Popen[bytes]) -> None:
@@ -216,7 +628,104 @@ def excerpt(path: Path) -> str:
     return selected.decode("utf-8", errors="replace")
 
 
-def run_gate(gate: Gate, directory: Path) -> dict[str, Any]:
+def gate_input_fingerprint(
+    gate: Gate,
+    snapshot: InputSnapshot,
+    runtime: RuntimeIdentity,
+    dependency_results: dict[str, dict[str, Any]],
+) -> str:
+    dependencies = {
+        name: {
+            "status": dependency_results[name]["status"],
+            "input_fingerprint_sha256": dependency_results[name].get(
+                "input_fingerprint_sha256", "unavailable"
+            ),
+            "outputs": dependency_results[name].get("outputs", []),
+        }
+        for name in gate.dependencies
+    }
+    identity = {
+        "cache_contract_version": CACHE_CONTRACT_VERSION,
+        "gate": gate.name,
+        "command": list(gate.identity_command or gate.command),
+        "cwd": ".",
+        "dependencies": dependencies,
+        "timeout_nanoseconds": int(gate.timeout_seconds * 1_000_000_000),
+        "maximum_log_bytes": gate.maximum_log_bytes,
+        "required_outputs": [path_label(Path(item)) for item in gate.required_outputs],
+        "worktree_input_sha256": snapshot.digest_sha256,
+        "cargo_lock_sha256": snapshot.cargo_lock_sha256,
+        "runtime_input_sha256": runtime.digest_sha256,
+        # This is resolved when the node becomes ready. In a fresh checkout the
+        # release-build prerequisite creates the executable used by descendants.
+        "command_executable": executable_identity(gate.command[0]),
+    }
+    return digest_value(identity)
+
+
+def finalize_gate_result(
+    gate: Gate,
+    directory: Path,
+    *,
+    status: str,
+    exit_code: int | None,
+    started: int,
+    reason: str | None,
+    input_fingerprint: str,
+    cache: dict[str, Any],
+) -> dict[str, Any]:
+    stdout_path = directory / f"{gate.name}.stdout.log"
+    stderr_path = directory / f"{gate.name}.stderr.log"
+    stdout_path.touch(exist_ok=True)
+    stderr_path.touch(exist_ok=True)
+    stdout_digest, stdout_bytes = digest_file(stdout_path)
+    stderr_digest, stderr_bytes = digest_file(stderr_path)
+    outputs = [output_proof(item) for item in gate.required_outputs]
+    if status == "passed" and any(item["kind"] != "file" for item in outputs):
+        status = "failed"
+        reason = "missing_declared_output"
+    evidence = {
+        "gate": gate.name,
+        "input_fingerprint_sha256": input_fingerprint,
+        "status": status,
+        "exit_code": exit_code,
+        "stdout_sha256": stdout_digest,
+        "stderr_sha256": stderr_digest,
+        "outputs": outputs,
+    }
+    result: dict[str, Any] = {
+        "name": gate.name,
+        "status": status,
+        "execution": "fresh",
+        "command": list(gate.command),
+        "dependencies": list(gate.dependencies),
+        "exit_code": exit_code,
+        "elapsed_nanoseconds": time.monotonic_ns() - started,
+        "stdout_bytes": stdout_bytes,
+        "stderr_bytes": stderr_bytes,
+        "stdout_sha256": stdout_digest,
+        "stderr_sha256": stderr_digest,
+        "stdout_log": relative(stdout_path),
+        "stderr_log": relative(stderr_path),
+        "outputs": outputs,
+        "input_fingerprint_sha256": input_fingerprint,
+        "fingerprint_sha256": digest_value(evidence),
+        "cache": cache,
+    }
+    if reason is not None:
+        result["reason"] = reason
+    if status != "passed":
+        result["stdout_excerpt"] = excerpt(stdout_path)
+        result["stderr_excerpt"] = excerpt(stderr_path)
+    return result
+
+
+def run_gate(
+    gate: Gate,
+    directory: Path,
+    input_fingerprint: str = "checker-self-test",
+    cache: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     stdout_path = directory / f"{gate.name}.stdout.log"
     stderr_path = directory / f"{gate.name}.stderr.log"
     started = time.monotonic_ns()
@@ -240,19 +749,16 @@ def run_gate(gate: Gate, directory: Path) -> dict[str, Any]:
     except FileNotFoundError:
         stdout_path.write_bytes(b"")
         stderr_path.write_bytes(b"")
-        return {
-            "name": gate.name,
-            "status": "unavailable",
-            "command": list(gate.command),
-            "exit_code": None,
-            "elapsed_nanoseconds": time.monotonic_ns() - started,
-            "stdout_bytes": 0,
-            "stderr_bytes": 0,
-            "stdout_log": relative(stdout_path),
-            "stderr_log": relative(stderr_path),
-            "fingerprint_sha256": hashlib.sha256(b"unavailable").hexdigest(),
-            "reason": "command_not_found",
-        }
+        return finalize_gate_result(
+            gate,
+            directory,
+            status="unavailable",
+            exit_code=None,
+            started=started,
+            reason="command_not_found",
+            input_fingerprint=input_fingerprint,
+            cache=cache or {"eligible": False, "lookup": "self_test"},
+        )
 
     selector = selectors.DefaultSelector()
     with stdout_path.open("wb") as stdout_file, stderr_path.open("wb") as stderr_file:
@@ -309,30 +815,16 @@ def run_gate(gate: Gate, directory: Path) -> dict[str, Any]:
     if reason is None:
         status = "passed" if exit_code == 0 else "failed"
         reason = None if exit_code == 0 else "nonzero_exit"
-    stdout_bytes = stdout_path.stat().st_size
-    stderr_bytes = stderr_path.stat().st_size
-    fingerprint = hashlib.sha256()
-    fingerprint.update(stdout_path.read_bytes())
-    fingerprint.update(b"\0")
-    fingerprint.update(stderr_path.read_bytes())
-    result: dict[str, Any] = {
-        "name": gate.name,
-        "status": status,
-        "command": list(gate.command),
-        "exit_code": exit_code,
-        "elapsed_nanoseconds": time.monotonic_ns() - started,
-        "stdout_bytes": stdout_bytes,
-        "stderr_bytes": stderr_bytes,
-        "stdout_log": relative(stdout_path),
-        "stderr_log": relative(stderr_path),
-        "fingerprint_sha256": fingerprint.hexdigest(),
-    }
-    if reason is not None:
-        result["reason"] = reason
-    if status != "passed":
-        result["stdout_excerpt"] = excerpt(stdout_path)
-        result["stderr_excerpt"] = excerpt(stderr_path)
-    return result
+    return finalize_gate_result(
+        gate,
+        directory,
+        status=status,
+        exit_code=exit_code,
+        started=started,
+        reason=reason,
+        input_fingerprint=input_fingerprint,
+        cache=cache or {"eligible": False, "lookup": "self_test"},
+    )
 
 
 def checked_output(command: list[str]) -> str:
@@ -347,36 +839,409 @@ def checked_output(command: list[str]) -> str:
     return result.stdout.strip() if result.returncode == 0 else "unavailable"
 
 
-def worktree_identity() -> str:
-    digest = hashlib.sha256()
-    status = subprocess.run(
-        ["git", "status", "--porcelain=v1", "-z", "--untracked-files=all"],
-        cwd=ROOT,
-        stdout=subprocess.PIPE,
-        check=True,
-    ).stdout
-    digest.update(status)
-    listing = subprocess.run(
-        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
-        cwd=ROOT,
-        stdout=subprocess.PIPE,
-        check=True,
-    ).stdout
-    for raw_path in sorted(item for item in listing.split(b"\0") if item):
-        path = ROOT / os.fsdecode(raw_path)
-        digest.update(len(raw_path).to_bytes(8, "big"))
-        digest.update(raw_path)
-        if path.is_symlink():
-            digest.update(b"link\0")
-            digest.update(os.fsencode(os.readlink(path)))
-        elif path.is_file():
-            digest.update(b"file\0")
-            with path.open("rb") as source:
-                while chunk := source.read(1024 * 1024):
-                    digest.update(chunk)
-        else:
-            digest.update(b"absent\0")
-    return digest.hexdigest()
+def atomic_write(path: Path, data: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as output:
+            output.write(data)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary_path, path)
+    finally:
+        try:
+            temporary_path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def cache_record_path(cache_root: Path, gate: Gate, fingerprint: str) -> Path:
+    if GATE_NAME.fullmatch(gate.name) is None or re.fullmatch(r"[0-9a-f]{64}", fingerprint) is None:
+        raise RuntimeError("refusing unsafe verification cache identity")
+    return cache_root / "evidence" / gate.name / f"{fingerprint}.json"
+
+
+def cache_log_path(cache_root: Path, digest: str) -> Path:
+    if re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+        raise RuntimeError("refusing unsafe verification log identity")
+    return cache_root / "logs" / f"{digest}.log"
+
+
+def cache_miss_reason(record_path: Path) -> str:
+    parent = record_path.parent
+    if not parent.is_dir():
+        return "not_found"
+    try:
+        return "input_changed" if any(parent.glob("*.json")) else "not_found"
+    except OSError:
+        return "cache_unreadable"
+
+
+def cached_evidence_digest(record: dict[str, Any]) -> str:
+    return digest_value(
+        {
+            "gate": record["gate"],
+            "input_fingerprint_sha256": record["input_fingerprint_sha256"],
+            "status": "passed",
+            "exit_code": 0,
+            "stdout_sha256": record["stdout_sha256"],
+            "stderr_sha256": record["stderr_sha256"],
+            "outputs": record["outputs"],
+        }
+    )
+
+
+def load_cached_gate(
+    gate: Gate,
+    input_fingerprint: str,
+    directory: Path,
+    cache_root: Path = CACHE_ROOT,
+) -> CacheLookup:
+    started = time.monotonic_ns()
+    record_path = cache_record_path(cache_root, gate, input_fingerprint)
+    if not record_path.exists():
+        return CacheLookup(None, cache_miss_reason(record_path))
+    if record_path.is_symlink():
+        return CacheLookup(None, "unsafe_record_symlink")
+    try:
+        if record_path.stat().st_size > MAXIMUM_CACHE_RECORD_BYTES:
+            return CacheLookup(None, "record_too_large")
+        raw_record = record_path.read_bytes()
+        record = json.loads(raw_record)
+        expected_keys = {
+            "cache_contract_version",
+            "gate",
+            "input_fingerprint_sha256",
+            "identity_command",
+            "source_elapsed_nanoseconds",
+            "stdout_bytes",
+            "stderr_bytes",
+            "stdout_sha256",
+            "stderr_sha256",
+            "outputs",
+            "fingerprint_sha256",
+        }
+        if not isinstance(record, dict) or set(record) != expected_keys:
+            return CacheLookup(None, "record_shape")
+        if (
+            record["cache_contract_version"] != CACHE_CONTRACT_VERSION
+            or record["gate"] != gate.name
+            or record["input_fingerprint_sha256"] != input_fingerprint
+            or record["identity_command"] != list(gate.identity_command or gate.command)
+        ):
+            return CacheLookup(None, "record_binding")
+        if not isinstance(record["source_elapsed_nanoseconds"], int) or record[
+            "source_elapsed_nanoseconds"
+        ] < 0:
+            return CacheLookup(None, "record_elapsed")
+        for stream in ("stdout", "stderr"):
+            byte_count = record[f"{stream}_bytes"]
+            digest = record[f"{stream}_sha256"]
+            if (
+                not isinstance(byte_count, int)
+                or byte_count < 0
+                or byte_count > gate.maximum_log_bytes
+                or not isinstance(digest, str)
+            ):
+                return CacheLookup(None, f"record_{stream}")
+            log_path = cache_log_path(cache_root, digest)
+            if (
+                log_path.is_symlink()
+                or not log_path.is_file()
+                or log_path.stat().st_size != byte_count
+            ):
+                return CacheLookup(None, f"{stream}_log_missing")
+            observed_digest, observed_bytes = digest_file(log_path)
+            if observed_bytes != byte_count or observed_digest != digest:
+                return CacheLookup(None, f"{stream}_log_corrupt")
+        if not isinstance(record["outputs"], list):
+            return CacheLookup(None, "record_outputs")
+        current_outputs = [output_proof(item) for item in gate.required_outputs]
+        if record["outputs"] != current_outputs:
+            return CacheLookup(None, "declared_output_changed")
+        if cached_evidence_digest(record) != record["fingerprint_sha256"]:
+            return CacheLookup(None, "evidence_digest")
+
+        stdout_path = directory / f"{gate.name}.stdout.log"
+        stderr_path = directory / f"{gate.name}.stderr.log"
+        shutil.copyfile(cache_log_path(cache_root, record["stdout_sha256"]), stdout_path)
+        shutil.copyfile(cache_log_path(cache_root, record["stderr_sha256"]), stderr_path)
+        result: dict[str, Any] = {
+            "name": gate.name,
+            "status": "passed",
+            "execution": "reused",
+            "command": list(gate.command),
+            "dependencies": list(gate.dependencies),
+            "exit_code": 0,
+            "elapsed_nanoseconds": time.monotonic_ns() - started,
+            "source_elapsed_nanoseconds": record["source_elapsed_nanoseconds"],
+            "stdout_bytes": record["stdout_bytes"],
+            "stderr_bytes": record["stderr_bytes"],
+            "stdout_sha256": record["stdout_sha256"],
+            "stderr_sha256": record["stderr_sha256"],
+            "stdout_log": relative(stdout_path),
+            "stderr_log": relative(stderr_path),
+            "outputs": record["outputs"],
+            "input_fingerprint_sha256": input_fingerprint,
+            "fingerprint_sha256": record["fingerprint_sha256"],
+            "cache": {
+                "eligible": True,
+                "lookup": "hit",
+                "record": relative(record_path),
+            },
+        }
+        return CacheLookup(result, "hit")
+    except (OSError, RuntimeError, TypeError, ValueError, json.JSONDecodeError):
+        return CacheLookup(None, "cache_corrupt")
+
+
+def rotate_gate_cache(record_path: Path) -> None:
+    records = sorted(
+        record_path.parent.glob("*.json"), key=lambda path: path.stat().st_mtime_ns, reverse=True
+    )
+    for obsolete in records[MAXIMUM_CACHE_ENTRIES_PER_GATE:]:
+        if obsolete.parent.resolve() != record_path.parent.resolve():
+            raise RuntimeError("refusing to remove an unexpected verification cache path")
+        obsolete.unlink()
+
+
+def prune_cache(cache_root: Path) -> None:
+    evidence_root = cache_root / "evidence"
+    logs_root = cache_root / "logs"
+    if not evidence_root.is_dir() or not logs_root.is_dir():
+        return
+    records: list[dict[str, Any]] = []
+    for path in evidence_root.glob("*/*.json"):
+        try:
+            if path.stat().st_size > MAXIMUM_CACHE_RECORD_BYTES:
+                path.unlink()
+                continue
+            value = json.loads(path.read_bytes())
+            digests = (value["stdout_sha256"], value["stderr_sha256"])
+            if any(re.fullmatch(r"[0-9a-f]{64}", item) is None for item in digests):
+                path.unlink()
+                continue
+            records.append(
+                {
+                    "path": path,
+                    "mtime": path.stat().st_mtime_ns,
+                    "bytes": path.stat().st_size,
+                    "digests": digests,
+                }
+            )
+        except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
+
+    def retained_size() -> int:
+        referenced = {digest for record in records for digest in record["digests"]}
+        log_bytes = 0
+        for digest in referenced:
+            try:
+                log_bytes += cache_log_path(cache_root, digest).stat().st_size
+            except FileNotFoundError:
+                pass
+        return sum(record["bytes"] for record in records) + log_bytes
+
+    records.sort(key=lambda item: item["mtime"])
+    while len(records) > 1 and retained_size() > MAXIMUM_CACHE_BYTES:
+        obsolete = records.pop(0)
+        try:
+            obsolete["path"].unlink()
+        except FileNotFoundError:
+            pass
+    referenced = {digest for record in records for digest in record["digests"]}
+    for path in logs_root.glob("*.log"):
+        digest = path.stem
+        if digest not in referenced:
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
+
+
+def store_cached_gate(
+    gate: Gate,
+    result: dict[str, Any],
+    cache_root: Path = CACHE_ROOT,
+) -> str:
+    if not gate.cacheable or result["status"] != "passed" or result["execution"] != "fresh":
+        return "not_eligible"
+    stdout_path = ROOT / result["stdout_log"]
+    stderr_path = ROOT / result["stderr_log"]
+    for stream, source in (("stdout", stdout_path), ("stderr", stderr_path)):
+        digest, size = digest_file(source)
+        if digest != result[f"{stream}_sha256"] or size != result[f"{stream}_bytes"]:
+            raise RuntimeError(f"{gate.name} {stream} log changed before cache publication")
+        atomic_write(cache_log_path(cache_root, digest), source.read_bytes())
+    current_outputs = [output_proof(item) for item in gate.required_outputs]
+    if current_outputs != result["outputs"]:
+        raise RuntimeError(f"{gate.name} output changed before cache publication")
+    record = {
+        "cache_contract_version": CACHE_CONTRACT_VERSION,
+        "gate": gate.name,
+        "input_fingerprint_sha256": result["input_fingerprint_sha256"],
+        "identity_command": list(gate.identity_command or gate.command),
+        "source_elapsed_nanoseconds": result["elapsed_nanoseconds"],
+        "stdout_bytes": result["stdout_bytes"],
+        "stderr_bytes": result["stderr_bytes"],
+        "stdout_sha256": result["stdout_sha256"],
+        "stderr_sha256": result["stderr_sha256"],
+        "outputs": result["outputs"],
+        "fingerprint_sha256": result["fingerprint_sha256"],
+    }
+    record_path = cache_record_path(cache_root, gate, result["input_fingerprint_sha256"])
+    atomic_write(record_path, json.dumps(record, indent=2, sort_keys=True).encode("utf-8") + b"\n")
+    rotate_gate_cache(record_path)
+    prune_cache(cache_root)
+    return relative(record_path) if cache_root == CACHE_ROOT else str(record_path)
+
+
+def execute_gate(
+    gate: Gate,
+    directory: Path,
+    snapshot: InputSnapshot,
+    runtime: RuntimeIdentity,
+    dependency_results: dict[str, dict[str, Any]],
+    *,
+    allow_reuse: bool,
+    fresh_reason: str,
+    cache_root: Path = CACHE_ROOT,
+) -> dict[str, Any]:
+    input_fingerprint = gate_input_fingerprint(gate, snapshot, runtime, dependency_results)
+    if allow_reuse and gate.cacheable:
+        lookup = load_cached_gate(gate, input_fingerprint, directory, cache_root)
+        if lookup.result is not None:
+            return lookup.result
+        cache = {"eligible": True, "lookup": "miss", "reason": lookup.reason}
+    elif not gate.cacheable:
+        cache = {"eligible": False, "lookup": "bypassed", "reason": "gate_not_cacheable"}
+    else:
+        cache = {"eligible": True, "lookup": "bypassed", "reason": fresh_reason}
+    return run_gate(gate, directory, input_fingerprint, cache)
+
+
+def skipped_gate_result(
+    gate: Gate,
+    snapshot: InputSnapshot,
+    runtime: RuntimeIdentity,
+    dependency_results: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    failed_dependencies = [
+        name for name in gate.dependencies if dependency_results[name]["status"] != "passed"
+    ]
+    input_fingerprint = gate_input_fingerprint(gate, snapshot, runtime, dependency_results)
+    evidence = {
+        "gate": gate.name,
+        "input_fingerprint_sha256": input_fingerprint,
+        "status": "skipped",
+        "failed_dependencies": failed_dependencies,
+    }
+    return {
+        "name": gate.name,
+        "status": "skipped",
+        "execution": "skipped",
+        "command": list(gate.command),
+        "dependencies": list(gate.dependencies),
+        "failed_dependencies": failed_dependencies,
+        "exit_code": None,
+        "elapsed_nanoseconds": 0,
+        "stdout_bytes": 0,
+        "stderr_bytes": 0,
+        "stdout_log": None,
+        "stderr_log": None,
+        "outputs": [],
+        "input_fingerprint_sha256": input_fingerprint,
+        "fingerprint_sha256": digest_value(evidence),
+        "reason": "failed_prerequisite",
+        "cache": {"eligible": False, "lookup": "not_attempted"},
+    }
+
+
+def internal_failure_result(gate: Gate, directory: Path, error: BaseException) -> dict[str, Any]:
+    stdout_path = directory / f"{gate.name}.stdout.log"
+    stderr_path = directory / f"{gate.name}.stderr.log"
+    stdout_path.write_bytes(b"")
+    message = f"checker infrastructure failure: {type(error).__name__}\n"
+    stderr_path.write_text(message, encoding="utf-8")
+    return finalize_gate_result(
+        gate,
+        directory,
+        status="failed",
+        exit_code=None,
+        started=time.monotonic_ns(),
+        reason="checker_infrastructure",
+        input_fingerprint="unavailable",
+        cache={"eligible": False, "lookup": "error"},
+    )
+
+
+def execute_dag(
+    gates: dict[str, Gate],
+    names: tuple[str, ...],
+    directory: Path,
+    snapshot: InputSnapshot,
+    runtime: RuntimeIdentity,
+    *,
+    maximum_workers: int,
+    allow_reuse: bool,
+    fresh_reason: str,
+    cache_root: Path = CACHE_ROOT,
+) -> list[dict[str, Any]]:
+    if not 1 <= maximum_workers <= MAXIMUM_WORKERS:
+        raise RuntimeError(f"worker count must be between 1 and {MAXIMUM_WORKERS}")
+    order = {name: position for position, name in enumerate(names)}
+    pending = set(names)
+    completed: dict[str, dict[str, Any]] = {}
+    running: dict[Future[dict[str, Any]], str] = {}
+
+    with ThreadPoolExecutor(max_workers=maximum_workers, thread_name_prefix="check-gate") as pool:
+        while pending or running:
+            progressed = False
+            for name in sorted(pending, key=order.__getitem__):
+                gate = gates[name]
+                if not all(dependency in completed for dependency in gate.dependencies):
+                    continue
+                dependencies = {
+                    dependency: completed[dependency] for dependency in gate.dependencies
+                }
+                if any(result["status"] != "passed" for result in dependencies.values()):
+                    completed[name] = skipped_gate_result(gate, snapshot, runtime, dependencies)
+                    pending.remove(name)
+                    progressed = True
+                    continue
+                if len(running) >= maximum_workers:
+                    break
+                future = pool.submit(
+                    execute_gate,
+                    gate,
+                    directory,
+                    snapshot,
+                    runtime,
+                    dependencies,
+                    allow_reuse=allow_reuse,
+                    fresh_reason=fresh_reason,
+                    cache_root=cache_root,
+                )
+                running[future] = name
+                pending.remove(name)
+                progressed = True
+
+            if running:
+                finished, _ = wait(tuple(running), return_when=FIRST_COMPLETED)
+                for future in finished:
+                    name = running.pop(future)
+                    try:
+                        completed[name] = future.result()
+                    except Exception as error:
+                        completed[name] = internal_failure_result(gates[name], directory, error)
+                progressed = True
+            if not progressed and pending:
+                raise RuntimeError("verification DAG scheduler made no progress")
+    return [completed[name] for name in names]
 
 
 def changed_paths() -> list[str]:
@@ -511,6 +1376,171 @@ def self_test(machine: bool) -> int:
     expected = ("passed", "failed", "unavailable", "exhausted", "exhausted")
     results = [run_gate(gate, directory) for gate in fixtures]
     actual = tuple(result["status"] for result in results)
+
+    parallel_directory = directory / "parallel"
+    parallel_directory.mkdir()
+    parallel_script = (
+        "import pathlib,sys,time; "
+        "root=pathlib.Path(sys.argv[1]); (root/sys.argv[2]).write_text('ready'); "
+        "end=time.monotonic()+2; "
+        "exec(\"while len(list(root.glob('*.ready'))) < 2 and time.monotonic() < end:\\n "
+        "time.sleep(0.01)\"); "
+        "raise SystemExit(0 if len(list(root.glob('*.ready'))) == 2 else 9)"
+    )
+    shared_marker = directory / "shared-prerequisite.count"
+    dag_gates = {
+        "parallel_a": Gate(
+            "parallel_a",
+            (sys.executable, "-c", parallel_script, str(parallel_directory), "a.ready"),
+            cacheable=False,
+            identity_command=(sys.executable, "-c", "parallel-fixture-a"),
+        ),
+        "parallel_b": Gate(
+            "parallel_b",
+            (sys.executable, "-c", parallel_script, str(parallel_directory), "b.ready"),
+            cacheable=False,
+            identity_command=(sys.executable, "-c", "parallel-fixture-b"),
+        ),
+        "shared": Gate(
+            "shared",
+            (
+                sys.executable,
+                "-c",
+                "import pathlib,sys; p=pathlib.Path(sys.argv[1]); "
+                "p.write_bytes(p.read_bytes()+b'x' if p.exists() else b'x')",
+                str(shared_marker),
+            ),
+            cacheable=False,
+            identity_command=(sys.executable, "-c", "shared-prerequisite-fixture"),
+        ),
+        "child_one": Gate(
+            "child_one",
+            (sys.executable, "-c", "raise SystemExit(0)"),
+            dependencies=("shared",),
+            cacheable=False,
+            identity_command=(sys.executable, "-c", "child-one-fixture"),
+        ),
+        "child_two": Gate(
+            "child_two",
+            (sys.executable, "-c", "raise SystemExit(0)"),
+            dependencies=("shared",),
+            cacheable=False,
+            identity_command=(sys.executable, "-c", "child-two-fixture"),
+        ),
+        "dag_failure": Gate(
+            "dag_failure",
+            (sys.executable, "-c", "raise SystemExit(3)"),
+            cacheable=False,
+            identity_command=(sys.executable, "-c", "failure-fixture"),
+        ),
+        "blocked": Gate(
+            "blocked",
+            (sys.executable, "-c", "raise SystemExit(99)"),
+            dependencies=("dag_failure",),
+            cacheable=False,
+            identity_command=(sys.executable, "-c", "blocked-fixture"),
+        ),
+    }
+    dag_names = dependency_closure(dag_gates, tuple(dag_gates))
+    synthetic_snapshot = InputSnapshot("1" * 64, "self-test-head", "2" * 64, 0, 0, ())
+    environment_digest, environment_names = environment_identity()
+    synthetic_runtime = RuntimeIdentity(
+        digest_sha256=digest_value(
+            {"environment": environment_digest, "executable": sys.executable}
+        ),
+        toolchain={"rustc": "self-test", "cargo": "self-test", "python": sys.version},
+        platform={"os": "self-test", "release": "self-test", "machine": "self-test"},
+        environment_sha256=environment_digest,
+        environment_names=environment_names,
+        executable_identities={sys.executable: executable_identity(sys.executable)},
+    )
+    dag_results = execute_dag(
+        dag_gates,
+        dag_names,
+        directory,
+        synthetic_snapshot,
+        synthetic_runtime,
+        maximum_workers=2,
+        allow_reuse=False,
+        fresh_reason="self_test",
+        cache_root=directory / "dag-cache",
+    )
+    dag_statuses = {result["name"]: result["status"] for result in dag_results}
+    dag_expected = {
+        "parallel_a": "passed",
+        "parallel_b": "passed",
+        "shared": "passed",
+        "child_one": "passed",
+        "child_two": "passed",
+        "dag_failure": "failed",
+        "blocked": "skipped",
+    }
+    dag_passed = dag_statuses == dag_expected and shared_marker.read_bytes() == b"x"
+
+    cache_root = directory / "cache-fixture"
+    cache_gate = Gate(
+        "cache_probe",
+        (sys.executable, "-c", "import os; os.write(1,b'cache-proof')"),
+    )
+    runtime_a = synthetic_runtime
+    runtime_b = RuntimeIdentity(
+        digest_sha256=digest_value(
+            {"environment": "changed-environment", "executable": sys.executable}
+        ),
+        toolchain=runtime_a.toolchain,
+        platform=runtime_a.platform,
+        environment_sha256="3" * 64,
+        environment_names=runtime_a.environment_names,
+        executable_identities=runtime_a.executable_identities,
+    )
+    fingerprint_a = gate_input_fingerprint(cache_gate, synthetic_snapshot, runtime_a, {})
+    fingerprint_b = gate_input_fingerprint(cache_gate, synthetic_snapshot, runtime_b, {})
+    initial_miss = load_cached_gate(cache_gate, fingerprint_a, directory, cache_root)
+    cache_fresh = run_gate(
+        cache_gate,
+        directory,
+        fingerprint_a,
+        {"eligible": True, "lookup": "miss", "reason": "self_test"},
+    )
+    store_cached_gate(cache_gate, cache_fresh, cache_root)
+    cache_hit = load_cached_gate(cache_gate, fingerprint_a, directory, cache_root)
+    stale_lookup = load_cached_gate(cache_gate, fingerprint_b, directory, cache_root)
+    record_path = cache_record_path(cache_root, cache_gate, fingerprint_a)
+    atomic_write(record_path, b"{not-json\n")
+    corrupt_lookup = load_cached_gate(cache_gate, fingerprint_a, directory, cache_root)
+    cache_passed = (
+        initial_miss.result is None
+        and initial_miss.reason == "not_found"
+        and cache_hit.result is not None
+        and cache_hit.result["execution"] == "reused"
+        and fingerprint_a != fingerprint_b
+        and stale_lookup.result is None
+        and stale_lookup.reason == "input_changed"
+        and corrupt_lookup.result is None
+        and corrupt_lookup.reason == "cache_corrupt"
+    )
+
+    graph_rejections: dict[str, bool] = {}
+    try:
+        validate_gate_graph({"cycle": Gate("cycle", ("true",), dependencies=("cycle",))})
+        graph_rejections["cycle"] = False
+    except RuntimeError:
+        graph_rejections["cycle"] = True
+    try:
+        validate_gate_graph({"unknown": Gate("unknown", ("true",), dependencies=("absent",))})
+        graph_rejections["unknown_dependency"] = False
+    except RuntimeError:
+        graph_rejections["unknown_dependency"] = True
+    try:
+        validate_gate_graph(
+            {
+                "duplicate_a": Gate("duplicate_a", ("true",)),
+                "duplicate_b": Gate("duplicate_b", ("true",)),
+            }
+        )
+        graph_rejections["duplicate_command"] = False
+    except RuntimeError:
+        graph_rejections["duplicate_command"] = True
     retention_actual = (
         managed_run(Path("20260821T000000.000000Z-123"), ""),
         managed_run(Path("20260821T000000.000000Z-123-full"), ""),
@@ -519,7 +1549,13 @@ def self_test(machine: bool) -> int:
         managed_run(Path("self-test-20260821T000000.000000Z-123"), "self-test-"),
     )
     retention_expected = (True, False, False, False, True)
-    passed = actual == expected and retention_actual == retention_expected
+    passed = (
+        actual == expected
+        and retention_actual == retention_expected
+        and dag_passed
+        and cache_passed
+        and all(graph_rejections.values())
+    )
     receipt = {
         "contract_version": CHECK_CONTRACT_VERSION,
         "kind": "checker_self_test",
@@ -528,10 +1564,23 @@ def self_test(machine: bool) -> int:
         "actual": actual,
         "retention_expected": retention_expected,
         "retention_actual": retention_actual,
+        "dag_expected": dag_expected,
+        "dag_actual": dag_statuses,
+        "dag_shared_prerequisite_executions": len(shared_marker.read_bytes()),
+        "cache": {
+            "initial_miss": initial_miss.reason,
+            "hit": cache_hit.reason,
+            "stale_environment": stale_lookup.reason,
+            "corrupt_record": corrupt_lookup.reason,
+        },
+        "graph_rejections": graph_rejections,
         "gates": results,
+        "dag_gates": dag_results,
     }
     receipt_path = directory / "receipt.json"
-    receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
+    atomic_write(
+        receipt_path, json.dumps(receipt, indent=2, sort_keys=True).encode("utf-8") + b"\n"
+    )
     summary = {
         "contract_version": CHECK_CONTRACT_VERSION,
         "status": receipt["status"],
@@ -550,6 +1599,14 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--machine", action="store_true")
     parser.add_argument("--details", action="store_true")
     parser.add_argument("--self-test", action="store_true")
+    parser.add_argument("--fresh", action="store_true", help="bypass reusable pass evidence")
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=DEFAULT_MAXIMUM_WORKERS,
+        metavar="N",
+        help=f"run at most N independent gates concurrently (1-{MAXIMUM_WORKERS})",
+    )
     arguments = parser.parse_args()
     if arguments.machine and arguments.details:
         parser.error("--machine and --details are incompatible")
@@ -557,6 +1614,8 @@ def parse_arguments() -> argparse.Namespace:
         parser.error("--self-test does not accept a profile")
     if not arguments.self_test and arguments.profile is None:
         parser.error("a profile is required")
+    if not 1 <= arguments.jobs <= MAXIMUM_WORKERS:
+        parser.error(f"--jobs must be between 1 and {MAXIMUM_WORKERS}")
     return arguments
 
 
@@ -570,69 +1629,190 @@ def main() -> int:
     gates = base_gates(run_directory)
     selection: dict[str, Any] | None = None
     if profile == "changed":
-        names, selection = select_changed()
+        requested_names, selection = select_changed()
     else:
-        names = PROFILES[profile]
+        requested_names = PROFILES[profile]
+    names = dependency_closure(gates, requested_names)
+    fresh_required = profile == "full" or arguments.fresh
+    fresh_reason = "full_profile_requires_fresh" if profile == "full" else "explicit_fresh"
     started = time.monotonic_ns()
-    results: list[dict[str, Any]] = []
-    unrun: list[str] = []
-    for position, name in enumerate(names):
-        result = run_gate(gates[name], run_directory)
-        results.append(result)
-        if result["status"] != "passed":
-            unrun = list(names[position + 1 :])
-            break
-    status = "passed" if not unrun and all(item["status"] == "passed" for item in results) else "failed"
+    initial_snapshot = capture_input_snapshot()
+    input_manifest_path = run_directory / "inputs.json"
+    atomic_write(
+        input_manifest_path,
+        json.dumps(
+            {
+                "contract_version": CHECK_CONTRACT_VERSION,
+                "worktree_input_sha256": initial_snapshot.digest_sha256,
+                "git_head": initial_snapshot.git_head,
+                "cargo_lock_sha256": initial_snapshot.cargo_lock_sha256,
+                "file_count": initial_snapshot.file_count,
+                "total_bytes": initial_snapshot.total_bytes,
+                "files": initial_snapshot.entries,
+            },
+            indent=2,
+            sort_keys=True,
+        ).encode("utf-8")
+        + b"\n",
+    )
+    runtime = capture_runtime_identity(gates, names)
+    dag_path = run_directory / "dag.json"
+    atomic_write(
+        dag_path,
+        json.dumps(
+            {
+                "contract_version": CHECK_CONTRACT_VERSION,
+                "requested": list(requested_names),
+                "selected_closure": list(names),
+                "maximum_workers": arguments.jobs,
+                "nodes": [
+                    {
+                        "name": name,
+                        "dependencies": list(gates[name].dependencies),
+                        "command": list(gates[name].identity_command or gates[name].command),
+                        "cacheable": gates[name].cacheable,
+                    }
+                    for name in names
+                ],
+            },
+            indent=2,
+            sort_keys=True,
+        ).encode("utf-8")
+        + b"\n",
+    )
+    results = execute_dag(
+        gates,
+        names,
+        run_directory,
+        initial_snapshot,
+        runtime,
+        maximum_workers=arguments.jobs,
+        allow_reuse=not fresh_required,
+        fresh_reason=fresh_reason,
+    )
+    final_snapshot = capture_input_snapshot()
+    input_stable = final_snapshot.digest_sha256 == initial_snapshot.digest_sha256
+    if input_stable:
+        for result in results:
+            gate = gates[result["name"]]
+            try:
+                cache_record = store_cached_gate(gate, result)
+                if cache_record != "not_eligible":
+                    result["cache"]["write"] = "stored"
+                    result["cache"]["record"] = cache_record
+            except (OSError, RuntimeError) as error:
+                result["cache"]["write"] = "failed"
+                result["cache"]["write_reason"] = type(error).__name__
+    else:
+        for result in results:
+            if result["execution"] == "fresh" and result["status"] == "passed":
+                result["cache"]["write"] = "withheld_input_changed"
+
+    unrun = [item["name"] for item in results if item["status"] == "skipped"]
+    fresh_count = sum(
+        item["status"] == "passed" and item["execution"] == "fresh" for item in results
+    )
+    reused_count = sum(
+        item["status"] == "passed" and item["execution"] == "reused" for item in results
+    )
+    all_gate_passed = all(item["status"] == "passed" for item in results)
+    full_is_fresh = profile != "full" or reused_count == 0
+    status = "passed" if all_gate_passed and input_stable and full_is_fresh else "failed"
     receipt: dict[str, Any] = {
         "contract_version": CHECK_CONTRACT_VERSION,
         "status": status,
         "profile": profile,
+        "requested_gates": list(requested_names),
         "selected_gates": list(names),
-        "completed_gates": len(results),
+        "completed_gates": sum(item["status"] != "skipped" for item in results),
         "passed_gates": sum(item["status"] == "passed" for item in results),
+        "fresh_passed_gates": fresh_count,
+        "reused_passed_gates": reused_count,
         "unrun_gates": unrun,
         "elapsed_nanoseconds": time.monotonic_ns() - started,
-        "git_head": checked_output(["git", "rev-parse", "HEAD"]),
-        "worktree_input_sha256": worktree_identity(),
-        "toolchain": {
-            "rustc": checked_output(["rustc", "-Vv"]),
-            "cargo": checked_output(["cargo", "-V"]),
-            "python": sys.version.splitlines()[0],
+        "git_head": initial_snapshot.git_head,
+        "worktree_input_sha256": initial_snapshot.digest_sha256,
+        "cargo_lock_sha256": initial_snapshot.cargo_lock_sha256,
+        "input_manifest": relative(input_manifest_path),
+        "input_stability": {
+            "status": "stable" if input_stable else "changed_during_run",
+            "before_sha256": initial_snapshot.digest_sha256,
+            "after_sha256": final_snapshot.digest_sha256,
         },
+        "toolchain": runtime.toolchain,
         "environment": {
-            "os": platform.system(),
-            "release": platform.release(),
-            "machine": platform.machine(),
+            **runtime.platform,
             "cargo_net_offline": True,
-            "rustflags": os.environ.get("RUSTFLAGS", ""),
+            "relevant_input_sha256": runtime.environment_sha256,
+            "relevant_names": list(runtime.environment_names),
         },
-        "pass_reuse": "none",
+        "runtime_input_sha256": runtime.digest_sha256,
+        "command_executables_at_start": runtime.executable_identities,
+        "dag": {
+            "manifest": relative(dag_path),
+            "nodes": len(names),
+            "requested_nodes": len(requested_names),
+            "deduplicated_prerequisites": len(requested_names) + sum(
+                len(gates[name].dependencies) for name in names
+            )
+            - len(names),
+            "maximum_workers": arguments.jobs,
+        },
+        "pass_reuse": {
+            "allowed": not fresh_required,
+            "fresh_required": fresh_required,
+            "reason": fresh_reason if fresh_required else "exact_input_match",
+            "fresh": fresh_count,
+            "reused": reused_count,
+            "cache_maximum_bytes": MAXIMUM_CACHE_BYTES,
+            "cache_maximum_entries_per_gate": MAXIMUM_CACHE_ENTRIES_PER_GATE,
+        },
         "log_limit_bytes_per_gate": DEFAULT_MAXIMUM_LOG_BYTES,
         "gates": results,
     }
     if selection is not None:
         receipt["selection"] = selection
     receipt_path = run_directory / "receipt.json"
-    receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
+    atomic_write(
+        receipt_path, json.dumps(receipt, indent=2, sort_keys=True).encode("utf-8") + b"\n"
+    )
     summary = {
         "contract_version": CHECK_CONTRACT_VERSION,
         "status": status,
         "profile": profile,
         "passed": receipt["passed_gates"],
+        "fresh": fresh_count,
+        "reused": reused_count,
         "selected": len(names),
         "elapsed_nanoseconds": receipt["elapsed_nanoseconds"],
         "receipt": relative(receipt_path),
     }
     if status != "passed":
-        summary["failure"] = next(
-            (item for item in results if item["status"] != "passed"), None
+        failure = next(
+            (item for item in results if item["status"] not in {"passed", "skipped"}), None
         )
+        if failure is None and not input_stable:
+            failure = {
+                "name": "input_stability",
+                "status": "failed",
+                "reason": "worktree_changed_during_run",
+                "fingerprint_sha256": final_snapshot.digest_sha256,
+            }
+        if failure is None and not full_is_fresh:
+            failure = {
+                "name": "fresh_policy",
+                "status": "failed",
+                "reason": "full_profile_reused_evidence",
+                "fingerprint_sha256": runtime.digest_sha256,
+            }
+        summary["failure"] = failure
         summary["unrun_gates"] = unrun
     if arguments.machine:
         print(json.dumps(summary, separators=(",", ":"), sort_keys=True))
     else:
         print(
             f"check {status}: profile={profile} passed={receipt['passed_gates']}/{len(names)} "
+            f"fresh={fresh_count} reused={reused_count} "
             f"elapsed={receipt['elapsed_nanoseconds'] / 1_000_000_000:.3f}s; "
             f"receipt={relative(receipt_path)}"
         )
@@ -641,7 +1821,8 @@ def main() -> int:
             assert isinstance(failure, dict)
             print(
                 f"failure: gate={failure['name']} status={failure['status']} "
-                f"reason={failure.get('reason', 'unknown')} fingerprint={failure['fingerprint_sha256']}"
+                f"reason={failure.get('reason', 'unknown')} "
+                f"fingerprint={failure['fingerprint_sha256']}"
             )
             if failure.get("stdout_excerpt"):
                 print("stdout excerpt:\n" + str(failure["stdout_excerpt"]))
@@ -652,7 +1833,7 @@ def main() -> int:
         elif arguments.details:
             for result in results:
                 print(
-                    f"gate {result['name']}: {result['status']} "
+                    f"gate {result['name']}: {result['status']} execution={result['execution']} "
                     f"elapsed={result['elapsed_nanoseconds'] / 1_000_000_000:.3f}s "
                     f"logs={result['stdout_log']},{result['stderr_log']}"
                 )
