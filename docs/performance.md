@@ -3,9 +3,9 @@
 Measurements are observations, not promises. Unless a row explicitly says otherwise, the retained
 numbers below predate meaning graph contracts 2, 3, and 4, persistent root pages, direct CLI v4, exact
 ID imports/targets, and explicit generics. They are historical baselines and must not be presented
-as current-contract performance. One current graph-4 release workflow at 10,000 empty background
-modules is retained below; no current distribution, million-owner, or complete-service performance
-receipt exists yet.
+as current-contract performance. Two graph-4 release workflows at 10,000 empty background modules
+are retained below on opposite sides of the semantic-fact cutover; no current distribution,
+million-owner, or complete-service performance receipt exists yet.
 
 The historical environment was Linux `7.0.0-29-generic` x86-64, `rustc 1.96.0`, Cargo 1.96.0.
 CPU time, peak RSS, provider tokens/cache/requests/retries, and monetary telemetry were unavailable.
@@ -120,8 +120,24 @@ revisions and 30,006 retained module versions, build took 199.282 ms, and segmen
 This is one warm-build, uncontrolled-filesystem-cache sample, not a distribution. It demonstrates
 bounded local semantic validation and exact lookup, while exposing two prerequisites before larger
 public runs: inefficient 10,000-operation bulk construction and a revision-bound semantic index
-whose rewritten bytes grow with total modules. The 100,000 and one-million public workflows were
-therefore deferred rather than spending time measuring known linear derived work.
+whose rewritten bytes grow with total modules.
+
+After batched persistent-map mutation, single-use prepared root publication, and semantic-fact
+contract 3 replaced those paths, the same public 10,000-module workflow was repeated from a fresh
+temporary project at implementation commit `8ec09e24efc9968d900cfd3a4fa9ef63035a06d8`. Raw evidence
+is retained at `docs/evidence/20260822-graph4-fact3-scale-10000.json`. The batch took 1.160 seconds
+and returned the same 794,397-byte class of allocation receipt. Local module creation and rename
+took 22.683 ms and 36.486 ms, checked one module each with full-oracle equality, and wrote 51,263
+and 52,116 derived-index bytes. Exact lookup reported work one in 2.354 ms cold and 1.756 ms warm;
+orientation took 155.361 ms, deep doctor took 316.332 ms across 30,006 retained module versions,
+build took 203.360 ms, and segmented backup took 21.162 seconds for 3,052,823 payload bytes.
+
+Compared only with the preceding single sample, the observed batch elapsed time fell by 38.7x and
+local derived-index bytes fell by about 94%. These are equal-topology point observations, not a
+latency distribution or a general performance guarantee. Backup remains the dominant measured
+operation. A 100,000-module attempt reached backup, but its final JSON was lost when the completed
+execution session exceeded the orchestration capture context and could not be reopened; it is
+classified unavailable rather than pass. The one-million-owner public workflow was not run.
 
 ## Historical compiler, service, and verification receipts
 

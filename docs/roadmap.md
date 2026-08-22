@@ -1,8 +1,8 @@
 # Evidence-gated roadmap
 
 Implemented work is intentionally absent. Meaning graph contract 4, direct CLI v4, binary-only
-`new`, six persistent Merkle maps, exact-ID imports and targets, local module rename, persisted
-authenticated semantic summaries, four local transaction classes, and explicit rank-1 generics
+`new`, batched persistent Merkle maps, exact-ID imports and targets, local module rename, persisted
+authenticated semantic-fact maps, four local transaction classes, and explicit rank-1 generics
 with named pure function values are current architecture, not roadmap items. Local exact-owner/name
 index contract 3 also delta-reuses content-addressed shards; the broad relation index does not.
 
@@ -24,8 +24,9 @@ direct-cutover deletion plan.
 3. **Complete declaration move.** Imports, targets, exports, and expressions are exact-ID bound;
    module and declaration rename are local. Add declaration move, preserve expected-name
    preconditions for caller intent, and prove declaration continuity and locality in diff/history.
-4. **Large-graph physical evidence.** Exercise persistent pages at 10,000, 100,000, and one million
-   logical owners across sparse, dense, wide-fanout, large-literal, and long-history topologies.
+4. **Large-graph physical evidence.** Extend the retained single 10,000-module public observation
+   to distributions at 100,000 and one million logical owners and to sparse, dense, wide-fanout,
+   large-literal, and long-history topologies.
    Compare the current object-per-module layout with immutable packs before selecting packing.
    Exercise segmented backup/restore beyond the predecessor 128 MiB bound and retain peak RSS,
    throughput, corruption, and cross-filesystem staging evidence. Do not infer end-to-end locality

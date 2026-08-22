@@ -1,6 +1,7 @@
 # Graph-native bootstrap and incremental-semantics campaign ledger
 
-Status: active campaign evidence, not normative product authority.
+Status: closed at the user-directed 2026-08-22 checkpoint; incomplete outcomes remain explicit in
+the roadmap. This ledger is evidence, not normative product authority.
 
 ## Campaign identity
 
@@ -188,8 +189,9 @@ before revision contract 4. It is historical and not a commit-bound final perfor
 
 ## Current revision-4 semantic-fact cutover observation
 
-This section records the current working-tree identities after replacing the monolithic semantic
-dependency generation. It is not yet a commit-bound final performance receipt.
+This section records the implementation identities after replacing the monolithic semantic
+dependency generation. The implementation is committed at
+`8ec09e24efc9968d900cfd3a4fa9ef63035a06d8`; final publication evidence belongs to the handoff.
 
 - Current contracts are meaning graph 4, persistent-root storage 2, CLI 4, change 3,
   transaction 4, revision/receipt 4/3, draft 4, diff/merge 2, semantic-summary 2,
@@ -222,8 +224,8 @@ dependency generation. It is not yet a commit-bound final performance receipt.
 - The predecessor maintained store directories were moved to
   `/tmp/lkjscript-revision4-cutover-old-20260822` before direct replacement. This is recoverable
   local scratch, not retained repository authority. No revision-3 reader remains in current code.
-- Updated 10,000/100,000/million-owner public scale, RSS, I/O, fsync, dense-fanout, and long-history
-  evidence remains unavailable and is not claimed.
+- One updated 10,000-module public workflow is retained below. No 100,000-module result, million-
+  owner workflow, RSS, CPU, fsync, dense-fanout, or long-history result is claimed.
 
 ## Verification notes
 
@@ -289,5 +291,30 @@ built-in standard identities recorded above.
 `cargo test --locked --lib --no-fail-fast` passed 122 tests, the public CLI suite passed 7 tests,
 and all-target Clippy passed with warnings denied. The working-tree authoritative DAG then passed
 17/17 fresh gates with no reuse in 116.312 seconds at
-`.artifacts/check/20260822T152519.342035Z-853126/receipt.json`. This is pre-commit evidence; final
-commit-bound and fresh-checkout receipts remain required.
+`.artifacts/check/20260822T152519.342035Z-853126/receipt.json`. Exact staged content passed the same
+17/17 policy in 6.376 seconds at
+`.artifacts/check/20260822T152856.487020Z-858100/receipt.json`; the implementation was then committed
+without content changes as `8ec09e24efc9968d900cfd3a4fa9ef63035a06d8`. Final repository and
+fresh-checkout receipts are intentionally recorded in the handoff so this checkpoint commit need
+not mutate after verification.
+
+## User-directed checkpoint scale evidence
+
+The current release executable, SHA-256
+`75335edf5aeca3a87489472265fac1896820fcc43b9e49defa0f7fa3db4c5de6` and 15,104,344 bytes, ran
+`tools/semantic-scale --modules 10000 --batch 10000 --binary target/release/lkjscript` from a fresh
+temporary project. The exact structured receipt is
+`docs/evidence/20260822-graph4-fact3-scale-10000.json`.
+
+The public 10,000-module batch completed in 1.160 seconds. One subsequent module creation and rename
+completed in 22.683 ms and 36.486 ms, checked one module each with full-oracle equality, and wrote
+51,263 and 52,116 derived-index bytes. Exact lookup retained work one. Deep doctor checked 30,006
+module versions; build and segmented backup completed. This single uncontrolled-cache observation
+does not establish a distribution or million-owner behavior.
+
+A 100,000-module command was allowed to proceed through segmented backup, but the completed
+execution session's final stdout exceeded the orchestration capture context and could not be
+reopened. No partial timing is retained or promoted to pass. Repeating that long run or beginning
+the million-owner and next architectural slices was declined at the user's requested stopping
+boundary. Remaining scale, validation-frontier, compiler, conflict, packing, retention, GC, and
+session work stays explicitly unperformed in `docs/roadmap.md`.

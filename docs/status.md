@@ -191,9 +191,12 @@ pass is not fresh. Gates that write a debug executable precede gates that launch
 release and non-Cargo work may still run in parallel. Default success remains one aggregate result
 plus a retained receipt.
 
-The current working-tree authoritative profile passed 17/17 fresh gates with no reuse in
-116.312 seconds at `.artifacts/check/20260822T152519.342035Z-853126/receipt.json`. This receipt is
-pre-commit evidence and will be superseded by final commit-bound and fresh-checkout verification.
+The semantic-fact cutover content passed 17/17 fresh gates with no reuse in 116.312 seconds at
+`.artifacts/check/20260822T152519.342035Z-853126/receipt.json`; exact staged content repeated the
+17/17 policy in 6.376 seconds at
+`.artifacts/check/20260822T152856.487020Z-858100/receipt.json` and was committed without content
+changes as `8ec09e24efc9968d900cfd3a4fa9ef63035a06d8`. The final handoff, rather than this mutable
+status document, owns the later checkpoint-commit and fresh-checkout receipt identities.
 
 ## Current limits and unproved properties
 
@@ -230,5 +233,8 @@ pre-commit evidence and will be superseded by final commit-bound and fresh-check
 - No stdio agent session is implemented. Standalone commands remain correct. Provider token,
   cached-token, retry, and monetary telemetry is unavailable; output bytes are not token or cost
   estimates.
-- Current graph-4 performance, RSS, I/O, fsync, dense-fanout, long-history, and million-owner
-  evidence is incomplete. Historical graph-1 rows are labeled in `docs/performance.md`.
+- One commit-bound graph-4/fact-3 10,000-background-module public workflow is retained. It is not a
+  distribution. A 100,000-module attempt produced no retained result after its execution output
+  became unavailable, and no million-owner workflow was run. RSS, CPU, fsync, dense-fanout, and
+  long-history evidence remains incomplete. Historical graph-1 rows are labeled in
+  `docs/performance.md`.
