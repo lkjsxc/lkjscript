@@ -1,15 +1,17 @@
 //! Revision-pinned, deterministic, bounded semantic owner and relation queries.
 
 use super::diagnostic::{Diagnostic, DiagnosticClass};
-use super::graph::GraphRoot;
+use super::graph::{GraphRoot, StoredGraphRootDelta};
 use super::meaning::{
     DeclarationKind, DocumentationOwner, GRAPH_CONTRACT_VERSION, MeaningModule, MemberIdentity,
     RelationRole, RelationSource, RelationTarget, SemanticRelation,
 };
 use super::package::PackageId;
 use super::packed;
-use super::repository::{DisposableIndexPart, RevisionSnapshot, SemanticRepository};
-use super::semantic_digest::RootObjectDigest;
+use super::repository::{
+    CurrentBinding, DisposableIndexPart, LocalIndexObjectKind, RevisionSnapshot, SemanticRepository,
+};
+use super::semantic_digest::{IndexDigest, RootObjectDigest};
 use super::semantic_id::{ModuleId, RevisionId};
 use base64::Engine;
 use bincode::{Decode, Encode};
@@ -32,15 +34,15 @@ pub const MAXIMUM_QUERY_INDEX_OWNERS: usize = 2_000_000;
 pub const MAXIMUM_QUERY_INDEX_RELATIONS: usize = 10_000_000;
 const QUERY_INDEX_MAGIC: [u8; 8] = *b"LKJIDX02";
 const QUERY_INDEX_DOMAIN: &str = "lkjscript.semantic-query-index.v2";
-const LOCAL_INDEX_CONTRACT_VERSION: u16 = 2;
+const LOCAL_INDEX_CONTRACT_VERSION: u16 = 3;
 const LOCAL_INDEX_BUCKETS: usize = 256;
 const MAXIMUM_LOCAL_INDEX_PART_BYTES: usize = 16 * 1_048_576;
-const LOCAL_MANIFEST_MAGIC: [u8; 8] = *b"LKJIXM02";
-const LOCAL_OWNER_MAGIC: [u8; 8] = *b"LKJIXO02";
-const LOCAL_NAME_MAGIC: [u8; 8] = *b"LKJIXN02";
-const LOCAL_MANIFEST_DOMAIN: &str = "lkjscript.semantic-local-index-manifest.v2";
-const LOCAL_OWNER_DOMAIN: &str = "lkjscript.semantic-local-owner-index.v2";
-const LOCAL_NAME_DOMAIN: &str = "lkjscript.semantic-local-name-index.v2";
+const LOCAL_MANIFEST_MAGIC: [u8; 8] = *b"LKJIXM03";
+const LOCAL_OWNER_MAGIC: [u8; 8] = *b"LKJIXO03";
+const LOCAL_NAME_MAGIC: [u8; 8] = *b"LKJIXN03";
+const LOCAL_MANIFEST_DOMAIN: &str = "lkjscript.semantic-local-index-manifest.v3";
+const LOCAL_OWNER_DOMAIN: &str = "lkjscript.semantic-local-owner-index.v3";
+const LOCAL_NAME_DOMAIN: &str = "lkjscript.semantic-local-name-index.v3";
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -275,15 +277,13 @@ struct PackedLocalIndexManifest {
     root: RootObjectDigest,
     package_id: PackageId,
     owner_count: u64,
-    owner_buckets: [u8; 32],
-    name_buckets: [u8; 32],
+    owner_shards: Vec<Option<IndexDigest>>,
+    name_shards: Vec<Option<IndexDigest>>,
 }
 
 #[derive(Decode, Encode, Clone, Debug, Eq, PartialEq)]
 struct PackedLocalOwnerShard {
     contract_version: u16,
-    revision: RevisionId,
-    root: RootObjectDigest,
     bucket: u8,
     owners: Vec<OwnerSummary>,
 }
@@ -297,11 +297,36 @@ struct PackedNameEntry {
 #[derive(Decode, Encode, Clone, Debug, Eq, PartialEq)]
 struct PackedLocalNameShard {
     contract_version: u16,
-    revision: RevisionId,
-    root: RootObjectDigest,
     bucket: u8,
     names: Vec<PackedNameEntry>,
     qualified_names: Vec<PackedNameEntry>,
+}
+
+#[derive(Clone, Debug)]
+struct PreparedLocalIndexObject {
+    kind: LocalIndexObjectKind,
+    digest: IndexDigest,
+    bytes: Vec<u8>,
+}
+
+type LocalNameValues = (
+    BTreeMap<String, BTreeSet<String>>,
+    BTreeMap<String, BTreeSet<String>>,
+);
+
+/// Disposable exact-owner/name generation prepared against one accepted base. It never
+/// participates in revision identity and may be dropped without changing accepted meaning.
+#[derive(Clone, Debug)]
+pub(crate) struct PreparedLocalIndexDelta {
+    expected_base: RevisionId,
+    base_root: RootObjectDigest,
+    result_root: RootObjectDigest,
+    repository_id: super::semantic_id::RepositoryId,
+    package_id: PackageId,
+    owner_count: u64,
+    owner_shards: Vec<Option<IndexDigest>>,
+    name_shards: Vec<Option<IndexDigest>>,
+    objects: Vec<PreparedLocalIndexObject>,
 }
 
 #[derive(Clone, Debug)]
@@ -726,6 +751,310 @@ impl SemanticQueryIndex {
             })
     }
 
+    pub(crate) fn prepare_local_index_delta(
+        repository: &SemanticRepository,
+        current: &CurrentBinding,
+        delta: &StoredGraphRootDelta,
+        changed_modules: &[MeaningModule],
+        result_root: RootObjectDigest,
+    ) -> Result<Option<PreparedLocalIndexDelta>, Diagnostic> {
+        let Some(base) = Self::cached_local_manifest(repository, current)? else {
+            return Ok(None);
+        };
+        let expected_modules = delta
+            .module_upserts
+            .iter()
+            .map(|reference| reference.id)
+            .collect::<BTreeSet<_>>();
+        let observed_modules = changed_modules
+            .iter()
+            .map(|module| module.module_id)
+            .collect::<BTreeSet<_>>();
+        let replaced_modules = delta
+            .module_removals
+            .iter()
+            .map(|reference| reference.id)
+            .collect::<BTreeSet<_>>();
+        if expected_modules != observed_modules
+            || expected_modules.len() != delta.module_upserts.len()
+            || observed_modules.len() != changed_modules.len()
+            || !replaced_modules.is_subset(&expected_modules)
+            || delta.package_name.is_some()
+            || !delta.dependency_removals.is_empty()
+            || !delta.dependency_upserts.is_empty()
+            || !delta.target_removals.is_empty()
+            || !delta.target_upserts.is_empty()
+        {
+            return Ok(None);
+        }
+
+        let mut before = BTreeMap::<String, OwnerSummary>::new();
+        let mut after = BTreeMap::<String, OwnerSummary>::new();
+        for module in changed_modules {
+            if let Some(reference) = repository.module_reference_by_id(current, module.module_id)? {
+                let old = repository.read_module(reference.object)?;
+                extend_unique_owner_summaries(
+                    &mut before,
+                    module_owner_summaries(
+                        &current.stored_root.package_id,
+                        &current.stored_root.package_name,
+                        &old,
+                    )?,
+                )?;
+            }
+            extend_unique_owner_summaries(
+                &mut after,
+                module_owner_summaries(
+                    &current.stored_root.package_id,
+                    &current.stored_root.package_name,
+                    module,
+                )?,
+            )?;
+        }
+
+        let changed_ids = before
+            .keys()
+            .chain(after.keys())
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let mut owner_shards = base.owner_shards.clone();
+        let mut name_shards = base.name_shards.clone();
+        let mut mutable_owners = BTreeMap::<u8, BTreeMap<String, OwnerSummary>>::new();
+        let mut name_removals = Vec::<(bool, String, String)>::new();
+        let mut name_additions = Vec::<(bool, String, String)>::new();
+        let mut owner_count = base.owner_count;
+
+        for id in changed_ids {
+            let old = before.get(&id);
+            let new = after.get(&id);
+            if old == new {
+                continue;
+            }
+            let bucket = local_bucket("owner", &id);
+            let values = match mutable_owners.entry(bucket) {
+                std::collections::btree_map::Entry::Occupied(entry) => entry.into_mut(),
+                std::collections::btree_map::Entry::Vacant(entry) => {
+                    let Some(values) = Self::owner_shard_values(repository, &base, bucket)? else {
+                        return Ok(None);
+                    };
+                    entry.insert(values)
+                }
+            };
+            if let Some(old) = old {
+                if values.remove(&id).as_ref() != Some(old) {
+                    return Ok(None);
+                }
+                owner_count = owner_count.checked_sub(1).ok_or_else(index_binding_error)?;
+            }
+            if let Some(new) = new {
+                if values.insert(id.clone(), new.clone()).is_some() {
+                    return Ok(None);
+                }
+                owner_count = owner_count.checked_add(1).ok_or_else(index_binding_error)?;
+            }
+            append_name_delta(
+                old.map(|value| value.name.as_str()),
+                new.map(|value| value.name.as_str()),
+                &id,
+                false,
+                &mut name_removals,
+                &mut name_additions,
+            );
+            append_name_delta(
+                old.map(|value| value.qualified_name.as_str()),
+                new.map(|value| value.qualified_name.as_str()),
+                &id,
+                true,
+                &mut name_removals,
+                &mut name_additions,
+            );
+        }
+
+        let mut mutable_names = BTreeMap::<u8, LocalNameValues>::new();
+        for (_, value, _) in name_removals.iter().chain(&name_additions) {
+            let bucket = local_bucket("name", value);
+            if let std::collections::btree_map::Entry::Vacant(entry) = mutable_names.entry(bucket) {
+                let Some(values) = Self::name_shard_values(repository, &base, bucket)? else {
+                    return Ok(None);
+                };
+                entry.insert(values);
+            }
+        }
+        for (qualified, value, id) in &name_removals {
+            let bucket = local_bucket("name", value);
+            let Some(values) = mutable_names.get_mut(&bucket) else {
+                return Ok(None);
+            };
+            let selected = if *qualified {
+                &mut values.1
+            } else {
+                &mut values.0
+            };
+            let Some(owners) = selected.get_mut(value) else {
+                return Ok(None);
+            };
+            if !owners.remove(id) {
+                return Ok(None);
+            }
+            if owners.is_empty() {
+                selected.remove(value);
+            }
+        }
+        for (qualified, value, id) in &name_additions {
+            let bucket = local_bucket("name", value);
+            let Some(values) = mutable_names.get_mut(&bucket) else {
+                return Ok(None);
+            };
+            let selected = if *qualified {
+                &mut values.1
+            } else {
+                &mut values.0
+            };
+            if !selected
+                .entry(value.clone())
+                .or_default()
+                .insert(id.clone())
+            {
+                return Ok(None);
+            }
+        }
+
+        let mut objects = Vec::new();
+        for (bucket, values) in mutable_owners {
+            if values.is_empty() {
+                owner_shards[bucket as usize] = None;
+                continue;
+            }
+            let shard = PackedLocalOwnerShard {
+                contract_version: LOCAL_INDEX_CONTRACT_VERSION,
+                bucket,
+                owners: values.into_values().collect(),
+            };
+            let bytes = shard.encode()?;
+            let digest = IndexDigest::of(&bytes);
+            owner_shards[bucket as usize] = Some(digest);
+            objects.push(PreparedLocalIndexObject {
+                kind: LocalIndexObjectKind::Owner,
+                digest,
+                bytes,
+            });
+        }
+        for (bucket, (names, qualified_names)) in mutable_names {
+            if names.is_empty() && qualified_names.is_empty() {
+                name_shards[bucket as usize] = None;
+                continue;
+            }
+            let shard = PackedLocalNameShard {
+                contract_version: LOCAL_INDEX_CONTRACT_VERSION,
+                bucket,
+                names: name_set_entries(names),
+                qualified_names: name_set_entries(qualified_names),
+            };
+            let bytes = shard.encode()?;
+            let digest = IndexDigest::of(&bytes);
+            name_shards[bucket as usize] = Some(digest);
+            objects.push(PreparedLocalIndexObject {
+                kind: LocalIndexObjectKind::Name,
+                digest,
+                bytes,
+            });
+        }
+
+        let prepared = PreparedLocalIndexDelta {
+            expected_base: current.head.revision,
+            base_root: current.record.core.root,
+            result_root,
+            repository_id: current.head.repository_id,
+            package_id: current.stored_root.package_id.clone(),
+            owner_count,
+            owner_shards,
+            name_shards,
+            objects,
+        };
+        prepared.validate()?;
+        Ok(Some(prepared))
+    }
+
+    pub(crate) fn install_local_index_delta(
+        repository: &SemanticRepository,
+        prepared: &PreparedLocalIndexDelta,
+        expected_base: RevisionId,
+        base_root: RootObjectDigest,
+        revision: RevisionId,
+        result_root: RootObjectDigest,
+    ) -> Result<(), Diagnostic> {
+        if prepared.expected_base != expected_base
+            || prepared.base_root != base_root
+            || prepared.result_root != result_root
+        {
+            return Err(index_binding_error());
+        }
+        prepared.validate()?;
+        for object in &prepared.objects {
+            repository.write_local_index_object(
+                object.kind,
+                object.digest,
+                &object.bytes,
+                MAXIMUM_LOCAL_INDEX_PART_BYTES + 50,
+            )?;
+        }
+        let manifest = PackedLocalIndexManifest {
+            contract_version: LOCAL_INDEX_CONTRACT_VERSION,
+            graph_contract_version: GRAPH_CONTRACT_VERSION,
+            repository_id: prepared.repository_id,
+            revision,
+            root: result_root,
+            package_id: prepared.package_id.clone(),
+            owner_count: prepared.owner_count,
+            owner_shards: prepared.owner_shards.clone(),
+            name_shards: prepared.name_shards.clone(),
+        };
+        repository.write_index_part(
+            revision,
+            DisposableIndexPart::Manifest,
+            &manifest.encode()?,
+            64 * 1024 + 50,
+        )
+    }
+
+    pub(crate) fn seed_local_index(
+        repository: &SemanticRepository,
+        revision: RevisionId,
+        root_digest: RootObjectDigest,
+        root: &GraphRoot,
+        modules: &[MeaningModule],
+    ) -> Result<(), Diagnostic> {
+        let owners = local_owner_summaries(root, modules)?;
+        Self::write_local_summaries(
+            repository,
+            revision,
+            root_digest,
+            root.repository_id,
+            root.package_id.clone(),
+            owners.into_values().collect(),
+        )
+        .map(|_| ())
+    }
+
+    fn cached_local_manifest(
+        repository: &SemanticRepository,
+        current: &CurrentBinding,
+    ) -> Result<Option<PackedLocalIndexManifest>, Diagnostic> {
+        Ok(repository
+            .read_index_part(
+                current.head.revision,
+                DisposableIndexPart::Manifest,
+                64 * 1024 + 50,
+            )?
+            .and_then(|bytes| PackedLocalIndexManifest::decode(&bytes).ok())
+            .filter(|manifest| {
+                manifest.repository_id == current.head.repository_id
+                    && manifest.revision == current.head.revision
+                    && manifest.root == current.record.core.root
+                    && manifest.package_id == current.stored_root.package_id
+            }))
+    }
+
     fn ensure_local_index(
         repository: &SemanticRepository,
         revision: RevisionId,
@@ -761,6 +1090,27 @@ impl SemanticQueryIndex {
         repository: &SemanticRepository,
         root: RootObjectDigest,
     ) -> Result<PackedLocalIndexManifest, Diagnostic> {
+        Self::write_local_summaries(
+            repository,
+            self.revision,
+            root,
+            self.root.repository_id,
+            self.package_id.clone(),
+            self.owners
+                .values()
+                .map(|owner| owner.summary.clone())
+                .collect(),
+        )
+    }
+
+    fn write_local_summaries(
+        repository: &SemanticRepository,
+        revision: RevisionId,
+        root: RootObjectDigest,
+        repository_id: super::semantic_id::RepositoryId,
+        package_id: PackageId,
+        owners: Vec<OwnerSummary>,
+    ) -> Result<PackedLocalIndexManifest, Diagnostic> {
         let mut owner_shards = (0..LOCAL_INDEX_BUCKETS)
             .map(|_| Vec::<OwnerSummary>::new())
             .collect::<Vec<_>>();
@@ -770,8 +1120,7 @@ impl SemanticQueryIndex {
         let mut qualified_name_shards = (0..LOCAL_INDEX_BUCKETS)
             .map(|_| BTreeMap::<String, Vec<String>>::new())
             .collect::<Vec<_>>();
-        for owner in self.owners.values() {
-            let summary = &owner.summary;
+        for summary in &owners {
             owner_shards[local_bucket("owner", &summary.id) as usize].push(summary.clone());
             name_shards[local_bucket("name", &summary.name) as usize]
                 .entry(summary.name.clone())
@@ -782,58 +1131,65 @@ impl SemanticQueryIndex {
                 .or_default()
                 .push(summary.id.clone());
         }
-        let mut owner_buckets = [0u8; 32];
-        let mut name_buckets = [0u8; 32];
+        let mut owner_digests = vec![None; LOCAL_INDEX_BUCKETS];
+        let mut name_digests = vec![None; LOCAL_INDEX_BUCKETS];
+        let mut objects = Vec::new();
         for bucket in 0..LOCAL_INDEX_BUCKETS {
             if !owner_shards[bucket].is_empty() {
-                mark_bucket(&mut owner_buckets, bucket as u8);
                 let shard = PackedLocalOwnerShard {
                     contract_version: LOCAL_INDEX_CONTRACT_VERSION,
-                    revision: self.revision,
-                    root,
                     bucket: bucket as u8,
                     owners: std::mem::take(&mut owner_shards[bucket]),
                 };
-                repository.write_index_part(
-                    self.revision,
-                    DisposableIndexPart::Owners(bucket as u8),
-                    &shard.encode()?,
-                    MAXIMUM_LOCAL_INDEX_PART_BYTES + 50,
-                )?;
+                let bytes = shard.encode()?;
+                let digest = IndexDigest::of(&bytes);
+                owner_digests[bucket] = Some(digest);
+                objects.push(PreparedLocalIndexObject {
+                    kind: LocalIndexObjectKind::Owner,
+                    digest,
+                    bytes,
+                });
             }
             if !name_shards[bucket].is_empty() || !qualified_name_shards[bucket].is_empty() {
-                mark_bucket(&mut name_buckets, bucket as u8);
                 let shard = PackedLocalNameShard {
                     contract_version: LOCAL_INDEX_CONTRACT_VERSION,
-                    revision: self.revision,
-                    root,
                     bucket: bucket as u8,
                     names: name_entries(std::mem::take(&mut name_shards[bucket])),
                     qualified_names: name_entries(std::mem::take(
                         &mut qualified_name_shards[bucket],
                     )),
                 };
-                repository.write_index_part(
-                    self.revision,
-                    DisposableIndexPart::Names(bucket as u8),
-                    &shard.encode()?,
-                    MAXIMUM_LOCAL_INDEX_PART_BYTES + 50,
-                )?;
+                let bytes = shard.encode()?;
+                let digest = IndexDigest::of(&bytes);
+                name_digests[bucket] = Some(digest);
+                objects.push(PreparedLocalIndexObject {
+                    kind: LocalIndexObjectKind::Name,
+                    digest,
+                    bytes,
+                });
             }
+        }
+        for object in objects {
+            repository.write_local_index_object(
+                object.kind,
+                object.digest,
+                &object.bytes,
+                MAXIMUM_LOCAL_INDEX_PART_BYTES + 50,
+            )?;
         }
         let manifest = PackedLocalIndexManifest {
             contract_version: LOCAL_INDEX_CONTRACT_VERSION,
             graph_contract_version: GRAPH_CONTRACT_VERSION,
-            repository_id: self.root.repository_id,
-            revision: self.revision,
+            repository_id,
+            revision,
             root,
-            package_id: self.package_id.clone(),
-            owner_count: u64::try_from(self.owners.len()).map_err(|_| index_binding_error())?,
-            owner_buckets,
-            name_buckets,
+            package_id,
+            owner_count: u64::try_from(owners.len()).map_err(|_| index_binding_error())?,
+            owner_shards: owner_digests,
+            name_shards: name_digests,
         };
         repository.write_index_part(
-            self.revision,
+            revision,
             DisposableIndexPart::Manifest,
             &manifest.encode()?,
             64 * 1024 + 50,
@@ -846,31 +1202,19 @@ impl SemanticQueryIndex {
         manifest: &PackedLocalIndexManifest,
         bucket: u8,
     ) -> Result<Option<PackedLocalOwnerShard>, Diagnostic> {
-        if !bucket_marked(&manifest.owner_buckets, bucket) {
+        if manifest.owner_shards[bucket as usize].is_none() {
             return Ok(None);
         }
-        let load = || -> Result<Option<PackedLocalOwnerShard>, Diagnostic> {
-            Ok(repository
-                .read_index_part(
-                    manifest.revision,
-                    DisposableIndexPart::Owners(bucket),
-                    MAXIMUM_LOCAL_INDEX_PART_BYTES + 50,
-                )?
-                .and_then(|bytes| PackedLocalOwnerShard::decode(&bytes).ok())
-                .filter(|shard| {
-                    shard.revision == manifest.revision
-                        && shard.root == manifest.root
-                        && shard.bucket == bucket
-                }))
-        };
-        if let Some(shard) = load()? {
+        if let Some(shard) = Self::read_local_owner_shard(repository, manifest, bucket)? {
             return Ok(Some(shard));
         }
         let rebuilt = Self::rebuild_local_index(repository, manifest.revision, manifest.root)?;
-        if !bucket_marked(&rebuilt.owner_buckets, bucket) {
+        if rebuilt.owner_shards[bucket as usize].is_none() {
             return Err(index_binding_error());
         }
-        load()?.map(Some).ok_or_else(index_binding_error)
+        Self::read_local_owner_shard(repository, &rebuilt, bucket)?
+            .map(Some)
+            .ok_or_else(index_binding_error)
     }
 
     fn local_name_shard(
@@ -878,31 +1222,94 @@ impl SemanticQueryIndex {
         manifest: &PackedLocalIndexManifest,
         bucket: u8,
     ) -> Result<Option<PackedLocalNameShard>, Diagnostic> {
-        if !bucket_marked(&manifest.name_buckets, bucket) {
+        if manifest.name_shards[bucket as usize].is_none() {
             return Ok(None);
         }
-        let load = || -> Result<Option<PackedLocalNameShard>, Diagnostic> {
-            Ok(repository
-                .read_index_part(
-                    manifest.revision,
-                    DisposableIndexPart::Names(bucket),
-                    MAXIMUM_LOCAL_INDEX_PART_BYTES + 50,
-                )?
-                .and_then(|bytes| PackedLocalNameShard::decode(&bytes).ok())
-                .filter(|shard| {
-                    shard.revision == manifest.revision
-                        && shard.root == manifest.root
-                        && shard.bucket == bucket
-                }))
-        };
-        if let Some(shard) = load()? {
+        if let Some(shard) = Self::read_local_name_shard(repository, manifest, bucket)? {
             return Ok(Some(shard));
         }
         let rebuilt = Self::rebuild_local_index(repository, manifest.revision, manifest.root)?;
-        if !bucket_marked(&rebuilt.name_buckets, bucket) {
+        if rebuilt.name_shards[bucket as usize].is_none() {
             return Err(index_binding_error());
         }
-        load()?.map(Some).ok_or_else(index_binding_error)
+        Self::read_local_name_shard(repository, &rebuilt, bucket)?
+            .map(Some)
+            .ok_or_else(index_binding_error)
+    }
+
+    fn read_local_owner_shard(
+        repository: &SemanticRepository,
+        manifest: &PackedLocalIndexManifest,
+        bucket: u8,
+    ) -> Result<Option<PackedLocalOwnerShard>, Diagnostic> {
+        let Some(digest) = manifest.owner_shards[bucket as usize] else {
+            return Ok(None);
+        };
+        Ok(repository
+            .read_local_index_object(
+                LocalIndexObjectKind::Owner,
+                digest,
+                MAXIMUM_LOCAL_INDEX_PART_BYTES + 50,
+            )?
+            .filter(|bytes| IndexDigest::of(bytes) == digest)
+            .and_then(|bytes| PackedLocalOwnerShard::decode(&bytes).ok())
+            .filter(|shard| shard.bucket == bucket))
+    }
+
+    fn read_local_name_shard(
+        repository: &SemanticRepository,
+        manifest: &PackedLocalIndexManifest,
+        bucket: u8,
+    ) -> Result<Option<PackedLocalNameShard>, Diagnostic> {
+        let Some(digest) = manifest.name_shards[bucket as usize] else {
+            return Ok(None);
+        };
+        Ok(repository
+            .read_local_index_object(
+                LocalIndexObjectKind::Name,
+                digest,
+                MAXIMUM_LOCAL_INDEX_PART_BYTES + 50,
+            )?
+            .filter(|bytes| IndexDigest::of(bytes) == digest)
+            .and_then(|bytes| PackedLocalNameShard::decode(&bytes).ok())
+            .filter(|shard| shard.bucket == bucket))
+    }
+
+    fn owner_shard_values(
+        repository: &SemanticRepository,
+        manifest: &PackedLocalIndexManifest,
+        bucket: u8,
+    ) -> Result<Option<BTreeMap<String, OwnerSummary>>, Diagnostic> {
+        match manifest.owner_shards[bucket as usize] {
+            None => Ok(Some(BTreeMap::new())),
+            Some(_) => Ok(
+                Self::read_local_owner_shard(repository, manifest, bucket)?.map(|shard| {
+                    shard
+                        .owners
+                        .into_iter()
+                        .map(|owner| (owner.id.clone(), owner))
+                        .collect()
+                }),
+            ),
+        }
+    }
+
+    fn name_shard_values(
+        repository: &SemanticRepository,
+        manifest: &PackedLocalIndexManifest,
+        bucket: u8,
+    ) -> Result<Option<LocalNameValues>, Diagnostic> {
+        match manifest.name_shards[bucket as usize] {
+            None => Ok(Some((BTreeMap::new(), BTreeMap::new()))),
+            Some(_) => Ok(
+                Self::read_local_name_shard(repository, manifest, bucket)?.map(|shard| {
+                    (
+                        name_entry_sets(shard.names),
+                        name_entry_sets(shard.qualified_names),
+                    )
+                }),
+            ),
+        }
     }
 
     pub fn owners(
@@ -1407,8 +1814,50 @@ impl PackedLocalIndexManifest {
             || self.graph_contract_version != GRAPH_CONTRACT_VERSION
             || self.owner_count == 0
             || self.owner_count > MAXIMUM_QUERY_INDEX_OWNERS as u64
+            || self.owner_shards.len() != LOCAL_INDEX_BUCKETS
+            || self.name_shards.len() != LOCAL_INDEX_BUCKETS
         {
             return Err(local_index_error("local index manifest is malformed"));
+        }
+        Ok(())
+    }
+}
+
+impl PreparedLocalIndexDelta {
+    fn validate(&self) -> Result<(), Diagnostic> {
+        if self.owner_count == 0
+            || self.owner_count > MAXIMUM_QUERY_INDEX_OWNERS as u64
+            || self.owner_shards.len() != LOCAL_INDEX_BUCKETS
+            || self.name_shards.len() != LOCAL_INDEX_BUCKETS
+        {
+            return Err(local_index_error("prepared local index delta is malformed"));
+        }
+        for object in &self.objects {
+            if object.bytes.len() > MAXIMUM_LOCAL_INDEX_PART_BYTES + 50
+                || IndexDigest::of(&object.bytes) != object.digest
+            {
+                return Err(local_index_error(
+                    "prepared local index object does not bind its content digest",
+                ));
+            }
+            match object.kind {
+                LocalIndexObjectKind::Owner => {
+                    let shard = PackedLocalOwnerShard::decode(&object.bytes)?;
+                    if self.owner_shards[shard.bucket as usize] != Some(object.digest) {
+                        return Err(local_index_error(
+                            "prepared owner shard is absent from its manifest",
+                        ));
+                    }
+                }
+                LocalIndexObjectKind::Name => {
+                    let shard = PackedLocalNameShard::decode(&object.bytes)?;
+                    if self.name_shards[shard.bucket as usize] != Some(object.digest) {
+                        return Err(local_index_error(
+                            "prepared name shard is absent from its manifest",
+                        ));
+                    }
+                }
+            }
         }
         Ok(())
     }
@@ -1511,14 +1960,6 @@ fn local_bucket(domain: &str, value: &str) -> u8 {
     hasher.finalize().as_bytes()[0]
 }
 
-fn mark_bucket(bitmap: &mut [u8; 32], bucket: u8) {
-    bitmap[(bucket / 8) as usize] |= 1 << (bucket % 8);
-}
-
-fn bucket_marked(bitmap: &[u8; 32], bucket: u8) -> bool {
-    bitmap[(bucket / 8) as usize] & (1 << (bucket % 8)) != 0
-}
-
 fn name_entries(values: BTreeMap<String, Vec<String>>) -> Vec<PackedNameEntry> {
     values
         .into_iter()
@@ -1528,6 +1969,58 @@ fn name_entries(values: BTreeMap<String, Vec<String>>) -> Vec<PackedNameEntry> {
             PackedNameEntry { value, owners }
         })
         .collect()
+}
+
+fn name_set_entries(values: BTreeMap<String, BTreeSet<String>>) -> Vec<PackedNameEntry> {
+    values
+        .into_iter()
+        .map(|(value, owners)| PackedNameEntry {
+            value,
+            owners: owners.into_iter().collect(),
+        })
+        .collect()
+}
+
+fn name_entry_sets(entries: Vec<PackedNameEntry>) -> BTreeMap<String, BTreeSet<String>> {
+    entries
+        .into_iter()
+        .map(|entry| (entry.value, entry.owners.into_iter().collect()))
+        .collect()
+}
+
+fn append_name_delta(
+    before: Option<&str>,
+    after: Option<&str>,
+    owner: &str,
+    qualified: bool,
+    removals: &mut Vec<(bool, String, String)>,
+    additions: &mut Vec<(bool, String, String)>,
+) {
+    if before == after {
+        return;
+    }
+    if let Some(value) = before {
+        removals.push((qualified, value.to_owned(), owner.to_owned()));
+    }
+    if let Some(value) = after {
+        additions.push((qualified, value.to_owned(), owner.to_owned()));
+    }
+}
+
+fn extend_unique_owner_summaries(
+    destination: &mut BTreeMap<String, OwnerSummary>,
+    values: BTreeMap<String, OwnerSummary>,
+) -> Result<(), Diagnostic> {
+    for (id, summary) in values {
+        if destination.insert(id, summary).is_some() {
+            return Err(query_error(
+                DiagnosticClass::Corrupt,
+                "semantic_index_identity_duplicate",
+                "two changed modules contain the same semantic owner identity",
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn page_values<T: Clone + Serialize>(
@@ -1647,6 +2140,22 @@ fn index_module(
     owners: &mut BTreeMap<String, OwnerRecord>,
     relations: &mut Vec<RelationView>,
 ) -> Result<(), Diagnostic> {
+    index_module_for_package(
+        &root.package_id,
+        &root.package_name,
+        module,
+        owners,
+        relations,
+    )
+}
+
+fn index_module_for_package(
+    package_id: &PackageId,
+    package_name: &str,
+    module: &MeaningModule,
+    owners: &mut BTreeMap<String, OwnerRecord>,
+    relations: &mut Vec<RelationView>,
+) -> Result<(), Diagnostic> {
     let module_id = module.module_id.to_string();
     insert_owner(
         owners,
@@ -1654,10 +2163,10 @@ fn index_module(
             kind: OwnerKind::Module,
             id: module_id.clone(),
             name: module.module.name.clone(),
-            qualified_name: format!("{}::{}", root.package_name, module.module.name),
-            package_id: root.package_id.clone(),
+            qualified_name: format!("{}::{}", package_name, module.module.name),
+            package_id: package_id.clone(),
             module_id: Some(module.module_id),
-            parent_id: Some(format!("pkg_{}", root.package_id.as_str())),
+            parent_id: Some(format!("pkg_{}", package_id.as_str())),
         },
         json!({
             "imports": module.module.imports,
@@ -1676,9 +2185,9 @@ fn index_module(
                 name: identity.name.clone(),
                 qualified_name: format!(
                     "{}::{}::{}",
-                    root.package_name, module.module.name, identity.name
+                    package_name, module.module.name, identity.name
                 ),
-                package_id: root.package_id.clone(),
+                package_id: package_id.clone(),
                 module_id: Some(module.module_id),
                 parent_id: Some(module_id.clone()),
             },
@@ -1694,9 +2203,9 @@ fn index_module(
                     name: name.clone(),
                     qualified_name: format!(
                         "{}::{}::{}::{}",
-                        root.package_name, module.module.name, identity.name, name
+                        package_name, module.module.name, identity.name, name
                     ),
-                    package_id: root.package_id.clone(),
+                    package_id: package_id.clone(),
                     module_id: Some(module.module_id),
                     parent_id: Some(declaration_id.clone()),
                 },
@@ -1712,9 +2221,9 @@ fn index_module(
                     name: binding.name.clone(),
                     qualified_name: format!(
                         "{}::{}::{}::binding::{}",
-                        root.package_name, module.module.name, identity.name, binding.name
+                        package_name, module.module.name, identity.name, binding.name
                     ),
-                    package_id: root.package_id.clone(),
+                    package_id: package_id.clone(),
                     module_id: Some(module.module_id),
                     parent_id: Some(declaration_id.clone()),
                 },
@@ -1736,9 +2245,9 @@ fn index_module(
                     name: path.clone(),
                     qualified_name: format!(
                         "{}::{}::{}::expression::{}",
-                        root.package_name, module.module.name, identity.name, path
+                        package_name, module.module.name, identity.name, path
                     ),
-                    package_id: root.package_id.clone(),
+                    package_id: package_id.clone(),
                     module_id: Some(module.module_id),
                     parent_id: Some(declaration_id.clone()),
                 },
@@ -1755,9 +2264,9 @@ fn index_module(
                 name: "documentation".to_owned(),
                 qualified_name: format!(
                     "{}::{}::documentation::{}",
-                    root.package_name, module.module.name, documentation.id
+                    package_name, module.module.name, documentation.id
                 ),
-                package_id: root.package_id.clone(),
+                package_id: package_id.clone(),
                 module_id: Some(module.module_id),
                 parent_id: Some(documentation_owner_id(&documentation.owner)),
             },
@@ -1773,9 +2282,9 @@ fn index_module(
                 name: annotation.key.clone(),
                 qualified_name: format!(
                     "{}::{}::annotation::{}",
-                    root.package_name, module.module.name, annotation.key
+                    package_name, module.module.name, annotation.key
                 ),
-                package_id: root.package_id.clone(),
+                package_id: package_id.clone(),
                 module_id: Some(module.module_id),
                 parent_id: Some(documentation_owner_id(&annotation.owner)),
             },
@@ -1783,6 +2292,205 @@ fn index_module(
         )?;
     }
     relations.extend(module.relations.iter().map(relation_view));
+    Ok(())
+}
+
+fn module_owner_summaries(
+    package_id: &PackageId,
+    package_name: &str,
+    module: &MeaningModule,
+) -> Result<BTreeMap<String, OwnerSummary>, Diagnostic> {
+    let mut owners = BTreeMap::new();
+    let module_id = module.module_id.to_string();
+    insert_owner_summary(
+        &mut owners,
+        OwnerSummary {
+            kind: OwnerKind::Module,
+            id: module_id.clone(),
+            name: module.module.name.clone(),
+            qualified_name: format!("{}::{}", package_name, module.module.name),
+            package_id: package_id.clone(),
+            module_id: Some(module.module_id),
+            parent_id: Some(format!("pkg_{}", package_id.as_str())),
+        },
+    )?;
+    for identity in &module.declarations {
+        let declaration_id = identity.id.to_string();
+        insert_owner_summary(
+            &mut owners,
+            OwnerSummary {
+                kind: declaration_owner_kind(identity.kind),
+                id: declaration_id.clone(),
+                name: identity.name.clone(),
+                qualified_name: format!(
+                    "{}::{}::{}",
+                    package_name, module.module.name, identity.name
+                ),
+                package_id: package_id.clone(),
+                module_id: Some(module.module_id),
+                parent_id: Some(module_id.clone()),
+            },
+        )?;
+        for member in &identity.members {
+            let (kind, id, name) = member_parts(member);
+            insert_owner_summary(
+                &mut owners,
+                OwnerSummary {
+                    kind,
+                    id,
+                    name: name.clone(),
+                    qualified_name: format!(
+                        "{}::{}::{}::{}",
+                        package_name, module.module.name, identity.name, name
+                    ),
+                    package_id: package_id.clone(),
+                    module_id: Some(module.module_id),
+                    parent_id: Some(declaration_id.clone()),
+                },
+            )?;
+        }
+        for binding in &identity.bindings {
+            insert_owner_summary(
+                &mut owners,
+                OwnerSummary {
+                    kind: OwnerKind::Binding,
+                    id: binding.id.to_string(),
+                    name: binding.name.clone(),
+                    qualified_name: format!(
+                        "{}::{}::{}::binding::{}",
+                        package_name, module.module.name, identity.name, binding.name
+                    ),
+                    package_id: package_id.clone(),
+                    module_id: Some(module.module_id),
+                    parent_id: Some(declaration_id.clone()),
+                },
+            )?;
+        }
+        for expression in &identity.expressions {
+            let path = expression
+                .path
+                .iter()
+                .map(u32::to_string)
+                .collect::<Vec<_>>()
+                .join(".");
+            insert_owner_summary(
+                &mut owners,
+                OwnerSummary {
+                    kind: OwnerKind::Expression,
+                    id: expression.id.to_string(),
+                    name: path.clone(),
+                    qualified_name: format!(
+                        "{}::{}::{}::expression::{}",
+                        package_name, module.module.name, identity.name, path
+                    ),
+                    package_id: package_id.clone(),
+                    module_id: Some(module.module_id),
+                    parent_id: Some(declaration_id.clone()),
+                },
+            )?;
+        }
+    }
+    for documentation in &module.documentation {
+        insert_owner_summary(
+            &mut owners,
+            OwnerSummary {
+                kind: OwnerKind::Documentation,
+                id: documentation.id.to_string(),
+                name: "documentation".to_owned(),
+                qualified_name: format!(
+                    "{}::{}::documentation::{}",
+                    package_name, module.module.name, documentation.id
+                ),
+                package_id: package_id.clone(),
+                module_id: Some(module.module_id),
+                parent_id: Some(documentation_owner_id(&documentation.owner)),
+            },
+        )?;
+    }
+    for annotation in &module.annotations {
+        insert_owner_summary(
+            &mut owners,
+            OwnerSummary {
+                kind: OwnerKind::Annotation,
+                id: annotation.id.to_string(),
+                name: annotation.key.clone(),
+                qualified_name: format!(
+                    "{}::{}::annotation::{}",
+                    package_name, module.module.name, annotation.key
+                ),
+                package_id: package_id.clone(),
+                module_id: Some(module.module_id),
+                parent_id: Some(documentation_owner_id(&annotation.owner)),
+            },
+        )?;
+    }
+    Ok(owners)
+}
+
+fn local_owner_summaries(
+    root: &GraphRoot,
+    modules: &[MeaningModule],
+) -> Result<BTreeMap<String, OwnerSummary>, Diagnostic> {
+    root.validate_modules(modules)?;
+    let mut owners = BTreeMap::new();
+    insert_owner_summary(
+        &mut owners,
+        OwnerSummary {
+            kind: OwnerKind::Repository,
+            id: root.repository_id.to_string(),
+            name: root.package_name.clone(),
+            qualified_name: root.package_name.clone(),
+            package_id: root.package_id.clone(),
+            module_id: None,
+            parent_id: None,
+        },
+    )?;
+    insert_owner_summary(
+        &mut owners,
+        OwnerSummary {
+            kind: OwnerKind::Package,
+            id: format!("pkg_{}", root.package_id.as_str()),
+            name: root.package_name.clone(),
+            qualified_name: root.package_name.clone(),
+            package_id: root.package_id.clone(),
+            module_id: None,
+            parent_id: Some(root.repository_id.to_string()),
+        },
+    )?;
+    for module in modules {
+        extend_unique_owner_summaries(
+            &mut owners,
+            module_owner_summaries(&root.package_id, &root.package_name, module)?,
+        )?;
+    }
+    for target in &root.targets {
+        insert_owner_summary(
+            &mut owners,
+            OwnerSummary {
+                kind: OwnerKind::Target,
+                id: target.id.to_string(),
+                name: target.name.clone(),
+                qualified_name: format!("{}::target::{}", root.package_name, target.name),
+                package_id: root.package_id.clone(),
+                module_id: Some(target.component_module),
+                parent_id: Some(format!("pkg_{}", root.package_id.as_str())),
+            },
+        )?;
+    }
+    Ok(owners)
+}
+
+fn insert_owner_summary(
+    owners: &mut BTreeMap<String, OwnerSummary>,
+    summary: OwnerSummary,
+) -> Result<(), Diagnostic> {
+    if owners.insert(summary.id.clone(), summary).is_some() {
+        return Err(query_error(
+            DiagnosticClass::Corrupt,
+            "semantic_index_identity_duplicate",
+            "two semantic owners use the same stable identity",
+        ));
+    }
     Ok(())
 }
 
@@ -2045,11 +2753,132 @@ fn query_error(class: DiagnosticClass, code: &str, message: impl Into<String>) -
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::platform::language::{Declaration, Expression, Module};
     use crate::platform::{
         GRAPH_CONTRACT_VERSION, InitialPublication, MigrationIdentityAllocator, ModuleObjectRef,
-        PackageId, RepositoryId, SemanticDiffDigest, SourceLimits, TransactionDigest, parse_module,
-        parse_source,
+        PackageId, RepositoryId, RequestIdentityAllocator, SemanticDiffDigest, SourceLimits,
+        TransactionDigest, parse_module, parse_source,
     };
+
+    fn local_index_fixture() -> (
+        tempfile::TempDir,
+        SemanticRepository,
+        GraphRoot,
+        MeaningModule,
+    ) {
+        let temporary = tempfile::TempDir::new().expect("temporary local index project");
+        let document = parse_source(
+            "local-index.lkj",
+            b"(module sample (fn answer () I64 42))\n",
+            SourceLimits::default(),
+        )
+        .expect("source oracle");
+        let module = parse_module(&document).expect("module oracle");
+        let mut allocator = MigrationIdentityAllocator::new(b"local-index-v3".to_vec());
+        let meaning = MeaningModule::import(module, &mut allocator).expect("meaning");
+        let mut root = GraphRoot {
+            graph_contract_version: GRAPH_CONTRACT_VERSION,
+            repository_id: RepositoryId::migrate(b"local-index-v3", 1),
+            package_id: PackageId::parse("10000000000000000000000000000001").expect("package"),
+            package_name: "fixture".to_owned(),
+            modules: vec![ModuleObjectRef {
+                id: meaning.module_id,
+                name: meaning.module.name.clone(),
+                object: meaning.digest().expect("module digest"),
+            }],
+            dependencies: Vec::new(),
+            targets: Vec::new(),
+            tombstones: Vec::new(),
+        };
+        let mut modules = vec![meaning];
+        super::super::semantic::canonicalize_graph_package(&mut root, &mut modules, &[])
+            .expect("canonical graph");
+        let meaning = modules.pop().expect("canonical module");
+        let (repository, _) = SemanticRepository::initialize(
+            temporary.path(),
+            InitialPublication {
+                root: root.clone(),
+                modules: vec![meaning.clone()],
+                transaction: TransactionDigest::of(b"local-index-v3-import"),
+                semantic_diff: SemanticDiffDigest::of(b"local-index-v3-initial"),
+                intent: None,
+                validation_profile: None,
+                dependency_artifacts: Vec::new(),
+                status: crate::platform::ReceiptStatus::ImportAccepted,
+            },
+        )
+        .expect("initialize");
+        (temporary, repository, root, meaning)
+    }
+
+    fn module_reference(module: &MeaningModule) -> ModuleObjectRef {
+        ModuleObjectRef {
+            id: module.module_id,
+            name: module.module.name.clone(),
+            object: module.digest().expect("changed module digest"),
+        }
+    }
+
+    fn assert_local_delta_matches_full(
+        repository: &SemanticRepository,
+        base_root: &GraphRoot,
+        result_root: GraphRoot,
+        result_modules: Vec<MeaningModule>,
+        changed_modules: Vec<MeaningModule>,
+        revision_byte: u8,
+    ) -> (usize, usize, usize) {
+        let current = repository.current_binding().expect("current binding");
+        let base_manifest =
+            SemanticQueryIndex::ensure_local_index(repository, current.head.revision)
+                .expect("seeded base local index");
+        let delta = StoredGraphRootDelta::between(base_root, &result_root).expect("root delta");
+        let result_digest = result_root.digest().expect("result root digest");
+        let prepared = SemanticQueryIndex::prepare_local_index_delta(
+            repository,
+            &current,
+            &delta,
+            &changed_modules,
+            result_digest,
+        )
+        .expect("prepare local index delta")
+        .expect("supported local index delta");
+        let object_count = prepared.objects.len();
+        let reused_owner_shards = base_manifest
+            .owner_shards
+            .iter()
+            .zip(&prepared.owner_shards)
+            .filter(|(before, after)| before.is_some() && before == after)
+            .count();
+        let reused_name_shards = base_manifest
+            .name_shards
+            .iter()
+            .zip(&prepared.name_shards)
+            .filter(|(before, after)| before.is_some() && before == after)
+            .count();
+        let revision = RevisionId::from_digest([revision_byte; 32]);
+        SemanticQueryIndex::install_local_index_delta(
+            repository,
+            &prepared,
+            current.head.revision,
+            current.record.core.root,
+            revision,
+            result_digest,
+        )
+        .expect("install local index delta");
+        let installed = PackedLocalIndexManifest::decode(
+            &repository
+                .read_index_part(revision, DisposableIndexPart::Manifest, 64 * 1024 + 50)
+                .expect("read installed manifest")
+                .expect("installed manifest"),
+        )
+        .expect("decode installed manifest");
+        let full = SemanticQueryIndex::from_parts(revision, result_root, result_modules)
+            .expect("full query oracle")
+            .write_local_index(repository, result_digest)
+            .expect("write full local index oracle");
+        assert_eq!(installed, full);
+        (object_count, reused_owner_shards, reused_name_shards)
+    }
 
     #[test]
     fn continuation_rejects_revision_query_and_byte_tampering() {
@@ -2072,6 +2901,210 @@ mod tests {
                 digest
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn local_index_v3_deltas_match_full_oracle_and_reuse_unchanged_shards() {
+        let (_temporary, repository, base_root, base_module) = local_index_fixture();
+        let initial_revision = repository.current_binding().expect("current").head.revision;
+        assert!(
+            repository
+                .read_index_object(initial_revision, MAXIMUM_QUERY_INDEX_BYTES + 50)
+                .expect("read broad index state")
+                .is_none(),
+            "exact-index seeding must leave the broad relation index lazy"
+        );
+        let base_manifest = SemanticQueryIndex::ensure_local_index(&repository, initial_revision)
+            .expect("initial v3 manifest");
+        let base_owner_shards = base_manifest
+            .owner_shards
+            .iter()
+            .filter(|digest| digest.is_some())
+            .count();
+        let base_name_shards = base_manifest
+            .name_shards
+            .iter()
+            .filter(|digest| digest.is_some())
+            .count();
+
+        let mut body_module = base_module.clone();
+        match &mut body_module.module.declarations[0] {
+            Declaration::Function(function) => {
+                function.body = match function.body.clone() {
+                    Expression::I64(_, span) => Expression::I64(43, span),
+                    _ => panic!("fixture body is an integer literal"),
+                };
+            }
+            _ => panic!("fixture declaration is a function"),
+        }
+        let mut body_root = base_root.clone();
+        body_root.modules[0] = module_reference(&body_module);
+        let (objects, reused_owners, reused_names) = assert_local_delta_matches_full(
+            &repository,
+            &base_root,
+            body_root,
+            vec![body_module.clone()],
+            vec![body_module],
+            21,
+        );
+        assert_eq!(
+            objects, 0,
+            "a body-only edit preserves all owner/name shards"
+        );
+        assert_eq!(reused_owners, base_owner_shards);
+        assert_eq!(reused_names, base_name_shards);
+
+        let created = MeaningModule::create(
+            Module {
+                name: "created".to_owned(),
+                imports: Vec::new(),
+                exports: Vec::new(),
+                declarations: Vec::new(),
+            },
+            &mut RequestIdentityAllocator::new(b"local-index-created".to_vec()),
+        )
+        .expect("created module");
+        let mut created_root = base_root.clone();
+        created_root.modules.push(module_reference(&created));
+        created_root.modules.sort();
+        let (objects, reused_owners, reused_names) = assert_local_delta_matches_full(
+            &repository,
+            &base_root,
+            created_root,
+            vec![base_module.clone(), created.clone()],
+            vec![created],
+            22,
+        );
+        assert!(objects > 0);
+        assert!(reused_owners + reused_names > 0);
+
+        let mut renamed_module = base_module.clone();
+        renamed_module.module.name = "renamed".to_owned();
+        let mut renamed_root = base_root.clone();
+        renamed_root.modules[0] = module_reference(&renamed_module);
+        let (objects, reused_owners, reused_names) = assert_local_delta_matches_full(
+            &repository,
+            &base_root,
+            renamed_root,
+            vec![renamed_module.clone()],
+            vec![renamed_module],
+            23,
+        );
+        assert!(objects > 0);
+        assert!(reused_owners + reused_names > 0);
+
+        let mut renamed_declaration = base_module.clone();
+        renamed_declaration.declarations[0].name = "result".to_owned();
+        match &mut renamed_declaration.module.declarations[0] {
+            Declaration::Function(function) => function.name = "result".to_owned(),
+            _ => panic!("fixture declaration is a function"),
+        }
+        let mut declaration_root = base_root.clone();
+        declaration_root.modules[0] = module_reference(&renamed_declaration);
+        let (objects, reused_owners, reused_names) = assert_local_delta_matches_full(
+            &repository,
+            &base_root,
+            declaration_root,
+            vec![renamed_declaration.clone()],
+            vec![renamed_declaration],
+            24,
+        );
+        assert!(objects > 0);
+        assert!(reused_owners + reused_names > 0);
+    }
+
+    #[test]
+    fn local_index_v2_manifest_rejects_and_rebuilds_as_v3() {
+        let (_temporary, repository, _, _) = local_index_fixture();
+        let revision = repository.current_binding().expect("current").head.revision;
+        let mut predecessor = repository
+            .read_index_part(revision, DisposableIndexPart::Manifest, 64 * 1024 + 50)
+            .expect("read manifest")
+            .expect("seeded manifest");
+        predecessor[..LOCAL_MANIFEST_MAGIC.len()].copy_from_slice(b"LKJIXM02");
+        assert!(PackedLocalIndexManifest::decode(&predecessor).is_err());
+        repository
+            .write_index_part(
+                revision,
+                DisposableIndexPart::Manifest,
+                &predecessor,
+                64 * 1024 + 50,
+            )
+            .expect("install predecessor fixture");
+        SemanticQueryIndex::ensure_local_index(&repository, revision)
+            .expect("rebuild rejected predecessor");
+        let repaired = repository
+            .read_index_part(revision, DisposableIndexPart::Manifest, 64 * 1024 + 50)
+            .expect("read repaired manifest")
+            .expect("repaired manifest");
+        PackedLocalIndexManifest::decode(&repaired).expect("current v3 manifest");
+        assert_eq!(&repaired[..LOCAL_MANIFEST_MAGIC.len()], b"LKJIXM03");
+    }
+
+    #[test]
+    fn local_index_delta_installs_manifest_only_after_all_content_objects() {
+        let (_temporary, repository, base_root, _base_module) = local_index_fixture();
+        let current = repository.current_binding().expect("current");
+        let created = MeaningModule::create(
+            Module {
+                name: "blocked".to_owned(),
+                imports: Vec::new(),
+                exports: Vec::new(),
+                declarations: Vec::new(),
+            },
+            &mut RequestIdentityAllocator::new(b"blocked-local-index-object".to_vec()),
+        )
+        .expect("created module");
+        let mut result_root = base_root.clone();
+        result_root.modules.push(module_reference(&created));
+        result_root.modules.sort();
+        let result_digest = result_root.digest().expect("result root digest");
+        let delta = StoredGraphRootDelta::between(&base_root, &result_root).expect("root delta");
+        let prepared = SemanticQueryIndex::prepare_local_index_delta(
+            &repository,
+            &current,
+            &delta,
+            &[created],
+            result_digest,
+        )
+        .expect("prepare")
+        .expect("supported local delta");
+        let object = prepared.objects.first().expect("new local index object");
+        let encoded = super::super::semantic_id::encode_hex(&object.digest.bytes());
+        let kind = match object.kind {
+            LocalIndexObjectKind::Owner => "owners",
+            LocalIndexObjectKind::Name => "names",
+        };
+        let object_path = repository
+            .store_path()
+            .join("indexes")
+            .join("local-objects")
+            .join(kind)
+            .join(&encoded[..2])
+            .join(format!("{encoded}.lkix"));
+        std::fs::create_dir_all(object_path.parent().expect("object parent"))
+            .expect("object parent");
+        std::fs::create_dir(&object_path).expect("blocking non-file object");
+
+        let revision = RevisionId::from_digest([31; 32]);
+        assert!(
+            SemanticQueryIndex::install_local_index_delta(
+                &repository,
+                &prepared,
+                current.head.revision,
+                current.record.core.root,
+                revision,
+                result_digest,
+            )
+            .is_err()
+        );
+        assert!(
+            repository
+                .read_index_part(revision, DisposableIndexPart::Manifest, 64 * 1024 + 50,)
+                .expect("read absent manifest")
+                .is_none(),
+            "a failed content-object install must not expose a manifest"
         );
     }
 
@@ -2171,16 +3204,42 @@ mod tests {
                 .rebuilt_index()
         );
 
+        let manifest = SemanticQueryIndex::ensure_local_index(&repository, revision)
+            .expect("seeded local index");
+        let name_bucket = local_bucket("name", "Item");
+        let name_digest = manifest.name_shards[name_bucket as usize].expect("name shard digest");
+        let name_encoded = super::super::semantic_id::encode_hex(&name_digest.bytes());
+        let local_name = repository
+            .store_path()
+            .join("indexes")
+            .join("local-objects")
+            .join("names")
+            .join(&name_encoded[..2])
+            .join(format!("{name_encoded}.lkix"));
+        std::fs::write(&local_name, b"corrupt derived name shard").expect("corrupt name shard");
+        assert_eq!(
+            SemanticQueryIndex::exact_find_revision(
+                &repository,
+                revision,
+                "Item",
+                None,
+                QueryBudget::default(),
+            )
+            .expect("rebuild corrupt name shard")
+            .total_items,
+            1
+        );
+
+        let bucket = local_bucket("owner", &declaration.to_string());
+        let owner_digest = manifest.owner_shards[bucket as usize].expect("owner shard digest");
+        let owner_encoded = super::super::semantic_id::encode_hex(&owner_digest.bytes());
         let local_owner = repository
             .store_path()
             .join("indexes")
-            .join(&encoded[..2])
-            .join(&encoded)
+            .join("local-objects")
             .join("owners")
-            .join(format!(
-                "{:02x}.lkix",
-                local_bucket("owner", &declaration.to_string())
-            ));
+            .join(&owner_encoded[..2])
+            .join(format!("{owner_encoded}.lkix"));
         std::fs::write(&local_owner, b"corrupt derived owner shard").expect("corrupt owner shard");
         assert_eq!(
             SemanticQueryIndex::show_revision(

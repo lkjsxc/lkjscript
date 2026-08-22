@@ -98,14 +98,16 @@ fully validates the complete candidate.
 
 Either path produces one prepared validation bound to base root, result root, root delta, changed
 modules, updated module summaries, reverse-dependency index, semantic certificate, and validation
-facts. Local preparation loads or rebuilds the base revision's certificate-matching semantic
+facts. Eligible local preparation also carries a disposable exact-owner/name index delta bound to
+the same base and result. It loads or rebuilds the base revision's certificate-matching semantic
 index, applies exact summary replacements/removals, and rebinds it to the predicted revision. Under
 the write lock publication rereads HEAD, rejects a changed base, replays the root delta, verifies
 the prepared result and certificate bindings, and does not repeat semantic validation. It writes
 immutable changed-module/page/root/receipt/revision objects and disposable summary/index bytes
-before replacing HEAD once. On Linux, new object data and directory metadata are flushed with
-`syncfs` before the separately synchronized HEAD stage and rename. Other targets use per-file
-synchronization.
+before replacing HEAD once. Exact-index content objects precede their manifest; a cache-write
+failure cannot change or prevent canonical publication. On Linux, new object data and directory
+metadata are flushed with `syncfs` before the separately synchronized HEAD stage and rename. Other
+targets use per-file synchronization.
 
 The persistent root eliminates a monolithic module-reference payload as the physical accepted root:
 equal maps have equal roots independent of insertion history, exact ID/name lookup traverses a
@@ -145,9 +147,13 @@ validation: the four admitted transaction classes are selected explicitly, while
 changes use complete preparation. The complete validator remains the fallback and differential
 oracle.
 
-The query engine retains revision-bound broad and sharded exact indexes. Missing, stale, or corrupt
-query state rebuilds from canonical authority. Canonical ordering and continuation meaning do not
-depend on physical page order.
+The query engine retains a revision-bound broad relation index and a local exact-index contract 3.
+The exact index stores content-addressed owner/name shards independently of revision and binds 256
+owner plus 256 name shard digest slots in a small revision/root manifest. Local changes rewrite
+only touched buckets; full-candidate and initial publication seed from graph values already in
+memory. Missing, stale, or corrupt query state rebuilds from canonical authority. Canonical
+ordering and continuation meaning do not depend on physical page order. Broad relation-index delta
+maintenance is not implemented.
 
 Pure functions may declare explicit rank-1 type parameters with stable identities. Direct calls
 and named pure function values require explicit type arguments, and `invoke` applies such a value.

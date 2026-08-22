@@ -24,7 +24,7 @@ application actor identity.
 | Identity-domain confusion | tagged opaque IDs, typed selectors, graph shape validation, foreign-domain rejection tests | callers preserve full durable IDs |
 | Partial or torn publication | exact-base lock, immutable objects first, filesystem durability before one synchronized atomic HEAD rename | local filesystem honors documented operations |
 | Corrupt current authority | object-key verification, deep reconstruction independent of indexes, writes blocked on observed corruption | operator restores or repairs from trusted backup |
-| Index substitution or loss | revision/root/contract-bound digests; local/full indexes are disposable and rebuild | rebuild cost can be broad |
+| Index substitution or loss | revision/root/contract-bound manifests; content-addressed local exact shards; local/full indexes are disposable and rebuild | loss may widen the next local change or query to broad reconstruction |
 | Semantic-summary substitution | contract-2 module/validator/input binding, revision-bound reverse index, domain-separated checksums, and a revision-core semantic certificate for the exact fact set | summary and reverse-index bytes are persisted but disposable; loss rebuilds, while a rebuilt certificate mismatch is canonical corruption |
 | Name-driven reference drift | canonical imports, exports, declaration references, and targets bind typed stable IDs; module name uniqueness uses the persistent name map; module and declaration rename have full-oracle differential locality tests | declaration move remains a complete-path operation because exact references include the owning module identity |
 | Stale concurrent write | HEAD reread under exclusive lock and exact base comparison | one local repository lock domain |

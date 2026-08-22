@@ -336,6 +336,101 @@ fn copied_binary_creates_runs_backs_up_and_restores_a_command_project() {
         changed["result"]["receipt"]["validation"]["modules_checked"],
         1
     );
+    let found_after_body_change = success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "find",
+            "main",
+            "--exact",
+            "--limit",
+            "16",
+        ],
+    );
+    assert!(
+        found_after_body_change["result"]["items"]
+            .as_array()
+            .expect("main candidates after body change")
+            .iter()
+            .any(|item| item["kind"] == "pure_function" && item["id"] == main)
+    );
+
+    let rename = serde_json::json!({
+        "contract_version": 3,
+        "base_revision": changed["result"]["published_revision"],
+        "changes": [{
+            "change": "rename_declaration",
+            "declaration": main,
+            "new_name": "entry"
+        }]
+    });
+    let rename_path = temporary.path().join("rename.json");
+    std::fs::write(
+        &rename_path,
+        serde_json::to_vec(&rename).expect("rename JSON"),
+    )
+    .expect("rename request");
+    let renamed = success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "--request-file",
+            path(&rename_path),
+            "--commit",
+        ],
+    );
+    assert_eq!(
+        renamed["result"]["receipt"]["validation"]["profile"],
+        "incremental_declaration_rename"
+    );
+    let found_after_rename = success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "find",
+            "entry",
+            "--exact",
+            "--limit",
+            "16",
+        ],
+    );
+    assert!(
+        found_after_rename["result"]["items"]
+            .as_array()
+            .expect("entry candidates after rename")
+            .iter()
+            .any(|item| item["kind"] == "pure_function" && item["id"] == main)
+    );
+    let stale_name = success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "find",
+            "main",
+            "--exact",
+            "--limit",
+            "16",
+        ],
+    );
+    assert!(
+        stale_name["result"]["items"]
+            .as_array()
+            .expect("remaining main candidates")
+            .iter()
+            .all(|item| item["kind"] != "pure_function" || item["id"] != main)
+    );
     let reran = success_at(
         &copied_binary,
         temporary.path(),

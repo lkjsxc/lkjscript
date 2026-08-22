@@ -49,23 +49,28 @@ request has no preconditions:
   callers.
 
 Each local path updates or removes the changed module summaries, updates the reverse index by
-delta, computes the new certificate, and produces a prepared root delta. Focused differential tests
-compare the accepted logical root and validation result with complete canonicalization and full
-validation.
+delta, computes the new certificate, and produces a prepared root delta. It also compares old and
+new module owner projections to prepare exact-owner/name index contract 3: only touched
+content-addressed buckets are rewritten and unchanged bucket digests are reused. Focused
+differential tests compare the accepted logical root, validation result, and exact-index generation
+with complete reconstruction.
 
 Every preconditioned request, mixed request, declaration move, signature/type/effect/capability/
 target/test/dependency change, and every other operation uses validation profile
 `prepared_once_full_oracle`. That path reconstructs current logical meaning, clones the complete
-root/module vectors, canonicalizes relations, and validates the complete candidate. A missing
-disposable owner or semantic index can also make local preparation perform a broad rebuild.
+root/module vectors, canonicalizes relations, and validates the complete candidate. It seeds the
+new exact index from candidate values already in memory. A missing disposable exact or semantic
+index makes local preparation widen to this complete path.
 
 ## Publication and full oracle
 
 Both local and complete preparation produce one exact result bound to base root, result root, root
 delta, changed modules, semantic diff, summary delta, reverse index, semantic certificate, and
-validation facts. Under the write lock publication rereads HEAD, rejects a stale base, replays and
+validation facts. Local preparation additionally carries an optional exact-index delta with the
+same bindings. Under the write lock publication rereads HEAD, rejects a stale base, replays and
 checks the prepared delta and certificate, writes new immutable data, and does not repeat semantic
-validation.
+validation. Exact-index shards precede their manifest; because the index is disposable, failure to
+install it does not block accepted authority.
 
 Complete canonicalization, complete semantic validation, packed reconstruction, and deterministic
 root rebuilding remain the correctness oracles. Current differential coverage is focused on the
@@ -90,8 +95,8 @@ General role-driven propagation across public signatures, types, effects, capabi
 components, targets, tests, dependencies, and generic applications remains future work. It requires
 explicit input-complete fact keys, deterministic diagnostics, sparse and dense high-fanout tests,
 long valid and invalid mutation sequences, work/I/O counters that expose hidden scans, and clean
-comparison with full validation and clean artifacts. Query-index delta maintenance and incremental
-compiler units are separate unimplemented layers.
+comparison with full validation and clean artifacts. Broad relation-index delta maintenance and
+incremental compiler units are separate unimplemented layers.
 
 Disable a local path and widen to the complete oracle on any unexplained mismatch. Re-enable it
 only after retaining the failing mutation and passing focused differential coverage. No later

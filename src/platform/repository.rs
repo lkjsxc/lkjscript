@@ -21,12 +21,12 @@ use super::semantic::{
 };
 use super::semantic_diff::semantic_diff_digest;
 use super::semantic_digest::{
-    ArtifactDigest, BackupDigest, CleanupDigest, ModuleObjectDigest, ReceiptDigest,
+    ArtifactDigest, BackupDigest, CleanupDigest, IndexDigest, ModuleObjectDigest, ReceiptDigest,
     RevisionRecordDigest, RootObjectDigest, SemanticDiffDigest, TransactionDigest,
 };
 use super::semantic_draft::{DraftRecord, MAXIMUM_DRAFT_BYTES, SemanticDraftStore};
 use super::semantic_id::{DraftId, ModuleId, RepositoryId, RevisionId};
-use super::semantic_query::SemanticQueryIndex;
+use super::semantic_query::{PreparedLocalIndexDelta, SemanticQueryIndex};
 use super::semantic_summary::{
     MAXIMUM_MODULE_SUMMARY_ENCODED_BYTES, MAXIMUM_REVERSE_INDEX_ENCODED_BYTES,
     ModuleSemanticSummary, ReverseDependencyIndex, SemanticSummaryDigest, build_module_summary,
@@ -72,13 +72,19 @@ const ARTIFACT_OBJECTS: &str = "artifacts";
 const DRAFT_OBJECTS: &str = "drafts";
 const INDEX_OBJECTS: &str = "indexes";
 const SUMMARY_INDEX_OBJECTS: &str = "indexes/summary-objects";
+const LOCAL_INDEX_OWNER_OBJECTS: &str = "indexes/local-objects/owners";
+const LOCAL_INDEX_NAME_OBJECTS: &str = "indexes/local-objects/names";
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum DisposableIndexPart {
     Manifest,
-    Owners(u8),
-    Names(u8),
     SemanticDependencies,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum LocalIndexObjectKind {
+    Owner,
+    Name,
 }
 
 #[derive(Clone, Debug)]
@@ -246,6 +252,7 @@ pub(crate) struct PreparedValidation {
     changed_modules: Vec<MeaningModule>,
     semantic_index: ReverseDependencyIndex,
     semantic_summaries: Vec<ModuleSemanticSummary>,
+    local_index_delta: Option<PreparedLocalIndexDelta>,
     facts: ValidationFacts,
 }
 
@@ -921,6 +928,7 @@ impl SemanticRepository {
             changed_modules,
             semantic_index,
             semantic_summaries,
+            local_index_delta: None,
             facts,
         })
     }
@@ -988,6 +996,15 @@ impl SemanticRepository {
                 "local preparation modules do not equal the persistent-root delta",
             ));
         }
+        let local_index_delta = SemanticQueryIndex::prepare_local_index_delta(
+            self,
+            current,
+            &delta,
+            &changed_modules,
+            result_root,
+        )
+        .ok()
+        .flatten();
         let semantic_summaries =
             build_semantic_summaries(&current.stored_root.package_id, &changed_modules)?;
         let (base_semantic_index, _) = self.load_or_rebuild_semantic_index(current)?;
@@ -1018,6 +1035,7 @@ impl SemanticRepository {
             changed_modules,
             semantic_index,
             semantic_summaries,
+            local_index_delta,
             facts,
         })
     }
@@ -1283,58 +1301,66 @@ impl SemanticRepository {
                 "proposed graph root belongs to a foreign repository",
             ));
         }
-        let (stored, changed_modules, prepared_facts, semantic_index, semantic_summaries) =
-            if let Some(prepared) = proposal.prepared_validation.as_ref() {
-                if prepared.expected_base != proposal.expected_base
-                    || prepared.base_root != current.record.core.root
-                {
-                    return Err(repository_error(
-                        DiagnosticClass::Infrastructure,
-                        "repository_prepared_base_binding",
-                        "prepared validation does not bind the exact visible base",
-                    ));
-                }
-                let stored = current.stored_root.apply_delta(
-                    &RepositoryPageStore::read_only(&self.store),
-                    &prepared.delta,
-                )?;
-                (
-                    stored,
-                    prepared.changed_modules.clone(),
-                    Some(prepared.facts.clone()),
-                    prepared.semantic_index.clone(),
-                    prepared.semantic_summaries.clone(),
+        let (
+            stored,
+            changed_modules,
+            prepared_facts,
+            semantic_index,
+            semantic_summaries,
+            local_index_delta,
+        ) = if let Some(prepared) = proposal.prepared_validation.as_ref() {
+            if prepared.expected_base != proposal.expected_base
+                || prepared.base_root != current.record.core.root
+            {
+                return Err(repository_error(
+                    DiagnosticClass::Infrastructure,
+                    "repository_prepared_base_binding",
+                    "prepared validation does not bind the exact visible base",
+                ));
+            }
+            let stored = current.stored_root.apply_delta(
+                &RepositoryPageStore::read_only(&self.store),
+                &prepared.delta,
+            )?;
+            (
+                stored,
+                prepared.changed_modules.clone(),
+                Some(prepared.facts.clone()),
+                prepared.semantic_index.clone(),
+                prepared.semantic_summaries.clone(),
+                prepared.local_index_delta.clone(),
+            )
+        } else {
+            let proposed_root = proposal.root.as_ref().ok_or_else(|| {
+                repository_error(
+                    DiagnosticClass::Infrastructure,
+                    "repository_proposal_root_missing",
+                    "an unprepared publication requires a complete logical root",
                 )
-            } else {
-                let proposed_root = proposal.root.as_ref().ok_or_else(|| {
-                    repository_error(
-                        DiagnosticClass::Infrastructure,
-                        "repository_proposal_root_missing",
-                        "an unprepared publication requires a complete logical root",
-                    )
-                })?;
-                let current_root = current.stored_root.reconstruct(
-                    &RepositoryPageStore::read_only(&self.store),
-                    &mut MapWork::default(),
-                )?;
-                let delta = StoredGraphRootDelta::between(&current_root, proposed_root)?;
-                let stored = current
-                    .stored_root
-                    .apply_delta(&RepositoryPageStore::read_only(&self.store), &delta)?;
-                let semantic_summaries =
-                    build_semantic_summaries(&proposed_root.package_id, &proposal.modules)?;
-                let semantic_index = build_reverse_dependency_index(
-                    RevisionId::from_digest([0; 32]),
-                    &semantic_summaries,
-                )?;
-                (
-                    stored,
-                    proposal.modules.clone(),
-                    None,
-                    semantic_index,
-                    semantic_summaries,
-                )
-            };
+            })?;
+            let current_root = current.stored_root.reconstruct(
+                &RepositoryPageStore::read_only(&self.store),
+                &mut MapWork::default(),
+            )?;
+            let delta = StoredGraphRootDelta::between(&current_root, proposed_root)?;
+            let stored = current
+                .stored_root
+                .apply_delta(&RepositoryPageStore::read_only(&self.store), &delta)?;
+            let semantic_summaries =
+                build_semantic_summaries(&proposed_root.package_id, &proposal.modules)?;
+            let semantic_index = build_reverse_dependency_index(
+                RevisionId::from_digest([0; 32]),
+                &semantic_summaries,
+            )?;
+            (
+                stored,
+                proposal.modules.clone(),
+                None,
+                semantic_index,
+                semantic_summaries,
+                None,
+            )
+        };
         let root_bytes = stored.root.encode()?;
         let root_digest = stored.root.digest()?;
         if let Some(prepared) = proposal.prepared_validation.as_ref()
@@ -1429,6 +1455,30 @@ impl SemanticRepository {
             "graph root object",
         )?;
         self.write_semantic_cache(&semantic_index, &semantic_summaries)?;
+        if let Some(local_index_delta) = &local_index_delta {
+            // Exact owner/name indexes are disposable acceleration. New content-addressed shards
+            // are installed before their revision-bound manifest, and any failure deliberately
+            // leaves canonical publication authoritative and rebuildable.
+            let _ = SemanticQueryIndex::install_local_index_delta(
+                self,
+                local_index_delta,
+                proposal.expected_base,
+                current.record.core.root,
+                revision,
+                root_digest,
+            );
+        } else if let Some(root) = proposal.root.as_ref() {
+            // Full-candidate preparation already owns the complete validated graph. Seed the
+            // exact disposable generation from those in-memory values so the next exact query
+            // does not have to construct the broad relation index merely to recover a cache.
+            let _ = SemanticQueryIndex::seed_local_index(
+                self,
+                revision,
+                root_digest,
+                root,
+                &proposal.modules,
+            );
+        }
         proposal.affected_owners.sort();
         proposal.affected_owners.dedup();
         let receipt = TransactionReceipt {
@@ -2510,6 +2560,135 @@ impl SemanticRepository {
         result
     }
 
+    pub(crate) fn read_local_index_object(
+        &self,
+        kind: LocalIndexObjectKind,
+        digest: IndexDigest,
+        maximum_bytes: usize,
+    ) -> Result<Option<Vec<u8>>, Diagnostic> {
+        let path = local_index_object_path(&self.store, kind, digest);
+        match fs::symlink_metadata(&path) {
+            Ok(metadata) => {
+                if metadata.file_type().is_symlink() || !metadata.is_file() {
+                    return Err(repository_error(
+                        DiagnosticClass::Corrupt,
+                        "repository_local_index_object_type",
+                        format!(
+                            "disposable local index object '{}' is not a regular non-symlink file",
+                            path.display()
+                        ),
+                    ));
+                }
+                read_bounded(&path, maximum_bytes, "disposable local index object").map(Some)
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(io_error(
+                "repository_local_index_object_metadata",
+                &path,
+                error,
+            )),
+        }
+    }
+
+    pub(crate) fn write_local_index_object(
+        &self,
+        kind: LocalIndexObjectKind,
+        digest: IndexDigest,
+        bytes: &[u8],
+        maximum_bytes: usize,
+    ) -> Result<(), Diagnostic> {
+        if bytes.len() > maximum_bytes {
+            return Err(repository_error(
+                DiagnosticClass::Resource,
+                "repository_local_index_object_limit",
+                format!("disposable local index object exceeds {maximum_bytes} bytes"),
+            ));
+        }
+        if IndexDigest::of(bytes) != digest {
+            return Err(repository_error(
+                DiagnosticClass::Infrastructure,
+                "repository_local_index_object_digest",
+                "disposable local index object bytes do not bind their content-addressed key",
+            ));
+        }
+        ensure_directory(
+            &self.store.join(INDEX_OBJECTS),
+            "repository_index_directory",
+        )?;
+        let object_directory = self.store.join(match kind {
+            LocalIndexObjectKind::Owner => LOCAL_INDEX_OWNER_OBJECTS,
+            LocalIndexObjectKind::Name => LOCAL_INDEX_NAME_OBJECTS,
+        });
+        let object_parent = object_directory.parent().ok_or_else(|| {
+            repository_error(
+                DiagnosticClass::Infrastructure,
+                "repository_local_index_object_parent",
+                "disposable local index object directory has no parent",
+            )
+        })?;
+        ensure_or_create_directory(object_parent, "repository_local_index_object_root")?;
+        ensure_or_create_directory(&object_directory, "repository_local_index_object_directory")?;
+        let path = local_index_object_path(&self.store, kind, digest);
+        let parent = path.parent().ok_or_else(|| {
+            repository_error(
+                DiagnosticClass::Infrastructure,
+                "repository_local_index_object_parent",
+                "disposable local index object path has no parent",
+            )
+        })?;
+        ensure_or_create_directory(parent, "repository_local_index_object_directory")?;
+        match fs::symlink_metadata(&path) {
+            Ok(metadata) => {
+                if metadata.file_type().is_symlink() || !metadata.is_file() {
+                    return Err(repository_error(
+                        DiagnosticClass::Corrupt,
+                        "repository_local_index_object_type",
+                        format!(
+                            "disposable local index object '{}' is not a regular non-symlink file",
+                            path.display()
+                        ),
+                    ));
+                }
+                if metadata.len() == bytes.len() as u64
+                    && fs::read(&path).map_err(|error| {
+                        io_error("repository_local_index_object_read", &path, error)
+                    })? == bytes
+                {
+                    return Ok(());
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(io_error(
+                    "repository_local_index_object_metadata",
+                    &path,
+                    error,
+                ));
+            }
+        }
+        let temporary = parent.join(format!(".local-index-stage-{}", RepositoryId::generate()?));
+        let result = (|| {
+            let mut file = OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .open(&temporary)
+                .map_err(|error| {
+                    io_error("repository_local_index_object_create", &temporary, error)
+                })?;
+            file.write_all(bytes).map_err(|error| {
+                io_error("repository_local_index_object_write", &temporary, error)
+            })?;
+            drop(file);
+            fs::rename(&temporary, &path)
+                .map_err(|error| io_error("repository_local_index_object_publish", &path, error))?;
+            Ok(())
+        })();
+        if result.is_err() {
+            let _ = fs::remove_file(&temporary);
+        }
+        result
+    }
+
     pub(crate) fn read_index_part(
         &self,
         revision: RevisionId,
@@ -3162,11 +3341,16 @@ fn initialize_stage(
     if let Some(profile) = validation_profile {
         validation.profile = profile;
     }
-    SemanticRepository {
+    let repository = SemanticRepository {
         project_root: PathBuf::new(),
         store: store.to_path_buf(),
-    }
-    .write_semantic_cache(&semantic_index, &semantic_summaries)?;
+    };
+    repository.write_semantic_cache(&semantic_index, &semantic_summaries)?;
+    // The initial graph is already fully materialized and validated. Seed the disposable exact
+    // owner/name generation without creating the broad relation index; failure cannot change the
+    // staged canonical authority and is recovered lazily.
+    let _ =
+        SemanticQueryIndex::seed_local_index(&repository, revision, root_digest, &root, &modules);
     let receipt = TransactionReceipt {
         contract_version: RECEIPT_CONTRACT_VERSION,
         graph_contract_version: GRAPH_CONTRACT_VERSION,
@@ -3649,14 +3833,20 @@ fn index_part_path(store: &Path, revision: RevisionId, part: DisposableIndexPart
     let revision = index_revision_directory(store, revision);
     match part {
         DisposableIndexPart::Manifest => revision.join("local-manifest.lkix"),
-        DisposableIndexPart::Owners(bucket) => {
-            revision.join("owners").join(format!("{bucket:02x}.lkix"))
-        }
-        DisposableIndexPart::Names(bucket) => {
-            revision.join("names").join(format!("{bucket:02x}.lkix"))
-        }
         DisposableIndexPart::SemanticDependencies => revision.join("semantic-dependencies.lkix"),
     }
+}
+
+fn local_index_object_path(
+    store: &Path,
+    kind: LocalIndexObjectKind,
+    digest: IndexDigest,
+) -> PathBuf {
+    let directory = match kind {
+        LocalIndexObjectKind::Owner => LOCAL_INDEX_OWNER_OBJECTS,
+        LocalIndexObjectKind::Name => LOCAL_INDEX_NAME_OBJECTS,
+    };
+    sharded_digest_path(store, directory, &digest.bytes(), "lkix")
 }
 
 fn summary_object_path(store: &Path, digest: SemanticSummaryDigest) -> PathBuf {
@@ -3851,6 +4041,17 @@ mod tests {
         )
         .expect("initialize");
         let initial = repository.reconstruct_current().expect("reconstruct");
+        assert!(
+            repository
+                .read_index_part(
+                    initial.current.head.revision,
+                    DisposableIndexPart::Manifest,
+                    64 * 1024 + 50,
+                )
+                .expect("read initial exact index manifest")
+                .is_some(),
+            "initial publication seeds the disposable exact index"
+        );
 
         let (no_change, receipt) = repository
             .publish(PublicationProposal {
@@ -3928,6 +4129,17 @@ mod tests {
         assert_eq!(receipt.expect("receipt").affected_owners.len(), 1);
         let reconstructed = repository.reconstruct_current().expect("current");
         assert_eq!(reconstructed.modules[0].declarations[0].id, declaration_id);
+        assert!(
+            repository
+                .read_index_part(
+                    reconstructed.current.head.revision,
+                    DisposableIndexPart::Manifest,
+                    64 * 1024 + 50,
+                )
+                .expect("read full-publication exact index manifest")
+                .is_some(),
+            "full-candidate publication seeds the disposable exact index"
+        );
         assert_eq!(repository.history(None, 10).expect("history").len(), 2);
         assert_eq!(
             repository.doctor(true).expect("doctor").revisions_checked,

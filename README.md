@@ -108,6 +108,12 @@ otherwise local path broad. Either path prepares once; publication rechecks the 
 delta, summary delta, and authenticated certificate without repeating semantic validation. The
 complete validator and packed reconstruction remain full oracles.
 
+Exact owner/name queries use local-index contract 3: a small revision/root-bound manifest selects
+content-addressed shards, and the four local transaction profiles rewrite only touched buckets.
+Body-only changes reuse every shard. Initial and complete-candidate publication seed the same
+derived index from graph values already in memory. The broad relation index remains lazy and
+rebuildable rather than delta-maintained.
+
 ## Review, history, and recovery
 
 ```sh

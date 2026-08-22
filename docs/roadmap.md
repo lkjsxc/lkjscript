@@ -3,7 +3,8 @@
 Implemented work is intentionally absent. Meaning graph contract 4, direct CLI v4, binary-only
 `new`, six persistent Merkle maps, exact-ID imports and targets, local module rename, persisted
 authenticated semantic summaries, four local transaction classes, and explicit rank-1 generics
-with named pure function values are current architecture, not roadmap items.
+with named pure function values are current architecture, not roadmap items. Local exact-owner/name
+index contract 3 also delta-reuses content-addressed shards; the broad relation index does not.
 
 Each remaining item requires a complete consumer, exact contract, measured reversal gate, and
 direct-cutover deletion plan.
@@ -14,8 +15,8 @@ direct-cutover deletion plan.
    signatures, types, effects, capabilities, targets, tests, dependencies, and mixed changes. Remove
    fallback candidate reconstruction/cloning only after randomized and adversarial differential
    evidence is clean.
-2. **Finish publication and query locality.** Avoid reconstructing the complete logical graph
-   before applying a bounded root delta, delta-update disposable query indexes, verify only new
+2. **Finish publication and broad-query locality.** Avoid reconstructing the complete logical graph
+   before applying a bounded root delta, delta-update the broad relation index, verify only new
    immutable bytes plus exact parent bindings during publication, and extend deep doctor to the
    complete retained canonical/dependency/draft closure plus the full semantic oracle. Measure page
    reads/writes, reused objects, fsyncs, and true semantic closure.

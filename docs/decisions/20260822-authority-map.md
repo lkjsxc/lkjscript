@@ -26,7 +26,8 @@ All live repository-managed paths are below `.lkjscript/meaning`.
 | `drafts/*.lkjd` | non-executable draft authority | Pending operations, base, generation, holes, conflicts, and intent. Draft mutation cannot change accepted HEAD. |
 | `indexes/summary-objects/*/*.lkis` | derived cache | Content-addressed semantic-summary contract-2 facts. Loss rebuilds from canonical modules. |
 | `indexes/*/*/semantic-dependencies.lkix` | derived cache | Revision-bound reverse dependencies whose certificate must match the accepted revision. Missing/malformed bytes rebuild; a rebuilt certificate mismatch is canonical corruption. |
-| other `indexes/**` | derived cache | Revision-bound query manifests and owner/name/relation shards. Loss or corruption rebuilds from canonical authority. |
+| `indexes/local-objects/{owners,names}/**` plus revision manifests | derived cache | Local-index contract-3 owner/name shards are revision-independent content-addressed objects; each small revision/root-bound manifest selects 256 optional digests per index. Loss or corruption rebuilds from canonical authority. |
+| other `indexes/**` | derived cache | Revision-bound broad query indexes and operational generations. Loss or corruption rebuilds from canonical authority. |
 | `LOCK` | operational coordination | Empty local lock file serializes publication, draft mutation, backup, and related repository operations. It owns no meaning. |
 | directories and private stage names | operational state | Layout and interrupted unreachable stages. Opening may reconstruct missing draft/index directories and `LOCK` only after canonical validation. |
 

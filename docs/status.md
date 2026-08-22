@@ -30,7 +30,7 @@ template does the same. These are maintained abstraction consumers, not test-onl
 | Revisions and receipts | versions 3 and 3 |
 | Public CLI | version 4, strict JSON |
 | Public change and internal transaction | versions 3 and 4 |
-| Query and query index | versions 2 and 2 |
+| Query / broad index / local exact index | versions 2 / 2 / 3 |
 | Draft, semantic diff, and merge | versions 4, 2, and 2 |
 | Semantic summary / validator identity | `lkjscript-semantic-summary-2` / `lkjscript-semantic-validator-2` |
 | Executable artifact / package object | versions 4 and 3 |
@@ -106,9 +106,9 @@ package/module/declaration IDs.
 
 Every request with preconditions and every other change class still
 calls `reconstruct_current`, clones the complete logical root and module vector, rebuilds canonical
-relations, and fully validates the candidate under profile `prepared_once_full_oracle`. A missing
-disposable local owner index can also trigger a complete index reconstruction before the pure-body
-slice. Prepared publication removes duplicate write-lock validation in both paths.
+relations, and fully validates the candidate under profile `prepared_once_full_oracle`. Prepared
+publication removes duplicate write-lock validation in both paths. A missing exact-index generation
+makes a local transaction widen to complete preparation; it does not narrow validation.
 
 Semantic summary contract 2 implements integrity-bound module signatures, implementation/effect
 digests, typed dependency facts, rebuildable reverse dependencies, private/public change
@@ -120,10 +120,14 @@ rebuild from canonical modules, while a certificate mismatch is corruption. This
 frontier-driven validation: only the four transaction classes above use local preparation. The
 complete validator and packed reconstruction remain the trusted oracles.
 
-Query indexes remain revision-bound and disposable. Exact module ID/name storage lookup can follow
-the persistent maps, but broad index creation reconstructs canonical modules, and project
-orientation reconstructs all logical root entries. Accepted changes do not yet delta-update broad
-query indexes. Missing/corrupt indexes rebuild without changing meaning.
+Query indexes remain disposable. Exact owner/name index v3 uses revision-independent,
+content-addressed shards and one revision/root-bound manifest containing 256 owner and 256 name
+shard slots. The four local transaction profiles update only touched shards and reuse every
+unchanged digest; a body-only edit writes no new exact-index object. Initial and full-candidate
+publication seed the exact generation from graph values already in memory. Missing/corrupt state
+rebuilds without changing meaning. The broad relation index remains revision-bound and lazy;
+building it reconstructs canonical modules, accepted changes do not delta-update it, and project
+orientation still reconstructs all logical root entries.
 
 Build reconstructs the exact package closure and produces a deterministic graph-native artifact.
 There is no incremental compiler-unit cache yet. Deep doctor is exhaustive over retained

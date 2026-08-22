@@ -122,8 +122,10 @@ Growing queries have item, byte, work, depth, and fanout budgets. Defaults are 5
 
 Ordering is independent of hash iteration and physical index position. A continuation binds the
 query contract, exact revision, normalized query, and cursor with a domain-separated integrity
-check. Changed or malformed inputs reject. Query indexes are revision-bound disposable state;
-missing or corrupt state rebuilds from canonical authority.
+check. Changed or malformed inputs reject. Query indexes are disposable state. The broad relation
+index is revision-bound; exact owner/name queries use content-addressed local-index v3 shards named
+by a revision/root-bound manifest. Local accepted changes update touched exact shards by delta.
+Missing or corrupt state rebuilds from canonical authority.
 
 ## Public change protocol
 

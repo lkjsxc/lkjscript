@@ -1185,11 +1185,14 @@ fn prepare_local_declaration_rename(
         if requested.insert(*declaration, new_name.clone()).is_some() {
             return Ok(None);
         }
-        let summary = SemanticQueryIndex::owner_summary_revision(
+        let summary = match SemanticQueryIndex::owner_summary_revision(
             repository,
             current.head.revision,
             &declaration.to_string(),
-        )?;
+        ) {
+            Ok(summary) => summary,
+            Err(_) => return Ok(None),
+        };
         let module = summary.module_id.ok_or_else(|| {
             operation_error(
                 "declaration_selection",

@@ -132,10 +132,19 @@ packed validation; focused differential tests retain the full validator for loca
 runs deep structural/history verification but does not rerun complete cross-package semantic
 validation.
 
-The query system stores a revision-bound broad index plus a manifest and 256 deterministic owner
-and name buckets. Every generation binds repository, package, revision, root, and index contract.
-A missing, stale, foreign, or corrupt index invalidates derived state and triggers reconstruction.
-Disposable index writes are not canonical publication.
+The query system stores a revision-bound broad relation index plus exact-index contract 3. The
+exact index consists of revision-independent content-addressed owner and name shard objects and a
+revision-bound manifest with 256 optional owner digests and 256 optional name digests. The manifest
+binds repository, package, revision, canonical root, owner count, graph contract, and index
+contract. A local accepted change derives touched buckets from old and new module projections,
+rewrites only changed content objects, and reuses all other digests. Initial and complete-candidate
+publication may seed all exact shards from graph values already in memory. Shards are written and
+verified before the manifest; a failed disposable write never changes accepted publication.
+
+A missing, stale, foreign, predecessor, or corrupt manifest or shard invalidates derived state and
+triggers reconstruction from canonical authority. Rebuild output must equal delta output for the
+same revision. Disposable index writes are not canonical publication. The broad relation index is
+still rebuilt lazily rather than updated by accepted deltas.
 
 Semantic summary contract 2 defines integrity-bound per-module facts and a reverse-dependency
 index under validator contract 2. Module summaries bind module object, package, validator, exact

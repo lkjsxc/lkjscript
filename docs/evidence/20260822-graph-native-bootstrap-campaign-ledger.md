@@ -157,6 +157,12 @@ It is not a commit-bound final performance receipt.
   independent empty-module creation, module rename, and declaration rename. Structurally different
   body replacement records removed nested identities as tombstone-map deltas. Exact-reference
   importers and callers are not rewritten on either rename.
+- Local exact-index contract 3 stores revision-independent content-addressed owner/name shards and
+  one revision/root-bound manifest with 256 digest slots per index. The four local profiles update
+  touched buckets and reuse other shard digests; body-only differential coverage observes zero new
+  exact-index objects. Initial and complete-candidate publications seed from already available
+  graph values. Missing/corrupt shards and predecessor v2 manifests rebuild; the broad relation
+  index remains lazy and is not delta-maintained.
 - Direct CLI discovery reports schema digest
   `1980273fe10405fbf7aa7940c607af819c1261bd8b89019243326da31841df6c` and documents request-local,
   local declaration-ID, and exact package/module/declaration selector forms.
@@ -174,9 +180,11 @@ It is not a commit-bound final performance receipt.
   and 12 passing checks across its exact two-package closure.
 - Focused graph-4 checks currently pass for maintained repository status, graph checks, bytecode /
   reference equality, deep doctor, copied-binary change, and a 256-importer declaration-rename
-  differential case. A working-tree fresh full profile is recorded below. Final commit-bound and
-  fresh-checkout profiles, the scale matrix, RSS, I/O, fsync, and million-owner results have not
-  yet been run and are not claimed.
+  differential case. After the exact-index v3 slice, `cargo test --locked --lib` passed 114 tests,
+  `cargo test --locked --test public_cli -- --nocapture` passed 7, and
+  `cargo clippy --locked --lib -- -D warnings` passed. A working-tree fresh full profile is recorded
+  below. Final commit-bound and fresh-checkout profiles, the scale matrix, RSS, I/O, fsync, and
+  million-owner results have not yet been run and are not claimed.
 
 ## Verification notes
 
