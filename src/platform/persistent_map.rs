@@ -178,8 +178,9 @@ impl MemoryPageStore {
     }
 }
 
-/// Read-through staging store used by local path-copy updates. Existing immutable pages remain in
-/// the base store; only newly introduced pages are retained for later verified publication.
+/// Read-through staging store used by local path-copy updates. Every page produced by the mutation
+/// is retained, including exact physical reuse, so final reachability can preserve newly produced
+/// descendants below a reused ancestor. [`PageWrite::Reused`] remains accounting information.
 pub struct OverlayPageStore<'a, S: PageStore + ?Sized> {
     base: &'a S,
     pages: MemoryPageStore,
@@ -213,7 +214,10 @@ impl<S: PageStore + ?Sized> PageStore for OverlayPageStore<'_, S> {
             return self.pages.write_page(digest, bytes);
         }
         match self.base.read_page(digest)? {
-            Some(existing) if existing == bytes => Ok(PageWrite::Reused),
+            Some(existing) if existing == bytes => {
+                let _ = self.pages.write_page(digest, bytes)?;
+                Ok(PageWrite::Reused)
+            }
             Some(_) => Err(map_error(
                 MapErrorClass::Corrupt,
                 "persistent_map_overlay_collision",
@@ -1208,16 +1212,41 @@ fn verify_child_link(
     reference: &ChildRef,
     child: &Page,
 ) -> Result<(), MapError> {
-    if child.count() != reference.count || child.logical_bytes() != reference.logical_bytes {
+    verify_child_summary(parent_prefix, reference, &PageLinkSummary::from_page(child))
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct PageLinkSummary {
+    prefix: Vec<u8>,
+    count: u64,
+    logical_bytes: u64,
+}
+
+impl PageLinkSummary {
+    fn from_page(page: &Page) -> Self {
+        Self {
+            prefix: page.prefix().to_vec(),
+            count: page.count(),
+            logical_bytes: page.logical_bytes(),
+        }
+    }
+}
+
+fn verify_child_summary(
+    parent_prefix: &[u8],
+    reference: &ChildRef,
+    child: &PageLinkSummary,
+) -> Result<(), MapError> {
+    if child.count != reference.count || child.logical_bytes != reference.logical_bytes {
         return Err(map_error(
             MapErrorClass::Corrupt,
             "persistent_map_child_summary",
             "branch child reference disagrees with the referenced page summary",
         ));
     }
-    if child.prefix().len() <= parent_prefix.len()
-        || !child.prefix().starts_with(parent_prefix)
-        || child.prefix()[parent_prefix.len()] != reference.edge
+    if child.prefix.len() <= parent_prefix.len()
+        || !child.prefix.starts_with(parent_prefix)
+        || child.prefix[parent_prefix.len()] != reference.edge
     {
         return Err(map_error(
             MapErrorClass::Corrupt,
@@ -2063,9 +2092,9 @@ impl PersistentMap {
         S: PageStore + ?Sized,
         D: PageStore + ?Sized,
     {
-        let mut seen = BTreeSet::new();
-        let count = copy_reachable_page(source, destination, self.root.page, 0, &mut seen, work)?;
-        if count != self.root.entries {
+        let mut seen = BTreeMap::new();
+        let summary = copy_reachable_page(source, destination, self.root.page, 0, &mut seen, work)?;
+        if summary.count != self.root.entries {
             return Err(map_error(
                 MapErrorClass::Corrupt,
                 "persistent_map_copy_count",
@@ -2080,6 +2109,117 @@ impl PersistentMap {
             )
         })
     }
+
+    /// Copies only final pages staged by a path-copy mutation. [`OverlayPageStore`] records every
+    /// generated page even when its bytes already exist physically, so a missing staged page is
+    /// exactly an unchanged accepted-base subtree and can be reused without traversal.
+    ///
+    /// This is deliberately narrower than [`Self::copy_reachable`]: callers must retain the
+    /// immutable base store until the returned pages are durably published. Full reconstruction,
+    /// backup, and doctor must continue to use the exhaustive operation.
+    pub fn copy_staged_reachable<D>(
+        &self,
+        staged: &MemoryPageStore,
+        destination: &mut D,
+        work: &mut MapWork,
+    ) -> Result<u64, MapError>
+    where
+        D: PageStore + ?Sized,
+    {
+        let mut seen = BTreeMap::new();
+        copy_staged_reachable_page(
+            staged,
+            destination,
+            self.root.page,
+            self.root.entries,
+            None,
+            0,
+            &mut seen,
+            work,
+        )?;
+        u64::try_from(seen.len()).map_err(|_| {
+            map_error(
+                MapErrorClass::Resource,
+                "persistent_map_staged_pages",
+                "staged reachable page count cannot be represented",
+            )
+        })
+    }
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the traversal carries explicit integrity summaries and bounded work state"
+)]
+fn copy_staged_reachable_page<D>(
+    staged: &MemoryPageStore,
+    destination: &mut D,
+    digest: PageDigest,
+    expected_count: u64,
+    parent_link: Option<(&[u8], &ChildRef)>,
+    depth: usize,
+    seen: &mut BTreeMap<PageDigest, PageLinkSummary>,
+    work: &mut MapWork,
+) -> Result<(), MapError>
+where
+    D: PageStore + ?Sized,
+{
+    ensure_depth(depth)?;
+    if let Some(summary) = seen.get(&digest) {
+        if summary.count != expected_count {
+            return Err(map_error(
+                MapErrorClass::Corrupt,
+                "persistent_map_staged_summary",
+                "one staged page digest is referenced with conflicting subtree summaries",
+            ));
+        }
+        if let Some((parent_prefix, child)) = parent_link {
+            verify_child_summary(parent_prefix, child, summary)?;
+        }
+        return Ok(());
+    }
+    if !staged.pages.contains_key(&digest) {
+        return Ok(());
+    }
+
+    let page = load_page(staged, digest, work)?;
+    if page.count() != expected_count {
+        return Err(map_error(
+            MapErrorClass::Corrupt,
+            "persistent_map_staged_summary",
+            "staged page content disagrees with its parent or map-root summary",
+        ));
+    }
+    if let Some((parent_prefix, child)) = parent_link {
+        verify_child_link(parent_prefix, child, &page)?;
+    }
+    let written = write_page(destination, &page, work)?;
+    if written.digest != digest {
+        return Err(map_error(
+            MapErrorClass::Corrupt,
+            "persistent_map_staged_digest",
+            "copied staged page changed its canonical digest",
+        ));
+    }
+    seen.insert(digest, PageLinkSummary::from_page(&page));
+    if let Page::Branch {
+        prefix, children, ..
+    } = &page
+    {
+        for child in children {
+            copy_staged_reachable_page(
+                staged,
+                destination,
+                child.digest,
+                child.count,
+                Some((prefix, child)),
+                depth + 1,
+                seen,
+                work,
+            )?;
+        }
+    }
+    Ok(())
 }
 
 fn copy_reachable_page<S, D>(
@@ -2087,17 +2227,16 @@ fn copy_reachable_page<S, D>(
     destination: &mut D,
     digest: PageDigest,
     depth: usize,
-    seen: &mut BTreeSet<PageDigest>,
+    seen: &mut BTreeMap<PageDigest, PageLinkSummary>,
     work: &mut MapWork,
-) -> Result<u64, MapError>
+) -> Result<PageLinkSummary, MapError>
 where
     S: PageStore + ?Sized,
     D: PageStore + ?Sized,
 {
     ensure_depth(depth)?;
-    if !seen.insert(digest) {
-        let page = load_page(source, digest, work)?;
-        return Ok(page.count());
+    if let Some(summary) = seen.get(&digest) {
+        return Ok(summary.clone());
     }
     let page = load_page(source, digest, work)?;
     let written = write_page(destination, &page, work)?;
@@ -2108,22 +2247,21 @@ where
             "copied canonical page changed its digest",
         ));
     }
+    let summary = PageLinkSummary::from_page(&page);
+    seen.insert(digest, summary.clone());
     if let Page::Branch {
-        terminal, children, ..
+        prefix,
+        terminal,
+        children,
+        ..
     } = &page
     {
         let mut child_count = u64::from(terminal.is_some());
         for child in children {
             let observed =
                 copy_reachable_page(source, destination, child.digest, depth + 1, seen, work)?;
-            if observed != child.count {
-                return Err(map_error(
-                    MapErrorClass::Corrupt,
-                    "persistent_map_copy_child_count",
-                    "copied child entry count disagrees with its parent summary",
-                ));
-            }
-            child_count = child_count.checked_add(observed).ok_or_else(|| {
+            verify_child_summary(prefix, child, &observed)?;
+            child_count = child_count.checked_add(observed.count).ok_or_else(|| {
                 map_error(
                     MapErrorClass::Resource,
                     "persistent_map_copy_count",
@@ -2139,7 +2277,7 @@ where
             ));
         }
     }
-    Ok(page.count())
+    Ok(summary)
 }
 
 #[cfg(test)]
@@ -2654,7 +2792,7 @@ mod tests {
     }
 
     #[test]
-    fn overlay_reads_base_and_retains_only_new_path_pages() {
+    fn overlay_reads_base_and_retains_generated_path_pages() {
         let mut base_store = MemoryPageStore::default();
         let base = numbered_map(&mut base_store, 0..1_200);
         let base_objects = base_store.object_count();
@@ -2670,6 +2808,24 @@ mod tests {
         assert!(work.pages_read < base_objects as u64);
         let staged = overlay.into_pages();
         assert!(staged.object_count() <= 4);
+        let mut retained = MemoryPageStore::default();
+        let mut extraction_work = MapWork::default();
+        let copied = updated
+            .copy_staged_reachable(&staged, &mut retained, &mut extraction_work)
+            .expect("staged reachability must succeed");
+        assert_eq!(copied as usize, retained.object_count());
+        assert!(retained.object_count() <= staged.object_count());
+        assert!(extraction_work.pages_read <= staged.object_count() as u64);
+
+        let mut published = base_store.clone();
+        for (digest, bytes) in retained.objects() {
+            published
+                .write_page(digest, bytes)
+                .expect("retained update page must publish");
+        }
+        updated
+            .verify(&published, &mut MapWork::default())
+            .expect("base plus retained staged pages must verify");
 
         let combined = OverlayPageStore::new(&base_store);
         // A fresh overlay does not contain the staged pages, proving they were not written into
@@ -2685,6 +2841,113 @@ mod tests {
             base.lookup(&base_store, &key, &mut MapWork::default())
                 .expect("base lookup must remain valid"),
             Some(numbered_entry(600).1)
+        );
+    }
+
+    #[test]
+    fn reused_physical_ancestor_still_retains_new_staged_descendants() {
+        let mut base_store = MemoryPageStore::default();
+        let base = numbered_map(&mut base_store, 0..1_200);
+        let (key, mut value) = numbered_entry(600);
+        value[0] ^= 0x7f;
+
+        let mut first_overlay = OverlayPageStore::new(&base_store);
+        let (updated, outcome) = base
+            .insert(&mut first_overlay, &key, &value, &mut MapWork::default())
+            .expect("first path-copy update");
+        assert!(matches!(outcome, InsertOutcome::Replaced { .. }));
+        let first_staged = first_overlay.into_pages();
+        let root_digest = updated.root().page();
+        let root_bytes = first_staged
+            .pages
+            .get(&root_digest)
+            .expect("updated root must be generated")
+            .clone();
+        assert!(
+            first_staged
+                .pages
+                .keys()
+                .any(|digest| *digest != root_digest && !base_store.pages.contains_key(digest)),
+            "the fixture needs a new descendant below the updated root"
+        );
+
+        // Model an unreachable page left by an interrupted old publication: the final branch is
+        // physically present, but one of its new children is not. Repeating the mutation must
+        // stage the physically reused branch so reachability does not discard that child.
+        let mut physical = base_store.clone();
+        physical
+            .write_page(root_digest, &root_bytes)
+            .expect("install orphan root fixture");
+        let mut second_overlay = OverlayPageStore::new(&physical);
+        let mut second_work = MapWork::default();
+        let (repeated, outcome) = base
+            .insert(&mut second_overlay, &key, &value, &mut second_work)
+            .expect("repeated path-copy update");
+        assert_eq!(repeated, updated);
+        assert!(matches!(outcome, InsertOutcome::Replaced { .. }));
+        assert!(second_work.pages_reused > 0);
+        let second_staged = second_overlay.into_pages();
+        assert!(second_staged.pages.contains_key(&root_digest));
+
+        let mut retained = MemoryPageStore::default();
+        repeated
+            .copy_staged_reachable(&second_staged, &mut retained, &mut MapWork::default())
+            .expect("extract repeated staged update");
+        let mut published = physical;
+        for (digest, bytes) in retained.objects() {
+            published
+                .write_page(digest, bytes)
+                .expect("publish retained repeated page");
+        }
+        repeated
+            .verify(&published, &mut MapWork::default())
+            .expect("reused branch and newly staged descendant must verify");
+    }
+
+    #[test]
+    fn reachable_copies_reject_parent_child_prefix_mismatch() {
+        let mut source = MemoryPageStore::default();
+        let map = numbered_map(&mut source, 0..1_200);
+        let root_bytes = source
+            .pages
+            .get(&map.root().page())
+            .expect("root page")
+            .clone();
+        let mut root_page = decode_page(&root_bytes).expect("root page must decode");
+        let Page::Branch { children, .. } = &mut root_page else {
+            panic!("numbered map root must branch");
+        };
+        let child = children.last_mut().expect("root branch child");
+        assert!(child.edge < u8::MAX, "fixture needs a larger unused edge");
+        child.edge += 1;
+        let corrupt_bytes = encode_page(&root_page).expect("locally valid corrupt root page");
+        let corrupt_digest = PageDigest::of(&corrupt_bytes);
+        source
+            .write_page(corrupt_digest, &corrupt_bytes)
+            .expect("install corrupt parent fixture");
+        let corrupt =
+            PersistentMap::from_root(MapRoot::from_parts(corrupt_digest, map.root().entries()));
+
+        let mut exhaustive_destination = MemoryPageStore::default();
+        assert_eq!(
+            corrupt
+                .copy_reachable(
+                    &source,
+                    &mut exhaustive_destination,
+                    &mut MapWork::default(),
+                )
+                .expect_err("exhaustive copy must reject a foreign child edge")
+                .code,
+            "persistent_map_child_prefix"
+        );
+
+        let mut staged_destination = MemoryPageStore::default();
+        assert_eq!(
+            corrupt
+                .copy_staged_reachable(&source, &mut staged_destination, &mut MapWork::default(),)
+                .expect_err("staged copy must reject a foreign generated child edge")
+                .code,
+            "persistent_map_child_prefix"
         );
     }
 }

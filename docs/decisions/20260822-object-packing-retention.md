@@ -12,7 +12,7 @@ a live object-pack implementation.
 
 ## Current physical reality
 
-Graph contract 3/root storage 2 stores separate immutable files for module objects, persistent-map
+Graph contract 4/root storage 2 stores separate immutable files for module objects, persistent-map
 pages, root manifests, revision records, receipts, and exact dependency artifacts. It also stores
 content-addressed semantic summaries and revision-bound semantic/query indexes as disposable files.
 The persistent-map update uses an in-memory overlay while preparing new pages, then publishes the

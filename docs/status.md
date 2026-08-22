@@ -84,9 +84,13 @@ exact base, result, delta, changed modules, and facts instead of repeating seman
 The accepted physical root is a bounded manifest over six immutable canonical Merkle radix maps:
 modules by stable ID, module names to IDs, dependencies by package ID, dependency aliases to
 package IDs, targets by stable ID, and typed tombstones. Exact root updates path-copy changed
-branches and structurally share equal pages. Publication writes delta-selected changed module
-objects and newly required pages. Backup, restore, artifact reconstruction, corruption tests, and
-deep doctor understand graph-4 roots and storage-2 pages.
+branches and structurally share equal pages. The overlay retains every generated path page, even an
+exact physical reuse, and final extraction traverses only generated pages reachable from changed
+map roots. Unchanged map roots and accepted-base subtrees are not traversed during ordinary local
+publication. Publication writes delta-selected changed module objects and required generated pages.
+Backup, restore, artifact reconstruction, corruption tests, and deep doctor understand graph-4
+roots and storage-2 pages. Deep doctor remains the exhaustive detector for damage in an untouched
+accepted-base subtree.
 
 This physical cutover is not a complete incremental semantic engine. Four precondition-free
 transaction classes have local preparation. Eligible pure-function body replacement uses profile

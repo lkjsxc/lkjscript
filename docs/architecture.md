@@ -116,6 +116,15 @@ claim that preparation is generally incremental. The four local classes avoid co
 reconstruction when their required disposable indexes are present. Missing semantic/query indexes
 may rebuild broadly, and every fallback path still clones reconstructed logical vectors.
 
+Root-delta mutation retains every generated path page in a private overlay, including a page whose
+exact bytes already exist as an unreachable physical object. Final extraction walks only generated
+pages reachable from changed map roots and skips unchanged map roots and accepted-base subtrees.
+The publication lock, exact accepted base, and typed logical delta are the trust boundary: reused
+subtree references originate in digest-checked accepted-base pages, while every generated page is
+decoded, link-checked, and digest-checked before it is written. Ordinary local publication therefore
+does not walk all persistent pages. External damage to an untouched accepted-base subtree can remain
+latent until that subtree is read or deep doctor performs the exhaustive walk.
+
 Deep doctor walks accepted history, verifies reachable module, map-page, root, receipt, and revision
 bindings, reconstructs logical roots/module shape, and loads or rebuilds the current query and
 semantic indexes. The rebuilt semantic certificate must equal the value in the current revision.

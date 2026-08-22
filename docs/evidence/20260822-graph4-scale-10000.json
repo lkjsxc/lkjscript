@@ -1,0 +1,164 @@
+{
+  "evidence_contract_version": 1,
+  "captured_utc": "2026-08-22T14:18:51Z",
+  "source": {
+    "base_commit": "e743a51deb1706b8a5d5701e58c488801bc14385",
+    "src_diff_sha256": "d5afbdcc815173f273120148ec75298b51867add3a048db002ec3c2e82d03e55",
+    "binary_sha256": "e7d959deeccca4ac39d5b483636c0146d4d1e2e6a0433f48a0a3afc3a5c5d69a",
+    "binary_bytes": 15031768,
+    "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)",
+    "cargo": "cargo 1.96.0 (30a34c682 2026-05-25)",
+    "platform": "Linux 7.0.0-29-generic x86_64 GNU/Linux",
+    "command": "tools/semantic-scale --modules 10000 --batch 10000 --binary target/release/lkjscript"
+  },
+  "cache_and_process": {
+    "project": "fresh temporary directory",
+    "process_mode": "one process per public command",
+    "binary_build": "warm release build",
+    "filesystem_cache": "uncontrolled",
+    "provider_telemetry": "unavailable",
+    "cpu_time": "unavailable",
+    "peak_rss": "unavailable",
+    "fsync_count": "unavailable"
+  },
+  "result": {
+    "contract_version": 3,
+    "topology": "many_tiny_modules",
+    "requested_modules": 10000,
+    "batch_size": 10000,
+    "base_modules": 1,
+    "measured_local_modules": 1,
+    "total_modules": 10002,
+    "final_revision": "rev_dadf0a6d866452ff19c08d850b10be7a551d9df76223d4d17fd42e8b045727d2",
+    "creation": {
+      "elapsed_nanoseconds": 49486489,
+      "response_bytes": 1062
+    },
+    "apply_batches": [
+      {
+        "start": 0,
+        "end": 10000,
+        "elapsed_nanoseconds": 44912942884,
+        "response_bytes": 794397,
+        "revision": "rev_6ce24cb28d3004f6abd534bcb8ecdd00553e8e0cc6e05c1103bdc27a9ea54ddd"
+      }
+    ],
+    "local_create": {
+      "elapsed_nanoseconds": 22780528,
+      "response_bytes": 1674,
+      "revision": "rev_6b9cc4b7bddb23b44cf6929743d807e64bb7e75a1a2054e32513f3ce51589fe6",
+      "validation": {
+        "profile": "incremental_independent_module_create",
+        "graph_valid": true,
+        "full_oracle_equal": true,
+        "modules_checked": 1,
+        "declarations_checked": 0
+      },
+      "store_delta": {
+        "indexes": {
+          "files": 6,
+          "bytes": 842666
+        },
+        "objects": {
+          "files": 7,
+          "bytes": 17764
+        },
+        "receipts": {
+          "files": 1,
+          "bytes": 361
+        },
+        "revisions": {
+          "files": 1,
+          "bytes": 333
+        }
+      }
+    },
+    "local_rename": {
+      "elapsed_nanoseconds": 45652930,
+      "response_bytes": 1583,
+      "revision": "rev_dadf0a6d866452ff19c08d850b10be7a551d9df76223d4d17fd42e8b045727d2",
+      "validation": {
+        "profile": "incremental_module_rename",
+        "graph_valid": true,
+        "full_oracle_equal": true,
+        "modules_checked": 1,
+        "declarations_checked": 0
+      },
+      "store_delta": {
+        "indexes": {
+          "files": 6,
+          "bytes": 843519
+        },
+        "objects": {
+          "files": 7,
+          "bytes": 17785
+        },
+        "receipts": {
+          "files": 1,
+          "bytes": 335
+        },
+        "revisions": {
+          "files": 1,
+          "bytes": 333
+        }
+      }
+    },
+    "transaction_request_bytes": 749227,
+    "orient": {
+      "elapsed_nanoseconds": 165291249,
+      "response_bytes": 1722,
+      "returned_items": 10
+    },
+    "exact_find_cold_index": {
+      "elapsed_nanoseconds": 2397469,
+      "response_bytes": 653,
+      "work": 1,
+      "matches": 1
+    },
+    "exact_find": {
+      "elapsed_nanoseconds": 1966187,
+      "response_bytes": 653,
+      "work": 1,
+      "matches": 1
+    },
+    "exact_show": {
+      "elapsed_nanoseconds": 1513216,
+      "response_bytes": 394,
+      "id": "mod_620c56add381a61271eafb605812803d"
+    },
+    "deep_doctor": {
+      "elapsed_nanoseconds": 281344566,
+      "response_bytes": 294,
+      "deep": true,
+      "valid": true,
+      "revision": "rev_dadf0a6d866452ff19c08d850b10be7a551d9df76223d4d17fd42e8b045727d2",
+      "revisions_checked": 4,
+      "roots_checked": 4,
+      "receipts_checked": 4,
+      "modules_checked": 30006,
+      "rebuilt_indexes": 0
+    },
+    "build": {
+      "elapsed_nanoseconds": 199281928,
+      "response_bytes": 588,
+      "artifact_bytes": 1130996,
+      "artifact_digest": "artifact_66df04d8e8630cafc2da4cbb467f9df71dd86dafe5a02d968054ef7fde4a7fe5"
+    },
+    "backup": {
+      "elapsed_nanoseconds": 21216495488,
+      "response_bytes": 470,
+      "backup_bytes": 3053899,
+      "backup_digest": "backup_5fd35e4474c67f6b7253147db060ed605d0ad9b089d747dd7d0b2b8913c922db"
+    },
+    "canonical_store_bytes": 2356598,
+    "store_bytes_with_indexes": 12541637,
+    "platform": "Linux x86_64",
+    "project_retained": false
+  },
+  "limitations": [
+    "This single working-tree sample is not a latency distribution or a commit-bound final receipt.",
+    "The topology contains many empty modules and does not cover dense relations or fanout.",
+    "The local mutations expose linear-sized semantic-index generations despite bounded semantic validation and persistent-root work.",
+    "The 100,000- and one-million-owner public workflows were not run because this sample exposed prerequisite bulk-construction and derived-index defects."
+  ]
+}

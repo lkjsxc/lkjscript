@@ -20,7 +20,7 @@ application actor identity.
 | Threat | Implemented control | Residual assumption |
 |---|---|---|
 | Malformed or excessive packed objects | typed domain magic, exact version/length, domain-separated digest, trailing rejection, checked bounds before decode | Rust and dependency correctness |
-| Persistent-root page substitution | root-bound page digests, canonical page encoding, bounded path traversal, missing/corrupt-page rejection, deep reconstruction | local object store preserves accepted immutable bytes |
+| Persistent-root page substitution | root-bound page digests, canonical page encoding, bounded changed-path traversal, generated parent-link checks, missing/corrupt-page rejection on access, exhaustive deep reconstruction | repository operations never delete accepted-base objects; external damage to an untouched reused subtree may remain latent until read or deep doctor |
 | Identity-domain confusion | tagged opaque IDs, typed selectors, graph shape validation, foreign-domain rejection tests | callers preserve full durable IDs |
 | Partial or torn publication | exact-base lock, immutable objects first, filesystem durability before one synchronized atomic HEAD rename | local filesystem honors documented operations |
 | Corrupt current authority | object-key verification, deep reconstruction independent of indexes, writes blocked on observed corruption | operator restores or repairs from trusted backup |

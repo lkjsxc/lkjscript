@@ -3,8 +3,9 @@
 Measurements are observations, not promises. Unless a row explicitly says otherwise, the retained
 numbers below predate meaning graph contracts 2, 3, and 4, persistent root pages, direct CLI v4, exact
 ID imports/targets, and explicit generics. They are historical baselines and must not be presented
-as current-contract performance. No graph-4 release, million-owner, or complete-service
-performance receipt has yet been retained for the shared worktree.
+as current-contract performance. One current graph-4 release workflow at 10,000 empty background
+modules is retained below; no current distribution, million-owner, or complete-service performance
+receipt exists yet.
 
 The historical environment was Linux `7.0.0-29-generic` x86-64, `rustc 1.96.0`, Cargo 1.96.0.
 CPU time, peak RSS, provider tokens/cache/requests/retries, and monetary telemetry were unavailable.
@@ -76,14 +77,51 @@ and reverified the complete candidate. Persistent-root contract 2 has replaced t
 root with path-copied Merkle pages. Graph 3 additionally implements local preparation for
 pure-body changes, independent module creation, module rename, and declaration rename, plus persisted authenticated
 summary deltas. Other changes retain complete logical preparation, and a cold index rebuild can
-still be broad. No retained graph-4 scale curve yet establishes impact-proportional end-to-end
-mutation, and the historical 90,000-module curve must not be used to claim that it does.
+still be broad. The one retained graph-4 10,000-module sample below is not a scale curve and does
+not establish impact-proportional end-to-end mutation. The historical 90,000-module curve must not
+be used to claim that it does.
 
 Graph contract 1 also had a 100,000-module root ceiling, so its million-module case was not run.
 Persistent-root contract 2 removes that flat-root semantic count from its root shape, but
 one-million-owner creation, lookup, update, doctor, backup, restore, RSS, I/O, and interruption
 behavior remain unmeasured. Persistent page unit/property tests are correctness evidence, not
 complete-workflow scale evidence.
+
+## Current persistent-root locality property
+
+The graph-4/root-2 working tree now has an in-process differential test that constructs 10,000-
+and 100,000-module persistent roots, changes one module-object binding, compares the delta root
+with a complete rebuild, publishes the retained pages into the accepted base, and reconstructs the
+exact changed logical root. A counting store observes physical base reads beneath overlay write
+probes. At both sizes the test requires fewer than 64 physical page reads, less than one quarter of
+base pages and bytes, and fewer than 32 retained pages. It also bounds 100,000-module reads to the
+10,000-module observation plus eight pages, retained pages plus eight, and bytes to twice the
+10,000-module observation. The focused debug test passed in 4.62 seconds on the shared warm
+worktree. These are executable asymptotic bounds, not a release CLI latency or exact I/O sample.
+
+The staged-page tests also retain an interrupted-publication counterexample in which a generated
+ancestor already exists physically but one generated child does not. The overlay keeps the reused
+ancestor, extraction retains its reachable child, and exhaustive reconstruction succeeds. A
+separate corruption fixture proves staged and exhaustive traversal reject a parent edge that does
+not match the child prefix. Million-owner complete-workflow, RSS, filesystem-call, and cold-cache
+evidence remains unavailable.
+
+One fresh-temporary-project release workflow then created 10,000 empty background modules through
+one public change, created one local module, renamed it, queried it, ran deep doctor, built, and
+backed up. Raw structured evidence is retained at
+`docs/evidence/20260822-graph4-scale-10000.json`. The 10,000-module batch took 44.913 seconds and
+returned 794,397 bytes. After that background, one-module creation took 22.781 ms and module rename
+took 45.653 ms; each checked one module, but their store deltas wrote 842,666 and 843,519 derived
+index bytes respectively. Exact lookup reported semantic work one in 2.397 ms for the first process
+and 1.966 ms for the second. Orientation took 165.291 ms, deep doctor took 281.345 ms over four
+revisions and 30,006 retained module versions, build took 199.282 ms, and segmented backup took
+21.216 seconds for 3,053,899 payload bytes.
+
+This is one warm-build, uncontrolled-filesystem-cache sample, not a distribution. It demonstrates
+bounded local semantic validation and exact lookup, while exposing two prerequisites before larger
+public runs: inefficient 10,000-operation bulk construction and a revision-bound semantic index
+whose rewritten bytes grow with total modules. The 100,000 and one-million public workflows were
+therefore deferred rather than spending time measuring known linear derived work.
 
 ## Historical compiler, service, and verification receipts
 
@@ -104,5 +142,6 @@ reused evidence; the authoritative full policy requires fresh execution. A worki
 CLI-v4 full profile passed 17/17 fresh gates in 6.078 seconds at
 `.artifacts/check/20260822T131807.529974Z-726352/receipt.json` after a first run exposed and retained
 an executable-writer DAG race. This is not yet final commit-bound or fresh-checkout evidence. No
-current claim is made for provider cost, correction depth, release binary size, startup, RSS,
-incremental compilation, or million-owner complete-workflow performance.
+current claim is made for provider cost, correction depth, startup, RSS, incremental compilation,
+or million-owner complete-workflow performance. The one measured working-tree release binary was
+15,031,768 bytes; it is an observation, not a size regression curve.

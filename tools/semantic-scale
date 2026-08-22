@@ -71,6 +71,44 @@ def byte_count(root: Path, include_indexes: bool) -> int:
     return total
 
 
+def payload_bytes(path: Path) -> int:
+    if path.is_file():
+        return path.stat().st_size
+    return sum(
+        candidate.stat().st_size
+        for candidate in path.rglob("*")
+        if candidate.is_file()
+    )
+
+
+def store_inventory(root: Path) -> dict[str, dict[str, int]]:
+    inventory: dict[str, dict[str, int]] = {}
+    for path in root.rglob("*"):
+        if not path.is_file() or path.name == "LOCK":
+            continue
+        relative = path.relative_to(root)
+        area = relative.parts[0]
+        current = inventory.setdefault(area, {"files": 0, "bytes": 0})
+        current["files"] += 1
+        current["bytes"] += path.stat().st_size
+    return dict(sorted(inventory.items()))
+
+
+def inventory_delta(
+    before: dict[str, dict[str, int]], after: dict[str, dict[str, int]]
+) -> dict[str, dict[str, int]]:
+    return {
+        area: {
+            "files": after.get(area, {}).get("files", 0)
+            - before.get(area, {}).get("files", 0),
+            "bytes": after.get(area, {}).get("bytes", 0)
+            - before.get(area, {}).get("bytes", 0),
+        }
+        for area in sorted(before.keys() | after.keys())
+        if before.get(area) != after.get(area)
+    }
+
+
 def run(configuration: argparse.Namespace, project: Path) -> dict[str, Any]:
     binary = Path(configuration.binary).resolve(strict=True)
     if any(project.iterdir()):
@@ -107,7 +145,7 @@ def run(configuration: argparse.Namespace, project: Path) -> dict[str, Any]:
             for ordinal in range(start, end)
         ]
         request = {
-            "contract_version": 2,
+            "contract_version": 3,
             "base_revision": revision,
             "idempotency_key": f"scale-{configuration.modules}-{start}-{end}",
             "preconditions": [],
@@ -141,6 +179,73 @@ def run(configuration: argparse.Namespace, project: Path) -> dict[str, Any]:
             }
         )
 
+    store = project / ".lkjscript" / "meaning"
+    before_local_create = store_inventory(store)
+    local_create_request = {
+        "contract_version": 3,
+        "base_revision": revision,
+        "idempotency_key": f"scale-{configuration.modules}-local-create",
+        "changes": [
+            {
+                "change": "create_module",
+                "as": "$local-module",
+                "name": "scale.localedit",
+            }
+        ],
+        "intent": "Measure one independent module creation after the background topology",
+    }
+    local_create_path = project / "change-local-create.json"
+    local_create_path.write_bytes(
+        json.dumps(
+            local_create_request, separators=(",", ":"), sort_keys=True
+        ).encode()
+    )
+    local_create, local_create_elapsed, local_create_output = invoke(
+        binary,
+        project,
+        "change",
+        "--request-file",
+        str(local_create_path),
+        "--commit",
+    )
+    local_create_path.unlink()
+    revision = local_create["result"]["published_revision"]
+    final_module_id = local_create["result"]["allocated_identities"]["$local-module"][
+        "id"
+    ]
+    after_local_create = store_inventory(store)
+
+    local_rename_request = {
+        "contract_version": 3,
+        "base_revision": revision,
+        "idempotency_key": f"scale-{configuration.modules}-local-rename",
+        "changes": [
+            {
+                "change": "rename_module",
+                "module": final_module_id,
+                "new_name": "scale.renamedlocaledit",
+            }
+        ],
+        "intent": "Measure one module rename after the background topology",
+    }
+    local_rename_path = project / "change-local-rename.json"
+    local_rename_path.write_bytes(
+        json.dumps(
+            local_rename_request, separators=(",", ":"), sort_keys=True
+        ).encode()
+    )
+    local_rename, local_rename_elapsed, local_rename_output = invoke(
+        binary,
+        project,
+        "change",
+        "--request-file",
+        str(local_rename_path),
+        "--commit",
+    )
+    local_rename_path.unlink()
+    revision = local_rename["result"]["published_revision"]
+    after_local_rename = store_inventory(store)
+
     orient, orient_elapsed, orient_bytes = invoke(
         binary, project, "inspect", "project", "--limit", "10"
     )
@@ -149,7 +254,7 @@ def run(configuration: argparse.Namespace, project: Path) -> dict[str, Any]:
         project,
         "query",
         "find",
-        module_name(configuration.modules - 1),
+        "scale.renamedlocaledit",
         "--exact",
         "--limit",
         "10",
@@ -159,7 +264,7 @@ def run(configuration: argparse.Namespace, project: Path) -> dict[str, Any]:
         project,
         "query",
         "find",
-        module_name(configuration.modules - 1),
+        "scale.renamedlocaledit",
         "--exact",
         "--limit",
         "10",
@@ -176,14 +281,13 @@ def run(configuration: argparse.Namespace, project: Path) -> dict[str, Any]:
     backup, backup_elapsed, backup_bytes = invoke(
         binary, project, "backup", "--output", str(backup_path)
     )
-    store = project / ".lkjscript" / "meaning"
-
     return {
-        "contract_version": 2,
+        "contract_version": 3,
         "topology": "many_tiny_modules",
         "requested_modules": configuration.modules,
         "batch_size": configuration.batch,
-        "base_modules": orient["result"]["module_count"] - configuration.modules,
+        "base_modules": orient["result"]["module_count"] - configuration.modules - 1,
+        "measured_local_modules": 1,
         "total_modules": orient["result"]["module_count"],
         "final_revision": revision,
         "creation": {
@@ -191,6 +295,20 @@ def run(configuration: argparse.Namespace, project: Path) -> dict[str, Any]:
             "response_bytes": creation_output,
         },
         "apply_batches": applied,
+        "local_create": {
+            "elapsed_nanoseconds": local_create_elapsed,
+            "response_bytes": local_create_output,
+            "revision": local_create["result"]["published_revision"],
+            "validation": local_create["result"]["receipt"]["validation"],
+            "store_delta": inventory_delta(before_local_create, after_local_create),
+        },
+        "local_rename": {
+            "elapsed_nanoseconds": local_rename_elapsed,
+            "response_bytes": local_rename_output,
+            "revision": local_rename["result"]["published_revision"],
+            "validation": local_rename["result"]["receipt"]["validation"],
+            "store_delta": inventory_delta(after_local_create, after_local_rename),
+        },
         "transaction_request_bytes": request_bytes,
         "orient": {
             "elapsed_nanoseconds": orient_elapsed,
@@ -228,7 +346,7 @@ def run(configuration: argparse.Namespace, project: Path) -> dict[str, Any]:
         "backup": {
             "elapsed_nanoseconds": backup_elapsed,
             "response_bytes": backup_bytes,
-            "backup_bytes": backup_path.stat().st_size,
+            "backup_bytes": payload_bytes(backup_path),
             "backup_digest": backup["result"]["receipt"]["digest"],
         },
         "canonical_store_bytes": byte_count(store, include_indexes=False),

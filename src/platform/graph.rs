@@ -572,8 +572,8 @@ impl StoredGraphRoot {
     }
 
     /// Applies an exact logical delta by path-copying only affected persistent-map pages. The
-    /// returned page set contains only newly reachable pages, never unchanged base pages or
-    /// intermediate mutation roots.
+    /// returned page set contains the final generated path pages, including exact physical reuse,
+    /// but excludes unchanged base-only subtrees and intermediate mutation roots.
     pub fn apply_delta<S: PageStore + ?Sized>(
         &self,
         store: &S,
@@ -752,21 +752,24 @@ impl StoredGraphRoot {
         };
         root.validate_shape()?;
 
-        let mut reachable = OverlayPageStore::new(store);
-        for map in [
-            modules,
-            module_names,
-            dependencies,
-            dependency_aliases,
-            targets,
-            tombstones,
+        let staged = overlay.into_pages();
+        let mut reachable = MemoryPageStore::default();
+        for (map, base) in [
+            (modules, self.modules),
+            (module_names, self.module_names),
+            (dependencies, self.dependencies),
+            (dependency_aliases, self.dependency_aliases),
+            (targets, self.targets),
+            (tombstones, self.tombstones),
         ] {
-            map.copy_reachable(&overlay, &mut reachable, &mut work)
-                .map_err(map_diagnostic)?;
+            if map.root() != base {
+                map.copy_staged_reachable(&staged, &mut reachable, &mut work)
+                    .map_err(map_diagnostic)?;
+            }
         }
         Ok(StoredGraphRootUpdate {
             root,
-            pages: reachable.into_pages(),
+            pages: reachable,
             work,
         })
     }
@@ -1411,7 +1414,43 @@ fn graph_error(class: DiagnosticClass, code: &str, message: impl Into<String>) -
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::platform::persistent_map::{PageDigest, PageWrite};
     use crate::platform::{MigrationIdentityAllocator, SourceLimits, parse_module, parse_source};
+    use std::cell::Cell;
+
+    struct CountingPageStore {
+        inner: MemoryPageStore,
+        reads: Cell<u64>,
+        bytes_read: Cell<u64>,
+    }
+
+    impl CountingPageStore {
+        const fn new(inner: MemoryPageStore) -> Self {
+            Self {
+                inner,
+                reads: Cell::new(0),
+                bytes_read: Cell::new(0),
+            }
+        }
+    }
+
+    impl PageStore for CountingPageStore {
+        fn read_page(&self, digest: PageDigest) -> Result<Option<Vec<u8>>, MapError> {
+            self.reads.set(self.reads.get() + 1);
+            let bytes = self.inner.read_page(digest)?;
+            if let Some(bytes) = &bytes {
+                self.bytes_read.set(
+                    self.bytes_read.get()
+                        + u64::try_from(bytes.len()).expect("test page length fits u64"),
+                );
+            }
+            Ok(bytes)
+        }
+
+        fn write_page(&mut self, digest: PageDigest, bytes: &[u8]) -> Result<PageWrite, MapError> {
+            self.inner.write_page(digest, bytes)
+        }
+    }
 
     #[test]
     fn root_and_modules_round_trip_with_exact_shard_binding() {
@@ -1481,6 +1520,97 @@ mod tests {
                 .reconstruct(&combined, &mut MapWork::default())
                 .expect("updated root reconstruction"),
             changed
+        );
+    }
+
+    #[test]
+    fn local_delta_page_reads_do_not_scan_a_large_unchanged_root() {
+        let mut observations = Vec::new();
+        for module_count in [10_000_u64, 100_000_u64] {
+            let mut modules = (0..module_count)
+                .map(|ordinal| ModuleObjectRef {
+                    id: ModuleId::migrate(b"large-root-module", ordinal),
+                    name: format!("module{ordinal:06}"),
+                    object: ModuleObjectDigest::of(&ordinal.to_be_bytes()),
+                })
+                .collect::<Vec<_>>();
+            modules.sort();
+            let root = GraphRoot {
+                graph_contract_version: GRAPH_CONTRACT_VERSION,
+                repository_id: RepositoryId::migrate(b"large-root-repository", 1),
+                package_id: PackageId::parse("10000000000000000000000000000001").expect("package"),
+                package_name: "large-root".to_owned(),
+                modules,
+                dependencies: Vec::new(),
+                targets: Vec::new(),
+                tombstones: Vec::new(),
+            };
+            let stored = StoredGraphRoot::build(&root).expect("large persistent root");
+            let base_pages = stored.pages.object_count();
+            let base_bytes = stored.pages.stored_bytes();
+            assert!(
+                base_pages > 64,
+                "fixture must contain a broad page background"
+            );
+            let counted_store = CountingPageStore::new(stored.pages);
+
+            let mut changed = root.clone();
+            let changed_index = usize::try_from(module_count / 2).expect("module index fits usize");
+            changed.modules[changed_index].object =
+                ModuleObjectDigest::of(b"one local module update");
+            let delta = StoredGraphRootDelta::between(&root, &changed).expect("one-module delta");
+            let update = stored
+                .root
+                .apply_delta(&counted_store, &delta)
+                .expect("bounded local persistent-root update");
+            let rebuilt = StoredGraphRoot::build(&changed).expect("full persistent-root oracle");
+            assert_eq!(update.root, rebuilt.root);
+            let physical_reads = counted_store.reads.get();
+            let physical_bytes_read = counted_store.bytes_read.get();
+            let retained_pages = update.pages.object_count();
+            assert!(
+                physical_reads < 64 && physical_reads < (base_pages as u64 / 4),
+                "{module_count}-module update physically read {physical_reads} of {base_pages} base pages"
+            );
+            assert!(
+                physical_bytes_read
+                    < u64::try_from(base_bytes / 4).expect("base byte count fits u64"),
+                "{module_count}-module update physically read {physical_bytes_read} of {base_bytes} base bytes"
+            );
+            assert!(
+                retained_pages < 32,
+                "{module_count}-module update retained {retained_pages} pages"
+            );
+
+            let mut combined = counted_store.inner;
+            for (digest, bytes) in update.pages.objects() {
+                combined
+                    .write_page(digest, bytes)
+                    .expect("publish one-module root pages");
+            }
+            assert_eq!(
+                update
+                    .root
+                    .reconstruct(&combined, &mut MapWork::default())
+                    .expect("updated large root reconstruction"),
+                changed
+            );
+            observations.push((physical_reads, physical_bytes_read, retained_pages));
+        }
+
+        let (reads_10k, bytes_10k, pages_10k) = observations[0];
+        let (reads_100k, bytes_100k, pages_100k) = observations[1];
+        assert!(
+            reads_100k <= reads_10k + 8,
+            "physical page reads grew from {reads_10k} at 10k modules to {reads_100k} at 100k"
+        );
+        assert!(
+            bytes_100k <= bytes_10k.saturating_mul(2),
+            "physical bytes grew from {bytes_10k} at 10k modules to {bytes_100k} at 100k"
+        );
+        assert!(
+            pages_100k <= pages_10k + 8,
+            "retained pages grew from {pages_10k} at 10k modules to {pages_100k} at 100k"
         );
     }
 }

@@ -15,11 +15,12 @@ direct-cutover deletion plan.
    signatures, types, effects, capabilities, targets, tests, dependencies, and mixed changes. Remove
    fallback candidate reconstruction/cloning only after randomized and adversarial differential
    evidence is clean.
-2. **Finish publication and broad-query locality.** Avoid reconstructing the complete logical graph
-   before applying a bounded root delta, delta-update the broad relation index, verify only new
-   immutable bytes plus exact parent bindings during publication, and extend deep doctor to the
-   complete retained canonical/dependency/draft closure plus the full semantic oracle. Measure page
-   reads/writes, reused objects, fsyncs, and true semantic closure.
+2. **Finish broad-query and semantic publication locality.** The four local profiles now extract
+   only generated persistent-root pages and reuse accepted-base subtrees without a complete page
+   walk. Extend that bounded path to more semantic changes, delta-update the broad relation index,
+   and extend deep doctor to the complete retained canonical/dependency/draft closure plus the full
+   semantic oracle. Measure end-to-end page reads/writes, reused objects, fsyncs, and true semantic
+   closure; do not infer them solely from the in-process root property test.
 3. **Complete declaration move.** Imports, targets, exports, and expressions are exact-ID bound;
    module and declaration rename are local. Add declaration move, preserve expected-name
    preconditions for caller intent, and prove declaration continuity and locality in diff/history.

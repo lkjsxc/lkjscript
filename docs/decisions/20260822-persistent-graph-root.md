@@ -35,7 +35,12 @@ order.
 Mutation uses an overlay page store and path-copies changed branches. Exact module ID/name and
 dependency ID/alias lookup follows one map path. Root delta application updates both sides of each
 exact identity/presentation pairing and checks deterministic equality with full root rebuilding in
-tests. Newly reachable pages are immutable, digest checked, and made durable before HEAD changes.
+tests. The overlay records every generated page, including exact physical reuse, so an interrupted
+old publication cannot make a reused generated ancestor hide a newly required child. Final
+extraction traverses generated pages reachable from changed map roots only, verifies their digests
+and generated parent/child links, and omits intermediate mutation roots. Unchanged accepted-base
+subtrees are structurally reused under the exclusive publication lock. Required generated pages are
+immutable, digest checked, and made durable before HEAD changes.
 
 ## Reference locality
 
@@ -70,14 +75,18 @@ of a general incremental semantic engine.
 
 Persistent-map unit/property tests cover insertion-order equality, thousands of operations against
 `BTreeMap`, prefix keys, removal collapse, no-change reuse, exact/digest-skipping diff, bounded
-fixture writes, and missing/foreign/corrupt/trailing inputs. Repository tests cover root-delta/full
-build equality, local module creation and rename, backup/restore, predecessor rejection, and deep
-doctor. Maintained standard and `lkjournal` authorities use graph 4/root 2.
+fixture writes, staged/exhaustive parent-link validation, interrupted orphan-page reuse, and
+missing/foreign/corrupt/trailing inputs. Repository tests cover root-delta/full-build equality,
+physical page/byte reads and retained pages for one local update over 10,000 and 100,000 modules,
+local module creation and rename, backup/restore, predecessor rejection, and deep doctor.
+Maintained standard and `lkjournal` authorities use graph 4/root 2.
 
-This evidence does not cover 10,000, 100,000, or one million current logical owners, adversarial
-key distributions in complete workflows, crash injection at every page/publication boundary, or a
-measured B+ tree/HAMT alternative. Current pages and module versions are separate files; immutable
-packing, retention pruning, compaction, and garbage collection are not implemented.
+The 10,000/100,000 evidence is an in-process root property test, not a complete public workflow.
+Evidence still does not cover one million current logical owners, adversarial key distributions in
+complete workflows, crash injection at every page/publication boundary, or a measured B+ tree/HAMT
+alternative. Current pages and module versions are separate files; immutable packing, retention
+pruning, compaction, and garbage collection are not implemented. External damage to an untouched
+accepted-base subtree is detected on later read or deep doctor rather than by every local publish.
 
 ## Rejected alternatives and reversal gate
 

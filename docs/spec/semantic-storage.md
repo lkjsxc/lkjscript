@@ -22,7 +22,7 @@ objects/map-pages/PP/DIGEST.lkjp
 revisions/PP/REVISION.lkjv
 receipts/PP/DIGEST.lkjt
 artifacts/PP/DIGEST.lkja
-drafts/PP/DRAFT.lkjd
+drafts/DRAFT.lkjd
 indexes/PP/REVISION.lkji
 indexes/PP/REVISION/local-manifest.lkix
 indexes/PP/REVISION/owners/BB.lkix
@@ -54,12 +54,16 @@ These limits force larger values into separately addressed objects; they do not 
 count on language meaning. A root manifest is at most 64 KiB.
 
 A local root update computes `StoredGraphRootDelta` from logical roots and path-copies affected
-map branches in an overlay page store. Exact module ID/name and dependency ID/alias lookup follows
-the appropriate map path. Deterministic full reconstruction and full-build equality remain the
-oracle for delta operations. Eligible pure-body replacement, independent empty-module creation,
-and module rename can derive bounded deltas. A missing disposable index and every fallback
-transaction still reconstruct and clone the logical graph before deriving the delta; persistent
-physical locality does not imply a fully incremental semantic engine.
+map branches in an overlay page store. The overlay retains every generated page, including exact
+physical reuse. Extraction starts at each changed final map root, visits only generated reachable
+pages, and treats an absent staged digest as an unchanged accepted-base subtree. A map whose final
+root equals its accepted base root requires no extraction. Exact module ID/name and dependency
+ID/alias lookup follows the appropriate map path. Deterministic exhaustive reconstruction and
+full-build equality remain the oracle for delta operations. Eligible pure-body replacement,
+independent empty-module creation, module rename, and declaration rename can derive bounded deltas.
+A missing disposable index and every fallback transaction still reconstruct and clone the logical
+graph before deriving the delta; persistent physical locality does not imply a fully incremental
+semantic engine.
 
 ## Packed objects and integrity
 
@@ -81,14 +85,14 @@ or visibility.
 
 ## Preparation and publication
 
-The common change path prepares semantic validation once before locking publication. Three
+The common change path prepares semantic validation once before locking publication. Four
 precondition-free transaction classes may prepare locally: eligible pure-function body
 replacement validates selected modules and their recursive local import dependencies; independent
 creation validates new empty modules; and module rename validates renamed modules plus their
-outgoing import dependencies without rewriting importers or targets. Preconditions, mixed
-operations, declaration rename, and all other requests reconstruct current logical meaning, apply
-operations, canonicalize relations, and fully validate the candidate. The resulting prepared
-validation binds:
+outgoing import dependencies without rewriting importers or targets. Declaration rename validates
+owning modules plus outgoing imports without rewriting exact-reference callers. Preconditions,
+mixed operations, and all other requests reconstruct current logical meaning, apply operations,
+canonicalize relations, and fully validate the candidate. The resulting prepared validation binds:
 
 - exact expected revision and base root;
 - exact result root;
@@ -102,7 +106,10 @@ Publication acquires the repository lock, rereads the current binding, and rejec
 before replaying the root delta. It verifies that the delta result, semantic-diff binding, summary
 delta, and semantic certificate equal the prepared values and reuses the prepared validation
 facts; it does not repeat semantic validation. Unprepared internal publication paths retain
-complete validation.
+complete validation. A root delta contains typed logical values, never caller-selected page
+digests. Generated parent/child links and bytes are checked while extracting staged pages. Reused
+subtrees inherit exact references from digest-checked accepted-base pages under the same exclusive
+lock and are not reopened merely to reprove the complete retained store.
 
 The publisher writes newly required dependency artifacts, changed module objects, new map pages,
 the fixed root manifest, receipt, and revision as immutable files. It also writes disposable
@@ -115,6 +122,13 @@ An interruption before HEAD replacement can leave only unreachable immutable byt
 interruption after replacement exposes the complete new revision. An existing immutable path must
 contain equal bytes or corruption is reported. A visibility-sync failure is indeterminate and
 requires HEAD/receipt reconciliation.
+
+The repository itself has no canonical deletion path, and future cleanup or compaction must share
+the publication lock. Under that model, an accepted-base subtree cannot disappear during a local
+publication. External filesystem damage outside repository operations may remain unobserved when an
+untouched subtree is structurally reused; the first read of the damaged path or exhaustive deep
+doctor rejects it. This is a stated local-store integrity assumption, not a claim that every write
+rescans all accepted bytes.
 
 Initial project creation constructs a complete store in a private sibling stage and exposes the
 destination through one rename. Restore uses a private store stage under the selected destination
@@ -195,9 +209,11 @@ Persisted bytes, artifacts, and backups are hostile decoding boundaries. Travers
 domain directories and canonical keys; reads require ordinary non-symlink files. Creation, output,
 and restore reject unsafe path types and use fresh private stages.
 
-Missing or malformed reachable canonical bytes are corruption and block writes. Missing derived
-bytes are rebuildable. Stale base, invalid graph, resource exhaustion, corruption, cancellation,
-and infrastructure/durability failure remain distinct.
+Missing or malformed canonical bytes observed on a selected base path or generated closure are
+corruption and block writes. External damage in an untouched structurally reused subtree may remain
+latent until that subtree is read or deep doctor walks it. Missing derived bytes are rebuildable.
+Stale base, invalid graph, resource exhaustion, corruption, cancellation, and
+infrastructure/durability failure remain distinct.
 
 The guarantee assumes a trusted local operator and a filesystem that honors the documented
 operations. Network filesystems, a hostile concurrent filesystem administrator, encrypted graph

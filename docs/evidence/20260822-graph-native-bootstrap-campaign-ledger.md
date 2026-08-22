@@ -206,3 +206,34 @@ both Clippy and release build. Six consecutive fresh full repetitions then passe
 corrected fresh 17/17 profile passed with no reuse in 6.078 seconds at
 `.artifacts/check/20260822T131807.529974Z-726352/receipt.json`; a later final receipt will supersede
 this working-tree evidence.
+
+## Persistent-root publication locality correction
+
+A post-index audit found that `StoredGraphRoot::apply_delta` path-copied bounded map paths but then
+used the exhaustive reachable-page copier on every final map. That cleanup traversal decoded the
+complete persistent root merely to discard intermediate generated pages, so ordinary local root
+publication was still linear in total root pages. The corrected overlay retains every generated
+page, including exact physical reuse, and final extraction walks generated pages reachable from
+changed map roots only. Unchanged accepted-base subtrees are structurally reused under the exact
+base and exclusive publication lock; deep doctor remains the exhaustive corruption route.
+
+The focused test
+`platform::graph::tests::local_delta_page_reads_do_not_scan_a_large_unchanged_root` constructs
+10,000- and 100,000-module roots, counts physical base reads including overlay write probes,
+requires bounded page/byte reads and retained pages across the tenfold size increase, proves exact
+equality with full rebuilding, and reconstructs from base plus retained pages. It passed in 4.62
+seconds on the warm debug worktree. The interrupted-orphan regression
+`reused_physical_ancestor_still_retains_new_staged_descendants` and parent/child edge corruption
+test `reachable_copies_reject_parent_child_prefix_mismatch` also passed. All-target Clippy with
+warnings denied passed after the correction. A fresh full profile passed 17/17 gates with no reuse
+in 9.956 seconds at `.artifacts/check/20260822T141831.947091Z-808336/receipt.json`. This is
+in-process property evidence, not million-owner evidence.
+
+The repaired public scale harness then completed a 10,000-background-module release workflow. The
+raw receipt and exact binary/source/environment bindings are retained in
+`docs/evidence/20260822-graph4-scale-10000.json`. The initial 10,000-module transaction took 44.913
+seconds. A subsequent one-module creation and rename retained their one-module validation profiles
+and completed in 22.781 ms and 45.653 ms, but wrote 842,666 and 843,519 derived-index bytes. Backup
+took 21.216 seconds for 3,053,899 payload bytes. These observations select monolithic semantic-index
+storage and bulk persistent-map mutation as prerequisites; 100,000 and one-million public runs were
+not attempted on the known linear path.
