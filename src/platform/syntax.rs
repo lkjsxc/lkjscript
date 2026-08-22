@@ -1,12 +1,14 @@
-//! Bounded parser for the maintained textual source authority.
+//! Bounded parser retained as an implementation-disjoint test and recovery-import oracle.
 //!
-//! Authored bytes retain comments and formatting. `semantic_bytes` is a canonical, comment-free
-//! projection used only for semantic equality and compilation; it is never a second editable
-//! authority.
+//! Parsed bytes never become maintained authority and this module is not a public mutation path.
+//! `semantic_bytes` is a canonical, comment-free comparison projection for oracle tests.
 
+#[cfg(test)]
 use super::diagnostic::{Diagnostic, SourceLocation};
-use serde::Serialize;
+use bincode::{Decode, Encode};
+use serde::{Deserialize, Serialize};
 
+#[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SourceLimits {
     pub maximum_bytes: usize,
@@ -16,6 +18,7 @@ pub struct SourceLimits {
     pub maximum_string_bytes: usize,
 }
 
+#[cfg(test)]
 impl Default for SourceLimits {
     fn default() -> Self {
         Self {
@@ -28,7 +31,7 @@ impl Default for SourceLimits {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SourceSpan {
     pub byte_start: usize,
@@ -37,16 +40,19 @@ pub struct SourceSpan {
     pub column: usize,
 }
 
+#[cfg(test)]
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct Atom(String);
 
+#[cfg(test)]
 impl Atom {
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 
+#[cfg(test)]
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", content = "data", rename_all = "snake_case")]
 pub enum FormKind {
@@ -56,6 +62,7 @@ pub enum FormKind {
     List(Vec<Form>),
 }
 
+#[cfg(test)]
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Form {
@@ -63,6 +70,7 @@ pub struct Form {
     pub value: FormKind,
 }
 
+#[cfg(test)]
 impl Form {
     pub fn atom(&self) -> Option<&str> {
         match &self.value {
@@ -79,6 +87,7 @@ impl Form {
     }
 }
 
+#[cfg(test)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SourceDocument {
     path: String,
@@ -87,6 +96,7 @@ pub struct SourceDocument {
     semantic_bytes: Vec<u8>,
 }
 
+#[cfg(test)]
 impl SourceDocument {
     pub fn path(&self) -> &str {
         &self.path
@@ -105,7 +115,8 @@ impl SourceDocument {
     }
 }
 
-pub fn parse_source(
+#[cfg(test)]
+pub(crate) fn parse_source(
     path: impl Into<String>,
     bytes: &[u8],
     limits: SourceLimits,
@@ -195,6 +206,7 @@ pub fn parse_source(
     })
 }
 
+#[cfg(test)]
 struct Parser<'a> {
     path: &'a str,
     text: &'a str,
@@ -204,6 +216,7 @@ struct Parser<'a> {
     limits: SourceLimits,
 }
 
+#[cfg(test)]
 impl Parser<'_> {
     fn parse_form(&mut self, depth: usize) -> Result<Form, Diagnostic> {
         if depth > self.limits.maximum_depth {
@@ -407,6 +420,7 @@ impl Parser<'_> {
     }
 }
 
+#[cfg(test)]
 fn render_form(form: &Form, output: &mut Vec<u8>) {
     match &form.value {
         FormKind::Atom(atom) => output.extend_from_slice(atom.as_str().as_bytes()),
@@ -428,6 +442,7 @@ fn render_form(form: &Form, output: &mut Vec<u8>) {
     }
 }
 
+#[cfg(test)]
 fn location_at(path: &str, bytes: &[u8], offset: usize) -> SourceLocation {
     let bounded = offset.min(bytes.len());
     let mut line = 1usize;
@@ -449,6 +464,7 @@ fn location_at(path: &str, bytes: &[u8], offset: usize) -> SourceLocation {
     }
 }
 
+#[cfg(test)]
 fn char_width(first: u8) -> usize {
     match first {
         0x00..=0x7f => 1,
@@ -458,6 +474,7 @@ fn char_width(first: u8) -> usize {
     }
 }
 
+#[cfg(test)]
 fn valid_atom_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric()
         || matches!(
@@ -478,11 +495,13 @@ fn valid_atom_byte(byte: u8) -> bool {
         )
 }
 
+#[cfg(test)]
 fn looks_like_integer(token: &str) -> bool {
     let digits = token.strip_prefix('-').unwrap_or(token);
     !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit())
 }
 
+#[cfg(test)]
 fn validate_integer_spelling(token: &str) -> Result<(), &'static str> {
     if token == "-0" {
         return Err("negative zero is not a canonical integer");

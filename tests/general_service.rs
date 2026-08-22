@@ -73,25 +73,27 @@ fn interface(program: &PreparedProgram, target: &str, alias: &str) -> OwnerId {
         .clone()
 }
 
-fn sql_value_owner() -> OwnerId {
-    OwnerId {
-        package: lkjscript::platform::PackageId::parse("10000000000000000000000000000001")
-            .expect("standard package id"),
-        module: "database".to_owned(),
-        declaration: "SqlValue".to_owned(),
-    }
+fn sql_value_owner(program: &PreparedProgram) -> OwnerId {
+    program
+        .resolve_name(
+            &lkjscript::platform::PackageId::parse("10000000000000000000000000000001")
+                .expect("standard package id"),
+            "database",
+            "SqlValue",
+        )
+        .expect("standard SqlValue owner")
 }
 
-fn sql_bool(value: bool) -> Value {
-    Value::variant(sql_value_owner(), "Bool", Some(Value::Bool(value)))
+fn sql_bool(program: &PreparedProgram, value: bool) -> Value {
+    Value::variant(sql_value_owner(program), "Bool", Some(Value::Bool(value)))
 }
 
-fn sql_text(value: &str) -> Value {
-    Value::variant(sql_value_owner(), "Text", Some(Value::text(value)))
+fn sql_text(program: &PreparedProgram, value: &str) -> Value {
+    Value::variant(sql_value_owner(program), "Text", Some(Value::text(value)))
 }
 
-fn sql_i64(value: i64) -> Value {
-    Value::variant(sql_value_owner(), "I64", Some(Value::I64(value)))
+fn sql_i64(program: &PreparedProgram, value: i64) -> Value {
+    Value::variant(sql_value_owner(program), "I64", Some(Value::I64(value)))
 }
 
 fn rows(row: Vec<Value>) -> Value {
@@ -251,7 +253,7 @@ async fn authored_create_route_owns_auth_transaction_and_job_policy() {
         interface(&program, "serve", "db"),
         vec![ScriptedCall {
             operation: "query".to_owned(),
-            result: Ok(rows(vec![sql_text("alice")])),
+            result: Ok(rows(vec![sql_text(&program, "alice")])),
         }],
         vec![vec![
             ScriptedCall {
@@ -334,15 +336,15 @@ async fn application_owned_owner_check_denies_cross_actor_read() {
         vec![
             ScriptedCall {
                 operation: "query".to_owned(),
-                result: Ok(rows(vec![sql_text("alice")])),
+                result: Ok(rows(vec![sql_text(&program, "alice")])),
             },
             ScriptedCall {
                 operation: "query".to_owned(),
                 result: Ok(rows(vec![
-                    sql_text("bob"),
-                    sql_text("Private"),
-                    sql_text("body"),
-                    sql_i64(3),
+                    sql_text(&program, "bob"),
+                    sql_text(&program, "Private"),
+                    sql_text(&program, "body"),
+                    sql_i64(&program, 3),
                 ])),
             },
         ],
@@ -384,20 +386,20 @@ async fn authored_list_route_projects_bounded_typed_rows() {
         vec![
             ScriptedCall {
                 operation: "query".to_owned(),
-                result: Ok(rows(vec![sql_text("alice")])),
+                result: Ok(rows(vec![sql_text(&program, "alice")])),
             },
             ScriptedCall {
                 operation: "query".to_owned(),
                 result: Ok(Value::List(Arc::new(vec![
                     Value::List(Arc::new(vec![
-                        sql_text("resource-2"),
-                        sql_text("Second"),
-                        sql_i64(4),
+                        sql_text(&program, "resource-2"),
+                        sql_text(&program, "Second"),
+                        sql_i64(&program, 4),
                     ])),
                     Value::List(Arc::new(vec![
-                        sql_text("resource-1"),
-                        sql_text("First"),
-                        sql_i64(0),
+                        sql_text(&program, "resource-1"),
+                        sql_text(&program, "First"),
+                        sql_i64(&program, 0),
                     ])),
                 ]))),
             },
@@ -439,7 +441,7 @@ async fn malformed_typed_json_is_a_response_without_transaction_work() {
         interface(&program, "serve", "db"),
         vec![ScriptedCall {
             operation: "query".to_owned(),
-            result: Ok(rows(vec![sql_text("alice")])),
+            result: Ok(rows(vec![sql_text(&program, "alice")])),
         }],
     ));
     let app = application(
@@ -487,7 +489,7 @@ async fn login_uses_deterministic_time_randomness_and_same_database_handler_path
         vec![
             ScriptedCall {
                 operation: "query".to_owned(),
-                result: Ok(rows(vec![sql_text("encoded-password")])),
+                result: Ok(rows(vec![sql_text(&program, "encoded-password")])),
             },
             ScriptedCall {
                 operation: "execute".to_owned(),
@@ -551,7 +553,7 @@ async fn object_route_streams_through_generic_store_and_malformed_query_precedes
         vec![
             ScriptedCall {
                 operation: "query".to_owned(),
-                result: Ok(rows(vec![sql_text("alice")])),
+                result: Ok(rows(vec![sql_text(&program, "alice")])),
             },
             ScriptedCall {
                 operation: "execute".to_owned(),
@@ -563,11 +565,11 @@ async fn object_route_streams_through_generic_store_and_malformed_query_precedes
             },
             ScriptedCall {
                 operation: "query".to_owned(),
-                result: Ok(rows(vec![sql_text("alice")])),
+                result: Ok(rows(vec![sql_text(&program, "alice")])),
             },
             ScriptedCall {
                 operation: "query".to_owned(),
-                result: Ok(rows(vec![sql_bool(true)])),
+                result: Ok(rows(vec![sql_bool(&program, true)])),
             },
             ScriptedCall {
                 operation: "execute".to_owned(),

@@ -56,13 +56,34 @@ impl ConfigurationAdapter {
         interface: OwnerId,
         values: BTreeMap<String, ConfigurationValue>,
     ) -> Result<Self, Diagnostic> {
+        Self::validate_values(&values)?;
+        Ok(Self {
+            interface,
+            values: Arc::new(values),
+        })
+    }
+
+    pub fn observe_values(
+        values: &BTreeMap<String, ConfigurationValue>,
+    ) -> Result<ConfigurationObservation, Diagnostic> {
+        Self::validate_values(values)?;
+        Ok(ConfigurationObservation {
+            contract_version: CONFIGURATION_ADAPTER_CONTRACT_VERSION,
+            fields: values
+                .iter()
+                .map(|(name, value)| (name.clone(), value.kind().to_owned()))
+                .collect(),
+        })
+    }
+
+    fn validate_values(values: &BTreeMap<String, ConfigurationValue>) -> Result<(), Diagnostic> {
         if values.len() > MAXIMUM_CONFIGURATION_FIELDS {
             return Err(configuration_diagnostic(
                 "configuration_field_limit",
                 format!("configuration has more than {MAXIMUM_CONFIGURATION_FIELDS} fields"),
             ));
         }
-        for (name, value) in &values {
+        for (name, value) in values {
             validate_name(name).map_err(|error| {
                 configuration_diagnostic("configuration_field_name", error.message)
             })?;
@@ -73,10 +94,7 @@ impl ConfigurationAdapter {
                 ));
             }
         }
-        Ok(Self {
-            interface,
-            values: Arc::new(values),
-        })
+        Ok(())
     }
 
     pub fn observe_redacted(&self) -> ConfigurationObservation {
@@ -166,11 +184,11 @@ mod tests {
     use crate::platform::language::{Idempotency, Visibility};
 
     fn owner() -> OwnerId {
-        OwnerId {
-            package: PackageId::parse("1234567890abcdef1234567890abcdef").expect("package id"),
-            module: "configuration".to_owned(),
-            declaration: "Configuration".to_owned(),
-        }
+        OwnerId::deterministic_for_test(
+            PackageId::parse("1234567890abcdef1234567890abcdef").expect("package id"),
+            "configuration",
+            "Configuration",
+        )
     }
 
     fn policy(operation: &str) -> CallPolicy {

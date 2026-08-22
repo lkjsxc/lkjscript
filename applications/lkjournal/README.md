@@ -1,46 +1,61 @@
 # lkjournal
 
-`lkjournal` is an actor-aware resource journal implemented as lkjscript application meaning above
-generic adapters. It stores named Markdown-like text without parsing it, retains immutable
-snapshots for every accepted update, publishes named objects, and completes one durable indexing
-job per created resource.
+`lkjournal` is an actor-aware resource journal whose canonical application meaning is the typed
+graph under `.lkjscript/meaning`. It stores named Markdown-like text without parsing it, retains an
+immutable snapshot for every accepted update, publishes named objects, and completes one durable
+indexing job for each created resource.
 
-The semantic owners are:
+The current graph has three stable modules:
 
-- `domain.lkj`: domain records, exact-base and ownership policy;
-- `service.lkj`: routes, strict JSON schemas, authorization, SQL, migration, rendering, object
-  reconciliation, and enqueue policy; and
-- `worker.lkj`: queue claim and exact-attempt completion policy.
+- `domain` (`mod_86e34c967b6c9ebc5b3db7da53012a48`) owns domain records, exact-base
+  transitions, and ownership meaning;
+- `service` (`mod_50e2d3318b93f572dad082bd4f42c526`) owns routes, strict JSON schemas,
+  authorization, SQL, migration, rendering, object reconciliation, and enqueue policy; and
+- `worker` (`mod_0510586a801c429b7a4a49a217de7fab`) owns queue claim and exact-attempt
+  completion meaning.
 
-The checked `lkjournal.lkja` contains those modules plus the exact `standard` dependency. The
-artifact contains requirements and no grants, credentials, paths, listener, or deployment secrets.
+`lkjournal.lkja` is a deterministic graph-native bundle containing the exact standard dependency.
+It contains requirements and no grants, credentials, listener address, host paths, or deployment
+secrets.
 
-## Run
+## Inspect and verify
 
-Build from the repository root:
+From the repository root:
 
 ```sh
 cargo build --workspace --release --locked
-target/release/lkjscript --project applications/lkjournal package test
+target/release/lkjscript --project applications/lkjournal semantic orient --limit 20
+target/release/lkjscript --project applications/lkjournal semantic show \
+  mod_50e2d3318b93f572dad082bd4f42c526 --body
+target/release/lkjscript --project applications/lkjournal semantic test
+target/release/lkjscript --project applications/lkjournal semantic build \
+  --output /tmp/lkjournal.lkja
+target/release/lkjscript --project applications/lkjournal semantic doctor --deep
 ```
 
-Create a PostgreSQL database, then from this directory run:
+The test command runs 11 accepted tests and requires equality between prepared bytecode and the
+semantic reference interpreter.
+
+## Run
+
+Create an empty PostgreSQL database and bind the two named secrets. Do not commit their values.
 
 ```sh
 export LKJOURNAL_DATABASE_URL='postgresql://operator:password@127.0.0.1/lkjournal'
 export LKJOURNAL_BOOTSTRAP_TOKEN='replace-with-a-random-bootstrap-token'
+cd applications/lkjournal
 ../../target/release/lkjscript serve --deployment service.deployment.json
 ../../target/release/lkjscript worker --deployment worker.deployment.json
 ```
 
-The service descriptor listens on `127.0.0.1:8080`. It admits at most 16 active requests plus 64
-queued requests, limits request bodies to 8 MiB and response bodies to 4 MiB, and gives work a
-30-second operational deadline. The worker runs at most two tasks. Change deployment values for a
-real deployment; do not commit secrets.
+The service descriptor listens on `127.0.0.1:8080`, admits at most 16 active requests plus 64
+queued requests, limits request bodies to 8 MiB and response bodies to 4 MiB, and assigns a
+30-second operational deadline. The worker runs at most two tasks. Deployment JSON binds runtime
+grants; it is not program authority.
 
 ## Routes
 
-| Method and path | Application behavior |
+| Method and path | Graph-owned behavior |
 |---|---|
 | `GET /health` | readiness response independent of database work |
 | `GET /` | escaped server-rendered service page |
@@ -54,26 +69,31 @@ real deployment; do not commit secrets.
 | `POST /objects?name=…` | streaming no-replace object publication and database reference |
 | `POST /objects/reconcile?name=…` | reconcile a possibly visible object publication |
 
-Unknown routes return 404. Missing or invalid sessions return 401; cross-actor ownership checks
-return 403; stale updates return 409; malformed typed JSON returns 400. Domain outcomes are HTTP
-values authored in `service.lkj`, not adapter diagnostics.
+Unknown routes return 404. Missing or invalid sessions return 401, cross-actor checks return 403,
+stale updates return 409, and malformed typed JSON returns 400. These domain outcomes are graph
+values, not adapter diagnostics.
 
-The bootstrap token is compared by the generic secret-verifier adapter and is never passed into the
-language as a serializable value. Password hashes use bounded Argon2 parameters from deployment.
-Session expiry, actor ownership, object keys, SQL statements, and job payloads remain application
-policy.
+The bootstrap token is checked by the generic secret-verifier adapter and never becomes a
+serializable language value. Password hashes use bounded Argon2 deployment parameters. Session
+expiry, actor ownership, SQL, object keys, and job payloads remain application meaning rather than
+generic Rust policy.
 
-## Evidence and recovery
+## Acceptance and recovery
 
 ```sh
 tools/service-acceptance --binary target/release/lkjscript
 ```
 
-The acceptance command requires an already cached `postgres:16-alpine` Docker image, starts an
-isolated database, exercises live handlers and the worker, performs `pg_dump`/`pg_restore`, restarts
-against the restored database, and retains bounded evidence under `.artifacts/service/`.
+The acceptance tool requires a cached `postgres:16-alpine` image. It starts an isolated database,
+exercises live HTTP and worker paths, performs `pg_dump`/`pg_restore`, restarts, and retains bounded
+evidence under `.artifacts/service/`.
 
-The local object deployment writes beneath `state/objects`, which is excluded from source control.
-The local adapter validates content type but the underlying local backend does not persist provider
-attributes; S3 and memory adapters do. Database backup and object backup are separate operational
-authorities and must be coordinated explicitly by a deployment.
+Canonical program backup is separate:
+
+```sh
+target/release/lkjscript --project applications/lkjournal semantic backup \
+  --output /tmp/lkjournal-meaning.lkjb
+```
+
+Database, object, and canonical-meaning backups are distinct operational authorities and must be
+coordinated by deployment policy.

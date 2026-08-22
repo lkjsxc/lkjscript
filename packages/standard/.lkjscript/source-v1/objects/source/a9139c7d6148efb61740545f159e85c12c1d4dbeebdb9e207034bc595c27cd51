@@ -1,8 +1,0 @@
-; Application-owned schemas select source-origin keys; deployment supplies typed values.
-(module configuration
-  (export Configuration)
-  (interface Configuration
-    (operation exists ((name StaticText)) Bool idempotent no-visibility)
-    (operation text ((name StaticText)) Text idempotent no-visibility)
-    (operation i64 ((name StaticText)) I64 idempotent no-visibility)
-    (operation bool ((name StaticText)) Bool idempotent no-visibility)))

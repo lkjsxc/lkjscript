@@ -1,4 +1,4 @@
-//! Current source-authored lkjscript command and generic resident runner.
+//! Public semantic-development command and generic resident runner.
 
 #![allow(
     clippy::result_large_err,
@@ -22,27 +22,50 @@ const EXIT_INFRASTRUCTURE: u8 = 6;
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> ExitCode {
     let arguments = std::env::args().skip(1).collect::<Vec<_>>();
+    if !matches!(
+        arguments.first().map(String::as_str),
+        Some("serve" | "worker" | "deployment" | "hash")
+    ) {
+        return semantic_cli(arguments);
+    }
     let outcome = match arguments.first().map(String::as_str) {
         Some("serve") => serve(&arguments[1..]).await,
         Some("worker") => worker(&arguments[1..]).await,
         Some("deployment") => deployment(&arguments[1..]),
         Some("hash") => hash(&arguments[1..]),
-        _ => execute_cli(arguments).and_then(|receipt| write_json(&receipt)),
+        _ => unreachable!("semantic commands returned above"),
     };
     match outcome {
         Ok(()) => ExitCode::SUCCESS,
-        Err(error) => {
-            let exit = exit_for(&error);
-            let failure = json!({
-                "contract_version": 1,
-                "ok": false,
-                "error": error,
-            });
-            if write_json(&failure).is_err() {
+        Err(error) => write_failure(&error, 1),
+    }
+}
+
+fn semantic_cli(arguments: Vec<String>) -> ExitCode {
+    match execute_cli(arguments) {
+        Ok(receipt) => {
+            let exit = receipt.process_exit_code();
+            if write_json(&receipt).is_err() {
                 return ExitCode::from(EXIT_INFRASTRUCTURE);
             }
             ExitCode::from(exit)
         }
+        Err(error) => write_failure(&error, 2),
+    }
+}
+
+fn write_failure(error: &Diagnostic, contract_version: u16) -> ExitCode {
+    let exit = exit_for(error);
+    let failure = json!({
+        "contract_version": contract_version,
+        "ok": false,
+        "status": "failure",
+        "error": error,
+    });
+    if write_json(&failure).is_err() {
+        ExitCode::from(EXIT_INFRASTRUCTURE)
+    } else {
+        ExitCode::from(exit)
     }
 }
 

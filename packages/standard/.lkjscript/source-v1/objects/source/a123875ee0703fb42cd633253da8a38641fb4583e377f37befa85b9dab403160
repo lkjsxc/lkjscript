@@ -1,5 +1,0 @@
-; UUID spelling and generation are generic; domain identity remains application-owned.
-(module identifier
-  (export Identifier)
-  (interface Identifier
-    (operation uuid-v4 () Text non-idempotent no-visibility)))

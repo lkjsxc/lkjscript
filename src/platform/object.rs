@@ -839,11 +839,11 @@ mod tests {
     use std::collections::BTreeMap;
 
     fn owner() -> OwnerId {
-        OwnerId {
-            package: PackageId::parse("1234567890abcdef1234567890abcdef").expect("package id"),
-            module: "object".to_owned(),
-            declaration: "ObjectStorage".to_owned(),
-        }
+        OwnerId::deterministic_for_test(
+            PackageId::parse("1234567890abcdef1234567890abcdef").expect("package id"),
+            "object",
+            "ObjectStorage",
+        )
     }
 
     fn policy(operation: &str, possible: bool) -> CallPolicy {

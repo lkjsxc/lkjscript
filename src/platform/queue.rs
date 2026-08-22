@@ -1166,11 +1166,11 @@ mod tests {
     use crate::platform::language::{Idempotency, Visibility};
 
     fn owner() -> OwnerId {
-        OwnerId {
-            package: PackageId::parse("1234567890abcdef1234567890abcdef").expect("package id"),
-            module: "queue".to_owned(),
-            declaration: "DurableQueue".to_owned(),
-        }
+        OwnerId::deterministic_for_test(
+            PackageId::parse("1234567890abcdef1234567890abcdef").expect("package id"),
+            "queue",
+            "DurableQueue",
+        )
     }
 
     fn policy(operation: &str) -> CallPolicy {

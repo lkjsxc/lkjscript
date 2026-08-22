@@ -1,0 +1,257 @@
+#!/usr/bin/env python3
+"""Generate and measure a many-module graph through the public semantic CLI only."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+import time
+from typing import Any
+
+
+GRAPH_CONTRACT = "lkjscript-meaning-graph-1"
+MAXIMUM_BATCH = 10_000
+MAXIMUM_MODULES = 90_000
+
+
+def arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Create a deterministic many-module topology using semantic transactions."
+    )
+    parser.add_argument("--modules", type=int, default=10_000)
+    parser.add_argument("--batch", type=int, default=10_000)
+    parser.add_argument(
+        "--artifact", default="applications/lkjournal/dependencies/standard.lkja"
+    )
+    parser.add_argument("--binary", default="target/release/lkjscript")
+    parser.add_argument(
+        "--retain",
+        type=Path,
+        help="Use and retain this existing empty directory instead of a temporary project.",
+    )
+    return parser.parse_args()
+
+
+def invoke(binary: Path, project: Path, *command: str) -> tuple[dict[str, Any], int, int]:
+    started = time.perf_counter_ns()
+    result = subprocess.run(
+        [str(binary), "--project", str(project), "semantic", *command],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    elapsed = time.perf_counter_ns() - started
+    if result.stderr:
+        raise RuntimeError(f"semantic command wrote stderr: {result.stderr[:512]!r}")
+    try:
+        receipt = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise RuntimeError(f"semantic command returned invalid JSON: {error}") from error
+    if result.returncode != 0 or not receipt.get("ok"):
+        raise RuntimeError(
+            f"semantic command failed ({result.returncode}): "
+            f"{json.dumps(receipt, sort_keys=True)[:2048]}"
+        )
+    return receipt, elapsed, len(result.stdout)
+
+
+def module_id(ordinal: int) -> str:
+    digest = hashlib.blake2b(
+        f"lkjscript.semantic-scale.module.v1:{ordinal}".encode(), digest_size=16
+    ).hexdigest()
+    return f"mod_{digest}"
+
+
+def module_name(ordinal: int) -> str:
+    return f"scale.module{ordinal:06d}"
+
+
+def byte_count(root: Path, include_indexes: bool) -> int:
+    total = 0
+    for path in root.rglob("*"):
+        if not path.is_file() or path.name == "LOCK":
+            continue
+        relative = path.relative_to(root)
+        if not include_indexes and relative.parts[0] in {"indexes", "drafts"}:
+            continue
+        total += path.stat().st_size
+    return total
+
+
+def run(configuration: argparse.Namespace, project: Path) -> dict[str, Any]:
+    binary = Path(configuration.binary).resolve(strict=True)
+    artifact = Path(configuration.artifact).resolve(strict=True)
+    if any(project.iterdir()):
+        raise RuntimeError(f"retained benchmark directory is not empty: {project}")
+
+    import_receipt, import_elapsed, import_output = invoke(
+        binary, project, "import", "--artifact", str(artifact)
+    )
+    status = import_receipt["result"]["status"]
+    repository_id = status["repository_id"]
+    revision = status["revision"]
+    applied: list[dict[str, Any]] = []
+    request_bytes = 0
+
+    for start in range(0, configuration.modules, configuration.batch):
+        end = min(start + configuration.batch, configuration.modules)
+        operations = [
+            {
+                "operation_kind": "create_module",
+                "id": module_id(ordinal),
+                "name": module_name(ordinal),
+            }
+            for ordinal in range(start, end)
+        ]
+        request = {
+            "contract_version": 1,
+            "graph_contract": GRAPH_CONTRACT,
+            "repository_id": repository_id,
+            "base_revision": revision,
+            "idempotency_key": f"semantic-scale-{configuration.modules}-{start}-{end}",
+            "preconditions": [],
+            "operations": operations,
+            "budget": {
+                "maximum_operations": len(operations),
+                "maximum_work": 10_000_000,
+                "maximum_affected_owners": 100_000,
+            },
+            "intent": "Deterministic public semantic CLI many-module scale fixture",
+        }
+        request_path = project / f"transaction-{start:06d}-{end:06d}.json"
+        encoded = json.dumps(request, separators=(",", ":"), sort_keys=True).encode()
+        request_bytes += len(encoded)
+        request_path.write_bytes(encoded)
+        receipt, elapsed, output_bytes = invoke(
+            binary, project, "apply", "--request-file", str(request_path)
+        )
+        request_path.unlink()
+        revision = receipt["result"]["published_revision"]
+        applied.append(
+            {
+                "start": start,
+                "end": end,
+                "elapsed_nanoseconds": elapsed,
+                "response_bytes": output_bytes,
+                "revision": revision,
+            }
+        )
+
+    orient, orient_elapsed, orient_bytes = invoke(binary, project, "orient", "--limit", "10")
+    find_cold, find_cold_elapsed, find_cold_bytes = invoke(
+        binary,
+        project,
+        "find",
+        module_name(configuration.modules - 1),
+        "--exact",
+        "--limit",
+        "10",
+    )
+    find, find_elapsed, find_bytes = invoke(
+        binary,
+        project,
+        "find",
+        module_name(configuration.modules - 1),
+        "--exact",
+        "--limit",
+        "10",
+    )
+    show, show_elapsed, show_bytes = invoke(
+        binary, project, "show", module_id(configuration.modules - 1)
+    )
+    doctor, doctor_elapsed, doctor_bytes = invoke(binary, project, "doctor", "--deep")
+    artifact_path = project / "scale.lkja"
+    build, build_elapsed, build_bytes = invoke(
+        binary, project, "build", "--output", str(artifact_path)
+    )
+    backup_path = project / "scale.lkjb"
+    backup, backup_elapsed, backup_bytes = invoke(
+        binary, project, "backup", "--output", str(backup_path)
+    )
+    store = project / ".lkjscript" / "meaning"
+
+    return {
+        "contract_version": 1,
+        "topology": "many_tiny_modules",
+        "requested_modules": configuration.modules,
+        "batch_size": configuration.batch,
+        "base_modules": orient["result"]["module_count"] - configuration.modules,
+        "total_modules": orient["result"]["module_count"],
+        "final_revision": revision,
+        "apply_batches": applied,
+        "transaction_request_bytes": request_bytes,
+        "orient": {
+            "elapsed_nanoseconds": orient_elapsed,
+            "response_bytes": orient_bytes,
+            "returned_items": len(orient["result"]["modules"]),
+        },
+        "exact_find": {
+            "elapsed_nanoseconds": find_elapsed,
+            "response_bytes": find_bytes,
+            "work": find["result"]["work"],
+            "matches": find["result"]["total_items"],
+        },
+        "exact_find_cold_index": {
+            "elapsed_nanoseconds": find_cold_elapsed,
+            "response_bytes": find_cold_bytes,
+            "work": find_cold["result"]["work"],
+            "matches": find_cold["result"]["total_items"],
+        },
+        "exact_show": {
+            "elapsed_nanoseconds": show_elapsed,
+            "response_bytes": show_bytes,
+            "id": show["result"]["id"],
+        },
+        "deep_doctor": {
+            "elapsed_nanoseconds": doctor_elapsed,
+            "response_bytes": doctor_bytes,
+            **doctor["result"],
+        },
+        "build": {
+            "elapsed_nanoseconds": build_elapsed,
+            "response_bytes": build_bytes,
+            "artifact_bytes": artifact_path.stat().st_size,
+            "artifact_digest": build["result"]["receipt"]["artifact_digest"],
+        },
+        "backup": {
+            "elapsed_nanoseconds": backup_elapsed,
+            "response_bytes": backup_bytes,
+            "backup_bytes": backup_path.stat().st_size,
+            "backup_digest": backup["result"]["receipt"]["digest"],
+        },
+        "canonical_store_bytes": byte_count(store, include_indexes=False),
+        "store_bytes_with_indexes": byte_count(store, include_indexes=True),
+        "platform": os.uname().sysname + " " + os.uname().machine,
+        "project_retained": configuration.retain is not None,
+    }
+
+
+def main() -> int:
+    configuration = arguments()
+    if (
+        configuration.modules < 1
+        or configuration.modules > MAXIMUM_MODULES
+        or configuration.batch < 1
+        or configuration.batch > MAXIMUM_BATCH
+    ):
+        raise SystemExit(
+            f"--modules must be 1 through {MAXIMUM_MODULES}; "
+            f"--batch must be 1 through {MAXIMUM_BATCH}"
+        )
+    if configuration.retain is not None:
+        project = configuration.retain.resolve(strict=True)
+        receipt = run(configuration, project)
+    else:
+        with tempfile.TemporaryDirectory(prefix="lkjscript-semantic-scale-") as directory:
+            receipt = run(configuration, Path(directory))
+    print(json.dumps(receipt, separators=(",", ":"), sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

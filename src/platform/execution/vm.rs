@@ -1,6 +1,7 @@
 use super::capability::BoundTransaction;
-use super::{BoundCapabilities, Instruction, PreparedProgram};
+use super::{BoundCapabilities, Instruction, PreparedFunction, PreparedProgram};
 use crate::platform::semantic::OwnerId;
+use crate::platform::semantic_id::ExpressionId;
 use crate::platform::value::{MapKey, Value};
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -156,6 +157,28 @@ impl<'a> Vm<'a> {
         function: &OwnerId,
         arguments: Vec<Value>,
     ) -> Result<(Value, RunObservation), ExecutionError> {
+        let function = self.program.function(function).ok_or_else(|| {
+            ExecutionError::new(
+                ExecutionFailureClass::Infrastructure,
+                "vm_function_missing",
+                "prepared semantic function is absent",
+            )
+        })?;
+        self.invoke_inner(function, arguments, None, &ExecutionControl::uncancelled())
+    }
+
+    pub(crate) fn invoke_test_expression(
+        &self,
+        expression: &ExpressionId,
+        arguments: Vec<Value>,
+    ) -> Result<(Value, RunObservation), ExecutionError> {
+        let function = self.program.test_expression(expression).ok_or_else(|| {
+            ExecutionError::new(
+                ExecutionFailureClass::Infrastructure,
+                "vm_test_expression_missing",
+                format!("prepared test expression '{expression}' is absent"),
+            )
+        })?;
         self.invoke_inner(function, arguments, None, &ExecutionControl::uncancelled())
     }
 
@@ -165,6 +188,13 @@ impl<'a> Vm<'a> {
         arguments: Vec<Value>,
         capabilities: &BoundCapabilities,
     ) -> Result<(Value, RunObservation), ExecutionError> {
+        let function = self.program.function(function).ok_or_else(|| {
+            ExecutionError::new(
+                ExecutionFailureClass::Infrastructure,
+                "vm_function_missing",
+                "prepared semantic function is absent",
+            )
+        })?;
         self.invoke_inner(
             function,
             arguments,
@@ -180,12 +210,19 @@ impl<'a> Vm<'a> {
         capabilities: Option<&BoundCapabilities>,
         control: &ExecutionControl,
     ) -> Result<(Value, RunObservation), ExecutionError> {
+        let function = self.program.function(function).ok_or_else(|| {
+            ExecutionError::new(
+                ExecutionFailureClass::Infrastructure,
+                "vm_function_missing",
+                "prepared semantic function is absent",
+            )
+        })?;
         self.invoke_inner(function, arguments, capabilities, control)
     }
 
     fn invoke_inner(
         &self,
-        function: &OwnerId,
+        function: &PreparedFunction,
         arguments: Vec<Value>,
         capabilities: Option<&BoundCapabilities>,
         control: &ExecutionControl,
@@ -207,7 +244,7 @@ impl<'a> Vm<'a> {
             },
         };
         let mut transactions: BTreeMap<String, BoundTransaction> = BTreeMap::new();
-        machine.call(function, arguments)?;
+        machine.call_prepared(function, arguments)?;
         loop {
             control.check()?;
             if machine.fuel == 0 {
@@ -480,6 +517,14 @@ impl Machine<'_> {
                 format!("prepared function '{}' is absent", owner.diagnostic_name()),
             )
         })?;
+        self.call_prepared(function, arguments)
+    }
+
+    fn call_prepared(
+        &mut self,
+        function: &PreparedFunction,
+        arguments: Vec<Value>,
+    ) -> Result<(), ExecutionError> {
         if arguments.len() != function.signature.parameters.len() {
             return Err(runtime_type("function argument count is foreign"));
         }

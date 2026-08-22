@@ -1,67 +1,78 @@
 # Security and trust model
 
-This threat model covers the current source-authored platform and `lkjournal`. It does not grant a
-sandbox claim.
+This threat model covers the canonical graph platform and `lkjournal`. It does not grant a
+hostile-code sandbox or distributed-system guarantee.
 
 ## Trust boundaries
 
-The local operator, checked lkjscript source, compiled bootstrap binary, Rust dependency closure,
-deployment descriptor, PostgreSQL administrator, object-store administrator, and host OS are
-trusted within their named authority. HTTP peers, request bytes, JSON, URL/query fields, headers,
-database rows, object metadata, queue records, source/artifact/backup bytes, and environment values
-are untrusted inputs. Authored lkjscript is validated and resource-bounded but is not treated as
-hostile tenant code.
+The local repository operator, compiled bootstrap, locked Rust dependency closure, accepted graph
+meaning, deployment author, host OS, PostgreSQL administrator, and object-store administrator are
+trusted within their named authority. Packed graph/backup/artifact bytes, semantic requests,
+continuation handles, deployment descriptors, HTTP input, JSON, database rows, object responses,
+queue records, and environment values are hostile decoding inputs.
 
-Application authentication establishes an actor string from a bearer session. Application-owned
-queries enforce resource ownership. Deployment grants authorize generic mechanics; they do not
-authorize domain access. A process boundary, package digest, or database connection is not an actor
-identity.
+Accepted lkjscript meaning is validated and resource-bounded but is not isolated as hostile tenant
+code. A process, package digest, repository ID, database connection, or runtime task is not an
+application actor identity.
 
-## Principal threats and controls
+## Canonical graph threats
 
-| Threat | Current control | Residual assumption |
+| Threat | Implemented control | Residual assumption |
 |---|---|---|
-| Malformed or excessive source/artifact/config | strict closed decoders, bounds before retained allocation, digests, exact versions | trusted compiler/runtime correctness |
-| Capability confusion | exact interface owner, operation set, requirement alias, limits, sharing domain, authority revision, descriptor digest | deployment author chooses appropriate grants |
-| Secret disclosure | environment acquisition into opaque catalog, redacted debug/observations, verifier comparison without serialization | OS process environment and administrator are trusted |
-| SQL injection | statements must be `StaticText`; values use typed parameter binding | authored static SQL is trusted and reviewed |
-| Cross-actor resource access | session lookup plus application-owned owner checks and deterministic denial tests | one PostgreSQL authority is trusted |
-| Password theft | bounded Argon2 hashes, random salt, generic verification, no plaintext persistence | operator selects deployment parameters and transport security |
-| Request denial | header/body/count limits, bounded admission queue, per-request deadline, bounded streams | no per-IP rate limiter or TLS proxy is included |
-| Object overwrite/traversal | validated opaque keys/prefix, no-replace publication, checksum, exact local root/object-store API | local root and S3 credentials are operator-controlled |
-| Unknown external publication | explicit `possible_visibility` class and application reconciliation | provider truth remains external authority |
-| Duplicate background work | enqueue idempotency, exact attempt/lease owner, stale completion rejection | handlers must keep domain publication idempotent |
-| Shutdown repetition | admission stop, drain, cooperative cancellation, adapter cleanup receipt | blocking drivers may outlive cancellation grace and report infrastructure failure |
-| Diagnostic leakage | closed error projections and redacted secret types | application-authored response/log text is trusted |
+| Malformed or excessive packed objects | typed domain magic, exact version/length, domain-separated digest, trailing rejection, checked bounds before decode | Rust and dependency correctness |
+| Identity-domain confusion | tagged opaque IDs, typed selectors, graph shape validation, foreign-domain rejection tests | callers preserve full durable IDs |
+| Partial or torn publication | exact-base lock, immutable objects first, filesystem durability before one synchronized atomic HEAD rename | local filesystem honors documented operations |
+| Corrupt current authority | object-key verification, deep reconstruction independent of indexes, writes blocked on observed corruption | operator restores or repairs from trusted backup |
+| Index substitution or loss | revision/root/contract-bound digests; local/full indexes are disposable and rebuild | rebuild cost can be broad |
+| Stale concurrent write | HEAD reread under exclusive lock and exact base comparison | one local repository lock domain |
+| Replay confusion | optional bounded idempotency key binds one exact transaction digest | caller scopes keys appropriately |
+| Oversized query or traversal | item, byte, work, depth, fanout, and continuation bounds | elapsed-time cancellation is process-level, not a hard realtime guarantee |
+| Tampered continuation | revision/query/cursor binding plus domain-separated integrity digest | handle is integrity protected, not confidential |
+| Draft execution | drafts use distinct IDs/storage and build/run paths accept only accepted revisions | local operator controls draft retention |
+| Review text becoming authority | projection is span-free, marked non-authoritative, and has no apply/import path | reviewer understands it is a projection |
+| Backup path/symlink attack | fixed canonical key spaces, regular-file checks, private restore stage, full validation before rename | hostile co-resident filesystem administrator is out of scope |
 
-Tests cover strict/oversized decoding, missing grants, deterministic auth success/failure,
-cross-actor denial, transaction rollback and handle lifetime, overload and shutdown, stream
-backpressure/cleanup, no-replace object behavior and reconciliation, queue duplicate delivery/lease
-loss/stale completion, secret redaction, predecessor rejection, and absence of `lkjournal` product
-vocabulary in generic native sources. Live acceptance covers authentication and the same owner path
-over a real PostgreSQL process.
+On Linux, publication closes all new immutable files, uses `syncfs` on the containing filesystem,
+then writes and synchronizes the HEAD stage and store directory. This batches data durability
+without weakening the visibility point. Non-Linux builds use per-file synchronization. Network
+filesystems and platforms not covered by retained evidence are not claimed.
 
-Generic HTTP failure responses expose only a bounded closed failure class/code header for
-operational diagnosis. Provider messages, connection descriptors, credentials, and application
-values are not copied into those headers.
+## Capability and service threats
 
-## Dependency and native boundary
+| Threat | Implemented control | Residual assumption |
+|---|---|---|
+| Capability confusion | exact interface/operation/alias/limit requirement and deployment grant equality | deployment author chooses appropriate authority |
+| Secret disclosure | environment acquisition into opaque redacted values; no durable graph or artifact secret | OS environment and administrator are trusted |
+| SQL injection | graph-owned statements require `StaticText`; values use typed parameters | authored static SQL is trusted and reviewed |
+| Cross-actor access | graph-owned session and owner checks with deterministic denial tests | one PostgreSQL authority is trusted |
+| Password theft | bounded Argon2 hashes, random salt, generic verification | deployment protects transport and database |
+| Request denial | bounded headers/body/admission/tasks/streams and operational deadlines | no per-IP limiter or TLS proxy is included |
+| Object overwrite or traversal | validated opaque keys/prefixes, no-replace publication, checksums | object root and credentials are operator-controlled |
+| Possibly visible external write | closed `possible_visibility` failure plus application reconciliation | provider truth remains external authority |
+| Duplicate background work | idempotency key, exact attempt/lease owner, stale completion rejection | handlers keep domain publication idempotent |
+| Diagnostic leakage | closed projections, bounded excerpts, secret redaction | graph-authored response text is trusted |
 
-First-party Rust forbids `unsafe`. Native dependencies are locked. Axum/Tokio own HTTP and task
-mechanics; `postgres` owns the PostgreSQL protocol; `object_store` owns local/S3 protocol mechanics;
-Argon2 and OS randomness own cryptographic mechanics. These dependencies may contain audited unsafe
-code outside the repository prohibition. The current PostgreSQL adapter uses `NoTls`, and the HTTP
-listener does not terminate TLS; production exposure therefore requires a trusted local/private
-network or a correctly configured external TLS boundary.
+Artifacts contain typed requirements, not grants, host coordinates, credentials, or live handles.
+Deployment descriptors bind concrete adapters and secrets after artifact verification. Generic Rust
+does not own lkjournal routes, tables, roles, object keys, or queue transitions.
 
-There is no ambient outbound network interface available to lkjscript. The S3 and PostgreSQL
-adapters can reach only endpoints explicitly bound by deployment. The S3 endpoint restrictions are
-deployment validation, not an application-visible arbitrary socket capability.
+## Native and test boundaries
+
+First-party Rust forbids `unsafe`. `rustix` supplies the safe Linux `syncfs` wrapper; Axum/Tokio own
+HTTP and task mechanics; `postgres` owns the PostgreSQL protocol; `object_store` owns local/S3
+mechanics; Argon2 and OS randomness own cryptographic mechanics. Locked dependencies may contain
+unsafe code outside the first-party prohibition.
+
+The old source parser and semantic builder compile only in Rust tests as an independent migration
+and execution oracle. Test fixture text is not maintained program authority. Source-era project
+markers and artifact contracts reject at public boundaries; there is no fallback decoder.
 
 ## Explicit non-claims
 
-The runtime does not isolate hostile lkjscript programs, hostile native dependencies, a hostile OS
-administrator, database superusers, object-store administrators, or co-resident processes. It does
-not provide tenant CPU/RSS isolation, encrypted artifacts, artifact signatures, provenance,
-certificate management, CSRF middleware, session revocation UI, audit-log durability, or cluster
-consensus. These claims require separate implemented consumers and evidence.
+The system does not isolate hostile lkjscript programs, native dependencies, an OS administrator,
+database superusers, object-store administrators, or co-resident processes. It does not provide
+tenant CPU/RSS isolation, encrypted stores/backups, artifact signatures, authenticated provenance,
+distributed consensus, multi-node publication, cross-authority transactions, certificate
+management, CSRF middleware, audit-log durability, or production portability beyond retained
+Linux x86-64 evidence. Current PostgreSQL uses `NoTls`, and the HTTP listener does not terminate
+TLS; production exposure requires an appropriate trusted network or external TLS boundary.

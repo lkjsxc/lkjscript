@@ -1,4 +1,4 @@
-//! Strict deployment descriptors bind source-authored requirements to generic native adapters.
+//! Strict deployment descriptors bind graph-authored requirements to generic native adapters.
 
 use super::artifact::{MAXIMUM_ARTIFACT_BYTES, load_artifact};
 use super::configuration::{ConfigurationAdapter, ConfigurationObservation, ConfigurationValue};
@@ -194,25 +194,8 @@ impl PreparedDeployment {
             )
         })?;
         let streams = StreamRegistry::new(descriptor.streams.clone())?;
-        let configuration = ConfigurationAdapter::new(
-            component
-                .requirements
-                .values()
-                .find(|requirement| {
-                    descriptor.grants.iter().any(|grant| {
-                        grant.requirement == requirement.alias
-                            && matches!(grant.adapter, AdapterDescriptor::Configuration)
-                    })
-                })
-                .map(|requirement| requirement.interface.clone())
-                .unwrap_or_else(|| OwnerId {
-                    package: program.artifact().root_package_id.clone(),
-                    module: "deployment".to_owned(),
-                    declaration: "UnusedConfiguration".to_owned(),
-                }),
-            descriptor.configuration.clone(),
-        )?;
-        let configuration_observation = configuration.observe_redacted();
+        let configuration_observation =
+            ConfigurationAdapter::observe_values(&descriptor.configuration)?;
 
         let mut by_requirement = BTreeMap::new();
         for grant in &descriptor.grants {

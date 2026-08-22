@@ -1,14 +1,22 @@
-//! Exact package metadata and path-as-locator dependency model.
+//! Exact semantic package metadata plus the bounded predecessor-import descriptor model.
 
 use super::diagnostic::{Diagnostic, DiagnosticClass};
+use bincode::de::Decoder;
+use bincode::enc::Encoder;
+use bincode::error::{DecodeError, EncodeError};
+use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
+#[cfg(test)]
 use std::collections::BTreeSet;
 
 pub const PACKAGE_CONTRACT_VERSION: u16 = 1;
-pub const PACKAGE_FILE_NAME: &str = "lkjscript.package.json";
+#[cfg(test)]
 pub const MAXIMUM_PACKAGE_BYTES: usize = 1_048_576;
+#[cfg(test)]
 pub const MAXIMUM_MODULES: usize = 4_096;
+#[cfg(test)]
 pub const MAXIMUM_DEPENDENCIES: usize = 1_024;
+#[cfg(test)]
 pub const MAXIMUM_TARGETS: usize = 1_024;
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
@@ -30,7 +38,40 @@ impl PackageId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    pub fn bytes(&self) -> [u8; 16] {
+        let mut bytes = [0_u8; 16];
+        for (index, pair) in self.0.as_bytes().chunks_exact(2).enumerate() {
+            let high = decode_hex(pair[0]);
+            let low = decode_hex(pair[1]);
+            bytes[index] = (high << 4) | low;
+        }
+        bytes
+    }
 }
+
+impl Encode for PackageId {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        17u8.encode(encoder)?;
+        self.bytes().encode(encoder)
+    }
+}
+
+impl<Context> Decode<Context> for PackageId {
+    fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let tag = u8::decode(decoder)?;
+        if tag != 17 {
+            return Err(DecodeError::OtherString(format!(
+                "foreign package identity domain tag {tag}"
+            )));
+        }
+        let bytes = <[u8; 16]>::decode(decoder)?;
+        let encoded = super::semantic_id::encode_hex(&bytes);
+        Self::parse(&encoded).map_err(|error| DecodeError::OtherString(error.message))
+    }
+}
+
+bincode::impl_borrow_decode!(PackageId);
 
 impl<'de> Deserialize<'de> for PackageId {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -73,7 +114,9 @@ pub struct Dependency {
     pub artifact: String,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(
+    Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, Ord, PartialEq, PartialOrd, Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum RunnerKind {
     Command,
@@ -93,7 +136,8 @@ pub struct Target {
     pub runner: RunnerKind,
 }
 
-pub fn decode_package(bytes: &[u8]) -> Result<PackageDescriptor, Diagnostic> {
+#[cfg(test)]
+pub(crate) fn decode_package(bytes: &[u8]) -> Result<PackageDescriptor, Diagnostic> {
     if bytes.len() > MAXIMUM_PACKAGE_BYTES {
         return Err(package_error(
             "package_too_large",
@@ -120,7 +164,8 @@ pub fn decode_package(bytes: &[u8]) -> Result<PackageDescriptor, Diagnostic> {
     Ok(descriptor)
 }
 
-pub fn canonical_package_bytes(descriptor: &PackageDescriptor) -> Result<Vec<u8>, Diagnostic> {
+#[cfg(test)]
+fn canonical_package_bytes(descriptor: &PackageDescriptor) -> Result<Vec<u8>, Diagnostic> {
     let mut bytes = serde_json::to_vec(descriptor).map_err(|error| {
         package_error(
             "package_encode",
@@ -183,6 +228,7 @@ pub fn semantic_dependency_bytes(descriptor: &PackageDescriptor) -> Result<Vec<u
     })
 }
 
+#[cfg(test)]
 fn validate_package(descriptor: &PackageDescriptor) -> Result<(), Diagnostic> {
     if descriptor.contract_version != PACKAGE_CONTRACT_VERSION {
         return Err(package_error(
@@ -281,6 +327,7 @@ fn validate_package(descriptor: &PackageDescriptor) -> Result<(), Diagnostic> {
     Ok(())
 }
 
+#[cfg(test)]
 fn validate_name(value: &str, label: &str, qualified: bool) -> Result<(), Diagnostic> {
     if value.is_empty() || value.len() > 128 {
         return Err(package_error(
@@ -319,6 +366,7 @@ fn validate_name(value: &str, label: &str, qualified: bool) -> Result<(), Diagno
     Ok(())
 }
 
+#[cfg(test)]
 fn validate_qualified_owner(value: &str, label: &str) -> Result<(), Diagnostic> {
     if value.len() > 257 {
         return Err(package_error(
@@ -347,7 +395,8 @@ fn validate_qualified_owner(value: &str, label: &str) -> Result<(), Diagnostic> 
     Ok(())
 }
 
-pub fn validate_relative_path(
+#[cfg(test)]
+fn validate_relative_path(
     value: &str,
     label: &str,
     require_source_root: bool,
@@ -395,6 +444,14 @@ fn validate_hex(value: &str, length: usize, label: &str) -> Result<(), Diagnosti
         ));
     }
     Ok(())
+}
+
+fn decode_hex(value: u8) -> u8 {
+    match value {
+        b'0'..=b'9' => value - b'0',
+        b'a'..=b'f' => value - b'a' + 10,
+        _ => 0,
+    }
 }
 
 fn package_error(code: &str, message: impl Into<String>) -> Diagnostic {

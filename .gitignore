@@ -12,5 +12,7 @@ __pycache__/
 /.pi/
 /.pi-subagents/
 
-# Source-project operational locks and deployment state
-**/.lkjscript/source-v1/LOCK
+# Meaning-repository derived and local operational state
+**/.lkjscript/meaning/LOCK
+**/.lkjscript/meaning/indexes/
+**/.lkjscript/meaning/drafts/

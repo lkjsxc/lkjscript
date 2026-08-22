@@ -1,118 +1,116 @@
 # Current status
 
-Status date: 2026-08-21 UTC. This file describes implemented checkout reality, not future intent.
+Status date: 2026-08-22 UTC. This file describes implemented checkout reality.
 
-## Maintained authorities
+## Maintained graph authorities
 
-| Authority | Current identity |
+| Authority | Exact current identity |
 |---|---|
-| `packages/standard` | package `10000000000000000000000000000001`, revision 5, record `9766c0b08788b8326757091526fddd50bceb4ec618874e4023d0fc972a3e8c49`, semantic `d0fe09ea464351240e77248f35b293653b198b238f0688b05c372903cd04630a` |
-| `applications/lkjournal` | package `20000000000000000000000000000001`, revision 7, record `e85d84f4bd23c1cb768b8387805710939fd1347a6604bd2ac7d3886b2aaf7beb`, semantic `cdbd18f4be55897dcd27b6601cf03e818d666e8ca90789ad02d86f4c4a4bce53` |
-| checked service artifact | component artifact digest `eec4c68b121bfa4bdf4af2b01e712040d9e40907e92bf490e345da75bb682af4`, 41,587 bytes |
-| checked standard dependency | package artifact digest `a09712fe34ccc0315fdf6e55bbddf8e4ba433093a140075fa2d704d3876a8cab`, 9,602 bytes |
+| `packages/standard` | repository `repo_c1358d64c351873b51c954b69d1ac988`; revision `rev_2fd85a82b827f2d1b60ef1c474831121fc4d968f9df10df04488cf77c3a2772d`; 12 modules; 6 tests |
+| `applications/lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; revision `rev_441156fb5408ad27352d91a8e8ac42f60cd6e2704ee9b42f58a01cc64a6ef218`; 3 modules; 2 targets; 11 tests |
+| standard package artifact | `artifact_4f7957f6f76520647164247059b5593120f03596915975b2d9f9087428fcdef9`; checked bundle 20,350 bytes |
+| lkjournal artifact bundle | `artifact_b90c24ab397d03d641b8b97cddf056a1ad738f8f3e82a63628a36f9db1ca4979`; 160,195 bytes |
 
-`lkjournal` exposes HTTP target `serve` and worker target `work`. It has 11 accepted package tests
-across its exact closure. `standard` has three package tests.
+The canonical standard store is 21,062 bytes across 16 transportable files. The canonical
+lkjournal store is 160,419 bytes across 8 transportable files. Disposable indexes, drafts, and lock
+files are excluded. Both maintained histories were deliberately re-rooted at their normalized
+graph snapshot during direct cutover; source-era revision ancestry is not current history.
 
-## Current contract identities
+`lkjournal` binds the exact standard revision and package artifact. Its `serve` target selects the
+`service.Web/request` HTTP port and its `work` target selects the `worker.Worker/run` worker port.
+Both package test suites report bytecode/reference differential equality.
 
-All listed identities have only version 1. Unknown fields, wrong versions, trailing input, foreign
-identity, and contract-specific excess reject.
+## Current contracts
 
-| Domain | Identity or encoding |
+| Domain | Current contract |
 |---|---|
-| Source authority | source project contract 1, `.lkjscript/source-v1` |
-| Package | package contract 1, `lkjscript.package.json` |
-| Workspace projection | workspace and CLI contract 1, strict JSON output |
-| Component artifact | artifact contract 1, canonical JSON `.lkja` |
-| Capability grant | capability grant contract 1 |
-| Deployment | deployment contract 1, strict JSON descriptor |
-| Execution | `bytecode_v1` production and `reference_ast_v1` oracle |
-| Resident topology | resident runtime contract 1 |
-| HTTP server | HTTP adapter contract 1 |
-| Typed JSON | JSON contract 1 |
-| Streams | stream contract 1 |
-| PostgreSQL | PostgreSQL adapter contract 1 |
-| Object storage | object adapter contract 1 |
-| Durable queue and worker | queue contract 1 and worker contract 1 |
-| Configuration | configuration adapter contract 1 |
-| Secrets | secret catalog and verifier contract 1 |
-| Clock/random/identifier/password | security adapter contract 1 |
+| Meaning graph | `lkjscript-meaning-graph-1`, version 1 |
+| Revisions and transaction receipts | packed version 1 |
+| Semantic transactions, drafts, diff, merge, query | version 1 |
+| Public semantic CLI | version 2, strict JSON |
+| Graph artifact bundle | version 2 with package objects version 1 |
+| Canonical backup | version 1 |
+| Deployment and capability grants | version 1 |
+| Execution | `bytecode_v1` production and `semantic_reference_v1` oracle |
 
-Runner kinds are `command`, `http`, `interactive`, `batch`, `worker`, and `test`. They are target
-metadata over one component/port model, not separate application formats. HTTP and worker have live
-generic runners; pure command target execution and tests use the same prepared functions. No
-current interactive or batch transport adapter is maintained.
+Unknown contracts and fields, malformed tagged identities, duplicate or noncanonical order,
+trailing bytes, checksum mismatch, foreign IDs, and configured excess reject at their decoding or
+semantic boundary.
 
-## Implemented language
+## Implemented semantic development
 
-The value/type surface includes unit, bool, checked signed i64, immutable bytes, UTF-8 text,
-compile-time `StaticText`, opaque secret/resource values, nominal and structural records, nominal
-variants, homogeneous lists, deterministically ordered maps, option, result, stream, and function
-types. Map keys are bool, i64, bytes, or text; iteration follows their defined total order. Runtime
-values are bounded to depth 256 and 1,000,000 collection items.
+The executable command registry provides status, orientation, selected schema, typed ID allocation,
+dependency staging, owners/find/show, references/callers/callees/type/capability traversal,
+context, impact, closed query, semantic diff, three-way merge, plan/validate/apply, draft lifecycle,
+targets, build/test/run, artifact inspection, deterministic text projection, history/revision show,
+deep doctor, backup/export, restore, and graph-artifact import.
 
-Declarations include records, variants, interfaces, closed externs, pure/task functions, constants,
-components, and tests. Expressions include lazy conditionals, lexical binding, sequencing, calls,
-records/fields, variants/matching, lists, maps, function references, capability performance, and
-lexical transactions. There is no implicit coercion, floating point, mutation-visible collection,
-closure capture, generics, traits, set, or user-visible scheduler primitive.
+Queries are revision-pinned, deterministically ordered, projected, budgeted, and continuable.
+Exact ID/name queries use local 256-way owner/name shards and load one canonical module only when a
+body is requested. Broad relations use a full revision-bound index. Production results are checked
+against canonical reconstruction in tests; all derived indexes rebuild on loss or corruption.
 
-## Implemented service mechanics
+Transactions support package metadata/dependencies; module create/rename/delete; declaration
+create/replace/rename/move/delete/clone/restore; record fields; variant cases; interface operations;
+function signatures and bodies; exact expression replacement and reference rebinding; binding
+rename; test expectation replacement; target create/delete; preconditions; idempotent replay; and
+atomic ordered batches. Rename and move preserve stable IDs. Deletion records typed tombstones and
+nonreuse is validated. Normal CLI responses inline at most 64 affected owners.
 
-- Strict HTTP/1 request decoding, query decoding, header validation, bounded request-body streams,
-  whole bounded responses, overload mapping, in-memory dispatch, and graceful shutdown.
-- Strict JSON with duplicate-field, unknown typed-field, non-i64 number, depth, item, string, total
-  byte, and trailing-input rejection.
-- Parameterized PostgreSQL statements using unforgeable `StaticText`, typed parameters and row
-  schemas, bounded pools/rows, lexical transactions, checksummed ordered migrations, rollback, and
-  classified PostgreSQL failures. PostgreSQL-backed deployments establish a reusable connection
-  under bounded retry before publishing readiness.
-- Typed configuration, environment-bound redacted secrets, constant-time secret verification,
-  wall clock, deterministic test clocks, OS secure randomness, deterministic test randomness,
-  canonical UUID v4, and bounded Argon2 password hashing.
-- Task-scoped bounded byte streams with backpressure and cleanup; memory, local, and S3-compatible
-  named object adapters with no-replace publication, checksum facts, streaming multipart upload,
-  range/whole read operations, and reconciliation.
-- Memory and PostgreSQL durable queues with exact idempotency key, attempt identity, lease,
-  heartbeat, completion, failure/retry, cancellation, inspection, and stale-completion rejection;
-  bounded resident workers.
+Drafts retain bounded operation deltas, holes, diagnostics, conflicts, base revision, generation,
+and intent outside accepted authority. They cannot build, run, deploy, or publish until fully
+resolved and validated. Three-way merge detects stable-owner add/remove/rename/move/modify conflicts
+and publishes only a conflict-free exact-base result.
 
-Global hard maxima include 128 MiB artifacts, 1 MiB package descriptors, 4,096 modules, 1,024
-dependencies/targets/grants, 4,096 active runtime tasks, 65,536 queued tasks, 64 MiB HTTP bodies,
-1 MiB stream chunks, 65,536 live streams, 1,024 database connections, 1,000,000 rows, 16 GiB
-objects, 16 MiB queue payloads/results, 24-hour leases, 64 KiB secrets, 1 MiB random requests, and
-1,024-byte passwords. Deployment descriptors select smaller values for `lkjournal`.
+## Language, compiler, and runtime
 
-## Direct cutover
+The graph represents packages, modules, imports/exports, records, variants, interfaces, closed
+externs, constants, pure and task functions, components, ports, capability requirements, targets,
+tests, documentation, annotations, patterns, bindings, expressions, and typed relations.
 
-The active tree contains no graph-authored project engine, semantic proposal mutation path,
-application profile reader, stateful instance format, predecessor runtime protocol, `lkjedit`,
-`lkjwork`, application-specific native binary, vendored terminal stack, or compatibility alias.
-Opening a predecessor `.lkjscript/project` rejects with `source_predecessor_rejected`; artifact and
-descriptor decoders reject predecessor versions directly. Historical code and evidence remain in
-Git and the campaign ledger, not in a current reader.
+The value/type surface includes unit, bool, checked i64, bytes, text, `StaticText`, opaque
+resource/secret values, nominal and structural records, variants, lists, ordered maps, option,
+result, streams, and functions. Evaluation order, capability use, lexical transactions, checked
+arithmetic, and collection bounds remain explicit. No implicit coercion, floating point, generics,
+closure capture, or user-visible scheduler primitive is implemented.
 
-The two old products were deliberately deleted rather than kept on incompatible parallel profiles.
-Their user value is not claimed as migrated. The reproduced editor append, viewport, explorer,
-status, visual-boundary, split, and large-file debts therefore remain historical unresolved product
-evidence, not fixed defects.
+Graph objects lower directly into deterministic exact-closure package artifacts. The same prepared
+component ports feed pure tests, command execution, resident HTTP, and workers. PostgreSQL,
+configuration, redacted secrets, clock, randomness, UUID, Argon2, streams, memory/local/S3 objects,
+durable queues, HTTP, and workers remain generic typed adapters. Application policy is not native
+Rust.
 
-## Known limits
+## Direct-cutover absence
 
-- The language and current native adapters are trusted; this is not a hostile-code sandbox.
-- HTTP is currently HTTP/1 without TLS termination, response streams, trailers, multipart, cookies,
-  compression, WebSocket, or outbound client authority.
-- URL support is bounded query decoding, not a complete URI/form library. HTML support is text
-  escaping plus literal authored markup, not a typed multi-context template system. Markdown is
-  stored as text; no parser or sanitizer is implemented.
-- PostgreSQL uses `NoTls`; driver cancellation is cooperative only at operation boundaries. No
-  production PostgreSQL integration is run without the explicit service profile.
-- S3-compatible code has deterministic adapter tests but no retained live S3 conformance receipt.
-  The local object backend validates but cannot persist provider content-type attributes.
-- Configuration is a validated deployment map, not a schema declaration language with watches.
-  Secret rotation is observed only by restart.
-- There is no general filesystem, terminal, subprocess, HTTP client, metrics exporter, structured
-  logging sink, distributed tracing, calendar scheduler, package registry, FFI, or GUI.
-- Only Linux x86-64 has fresh-checkout evidence. No sandbox, multi-node coordination, distributed
-  transaction, or multi-tenant operator isolation is claimed.
+The maintained tree contains no `.lkj` program modules, `lkjscript.package.json`,
+`.lkjscript/source-v1`, source apply/formatting publication, source-derived declaration identity,
+active predecessor graph store, profile artifacts/runtimes, product-specific native binary,
+private standard/lkjournal builder, dual reader, dual writer, compatibility edition, fallback
+alias, or Lean material. Source-era markers are recognized only to return an exact predecessor
+rejection when no current graph exists.
+
+The parser and source semantic builder remain test-only independent fixtures. They cannot open or
+mutate a maintained project and are not linked as a public authoring workflow.
+
+## Current limits
+
+- Accepted transaction validation reconstructs and validates the complete candidate twice. It is
+  correct but is not yet an incremental semantic engine; final 90,000-module batch latency exposes
+  this growth.
+- Broad index creation reconstructs the current graph. Exact warm lookups are local afterward, but
+  cold orientation still loads the root and all module references.
+- Graph contract 1 permits at most 100,000 modules, 10,000 operations per transaction, a 64 MiB
+  packed module, and a 128 MiB packed global object. A one-million-module fixture therefore rejects
+  under current policy and was not executed.
+- Canonical history has no public garbage collection, pruning, or segment repacking command.
+- Merge conflicts are returned as a closed nonpublishing result; persisting that result into a
+  conflict draft and a dedicated conflict-resolution command are not implemented.
+- The generic transaction protocol is the complete writer, but several catalog convenience names
+  such as extract, inline, change-signature, add-field, conflict-show, receipt-show, and query-save
+  are not separate commands.
+- Dependency staging is operational and exact but has no automatic registry transport.
+- No semantic daemon is implemented; every command is stateless-correct.
+- Provider input-token, cached-token, retry, and monetary telemetry is unavailable. Output bytes
+  are not used to claim token or cost savings.
+- The runtime is not a hostile-code sandbox. Linux x86-64 is the only verified bootstrap and
+  service platform. HTTP TLS termination, PostgreSQL TLS, and distributed guarantees are absent.

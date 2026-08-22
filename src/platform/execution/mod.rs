@@ -11,6 +11,7 @@ use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::language::{Declaration, Expression};
 use super::package::{PackageId, RunnerKind};
 use super::semantic::{FunctionSignature, OwnerId, ResolvedOperation};
+use super::semantic_id::ExpressionId;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -69,14 +70,15 @@ pub struct PreparedTest {
     pub package: PackageId,
     pub module: String,
     pub name: String,
-    pub actual: OwnerId,
-    pub expected: OwnerId,
+    pub actual: ExpressionId,
+    pub expected: ExpressionId,
 }
 
 #[derive(Clone, Debug)]
 pub struct PreparedProgram {
     artifact: Arc<LoadedArtifact>,
     functions: BTreeMap<OwnerId, PreparedFunction>,
+    test_expressions: BTreeMap<ExpressionId, PreparedFunction>,
     components: BTreeMap<OwnerId, PreparedComponent>,
     targets: BTreeMap<String, PreparedTarget>,
     tests: Vec<PreparedTest>,
@@ -86,17 +88,15 @@ impl PreparedProgram {
     pub fn prepare(artifact: LoadedArtifact) -> Result<Self, Diagnostic> {
         let artifact = Arc::new(artifact);
         let mut functions = BTreeMap::new();
+        let mut test_expressions = BTreeMap::new();
         let mut tests = Vec::new();
         for package in artifact.packages.values() {
             for module in &package.modules {
                 for declaration in &module.module.declarations {
                     match declaration {
                         Declaration::Function(function) => {
-                            let owner = OwnerId {
-                                package: package.descriptor.package_id.clone(),
-                                module: module.module.name.clone(),
-                                declaration: function.name.clone(),
-                            };
+                            let owner =
+                                module.owner(&package.descriptor.package_id, &function.name)?;
                             let signature = package
                                 .function_facts
                                 .get(&owner)
@@ -133,11 +133,8 @@ impl PreparedProgram {
                             );
                         }
                         Declaration::External(external) => {
-                            let owner = OwnerId {
-                                package: package.descriptor.package_id.clone(),
-                                module: module.module.name.clone(),
-                                declaration: external.name.clone(),
-                            };
+                            let owner =
+                                module.owner(&package.descriptor.package_id, &external.name)?;
                             let signature = package
                                 .function_facts
                                 .get(&owner)
@@ -171,11 +168,8 @@ impl PreparedProgram {
                             );
                         }
                         Declaration::Constant(constant) => {
-                            let owner = OwnerId {
-                                package: package.descriptor.package_id.clone(),
-                                module: module.module.name.clone(),
-                                declaration: constant.name.clone(),
-                            };
+                            let owner =
+                                module.owner(&package.descriptor.package_id, &constant.name)?;
                             let result =
                                 package.constant_types.get(&owner).cloned().ok_or_else(|| {
                                     execution_diagnostic(
@@ -211,20 +205,13 @@ impl PreparedProgram {
                             );
                         }
                         Declaration::Test(test) => {
-                            let actual = OwnerId {
-                                package: package.descriptor.package_id.clone(),
-                                module: module.module.name.clone(),
-                                declaration: format!("\0test.actual.{}", test.name),
-                            };
-                            let expected = OwnerId {
-                                package: package.descriptor.package_id.clone(),
-                                module: module.module.name.clone(),
-                                declaration: format!("\0test.expected.{}", test.name),
-                            };
-                            for (owner, expression) in [
-                                (actual.clone(), &test.actual),
-                                (expected.clone(), &test.expected),
-                            ] {
+                            let test_owner =
+                                module.owner(&package.descriptor.package_id, &test.name)?;
+                            let actual = module.expression_id(&test.name, &[0])?;
+                            let expected = module.expression_id(&test.name, &[1])?;
+                            for (owner, expression) in
+                                [(actual, &test.actual), (expected, &test.expected)]
+                            {
                                 let compiled = compiler::compile_function(
                                     &artifact,
                                     package,
@@ -232,11 +219,11 @@ impl PreparedProgram {
                                     &[],
                                     expression,
                                 )?;
-                                functions.insert(
-                                    owner.clone(),
+                                test_expressions.insert(
+                                    owner,
                                     PreparedFunction {
                                         signature: FunctionSignature {
-                                            owner,
+                                            owner: test_owner.clone(),
                                             parameters: Vec::new(),
                                             result: super::semantic::ResolvedType::Unit,
                                             task_capabilities: Vec::new(),
@@ -273,11 +260,7 @@ impl PreparedProgram {
                     let Declaration::Component(component) = declaration else {
                         continue;
                     };
-                    let owner = OwnerId {
-                        package: package.descriptor.package_id.clone(),
-                        module: module.module.name.clone(),
-                        declaration: component.name.clone(),
-                    };
+                    let owner = module.owner(&package.descriptor.package_id, &component.name)?;
                     let mut requirements = BTreeMap::new();
                     for requirement in &component.requirements {
                         let interface =
@@ -386,11 +369,20 @@ impl PreparedProgram {
                     format!("target '{}' has an invalid component owner", target.name),
                 ));
             };
-            let owner = OwnerId {
-                package: root.descriptor.package_id.clone(),
-                module: module.to_owned(),
-                declaration: component.to_owned(),
-            };
+            let target_module = root
+                .modules
+                .iter()
+                .find(|candidate| candidate.module.name == module)
+                .ok_or_else(|| {
+                    execution_diagnostic(
+                        "prepare_target_module",
+                        format!(
+                            "target '{}' references absent module '{module}'",
+                            target.name
+                        ),
+                    )
+                })?;
+            let owner = target_module.owner(&root.descriptor.package_id, component)?;
             let prepared_component = components.get(&owner).ok_or_else(|| {
                 execution_diagnostic(
                     "prepare_target_component",
@@ -429,6 +421,7 @@ impl PreparedProgram {
         Ok(Self {
             artifact,
             functions,
+            test_expressions,
             components,
             targets,
             tests,
@@ -468,6 +461,10 @@ impl PreparedProgram {
         self.functions.get(owner)
     }
 
+    pub(crate) fn test_expression(&self, expression: &ExpressionId) -> Option<&PreparedFunction> {
+        self.test_expressions.get(expression)
+    }
+
     pub(crate) fn call_intrinsic(
         &self,
         implementation: &str,
@@ -482,7 +479,7 @@ impl PreparedProgram {
         )
     }
 
-    pub(crate) fn resolve_name(
+    pub fn resolve_name(
         &self,
         package_id: &PackageId,
         module_name: &str,
@@ -510,11 +507,7 @@ pub(crate) fn resolve_owner(
     name: &str,
 ) -> Result<OwnerId, Diagnostic> {
     let Some((alias, declaration)) = name.split_once('.') else {
-        return Ok(OwnerId {
-            package: package.descriptor.package_id.clone(),
-            module: module.module.name.clone(),
-            declaration: name.to_owned(),
-        });
+        return module.owner(&package.descriptor.package_id, name);
     };
     let import = module
         .module
@@ -537,23 +530,41 @@ pub(crate) fn resolve_owner(
             .iter()
             .find(|dependency| dependency.alias == dependency_alias)
     {
-        if !artifact.packages.contains_key(&dependency.package_id) {
-            return Err(execution_diagnostic(
-                "prepare_dependency_missing",
-                format!("exact dependency '{dependency_alias}' is absent"),
-            ));
-        }
-        return Ok(OwnerId {
-            package: dependency.package_id.clone(),
-            module: dependency_module.to_owned(),
-            declaration: declaration.to_owned(),
-        });
+        let dependency_package =
+            artifact
+                .packages
+                .get(&dependency.package_id)
+                .ok_or_else(|| {
+                    execution_diagnostic(
+                        "prepare_dependency_missing",
+                        format!("exact dependency '{dependency_alias}' is absent"),
+                    )
+                })?;
+        let dependency_module = dependency_package
+            .modules
+            .iter()
+            .find(|module| module.module.name == dependency_module)
+            .ok_or_else(|| {
+                execution_diagnostic(
+                    "prepare_dependency_module_missing",
+                    format!(
+                        "exact dependency '{dependency_alias}' has no module '{dependency_module}'"
+                    ),
+                )
+            })?;
+        return dependency_module.owner(&dependency.package_id, declaration);
     }
-    Ok(OwnerId {
-        package: package.descriptor.package_id.clone(),
-        module: import.module.clone(),
-        declaration: declaration.to_owned(),
-    })
+    let imported_module = package
+        .modules
+        .iter()
+        .find(|module| module.module.name == import.module)
+        .ok_or_else(|| {
+            execution_diagnostic(
+                "prepare_import_module_missing",
+                format!("imported module '{}' is absent", import.module),
+            )
+        })?;
+    imported_module.owner(&package.descriptor.package_id, declaration)
 }
 
 pub(crate) fn package_for<'a>(

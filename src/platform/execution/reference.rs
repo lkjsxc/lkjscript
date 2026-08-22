@@ -1,9 +1,13 @@
 //! Direct AST oracle. It deliberately does not consume bytecode or compiler-local identities.
 
-use super::{ExecutionError, ExecutionFailureClass, PreparedProgram, RunObservation, RunPolicy};
+use super::{
+    ExecutionError, ExecutionFailureClass, PreparedFunction, PreparedProgram, RunObservation,
+    RunPolicy,
+};
 use crate::platform::language::{Binding, Expression, MapEntry, MatchArm, RecordField};
 use crate::platform::package::PackageId;
 use crate::platform::semantic::OwnerId;
+use crate::platform::semantic_id::ExpressionId;
 use crate::platform::value::{MapKey, Value};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -23,6 +27,36 @@ impl<'a> ReferenceInterpreter<'a> {
         function: &OwnerId,
         arguments: Vec<Value>,
     ) -> Result<(Value, RunObservation), ExecutionError> {
+        let function = self.program.function(function).ok_or_else(|| {
+            ExecutionError::new(
+                ExecutionFailureClass::Infrastructure,
+                "reference_function_missing",
+                "prepared semantic function is absent",
+            )
+        })?;
+        self.invoke_prepared(function, arguments)
+    }
+
+    pub(crate) fn invoke_test_expression(
+        &self,
+        expression: &ExpressionId,
+        arguments: Vec<Value>,
+    ) -> Result<(Value, RunObservation), ExecutionError> {
+        let function = self.program.test_expression(expression).ok_or_else(|| {
+            ExecutionError::new(
+                ExecutionFailureClass::Infrastructure,
+                "reference_test_expression_missing",
+                format!("prepared test expression '{expression}' is absent"),
+            )
+        })?;
+        self.invoke_prepared(function, arguments)
+    }
+
+    fn invoke_prepared(
+        &self,
+        function: &PreparedFunction,
+        arguments: Vec<Value>,
+    ) -> Result<(Value, RunObservation), ExecutionError> {
         let mut machine = Machine {
             program: self.program,
             policy: self.policy,
@@ -38,7 +72,7 @@ impl<'a> ReferenceInterpreter<'a> {
                 production_tier: "reference_ast_v1",
             },
         };
-        let mut control = machine.invoke_function(function.clone(), arguments)?;
+        let mut control = machine.invoke_prepared(function, arguments)?;
         loop {
             if machine.fuel == 0 {
                 return Err(ExecutionError::resource(
@@ -533,6 +567,14 @@ impl Machine<'_> {
                 format!("prepared function '{}' is absent", owner.diagnostic_name()),
             )
         })?;
+        self.invoke_prepared(function, arguments)
+    }
+
+    fn invoke_prepared(
+        &mut self,
+        function: &PreparedFunction,
+        arguments: Vec<Value>,
+    ) -> Result<Control, ExecutionError> {
         if arguments.len() != function.parameters.len() {
             return Err(runtime_type("function argument count is foreign"));
         }
@@ -565,8 +607,8 @@ impl Machine<'_> {
         Ok(Control::Evaluate(
             source,
             Context {
-                package: owner.package,
-                module: owner.module,
+                package: function.signature.owner.package.clone(),
+                module: function.signature.owner.module.clone(),
                 locals,
             },
         ))

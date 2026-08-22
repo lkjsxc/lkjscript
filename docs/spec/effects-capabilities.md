@@ -1,70 +1,59 @@
-# Effect, capability, and failure contract 1
+# Effects and capabilities
 
-This specification owns static effect discovery, requirement/grant binding, operation accounting,
-task-scoped capability calls, and closed execution failures. Interfaces and application tasks own
-semantic operation policy; adapters own only generic mechanics.
+Status: normative.
 
-## Interface and effect declarations
+## Effect boundary
 
-Each interface operation defines ordered typed parameters/result, idempotency
-(`idempotent`, `idempotent-with-key`, or `non-idempotent`), and visibility (`no-visibility` or
-`possible-visibility`). Possible visibility requires an idempotency-key contract; unsafe
-combinations reject semantically. These annotations constrain adapter failure classification and do
-not by themselves make an application retry.
+Pure meaning is independent of deployment, time, randomness, scheduling, network, storage,
+credentials, and process state. A pure function cannot perform a capability operation or call a
+task function. A task function has an explicit task effect containing stable requirement identities
+and aliases. Effect checking is transitive through exact calls.
 
-A pure function cannot contain or transitively reach `perform` or `transaction`. A task declares
-capability aliases; semantic closure records every operation used. A component requirement must
-name the exact interface, include every used operation, and set maximum limits. Artifacts expose
-that closed requirement before deployment.
+A component declares the requirements needed by its ports. Preparation proves that every task
+capability use resolves to the required interface and operation. Deployment grants bind those
+requirements to adapter instances; omission, foreign interface, operation mismatch, or excess
+authority rejects before admission.
 
-## Grants and accounting
+## Interfaces and operations
 
-A grant descriptor contains contract 1, interface owner, canonical adapter kind, sharing domain,
-64-hex authority revision and descriptor digest, operation set, and concrete limits. Binding
-requires exactly one grant per requirement. Foreign interfaces/adapters, missing or extra
-requirements, missing operations/limits, and a granted limit greater than the application-requested
-maximum reject before work.
+An interface owns stable operation identities, input parameters, output type, failure contract,
+and semantic limits. A capability relation records the exact use site, requirement, interface, and
+operation. Rename does not change identity. Interface evolution exposes requirements, callers,
+components, grants, adapters, tests, targets, and artifacts through impact queries.
 
-Each admitted task gets fresh call/input/output counters while sharing only the declared adapter
-domain. `maximum_calls`, `maximum_input_bytes`, and `maximum_output_bytes` are enforced with checked
-arithmetic before/after calls. Adapter-specific row, random, stream, queue, object, and pool bounds
-also apply. Grants and counters are operational values and cannot be serialized.
+Closed external functions are pure or explicitly task-bound compiler/runtime intrinsics. Unknown
+or forged intrinsic names reject during semantic validation; there is no ambient host call escape.
 
-## Ordering, cancellation, and retry
+## Resources and visibility
 
-Capability calls occur in language evaluation order. Adapters receive runtime-owned cancellation
-and deadline control and must check it before blocking or publishing where the external API allows.
-Cancellation is not an instruction-fuel substitute. It does not roll back an already completed
-external publication.
+Every live resource has exact acquisition, owner task, allowed operation, close, cancellation,
+timeout, and cleanup semantics. Handles are runtime-only and cannot serialize into graph authority,
+artifacts as values, backups, queues, objects, or logs. Streams use bounded chunks and backpressure.
+Database transactions and queue leases are lexical/task-owned.
 
-The closed execution failure classes are:
+Operations that may have committed externally before visibility loss return the distinct possible
+visibility class. Callers may retry only where the graph-owned idempotency contract permits it.
+Cancellation and resource exhaustion are distinct from typed application failure.
 
-- `trap`: violated pure/language operation contract;
-- `capability`: known external failure or denial;
-- `possible_visibility`: success/failure cannot be established after possible publication;
-- `resource`: a declared bound or admission resource was exhausted;
-- `cancelled`: owner cancellation or operational deadline; and
-- `infrastructure`: runtime/adapter invariant or host mechanism failed.
+## Generic adapters
 
-Each error also has a stable code, bounded safe message, retryable flag, and possibly-visible flag.
-Only a known safe class may set retryable. Possible visibility is always explicit and blocks blind
-retry; application policy must reconcile using a read/query operation. Expected domain failures
-remain normal typed values.
+Current adapters cover strict HTTP server dispatch, typed JSON, PostgreSQL and lexical
+transactions, configuration, redacted secrets, clocks, secure/deterministic randomness, UUID,
+Argon2 password hashing, bounded streams, memory/local/S3-compatible objects, and memory/PostgreSQL
+durable queues and workers.
 
-## Transactions and live resources
+Production and deterministic test adapters share public behavior contracts but use disjoint
+implementations. Tests use explicit scripted or deterministic grants and never ambient production
+credentials. Deployment descriptors own adapter selection and limits; semantic artifacts own only
+typed requirements.
 
-`transaction capability binding body` opens one lexical adapter transaction, evaluates the body
-with a temporary alias, commits only after body success, and rolls back after body failure. Commit
-failure may be possibly visible. The transaction object is owned by the task, cannot nest in the
-current PostgreSQL contract, cannot escape as `Value`, and cannot enter source, artifacts, durable
-state, streams, another task, or another process. Rollback is idempotent and Drop attempts
-best-effort rollback; cleanup failure is retained as adapter/runtime evidence.
+## Structured runtime
 
-Streams and secrets are likewise opaque task/deployment resources. No finalization depends on
-language garbage collection. Scope close, cancellation, peer failure, shutdown, and adapter
-shutdown each reach an explicit cleanup route. Restart discards live handles and reconstructs only
-application/database/object/queue authority.
+One resident kernel performs preparation, admission, execution, capability routing, task
+ownership, resource accounting, cancellation, shutdown, and observations. Concurrency and queues
+are bounded. There are no detached ownerless tasks.
 
-`ScriptedAdapter` is the deterministic reference fake. It has independent scripted results and
-transactions, rejects unexpected call order or exhaustion, and cannot accidentally access
-production PostgreSQL, object, clock, random, or secret state.
+Graceful shutdown stops admission, drains within the configured bound, cancels remaining work,
+allows only explicitly non-cancellable publication sections to finish, closes resources, and
+returns a classified status. A process boundary is not a hostile-code sandbox or multi-tenant
+security boundary.

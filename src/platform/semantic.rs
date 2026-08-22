@@ -1,21 +1,61 @@
 //! Package resolution, nominal identity, type checking, and effect discovery.
 
 use super::diagnostic::{Diagnostic, SourceLocation};
+use super::graph::GraphRoot;
 use super::language::{
     Component, Declaration, Effect, Expression, ExternalFunction, Function, Idempotency, Interface,
     MatchArm, Module, Parameter, TaskCapability, Type, Visibility,
 };
-use super::package::{PackageDescriptor, PackageId, semantic_dependency_bytes};
-use super::syntax::{SourceDocument, SourceSpan};
+use super::meaning::{
+    DeclarationIdentity, DeclarationReference, MeaningModule, MemberIdentity, ModuleReference,
+    RelationRole, RelationSource, RelationTarget, SemanticRelation,
+};
+use super::package::{
+    Dependency, ModuleLocator, PackageDescriptor, PackageId, Target, semantic_dependency_bytes,
+};
+use super::semantic_digest::{ArtifactDigest, RootObjectDigest};
+use super::semantic_id::{DeclarationId, ExpressionId, ModuleId, RevisionId};
+use super::syntax::SourceSpan;
+#[cfg(test)]
+use super::{meaning::MigrationIdentityAllocator, syntax::SourceDocument};
+use bincode::{Decode, Encode};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(Clone, Debug, Decode, Encode, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct OwnerId {
     pub package: PackageId,
+    pub module_id: ModuleId,
+    pub declaration_id: DeclarationId,
     pub module: String,
     pub declaration: String,
+}
+
+impl PartialEq for OwnerId {
+    fn eq(&self, other: &Self) -> bool {
+        self.package == other.package
+            && self.module_id == other.module_id
+            && self.declaration_id == other.declaration_id
+    }
+}
+
+impl Eq for OwnerId {}
+
+impl Ord for OwnerId {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        (&self.package, self.module_id, self.declaration_id).cmp(&(
+            &other.package,
+            other.module_id,
+            other.declaration_id,
+        ))
+    }
+}
+
+impl PartialOrd for OwnerId {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl OwnerId {
@@ -26,6 +66,26 @@ impl OwnerId {
             self.module,
             self.declaration
         )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn deterministic_for_test(
+        package: PackageId,
+        module: &str,
+        declaration: &str,
+    ) -> Self {
+        let mut seed = package.bytes().to_vec();
+        seed.extend_from_slice(&(module.len() as u64).to_be_bytes());
+        seed.extend_from_slice(module.as_bytes());
+        seed.extend_from_slice(&(declaration.len() as u64).to_be_bytes());
+        seed.extend_from_slice(declaration.as_bytes());
+        Self {
+            package,
+            module_id: ModuleId::migrate(&seed, 0),
+            declaration_id: DeclarationId::migrate(&seed, 0),
+            module: module.to_owned(),
+            declaration: declaration.to_owned(),
+        }
     }
 }
 
@@ -134,8 +194,43 @@ pub struct ResolvedOperation {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ValidatedModule {
     pub path: String,
+    pub module_id: ModuleId,
     pub module: Module,
+    pub declaration_identities: Vec<DeclarationIdentity>,
+    pub relations: Vec<SemanticRelation>,
     pub semantic_bytes: Vec<u8>,
+}
+
+impl ValidatedModule {
+    pub fn owner(&self, package: &PackageId, declaration: &str) -> Result<OwnerId, Diagnostic> {
+        validated_owner(package, self, declaration)
+    }
+
+    pub fn expression_id(
+        &self,
+        declaration: &str,
+        path: &[u32],
+    ) -> Result<ExpressionId, Diagnostic> {
+        self.declaration_identities
+            .iter()
+            .find(|identity| identity.name == declaration)
+            .and_then(|identity| {
+                identity
+                    .expressions
+                    .iter()
+                    .find(|expression| expression.path == path)
+            })
+            .map(|expression| expression.id)
+            .ok_or_else(|| {
+                semantic_without_location(
+                    "semantic_expression_identity_missing",
+                    format!(
+                        "declaration '{}.{}' has no expression identity at path {:?}",
+                        self.module.name, declaration, path
+                    ),
+                )
+            })
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -143,6 +238,8 @@ pub struct ValidatedPackage {
     pub descriptor: PackageDescriptor,
     pub modules: Vec<ValidatedModule>,
     pub revision_digest: String,
+    pub accepted_revision: Option<RevisionId>,
+    pub graph_root_digest: Option<RootObjectDigest>,
     pub function_facts: BTreeMap<OwnerId, FunctionFacts>,
     pub nominal_shapes: BTreeMap<OwnerId, NominalShape>,
     pub interfaces: BTreeMap<OwnerId, ResolvedInterface>,
@@ -155,12 +252,18 @@ pub struct ExactDependency<'a> {
     pub artifact_digest: &'a str,
 }
 
-pub fn validate_package_documents(
+pub struct ExactGraphDependency<'a> {
+    pub alias: &'a str,
+    pub package: &'a ValidatedPackage,
+    pub artifact: ArtifactDigest,
+}
+
+#[cfg(test)]
+pub(crate) fn validate_package_documents(
     descriptor: PackageDescriptor,
     documents: Vec<SourceDocument>,
     dependencies: &[ExactDependency<'_>],
 ) -> Result<ValidatedPackage, Diagnostic> {
-    validate_exact_dependencies(&descriptor, dependencies)?;
     if documents.len() != descriptor.modules.len() {
         return Err(semantic_without_location(
             "package_module_document_count",
@@ -184,6 +287,8 @@ pub fn validate_package_documents(
     }
 
     let mut modules = Vec::new();
+    let mut identity_allocator =
+        MigrationIdentityAllocator::new(descriptor.package_id.bytes().to_vec());
     for locator in &descriptor.modules {
         let document = by_path.remove(&locator.path).ok_or_else(|| {
             semantic_without_location(
@@ -213,9 +318,13 @@ pub fn validate_package_documents(
                 ),
             ));
         }
+        let meaning = MeaningModule::import(module.clone(), &mut identity_allocator)?;
         modules.push(ValidatedModule {
             path: locator.path.clone(),
+            module_id: meaning.module_id,
             module,
+            declaration_identities: meaning.declarations,
+            relations: meaning.relations,
             semantic_bytes: document.semantic_bytes().to_vec(),
         });
     }
@@ -226,33 +335,292 @@ pub fn validate_package_documents(
         ));
     }
 
-    let context = PackageContext {
-        descriptor: &descriptor,
-        modules: &modules,
+    validate_package_modules(
+        descriptor,
+        modules,
         dependencies,
+        None,
+        None,
+        RelationPolicy::Populate,
+    )
+}
+
+pub fn validate_graph_package(
+    root: &GraphRoot,
+    meanings: Vec<MeaningModule>,
+    dependencies: &[ExactGraphDependency<'_>],
+    accepted_revision: Option<RevisionId>,
+) -> Result<ValidatedPackage, Diagnostic> {
+    validate_graph_package_with_relations(
+        root,
+        meanings,
+        dependencies,
+        accepted_revision,
+        RelationPolicy::Verify,
+    )
+}
+
+/// Reconstructs every canonical semantic relation from owner meaning, refreshes packed module
+/// bindings, and then verifies the result through the normal graph validator. This is used by the
+/// transaction engine; callers never supply derived relation tables as authored input.
+pub fn canonicalize_graph_package(
+    root: &mut GraphRoot,
+    meanings: &mut [MeaningModule],
+    dependencies: &[ExactGraphDependency<'_>],
+) -> Result<ValidatedPackage, Diagnostic> {
+    for meaning in meanings.iter_mut() {
+        super::meaning::normalize_module_spans(&mut meaning.module);
+    }
+    refresh_graph_module_objects(root, meanings)?;
+    let populated = validate_graph_package_with_relations(
+        root,
+        meanings.to_vec(),
+        dependencies,
+        None,
+        RelationPolicy::Populate,
+    )?;
+    for meaning in meanings.iter_mut() {
+        let validated = populated
+            .modules
+            .iter()
+            .find(|module| module.module_id == meaning.module_id)
+            .ok_or_else(|| {
+                semantic_without_location(
+                    "graph_relation_module_missing",
+                    "relation reconstruction lost a meaning module",
+                )
+            })?;
+        meaning.relations.clone_from(&validated.relations);
+    }
+    refresh_graph_module_objects(root, meanings)?;
+    validate_graph_package(root, meanings.to_vec(), dependencies, None)
+}
+
+pub fn refresh_graph_module_objects(
+    root: &mut GraphRoot,
+    meanings: &[MeaningModule],
+) -> Result<(), Diagnostic> {
+    if root.modules.len() != meanings.len() {
+        return Err(semantic_without_location(
+            "graph_module_binding_count",
+            "graph root and meaning module counts differ",
+        ));
+    }
+    for reference in &mut root.modules {
+        let meaning = meanings
+            .iter()
+            .find(|meaning| meaning.module_id == reference.id)
+            .ok_or_else(|| {
+                semantic_without_location(
+                    "graph_module_binding_missing",
+                    format!(
+                        "graph root module '{}' has no meaning object",
+                        reference.name
+                    ),
+                )
+            })?;
+        reference.name.clone_from(&meaning.module.name);
+        reference.object = meaning.digest()?;
+    }
+    root.modules.sort();
+    root.validate_modules(meanings)
+}
+
+fn validate_graph_package_with_relations(
+    root: &GraphRoot,
+    meanings: Vec<MeaningModule>,
+    dependencies: &[ExactGraphDependency<'_>],
+    accepted_revision: Option<RevisionId>,
+    relation_policy: RelationPolicy,
+) -> Result<ValidatedPackage, Diagnostic> {
+    root.validate_modules(&meanings)?;
+    if dependencies.len() != root.dependencies.len() {
+        return Err(semantic_without_location(
+            "graph_dependency_count",
+            "loaded graph dependency count does not match the canonical root",
+        ));
+    }
+    let mut descriptor_dependencies = Vec::with_capacity(root.dependencies.len());
+    let mut artifact_digests = Vec::with_capacity(root.dependencies.len());
+    let mut matched_dependencies = Vec::with_capacity(root.dependencies.len());
+    for binding in &root.dependencies {
+        let dependency = dependencies
+            .iter()
+            .find(|dependency| dependency.alias == binding.alias)
+            .ok_or_else(|| {
+                semantic_without_location(
+                    "graph_dependency_missing",
+                    format!("exact dependency '{}' is unavailable", binding.alias),
+                )
+            })?;
+        if dependency.package.descriptor.package_id != binding.package_id
+            || dependency.package.accepted_revision != Some(binding.semantic_revision)
+            || dependency.artifact != binding.artifact
+        {
+            return Err(semantic_without_location(
+                "graph_dependency_mismatch",
+                format!(
+                    "exact dependency '{}' does not match its canonical binding",
+                    binding.alias
+                ),
+            ));
+        }
+        let artifact = super::semantic_id::encode_hex(&dependency.artifact.bytes());
+        artifact_digests.push(artifact.clone());
+        matched_dependencies.push(dependency);
+        descriptor_dependencies.push(Dependency {
+            alias: binding.alias.clone(),
+            package_id: binding.package_id.clone(),
+            revision_digest: dependency.package.revision_digest.clone(),
+            artifact_digest: artifact,
+            artifact: "canonical-object".to_owned(),
+        });
+    }
+    let mut exact_dependencies = Vec::with_capacity(dependencies.len());
+    for (dependency, artifact_digest) in matched_dependencies.iter().zip(&artifact_digests) {
+        exact_dependencies.push(ExactDependency {
+            alias: dependency.alias,
+            package: dependency.package,
+            artifact_digest,
+        });
+    }
+    let descriptor = PackageDescriptor {
+        contract_version: super::package::PACKAGE_CONTRACT_VERSION,
+        package_id: root.package_id.clone(),
+        name: root.package_name.clone(),
+        modules: root
+            .modules
+            .iter()
+            .map(|module| ModuleLocator {
+                name: module.name.clone(),
+                path: format!("semantic:{}", module.id),
+            })
+            .collect(),
+        dependencies: descriptor_dependencies,
+        targets: root
+            .targets
+            .iter()
+            .map(|target| Target {
+                name: target.name.clone(),
+                component: format!("{}.{}", target.component_module_name, target.component_name),
+                port: target.port_name.clone(),
+                runner: target.runner,
+            })
+            .collect(),
     };
-    validate_imports_and_exports(&context)?;
-    validate_declared_types(&context)?;
-    let (nominal_shapes, interfaces) = collect_type_shapes(&context)?;
-    let constant_types = collect_constant_types(&context)?;
-    let signatures = collect_function_signatures(&context)?;
-    for signature in signatures.values() {
-        if let Some(implementation) = &signature.external_implementation {
-            super::intrinsic_contract::validate_intrinsic(implementation, signature)?;
+    let mut by_id = meanings
+        .into_iter()
+        .map(|meaning| (meaning.module_id, meaning))
+        .collect::<BTreeMap<_, _>>();
+    let mut modules = Vec::with_capacity(root.modules.len());
+    for reference in &root.modules {
+        let meaning = by_id.remove(&reference.id).ok_or_else(|| {
+            semantic_without_location(
+                "graph_module_missing",
+                format!("module object '{}' is missing", reference.name),
+            )
+        })?;
+        let semantic_bytes = meaning.encode()?;
+        modules.push(ValidatedModule {
+            path: format!("semantic:{}", meaning.module_id),
+            module_id: meaning.module_id,
+            module: meaning.module,
+            declaration_identities: meaning.declarations,
+            relations: meaning.relations,
+            semantic_bytes,
+        });
+    }
+    validate_package_modules(
+        descriptor,
+        modules,
+        &exact_dependencies,
+        accepted_revision,
+        matches!(relation_policy, RelationPolicy::Verify)
+            .then(|| root.digest())
+            .transpose()?,
+        relation_policy,
+    )
+}
+
+#[derive(Clone, Copy)]
+enum RelationPolicy {
+    Populate,
+    Verify,
+}
+
+fn validate_package_modules(
+    descriptor: PackageDescriptor,
+    mut modules: Vec<ValidatedModule>,
+    dependencies: &[ExactDependency<'_>],
+    accepted_revision: Option<RevisionId>,
+    graph_root_digest: Option<RootObjectDigest>,
+    relation_policy: RelationPolicy,
+) -> Result<ValidatedPackage, Diagnostic> {
+    validate_exact_dependencies(&descriptor, dependencies)?;
+    let (nominal_shapes, interfaces, constant_types, function_facts, derived_relations) = {
+        let context = PackageContext {
+            descriptor: &descriptor,
+            modules: &modules,
+            dependencies,
+        };
+        validate_imports_and_exports(&context)?;
+        validate_declared_types(&context)?;
+        let (nominal_shapes, interfaces) = collect_type_shapes(&context)?;
+        let constant_types = collect_constant_types(&context)?;
+        let signatures = collect_function_signatures(&context)?;
+        for signature in signatures.values() {
+            if let Some(implementation) = &signature.external_implementation {
+                super::intrinsic_contract::validate_intrinsic(implementation, signature)?;
+            }
+        }
+        let function_facts = validate_expressions_and_effects(
+            &context,
+            &signatures,
+            &nominal_shapes,
+            &interfaces,
+            &constant_types,
+        )?;
+        let derived_relations = derive_semantic_relations(
+            &context,
+            &signatures,
+            &nominal_shapes,
+            &interfaces,
+            &constant_types,
+        )?;
+        (
+            nominal_shapes,
+            interfaces,
+            constant_types,
+            function_facts,
+            derived_relations,
+        )
+    };
+    for module in &mut modules {
+        let derived = derived_relations
+            .get(&module.module_id)
+            .cloned()
+            .unwrap_or_default();
+        match relation_policy {
+            RelationPolicy::Populate => module.relations = derived,
+            RelationPolicy::Verify if module.relations != derived => {
+                return Err(semantic_without_location(
+                    "semantic_relation_mismatch",
+                    format!(
+                        "module '{}' canonical relations do not match reconstructed meaning",
+                        module.module.name
+                    ),
+                ));
+            }
+            RelationPolicy::Verify => {}
         }
     }
-    let function_facts = validate_expressions_and_effects(
-        &context,
-        &signatures,
-        &nominal_shapes,
-        &interfaces,
-        &constant_types,
-    )?;
     let revision_digest = package_revision_digest(&descriptor, &modules)?;
     Ok(ValidatedPackage {
         descriptor,
         modules,
         revision_digest,
+        accepted_revision,
+        graph_root_digest,
         function_facts,
         nominal_shapes,
         interfaces,
@@ -279,12 +647,14 @@ impl PackageContext<'_> {
             .find(|dependency| dependency.alias == alias)
     }
 
-    fn owner(&self, module: &str, declaration: &str) -> OwnerId {
-        OwnerId {
-            package: self.descriptor.package_id.clone(),
-            module: module.to_owned(),
-            declaration: declaration.to_owned(),
-        }
+    fn owner(&self, module: &str, declaration: &str) -> Result<OwnerId, Diagnostic> {
+        let module = self.module(module).ok_or_else(|| {
+            semantic_without_location(
+                "semantic_owner_module_missing",
+                format!("semantic owner module '{module}' is absent"),
+            )
+        })?;
+        validated_owner(&self.descriptor.package_id, module, declaration)
     }
 
     fn resolve<'a>(
@@ -345,7 +715,7 @@ impl PackageContext<'_> {
                 )
             })?;
         Ok(ResolvedDeclaration {
-            owner: self.owner(&from.module.name, name),
+            owner: self.owner(&from.module.name, name)?,
             declaration,
         })
     }
@@ -405,11 +775,11 @@ impl PackageContext<'_> {
                         )
                     })?;
             return Ok(ResolvedDeclaration {
-                owner: OwnerId {
-                    package: dependency.package.descriptor.package_id.clone(),
-                    module: module.module.name.clone(),
-                    declaration: declaration_name.to_owned(),
-                },
+                owner: validated_owner(
+                    &dependency.package.descriptor.package_id,
+                    module,
+                    declaration_name,
+                )?,
                 declaration,
             });
         }
@@ -454,10 +824,1344 @@ impl PackageContext<'_> {
                 )
             })?;
         Ok(ResolvedDeclaration {
-            owner: self.owner(&module.module.name, declaration_name),
+            owner: self.owner(&module.module.name, declaration_name)?,
             declaration,
         })
     }
+
+    fn imported_module<'a>(
+        &'a self,
+        from: &ValidatedModule,
+        import: &super::language::Import,
+    ) -> Result<(&'a PackageId, &'a ValidatedModule), Diagnostic> {
+        if let Some((dependency_alias, module_name)) = import.module.split_once('.')
+            && let Some(dependency) = self.dependency(dependency_alias)
+        {
+            let module = dependency
+                .package
+                .modules
+                .iter()
+                .find(|module| module.module.name == module_name)
+                .ok_or_else(|| {
+                    semantic_at(
+                        &from.path,
+                        import.span.clone(),
+                        "semantic_dependency_module_missing",
+                        format!("dependency '{dependency_alias}' has no module '{module_name}'"),
+                    )
+                })?;
+            return Ok((&dependency.package.descriptor.package_id, module));
+        }
+        let module = self.module(&import.module).ok_or_else(|| {
+            semantic_at(
+                &from.path,
+                import.span.clone(),
+                "semantic_local_module_missing",
+                format!("local module '{}' does not exist", import.module),
+            )
+        })?;
+        Ok((&self.descriptor.package_id, module))
+    }
+
+    fn owner_module<'a>(&'a self, owner: &OwnerId) -> Option<&'a ValidatedModule> {
+        if owner.package == self.descriptor.package_id {
+            return self
+                .modules
+                .iter()
+                .find(|module| module.module_id == owner.module_id);
+        }
+        self.dependencies
+            .iter()
+            .find(|dependency| dependency.package.descriptor.package_id == owner.package)
+            .and_then(|dependency| {
+                dependency
+                    .package
+                    .modules
+                    .iter()
+                    .find(|module| module.module_id == owner.module_id)
+            })
+    }
+
+    fn declaration_identity<'a>(
+        &'a self,
+        owner: &OwnerId,
+    ) -> Result<&'a DeclarationIdentity, Diagnostic> {
+        self.owner_module(owner)
+            .and_then(|module| {
+                module
+                    .declaration_identities
+                    .iter()
+                    .find(|identity| identity.id == owner.declaration_id)
+            })
+            .ok_or_else(|| {
+                semantic_without_location(
+                    "semantic_relation_owner_missing",
+                    format!(
+                        "semantic relation target '{}' is absent from the exact package closure",
+                        owner.diagnostic_name()
+                    ),
+                )
+            })
+    }
+}
+
+type RelationSets = BTreeMap<ModuleId, BTreeSet<SemanticRelation>>;
+
+fn derive_semantic_relations(
+    context: &PackageContext<'_>,
+    signatures: &BTreeMap<OwnerId, FunctionSignature>,
+    nominal_shapes: &BTreeMap<OwnerId, NominalShape>,
+    interfaces: &BTreeMap<OwnerId, ResolvedInterface>,
+    constant_types: &BTreeMap<OwnerId, ResolvedType>,
+) -> Result<BTreeMap<ModuleId, Vec<SemanticRelation>>, Diagnostic> {
+    let inference = InferContext {
+        package: context,
+        signatures,
+        nominal_shapes,
+        interfaces,
+        constant_types,
+    };
+    let site_types = collect_expression_site_types(&inference)?;
+    let mut relations = RelationSets::new();
+    for module in context.modules {
+        relations.entry(module.module_id).or_default();
+        collect_module_relations(context, module, &site_types, &mut relations)?;
+    }
+    Ok(relations
+        .into_iter()
+        .map(|(module, relations)| (module, relations.into_iter().collect()))
+        .collect())
+}
+
+fn collect_module_relations(
+    context: &PackageContext<'_>,
+    module: &ValidatedModule,
+    site_types: &BTreeMap<usize, ResolvedType>,
+    relations: &mut RelationSets,
+) -> Result<(), Diagnostic> {
+    for import in &module.module.imports {
+        let (package, imported) = context.imported_module(module, import)?;
+        insert_relation(
+            relations,
+            module.module_id,
+            RelationSource::Module(module.module_id),
+            RelationTarget::Module(ModuleReference {
+                package: package.clone(),
+                module: imported.module_id,
+            }),
+            RelationRole::Import,
+        );
+    }
+    for export in &module.module.exports {
+        let owner = context.owner(&module.module.name, export)?;
+        insert_relation(
+            relations,
+            module.module_id,
+            RelationSource::Module(module.module_id),
+            declaration_target(&owner),
+            RelationRole::Export,
+        );
+    }
+    for (declaration, identity) in module
+        .module
+        .declarations
+        .iter()
+        .zip(&module.declaration_identities)
+    {
+        collect_declaration_relations(
+            context,
+            module,
+            declaration,
+            identity,
+            site_types,
+            relations,
+        )?;
+    }
+    Ok(())
+}
+
+fn collect_declaration_relations(
+    context: &PackageContext<'_>,
+    module: &ValidatedModule,
+    declaration: &Declaration,
+    identity: &DeclarationIdentity,
+    site_types: &BTreeMap<usize, ResolvedType>,
+    relations: &mut RelationSets,
+) -> Result<(), Diagnostic> {
+    let owner = context.owner(&module.module.name, declaration.name())?;
+    let owner_reference = declaration_reference(&owner);
+    let catalog = IdentityCatalog::new(identity)?;
+    let mut members = identity.members.iter();
+    match declaration {
+        Declaration::Record(record) => {
+            for field in &record.fields {
+                let MemberIdentity::Field { id, .. } = next_member(&mut members, identity)? else {
+                    return Err(relation_shape(identity));
+                };
+                collect_type_relations(
+                    context,
+                    module,
+                    RelationSource::Field(*id),
+                    &field.ty,
+                    relations,
+                )?;
+            }
+        }
+        Declaration::Variant(variant) => {
+            for case in &variant.cases {
+                let MemberIdentity::Case { id, .. } = next_member(&mut members, identity)? else {
+                    return Err(relation_shape(identity));
+                };
+                if let Some(payload) = &case.payload {
+                    collect_type_relations(
+                        context,
+                        module,
+                        RelationSource::Case(*id),
+                        payload,
+                        relations,
+                    )?;
+                }
+            }
+        }
+        Declaration::Interface(interface) => {
+            for operation in &interface.operations {
+                let MemberIdentity::Operation { id, .. } = next_member(&mut members, identity)?
+                else {
+                    return Err(relation_shape(identity));
+                };
+                for parameter in &operation.parameters {
+                    let MemberIdentity::Parameter { id, .. } = next_member(&mut members, identity)?
+                    else {
+                        return Err(relation_shape(identity));
+                    };
+                    collect_type_relations(
+                        context,
+                        module,
+                        RelationSource::Parameter(*id),
+                        &parameter.ty,
+                        relations,
+                    )?;
+                }
+                collect_type_relations(
+                    context,
+                    module,
+                    RelationSource::Operation(*id),
+                    &operation.result,
+                    relations,
+                )?;
+            }
+        }
+        Declaration::External(external) => {
+            for parameter in &external.parameters {
+                let MemberIdentity::Parameter { id, .. } = next_member(&mut members, identity)?
+                else {
+                    return Err(relation_shape(identity));
+                };
+                collect_type_relations(
+                    context,
+                    module,
+                    RelationSource::Parameter(*id),
+                    &parameter.ty,
+                    relations,
+                )?;
+            }
+            collect_type_relations(
+                context,
+                module,
+                RelationSource::Declaration(identity.id),
+                &external.result,
+                relations,
+            )?;
+        }
+        Declaration::Function(function) => {
+            let mut variables = BTreeMap::new();
+            for parameter in &function.parameters {
+                let MemberIdentity::Parameter { id, .. } = next_member(&mut members, identity)?
+                else {
+                    return Err(relation_shape(identity));
+                };
+                let target = RelationTarget::Parameter {
+                    owner: owner_reference.clone(),
+                    parameter: *id,
+                };
+                variables.insert(parameter.name.clone(), target);
+                collect_type_relations(
+                    context,
+                    module,
+                    RelationSource::Parameter(*id),
+                    &parameter.ty,
+                    relations,
+                )?;
+            }
+            let mut capabilities = BTreeMap::new();
+            if let Effect::Task {
+                capabilities: declared,
+            } = &function.effect
+            {
+                for capability in declared {
+                    let MemberIdentity::TaskRequirement { id, .. } =
+                        next_member(&mut members, identity)?
+                    else {
+                        return Err(relation_shape(identity));
+                    };
+                    let resolved = context.resolve(module, &capability.interface)?;
+                    let target = RelationTarget::Requirement {
+                        owner: owner_reference.clone(),
+                        requirement: *id,
+                    };
+                    insert_relation(
+                        relations,
+                        module.module_id,
+                        RelationSource::Requirement(*id),
+                        declaration_target(&resolved.owner),
+                        RelationRole::CapabilityInterface,
+                    );
+                    capabilities.insert(
+                        capability.alias.clone(),
+                        RelationCapability {
+                            binding: target,
+                            interface: resolved.owner,
+                        },
+                    );
+                }
+            }
+            collect_type_relations(
+                context,
+                module,
+                RelationSource::Declaration(identity.id),
+                &function.result,
+                relations,
+            )?;
+            collect_expression_relations(
+                context,
+                module,
+                &catalog,
+                &owner_reference,
+                &function.body,
+                vec![0],
+                &variables,
+                &capabilities,
+                site_types,
+                None,
+                relations,
+            )?;
+        }
+        Declaration::Constant(constant) => {
+            collect_type_relations(
+                context,
+                module,
+                RelationSource::Declaration(identity.id),
+                &constant.ty,
+                relations,
+            )?;
+            collect_expression_relations(
+                context,
+                module,
+                &catalog,
+                &owner_reference,
+                &constant.value,
+                vec![0],
+                &BTreeMap::new(),
+                &BTreeMap::new(),
+                site_types,
+                None,
+                relations,
+            )?;
+        }
+        Declaration::Component(component) => {
+            for requirement in &component.requirements {
+                let MemberIdentity::ComponentRequirement { id, .. } =
+                    next_member(&mut members, identity)?
+                else {
+                    return Err(relation_shape(identity));
+                };
+                let resolved = context.resolve(module, &requirement.interface)?;
+                insert_relation(
+                    relations,
+                    module.module_id,
+                    RelationSource::Requirement(*id),
+                    declaration_target(&resolved.owner),
+                    RelationRole::CapabilityInterface,
+                );
+                for operation in &requirement.operations {
+                    insert_relation(
+                        relations,
+                        module.module_id,
+                        RelationSource::Requirement(*id),
+                        operation_target(context, &resolved.owner, operation)?,
+                        RelationRole::CapabilityOperation,
+                    );
+                }
+            }
+            for (index, port) in component.ports.iter().enumerate() {
+                let MemberIdentity::Port { id, .. } = next_member(&mut members, identity)? else {
+                    return Err(relation_shape(identity));
+                };
+                collect_type_relations(
+                    context,
+                    module,
+                    RelationSource::Port(*id),
+                    &port.ty,
+                    relations,
+                )?;
+                if let Expression::FunctionRef { function, .. } = &port.value {
+                    let resolved = context.resolve(module, function)?;
+                    insert_relation(
+                        relations,
+                        module.module_id,
+                        RelationSource::Port(*id),
+                        declaration_target(&resolved.owner),
+                        RelationRole::ComponentPortFunction,
+                    );
+                }
+                collect_expression_relations(
+                    context,
+                    module,
+                    &catalog,
+                    &owner_reference,
+                    &port.value,
+                    vec![u32::try_from(index).map_err(|_| relation_work_limit())?],
+                    &BTreeMap::new(),
+                    &BTreeMap::new(),
+                    site_types,
+                    None,
+                    relations,
+                )?;
+            }
+        }
+        Declaration::Test(test) => {
+            for (ordinal, expression) in [(0, &test.actual), (1, &test.expected)] {
+                collect_expression_relations(
+                    context,
+                    module,
+                    &catalog,
+                    &owner_reference,
+                    expression,
+                    vec![ordinal],
+                    &BTreeMap::new(),
+                    &BTreeMap::new(),
+                    site_types,
+                    Some(identity.id),
+                    relations,
+                )?;
+            }
+        }
+    }
+    if members.next().is_some() {
+        return Err(relation_shape(identity));
+    }
+    Ok(())
+}
+
+fn collect_type_relations(
+    context: &PackageContext<'_>,
+    module: &ValidatedModule,
+    source: RelationSource,
+    ty: &Type,
+    relations: &mut RelationSets,
+) -> Result<(), Diagnostic> {
+    match ty {
+        Type::Named(name) => {
+            let resolved = context.resolve(module, name)?;
+            insert_relation(
+                relations,
+                module.module_id,
+                source,
+                declaration_target(&resolved.owner),
+                RelationRole::TypeUse,
+            );
+        }
+        Type::Record(fields) => {
+            for field in fields {
+                collect_type_relations(context, module, source.clone(), &field.ty, relations)?;
+            }
+        }
+        Type::List(item) | Type::Option(item) | Type::Stream(item) => {
+            collect_type_relations(context, module, source, item, relations)?;
+        }
+        Type::Map(key, value) | Type::Result(key, value) => {
+            collect_type_relations(context, module, source.clone(), key, relations)?;
+            collect_type_relations(context, module, source, value, relations)?;
+        }
+        Type::Function(parameters, result) => {
+            for parameter in parameters {
+                collect_type_relations(context, module, source.clone(), parameter, relations)?;
+            }
+            collect_type_relations(context, module, source, result, relations)?;
+        }
+        Type::Unit
+        | Type::Bool
+        | Type::I64
+        | Type::Bytes
+        | Type::Text
+        | Type::StaticText
+        | Type::Secret => {}
+    }
+    Ok(())
+}
+
+fn next_member<'a>(
+    members: &mut impl Iterator<Item = &'a MemberIdentity>,
+    identity: &DeclarationIdentity,
+) -> Result<&'a MemberIdentity, Diagnostic> {
+    members.next().ok_or_else(|| relation_shape(identity))
+}
+
+fn relation_shape(identity: &DeclarationIdentity) -> Diagnostic {
+    semantic_without_location(
+        "semantic_relation_identity_shape",
+        format!(
+            "declaration '{}' identity catalog cannot reconstruct canonical relations",
+            identity.name
+        ),
+    )
+}
+
+fn relation_work_limit() -> Diagnostic {
+    semantic_without_location(
+        "semantic_relation_work_limit",
+        "semantic relation traversal exceeded its exact ordinal range",
+    )
+}
+
+fn declaration_reference(owner: &OwnerId) -> DeclarationReference {
+    DeclarationReference {
+        package: owner.package.clone(),
+        module: owner.module_id,
+        declaration: owner.declaration_id,
+    }
+}
+
+fn declaration_target(owner: &OwnerId) -> RelationTarget {
+    RelationTarget::Declaration(declaration_reference(owner))
+}
+
+fn insert_relation(
+    relations: &mut RelationSets,
+    module: ModuleId,
+    source: RelationSource,
+    target: RelationTarget,
+    role: RelationRole,
+) {
+    relations
+        .entry(module)
+        .or_default()
+        .insert(SemanticRelation {
+            source,
+            target,
+            role,
+        });
+}
+
+fn operation_target(
+    context: &PackageContext<'_>,
+    owner: &OwnerId,
+    name: &str,
+) -> Result<RelationTarget, Diagnostic> {
+    let identity = context.declaration_identity(owner)?;
+    identity
+        .members
+        .iter()
+        .find_map(|member| match member {
+            MemberIdentity::Operation {
+                id,
+                name: candidate,
+            } if candidate == name => Some(RelationTarget::Operation {
+                owner: declaration_reference(owner),
+                operation: *id,
+            }),
+            _ => None,
+        })
+        .ok_or_else(|| {
+            semantic_without_location(
+                "semantic_relation_operation_missing",
+                format!(
+                    "interface '{}' has no stable operation identity for '{name}'",
+                    owner.diagnostic_name()
+                ),
+            )
+        })
+}
+
+fn field_target(
+    context: &PackageContext<'_>,
+    owner: &OwnerId,
+    name: &str,
+) -> Result<RelationTarget, Diagnostic> {
+    let identity = context.declaration_identity(owner)?;
+    identity
+        .members
+        .iter()
+        .find_map(|member| match member {
+            MemberIdentity::Field {
+                id,
+                name: candidate,
+            } if candidate == name => Some(RelationTarget::Field {
+                owner: declaration_reference(owner),
+                field: *id,
+            }),
+            _ => None,
+        })
+        .ok_or_else(|| {
+            semantic_without_location(
+                "semantic_relation_field_missing",
+                format!(
+                    "record '{}' has no stable field identity for '{name}'",
+                    owner.diagnostic_name()
+                ),
+            )
+        })
+}
+
+fn case_target(
+    context: &PackageContext<'_>,
+    owner: &OwnerId,
+    name: &str,
+) -> Result<RelationTarget, Diagnostic> {
+    let identity = context.declaration_identity(owner)?;
+    identity
+        .members
+        .iter()
+        .find_map(|member| match member {
+            MemberIdentity::Case {
+                id,
+                name: candidate,
+            } if candidate == name => Some(RelationTarget::Case {
+                owner: declaration_reference(owner),
+                case: *id,
+            }),
+            _ => None,
+        })
+        .ok_or_else(|| {
+            semantic_without_location(
+                "semantic_relation_case_missing",
+                format!(
+                    "variant '{}' has no stable case identity for '{name}'",
+                    owner.diagnostic_name()
+                ),
+            )
+        })
+}
+
+#[derive(Clone)]
+struct RelationCapability {
+    binding: RelationTarget,
+    interface: OwnerId,
+}
+
+struct IdentityCatalog {
+    expressions: BTreeMap<Vec<u32>, ExpressionId>,
+    bindings: BTreeMap<(Vec<u32>, u32), super::semantic_id::BindingId>,
+}
+
+impl IdentityCatalog {
+    fn new(identity: &DeclarationIdentity) -> Result<Self, Diagnostic> {
+        let expressions = identity
+            .expressions
+            .iter()
+            .map(|expression| (expression.path.clone(), expression.id))
+            .collect::<BTreeMap<_, _>>();
+        let bindings = identity
+            .bindings
+            .iter()
+            .map(|binding| ((binding.expression_path.clone(), binding.slot), binding.id))
+            .collect::<BTreeMap<_, _>>();
+        if expressions.len() != identity.expressions.len()
+            || bindings.len() != identity.bindings.len()
+        {
+            return Err(relation_shape(identity));
+        }
+        Ok(Self {
+            expressions,
+            bindings,
+        })
+    }
+
+    fn expression(&self, path: &[u32]) -> Result<ExpressionId, Diagnostic> {
+        self.expressions.get(path).copied().ok_or_else(|| {
+            semantic_without_location(
+                "semantic_relation_expression_missing",
+                format!("semantic expression site {path:?} has no stable identity"),
+            )
+        })
+    }
+
+    fn binding(
+        &self,
+        path: &[u32],
+        slot: u32,
+    ) -> Result<super::semantic_id::BindingId, Diagnostic> {
+        self.bindings
+            .get(&(path.to_vec(), slot))
+            .copied()
+            .ok_or_else(|| {
+                semantic_without_location(
+                    "semantic_relation_binding_missing",
+                    format!(
+                        "semantic binding at expression site {path:?} slot {slot} has no stable identity"
+                    ),
+                )
+            })
+    }
+}
+
+fn collect_expression_site_types(
+    inference: &InferContext<'_>,
+) -> Result<BTreeMap<usize, ResolvedType>, Diagnostic> {
+    let mut site_types = BTreeMap::new();
+    for module in inference.package.modules {
+        for declaration in &module.module.declarations {
+            match declaration {
+                Declaration::Function(function) => {
+                    let owner = inference
+                        .package
+                        .owner(&module.module.name, &function.name)?;
+                    let signature = inference.signatures.get(&owner).ok_or_else(|| {
+                        semantic_without_location(
+                            "semantic_relation_signature_missing",
+                            format!("function '{}' has no exact signature", function.name),
+                        )
+                    })?;
+                    let variables = function
+                        .parameters
+                        .iter()
+                        .zip(&signature.parameters)
+                        .map(|(parameter, ty)| (parameter.name.clone(), ty.clone()))
+                        .collect();
+                    let capabilities = signature
+                        .task_capabilities
+                        .iter()
+                        .map(|capability| {
+                            (
+                                capability.alias.clone(),
+                                CapabilityBinding {
+                                    interface: capability.interface.clone(),
+                                    report_alias: capability.alias.clone(),
+                                },
+                            )
+                        })
+                        .collect();
+                    let facts = infer_expression(
+                        inference,
+                        module,
+                        &function.body,
+                        &variables,
+                        &capabilities,
+                        matches!(function.effect, Effect::Pure),
+                    )?;
+                    extend_site_types(&mut site_types, facts.site_types)?;
+                }
+                Declaration::Constant(constant) => {
+                    let facts = infer_expression(
+                        inference,
+                        module,
+                        &constant.value,
+                        &BTreeMap::new(),
+                        &BTreeMap::new(),
+                        true,
+                    )?;
+                    extend_site_types(&mut site_types, facts.site_types)?;
+                }
+                Declaration::Component(component) => {
+                    for port in &component.ports {
+                        let facts = infer_expression(
+                            inference,
+                            module,
+                            &port.value,
+                            &BTreeMap::new(),
+                            &BTreeMap::new(),
+                            true,
+                        )?;
+                        extend_site_types(&mut site_types, facts.site_types)?;
+                    }
+                }
+                Declaration::Test(test) => {
+                    for expression in [&test.actual, &test.expected] {
+                        let facts = infer_expression(
+                            inference,
+                            module,
+                            expression,
+                            &BTreeMap::new(),
+                            &BTreeMap::new(),
+                            true,
+                        )?;
+                        extend_site_types(&mut site_types, facts.site_types)?;
+                    }
+                }
+                Declaration::Record(_)
+                | Declaration::Variant(_)
+                | Declaration::Interface(_)
+                | Declaration::External(_) => {}
+            }
+        }
+    }
+    Ok(site_types)
+}
+
+fn extend_site_types(
+    target: &mut BTreeMap<usize, ResolvedType>,
+    source: BTreeMap<usize, ResolvedType>,
+) -> Result<(), Diagnostic> {
+    for (site, ty) in source {
+        if target.insert(site, ty).is_some() {
+            return Err(semantic_without_location(
+                "semantic_relation_site_duplicate",
+                "one semantic expression site was inferred more than once",
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn collect_expression_relations(
+    context: &PackageContext<'_>,
+    module: &ValidatedModule,
+    catalog: &IdentityCatalog,
+    declaration_owner: &DeclarationReference,
+    expression: &Expression,
+    path: Vec<u32>,
+    variables: &BTreeMap<String, RelationTarget>,
+    capabilities: &BTreeMap<String, RelationCapability>,
+    site_types: &BTreeMap<usize, ResolvedType>,
+    test_owner: Option<DeclarationId>,
+    relations: &mut RelationSets,
+) -> Result<(), Diagnostic> {
+    let expression_id = catalog.expression(&path)?;
+    let source = RelationSource::Expression(expression_id);
+    match expression {
+        Expression::Unit(_)
+        | Expression::Bool(_, _)
+        | Expression::I64(_, _)
+        | Expression::Text(_, _)
+        | Expression::StaticText(_, _) => {}
+        Expression::Variable(name, _) => {
+            let target = if let Some(target) = variables.get(name) {
+                target.clone()
+            } else {
+                let resolved = context.resolve(module, name)?;
+                declaration_target(&resolved.owner)
+            };
+            insert_expression_relation(
+                relations,
+                module.module_id,
+                source,
+                target,
+                RelationRole::ValueReference,
+                test_owner,
+            );
+        }
+        Expression::If {
+            condition,
+            when_true,
+            when_false,
+            ..
+        } => {
+            for (ordinal, child) in [
+                (0usize, condition.as_ref()),
+                (1usize, when_true.as_ref()),
+                (2usize, when_false.as_ref()),
+            ] {
+                collect_expression_relations(
+                    context,
+                    module,
+                    catalog,
+                    declaration_owner,
+                    child,
+                    relation_child_path(&path, ordinal)?,
+                    variables,
+                    capabilities,
+                    site_types,
+                    test_owner,
+                    relations,
+                )?;
+            }
+        }
+        Expression::Let { bindings, body, .. } => {
+            let mut local = variables.clone();
+            for (index, binding) in bindings.iter().enumerate() {
+                collect_expression_relations(
+                    context,
+                    module,
+                    catalog,
+                    declaration_owner,
+                    &binding.value,
+                    relation_child_path(&path, index)?,
+                    &local,
+                    capabilities,
+                    site_types,
+                    test_owner,
+                    relations,
+                )?;
+                let slot = u32::try_from(index).map_err(|_| relation_work_limit())?;
+                local.insert(
+                    binding.name.clone(),
+                    RelationTarget::Binding {
+                        owner: declaration_owner.clone(),
+                        binding: catalog.binding(&path, slot)?,
+                    },
+                );
+            }
+            collect_expression_relations(
+                context,
+                module,
+                catalog,
+                declaration_owner,
+                body,
+                relation_child_path(&path, bindings.len())?,
+                &local,
+                capabilities,
+                site_types,
+                test_owner,
+                relations,
+            )?;
+        }
+        Expression::Do { expressions, .. }
+        | Expression::List {
+            items: expressions, ..
+        } => {
+            if let Expression::List { item_type, .. } = expression {
+                collect_type_relations(context, module, source.clone(), item_type, relations)?;
+            }
+            for (index, child) in expressions.iter().enumerate() {
+                collect_expression_relations(
+                    context,
+                    module,
+                    catalog,
+                    declaration_owner,
+                    child,
+                    relation_child_path(&path, index)?,
+                    variables,
+                    capabilities,
+                    site_types,
+                    test_owner,
+                    relations,
+                )?;
+            }
+        }
+        Expression::Call {
+            function,
+            arguments,
+            ..
+        } => {
+            let resolved = context.resolve(module, function)?;
+            insert_expression_relation(
+                relations,
+                module.module_id,
+                source,
+                declaration_target(&resolved.owner),
+                RelationRole::Call,
+                test_owner,
+            );
+            for (index, argument) in arguments.iter().enumerate() {
+                collect_expression_relations(
+                    context,
+                    module,
+                    catalog,
+                    declaration_owner,
+                    argument,
+                    relation_child_path(&path, index)?,
+                    variables,
+                    capabilities,
+                    site_types,
+                    test_owner,
+                    relations,
+                )?;
+            }
+        }
+        Expression::Record { ty, fields, .. } => {
+            if let Some(name) = ty {
+                let resolved = context.resolve(module, name)?;
+                insert_expression_relation(
+                    relations,
+                    module.module_id,
+                    source.clone(),
+                    declaration_target(&resolved.owner),
+                    RelationRole::TypeUse,
+                    test_owner,
+                );
+                for field in fields {
+                    insert_expression_relation(
+                        relations,
+                        module.module_id,
+                        source.clone(),
+                        field_target(context, &resolved.owner, &field.name)?,
+                        RelationRole::FieldUse,
+                        test_owner,
+                    );
+                }
+            }
+            for (index, field) in fields.iter().enumerate() {
+                collect_expression_relations(
+                    context,
+                    module,
+                    catalog,
+                    declaration_owner,
+                    &field.value,
+                    relation_child_path(&path, index)?,
+                    variables,
+                    capabilities,
+                    site_types,
+                    test_owner,
+                    relations,
+                )?;
+            }
+        }
+        Expression::Variant {
+            ty, case, payload, ..
+        } => {
+            let resolved = context.resolve(module, ty)?;
+            insert_expression_relation(
+                relations,
+                module.module_id,
+                source.clone(),
+                declaration_target(&resolved.owner),
+                RelationRole::VariantConstruction,
+                test_owner,
+            );
+            insert_expression_relation(
+                relations,
+                module.module_id,
+                source,
+                case_target(context, &resolved.owner, case)?,
+                RelationRole::VariantConstruction,
+                test_owner,
+            );
+            if let Some(payload) = payload {
+                collect_expression_relations(
+                    context,
+                    module,
+                    catalog,
+                    declaration_owner,
+                    payload,
+                    relation_child_path(&path, 0)?,
+                    variables,
+                    capabilities,
+                    site_types,
+                    test_owner,
+                    relations,
+                )?;
+            }
+        }
+        Expression::Field { value, field, .. } => {
+            collect_expression_relations(
+                context,
+                module,
+                catalog,
+                declaration_owner,
+                value,
+                relation_child_path(&path, 0)?,
+                variables,
+                capabilities,
+                site_types,
+                test_owner,
+                relations,
+            )?;
+            if let Some(ResolvedType::Nominal(owner)) = site_types.get(&expression_pointer(value)) {
+                insert_expression_relation(
+                    relations,
+                    module.module_id,
+                    source,
+                    field_target(context, owner, field)?,
+                    RelationRole::FieldUse,
+                    test_owner,
+                );
+            }
+        }
+        Expression::Map {
+            key_type,
+            value_type,
+            entries,
+            ..
+        } => {
+            collect_type_relations(context, module, source.clone(), key_type, relations)?;
+            collect_type_relations(context, module, source, value_type, relations)?;
+            for (index, entry) in entries.iter().enumerate() {
+                let key = index.checked_mul(2).ok_or_else(relation_work_limit)?;
+                collect_expression_relations(
+                    context,
+                    module,
+                    catalog,
+                    declaration_owner,
+                    &entry.key,
+                    relation_child_path(&path, key)?,
+                    variables,
+                    capabilities,
+                    site_types,
+                    test_owner,
+                    relations,
+                )?;
+                collect_expression_relations(
+                    context,
+                    module,
+                    catalog,
+                    declaration_owner,
+                    &entry.value,
+                    relation_child_path(
+                        &path,
+                        key.checked_add(1).ok_or_else(relation_work_limit)?,
+                    )?,
+                    variables,
+                    capabilities,
+                    site_types,
+                    test_owner,
+                    relations,
+                )?;
+            }
+        }
+        Expression::Match { value, arms, .. } => {
+            collect_expression_relations(
+                context,
+                module,
+                catalog,
+                declaration_owner,
+                value,
+                relation_child_path(&path, 0)?,
+                variables,
+                capabilities,
+                site_types,
+                test_owner,
+                relations,
+            )?;
+            let owner = match site_types.get(&expression_pointer(value)) {
+                Some(ResolvedType::Nominal(owner)) => owner,
+                _ => {
+                    return Err(semantic_without_location(
+                        "semantic_relation_match_type",
+                        "validated variant match has no nominal expression type",
+                    ));
+                }
+            };
+            for (index, arm) in arms.iter().enumerate() {
+                insert_expression_relation(
+                    relations,
+                    module.module_id,
+                    source.clone(),
+                    case_target(context, owner, &arm.case)?,
+                    RelationRole::VariantPattern,
+                    test_owner,
+                );
+                let mut local = variables.clone();
+                if let Some(binding) = &arm.binding {
+                    let slot = u32::try_from(index).map_err(|_| relation_work_limit())?;
+                    local.insert(
+                        binding.clone(),
+                        RelationTarget::Binding {
+                            owner: declaration_owner.clone(),
+                            binding: catalog.binding(&path, slot)?,
+                        },
+                    );
+                }
+                collect_expression_relations(
+                    context,
+                    module,
+                    catalog,
+                    declaration_owner,
+                    &arm.body,
+                    relation_child_path(
+                        &path,
+                        index.checked_add(1).ok_or_else(relation_work_limit)?,
+                    )?,
+                    &local,
+                    capabilities,
+                    site_types,
+                    test_owner,
+                    relations,
+                )?;
+            }
+        }
+        Expression::FunctionRef { function, .. } => {
+            let resolved = context.resolve(module, function)?;
+            insert_expression_relation(
+                relations,
+                module.module_id,
+                source,
+                declaration_target(&resolved.owner),
+                RelationRole::ValueReference,
+                test_owner,
+            );
+        }
+        Expression::Perform {
+            capability,
+            operation,
+            arguments,
+            ..
+        } => {
+            let capability = capabilities.get(capability).ok_or_else(|| {
+                semantic_without_location(
+                    "semantic_relation_capability_missing",
+                    "validated capability expression has no exact binding",
+                )
+            })?;
+            insert_expression_relation(
+                relations,
+                module.module_id,
+                source.clone(),
+                capability.binding.clone(),
+                RelationRole::CapabilityInterface,
+                test_owner,
+            );
+            insert_expression_relation(
+                relations,
+                module.module_id,
+                source,
+                operation_target(context, &capability.interface, operation)?,
+                RelationRole::CapabilityOperation,
+                test_owner,
+            );
+            for (index, argument) in arguments.iter().enumerate() {
+                collect_expression_relations(
+                    context,
+                    module,
+                    catalog,
+                    declaration_owner,
+                    argument,
+                    relation_child_path(&path, index)?,
+                    variables,
+                    capabilities,
+                    site_types,
+                    test_owner,
+                    relations,
+                )?;
+            }
+        }
+        Expression::Transaction {
+            capability,
+            binding,
+            body,
+            ..
+        } => {
+            let capability = capabilities.get(capability).ok_or_else(|| {
+                semantic_without_location(
+                    "semantic_relation_capability_missing",
+                    "validated transaction expression has no exact capability binding",
+                )
+            })?;
+            let binding_id = catalog.binding(&path, 0)?;
+            let binding_target = RelationTarget::Binding {
+                owner: declaration_owner.clone(),
+                binding: binding_id,
+            };
+            insert_expression_relation(
+                relations,
+                module.module_id,
+                source.clone(),
+                capability.binding.clone(),
+                RelationRole::CapabilityInterface,
+                test_owner,
+            );
+            insert_expression_relation(
+                relations,
+                module.module_id,
+                source,
+                operation_target(context, &capability.interface, "transaction")?,
+                RelationRole::CapabilityOperation,
+                test_owner,
+            );
+            insert_relation(
+                relations,
+                module.module_id,
+                RelationSource::Binding(binding_id),
+                declaration_target(&capability.interface),
+                RelationRole::CapabilityInterface,
+            );
+            let mut nested = capabilities.clone();
+            nested.insert(
+                binding.clone(),
+                RelationCapability {
+                    binding: binding_target,
+                    interface: capability.interface.clone(),
+                },
+            );
+            collect_expression_relations(
+                context,
+                module,
+                catalog,
+                declaration_owner,
+                body,
+                relation_child_path(&path, 0)?,
+                variables,
+                &nested,
+                site_types,
+                test_owner,
+                relations,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn relation_child_path(parent: &[u32], ordinal: usize) -> Result<Vec<u32>, Diagnostic> {
+    if parent.len() >= super::meaning::MAXIMUM_EXPRESSION_DEPTH {
+        return Err(relation_work_limit());
+    }
+    let mut path = parent.to_vec();
+    path.push(u32::try_from(ordinal).map_err(|_| relation_work_limit())?);
+    Ok(path)
+}
+
+fn insert_expression_relation(
+    relations: &mut RelationSets,
+    module: ModuleId,
+    source: RelationSource,
+    target: RelationTarget,
+    role: RelationRole,
+    test_owner: Option<DeclarationId>,
+) {
+    if let Some(test_owner) = test_owner
+        && let Some(owner) = relation_target_owner(&target)
+        && owner.declaration != test_owner
+    {
+        insert_relation(
+            relations,
+            module,
+            RelationSource::Declaration(test_owner),
+            RelationTarget::Declaration(owner),
+            RelationRole::TestDependency,
+        );
+    }
+    insert_relation(relations, module, source, target, role);
+}
+
+fn relation_target_owner(target: &RelationTarget) -> Option<DeclarationReference> {
+    match target {
+        RelationTarget::Module(_) => None,
+        RelationTarget::Declaration(owner)
+        | RelationTarget::Field { owner, .. }
+        | RelationTarget::Case { owner, .. }
+        | RelationTarget::Operation { owner, .. }
+        | RelationTarget::Parameter { owner, .. }
+        | RelationTarget::Binding { owner, .. }
+        | RelationTarget::Requirement { owner, .. }
+        | RelationTarget::Port { owner, .. } => Some(owner.clone()),
+    }
+}
+
+fn validated_owner(
+    package: &PackageId,
+    module: &ValidatedModule,
+    declaration: &str,
+) -> Result<OwnerId, Diagnostic> {
+    let identity = module
+        .declaration_identities
+        .iter()
+        .find(|identity| identity.name == declaration)
+        .ok_or_else(|| {
+            semantic_without_location(
+                "semantic_owner_identity_missing",
+                format!(
+                    "declaration '{}.{}' has no stable semantic identity",
+                    module.module.name, declaration
+                ),
+            )
+        })?;
+    Ok(OwnerId {
+        package: package.clone(),
+        module_id: module.module_id,
+        declaration_id: identity.id,
+        module: module.module.name.clone(),
+        declaration: declaration.to_owned(),
+    })
 }
 
 struct ResolvedDeclaration<'a> {
@@ -693,7 +2397,7 @@ fn collect_type_shapes(context: &PackageContext<'_>) -> Result<ShapeMaps, Diagno
         for declaration in &module.module.declarations {
             match declaration {
                 Declaration::Record(record) => {
-                    let owner = context.owner(&module.module.name, &record.name);
+                    let owner = context.owner(&module.module.name, &record.name)?;
                     nominal.insert(
                         owner,
                         NominalShape::Record(
@@ -711,7 +2415,7 @@ fn collect_type_shapes(context: &PackageContext<'_>) -> Result<ShapeMaps, Diagno
                     );
                 }
                 Declaration::Variant(variant) => {
-                    let owner = context.owner(&module.module.name, &variant.name);
+                    let owner = context.owner(&module.module.name, &variant.name)?;
                     nominal.insert(
                         owner,
                         NominalShape::Variant(
@@ -734,7 +2438,7 @@ fn collect_type_shapes(context: &PackageContext<'_>) -> Result<ShapeMaps, Diagno
                     );
                 }
                 Declaration::Interface(interface) => {
-                    let owner = context.owner(&module.module.name, &interface.name);
+                    let owner = context.owner(&module.module.name, &interface.name)?;
                     interfaces.insert(
                         owner.clone(),
                         ResolvedInterface {
@@ -788,7 +2492,7 @@ fn collect_constant_types(
         for declaration in &module.module.declarations {
             if let Declaration::Constant(constant) = declaration {
                 constants.insert(
-                    context.owner(&module.module.name, &constant.name),
+                    context.owner(&module.module.name, &constant.name)?,
                     resolve_type(context, module, &constant.ty, &constant.span)?,
                 );
             }
@@ -967,7 +2671,7 @@ fn function_signature(
             .collect::<Result<Vec<_>, Diagnostic>>()?,
     };
     Ok(FunctionSignature {
-        owner: context.owner(&module.module.name, &function.name),
+        owner: context.owner(&module.module.name, &function.name)?,
         parameters: function
             .parameters
             .iter()
@@ -985,7 +2689,7 @@ fn external_signature(
     external: &ExternalFunction,
 ) -> Result<FunctionSignature, Diagnostic> {
     Ok(FunctionSignature {
-        owner: context.owner(&module.module.name, &external.name),
+        owner: context.owner(&module.module.name, &external.name)?,
         parameters: external
             .parameters
             .iter()
@@ -1021,7 +2725,7 @@ fn validate_expressions_and_effects(
     for module in context.modules {
         for declaration in &module.module.declarations {
             if let Declaration::Function(function) = declaration {
-                let owner = context.owner(&module.module.name, &function.name);
+                let owner = context.owner(&module.module.name, &function.name)?;
                 let signature = signatures.get(&owner).ok_or_else(|| {
                     semantic_at(
                         &module.path,
@@ -1132,7 +2836,7 @@ fn validate_expressions_and_effects(
     for module in context.modules {
         for declaration in &module.module.declarations {
             if let Declaration::Function(function) = declaration {
-                let owner = context.owner(&module.module.name, &function.name);
+                let owner = context.owner(&module.module.name, &function.name)?;
                 let signature = signatures.get(&owner).ok_or_else(|| {
                     semantic_without_location(
                         "semantic_function_signature_missing",
@@ -1226,7 +2930,7 @@ fn validate_expressions_and_effects(
                         &BTreeMap::new(),
                         true,
                     )?;
-                    let owner = context.owner(&module.module.name, &constant.name);
+                    let owner = context.owner(&module.module.name, &constant.name)?;
                     let expected = constant_types.get(&owner).ok_or_else(|| {
                         semantic_without_location(
                             "semantic_constant_type_missing",
@@ -1291,6 +2995,7 @@ struct ExpressionFacts {
     capabilities: BTreeMap<String, CapabilityFacts>,
     called_tasks: BTreeSet<OwnerId>,
     function_refs: BTreeSet<OwnerId>,
+    site_types: BTreeMap<usize, ResolvedType>,
 }
 
 impl ExpressionFacts {
@@ -1306,6 +3011,7 @@ impl ExpressionFacts {
         self.called_tasks.extend(other.called_tasks.iter().cloned());
         self.function_refs
             .extend(other.function_refs.iter().cloned());
+        self.site_types.extend(other.site_types.clone());
         Ok(())
     }
 }
@@ -1319,6 +3025,22 @@ struct InferContext<'a> {
 }
 
 fn infer_expression(
+    context: &InferContext<'_>,
+    module: &ValidatedModule,
+    expression: &Expression,
+    variables: &BTreeMap<String, ResolvedType>,
+    capabilities: &BTreeMap<String, CapabilityBinding>,
+    pure: bool,
+) -> Result<ExpressionFacts, Diagnostic> {
+    let mut facts =
+        infer_expression_inner(context, module, expression, variables, capabilities, pure)?;
+    facts
+        .site_types
+        .insert(expression_pointer(expression), facts.ty.clone());
+    Ok(facts)
+}
+
+fn infer_expression_inner(
     context: &InferContext<'_>,
     module: &ValidatedModule,
     expression: &Expression,
@@ -1912,6 +3634,10 @@ fn infer_expression(
             Ok(result)
         }
     }
+}
+
+fn expression_pointer(expression: &Expression) -> usize {
+    std::ptr::from_ref(expression).addr()
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2513,16 +4239,85 @@ mod tests {
             &[],
         )
         .expect("package validates");
-        let owner = OwnerId {
-            package: package.descriptor.package_id.clone(),
-            module: "domain".to_owned(),
-            declaration: "Item".to_owned(),
-        };
+        let owner = package.modules[0]
+            .owner(&package.descriptor.package_id, "Item")
+            .expect("owner identity");
         assert_eq!(
             owner.diagnostic_name(),
             "1234567890abcdef1234567890abcdef::domain::Item"
         );
         assert!(!owner.diagnostic_name().contains("src/"));
+    }
+
+    #[test]
+    fn canonical_relations_reconstruct_calls_types_fields_and_tests() {
+        let descriptor = decode_package(
+            br#"{"contract_version":1,"package_id":"1234567890abcdef1234567890abcdef","name":"relations","modules":[{"name":"main","path":"src/main.lkj"}],"dependencies":[],"targets":[]}"#,
+        )
+        .expect("descriptor");
+        let package = validate_package_documents(
+            descriptor,
+            vec![source(
+                "src/main.lkj",
+                "(module main
+                   (export Item make read)
+                   (record Item (value Text))
+                   (fn make ((value Text)) Item (record Item (value value)))
+                   (fn read ((item Item)) Text (field item value))
+                   (test round-trip (call read (call make \"value\")) \"value\"))",
+            )],
+            &[],
+        )
+        .expect("source migration validates");
+        let relations = &package.modules[0].relations;
+        for role in [
+            RelationRole::Export,
+            RelationRole::TypeUse,
+            RelationRole::Call,
+            RelationRole::FieldUse,
+            RelationRole::ValueReference,
+            RelationRole::TestDependency,
+        ] {
+            assert!(
+                relations.iter().any(|relation| relation.role == role),
+                "missing {role:?} relation"
+            );
+        }
+
+        let mut meaning = MeaningModule {
+            graph_contract_version: super::super::meaning::GRAPH_CONTRACT_VERSION,
+            module_id: package.modules[0].module_id,
+            module: package.modules[0].module.clone(),
+            declarations: package.modules[0].declaration_identities.clone(),
+            relations: relations.clone(),
+            documentation: Vec::new(),
+            annotations: Vec::new(),
+        };
+        super::super::meaning::normalize_module_spans(&mut meaning.module);
+        let root = GraphRoot {
+            graph_contract_version: super::super::meaning::GRAPH_CONTRACT_VERSION,
+            repository_id: super::super::semantic_id::RepositoryId::migrate(b"relations", 1),
+            package_id: package.descriptor.package_id.clone(),
+            package_name: package.descriptor.name.clone(),
+            modules: vec![super::super::graph::ModuleObjectRef {
+                id: meaning.module_id,
+                name: meaning.module.name.clone(),
+                object: meaning.digest().expect("module digest"),
+            }],
+            dependencies: Vec::new(),
+            targets: Vec::new(),
+            tombstones: Vec::new(),
+        };
+        validate_graph_package(&root, vec![meaning.clone()], &[], None)
+            .expect("canonical relations reconstruct");
+
+        let mut missing = meaning;
+        missing.relations.pop();
+        let mut missing_root = root;
+        missing_root.modules[0].object = missing.digest().expect("tampered module digest");
+        let error = validate_graph_package(&missing_root, vec![missing], &[], None)
+            .expect_err("missing canonical relation rejects");
+        assert_eq!(error.code, "semantic_relation_mismatch");
     }
 
     #[test]
@@ -2611,11 +4406,9 @@ mod tests {
             &[dependency],
         )
         .expect("service package validates");
-        let owner = OwnerId {
-            package: package.descriptor.package_id.clone(),
-            module: "service".to_owned(),
-            declaration: "create".to_owned(),
-        };
+        let owner = package.modules[0]
+            .owner(&package.descriptor.package_id, "create")
+            .expect("owner identity");
         let facts = package.function_facts.get(&owner).expect("task facts");
         assert_eq!(
             facts.capabilities["database"].operations,

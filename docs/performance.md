@@ -1,100 +1,116 @@
 # Performance and economy evidence
 
-Measurements are observations, not promises. Environment: Linux `7.0.0-29-generic` x86-64, 20
-logical CPUs, `rustc 1.96.0`, Cargo 1.96.0, Python 3.12.3. Process RSS and provider token, cache, and
-price telemetry are unavailable. No token or money claim is inferred from bytes.
+Measurements are observations, not promises. Current environment: Linux
+`7.0.0-29-generic` x86-64, `rustc 1.96.0`, Cargo 1.96.0. The final measured release binary was
+13,399,896 bytes with SHA-256
+`f7d985142b4e019d22c5d3ab8a2bdfcdb99b7043a663edd5be2379aafefd13ab`.
+CPU time, peak RSS, provider tokens/cache/requests/retries, and monetary telemetry were unavailable.
+No token or money result is inferred from byte counts.
 
-## Reproduced predecessor baseline
+## Historical baselines
 
-At starting commit `cc9b465227237a1600e9f2cb4e8e7f85ae59093a`, release `lkjedit` measured
-27.768608630 s for 10,000 mixed transitions, 4.405541596 s for 1,006 growing-insert transitions,
-2.815967447 s for 795 transitions over 100 tabs, 83.456675 ms for a 65,536-scalar paste, and
-51.612490 ms for a 1-by-1 resize. One large-editor orientation took 998.527023 ms and emitted 1,247
-bytes; an exact function query emitted 37,897 bytes. Its public backup retained 51,704,083 bytes.
+At campaign start `6747754bdcad4dc9000c3d7891db7ef207c8ec2f`, the source-authority lkjournal
+workflow had these retained warm p50 observations: orientation 44.718854 ms and 1,356 output bytes;
+package test 76.677093 ms and 311 bytes; service-module show 84.051330 ms and 40,322 bytes. The
+package test covered the same 11 program tests and bytecode/AST differential contract now used by
+the graph workflow. Source authority has since been deleted, so these figures are historical.
 
-The predecessor full check passed 15 gates in 730.608 s. Workspace tests took 537.914 s, editor
-deep doctor 108.278 s, and editor acceptance 75.424 s. Its contract-1 receipt was captured at
-`.artifacts/check/20260821T122930.983038Z-4129073-full/receipt.json`; an initial contract-2 retention
-defect later removed that directory, so the raw predecessor receipt and child logs are unavailable.
-The reproduced aggregate measurements remain in the campaign ledger and are not upgraded into
-stronger evidence.
+The older graph-product baseline emitted 37,897 bytes for one exact-function query, took about
+998.5 ms for one orientation, and took about 730.6 seconds for its complete verification profile.
+Those observations explain the selected local query protocol; they are not current product
+benchmarks.
 
-These workloads are retained baseline evidence only: the products and implementation were deleted,
-so the service cutover is not presented as an equal editor-performance improvement.
+## Current maintained graph
 
-## Current source and package workflows
+Seven warm release samples were taken per command on 2026-08-22. Fresh unique output files were
+used for build, review, and backup. The table reports p50 wall time and stdout plus stderr bytes.
 
-Five warm release samples were taken per command on 2026-08-21. The table reports p50 and the bytes
-written to stdout plus stderr.
+| Public command | p50 | Output bytes | Derived file bytes |
+|---|---:|---:|---:|
+| `lkjournal semantic status` | 1.863 ms | 712 | — |
+| `lkjournal semantic orient --limit 20` | 3.642 ms | 1,710 | — |
+| `lkjournal semantic find handle --exact` | 1.684 ms | 645 | — |
+| `lkjournal semantic show decl_ec993… --body` | 2.863 ms | 5,613 | — |
+| `lkjournal semantic test` | 22.101 ms | 418 | — |
+| `lkjournal semantic doctor --deep` | 5.217 ms | 299 | — |
+| `lkjournal semantic build` | 17.505 ms | 607 | 160,195 |
+| `lkjournal semantic text-project` | 14.639 ms | 630 | 1,328,003 |
+| `lkjournal semantic backup` | 11.141 ms | 476 | 160,697 |
 
-| Command | p50 | Output bytes |
+The source and graph orientation commands are the same user objective but differ in returned
+fields: graph orientation was about 91.9% lower wall time and 354 bytes larger. The package-test
+task retained the same 11 tests and differential obligation: graph time was about 71.2% lower and
+output was 107 bytes larger. These two comparisons do not establish universal graph superiority.
+The source service-module show and graph exact-function show are not equal tasks and are not used
+as a performance ratio.
+
+The canonical standard authority is 21,062 bytes across 16 transportable files. Canonical
+lkjournal authority is 160,419 bytes across 8 files. Current disposable query indexes add 50,858
+bytes for standard and 790,720 bytes for lkjournal. The explicit full review projection is larger
+than canonical authority and is therefore out-of-band, never routine command output.
+
+## Scale topology
+
+`tools/semantic-scale` creates deterministic empty modules only through public ID allocation rules,
+graph-artifact import, and exact-base semantic transactions. It then runs public orient, exact
+find/show, deep doctor, build, and backup. Raw structured results are retained at
+`docs/evidence/20260822-semantic-scale.json`.
+
+| Observation | 10,000 added modules | 90,000 added modules |
 |---|---:|---:|
-| `standard project orient` | 3.365969 ms | 1,621 |
-| `lkjournal project orient` | 44.718854 ms | 1,356 |
-| `standard package test` | 3.930802 ms | 307 |
-| `lkjournal package test` | 76.677093 ms | 311 |
-| `standard project doctor --deep` | 1.796068 ms | 436 |
-| `lkjournal project doctor --deep` | 1.817768 ms | 441 |
-| `lkjournal component inspect service.Web` | 78.800446 ms | 7,714 |
-| `lkjournal module show service` | 84.051330 ms | 40,322 |
+| first 10,000-module apply | 462 ms | 469 ms |
+| final 10,000-module apply | 462 ms | 10.949 s |
+| apply response | 5,378 bytes | 5,378 bytes each |
+| cold exact local-index lookup | 73.5 ms | 630 ms |
+| warm exact lookup, work = 1 | 15.8 ms | 138 ms |
+| exact show | 13.7 ms | 134 ms |
+| orientation | 129 ms | 1.283 s |
+| deep doctor | 93.5 ms / 10,024 module versions | 3.661 s / 450,120 module versions |
+| deterministic build | 132 ms / 1,330,505 bytes | 1.269 s / 10,370,515 bytes |
+| backup | 98.4 ms / 2,183,176 bytes | 3.995 s / 44,315,558 bytes |
+| canonical store | 1,832,489 bytes | 41,163,949 bytes |
+| store with derived indexes | 6,631,953 bytes | 82,844,955 bytes |
 
-The standard authority is 38 files and 31,950 bytes; lkjournal authority is 48 files and 300,919
-bytes. Those counts include content-addressed accepted history, not working source alone. The checked
-exact dependency artifact is 9,602 bytes and the complete service artifact is 41,587 bytes.
+The original file-by-file durability prototype took 20.523 seconds for the identical first
+10,000-module revision. Batched Linux filesystem synchronization reduced that to 462 ms without
+changing its deterministic revision or artifact digest. The final 90,000-module batch still grows
+to 10.949 seconds because accepted publication reconstructs and validates the complete candidate
+and verifies retained immutable objects. This is a recorded incremental-engine defect/limit; no
+timeout or work budget was raised to hide it.
 
-Thirty-one warm release package-test samples compared the same test expressions inside one process.
-For `standard`, bytecode p50 was 22,732 ns and AST-oracle p50 28,895 ns (bytecode 21.3% lower). For
-`lkjournal`, bytecode p50 was 88,997 ns and oracle p50 134,712 ns (bytecode 33.9% lower). Ranges were
-17,151--33,985 ns versus 23,475--32,752 ns for standard and 80,514--113,864 ns versus
-131,227--220,714 ns for lkjournal. The test sets are small, but the equal in-process comparison
-meets the predeclared retain gate and package tests continue to compare results/instruction facts.
+Graph contract 1 caps one root at 100,000 modules, so the requested million-module topology is
+outside current resource policy and was not run. The retained topology covers many tiny modules;
+dense calls, large literals/docs, branch conflict fanout, compaction, and million-owner behavior
+remain unmeasured.
 
-## Live service workflow
+## Compiler and service
 
-The current isolated PostgreSQL acceptance at
-`.artifacts/service/20260821T171340.084371Z-131501/receipt.json` passed in 3.160614082 s. It checked
-13 route/failure observations, created and exactly updated one durable resource, reconstructed two
-snapshot entries, streamed and verified a 200,000-byte object, completed one queue attempt, stopped
-service and worker with zero cleanup failures, produced a 12,520-byte PostgreSQL custom backup,
-restored it to a second database, restarted, and read revision 1 unchanged.
+Current graph package tests pass 6 standard and 11 lkjournal cases with bytecode/reference equality.
+The seven-sample command table measures complete preparation and test execution, not an isolated
+instruction microbenchmark. The old small-sample source-era bytecode p50 advantage remains
+historical; no new percentage claim is made from the short current runs.
 
-After closing a reproduced first-connection/readiness race, ten consecutive equal fresh-container
-runs passed; their retained receipts span
-`.artifacts/service/20260821T171057.675379Z-119920/receipt.json` through
-`.artifacts/service/20260821T171137.972457Z-126746/receipt.json`. This is stability evidence, not a
-tail-latency distribution.
+The final graph-cutover PostgreSQL service/worker acceptance passed in 4.431 seconds at
+`.artifacts/service/20260822T061313.861237Z-420089/receipt.json`. It checked 13 route/failure
+observations, exact update/history, one 200,000-byte object, one productive worker iteration, zero
+shutdown cleanup failures, a 12,520-byte PostgreSQL backup, restore, restart, and equal restored
+read. This is one complete observation, not a latency distribution. Live S3, sustained overload,
+RSS, database contention, multipart throughput, multi-hour worker behavior, and p95 service
+latency remain unmeasured.
 
-That receipt records nanosecond latency for health, bootstrap denial, initialization, login,
-create/list/read/update/stale/history/unauthenticated/strict-JSON/object and restored-read requests.
-One sample is not a p95 or throughput claim. Startup, database pool contention, S3 first-byte,
-multipart throughput, sustained overload, RSS, and multi-hour worker behavior remain unmeasured.
+## Verification and agent economy
 
-## Agent and verification economy
+Normal exact lookup is hundreds of bytes, body expansion is explicit, broad transaction output
+inlines at most 64 affected owners, package tests return aggregates, and all-pass verification emits
+one aggregate result plus a retained receipt path. `tools/check` stores separate bounded logs under
+`.artifacts/check`; current full verification does not reuse a prior pass.
 
-Current `module show` loads one authored module rather than a full semantic graph, and orientation
-names modules, declarations, exact dependencies, targets, and expansion commands in 1.3--1.6 KiB.
-`package test` emits one aggregate differential result rather than passing-case lines.
+The final authoritative local profile passed 15/15 gates in 94.743 seconds at
+`.artifacts/check/20260822T061143.565460Z-417922/receipt.json`. It binds worktree input SHA-256
+`d822a652537d07e1859f0faea1e481b6d0e037f93f0eab3452416147074d0910`; documentation updates after
+that run require one final fresh verification before publication.
 
-`tools/check` contract 2 supports `focused`, exact conservative `changed`, `product`, `service`, and
-`full`. Default all-pass output is one line plus a receipt locator. Each gate keeps separate logs,
-bounded to 64 MiB combined; the newest eight ordinary runs and newest eight self-tests are retained
-independently, while foreign/predecessor directories are never rotated. Pass receipts are keyed by
-current worktree digest, Git head, command, toolchain, and selected environment facts, but no
-cross-run pass reuse is implemented. Uncertain changes widen to full.
-
-There is no equal-task old/new edit study with provider request counts or correction depth. The
-available old graph queries and current source-module commands differ in task and program size, so
-their byte reduction is not claimed as an equal comparison. Provider telemetry remains unavailable.
-
-## Reversal gates
-
-- Retain content-addressed source history while current open/deep doctor remain bounded and the
-  object/manifest publication matrix stays simpler than reconstructing a journal. Revisit after a
-  maintained package exceeds 10,000 modules or one accepted apply/open p50 exceeds 250 ms.
-- Retain bytecode as the production route only while differential tests agree and equal release
-  workloads show no material regression. Revisit specialization/JIT only after execution is at
-  least 30% of a complete maintained workload.
-- Retain resident prepared-program reuse while admission, shutdown, and corruption fallback remain
-  exact. A cache may be added only with artifact/toolchain identity and a reference fallback.
-- Retain local whole-response HTTP until a maintained response exceeds the 4 MiB deployment bound
-  or response buffering dominates retained memory; then implement task-scoped response streaming.
+No complete provider-instrumented comparison exists for the campaign's full edit/refactor matrix.
+Commands, corrections, elapsed time, request/response bytes, and stable-ID continuity were observed
+for orientation, exact lookup/show, mutation, build, doctor, review, and backup. Provider token and
+cost superiority remains unknown.

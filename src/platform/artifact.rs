@@ -1,21 +1,54 @@
-//! Deterministic package-closure artifact for components and every runner topology.
+//! Deterministic graph-native package-closure artifacts.
+//!
+//! An artifact contains independently integrity-protected package objects. Each package object
+//! embeds a canonical graph root, its packed module shards, and the exact accepted revision and
+//! receipt. Compilation and execution consume those graph records directly; textual input is
+//! neither stored nor reparsed here.
 
 use super::diagnostic::{Diagnostic, DiagnosticClass};
-use super::package::{Dependency, ModuleLocator, PackageDescriptor, PackageId, RunnerKind, Target};
-use super::semantic::{ExactDependency, ValidatedPackage, validate_package_documents};
-use super::syntax::{SourceLimits, parse_source};
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use super::graph::GraphRoot;
+#[cfg(test)]
+use super::graph::{DependencyBinding, ModuleObjectRef, TargetBinding};
+#[cfg(test)]
+use super::language::Declaration;
+use super::meaning::MeaningModule;
+#[cfg(test)]
+use super::meaning::{GRAPH_CONTRACT_VERSION, MemberIdentity};
+use super::package::{PackageId, Target};
+use super::packed;
+#[cfg(test)]
+use super::revision::{
+    RECEIPT_CONTRACT_VERSION, REVISION_CONTRACT_VERSION, ReceiptStatus, RevisionCore,
+    ValidationFacts,
+};
+use super::revision::{RevisionRecord, TransactionReceipt};
+use super::semantic::{ExactGraphDependency, ValidatedPackage, validate_graph_package};
+use super::semantic_digest::ArtifactDigest;
+#[cfg(test)]
+use super::semantic_digest::{SemanticDiffDigest, TransactionDigest};
+use super::semantic_id::RevisionId;
+#[cfg(test)]
+use super::semantic_id::{RepositoryId, TargetId};
+use bincode::{Decode, Encode};
+use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 1;
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 2;
+pub const PACKAGE_ARTIFACT_CONTRACT_VERSION: u16 = 1;
 pub const MAXIMUM_ARTIFACT_BYTES: usize = 128 * 1_048_576;
 pub const MAXIMUM_ARTIFACT_PACKAGES: usize = 1_024;
+const MAXIMUM_PACKAGE_ARTIFACT_BYTES: usize = 128 * 1_048_576;
+const ARTIFACT_MAGIC: [u8; 8] = *b"LKJART02";
+const ARTIFACT_DOMAIN: &str = "lkjscript.graph-artifact-bundle.v2";
+const PACKAGE_MAGIC: [u8; 8] = *b"LKJPKG01";
+const PACKAGE_DOMAIN: &str = "lkjscript.graph-package-artifact.v1";
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ArtifactReceipt {
     pub contract_version: u16,
     pub artifact_digest: String,
+    pub root_package_artifact: ArtifactDigest,
     pub root_package_id: PackageId,
     pub root_revision_digest: String,
     pub package_count: usize,
@@ -26,9 +59,13 @@ pub struct ArtifactReceipt {
 #[derive(Clone, Debug)]
 pub struct LoadedArtifact {
     pub artifact_digest: String,
+    pub root_package_artifact: ArtifactDigest,
     pub root_package_id: PackageId,
     pub root_revision_digest: String,
+    pub root_revision: RevisionId,
     pub packages: BTreeMap<PackageId, ValidatedPackage>,
+    pub package_artifacts: BTreeMap<PackageId, ArtifactDigest>,
+    pub(crate) package_objects: BTreeMap<ArtifactDigest, Vec<u8>>,
 }
 
 impl LoadedArtifact {
@@ -56,77 +93,508 @@ impl LoadedArtifact {
                 )
             })
     }
+
+    pub fn package_object(&self, digest: ArtifactDigest) -> Option<&[u8]> {
+        self.package_objects.get(&digest).map(Vec::as_slice)
+    }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-struct ArtifactEnvelope {
+#[derive(Decode, Encode, Clone, Debug, Eq, PartialEq)]
+struct ArtifactBundle {
     contract_version: u16,
-    artifact_digest: String,
-    root_package_id: PackageId,
-    root_revision_digest: String,
-    packages: Vec<ArtifactPackage>,
+    root: ArtifactDigest,
+    objects: Vec<ArtifactObject>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-struct ArtifactCore {
-    contract_version: u16,
-    root_package_id: PackageId,
-    root_revision_digest: String,
-    packages: Vec<ArtifactPackage>,
+#[derive(Decode, Encode, Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct ArtifactObject {
+    digest: ArtifactDigest,
+    bytes: Vec<u8>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-struct ArtifactPackage {
-    package_id: PackageId,
-    name: String,
-    revision_digest: String,
-    package_artifact_digest: String,
-    modules: Vec<ArtifactModule>,
-    dependencies: Vec<ArtifactDependency>,
-    targets: Vec<ArtifactTarget>,
+#[derive(Decode, Encode, Clone, Debug, Eq, PartialEq)]
+pub(crate) struct GraphPackageArtifact {
+    pub(crate) contract_version: u16,
+    pub(crate) revision: RevisionRecord,
+    pub(crate) receipt: TransactionReceipt,
+    pub(crate) root: GraphRoot,
+    pub(crate) modules: Vec<MeaningModule>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-struct ArtifactModule {
-    name: String,
-    source: String,
+impl GraphPackageArtifact {
+    fn encode(&self) -> Result<Vec<u8>, Diagnostic> {
+        self.validate_shape()?;
+        packed::encode(
+            PACKAGE_MAGIC,
+            PACKAGE_DOMAIN,
+            self,
+            MAXIMUM_PACKAGE_ARTIFACT_BYTES,
+        )
+    }
+
+    fn decode(bytes: &[u8]) -> Result<Self, Diagnostic> {
+        let value: Self = packed::decode(
+            bytes,
+            PACKAGE_MAGIC,
+            PACKAGE_DOMAIN,
+            MAXIMUM_PACKAGE_ARTIFACT_BYTES,
+        )?;
+        value.validate_shape()?;
+        Ok(value)
+    }
+
+    fn validate_shape(&self) -> Result<(), Diagnostic> {
+        if self.contract_version != PACKAGE_ARTIFACT_CONTRACT_VERSION {
+            return Err(artifact_error(
+                DiagnosticClass::Source,
+                "artifact_package_contract",
+                "package artifact uses an unknown contract",
+            ));
+        }
+        self.root.validate_modules(&self.modules)?;
+        if self.revision.core.repository_id != self.root.repository_id
+            || self.revision.core.root != self.root.digest()?
+            || self.receipt.repository_id != self.root.repository_id
+            || self.receipt.result != self.revision.revision
+            || self.receipt.transaction != self.revision.core.transaction
+            || self.receipt.semantic_diff != self.revision.core.semantic_diff
+            || self.revision.receipt != self.receipt.digest()?
+        {
+            return Err(artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_package_revision",
+                "package graph, revision, and receipt bindings are inconsistent",
+            ));
+        }
+        RevisionRecord::decode(&self.revision.encode()?)?;
+        TransactionReceipt::decode(&self.receipt.encode()?)?;
+        Ok(())
+    }
+
+    pub(crate) fn dependencies(&self) -> impl Iterator<Item = ArtifactDigest> + '_ {
+        self.root
+            .dependencies
+            .iter()
+            .map(|dependency| dependency.artifact)
+    }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-struct ArtifactDependency {
-    alias: String,
-    package_id: PackageId,
-    revision_digest: String,
-    artifact_digest: String,
+pub(crate) fn encode_package_object(
+    revision: RevisionRecord,
+    receipt: TransactionReceipt,
+    root: GraphRoot,
+    modules: Vec<MeaningModule>,
+) -> Result<(ArtifactDigest, Vec<u8>), Diagnostic> {
+    let object = GraphPackageArtifact {
+        contract_version: PACKAGE_ARTIFACT_CONTRACT_VERSION,
+        revision,
+        receipt,
+        root,
+        modules,
+    };
+    let bytes = object.encode()?;
+    Ok((ArtifactDigest::of(&bytes), bytes))
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-struct ArtifactTarget {
-    name: String,
-    component: String,
-    port: String,
-    runner: RunnerKind,
+#[cfg(test)]
+#[derive(Clone)]
+struct BuiltPackage {
+    digest: ArtifactDigest,
+    bytes: Vec<u8>,
+    revision: RevisionId,
 }
 
-pub fn package_artifact_digest(package: &ValidatedPackage) -> String {
-    domain_digest(
-        "lkjscript.package-artifact.v1",
-        package.revision_digest.as_bytes(),
-    )
-}
-
-/// Builds one artifact containing an exact package closure. `packages` may be in any order but
-/// must contain the root and every transitive dependency exactly once.
-pub fn build_artifact(
+/// Independent test oracle for reconstructing an initial graph from textual fixtures. It is not
+/// compiled into the public library and cannot publish maintained authority.
+#[cfg(test)]
+pub(crate) fn build_artifact(
     root: &ValidatedPackage,
     packages: &[&ValidatedPackage],
 ) -> Result<(Vec<u8>, ArtifactReceipt), Diagnostic> {
+    let by_id = validate_build_closure(root, packages)?;
+    let mut pending = by_id.clone();
+    let mut built = BTreeMap::<PackageId, BuiltPackage>::new();
+    while !pending.is_empty() {
+        let ready = pending
+            .iter()
+            .filter(|(_, package)| {
+                package
+                    .descriptor
+                    .dependencies
+                    .iter()
+                    .all(|dependency| built.contains_key(&dependency.package_id))
+            })
+            .map(|(package, _)| package.clone())
+            .collect::<Vec<_>>();
+        if ready.is_empty() {
+            return Err(artifact_error(
+                DiagnosticClass::Semantic,
+                "artifact_dependency_cycle",
+                "package dependency graph contains a cycle",
+            ));
+        }
+        for package_id in ready {
+            let package = pending.remove(&package_id).ok_or_else(|| {
+                artifact_error(
+                    DiagnosticClass::Infrastructure,
+                    "artifact_build_pending",
+                    "ready package disappeared during artifact construction",
+                )
+            })?;
+            let object = migration_package_artifact(package, &built)?;
+            let bytes = object.encode()?;
+            let digest = ArtifactDigest::of(&bytes);
+            built.insert(
+                package_id,
+                BuiltPackage {
+                    digest,
+                    bytes,
+                    revision: object.revision.revision,
+                },
+            );
+        }
+    }
+    let root_object = built
+        .get(&root.descriptor.package_id)
+        .ok_or_else(|| {
+            artifact_error(
+                DiagnosticClass::Infrastructure,
+                "artifact_build_root",
+                "built package closure lost its root",
+            )
+        })?
+        .clone();
+    let objects = built
+        .into_values()
+        .map(|object| ArtifactObject {
+            digest: object.digest,
+            bytes: object.bytes,
+        })
+        .collect();
+    encode_bundle(root_object.digest, objects)
+}
+
+pub fn build_artifact_from_objects(
+    root: ArtifactDigest,
+    objects: BTreeMap<ArtifactDigest, Vec<u8>>,
+) -> Result<(Vec<u8>, ArtifactReceipt), Diagnostic> {
+    encode_bundle(
+        root,
+        objects
+            .into_iter()
+            .map(|(digest, bytes)| ArtifactObject { digest, bytes })
+            .collect(),
+    )
+}
+
+fn encode_bundle(
+    root: ArtifactDigest,
+    mut objects: Vec<ArtifactObject>,
+) -> Result<(Vec<u8>, ArtifactReceipt), Diagnostic> {
+    objects.sort();
+    let bundle = ArtifactBundle {
+        contract_version: ARTIFACT_CONTRACT_VERSION,
+        root,
+        objects,
+    };
+    validate_bundle_shape(&bundle)?;
+    let bytes = packed::encode(
+        ARTIFACT_MAGIC,
+        ARTIFACT_DOMAIN,
+        &bundle,
+        MAXIMUM_ARTIFACT_BYTES,
+    )?;
+    let digest = ArtifactDigest::of(&bytes);
+    let loaded = load_bundle_objects(root, &bundle.objects, digest)?;
+    let module_count = loaded
+        .packages
+        .values()
+        .try_fold(0usize, |count, package| {
+            count.checked_add(package.modules.len())
+        })
+        .ok_or_else(|| {
+            artifact_error(
+                DiagnosticClass::Resource,
+                "artifact_module_count",
+                "artifact module count overflowed",
+            )
+        })?;
+    let package_count = loaded.packages.len();
+    let receipt = ArtifactReceipt {
+        contract_version: ARTIFACT_CONTRACT_VERSION,
+        artifact_digest: digest.to_string(),
+        root_package_artifact: root,
+        root_package_id: loaded.root_package_id,
+        root_revision_digest: loaded.root_revision_digest,
+        package_count,
+        module_count,
+        bytes: bytes.len(),
+    };
+    Ok((bytes, receipt))
+}
+
+pub fn load_artifact(bytes: &[u8]) -> Result<LoadedArtifact, Diagnostic> {
+    if bytes.len() > MAXIMUM_ARTIFACT_BYTES + 50 {
+        return Err(artifact_error(
+            DiagnosticClass::Resource,
+            "artifact_too_large",
+            format!("artifact exceeds {MAXIMUM_ARTIFACT_BYTES} payload bytes"),
+        ));
+    }
+    if bytes.get(..8) != Some(ARTIFACT_MAGIC.as_slice()) {
+        return Err(artifact_error(
+            DiagnosticClass::Source,
+            "artifact_contract",
+            "artifact does not use the current graph-native contract",
+        ));
+    }
+    let bundle: ArtifactBundle = packed::decode(
+        bytes,
+        ARTIFACT_MAGIC,
+        ARTIFACT_DOMAIN,
+        MAXIMUM_ARTIFACT_BYTES,
+    )?;
+    validate_bundle_shape(&bundle)?;
+    load_bundle_objects(bundle.root, &bundle.objects, ArtifactDigest::of(bytes))
+}
+
+pub(crate) fn decode_package_object(bytes: &[u8]) -> Result<GraphPackageArtifact, Diagnostic> {
+    GraphPackageArtifact::decode(bytes)
+}
+
+pub(crate) fn load_package_object_closure(
+    root: ArtifactDigest,
+    objects: BTreeMap<ArtifactDigest, Vec<u8>>,
+) -> Result<LoadedArtifact, Diagnostic> {
+    let artifact_objects = objects
+        .into_iter()
+        .map(|(digest, bytes)| ArtifactObject { digest, bytes })
+        .collect::<Vec<_>>();
+    load_bundle_objects(root, &artifact_objects, ArtifactDigest::of(&root.bytes()))
+}
+
+fn validate_bundle_shape(bundle: &ArtifactBundle) -> Result<(), Diagnostic> {
+    if bundle.contract_version != ARTIFACT_CONTRACT_VERSION {
+        return Err(artifact_error(
+            DiagnosticClass::Source,
+            "artifact_contract",
+            format!(
+                "artifact contract {} is not current contract {ARTIFACT_CONTRACT_VERSION}",
+                bundle.contract_version
+            ),
+        ));
+    }
+    if bundle.objects.is_empty() || bundle.objects.len() > MAXIMUM_ARTIFACT_PACKAGES {
+        return Err(artifact_error(
+            DiagnosticClass::Resource,
+            "artifact_package_count",
+            format!("artifact must contain 1 through {MAXIMUM_ARTIFACT_PACKAGES} package objects"),
+        ));
+    }
+    if bundle.objects.windows(2).any(|pair| pair[0] >= pair[1]) {
+        return Err(artifact_error(
+            DiagnosticClass::Corrupt,
+            "artifact_object_order",
+            "artifact package objects are not unique and canonically ordered",
+        ));
+    }
+    if !bundle
+        .objects
+        .iter()
+        .any(|object| object.digest == bundle.root)
+    {
+        return Err(artifact_error(
+            DiagnosticClass::Corrupt,
+            "artifact_root_missing",
+            "artifact root package object is absent",
+        ));
+    }
+    for object in &bundle.objects {
+        if object.bytes.len() > MAXIMUM_PACKAGE_ARTIFACT_BYTES + 50
+            || ArtifactDigest::of(&object.bytes) != object.digest
+        {
+            return Err(artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_object_digest",
+                "artifact package object exceeds its bound or has a foreign digest",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn load_bundle_objects(
+    root_digest: ArtifactDigest,
+    objects: &[ArtifactObject],
+    bundle_digest: ArtifactDigest,
+) -> Result<LoadedArtifact, Diagnostic> {
+    let mut decoded = BTreeMap::new();
+    let mut object_bytes = BTreeMap::new();
+    for object in objects {
+        if ArtifactDigest::of(&object.bytes) != object.digest {
+            return Err(artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_object_digest",
+                "artifact package object digest does not match its bytes",
+            ));
+        }
+        if decoded
+            .insert(object.digest, GraphPackageArtifact::decode(&object.bytes)?)
+            .is_some()
+        {
+            return Err(artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_object_duplicate",
+                "artifact repeats a package object digest",
+            ));
+        }
+        object_bytes.insert(object.digest, object.bytes.clone());
+    }
+    let reachable = reachable_objects(root_digest, &decoded)?;
+    if reachable.len() != decoded.len() {
+        return Err(artifact_error(
+            DiagnosticClass::Corrupt,
+            "artifact_object_foreign",
+            "artifact contains a package object outside the root dependency closure",
+        ));
+    }
+
+    let mut pending = decoded;
+    let mut validated_by_digest = BTreeMap::<ArtifactDigest, ValidatedPackage>::new();
+    let mut artifacts_by_package = BTreeMap::new();
+    while !pending.is_empty() {
+        let ready = pending
+            .iter()
+            .filter(|(_, package)| {
+                package
+                    .root
+                    .dependencies
+                    .iter()
+                    .all(|dependency| validated_by_digest.contains_key(&dependency.artifact))
+            })
+            .map(|(digest, _)| *digest)
+            .collect::<Vec<_>>();
+        if ready.is_empty() {
+            return Err(artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_dependency_cycle",
+                "artifact package dependency graph contains a cycle",
+            ));
+        }
+        for digest in ready {
+            let package = pending.remove(&digest).ok_or_else(|| {
+                artifact_error(
+                    DiagnosticClass::Infrastructure,
+                    "artifact_decode_pending",
+                    "ready package object disappeared",
+                )
+            })?;
+            let exact = package
+                .root
+                .dependencies
+                .iter()
+                .map(|dependency| {
+                    let supplied =
+                        validated_by_digest
+                            .get(&dependency.artifact)
+                            .ok_or_else(|| {
+                                artifact_error(
+                                    DiagnosticClass::Corrupt,
+                                    "artifact_dependency_missing",
+                                    "ready package dependency disappeared",
+                                )
+                            })?;
+                    Ok(ExactGraphDependency {
+                        alias: &dependency.alias,
+                        package: supplied,
+                        artifact: dependency.artifact,
+                    })
+                })
+                .collect::<Result<Vec<_>, Diagnostic>>()?;
+            let validated = validate_graph_package(
+                &package.root,
+                package.modules.clone(),
+                &exact,
+                Some(package.revision.revision),
+            )?;
+            if artifacts_by_package
+                .insert(package.root.package_id.clone(), digest)
+                .is_some()
+            {
+                return Err(artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_package_duplicate",
+                    "artifact contains two objects for one package identity",
+                ));
+            }
+            validated_by_digest.insert(digest, validated);
+        }
+    }
+    let root = validated_by_digest.get(&root_digest).ok_or_else(|| {
+        artifact_error(
+            DiagnosticClass::Corrupt,
+            "artifact_root_missing",
+            "validated artifact lost its root package",
+        )
+    })?;
+    let root_package_id = root.descriptor.package_id.clone();
+    let root_revision = root.accepted_revision.ok_or_else(|| {
+        artifact_error(
+            DiagnosticClass::Corrupt,
+            "artifact_root_revision",
+            "artifact root package has no accepted revision",
+        )
+    })?;
+    let packages = validated_by_digest
+        .into_values()
+        .map(|package| (package.descriptor.package_id.clone(), package))
+        .collect();
+    Ok(LoadedArtifact {
+        artifact_digest: bundle_digest.to_string(),
+        root_package_artifact: root_digest,
+        root_package_id,
+        root_revision_digest: root_revision.to_string(),
+        root_revision,
+        packages,
+        package_artifacts: artifacts_by_package,
+        package_objects: object_bytes,
+    })
+}
+
+fn reachable_objects(
+    root: ArtifactDigest,
+    objects: &BTreeMap<ArtifactDigest, GraphPackageArtifact>,
+) -> Result<BTreeSet<ArtifactDigest>, Diagnostic> {
+    let mut reachable = BTreeSet::new();
+    let mut pending = vec![root];
+    while let Some(digest) = pending.pop() {
+        if !reachable.insert(digest) {
+            continue;
+        }
+        let object = objects.get(&digest).ok_or_else(|| {
+            artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_dependency_missing",
+                format!("artifact closure omits package object '{digest}'"),
+            )
+        })?;
+        pending.extend(object.dependencies());
+        if reachable.len() > MAXIMUM_ARTIFACT_PACKAGES {
+            return Err(artifact_error(
+                DiagnosticClass::Resource,
+                "artifact_package_count",
+                "artifact dependency traversal exceeded its package bound",
+            ));
+        }
+    }
+    Ok(reachable)
+}
+
+#[cfg(test)]
+fn validate_build_closure<'a>(
+    root: &ValidatedPackage,
+    packages: &'a [&'a ValidatedPackage],
+) -> Result<BTreeMap<PackageId, &'a ValidatedPackage>, Diagnostic> {
     if packages.is_empty() || packages.len() > MAXIMUM_ARTIFACT_PACKAGES {
         return Err(artifact_error(
             DiagnosticClass::Resource,
@@ -154,126 +622,9 @@ pub fn build_artifact(
             "artifact closure omits its root package",
         ));
     }
-    validate_build_closure(&by_id)?;
-    let mut encoded = Vec::with_capacity(by_id.len());
-    let mut module_count = 0usize;
     for package in by_id.values() {
-        module_count = module_count.saturating_add(package.modules.len());
-        encoded.push(encode_package(package)?);
-    }
-    let core = ArtifactCore {
-        contract_version: ARTIFACT_CONTRACT_VERSION,
-        root_package_id: root.descriptor.package_id.clone(),
-        root_revision_digest: root.revision_digest.clone(),
-        packages: encoded,
-    };
-    let core_bytes = canonical_json(&core)?;
-    let artifact_digest = domain_digest("lkjscript.component-artifact.v1", &core_bytes);
-    let envelope = ArtifactEnvelope {
-        contract_version: core.contract_version,
-        artifact_digest: artifact_digest.clone(),
-        root_package_id: core.root_package_id.clone(),
-        root_revision_digest: core.root_revision_digest.clone(),
-        packages: core.packages,
-    };
-    let bytes = canonical_json(&envelope)?;
-    if bytes.len() > MAXIMUM_ARTIFACT_BYTES {
-        return Err(artifact_error(
-            DiagnosticClass::Resource,
-            "artifact_too_large",
-            format!(
-                "artifact has {} bytes; the limit is {MAXIMUM_ARTIFACT_BYTES}",
-                bytes.len()
-            ),
-        ));
-    }
-    let receipt = ArtifactReceipt {
-        contract_version: ARTIFACT_CONTRACT_VERSION,
-        artifact_digest,
-        root_package_id: root.descriptor.package_id.clone(),
-        root_revision_digest: root.revision_digest.clone(),
-        package_count: packages.len(),
-        module_count,
-        bytes: bytes.len(),
-    };
-    Ok((bytes, receipt))
-}
-
-pub fn load_artifact(bytes: &[u8]) -> Result<LoadedArtifact, Diagnostic> {
-    if bytes.len() > MAXIMUM_ARTIFACT_BYTES {
-        return Err(artifact_error(
-            DiagnosticClass::Resource,
-            "artifact_too_large",
-            format!(
-                "artifact has {} bytes; the limit is {MAXIMUM_ARTIFACT_BYTES}",
-                bytes.len()
-            ),
-        ));
-    }
-    let envelope: ArtifactEnvelope = strict_json(bytes, "component artifact")?;
-    if envelope.contract_version != ARTIFACT_CONTRACT_VERSION {
-        return Err(artifact_error(
-            DiagnosticClass::Source,
-            "artifact_contract",
-            format!(
-                "artifact contract {} is not current contract {ARTIFACT_CONTRACT_VERSION}",
-                envelope.contract_version
-            ),
-        ));
-    }
-    if envelope.packages.is_empty() || envelope.packages.len() > MAXIMUM_ARTIFACT_PACKAGES {
-        return Err(artifact_error(
-            DiagnosticClass::Resource,
-            "artifact_package_count",
-            format!("artifact closure must contain 1 through {MAXIMUM_ARTIFACT_PACKAGES} packages"),
-        ));
-    }
-    validate_digest(&envelope.artifact_digest, "artifact digest")?;
-    validate_digest(&envelope.root_revision_digest, "root revision digest")?;
-    let core = ArtifactCore {
-        contract_version: envelope.contract_version,
-        root_package_id: envelope.root_package_id.clone(),
-        root_revision_digest: envelope.root_revision_digest.clone(),
-        packages: envelope.packages.clone(),
-    };
-    let actual_digest = domain_digest("lkjscript.component-artifact.v1", &canonical_json(&core)?);
-    if actual_digest != envelope.artifact_digest {
-        return Err(artifact_error(
-            DiagnosticClass::Corrupt,
-            "artifact_digest",
-            "component artifact digest does not match its canonical content",
-        ));
-    }
-    validate_encoded_closure(&envelope.packages)?;
-    let packages = decode_packages(&envelope.packages)?;
-    let root = packages.get(&envelope.root_package_id).ok_or_else(|| {
-        artifact_error(
-            DiagnosticClass::Corrupt,
-            "artifact_root_missing",
-            "artifact closure omits the root package",
-        )
-    })?;
-    if root.revision_digest != envelope.root_revision_digest {
-        return Err(artifact_error(
-            DiagnosticClass::Corrupt,
-            "artifact_root_revision",
-            "artifact root revision digest is inconsistent",
-        ));
-    }
-    Ok(LoadedArtifact {
-        artifact_digest: envelope.artifact_digest,
-        root_package_id: envelope.root_package_id,
-        root_revision_digest: envelope.root_revision_digest,
-        packages,
-    })
-}
-
-fn validate_build_closure(
-    packages: &BTreeMap<PackageId, &ValidatedPackage>,
-) -> Result<(), Diagnostic> {
-    for package in packages.values() {
         for dependency in &package.descriptor.dependencies {
-            let supplied = packages.get(&dependency.package_id).ok_or_else(|| {
+            let supplied = by_id.get(&dependency.package_id).ok_or_else(|| {
                 artifact_error(
                     DiagnosticClass::Semantic,
                     "artifact_dependency_missing",
@@ -283,308 +634,229 @@ fn validate_build_closure(
                     ),
                 )
             })?;
-            if supplied.revision_digest != dependency.revision_digest
-                || package_artifact_digest(supplied) != dependency.artifact_digest
-            {
+            if supplied.revision_digest != dependency.revision_digest {
                 return Err(artifact_error(
                     DiagnosticClass::Semantic,
                     "artifact_dependency_identity",
                     format!(
-                        "package '{}' dependency '{}' does not match the supplied exact package",
+                        "package '{}' dependency '{}' has a foreign semantic revision",
                         package.descriptor.name, dependency.alias
                     ),
                 ));
             }
         }
     }
-    Ok(())
+    Ok(by_id)
 }
 
-fn validate_encoded_closure(packages: &[ArtifactPackage]) -> Result<(), Diagnostic> {
-    let mut identities = BTreeSet::new();
-    for package in packages {
-        if !identities.insert(package.package_id.clone()) {
-            return Err(artifact_error(
-                DiagnosticClass::Corrupt,
-                "artifact_package_duplicate",
-                "artifact repeats a package identity",
-            ));
-        }
-        validate_digest(&package.revision_digest, "package revision digest")?;
-        validate_digest(&package.package_artifact_digest, "package artifact digest")?;
-        if package.modules.is_empty() {
-            return Err(artifact_error(
-                DiagnosticClass::Corrupt,
-                "artifact_package_modules",
-                "artifact package has no modules",
-            ));
-        }
-        let mut module_names = BTreeSet::new();
-        for module in &package.modules {
-            if !module_names.insert(&module.name) {
-                return Err(artifact_error(
-                    DiagnosticClass::Corrupt,
-                    "artifact_module_duplicate",
-                    "artifact package repeats a module name",
-                ));
-            }
-            if module.source.len() > SourceLimits::default().maximum_bytes {
-                return Err(artifact_error(
-                    DiagnosticClass::Resource,
-                    "artifact_module_too_large",
-                    "artifact module exceeds the source byte bound",
-                ));
-            }
-        }
-    }
-    for package in packages {
-        for dependency in &package.dependencies {
-            if !identities.contains(&dependency.package_id) {
-                return Err(artifact_error(
-                    DiagnosticClass::Corrupt,
-                    "artifact_dependency_missing",
-                    "artifact package references an absent dependency",
-                ));
-            }
-        }
-    }
-    Ok(())
-}
-
-fn decode_packages(
-    encoded: &[ArtifactPackage],
-) -> Result<BTreeMap<PackageId, ValidatedPackage>, Diagnostic> {
-    let mut pending: BTreeMap<PackageId, &ArtifactPackage> = encoded
-        .iter()
-        .map(|package| (package.package_id.clone(), package))
-        .collect();
-    let mut validated = BTreeMap::new();
-    while !pending.is_empty() {
-        let ready: Vec<_> = pending
-            .iter()
-            .filter(|(_, package)| {
-                package
-                    .dependencies
-                    .iter()
-                    .all(|dependency| validated.contains_key(&dependency.package_id))
-            })
-            .map(|(identity, _)| identity.clone())
-            .collect();
-        if ready.is_empty() {
-            return Err(artifact_error(
-                DiagnosticClass::Corrupt,
-                "artifact_dependency_cycle",
-                "package dependency graph contains a cycle",
-            ));
-        }
-        for identity in ready {
-            let package = pending.remove(&identity).ok_or_else(|| {
-                artifact_error(
-                    DiagnosticClass::Infrastructure,
-                    "artifact_decode_pending",
-                    "ready artifact package disappeared",
-                )
-            })?;
-            let descriptor = descriptor_from_artifact(package);
-            let documents = package
-                .modules
-                .iter()
-                .enumerate()
-                .map(|(index, module)| {
-                    parse_source(
-                        format!("src/{index:04}.lkj"),
-                        module.source.as_bytes(),
-                        SourceLimits::default(),
-                    )
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            let dependencies = package
-                .dependencies
-                .iter()
-                .map(|dependency| {
-                    let supplied = validated.get(&dependency.package_id).ok_or_else(|| {
-                        artifact_error(
-                            DiagnosticClass::Corrupt,
-                            "artifact_dependency_missing",
-                            "ready artifact package dependency disappeared",
-                        )
-                    })?;
-                    Ok(ExactDependency {
-                        alias: dependency.alias.as_str(),
-                        package: supplied,
-                        artifact_digest: dependency.artifact_digest.as_str(),
-                    })
-                })
-                .collect::<Result<Vec<_>, Diagnostic>>()?;
-            let value = validate_package_documents(descriptor, documents, &dependencies)?;
-            if value.revision_digest != package.revision_digest
-                || package_artifact_digest(&value) != package.package_artifact_digest
-            {
-                return Err(artifact_error(
-                    DiagnosticClass::Corrupt,
-                    "artifact_package_digest",
-                    "artifact package does not reconstruct to its declared identity",
-                ));
-            }
-            validated.insert(identity, value);
-        }
-    }
-    Ok(validated)
-}
-
-fn descriptor_from_artifact(package: &ArtifactPackage) -> PackageDescriptor {
-    PackageDescriptor {
-        contract_version: super::package::PACKAGE_CONTRACT_VERSION,
-        package_id: package.package_id.clone(),
-        name: package.name.clone(),
-        modules: package
-            .modules
-            .iter()
-            .enumerate()
-            .map(|(index, module)| ModuleLocator {
-                name: module.name.clone(),
-                path: format!("src/{index:04}.lkj"),
-            })
-            .collect(),
-        dependencies: package
-            .dependencies
-            .iter()
-            .map(|dependency| Dependency {
-                alias: dependency.alias.clone(),
-                package_id: dependency.package_id.clone(),
-                revision_digest: dependency.revision_digest.clone(),
-                artifact_digest: dependency.artifact_digest.clone(),
-                artifact: format!("packages/{}", dependency.package_id.as_str()),
-            })
-            .collect(),
-        targets: package
-            .targets
-            .iter()
-            .map(|target| Target {
-                name: target.name.clone(),
-                component: target.component.clone(),
-                port: target.port.clone(),
-                runner: target.runner,
-            })
-            .collect(),
-    }
-}
-
-fn encode_package(package: &ValidatedPackage) -> Result<ArtifactPackage, Diagnostic> {
+#[cfg(test)]
+fn migration_package_artifact(
+    package: &ValidatedPackage,
+    built: &BTreeMap<PackageId, BuiltPackage>,
+) -> Result<GraphPackageArtifact, Diagnostic> {
+    let repository_id = RepositoryId::migrate(&package.descriptor.package_id.bytes(), 1);
     let mut modules = package
         .modules
         .iter()
         .map(|module| {
-            let source = std::str::from_utf8(&module.semantic_bytes).map_err(|_| {
-                artifact_error(
-                    DiagnosticClass::Infrastructure,
-                    "artifact_module_utf8",
-                    "validated canonical module source is not UTF-8",
-                )
-            })?;
-            Ok(ArtifactModule {
+            let mut semantic_module = module.module.clone();
+            super::meaning::normalize_module_spans(&mut semantic_module);
+            MeaningModule {
+                graph_contract_version: GRAPH_CONTRACT_VERSION,
+                module_id: module.module_id,
+                module: semantic_module,
+                declarations: module.declaration_identities.clone(),
+                relations: module.relations.clone(),
+                documentation: Vec::new(),
+                annotations: Vec::new(),
+            }
+        })
+        .collect::<Vec<_>>();
+    modules.sort_by_key(|module| module.module_id);
+    let mut module_references = modules
+        .iter()
+        .map(|module| {
+            Ok(ModuleObjectRef {
+                id: module.module_id,
                 name: module.module.name.clone(),
-                source: source.to_owned(),
+                object: module.digest()?,
             })
         })
         .collect::<Result<Vec<_>, Diagnostic>>()?;
-    modules.sort_by(|left, right| left.name.cmp(&right.name));
+    module_references.sort();
     let mut dependencies = package
         .descriptor
         .dependencies
         .iter()
-        .map(|dependency| ArtifactDependency {
-            alias: dependency.alias.clone(),
-            package_id: dependency.package_id.clone(),
-            revision_digest: dependency.revision_digest.clone(),
-            artifact_digest: dependency.artifact_digest.clone(),
+        .map(|dependency| {
+            let exact = built.get(&dependency.package_id).ok_or_else(|| {
+                artifact_error(
+                    DiagnosticClass::Infrastructure,
+                    "artifact_dependency_build_order",
+                    format!("dependency '{}' was not built first", dependency.alias),
+                )
+            })?;
+            Ok(DependencyBinding {
+                alias: dependency.alias.clone(),
+                package_id: dependency.package_id.clone(),
+                semantic_revision: exact.revision,
+                artifact: exact.digest,
+            })
         })
-        .collect::<Vec<_>>();
-    dependencies.sort_by(|left, right| left.alias.cmp(&right.alias));
+        .collect::<Result<Vec<_>, Diagnostic>>()?;
+    dependencies.sort();
     let mut targets = package
         .descriptor
         .targets
         .iter()
-        .map(|target| ArtifactTarget {
-            name: target.name.clone(),
-            component: target.component.clone(),
-            port: target.port.clone(),
-            runner: target.runner,
-        })
-        .collect::<Vec<_>>();
-    targets.sort_by(|left, right| left.name.cmp(&right.name));
-    Ok(ArtifactPackage {
+        .enumerate()
+        .map(|(index, target)| migration_target(package, target, index))
+        .collect::<Result<Vec<_>, Diagnostic>>()?;
+    targets.sort();
+    let root = GraphRoot {
+        graph_contract_version: GRAPH_CONTRACT_VERSION,
+        repository_id,
         package_id: package.descriptor.package_id.clone(),
-        name: package.descriptor.name.clone(),
-        revision_digest: package.revision_digest.clone(),
-        package_artifact_digest: package_artifact_digest(package),
-        modules,
+        package_name: package.descriptor.name.clone(),
+        modules: module_references,
         dependencies,
         targets,
+        tombstones: Vec::new(),
+    };
+    root.validate_modules(&modules)?;
+    let root_bytes = root.encode()?;
+    let transaction = TransactionDigest::of(&root_bytes);
+    let semantic_diff = SemanticDiffDigest::of(&root_bytes);
+    let core = RevisionCore {
+        contract_version: REVISION_CONTRACT_VERSION,
+        graph_contract_version: GRAPH_CONTRACT_VERSION,
+        repository_id,
+        parents: Vec::new(),
+        root: root.digest()?,
+        semantic_diff,
+        transaction,
+    };
+    let revision = core.revision_id()?;
+    let module_count = u64::try_from(modules.len()).map_err(|_| count_limit("module"))?;
+    let declaration_count = modules.iter().try_fold(0u64, |total, module| {
+        total.checked_add(u64::try_from(module.declarations.len()).ok()?)
+    });
+    let receipt = TransactionReceipt {
+        contract_version: RECEIPT_CONTRACT_VERSION,
+        graph_contract_version: GRAPH_CONTRACT_VERSION,
+        repository_id,
+        status: ReceiptStatus::ImportAccepted,
+        base: None,
+        result: revision,
+        transaction,
+        idempotency_key: None,
+        semantic_diff,
+        affected_owners: Vec::new(),
+        validation: ValidationFacts {
+            profile: "source_import_full_graph_and_reconstruction".to_owned(),
+            graph_valid: true,
+            full_oracle_equal: true,
+            modules_checked: module_count,
+            declarations_checked: declaration_count.ok_or_else(|| count_limit("declaration"))?,
+        },
+        intent: Some("one-time source authority import".to_owned()),
+    };
+    let revision = RevisionRecord::new(core, receipt.digest()?)?;
+    Ok(GraphPackageArtifact {
+        contract_version: PACKAGE_ARTIFACT_CONTRACT_VERSION,
+        revision,
+        receipt,
+        root,
+        modules,
     })
 }
 
-fn canonical_json(value: &impl Serialize) -> Result<Vec<u8>, Diagnostic> {
-    let mut bytes = serde_json::to_vec(value).map_err(|error| {
+#[cfg(test)]
+fn migration_target(
+    package: &ValidatedPackage,
+    target: &Target,
+    index: usize,
+) -> Result<TargetBinding, Diagnostic> {
+    let (module_name, component_name) = target.component.rsplit_once('.').ok_or_else(|| {
         artifact_error(
-            DiagnosticClass::Infrastructure,
-            "artifact_encode",
-            format!("artifact encoding failed: {error}"),
+            DiagnosticClass::Semantic,
+            "artifact_target_component",
+            format!("target '{}' component is not qualified", target.name),
         )
     })?;
-    bytes.push(b'\n');
-    Ok(bytes)
-}
-
-fn strict_json<T: DeserializeOwned>(bytes: &[u8], label: &str) -> Result<T, Diagnostic> {
-    let mut decoder = serde_json::Deserializer::from_slice(bytes);
-    let value = T::deserialize(&mut decoder).map_err(|error| {
-        artifact_error(
-            DiagnosticClass::Source,
-            "artifact_json",
-            format!("{label} is malformed: {error}"),
-        )
-    })?;
-    decoder.end().map_err(|error| {
-        artifact_error(
-            DiagnosticClass::Source,
-            "artifact_trailing",
-            format!("{label} has trailing input: {error}"),
-        )
-    })?;
-    Ok(value)
-}
-
-fn validate_digest(value: &str, label: &str) -> Result<(), Diagnostic> {
-    if value.len() != 64
-        || !value
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-    {
+    let module = package
+        .modules
+        .iter()
+        .find(|module| module.module.name == module_name)
+        .ok_or_else(|| {
+            artifact_error(
+                DiagnosticClass::Semantic,
+                "artifact_target_module",
+                format!("target '{}' module is absent", target.name),
+            )
+        })?;
+    let (declaration, identity) = module
+        .module
+        .declarations
+        .iter()
+        .zip(&module.declaration_identities)
+        .find(|(declaration, _)| declaration.name() == component_name)
+        .ok_or_else(|| {
+            artifact_error(
+                DiagnosticClass::Semantic,
+                "artifact_target_component",
+                format!("target '{}' component is absent", target.name),
+            )
+        })?;
+    if !matches!(declaration, Declaration::Component(_)) {
         return Err(artifact_error(
-            DiagnosticClass::Source,
-            "artifact_digest_encoding",
-            format!("{label} is not 64 lowercase hexadecimal characters"),
+            DiagnosticClass::Semantic,
+            "artifact_target_component_kind",
+            format!("target '{}' owner is not a component", target.name),
         ));
     }
-    Ok(())
+    let port = identity
+        .members
+        .iter()
+        .find_map(|member| match member {
+            MemberIdentity::Port { id, name } if name == &target.port => Some(*id),
+            _ => None,
+        })
+        .ok_or_else(|| {
+            artifact_error(
+                DiagnosticClass::Semantic,
+                "artifact_target_port",
+                format!("target '{}' port is absent", target.name),
+            )
+        })?;
+    let mut seed = package.descriptor.package_id.bytes().to_vec();
+    seed.extend_from_slice(b"migration-target");
+    Ok(TargetBinding {
+        id: TargetId::migrate(
+            &seed,
+            u64::try_from(index)
+                .map_err(|_| count_limit("target"))?
+                .checked_add(1)
+                .ok_or_else(|| count_limit("target"))?,
+        ),
+        name: target.name.clone(),
+        component_module: module.module_id,
+        component_module_name: module_name.to_owned(),
+        component: identity.id,
+        component_name: component_name.to_owned(),
+        port,
+        port_name: target.port.clone(),
+        runner: target.runner,
+    })
 }
 
-fn domain_digest(domain: &str, bytes: &[u8]) -> String {
-    let mut hasher = blake3::Hasher::new_derive_key(domain);
-    hasher.update(&(bytes.len() as u64).to_be_bytes());
-    hasher.update(bytes);
-    hex(hasher.finalize().as_bytes())
-}
-
-fn hex(bytes: &[u8]) -> String {
-    const DIGITS: &[u8; 16] = b"0123456789abcdef";
-    let mut result = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        result.push(DIGITS[(byte >> 4) as usize] as char);
-        result.push(DIGITS[(byte & 0x0f) as usize] as char);
-    }
-    result
+#[cfg(test)]
+fn count_limit(label: &str) -> Diagnostic {
+    artifact_error(
+        DiagnosticClass::Resource,
+        "artifact_count_limit",
+        format!("artifact {label} count cannot be represented"),
+    )
 }
 
 fn artifact_error(class: DiagnosticClass, code: &str, message: impl Into<String>) -> Diagnostic {
@@ -594,7 +866,7 @@ fn artifact_error(class: DiagnosticClass, code: &str, message: impl Into<String>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::platform::{decode_package, parse_source};
+    use crate::platform::{SourceLimits, decode_package, parse_source, validate_package_documents};
 
     fn package() -> ValidatedPackage {
         let descriptor = decode_package(
@@ -611,31 +883,34 @@ mod tests {
     }
 
     #[test]
-    fn deterministic_round_trip_and_corruption_rejection() {
+    fn deterministic_graph_round_trip_has_no_source_payload() {
         let package = package();
         let (first, receipt) = build_artifact(&package, &[&package]).expect("build artifact");
         let (second, _) = build_artifact(&package, &[&package]).expect("repeat build");
         assert_eq!(first, second);
         assert_eq!(receipt.package_count, 1);
+        assert!(!first.windows(7).any(|window| window == b"(module"));
         let loaded = load_artifact(&first).expect("load artifact");
-        assert_eq!(loaded.root_revision_digest, package.revision_digest);
+        assert_eq!(
+            loaded.root_revision,
+            loaded
+                .root()
+                .expect("root")
+                .accepted_revision
+                .expect("accepted revision")
+        );
         assert_eq!(loaded.root().expect("root").descriptor.targets.len(), 1);
 
-        let mut corrupt: serde_json::Value = serde_json::from_slice(&first).expect("artifact json");
-        corrupt["packages"][0]["name"] = serde_json::Value::String("changed".to_owned());
-        let bytes = serde_json::to_vec(&corrupt).expect("corrupt encoding");
-        let error = load_artifact(&bytes).expect_err("digest must reject corruption");
-        assert_eq!(error.code, "artifact_digest");
+        let mut corrupt = first;
+        corrupt[18] ^= 1;
+        let error = load_artifact(&corrupt).expect_err("checksum must reject corruption");
+        assert_eq!(error.code, "packed_checksum");
     }
 
     #[test]
     fn predecessor_contract_rejects() {
-        let package = package();
-        let (bytes, _) = build_artifact(&package, &[&package]).expect("build artifact");
-        let mut value: serde_json::Value = serde_json::from_slice(&bytes).expect("artifact json");
-        value["contract_version"] = serde_json::Value::from(0);
-        let bytes = serde_json::to_vec(&value).expect("predecessor encoding");
-        let error = load_artifact(&bytes).expect_err("predecessor rejects");
+        let error = load_artifact(br#"{"contract_version":1}"#)
+            .expect_err("source-containing predecessor rejects");
         assert_eq!(error.code, "artifact_contract");
     }
 }

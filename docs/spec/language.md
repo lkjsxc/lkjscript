@@ -1,73 +1,88 @@
-# Language contract 1
+# Language meaning
 
-This specification defines authored lkjscript meaning. The parser, semantic validator, bytecode VM,
-AST reference evaluator, value checker, and differential tests are the executable oracles. It does
-not define host grants, process topology, storage schemas, or application policy.
+Status: normative for meaning graph contract 1.
 
-## Modules and declarations
+## Representation
 
-A file contains exactly one `(module name …)` form. Declarations are `record`, `variant`,
-`interface`, closed `extern`, `fn`, `task`, `const`, `component`, and `test`. Imports explicitly bind
-an alias to a local module or `dependency-alias.module`; exports are explicit and tests cannot be
-exported. Undeclared, private, ambiguous, duplicate, or foreign references reject at validation.
+Language constructs are typed semantic records in canonical module shards. There is no maintained
+source grammar. Public transaction JSON and CLI schema describe construction; deterministic JSON
+review projection describes inspection. Names locate meaning, while typed stable IDs own
+references and continuity.
 
-An `extern` is a general optimized primitive selected from the validator-owned closed registry. Its
-authored parameter/result signature must exactly match the intrinsic contract. It is not arbitrary
-native FFI, and an unknown or signature-forged extern rejects before authority publication.
+Evaluation is strict and left-to-right except `if` branch choice and variant `match`, which evaluate
+only the selected body. `let` bindings evaluate in declared order. `do` evaluates in order and
+returns its final value. Capability operations and lexical transactions preserve that order.
 
 ## Types and values
 
-Types are unit, bool, signed i64, immutable bytes, immutable UTF-8 text, source-origin `StaticText`,
-opaque secret, nominal named type, structural record, homogeneous list, ordered map, option, result,
-stream, and function. Records have unique named fields. Variants have a closed unique case set and
-optional typed payload. Lists and maps are immutable values; helpers return new collections.
+The closed current type surface is:
 
-Map keys are bool, i64, bytes, or text. Their order is first by key kind in that listed order and
-then by the natural total order of the contained value. Map construction rejects duplicate keys,
-and iteration/JSON projection is deterministic. Values are limited to depth 256 and 1,000,000 total
-collection items at checked boundaries.
+- `Unit`, `Bool`, checked signed `I64`, immutable `Bytes`, UTF-8 `Text`, and compile-time
+  `StaticText`;
+- opaque `Secret` and typed live `Resource` handles;
+- nominal records and variants, plus structural adapter records;
+- homogeneous lists and deterministic ordered maps;
+- option and result values;
+- task-scoped byte streams; and
+- function types.
 
-`StaticText` can only be written literally in accepted source. Runtime text cannot coerce to it;
-database statements and configuration keys use it to prevent injection by ordinary application
-data. Secret, stream, function, transaction, and other resource values are non-durable. Opaque
-resource identity has no public serialization.
+There are no implicit coercions. `I64` arithmetic traps on overflow and division edge cases.
+Indexing, collection counts, and all decoder sizes are checked. Text is valid UTF-8; names use the
+closed portable identifier rules and no normalization-dependent identity. Maps permit bool, i64,
+bytes, or text keys and iterate by the specified total order. Runtime values are bounded to depth
+256 and 1,000,000 collection items.
 
-## Evaluation
+Live resources, secrets, streams, database transactions, queue leases, and runtime handles never
+enter durable graph values. A durable literal has one canonical typed encoding and exact bound.
 
-Expressions are literals, variables, lazy `if`, lexical `let`, ordered `do`, direct calls, record
-construction/field access, variant construction/match, list/map construction, function reference,
-capability `perform`, and lexical `transaction`. Operands, binding values, arguments, fields, list
-items, and map entries evaluate in source order. Only the selected conditional or match arm runs.
-There is no implicit coercion or ambient overload resolution.
+## Declarations
 
-Signed arithmetic is checked. Overflow, division by zero, signed division overflow, invalid
-canonical integer spelling, missing list/map elements, invalid UTF-8 conversion, wrong runtime
-shape, fuel exhaustion, and explicit operation-contract violation are traps. Text equality is UTF-8
-byte equality; `text.length` is UTF-8 byte length, not scalar or grapheme count. Bytes are exact.
-Collection and record equality is structural after nominal owner equality where applicable.
+A module owns imports, exports, and declarations. Declaration kinds are record, variant,
+interface, closed external function, pure function, task function, constant, component, and test.
 
-Pure evaluation is deterministic and independent of grants, wall time, randomness, scheduler, and
-external state. Task functions are deterministic only relative to their ordered typed capability
-outcomes.
+Records own ordered stable field identities, mutable field names, and exact types. Variants own
+stable case identities and optional exact payload types. Interfaces own stable operation identities,
+parameters, result, declared failure class, and applicable limits. Constants own one typed pure
+expression.
 
-## Effects and recursion
+Functions own stable parameter identities, exact result, and body. A pure function may call only
+pure meaning. A task function declares the capability aliases and exact interfaces it may perform.
+There is no ambient overload resolution, global mutation, closure capture, generics, traits,
+floating point, set, user scheduler primitive, or dynamic evaluation in contract 1.
 
-`fn` is pure and may call only pure closure. `task` declares requirement aliases and may call pure
-or task functions and perform those aliases. The validator computes the transitive capability
-closure; undeclared or mismatched effects reject. Taking a task function reference is pure, but only
-a component runner may execute it with grants.
+## Expressions and bindings
 
-User recursion consumes explicit VM/reference continuation frames rather than native Rust stack.
-Execution policy bounds instruction fuel, call depth, and value stack. The bytecode and AST routes
-must agree on result, trap class/code, capability ordering, and exhaustion.
+Expression kinds are unit/bool/i64/text/static-text literals, variable, conditional, lexical let,
+sequencing, function call, record construction and field projection, variant construction and
+match, list, map, function reference, capability operation, and lexical capability transaction.
 
-## Typed JSON
+Bindings and expression sites receive stable typed IDs when semantic operations, diagnostics, or
+relations need robust selection. Their structural paths are canonical within the owning
+declaration and are validated against the operation tree. Paths and dense compiler indexes are not
+global identities.
 
-JSON contract 1 accepts UTF-8 JSON with signed i64 integers only; floating point and out-of-range
-unsigned values reject. Default bounds are 1 MiB total/string, depth 128, and 100,000 items.
-Duplicate object fields and trailing input reject. Typed decode additionally rejects unknown or
-missing fields, wrong nominal shape/case, invalid base64 bytes, and type/range mismatch with a
-precise JSON path. Encoding is deterministic and bounded.
+All references lower to exact package/module/declaration/member identities during validation.
+Unresolved or ambiguous references are allowed only as closed draft holes; an accepted revision
+contains neither.
 
-Expected application outcomes such as absent, stale, denied, or invalid domain input should be
-typed values or component responses. They are not semantic traps or infrastructure diagnostics.
+## Equality, expectation, and failure
+
+Value equality is type-directed and deterministic. Resource and secret values do not provide
+durable equality. Tests own actual and expected typed expressions; success requires equality in
+both bytecode and the semantic reference interpreter.
+
+A typed `Result` is an ordinary expected program value. Trap, capability failure, possible
+visibility, resource exhaustion, cancellation, corruption, and infrastructure failure are runtime
+classes and may not be silently converted into one another. Exact adapter contracts define which
+external failures become typed operation results.
+
+## Semantic validation
+
+Acceptance validates namespace uniqueness, visibility, imports/exports, nominal identity, type
+agreement, effect closure, capability operation membership, component requirements and ports,
+target bindings, test types, expression/binding identity shape, canonical relations, and exact
+dependency closure. Relation reconstruction is an independent check of retained relation bytes.
+
+Compiler lowering consumes validated graph structures directly. The prepared bytecode tier and
+the independent semantic reference interpreter must agree. Rendering or parsing text is absent
+from build, test, run, service, and worker paths.

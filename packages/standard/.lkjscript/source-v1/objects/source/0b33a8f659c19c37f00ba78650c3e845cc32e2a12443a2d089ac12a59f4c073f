@@ -1,5 +1,0 @@
-; Secure randomness is an explicit capability; deterministic test randomness has another adapter.
-(module random
-  (export SecureRandom)
-  (interface SecureRandom
-    (operation bytes ((length I64)) Bytes non-idempotent no-visibility)))

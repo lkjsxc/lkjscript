@@ -1,39 +1,62 @@
-# Verification command contract 2
+# Verification and evidence
 
-`tools/check` is the repository-owned verification entry point. It owns gate orchestration and
-evidence framing, not semantic authority or a substitute for tests.
+Status: normative.
 
-Accepted profiles are `focused`, `changed`, `product`, `service`, and `full`. Unknown profiles or
-options reject. `changed` derives paths from exact Git porcelain facts. Runtime/Cargo/test or any
-unknown path widens to full; package/application changes select product plus service; documentation
-alone selects diff validation. Selection is conservative convenience and never narrows `full`.
+## Correctness oracles
 
-Gates run sequentially with `CARGO_NET_OFFLINE=true`, a 3,600-second default deadline, and a 64 MiB
-combined stdout/stderr retained-byte maximum per gate. They use new process groups. Timeout,
-cancellation, log excess, command absence, nonzero exit, and success remain distinct statuses.
-After the first non-pass, remaining gates are explicitly `unrun`.
+Canonical decoding and deep reconstruction ignore disposable indexes. Full semantic validation
+reconstructs names, scopes, types, effects, capabilities, components, targets, tests, and retained
+relations from root/module objects. Incremental/query acceleration must agree with that route.
 
-Every run has a new directory under `.artifacts/check/`; the newest eight ordinary profile runs and
-the newest eight `self-test-` runs are retained independently. Rotation recognizes only the exact
-contract-2 timestamp/process naming shape and never deletes predecessor or foreign directories.
-Each gate has separate stdout and stderr logs, exit status, command vector, elapsed nanoseconds,
-byte counts, and a SHA-256 output fingerprint. Failure output contains bounded head/tail excerpts
-and exact log locators. Default all-pass output is one aggregate line plus receipt. `--machine`
-emits one compact JSON object; `--details` is an explicit human expansion.
+Execution has two implementation-disjoint tiers: prepared bytecode is production; the semantic
+reference interpreter walks validated operation structures. Every graph-owned package test runs
+actual and expected expressions through both tiers, requires tier equality, then requires expected
+value equality. A missing, skipped, unavailable, exhausted, cancelled, or unrun check is not pass.
 
-Receipt contract 2 records profile, selected/completed/passed/unrun gates, Git head, SHA-256 over
-Git status and every tracked/untracked nonignored input byte, Rust/Cargo/Python/platform facts,
-offline policy, elapsed time, and gate receipts. No cross-run pass reuse exists. Full therefore runs
-all gates even when an identical pass receipt exists; ordinary compiler caches may accelerate work
-without becoming authority.
+## Profiles
 
-`--self-test` independently exercises success with separate streams, exit 7, unavailable command,
-timeout cleanup, log overflow, and ordinary/self-test/predecessor retention classification. Full
-includes that self-test, format, clippy, all-target locked tests, release build, both package
-differential suites, both deep authority doctors, deterministic artifact reproduction, live
-PostgreSQL service acceptance, and `git diff --check HEAD`.
+`tools/check` is the executable verification owner. `focused` runs format, static analysis,
+locked tests, semantic package tests, deep graph doctors, and deterministic artifact reproduction
+appropriate to iteration. `changed` is selection convenience and widens uncertainty. `product`
+adds public workflows. `service` requires isolated PostgreSQL service/worker acceptance. `full`
+runs the complete authoritative local profile and never treats a prior receipt as a fresh pass.
 
-The service profile requires Docker and an already available `postgres:16-alpine` image. Absence is
-a failed/unavailable verification fact, never a skip converted to success. Complete service logs,
-PostgreSQL backup, runner events, timings, and receipt are retained separately under
-`.artifacts/service/` with secrets redacted.
+Successful checks emit one aggregate JSON line and a receipt locator. Each gate retains bounded
+stdout/stderr separately under `.artifacts/check`. Failure returns bounded excerpts and exact log
+locations. Passing test names and child logs are not printed by default.
+
+## Receipt rules
+
+A transaction receipt canonically binds repository, base/result, transaction digest, semantic diff
+digest, affected owners, validation profile and facts, optional idempotency key, and bounded
+nonsemantic intent. It is part of accepted history.
+
+Build, test, service, backup, restore, review projection, doctor, and verification receipts are
+evidence or derived outputs, not accepted program meaning. They must bind exact semantic revision,
+tool/contract identity, exact relevant inputs, status, counts, output/log locators, and honest
+limitations. Volatile elapsed time, platform facts, and operator labels never enter semantic
+revision identity.
+
+Pass reuse is permitted only when every semantic and operational input is proven identical and the
+active profile permits discovery. Final publication verification remains fresh. Current `full`
+does not reuse a prior pass.
+
+## Required adversarial coverage
+
+Tests cover unknown contracts, foreign identity domains, duplicate/trailing/excess input, checked
+allocation, corrupt object bytes, missing/corrupt derived indexes, stale base, no-change,
+precondition failure, idempotent replay, interrupted publication boundaries, two-parent history,
+draft separation/rebase, deterministic backup/restore, predecessor rejection, and public output
+bounds.
+
+Scale evidence must name exact generated topology, revision, toolchain, platform, command, cold or
+warm cache state, wall/CPU/memory where available, storage growth, output bytes, semantic work
+counts, and limitations. Limit increases may not substitute for correcting a superlinear
+algorithm.
+
+## Claims
+
+Performance, security, portability, provider-token, and monetary claims require retained evidence.
+Output bytes are not token counts. When provider input/cached/output/request/retry/cost telemetry is
+unavailable, evidence says unavailable and makes no savings claim. Fresh-checkout evidence is
+platform-specific and does not imply portability.

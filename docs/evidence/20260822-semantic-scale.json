@@ -1,0 +1,86 @@
+{
+  "contract_version": 1,
+  "evidence_kind": "semantic_scale",
+  "date_utc": "2026-08-22",
+  "git_head_at_measurement": "6747754bdcad4dc9000c3d7891db7ef207c8ec2f",
+  "worktree_state": "uncommitted canonical meaning graph campaign cutover",
+  "binary": {
+    "bytes": 13399896,
+    "sha256": "f7d985142b4e019d22c5d3ab8a2bdfcdb99b7043a663edd5be2379aafefd13ab"
+  },
+  "platform": {
+    "os": "Linux",
+    "kernel": "7.0.0-29-generic",
+    "machine": "x86_64",
+    "rustc": "1.96.0 (ac68faa20 2026-05-25)",
+    "cargo": "1.96.0 (30a34c682 2026-05-25)"
+  },
+  "provider_telemetry": "unavailable",
+  "runs": [
+    {
+      "command": "tools/semantic-scale --modules 10000 --batch 10000",
+      "requested_modules": 10000,
+      "base_modules": 12,
+      "final_revision": "rev_5f208af6c0071b4ef53270bb0437a89b185da0c2cf35f8137794277e10112573",
+      "transaction_request_bytes": 1070459,
+      "apply_batches_nanoseconds": [462151273],
+      "apply_response_bytes": 5378,
+      "orient_nanoseconds": 128678070,
+      "orient_response_bytes": 1666,
+      "exact_find_cold_nanoseconds": 73500060,
+      "exact_find_warm_nanoseconds": 15781474,
+      "exact_find_work": 1,
+      "exact_show_nanoseconds": 13691283,
+      "deep_doctor_nanoseconds": 93507931,
+      "revisions_checked": 2,
+      "module_versions_checked": 10024,
+      "build_nanoseconds": 131780965,
+      "artifact_bytes": 1330505,
+      "backup_nanoseconds": 98368861,
+      "backup_bytes": 2183176,
+      "canonical_store_bytes": 1832489,
+      "store_bytes_with_indexes": 6631953
+    },
+    {
+      "command": "tools/semantic-scale --modules 90000 --batch 10000",
+      "requested_modules": 90000,
+      "base_modules": 12,
+      "final_revision": "rev_8710150a3541f7f30841a42391f29f480b9460b5110e33c63e5690da19c28fcc",
+      "transaction_request_bytes": 9634163,
+      "apply_batches_nanoseconds": [
+        469163398,
+        1013478833,
+        1797971197,
+        2699059244,
+        4005845587,
+        5332111617,
+        7006957134,
+        8874844754,
+        10948611945
+      ],
+      "apply_response_bytes_each": 5378,
+      "orient_nanoseconds": 1283404699,
+      "orient_response_bytes": 1666,
+      "exact_find_cold_nanoseconds": 630272278,
+      "exact_find_warm_nanoseconds": 138455836,
+      "exact_find_work": 1,
+      "exact_show_nanoseconds": 133748133,
+      "deep_doctor_nanoseconds": 3660676463,
+      "revisions_checked": 10,
+      "module_versions_checked": 450120,
+      "build_nanoseconds": 1269326478,
+      "artifact_bytes": 10370515,
+      "backup_nanoseconds": 3995078322,
+      "backup_bytes": 44315558,
+      "canonical_store_bytes": 41163949,
+      "store_bytes_with_indexes": 82844955
+    }
+  ],
+  "limitations": [
+    "Wall time was measured by the public benchmark harness; CPU and RSS were unavailable.",
+    "The topology is many tiny modules, not every adversarial topology in the campaign matrix.",
+    "Graph contract 1 caps roots at 100000 modules; a million-module run was not performed.",
+    "Accepted publication still performs complete graph validation and packed reconstruction.",
+    "Output bytes are not provider token or monetary measurements."
+  ]
+}

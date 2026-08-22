@@ -1,58 +1,66 @@
-# Package, component, and artifact contract 1
+# Packages, modules, components, and targets
 
-This specification owns reusable package composition and runnable application description. Package
-metadata, semantic validation, artifact encoding/decoding, and preparation are executable oracles.
-It does not own deployment grants, credentials, process placement, or domain data.
+Status: normative for meaning graph contract 1.
 
-## Packages and modules
+## Repositories and packages
 
-`lkjscript.package.json` is strict JSON contract 1 with one package identity/name, 1 through 4,096
-explicit modules, at most 1,024 exact dependencies, and at most 1,024 targets. Names are canonical
-bounded ASCII tokens; module locators are relative slash paths beneath `src/`, with no empty, `.`,
-`..`, absolute, backslash, or NUL component. Duplicate module names/paths, dependency aliases or
-identities, and target names reject.
+One semantic repository currently owns one root package and its accepted revision DAG. Repository
+ID, package ID, package name, revision ID, root digest, artifact digest, and filesystem location are
+separate domains.
 
-Module imports may form cycles because modules have no ordered side-effecting initialization.
-Constants are pure and validated as declarations. Package dependency cycles reject. A dependency
-binds alias, exact package identity, exact semantic revision digest, and exact artifact digest. Its
-`artifact` field is a project-relative locator excluded from semantic dependency bytes. No build
-consults a registry, network, `latest`, mutable tag, or ambient search path.
+A package owns exact metadata, modules, dependencies, targets, and exported meaning. A module owns
+one namespace, imports, exports, documentation, annotations, and declarations. Package/module
+names are mutable locators. Module IDs survive rename. Declaration IDs survive rename and move.
 
-Visibility is export-based. References use local declaration, imported alias plus declaration, or
-dependency import alias plus module/declaration. Re-export and feature selection are not present in
-contract 1.
+Imports resolve only within the root package or an explicitly aliased dependency. Visibility and
+exports are validated over exact stable owners. Mutable tags, ambient directories, current working
+directory lookup, undeclared network state, and environment-dependent dependency resolution are
+forbidden in accepted builds.
 
-## Components and targets
+## Exact dependencies
 
-A component owns an exact declaration identity, requirement set, and typed entry ports. A
-requirement names one interface owner, a subset of its operations, and maximum semantic resource
-limits. A port is a direct function reference with an exact function type. A target names a
-component, port, and runner kind: command, HTTP, interactive, batch, worker, or test.
+A dependency binding contains alias, immutable package ID, exact semantic revision ID, and exact
+graph-artifact digest. Before an add/replace transaction, `semantic dependency-stage` verifies and
+stages the artifact closure as unreachable immutable objects. Publication makes the binding
+authoritative atomically with the root change. Removing a dependency requires that semantic
+validation find no remaining use.
 
-Runner kinds are adaptations of the same prepared port, not profiles with separate semantics. A
-component has no implicit mutable state, transport context, or lifecycle callback. Per-call values
-are explicit parameters; shared/durable state is reached only through declared capabilities.
-Startup validates the complete component/grant relation. Runtime readiness and shutdown are runner
-mechanics and cannot inspect private application state to make business decisions.
+Graph artifacts contain a sorted unique closure of packed package objects. Every object binds its
+revision record, receipt, graph root, and module set. The artifact identity commits to the exact
+closure and compiler-facing contract; it does not contain a deployment grant, secret, or host
+path.
 
-## Artifact
+## Components
 
-A `.lkja` artifact is canonical strict JSON contract 1 containing the root package and its complete
-transitive exact package closure, module source, exact dependency edges, targets, and a domain
-digest. It contains requirements but no grant, secret, environment name, listener, database URL,
-object root, live handle, or development workspace path.
+A component is a graph-owned declaration that groups typed ports and capability requirements. A
+requirement binds a stable requirement ID, local alias, exact interface, and operation set. A port
+binds a stable port ID, name, exact external entry type, and graph-owned function expression.
+Components contain no deployment credentials or live adapters.
 
-Artifact digest is BLAKE3 derive-key domain `lkjscript.component-artifact.v1` over canonical core
-bytes; per-package artifact digest uses `lkjscript.package-artifact.v1`. Maximum artifact size is
-128 MiB and package closure 1,024. Decode re-parses and semantically validates source independently,
-checks every package/revision/artifact edge, rejects cycles/duplicates/missing closure, and verifies
-the root and digest before preparation.
+The same model covers command, HTTP, interactive, batch, worker, and test runner kinds. These are
+target metadata, not separate language editions or application profiles. A target has stable ID,
+name, exact component module/declaration/port identities, retained locator names for diagnostics,
+and runner kind. Validation rejects stale locator names or incompatible port shape.
 
-Build writes a deterministic artifact to a required-absent output. It does not publish source
-history. Repeated builds from the same exact accepted closure must be byte-equal. Artifact
-preparation creates disposable bytecode and indexes; cache corruption or loss must fall back to
-re-preparation from the artifact.
+## Preparation and deployment
 
-Application contract 8/internal format 9 and typed, bytes-stream, stateful, and interactive profiles
-are direct predecessors. Contract 1 has no decoder, alias, wrapper, or current execution route for
-them.
+Artifact preparation resolves every target, component, port, function, type, test, and capability
+requirement to compact compiler/runtime indexes while retaining semantic provenance. Those indexes
+are derived and never enter stable graph identity.
+
+A deployment descriptor is external operational authority. It selects one exact artifact and
+target, binds requirement aliases to generic adapters and secret/configuration sources, sets
+resource limits, and supplies runner topology. The artifact declares requirements; deployment
+grants authority. Generic Rust adapters must not contain application routes, schemas,
+authorization roles, SQL/table policy, object keys, or queue transitions.
+
+## Maintained packages
+
+`packages/standard` is a graph-authored exact dependency package. It declares reusable typed
+interfaces and closed external functions for core values, HTTP, JSON, PostgreSQL, configuration,
+secrets, clock, randomness, identifiers, password hashing, streams, objects, and queues.
+
+`applications/lkjournal` is the maintained service package. Its routes, SQL, migrations,
+authentication/authorization, JSON/HTML representation, object naming/publication, and queue/job
+transitions are graph meaning. It has HTTP target `serve` and worker target `work`; both consume the
+same exact standard artifact binding.

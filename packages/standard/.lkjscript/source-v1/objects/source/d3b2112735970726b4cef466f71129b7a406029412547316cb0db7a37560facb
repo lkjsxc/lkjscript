@@ -1,7 +1,0 @@
-; Password hashing mechanics are separate from session and authorization policy.
-(module password
-  (export PasswordHash)
-  (interface PasswordHash
-    (operation hash ((password Bytes)) Text non-idempotent no-visibility)
-    (operation verify ((password Bytes) (encoded Text)) Bool idempotent no-visibility)
-    (operation needs-upgrade ((encoded Text)) Bool idempotent no-visibility)))
