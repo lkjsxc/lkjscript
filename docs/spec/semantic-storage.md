@@ -27,8 +27,9 @@ indexes/PP/REVISION.lkji
 indexes/PP/REVISION/local-manifest.lkix
 indexes/PP/REVISION/owners/BB.lkix
 indexes/PP/REVISION/names/BB.lkix
-indexes/PP/REVISION/semantic-dependencies.lkix
-indexes/summary-objects/PP/DIGEST.lkis
+indexes/PP/REVISION/facts.lkix
+indexes/semantic/pages/PP/DIGEST.lksp
+indexes/semantic/summaries/PP/DIGEST.lkss
 ```
 
 `LOCK` and indexes are local operational/derived state. Drafts are local non-executable authority.
@@ -98,8 +99,8 @@ canonicalize relations, and fully validate the candidate. The resulting prepared
 - exact result root;
 - canonical root delta;
 - changed module objects;
-- changed semantic summaries and a revision-bound reverse-dependency index;
-- a revision-independent semantic certificate for the exact fact set; and
+- changed semantic summaries and path-local edits to three persistent semantic-fact maps;
+- a revision-independent semantic certificate for the exact fact roots; and
 - validation facts.
 
 Publication acquires the repository lock, rereads the current binding, and rejects a stale base
@@ -113,7 +114,7 @@ lock and are not reopened merely to reprove the complete retained store.
 
 The publisher writes newly required dependency artifacts, changed module objects, new map pages,
 the fixed root manifest, receipt, and revision as immutable files. It also writes disposable
-content-addressed summary objects and the revision-bound semantic reverse index. New canonical
+content-addressed summary objects, semantic-fact pages, and the revision-bound fact manifest. New canonical
 bytes and directory entries become durable before a unique HEAD stage is synchronized and
 atomically renamed over HEAD. Linux batches immutable-object durability with `syncfs`; other
 targets synchronize individual files. HEAD remains the separately synchronized visibility point.
@@ -160,13 +161,14 @@ triggers reconstruction from canonical authority. Rebuild output must equal delt
 same revision. Disposable index writes are not canonical publication. The broad relation index is
 still rebuilt lazily rather than updated by accepted deltas.
 
-Semantic summary contract 2 defines integrity-bound per-module facts and a reverse-dependency
-index under validator contract 2. Module summaries bind module object, package, validator, exact
-input, signatures, implementations, effects, and dependency edges; the reverse index additionally
-binds one revision. Summary objects are content-addressed under `indexes/summary-objects`; one
-`semantic-dependencies.lkix` generation is bound to each accepted revision. Local transaction
-paths replace or remove exact summary facts and rebind the reverse index. Missing or malformed
-cache state rebuilds from canonical modules; a certificate mismatch against the revision core is
+Semantic-summary contract 2 defines integrity-bound per-module facts under validator contract 2.
+Module summaries bind module object, package, validator, exact input, signatures, implementations,
+effects, and dependency edges. Semantic-fact contract 3 binds summary input/content digests,
+graph-owned test owners, and flat typed reverse edges in three persistent maps. Summary objects are
+content-addressed under `indexes/semantic/summaries`, map pages under `indexes/semantic/pages`, and
+one `facts.lkix` manifest is bound to each accepted revision and canonical root. Local transaction
+paths replace or remove exact keys and path-copy changed map branches. Missing or malformed cache
+state rebuilds from canonical modules; a certificate mismatch against the revision core is
 canonical corruption. These bytes remain derived acceleration and cannot alter accepted meaning.
 The implemented frontier is not yet used to select general validation.
 

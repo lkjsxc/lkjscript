@@ -23,11 +23,11 @@ target/release/lkjscript package builtin export --output /tmp/builtin-standard.l
 
 Package identity is `10000000000000000000000000000001`; repository identity is
 `repo_c1358d64c351873b51c954b69d1ac988`. The maintained graph-4 revision is
-`rev_af36c21e869a22a992b982aafe959c6230311293094e9ded162e29872ce0afdf`; it owns 7 graph tests.
+`rev_1af582dbebc01b43cd1050349f208b7c71c92ca4efd3f6b65624745f7d9c988e`; it owns 7 graph tests.
 Its package artifact is
-`artifact_cef17b4730c708a9e3dfdaa934af28fad58902fb011db1e1305fd840f459c57a`, and the current
+`artifact_6ea73654d153ac4410ff4aaad329373dce27a58bb0d8c61eaa31cd6d66bcb3f6`, and the current
 executable bundle digest is
-`artifact_b2f39efc64b987378a6abcb81ade2f14de354ace122dbea22f02a984de875cea`.
+`artifact_3648f87daea0164ef6e94ea6e731dd687db590b8889583f63cac6587f5e7a4d1`.
 Consumers bind the exact semantic revision and package artifact digest. Artifact paths are
 deployment or transport locators, not semantic identity.
 The executable's built-in package is an integrity-checked copy of this maintained artifact;

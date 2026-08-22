@@ -33,6 +33,7 @@ pub mod semantic_change;
 pub mod semantic_diff;
 pub mod semantic_digest;
 pub mod semantic_draft;
+pub mod semantic_fact;
 pub mod semantic_id;
 pub mod semantic_merge;
 pub mod semantic_projection;

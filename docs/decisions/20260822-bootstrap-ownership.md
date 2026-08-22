@@ -49,9 +49,9 @@ This decision record is evidence. The accepted project graph and exact revision 
 program authority.
 
 The current embedded package is standard revision
-`rev_af36c21e869a22a992b982aafe959c6230311293094e9ded162e29872ce0afdf`, package artifact
-`artifact_cef17b4730c708a9e3dfdaa934af28fad58902fb011db1e1305fd840f459c57a`, and bundle digest
-`artifact_b2f39efc64b987378a6abcb81ade2f14de354ace122dbea22f02a984de875cea` (22,259 bytes).
+`rev_1af582dbebc01b43cd1050349f208b7c71c92ca4efd3f6b65624745f7d9c988e`, package artifact
+`artifact_6ea73654d153ac4410ff4aaad329373dce27a58bb0d8c61eaa31cd6d66bcb3f6`, and bundle digest
+`artifact_3648f87daea0164ef6e94ea6e731dd687db590b8889583f63cac6587f5e7a4d1` (22,264 bytes).
 
 ## Invariants
 

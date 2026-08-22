@@ -5,7 +5,7 @@ use super::artifact::{
     encode_package_object, load_artifact, load_package_object_closure,
 };
 use super::diagnostic::{Diagnostic, DiagnosticClass};
-use super::graph::{GraphRoot, StoredGraphRoot, StoredGraphRootDelta};
+use super::graph::{GraphRoot, StoredGraphRoot, StoredGraphRootDelta, StoredGraphRootUpdate};
 use super::meaning::{GRAPH_CONTRACT_VERSION, MeaningModule};
 use super::packed;
 use super::persistent_map::{
@@ -22,16 +22,19 @@ use super::semantic::{
 use super::semantic_diff::semantic_diff_digest;
 use super::semantic_digest::{
     ArtifactDigest, BackupDigest, CleanupDigest, IndexDigest, ModuleObjectDigest, ReceiptDigest,
-    RevisionRecordDigest, RootObjectDigest, SemanticDiffDigest, TransactionDigest,
+    RevisionRecordDigest, RootObjectDigest, SemanticCertificateDigest, SemanticDiffDigest,
+    TransactionDigest,
 };
 use super::semantic_draft::{DraftRecord, MAXIMUM_DRAFT_BYTES, SemanticDraftStore};
+use super::semantic_fact::{
+    MAXIMUM_SEMANTIC_FACT_MANIFEST_BYTES, SemanticFactManifest, SemanticFactUpdate,
+    build_semantic_certificate, build_semantic_facts, update_semantic_facts,
+};
 use super::semantic_id::{DraftId, ModuleId, RepositoryId, RevisionId};
 use super::semantic_query::{PreparedLocalIndexDelta, SemanticQueryIndex};
 use super::semantic_summary::{
-    MAXIMUM_MODULE_SUMMARY_ENCODED_BYTES, MAXIMUM_REVERSE_INDEX_ENCODED_BYTES,
-    ModuleSemanticSummary, ReverseDependencyIndex, SemanticSummaryDigest, build_module_summary,
-    build_reverse_dependency_index, rebind_reverse_dependency_index,
-    update_reverse_dependency_index,
+    MAXIMUM_MODULE_SUMMARY_ENCODED_BYTES, ModuleSemanticSummary, SemanticSummaryDigest,
+    build_module_summary,
 };
 use bincode::{Decode, Encode};
 use fs2::FileExt;
@@ -71,14 +74,16 @@ const RECEIPT_OBJECTS: &str = "receipts";
 const ARTIFACT_OBJECTS: &str = "artifacts";
 const DRAFT_OBJECTS: &str = "drafts";
 const INDEX_OBJECTS: &str = "indexes";
-const SUMMARY_INDEX_OBJECTS: &str = "indexes/summary-objects";
+const SEMANTIC_INDEX_OBJECTS: &str = "indexes/semantic";
+const SEMANTIC_FACT_PAGE_OBJECTS: &str = "indexes/semantic/pages";
+const SUMMARY_INDEX_OBJECTS: &str = "indexes/semantic/summaries";
 const LOCAL_INDEX_OWNER_OBJECTS: &str = "indexes/local-objects/owners";
 const LOCAL_INDEX_NAME_OBJECTS: &str = "indexes/local-objects/names";
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum DisposableIndexPart {
     Manifest,
-    SemanticDependencies,
+    SemanticFacts,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -172,6 +177,64 @@ impl PageStore for RepositoryPageStore<'_> {
     }
 }
 
+struct SemanticFactPageStore<'a> {
+    store: &'a Path,
+}
+
+impl SemanticFactPageStore<'_> {
+    const fn new(store: &Path) -> SemanticFactPageStore<'_> {
+        SemanticFactPageStore { store }
+    }
+}
+
+impl PageStore for SemanticFactPageStore<'_> {
+    fn read_page(&self, digest: PageDigest) -> Result<Option<Vec<u8>>, MapError> {
+        let path = semantic_fact_page_path(self.store, digest);
+        match fs::symlink_metadata(&path) {
+            Ok(metadata) => {
+                if metadata.file_type().is_symlink() || !metadata.is_file() {
+                    return Err(repository_map_error(repository_error(
+                        DiagnosticClass::Corrupt,
+                        "repository_semantic_page_type",
+                        format!(
+                            "derived semantic fact page '{}' is not a regular non-symlink file",
+                            path.display()
+                        ),
+                    )));
+                }
+                read_bounded(
+                    &path,
+                    super::persistent_map::MAXIMUM_PAGE_BYTES,
+                    "derived semantic fact page",
+                )
+                .map(Some)
+                .map_err(repository_map_error)
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(repository_map_error(io_error(
+                "repository_semantic_page_metadata",
+                &path,
+                error,
+            ))),
+        }
+    }
+
+    fn write_page(&mut self, digest: PageDigest, bytes: &[u8]) -> Result<PageWrite, MapError> {
+        if bytes.len() > super::persistent_map::MAXIMUM_PAGE_BYTES
+            || PageDigest::of(bytes) != digest
+        {
+            return Err(MapError {
+                class: MapErrorClass::Corrupt,
+                code: "repository_semantic_page_digest",
+                message: "derived semantic page bytes do not match their content key".to_owned(),
+            });
+        }
+        let path = semantic_fact_page_path(self.store, digest);
+        write_disposable_content(&path, bytes, "derived semantic fact page")
+            .map_err(repository_map_error)
+    }
+}
+
 #[derive(Default)]
 struct BackupPageCollector {
     pages: BTreeSet<PageDigest>,
@@ -248,9 +311,9 @@ pub(crate) struct PreparedValidation {
     expected_base: RevisionId,
     base_root: RootObjectDigest,
     result_root: RootObjectDigest,
-    delta: StoredGraphRootDelta,
+    stored_update: StoredGraphRootUpdate,
     changed_modules: Vec<MeaningModule>,
-    semantic_index: ReverseDependencyIndex,
+    semantic_facts: SemanticFactUpdate,
     semantic_summaries: Vec<ModuleSemanticSummary>,
     local_index_delta: Option<PreparedLocalIndexDelta>,
     facts: ValidationFacts,
@@ -261,8 +324,8 @@ impl PreparedValidation {
         self.result_root
     }
 
-    pub(crate) fn semantic_certificate(&self) -> SemanticSummaryDigest {
-        self.semantic_index.certificate
+    pub(crate) fn semantic_certificate(&self) -> SemanticCertificateDigest {
+        self.semantic_facts.manifest.certificate
     }
 }
 
@@ -857,6 +920,7 @@ impl SemanticRepository {
         &self,
         expected_base: RevisionId,
         base: &GraphRoot,
+        base_stored: &StoredGraphRoot,
         root: &mut GraphRoot,
         modules: &mut [MeaningModule],
     ) -> Result<PreparedValidation, Diagnostic> {
@@ -888,9 +952,11 @@ impl SemanticRepository {
             })
             .collect::<Result<Vec<_>, Diagnostic>>()?;
         let validated = canonicalize_graph_package(root, modules, &exact)?;
-        let result_root = root.digest()?;
-        let base_root = base.digest()?;
         let delta = StoredGraphRootDelta::between(base, root)?;
+        let stored_update =
+            base_stored.apply_delta(&RepositoryPageStore::read_only(&self.store), &delta)?;
+        let result_root = stored_update.root.digest()?;
+        let base_root = base_stored.digest()?;
         let changed_modules = delta
             .module_upserts
             .iter()
@@ -916,17 +982,22 @@ impl SemanticRepository {
             })
             .collect::<Result<Vec<_>, Diagnostic>>()?;
         let semantic_summaries = build_semantic_summaries(&root.package_id, modules)?;
-        let semantic_index =
-            build_reverse_dependency_index(RevisionId::from_digest([0; 32]), &semantic_summaries)?;
+        let semantic_facts = build_semantic_facts(
+            root.repository_id,
+            &root.package_id,
+            RevisionId::from_digest([0; 32]),
+            result_root,
+            &semantic_summaries,
+        )?;
         let mut facts = validation_facts(&validated)?;
         facts.profile = "prepared_once_full_oracle".to_owned();
         Ok(PreparedValidation {
             expected_base,
             base_root,
             result_root,
-            delta,
+            stored_update,
             changed_modules,
-            semantic_index,
+            semantic_facts,
             semantic_summaries,
             local_index_delta: None,
             facts,
@@ -1007,23 +1078,29 @@ impl SemanticRepository {
         .flatten();
         let semantic_summaries =
             build_semantic_summaries(&current.stored_root.package_id, &changed_modules)?;
-        let (base_semantic_index, _) = self.load_or_rebuild_semantic_index(current)?;
-        let replaced_modules = delta
-            .module_upserts
-            .iter()
-            .map(|reference| reference.id)
-            .collect::<BTreeSet<_>>();
-        let removed_modules = delta
+        let semantic_before = delta
             .module_removals
             .iter()
-            .filter(|reference| !replaced_modules.contains(&reference.id))
-            .map(|reference| reference.id)
-            .collect::<Vec<_>>();
-        let semantic_index = update_reverse_dependency_index(
+            .map(|reference| {
+                let module = self.read_module(reference.object)?;
+                if module.module_id != reference.id {
+                    return Err(repository_error(
+                        DiagnosticClass::Corrupt,
+                        "repository_semantic_before_owner",
+                        "base module object does not match its persistent-root identity",
+                    ));
+                }
+                build_module_summary(&current.stored_root.package_id, &module)
+            })
+            .collect::<Result<Vec<_>, Diagnostic>>()?;
+        let (base_semantic_facts, _) = self.load_or_rebuild_semantic_facts(current)?;
+        let semantic_facts = update_semantic_facts(
+            &base_semantic_facts,
+            &SemanticFactPageStore::new(&self.store),
             RevisionId::from_digest([0; 32]),
-            &base_semantic_index,
+            result_root,
+            &semantic_before,
             &semantic_summaries,
-            &removed_modules,
         )?;
         let mut facts = validation_facts(validated)?;
         facts.profile = profile.to_owned();
@@ -1031,9 +1108,9 @@ impl SemanticRepository {
             expected_base: current.head.revision,
             base_root: current.record.core.root,
             result_root,
-            delta,
+            stored_update: update,
             changed_modules,
-            semantic_index,
+            semantic_facts,
             semantic_summaries,
             local_index_delta,
             facts,
@@ -1043,12 +1120,9 @@ impl SemanticRepository {
     pub(crate) fn semantic_certificate_for_modules(
         package: &super::package::PackageId,
         modules: &[MeaningModule],
-    ) -> Result<SemanticSummaryDigest, Diagnostic> {
+    ) -> Result<SemanticCertificateDigest, Diagnostic> {
         let summaries = build_semantic_summaries(package, modules)?;
-        Ok(
-            build_reverse_dependency_index(RevisionId::from_digest([0; 32]), &summaries)?
-                .certificate,
-        )
+        build_semantic_certificate(&summaries)
     }
 
     pub(crate) fn dependency_binding_by_package(
@@ -1305,7 +1379,7 @@ impl SemanticRepository {
             stored,
             changed_modules,
             prepared_facts,
-            semantic_index,
+            semantic_facts,
             semantic_summaries,
             local_index_delta,
         ) = if let Some(prepared) = proposal.prepared_validation.as_ref() {
@@ -1318,15 +1392,11 @@ impl SemanticRepository {
                     "prepared validation does not bind the exact visible base",
                 ));
             }
-            let stored = current.stored_root.apply_delta(
-                &RepositoryPageStore::read_only(&self.store),
-                &prepared.delta,
-            )?;
             (
-                stored,
+                prepared.stored_update.clone(),
                 prepared.changed_modules.clone(),
                 Some(prepared.facts.clone()),
-                prepared.semantic_index.clone(),
+                prepared.semantic_facts.clone(),
                 prepared.semantic_summaries.clone(),
                 prepared.local_index_delta.clone(),
             )
@@ -1348,15 +1418,18 @@ impl SemanticRepository {
                 .apply_delta(&RepositoryPageStore::read_only(&self.store), &delta)?;
             let semantic_summaries =
                 build_semantic_summaries(&proposed_root.package_id, &proposal.modules)?;
-            let semantic_index = build_reverse_dependency_index(
+            let semantic_facts = build_semantic_facts(
+                proposed_root.repository_id,
+                &proposed_root.package_id,
                 RevisionId::from_digest([0; 32]),
+                stored.root.digest()?,
                 &semantic_summaries,
             )?;
             (
                 stored,
                 proposal.modules.clone(),
                 None,
-                semantic_index,
+                semantic_facts,
                 semantic_summaries,
                 None,
             )
@@ -1419,12 +1492,13 @@ impl SemanticRepository {
             repository_id: proposal.repository_id,
             parents,
             root: root_digest,
-            semantic_certificate: semantic_index.certificate,
+            semantic_certificate: semantic_facts.manifest.certificate,
             semantic_diff: proposal.semantic_diff,
             transaction: proposal.transaction,
         };
         let revision = core.revision_id()?;
-        let semantic_index = rebind_reverse_dependency_index(revision, &semantic_index)?;
+        let mut semantic_facts = semantic_facts;
+        semantic_facts.manifest = semantic_facts.manifest.rebind_revision(revision)?;
         let validation = match prepared_facts {
             Some(facts) => facts,
             None => validation_facts(&validate_repository_graph(
@@ -1454,7 +1528,10 @@ impl SemanticRepository {
             &root_bytes,
             "graph root object",
         )?;
-        self.write_semantic_cache(&semantic_index, &semantic_summaries)?;
+        // Semantic summaries and dependency facts are disposable acceleration. Their
+        // publication must never prevent an otherwise valid canonical revision from becoming
+        // visible; any partial generation is discarded or rebuilt on the next read.
+        let _ = self.write_semantic_cache(&semantic_facts, &semantic_summaries);
         if let Some(local_index_delta) = &local_index_delta {
             // Exact owner/name indexes are disposable acceleration. New content-addressed shards
             // are installed before their revision-bound manifest, and any failure deliberately
@@ -1728,7 +1805,7 @@ impl SemanticRepository {
         }
         let rebuilt_query = SemanticQueryIndex::current(self)?.rebuilt_index();
         let rebuilt_semantic = self
-            .load_or_rebuild_semantic_index(&self.current_binding()?)?
+            .load_or_rebuild_semantic_facts(&self.current_binding()?)?
             .1;
         let rebuilt_indexes = usize::from(rebuilt_query) + usize::from(rebuilt_semantic);
         Ok(DoctorReport {
@@ -2364,57 +2441,81 @@ impl SemanticRepository {
     /// Loads the revision-bound semantic dependency certificate when its disposable bytes match
     /// the accepted revision binding. Missing or malformed cache state is rebuilt from canonical
     /// modules; it never changes accepted meaning.
-    fn load_or_rebuild_semantic_index(
+    fn load_or_rebuild_semantic_facts(
         &self,
         current: &CurrentBinding,
-    ) -> Result<(ReverseDependencyIndex, bool), Diagnostic> {
+    ) -> Result<(SemanticFactManifest, bool), Diagnostic> {
+        // Every semantic-fact file is disposable acceleration. A malformed manifest, unsafe
+        // filesystem object, or unreadable page is therefore a cache miss; canonical graph
+        // reconstruction below remains the independent authority and will still fail closed if
+        // canonical bytes are damaged.
         let cached = self
             .read_index_part(
                 current.head.revision,
-                DisposableIndexPart::SemanticDependencies,
-                MAXIMUM_REVERSE_INDEX_ENCODED_BYTES,
-            )?
-            .and_then(|bytes| ReverseDependencyIndex::decode(&bytes).ok())
-            .filter(|index| {
-                index.revision == current.head.revision
-                    && index.package == current.stored_root.package_id
-                    && index.certificate == current.record.core.semantic_certificate
+                DisposableIndexPart::SemanticFacts,
+                MAXIMUM_SEMANTIC_FACT_MANIFEST_BYTES,
+            )
+            .ok()
+            .flatten()
+            .and_then(|bytes| SemanticFactManifest::decode(&bytes).ok())
+            .filter(|manifest| {
+                manifest.revision == current.head.revision
+                    && manifest.repository_id == current.head.repository_id
+                    && manifest.package_id == current.stored_root.package_id
+                    && manifest.canonical_root == current.record.core.root
+                    && manifest.certificate == current.record.core.semantic_certificate
+                    && manifest
+                        .verify(&SemanticFactPageStore::new(&self.store))
+                        .is_ok()
             });
-        if let Some(index) = cached {
-            return Ok((index, false));
+        if let Some(manifest) = cached {
+            return Ok((manifest, false));
         }
 
         let snapshot = self.reconstruct_revision(current.head.revision)?;
         let summaries = build_semantic_summaries(&snapshot.root.package_id, &snapshot.modules)?;
-        let index = build_reverse_dependency_index(current.head.revision, &summaries)?;
-        if index.certificate != current.record.core.semantic_certificate {
+        let update = build_semantic_facts(
+            current.head.repository_id,
+            &snapshot.root.package_id,
+            current.head.revision,
+            current.record.core.root,
+            &summaries,
+        )?;
+        if update.manifest.certificate != current.record.core.semantic_certificate {
             return Err(repository_error(
                 DiagnosticClass::Corrupt,
                 "repository_semantic_certificate_binding",
                 "accepted revision does not bind the semantic certificate rebuilt from canonical meaning",
             ));
         }
-        self.write_semantic_cache(&index, &summaries)?;
-        Ok((index, true))
+        let manifest = update.manifest.clone();
+        let _ = self.write_semantic_cache(&update, &summaries);
+        Ok((manifest, true))
     }
 
     fn write_semantic_cache(
         &self,
-        index: &ReverseDependencyIndex,
+        update: &SemanticFactUpdate,
         summaries: &[ModuleSemanticSummary],
     ) -> Result<(), Diagnostic> {
-        index.validate()?;
+        update.manifest.validate()?;
         for summary in summaries {
             summary.validate()?;
             let bytes = summary.encode()?;
             self.write_summary_object(summary.digest, &bytes)?;
         }
-        let bytes = index.encode()?;
+        let mut page_store = SemanticFactPageStore::new(&self.store);
+        for (digest, bytes) in update.pages.objects() {
+            page_store
+                .write_page(digest, bytes)
+                .map_err(repository_map_diagnostic)?;
+        }
+        let bytes = update.manifest.encode()?;
         self.write_index_part(
-            index.revision,
-            DisposableIndexPart::SemanticDependencies,
+            update.manifest.revision,
+            DisposableIndexPart::SemanticFacts,
             &bytes,
-            MAXIMUM_REVERSE_INDEX_ENCODED_BYTES,
+            MAXIMUM_SEMANTIC_FACT_MANIFEST_BYTES,
         )
     }
 
@@ -2443,6 +2544,10 @@ impl SemanticRepository {
             &self.store.join(INDEX_OBJECTS),
             "repository_index_directory",
         )?;
+        ensure_or_create_directory(
+            &self.store.join(SEMANTIC_INDEX_OBJECTS),
+            "repository_semantic_index_directory",
+        )?;
         ensure_or_create_directory(&root, "repository_summary_directory")?;
         let path = summary_object_path(&self.store, digest);
         let parent = path.parent().ok_or_else(|| {
@@ -2467,11 +2572,11 @@ impl SemanticRepository {
         }
         let temporary = parent.join(format!(".summary-stage-{}", RepositoryId::generate()?));
         let result = (|| {
-            write_new_file(&temporary, bytes, "temporary semantic summary")?;
+            // Cache objects do not require per-object durability. Canonical publication performs
+            // its own batch durability barrier, while cache loss remains a safe rebuild case.
+            write_new_file_with_sync(&temporary, bytes, "temporary semantic summary", false)?;
             fs::rename(&temporary, &path)
                 .map_err(|error| io_error("repository_summary_publish", &path, error))?;
-            sync_directory(parent)
-                .map_err(|error| io_error("repository_summary_sync", parent, error))?;
             Ok(())
         })();
         if result.is_err() {
@@ -3322,20 +3427,25 @@ fn initialize_stage(
         "graph root object",
     )?;
     let semantic_summaries = build_semantic_summaries(&root.package_id, &modules)?;
-    let semantic_index =
-        build_reverse_dependency_index(RevisionId::from_digest([0; 32]), &semantic_summaries)?;
+    let mut semantic_facts = build_semantic_facts(
+        root.repository_id,
+        &root.package_id,
+        RevisionId::from_digest([0; 32]),
+        root_digest,
+        &semantic_summaries,
+    )?;
     let core = RevisionCore {
         contract_version: REVISION_CONTRACT_VERSION,
         graph_contract_version: GRAPH_CONTRACT_VERSION,
         repository_id: root.repository_id,
         parents: Vec::new(),
         root: root_digest,
-        semantic_certificate: semantic_index.certificate,
+        semantic_certificate: semantic_facts.manifest.certificate,
         semantic_diff,
         transaction,
     };
     let revision = core.revision_id()?;
-    let semantic_index = rebind_reverse_dependency_index(revision, &semantic_index)?;
+    semantic_facts.manifest = semantic_facts.manifest.rebind_revision(revision)?;
     let validated = validate_repository_graph(store, &root, &modules, Some(revision))?;
     let mut validation = validation_facts(&validated)?;
     if let Some(profile) = validation_profile {
@@ -3345,7 +3455,7 @@ fn initialize_stage(
         project_root: PathBuf::new(),
         store: store.to_path_buf(),
     };
-    repository.write_semantic_cache(&semantic_index, &semantic_summaries)?;
+    let _ = repository.write_semantic_cache(&semantic_facts, &semantic_summaries);
     // The initial graph is already fully materialized and validated. Seed the disposable exact
     // owner/name generation without creating the broad relation index; failure cannot change the
     // staged canonical authority and is recovered lazily.
@@ -3679,6 +3789,48 @@ fn write_publication_immutable(path: &Path, bytes: &[u8], label: &str) -> Result
     }
 }
 
+fn write_disposable_content(
+    path: &Path,
+    bytes: &[u8],
+    label: &str,
+) -> Result<PageWrite, Diagnostic> {
+    if let Ok(metadata) = fs::symlink_metadata(path) {
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err(repository_error(
+                DiagnosticClass::Corrupt,
+                "repository_disposable_type",
+                format!(
+                    "existing {label} '{}' is not a regular file",
+                    path.display()
+                ),
+            ));
+        }
+        if read_bounded(path, bytes.len(), label).is_ok_and(|existing| existing == bytes) {
+            return Ok(PageWrite::Reused);
+        }
+    }
+    let parent = path.parent().ok_or_else(|| {
+        repository_error(
+            DiagnosticClass::Infrastructure,
+            "repository_disposable_parent",
+            "disposable repository object path has no parent",
+        )
+    })?;
+    fs::create_dir_all(parent)
+        .map_err(|error| io_error("repository_disposable_parent", parent, error))?;
+    let temporary = parent.join(format!(".disposable-stage-{}", RepositoryId::generate()?));
+    let result = (|| {
+        write_new_file_with_sync(&temporary, bytes, label, false)?;
+        fs::rename(&temporary, path)
+            .map_err(|error| io_error("repository_disposable_publish", path, error))?;
+        Ok(PageWrite::Inserted)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
+}
+
 fn write_immutable_with_sync(
     path: &Path,
     bytes: &[u8],
@@ -3833,7 +3985,7 @@ fn index_part_path(store: &Path, revision: RevisionId, part: DisposableIndexPart
     let revision = index_revision_directory(store, revision);
     match part {
         DisposableIndexPart::Manifest => revision.join("local-manifest.lkix"),
-        DisposableIndexPart::SemanticDependencies => revision.join("semantic-dependencies.lkix"),
+        DisposableIndexPart::SemanticFacts => revision.join("facts.lkix"),
     }
 }
 
@@ -3850,7 +4002,11 @@ fn local_index_object_path(
 }
 
 fn summary_object_path(store: &Path, digest: SemanticSummaryDigest) -> PathBuf {
-    sharded_digest_path(store, SUMMARY_INDEX_OBJECTS, &digest.bytes(), "lkis")
+    sharded_digest_path(store, SUMMARY_INDEX_OBJECTS, &digest.bytes(), "lkss")
+}
+
+fn semantic_fact_page_path(store: &Path, digest: PageDigest) -> PathBuf {
+    sharded_digest_path(store, SEMANTIC_FACT_PAGE_OBJECTS, &digest.bytes(), "lksp")
 }
 
 fn sharded_digest_path(store: &Path, directory: &str, bytes: &[u8], extension: &str) -> PathBuf {
@@ -4390,6 +4546,57 @@ mod tests {
                 .path()
                 .join(SEMANTIC_STORE_RELATIVE)
                 .exists()
+        );
+    }
+
+    #[test]
+    fn semantic_fact_page_loss_and_corruption_rebuild_without_changing_authority() {
+        let source = tempfile::TempDir::new().expect("temporary source project");
+        let (root, modules) = fixture();
+        let (repository, _) = SemanticRepository::initialize(
+            source.path(),
+            InitialPublication {
+                root,
+                modules,
+                transaction: TransactionDigest::of(b"import"),
+                semantic_diff: SemanticDiffDigest::of(b"initial"),
+                intent: None,
+                validation_profile: None,
+                dependency_artifacts: Vec::new(),
+                status: ReceiptStatus::ImportAccepted,
+            },
+        )
+        .expect("initialize");
+        let current = repository.current_binding().expect("current binding");
+        let head_before = fs::read(repository.store.join(HEAD_FILE)).expect("HEAD bytes");
+        let (manifest, rebuilt) = repository
+            .load_or_rebuild_semantic_facts(&current)
+            .expect("seeded facts");
+        assert!(!rebuilt);
+
+        let summary_page =
+            semantic_fact_page_path(&repository.store, manifest.roots.summaries.page());
+        fs::write(&summary_page, b"corrupt-derived-page").expect("corrupt fact page");
+        let (recovered, rebuilt) = repository
+            .load_or_rebuild_semantic_facts(&current)
+            .expect("rebuild corrupt facts");
+        assert!(rebuilt);
+        recovered
+            .verify(&SemanticFactPageStore::new(&repository.store))
+            .expect("recovered facts verify");
+
+        let test_page = semantic_fact_page_path(&repository.store, recovered.roots.tests.page());
+        fs::remove_file(&test_page).expect("remove disposable fact page");
+        let (recovered, rebuilt) = repository
+            .load_or_rebuild_semantic_facts(&current)
+            .expect("rebuild missing facts");
+        assert!(rebuilt);
+        recovered
+            .verify(&SemanticFactPageStore::new(&repository.store))
+            .expect("restored facts verify");
+        assert_eq!(
+            fs::read(repository.store.join(HEAD_FILE)).expect("HEAD after rebuild"),
+            head_before
         );
     }
 

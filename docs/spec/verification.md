@@ -8,10 +8,10 @@ Canonical decoding and deep reconstruction ignore disposable indexes. Full seman
 reconstructs names, scopes, types, effects, capabilities, components, targets, tests, and retained
 relations from root/module objects. Incremental/query acceleration must agree with that route.
 
-Meaning graph 4 revisions authenticate semantic-summary contract 2 facts with a semantic
-certificate. Content-addressed summaries and the revision-bound reverse-dependency index remain
-disposable: missing bytes rebuild from canonical modules, while a rebuilt certificate mismatch is
-canonical corruption. Focused differential tests compare the four current local preparation
+Meaning graph 4 revision contract 4 authenticates semantic-fact contract 3 Merkle roots with a
+semantic certificate. Content-addressed summaries, fact pages, and the revision-bound fact
+manifest remain disposable: missing or malformed bytes rebuild from canonical modules, while a
+rebuilt certificate mismatch is canonical corruption. Focused differential tests compare the four current local preparation
 classes—eligible pure-body replacement, independent empty-module creation, module rename, and
 declaration rename—with complete canonicalization and validation. This is not evidence for general incremental
 validation; every other transaction class keeps complete preparation.

@@ -145,10 +145,12 @@ every mixed request, and every other change uses complete package reconstruction
 canonicalization, and validation. Focused tests compare local results
 with the complete oracle; inability to prove eligibility widens rather than narrowing.
 
-Semantic-summary contract 2 persists disposable content-addressed module summaries and one
-revision-bound reverse-dependency index. The accepted revision authenticates the exact fact set
-with a revision-independent semantic certificate. The four local transaction paths update those
-facts by delta, but the reverse-dependency frontier does not yet select general validation.
+Semantic-summary contract 2 produces disposable content-addressed module summaries.
+Semantic-fact contract 3 binds their exact inputs and digests, graph-owned test owners, and typed
+reverse dependency edges in three persistent maps. The accepted revision authenticates the map
+roots with a revision-independent semantic certificate. The four local transaction paths update
+those facts by path-local delta, but the dependency frontier does not yet select general
+validation.
 
 Compiler lowering consumes validated graph structures directly. The bytecode VM and semantic
 reference interpreter implement direct calls, named function values, invoke, and explicit generic

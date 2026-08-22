@@ -353,6 +353,30 @@ pub enum RemoveOutcome {
     Unchanged,
 }
 
+/// One exact edit in a canonical sorted batch. `before: None` asserts absence; `after: None`
+/// leaves the key absent. This represents insertion, replacement, removal, and exact no-change
+/// assertions without an unconstrained "replace whatever is present" operation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MapEdit {
+    pub key: Vec<u8>,
+    pub before: Option<Vec<u8>>,
+    pub after: Option<Vec<u8>>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct BatchOutcome {
+    pub inserted: u64,
+    pub replaced: u64,
+    pub removed: u64,
+    pub unchanged: u64,
+}
+
+impl BatchOutcome {
+    pub const fn changed(self) -> bool {
+        self.inserted != 0 || self.replaced != 0 || self.removed != 0
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MapDifference {
     Added {
@@ -1477,6 +1501,82 @@ where
     Ok(visited)
 }
 
+fn visit_prefix_loaded<S, F>(
+    store: &S,
+    digest: PageDigest,
+    page: &Page,
+    requested: &[u8],
+    depth: usize,
+    work: &mut MapWork,
+    visitor: &mut F,
+) -> Result<u64, MapError>
+where
+    S: PageStore + ?Sized,
+    F: FnMut(&[u8], &[u8], &mut MapWork) -> Result<(), MapError>,
+{
+    ensure_depth(depth)?;
+    if page.prefix().starts_with(requested) {
+        return visit_loaded(store, digest, page, depth, work, visitor);
+    }
+    if !requested.starts_with(page.prefix()) {
+        return Ok(0);
+    }
+    match page {
+        Page::Leaf { entries, .. } => {
+            let mut visited = 0_u64;
+            for entry in entries {
+                add_counter(
+                    &mut work.key_comparisons,
+                    1,
+                    "persistent_map_work_comparisons",
+                )?;
+                if entry.key.starts_with(requested) {
+                    visitor(&entry.key, &entry.value, work)?;
+                    add_counter(
+                        &mut work.entries_visited,
+                        1,
+                        "persistent_map_work_entries_visited",
+                    )?;
+                    visited = visited.checked_add(1).ok_or_else(|| {
+                        map_error(
+                            MapErrorClass::Resource,
+                            "persistent_map_prefix_count",
+                            "prefix result count overflowed",
+                        )
+                    })?;
+                }
+            }
+            Ok(visited)
+        }
+        Page::Branch {
+            prefix, children, ..
+        } => {
+            let edge = *requested.get(prefix.len()).ok_or_else(|| {
+                map_error(
+                    MapErrorClass::Corrupt,
+                    "persistent_map_prefix_descent",
+                    "prefix traversal lost the next requested branch byte",
+                )
+            })?;
+            let Ok(index) = search_children(children, edge, work)? else {
+                return Ok(0);
+            };
+            let child = &children[index];
+            let child_page = load_page(store, child.digest, work)?;
+            verify_child_link(prefix, child, &child_page)?;
+            visit_prefix_loaded(
+                store,
+                child.digest,
+                &child_page,
+                requested,
+                depth + 1,
+                work,
+                visitor,
+            )
+        }
+    }
+}
+
 fn collect_loaded<S: PageStore + ?Sized>(
     store: &S,
     digest: PageDigest,
@@ -1771,6 +1871,342 @@ struct RemoveResult {
     changed: bool,
 }
 
+struct BatchResult {
+    replacement: Option<NodeRef>,
+    changed: bool,
+}
+
+fn batch_precondition_error() -> MapError {
+    map_error(
+        MapErrorClass::Input,
+        "persistent_map_batch_precondition",
+        "persistent-map batch edit does not match its exact before value",
+    )
+}
+
+fn validate_batch_edits(edits: &[MapEdit]) -> Result<BatchOutcome, MapError> {
+    let mut outcome = BatchOutcome::default();
+    for (index, edit) in edits.iter().enumerate() {
+        validate_key(&edit.key)?;
+        if let Some(value) = edit.before.as_deref() {
+            validate_value(value)?;
+        }
+        if let Some(value) = edit.after.as_deref() {
+            validate_value(value)?;
+        }
+        if index > 0 && edits[index - 1].key >= edit.key {
+            return Err(map_error(
+                MapErrorClass::Input,
+                "persistent_map_batch_order",
+                "persistent-map batch edits must be strictly ordered and unique by key",
+            ));
+        }
+        let counter = match (&edit.before, &edit.after) {
+            (None, Some(_)) => &mut outcome.inserted,
+            (Some(before), Some(after)) if before != after => &mut outcome.replaced,
+            (Some(_), None) => &mut outcome.removed,
+            _ => &mut outcome.unchanged,
+        };
+        *counter = counter.checked_add(1).ok_or_else(|| {
+            map_error(
+                MapErrorClass::Resource,
+                "persistent_map_batch_count",
+                "persistent-map batch outcome count overflowed",
+            )
+        })?;
+    }
+    Ok(outcome)
+}
+
+fn merge_leaf_edits<S: PageStore + ?Sized>(
+    store: &mut S,
+    digest: PageDigest,
+    page: &Page,
+    entries: &[Entry],
+    edits: &[MapEdit],
+    depth: usize,
+    work: &mut MapWork,
+) -> Result<BatchResult, MapError> {
+    let original = NodeRef::from_page(digest, page);
+    let mut merged = Vec::with_capacity(entries.len().saturating_add(edits.len()));
+    let mut entry_index = 0usize;
+    let mut edit_index = 0usize;
+    let mut changed = false;
+    while entry_index < entries.len() || edit_index < edits.len() {
+        match (entries.get(entry_index), edits.get(edit_index)) {
+            (Some(entry), Some(edit)) => {
+                add_counter(
+                    &mut work.key_comparisons,
+                    1,
+                    "persistent_map_work_comparisons",
+                )?;
+                match entry.key.cmp(&edit.key) {
+                    std::cmp::Ordering::Less => {
+                        merged.push(entry.clone());
+                        entry_index += 1;
+                    }
+                    std::cmp::Ordering::Equal => {
+                        if edit.before.as_deref() != Some(entry.value.as_slice()) {
+                            return Err(batch_precondition_error());
+                        }
+                        if let Some(after) = &edit.after {
+                            merged.push(Entry {
+                                key: edit.key.clone(),
+                                value: after.clone(),
+                            });
+                            changed |= after != &entry.value;
+                        } else {
+                            changed = true;
+                        }
+                        entry_index += 1;
+                        edit_index += 1;
+                    }
+                    std::cmp::Ordering::Greater => {
+                        if edit.before.is_some() {
+                            return Err(batch_precondition_error());
+                        }
+                        if let Some(after) = &edit.after {
+                            merged.push(Entry {
+                                key: edit.key.clone(),
+                                value: after.clone(),
+                            });
+                            changed = true;
+                        }
+                        edit_index += 1;
+                    }
+                }
+            }
+            (Some(entry), None) => {
+                merged.push(entry.clone());
+                entry_index += 1;
+            }
+            (None, Some(edit)) => {
+                if edit.before.is_some() {
+                    return Err(batch_precondition_error());
+                }
+                if let Some(after) = &edit.after {
+                    merged.push(Entry {
+                        key: edit.key.clone(),
+                        value: after.clone(),
+                    });
+                    changed = true;
+                }
+                edit_index += 1;
+            }
+            (None, None) => break,
+        }
+    }
+    if !changed {
+        return Ok(BatchResult {
+            replacement: Some(original),
+            changed: false,
+        });
+    }
+    let replacement = if merged.is_empty() {
+        None
+    } else {
+        Some(build_entries(store, &merged, depth, work)?)
+    };
+    Ok(BatchResult {
+        replacement,
+        changed: true,
+    })
+}
+
+fn validate_absent_edits(edits: &[MapEdit]) -> Result<Vec<Entry>, MapError> {
+    let mut inserted = Vec::new();
+    for edit in edits {
+        if edit.before.is_some() {
+            return Err(batch_precondition_error());
+        }
+        if let Some(value) = &edit.after {
+            inserted.push(Entry {
+                key: edit.key.clone(),
+                value: value.clone(),
+            });
+        }
+    }
+    Ok(inserted)
+}
+
+fn apply_batch_loaded<S: PageStore + ?Sized>(
+    store: &mut S,
+    digest: PageDigest,
+    page: Page,
+    edits: &[MapEdit],
+    depth: usize,
+    work: &mut MapWork,
+) -> Result<BatchResult, MapError> {
+    ensure_depth(depth)?;
+    if edits.is_empty() {
+        return Ok(BatchResult {
+            replacement: Some(NodeRef::from_page(digest, &page)),
+            changed: false,
+        });
+    }
+    if let Page::Leaf { entries, .. } = &page {
+        return merge_leaf_edits(store, digest, &page, entries, edits, depth, work);
+    }
+
+    let Page::Branch {
+        prefix,
+        count,
+        logical_bytes,
+        mut terminal,
+        children,
+    } = page
+    else {
+        unreachable!("leaf returned above")
+    };
+    let original_page = Page::Branch {
+        prefix: prefix.clone(),
+        count,
+        logical_bytes,
+        terminal: terminal.clone(),
+        children: children.clone(),
+    };
+    let original = NodeRef::from_page(digest, &original_page);
+
+    let mut inside = Vec::new();
+    let mut outside = Vec::new();
+    for edit in edits {
+        if edit.key.starts_with(&prefix) {
+            inside.push(edit.clone());
+        } else {
+            outside.push(edit.clone());
+        }
+    }
+    let outside_insertions = validate_absent_edits(&outside)?;
+
+    let mut changed = false;
+    let mut position = 0usize;
+    if inside
+        .first()
+        .is_some_and(|edit| edit.key.as_slice() == prefix.as_slice())
+    {
+        let edit = &inside[0];
+        if edit.before.as_deref() != terminal.as_deref() {
+            return Err(batch_precondition_error());
+        }
+        changed |= edit.after != terminal;
+        terminal = edit.after.clone();
+        position = 1;
+    }
+
+    let mut next_children = Vec::with_capacity(children.len().saturating_add(inside.len()));
+    let mut child_index = 0usize;
+    while child_index < children.len() || position < inside.len() {
+        let edit_edge = inside
+            .get(position)
+            .map(|edit| {
+                edit.key.get(prefix.len()).copied().ok_or_else(|| {
+                    map_error(
+                        MapErrorClass::Corrupt,
+                        "persistent_map_batch_branch_key",
+                        "nonterminal batch edit has no edge beyond its branch prefix",
+                    )
+                })
+            })
+            .transpose()?;
+        match (children.get(child_index), edit_edge) {
+            (Some(child), Some(edge)) if child.edge < edge => {
+                next_children.push(child.clone());
+                child_index += 1;
+            }
+            (Some(child), Some(edge)) if child.edge == edge => {
+                let start = position;
+                while position < inside.len()
+                    && inside[position].key.get(prefix.len()) == Some(&edge)
+                {
+                    position += 1;
+                }
+                let child_page = load_page(store, child.digest, work)?;
+                verify_child_link(&prefix, child, &child_page)?;
+                let result = apply_batch_loaded(
+                    store,
+                    child.digest,
+                    child_page,
+                    &inside[start..position],
+                    depth + 1,
+                    work,
+                )?;
+                changed |= result.changed;
+                if let Some(replacement) = result.replacement {
+                    next_children.push(replacement.child(edge));
+                }
+                child_index += 1;
+            }
+            (Some(_), Some(edge)) => {
+                let start = position;
+                while position < inside.len()
+                    && inside[position].key.get(prefix.len()) == Some(&edge)
+                {
+                    position += 1;
+                }
+                let entries = validate_absent_edits(&inside[start..position])?;
+                if !entries.is_empty() {
+                    let replacement = build_entries(store, &entries, depth + 1, work)?;
+                    next_children.push(replacement.child(edge));
+                    changed = true;
+                }
+            }
+            (Some(child), None) => {
+                next_children.push(child.clone());
+                child_index += 1;
+            }
+            (None, Some(edge)) => {
+                let start = position;
+                while position < inside.len()
+                    && inside[position].key.get(prefix.len()) == Some(&edge)
+                {
+                    position += 1;
+                }
+                let entries = validate_absent_edits(&inside[start..position])?;
+                if !entries.is_empty() {
+                    let replacement = build_entries(store, &entries, depth + 1, work)?;
+                    next_children.push(replacement.child(edge));
+                    changed = true;
+                }
+            }
+            (None, None) => break,
+        }
+    }
+
+    let mut result = if changed {
+        normalize_branch(store, prefix, terminal, next_children, depth, work)?
+    } else {
+        Some(original)
+    };
+    if !outside_insertions.is_empty() {
+        changed = true;
+        if let Some(mut current) = result {
+            for entry in outside_insertions {
+                let current_page = load_page(store, current.digest, work)?;
+                let (replacement, previous, inserted) = insert_loaded(
+                    store,
+                    current.digest,
+                    current_page,
+                    &entry.key,
+                    &entry.value,
+                    depth,
+                    work,
+                )?;
+                if previous.is_some() || !inserted {
+                    return Err(batch_precondition_error());
+                }
+                current = replacement;
+            }
+            result = Some(current);
+        } else {
+            result = Some(build_entries(store, &outside_insertions, depth, work)?);
+        }
+    }
+    Ok(BatchResult {
+        replacement: result,
+        changed,
+    })
+}
+
 fn remove_loaded<S: PageStore + ?Sized>(
     store: &mut S,
     digest: PageDigest,
@@ -1937,6 +2373,45 @@ impl PersistentMap {
         self.root.entries == 0
     }
 
+    /// Applies a strictly key-ordered set of exact edits while encoding each touched subtree at
+    /// most once. Unchanged children retain their accepted page references. The result is the same
+    /// canonical map as a full sorted rebuild, but ordinary work follows the edited paths and
+    /// genuine semantic fanout.
+    pub fn apply_sorted_edits<S: PageStore + ?Sized>(
+        &self,
+        store: &mut S,
+        edits: &[MapEdit],
+        work: &mut MapWork,
+    ) -> Result<(Self, BatchOutcome), MapError> {
+        let outcome = validate_batch_edits(edits)?;
+        if edits.is_empty() {
+            return Ok((*self, outcome));
+        }
+        let page = load_page(store, self.root.page, work)?;
+        verify_root(self.root, &page)?;
+        let result = apply_batch_loaded(store, self.root.page, page, edits, 0, work)?;
+        if result.changed != outcome.changed() {
+            return Err(map_error(
+                MapErrorClass::Corrupt,
+                "persistent_map_batch_outcome",
+                "persistent-map batch result disagrees with its exact edit classification",
+            ));
+        }
+        let replacement = match result.replacement {
+            Some(replacement) => replacement,
+            None => build_entries(store, &[], 0, work)?,
+        };
+        Ok((
+            Self {
+                root: MapRoot {
+                    page: replacement.digest,
+                    entries: replacement.count,
+                },
+            },
+            outcome,
+        ))
+    }
+
     pub fn lookup<S: PageStore + ?Sized>(
         &self,
         store: &S,
@@ -2012,6 +2487,34 @@ impl PersistentMap {
             ));
         }
         Ok(())
+    }
+
+    /// Iterates only entries whose canonical byte key starts with `prefix`. The traversal opens a
+    /// single search path before visiting the true matching subtree, so work is proportional to
+    /// map depth plus returned fanout rather than total map size.
+    pub fn for_each_prefix<S, F>(
+        &self,
+        store: &S,
+        prefix: &[u8],
+        work: &mut MapWork,
+        mut visitor: F,
+    ) -> Result<u64, MapError>
+    where
+        S: PageStore + ?Sized,
+        F: FnMut(&[u8], &[u8]) -> Result<(), MapError>,
+    {
+        validate_key(prefix)?;
+        let page = load_page(store, self.root.page, work)?;
+        verify_root(self.root, &page)?;
+        visit_prefix_loaded(
+            store,
+            self.root.page,
+            &page,
+            prefix,
+            0,
+            work,
+            &mut |key, value, _work| visitor(key, value),
+        )
     }
 
     pub fn insert<S: PageStore + ?Sized>(
@@ -2617,6 +3120,233 @@ mod tests {
             reverse = insert(&mut reverse_store, reverse, key, value);
         }
         assert_eq!(map.root(), reverse.root());
+    }
+
+    #[test]
+    fn sorted_exact_batch_matches_full_rebuild_and_rejects_bad_preconditions() {
+        let mut store = MemoryPageStore::default();
+        let base = PersistentMap::from_sorted(
+            &mut store,
+            (0..1_000).map(|number| {
+                let (key, value) = numbered_entry(number);
+                (key.to_vec(), value)
+            }),
+            &mut MapWork::default(),
+        )
+        .expect("base map");
+        let before_10 = numbered_entry(10).1;
+        let before_500 = numbered_entry(500).1;
+        let before_700 = numbered_entry(700).1;
+        let edits = vec![
+            MapEdit {
+                key: 10_u32.to_be_bytes().to_vec(),
+                before: Some(before_10),
+                after: None,
+            },
+            MapEdit {
+                key: 500_u32.to_be_bytes().to_vec(),
+                before: Some(before_500),
+                after: Some(b"replacement".to_vec()),
+            },
+            MapEdit {
+                key: 700_u32.to_be_bytes().to_vec(),
+                before: Some(before_700.clone()),
+                after: Some(before_700),
+            },
+            MapEdit {
+                key: 1_001_u32.to_be_bytes().to_vec(),
+                before: None,
+                after: Some(b"inserted".to_vec()),
+            },
+            MapEdit {
+                key: 1_500_u32.to_be_bytes().to_vec(),
+                before: None,
+                after: None,
+            },
+        ];
+        let mut work = MapWork::default();
+        let (updated, outcome) = base
+            .apply_sorted_edits(&mut store, &edits, &mut work)
+            .expect("exact batch");
+        assert_eq!(outcome.inserted, 1);
+        assert_eq!(outcome.replaced, 1);
+        assert_eq!(outcome.removed, 1);
+        assert_eq!(outcome.unchanged, 2);
+        assert!(work.pages_encoded < 32);
+
+        let mut oracle = (0..1_000)
+            .map(|number| {
+                let (key, value) = numbered_entry(number);
+                (key.to_vec(), value)
+            })
+            .collect::<BTreeMap<_, _>>();
+        oracle.remove(10_u32.to_be_bytes().as_slice());
+        oracle.insert(500_u32.to_be_bytes().to_vec(), b"replacement".to_vec());
+        oracle.insert(1_001_u32.to_be_bytes().to_vec(), b"inserted".to_vec());
+        let mut oracle_store = MemoryPageStore::default();
+        let rebuilt =
+            PersistentMap::from_sorted(&mut oracle_store, oracle, &mut MapWork::default())
+                .expect("oracle rebuild");
+        assert_eq!(updated.root(), rebuilt.root());
+
+        let wrong = [MapEdit {
+            key: 500_u32.to_be_bytes().to_vec(),
+            before: Some(b"wrong".to_vec()),
+            after: None,
+        }];
+        assert_eq!(
+            updated
+                .apply_sorted_edits(&mut store, &wrong, &mut MapWork::default())
+                .expect_err("foreign before value must reject")
+                .code,
+            "persistent_map_batch_precondition"
+        );
+        let unordered = [
+            MapEdit {
+                key: b"b".to_vec(),
+                before: None,
+                after: None,
+            },
+            MapEdit {
+                key: b"a".to_vec(),
+                before: None,
+                after: None,
+            },
+        ];
+        assert_eq!(
+            updated
+                .apply_sorted_edits(&mut store, &unordered, &mut MapWork::default())
+                .expect_err("unordered batch must reject")
+                .code,
+            "persistent_map_batch_order"
+        );
+    }
+
+    #[test]
+    fn broad_batch_encodes_only_final_pages_and_has_canonical_root() {
+        let (base_store, base) = empty();
+        let edits = (0..10_000_u32)
+            .map(|number| {
+                let (key, value) = numbered_entry(number);
+                MapEdit {
+                    key: key.to_vec(),
+                    before: None,
+                    after: Some(value),
+                }
+            })
+            .collect::<Vec<_>>();
+        let mut overlay = OverlayPageStore::new(&base_store);
+        let mut batch_work = MapWork::default();
+        let (updated, outcome) = base
+            .apply_sorted_edits(&mut overlay, &edits, &mut batch_work)
+            .expect("broad batch");
+        assert_eq!(outcome.inserted, 10_000);
+        let staged = overlay.into_pages();
+
+        let mut rebuilt_store = MemoryPageStore::default();
+        let mut rebuild_work = MapWork::default();
+        let rebuilt = PersistentMap::from_sorted(
+            &mut rebuilt_store,
+            edits
+                .into_iter()
+                .map(|edit| (edit.key, edit.after.expect("insert value"))),
+            &mut rebuild_work,
+        )
+        .expect("full rebuild");
+        assert_eq!(updated.root(), rebuilt.root());
+        assert_eq!(batch_work.pages_encoded, rebuild_work.pages_encoded);
+        assert_eq!(staged.object_count() as u64, batch_work.pages_encoded);
+    }
+
+    #[test]
+    fn prefix_iteration_visits_only_the_matching_subtree_in_key_order() {
+        let mut store = MemoryPageStore::default();
+        let map = PersistentMap::from_sorted(
+            &mut store,
+            (0..65_536_u32).map(|number| {
+                let key = number.to_be_bytes();
+                (key.to_vec(), number.to_le_bytes().to_vec())
+            }),
+            &mut MapWork::default(),
+        )
+        .expect("prefix fixture");
+        let total_pages = store.object_count() as u64;
+        let prefix = [0_u8, 0_u8, 42_u8];
+        let mut matches = Vec::new();
+        let mut work = MapWork::default();
+        let visited = map
+            .for_each_prefix(&store, &prefix, &mut work, |key, value| {
+                matches.push((key.to_vec(), value.to_vec()));
+                Ok(())
+            })
+            .expect("prefix traversal");
+        assert_eq!(visited, 256);
+        assert_eq!(matches.len(), 256);
+        assert!(matches.windows(2).all(|pair| pair[0].0 < pair[1].0));
+        assert!(matches.iter().all(|(key, _)| key.starts_with(&prefix)));
+        assert!(work.pages_read < total_pages / 4);
+
+        let mut absent_work = MapWork::default();
+        assert_eq!(
+            map.for_each_prefix(&store, &[1], &mut absent_work, |_key, _value| Ok(()))
+                .expect("absent prefix"),
+            0
+        );
+        assert!(absent_work.pages_read < 8);
+    }
+
+    #[test]
+    fn randomized_sorted_batches_match_btree_and_full_map_oracles() {
+        let (mut store, mut map) = empty();
+        let mut oracle = BTreeMap::<Vec<u8>, Vec<u8>>::new();
+        let mut state = 0xd1b5_4a32_d192_ed03_u64;
+        for round in 0..128_u32 {
+            let mut selected = BTreeSet::new();
+            while selected.len() < 24 {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                selected.insert((state % 2_000) as u32);
+            }
+            let mut edits = Vec::new();
+            for number in selected {
+                let key = number.to_be_bytes().to_vec();
+                let before = oracle.get(&key).cloned();
+                let after = if state.wrapping_add(u64::from(number)).is_multiple_of(5) {
+                    None
+                } else {
+                    Some([round.to_be_bytes().as_slice(), &number.to_be_bytes()].concat())
+                };
+                edits.push(MapEdit {
+                    key: key.clone(),
+                    before,
+                    after: after.clone(),
+                });
+                match after {
+                    Some(value) => {
+                        oracle.insert(key, value);
+                    }
+                    None => {
+                        oracle.remove(&key);
+                    }
+                }
+            }
+            map = map
+                .apply_sorted_edits(&mut store, &edits, &mut MapWork::default())
+                .expect("random exact batch")
+                .0;
+            let mut full_store = MemoryPageStore::default();
+            let full = PersistentMap::from_sorted(
+                &mut full_store,
+                oracle
+                    .iter()
+                    .map(|(key, value)| (key.clone(), value.clone())),
+                &mut MapWork::default(),
+            )
+            .expect("random full oracle");
+            assert_eq!(map.root(), full.root(), "round {round}");
+        }
+        assert_eq!(collect(&store, map), oracle.into_iter().collect::<Vec<_>>());
     }
 
     #[test]

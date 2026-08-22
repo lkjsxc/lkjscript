@@ -91,12 +91,14 @@ stable owner and persistent name/summary paths; importer objects are unchanged. 
 may use a request-local symbol, a local `decl_` identity, or the discoverable
 `exact:PACKAGE/mod_ID/decl_ID` selector.
 
-Semantic summary contract 2 defines integrity-bound, rebuildable module summaries and reverse
-dependencies for public signatures, implementations, types, calls, effects, capabilities,
-deployment, and tests. Content-addressed summary objects and a revision-bound reverse-dependency
-index are persisted as disposable acceleration. Every accepted revision commits to a
-revision-independent semantic certificate for the exact fact set; missing cache bytes rebuild, and
-a rebuilt certificate mismatch is canonical corruption rather than an alternate meaning.
+Semantic-summary contract 2 defines integrity-bound, rebuildable module summaries for public
+signatures, implementations, types, calls, effects, capabilities, deployment, and tests.
+Semantic-fact contract 3 stores exact summary bindings, graph-owned test owners, and typed reverse
+dependency edges in three persistent Merkle maps. Content-addressed summaries, map pages, and one
+revision/root-bound manifest are disposable acceleration. Every accepted revision commits to a
+constant-size, revision-independent certificate over the exact fact roots; missing or malformed
+cache bytes rebuild, and a rebuilt certificate mismatch is canonical corruption rather than an
+alternate meaning.
 
 Four precondition-free transaction classes have local preparation: eligible pure-function body
 replacements validate their recursive import dependency slice, independent module creation

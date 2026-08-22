@@ -22,7 +22,7 @@ and exactly six typed persistent maps:
 6. typed deleted identity to tombstone.
 
 These are canonical accepted root data, including the name and alias maps. Query indexes and
-semantic reverse indexes are separate disposable acceleration. Module objects remain independent
+semantic-fact maps are separate disposable acceleration. Module objects remain independent
 content-addressed semantic/validation units.
 
 Every map is a canonical immutable path-compressed Merkle radix tree over bounded byte keys and

@@ -77,8 +77,8 @@ and declaration rename are therefore local and do not rewrite importers or calle
 
 Accepted history is an immutable DAG. A revision binds exact parents, root digest, semantic
 certificate, transaction digest, semantic diff, and receipt. The certificate authenticates the
-exact graph-derived summary and reverse-dependency fact set without promoting disposable fact
-files to program authority. Drafts are separate non-executable authority tied to one base. Holes
+exact roots of three graph-derived persistent fact maps without promoting their disposable pages
+or manifest to program authority. Drafts are separate non-executable authority tied to one base. Holes
 and conflicts cannot enter accepted HEAD. Review projections, embedded artifacts, index bytes,
 compiler state, and deployment descriptors do not become accepted authority.
 
@@ -96,11 +96,12 @@ If eligibility cannot be proved, including mixed operations and every request wi
 preparation reconstructs the logical graph, applies the transaction, canonicalizes relations, and
 fully validates the complete candidate.
 
-Either path produces one prepared validation bound to base root, result root, root delta, changed
-modules, updated module summaries, reverse-dependency index, semantic certificate, and validation
-facts. Eligible local preparation also carries a disposable exact-owner/name index delta bound to
-the same base and result. It loads or rebuilds the base revision's certificate-matching semantic
-index, applies exact summary replacements/removals, and rebinds it to the predicted revision. Under
+Either path produces one prepared validation bound to base root, result root, changed modules,
+updated module summaries, persistent semantic-fact root delta, semantic certificate, and
+validation facts. Eligible local preparation also carries a disposable exact-owner/name index
+delta bound to the same base and result. It loads or rebuilds the base revision's
+certificate-matching semantic-fact manifest, path-copies exact summary/test/reverse-fact edits,
+and rebinds the manifest to the predicted revision. Under
 the write lock publication rereads HEAD, rejects a changed base, replays the root delta, verifies
 the prepared result and certificate bindings, and does not repeat semantic validation. It writes
 immutable changed-module/page/root/receipt/revision objects and disposable summary/index bytes
@@ -145,16 +146,17 @@ are disposable and rebuildable.
 
 ## Summaries, queries, compiler, and runtime
 
-Semantic summary contract 2 encodes per-module public signatures, implementations, effects, tests,
+Semantic-summary contract 2 encodes per-module public signatures, implementations, effects, tests,
 and typed dependency edges, bound to exact module content, package, and validator contract 2.
-Summary objects are content-addressed below `indexes/summary-objects`; each accepted revision has a
-revision-bound disposable `semantic-dependencies.lkix` generation. The reverse index and
-invalidation-frontier implementation distinguish unchanged, private-implementation, and
-public-signature changes. Local transaction paths delta-update the index and revisions authenticate
-its fact set through `semantic_certificate`. This does not provide general frontier-driven
-validation: the four admitted transaction classes are selected explicitly, while all other
-changes use complete preparation. The complete validator remains the fallback and differential
-oracle.
+Semantic-fact contract 3 persists summary bindings, test owners, and flat typed reverse edges as
+three path-compressed Merkle maps. Summary objects live below `indexes/semantic/summaries`, fact
+pages below `indexes/semantic/pages`, and each revision has one disposable `facts.lkix` manifest.
+The change classifier and bounded invalidation frontier distinguish unchanged,
+private-implementation, and public-signature changes. Local transaction paths delta-update the
+maps and revisions authenticate their roots through `semantic_certificate`. This does not provide
+general frontier-driven validation: the four admitted transaction classes are selected
+explicitly, while all other changes use complete preparation. The complete validator remains the
+fallback and differential oracle.
 
 The query engine retains a revision-bound broad relation index and a local exact-index contract 3.
 The exact index stores content-addressed owner/name shards independently of revision and binds 256

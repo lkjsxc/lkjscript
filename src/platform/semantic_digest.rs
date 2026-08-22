@@ -141,6 +141,12 @@ semantic_digest!(
     9u8
 );
 semantic_digest!(CleanupDigest, "cleanup_", "lkjscript.cleanup-plan.v1", 10u8);
+semantic_digest!(
+    SemanticCertificateDigest,
+    "semantic_certificate_",
+    "lkjscript.semantic-certificate.v3",
+    11u8
+);
 
 fn decode_digest(encoded: &str) -> Result<[u8; DIGEST_BYTES], Diagnostic> {
     if encoded.len() != DIGEST_BYTES * 2 {

@@ -5,8 +5,8 @@ use super::meaning::{GRAPH_CONTRACT_VERSION, MeaningModule};
 use super::package::{PackageId, RunnerKind};
 use super::packed;
 use super::persistent_map::{
-    MapError, MapErrorClass, MapRoot, MapWork, MemoryPageStore, OverlayPageStore, PageStore,
-    PersistentMap, RemoveOutcome,
+    MapEdit, MapError, MapErrorClass, MapRoot, MapWork, MemoryPageStore, OverlayPageStore,
+    PageStore, PersistentMap,
 };
 use super::semantic_digest::{ArtifactDigest, ModuleObjectDigest, RootObjectDigest};
 use super::semantic_id::{
@@ -589,150 +589,90 @@ impl StoredGraphRoot {
         let mut targets = PersistentMap::from_root(self.targets);
         let mut tombstones = PersistentMap::from_root(self.tombstones);
 
-        for reference in &delta.module_removals {
-            modules = remove_exact(
-                modules,
+        modules = modules
+            .apply_sorted_edits(
                 &mut overlay,
-                &reference.id.bytes(),
-                reference,
+                &exact_map_edits(
+                    &delta.module_removals,
+                    &delta.module_upserts,
+                    |reference| reference.id.bytes().to_vec(),
+                    encode_root_value,
+                    "graph_root_delta_module_duplicate",
+                )?,
                 &mut work,
-                "graph_root_delta_module_missing",
-            )?;
-            module_names = remove_exact(
-                module_names,
+            )
+            .map_err(map_diagnostic)?
+            .0;
+        module_names = module_names
+            .apply_sorted_edits(
                 &mut overlay,
-                reference.name.as_bytes(),
-                &reference.id,
+                &exact_map_edits(
+                    &delta.module_removals,
+                    &delta.module_upserts,
+                    |reference| reference.name.as_bytes().to_vec(),
+                    |reference| encode_root_value(&reference.id),
+                    "graph_root_delta_module_name_duplicate",
+                )?,
                 &mut work,
-                "graph_root_delta_module_name_missing",
-            )?;
-        }
-        for reference in &delta.module_upserts {
-            if let Some(existing) = module_names
-                .lookup(&overlay, reference.name.as_bytes(), &mut work)
-                .map_err(map_diagnostic)?
-            {
-                let existing: ModuleId = decode_root_value(&existing)?;
-                if existing != reference.id {
-                    return Err(graph_error(
-                        DiagnosticClass::Semantic,
-                        "graph_root_delta_module_name_duplicate",
-                        "module name is already bound to a different stable identity",
-                    ));
-                }
-            }
-            modules = modules
-                .insert(
-                    &mut overlay,
-                    &reference.id.bytes(),
-                    &encode_root_value(reference)?,
-                    &mut work,
-                )
-                .map_err(map_diagnostic)?
-                .0;
-            module_names = module_names
-                .insert(
-                    &mut overlay,
-                    reference.name.as_bytes(),
-                    &encode_root_value(&reference.id)?,
-                    &mut work,
-                )
-                .map_err(map_diagnostic)?
-                .0;
-        }
-        for binding in &delta.dependency_removals {
-            dependencies = remove_exact(
-                dependencies,
+            )
+            .map_err(map_diagnostic)?
+            .0;
+        dependencies = dependencies
+            .apply_sorted_edits(
                 &mut overlay,
-                &binding.package_id.bytes(),
-                binding,
+                &exact_map_edits(
+                    &delta.dependency_removals,
+                    &delta.dependency_upserts,
+                    |binding| binding.package_id.bytes().to_vec(),
+                    encode_root_value,
+                    "graph_root_delta_dependency_duplicate",
+                )?,
                 &mut work,
-                "graph_root_delta_dependency_missing",
-            )?;
-            dependency_aliases = remove_exact(
-                dependency_aliases,
+            )
+            .map_err(map_diagnostic)?
+            .0;
+        dependency_aliases = dependency_aliases
+            .apply_sorted_edits(
                 &mut overlay,
-                binding.alias.as_bytes(),
-                &binding.package_id,
+                &exact_map_edits(
+                    &delta.dependency_removals,
+                    &delta.dependency_upserts,
+                    |binding| binding.alias.as_bytes().to_vec(),
+                    |binding| encode_root_value(&binding.package_id),
+                    "graph_root_delta_dependency_alias_duplicate",
+                )?,
                 &mut work,
-                "graph_root_delta_dependency_alias_missing",
-            )?;
-        }
-        for binding in &delta.dependency_upserts {
-            if let Some(existing) = dependency_aliases
-                .lookup(&overlay, binding.alias.as_bytes(), &mut work)
-                .map_err(map_diagnostic)?
-            {
-                let existing: PackageId = decode_root_value(&existing)?;
-                if existing != binding.package_id {
-                    return Err(graph_error(
-                        DiagnosticClass::Semantic,
-                        "graph_root_delta_dependency_alias_duplicate",
-                        "dependency alias is already bound to a different package identity",
-                    ));
-                }
-            }
-            dependencies = dependencies
-                .insert(
-                    &mut overlay,
-                    &binding.package_id.bytes(),
-                    &encode_root_value(binding)?,
-                    &mut work,
-                )
-                .map_err(map_diagnostic)?
-                .0;
-            dependency_aliases = dependency_aliases
-                .insert(
-                    &mut overlay,
-                    binding.alias.as_bytes(),
-                    &encode_root_value(&binding.package_id)?,
-                    &mut work,
-                )
-                .map_err(map_diagnostic)?
-                .0;
-        }
-        for binding in &delta.target_removals {
-            targets = remove_exact(
-                targets,
+            )
+            .map_err(map_diagnostic)?
+            .0;
+        targets = targets
+            .apply_sorted_edits(
                 &mut overlay,
-                &binding.id.bytes(),
-                binding,
+                &exact_map_edits(
+                    &delta.target_removals,
+                    &delta.target_upserts,
+                    |binding| binding.id.bytes().to_vec(),
+                    encode_root_value,
+                    "graph_root_delta_target_duplicate",
+                )?,
                 &mut work,
-                "graph_root_delta_target_missing",
-            )?;
-        }
-        for binding in &delta.target_upserts {
-            targets = targets
-                .insert(
-                    &mut overlay,
-                    &binding.id.bytes(),
-                    &encode_root_value(binding)?,
-                    &mut work,
-                )
-                .map_err(map_diagnostic)?
-                .0;
-        }
-        for tombstone in &delta.tombstone_removals {
-            tombstones = remove_exact(
-                tombstones,
+            )
+            .map_err(map_diagnostic)?
+            .0;
+        tombstones = tombstones
+            .apply_sorted_edits(
                 &mut overlay,
-                &tombstone_key(&tombstone.identity),
-                tombstone,
+                &exact_map_edits(
+                    &delta.tombstone_removals,
+                    &delta.tombstone_upserts,
+                    |tombstone| tombstone_key(&tombstone.identity),
+                    encode_root_value,
+                    "graph_root_delta_tombstone_duplicate",
+                )?,
                 &mut work,
-                "graph_root_delta_tombstone_missing",
-            )?;
-        }
-        for tombstone in &delta.tombstone_upserts {
-            tombstones = tombstones
-                .insert(
-                    &mut overlay,
-                    &tombstone_key(&tombstone.identity),
-                    &encode_root_value(tombstone)?,
-                    &mut work,
-                )
-                .map_err(map_diagnostic)?
-                .0;
-        }
+            )
+            .map_err(map_diagnostic)?
+            .0;
 
         let root = Self {
             storage_contract_version: self.storage_contract_version,
@@ -1125,35 +1065,54 @@ where
     (removals, upserts)
 }
 
-fn remove_exact<T, S>(
-    map: PersistentMap,
-    store: &mut S,
-    key: &[u8],
-    expected: &T,
-    work: &mut MapWork,
+#[derive(Default)]
+struct PendingMapEdit {
+    before_set: bool,
+    before: Option<Vec<u8>>,
+    after_set: bool,
+    after: Option<Vec<u8>>,
+}
+
+fn exact_map_edits<T>(
+    removals: &[T],
+    upserts: &[T],
+    key: impl Fn(&T) -> Vec<u8>,
+    value: impl Fn(&T) -> Result<Vec<u8>, Diagnostic>,
     code: &'static str,
-) -> Result<PersistentMap, Diagnostic>
-where
-    T: Decode<()> + Eq,
-    S: PageStore + ?Sized,
-{
-    let (next, outcome) = map.remove(store, key, work).map_err(map_diagnostic)?;
-    let RemoveOutcome::Removed { previous } = outcome else {
-        return Err(graph_error(
-            DiagnosticClass::Corrupt,
-            code,
-            "persistent-root delta expected an exact base entry that is absent",
-        ));
-    };
-    let previous: T = decode_root_value(&previous)?;
-    if &previous != expected {
-        return Err(graph_error(
-            DiagnosticClass::Corrupt,
-            code,
-            "persistent-root delta base entry differs from its exact expected value",
-        ));
+) -> Result<Vec<MapEdit>, Diagnostic> {
+    let mut pending = BTreeMap::<Vec<u8>, PendingMapEdit>::new();
+    for removal in removals {
+        let edit = pending.entry(key(removal)).or_default();
+        if edit.before_set {
+            return Err(graph_error(
+                DiagnosticClass::Corrupt,
+                code,
+                "persistent-root delta removes one exact key more than once",
+            ));
+        }
+        edit.before_set = true;
+        edit.before = Some(value(removal)?);
     }
-    Ok(next)
+    for upsert in upserts {
+        let edit = pending.entry(key(upsert)).or_default();
+        if edit.after_set {
+            return Err(graph_error(
+                DiagnosticClass::Corrupt,
+                code,
+                "persistent-root delta upserts one exact key more than once",
+            ));
+        }
+        edit.after_set = true;
+        edit.after = Some(value(upsert)?);
+    }
+    Ok(pending
+        .into_iter()
+        .map(|(key, edit)| MapEdit {
+            key,
+            before: edit.before,
+            after: edit.after,
+        })
+        .collect())
 }
 
 fn decode_map_values<T, S>(

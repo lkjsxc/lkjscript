@@ -15,12 +15,12 @@ The current graph has three stable modules:
   completion meaning.
 
 The maintained graph-4 revision is
-`rev_583079ff88a142c5a8553bb7fd3beffeda8e7d181651370cb6322819eb9f5dfc`. Its root package
-artifact is `artifact_231583fc727b1ce12854227f2031ed62332ef94eb7b7c6dfe58487047c94dcfd`, and
+`rev_eb60847c2ebc2098c65a3e425398fb63ae74e08f47cdda3067069acacea7fa90`. Its root package
+artifact is `artifact_55c3b229f8cbdd53fb153e0859375404df5e31f66f6128736f5d8f95f71dfe98`, and
 `lkjournal.lkja` has bundle digest
-`artifact_3ea0c5e71f763319514a6747e580b02c02efbf7e35086420b9bfed74e3cd0444`. The bundle contains
+`artifact_fd1b07fbf5caafc92499eead7077f2ffe638bbf1a8c48f154eb9a09fcc3bf78d`. The bundle contains
 the exact standard package artifact
-`artifact_cef17b4730c708a9e3dfdaa934af28fad58902fb011db1e1305fd840f459c57a`. It contains
+`artifact_6ea73654d153ac4410ff4aaad329373dce27a58bb0d8c61eaa31cd6d66bcb3f6`. It contains
 requirements and no grants, credentials, listener address, host paths, or deployment secrets.
 
 ## Inspect and verify

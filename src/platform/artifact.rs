@@ -26,11 +26,13 @@ use super::semantic::{ExactGraphDependency, ValidatedPackage, validate_graph_pac
 use super::semantic_digest::ArtifactDigest;
 #[cfg(test)]
 use super::semantic_digest::{SemanticDiffDigest, TransactionDigest};
+#[cfg(test)]
+use super::semantic_fact::build_semantic_certificate;
 use super::semantic_id::RevisionId;
 #[cfg(test)]
 use super::semantic_id::{RepositoryId, TargetId};
 #[cfg(test)]
-use super::semantic_summary::{build_module_summary, build_semantic_certificate};
+use super::semantic_summary::build_module_summary;
 use bincode::{Decode, Encode};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};

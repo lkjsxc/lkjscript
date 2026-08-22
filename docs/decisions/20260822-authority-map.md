@@ -6,7 +6,7 @@ Date: 2026-08-22 UTC.
 
 Accepted inventory of the CLI v4 and current repository implementation. It distinguishes accepted
 program authority from draft, operational, derived, evidence, bootstrap, recovery, and deployment
-state. Persisted semantic summaries and their reverse index are described as derived; compiler
+state. Persisted semantic summaries and their persistent fact maps are described as derived; compiler
 caches, packs, retention pins, compaction, and garbage collection are not described as
 implemented.
 
@@ -24,8 +24,9 @@ All live repository-managed paths are below `.lkjscript/meaning`.
 | `artifacts/*/*.lkja` | exact dependency authority | Immutable package-object closure required by accepted dependency bindings. Staging alone introduces no graph binding or new reachability and cannot change HEAD. |
 | `receipts/*/*.lkjt` | integrity-bound evidence | Accepted revision records bind receipts proving transaction, diff, affected owners, and validation. Receipts explain acceptance but are not a second program graph. |
 | `drafts/*.lkjd` | non-executable draft authority | Pending operations, base, generation, holes, conflicts, and intent. Draft mutation cannot change accepted HEAD. |
-| `indexes/summary-objects/*/*.lkis` | derived cache | Content-addressed semantic-summary contract-2 facts. Loss rebuilds from canonical modules. |
-| `indexes/*/*/semantic-dependencies.lkix` | derived cache | Revision-bound reverse dependencies whose certificate must match the accepted revision. Missing/malformed bytes rebuild; a rebuilt certificate mismatch is canonical corruption. |
+| `indexes/semantic/summaries/*/*.lkss` | derived cache | Content-addressed semantic-summary contract-2 objects. Loss rebuilds from canonical modules. |
+| `indexes/semantic/pages/*/*.lksp` | derived cache | Persistent semantic-fact contract-3 pages for exact summary bindings, test owners, and reverse dependency edges. Loss or corruption rebuilds. |
+| `indexes/*/*/facts.lkix` | derived cache | Revision/root-bound semantic-fact manifest. Its constant-size certificate must match the accepted revision; a rebuilt mismatch is canonical corruption. |
 | `indexes/local-objects/{owners,names}/**` plus revision manifests | derived cache | Local-index contract-3 owner/name shards are revision-independent content-addressed objects; each small revision/root-bound manifest selects 256 optional digests per index. Loss or corruption rebuilds from canonical authority. |
 | other `indexes/**` | derived cache | Revision-bound broad query indexes and operational generations. Loss or corruption rebuilds from canonical authority. |
 | `LOCK` | operational coordination | Empty local lock file serializes publication, draft mutation, backup, and related repository operations. It owns no meaning. |
@@ -119,5 +120,5 @@ one in-place revision-publication kernel, not one callable Rust writer.
   operation.
 - Deployment grants and secrets never enter accepted artifacts or graph authority.
 - Deep doctor is the exhaustive reconstruction path; caches cannot certify missing canonical data.
-- Current semantic summaries and reverse indexes, and future compiled units, sessions, packs, and
+- Current semantic summaries and persistent fact maps, and future compiled units, sessions, packs, and
   GC catalogs, remain derived or operational unless a later explicit decision changes their role.

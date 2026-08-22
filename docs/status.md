@@ -7,10 +7,10 @@ from predecessor contracts are historical and remain in `docs/performance.md`.
 
 | Authority | Current inspected identity |
 |---|---|
-| `packages/standard` | repository `repo_c1358d64c351873b51c954b69d1ac988`; revision `rev_af36c21e869a22a992b982aafe959c6230311293094e9ded162e29872ce0afdf`; root `root_object_61f185e6332b885353acf6312c779369bcca9ca82acc5141b9beb4bcc2e1aeeb`; 12 modules |
-| `applications/lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; revision `rev_583079ff88a142c5a8553bb7fd3beffeda8e7d181651370cb6322819eb9f5dfc`; root `root_object_1d2e3529202868c508db87b475ac41b31d6241a01c791ac1db47fb0b1a4e7090`; 3 modules; 2 targets |
-| embedded standard package | semantic revision `rev_af36c21e869a22a992b982aafe959c6230311293094e9ded162e29872ce0afdf`; package artifact `artifact_cef17b4730c708a9e3dfdaa934af28fad58902fb011db1e1305fd840f459c57a`; bundle digest `artifact_b2f39efc64b987378a6abcb81ade2f14de354ace122dbea22f02a984de875cea`; 22,259 bytes |
-| current lkjournal build | root package artifact `artifact_231583fc727b1ce12854227f2031ed62332ef94eb7b7c6dfe58487047c94dcfd`; bundle digest `artifact_3ea0c5e71f763319514a6747e580b02c02efbf7e35086420b9bfed74e3cd0444`; 178,756 bytes; exact 2-package closure |
+| `packages/standard` | repository `repo_c1358d64c351873b51c954b69d1ac988`; revision `rev_1af582dbebc01b43cd1050349f208b7c71c92ca4efd3f6b65624745f7d9c988e`; root `root_object_61f185e6332b885353acf6312c779369bcca9ca82acc5141b9beb4bcc2e1aeeb`; 12 modules |
+| `applications/lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; revision `rev_eb60847c2ebc2098c65a3e425398fb63ae74e08f47cdda3067069acacea7fa90`; root `root_object_f67b6e91af36e61f306ca80b315a82e1ffdceb36227be21bb554df6903d786f1`; 3 modules; 2 targets |
+| embedded standard package | semantic revision `rev_1af582dbebc01b43cd1050349f208b7c71c92ca4efd3f6b65624745f7d9c988e`; package artifact `artifact_6ea73654d153ac4410ff4aaad329373dce27a58bb0d8c61eaa31cd6d66bcb3f6`; bundle digest `artifact_3648f87daea0164ef6e94ea6e731dd687db590b8889583f63cac6587f5e7a4d1`; 22,264 bytes |
+| current lkjournal build | root package artifact `artifact_55c3b229f8cbdd53fb153e0859375404df5e31f66f6128736f5d8f95f71dfe98`; bundle digest `artifact_fd1b07fbf5caafc92499eead7077f2ffe638bbf1a8c48f154eb9a09fcc3bf78d`; 178,766 bytes; exact 2-package closure |
 
 The standard package has 7 graph tests. The `lkjournal` root package has 5 graph tests and its
 exact two-package closure runs 12; current direct `check` observations report
@@ -27,12 +27,12 @@ template does the same. These are maintained abstraction consumers, not test-onl
 |---|---|
 | Meaning graph | `lkjscript-meaning-graph-4`, version 4 |
 | Physical accepted root | `lkjscript-persistent-root-2`, storage version 2 |
-| Revisions and receipts | versions 3 and 3 |
+| Revisions and receipts | versions 4 and 3 |
 | Public CLI | version 4, strict JSON |
 | Public change and internal transaction | versions 3 and 4 |
 | Query / broad index / local exact index | versions 2 / 2 / 3 |
 | Draft, semantic diff, and merge | versions 4, 2, and 2 |
-| Semantic summary / validator identity | `lkjscript-semantic-summary-2` / `lkjscript-semantic-validator-2` |
+| Semantic summary / fact / validator | `lkjscript-semantic-summary-2` / `lkjscript-semantic-facts-3` / `lkjscript-semantic-validator-2` |
 | Executable artifact / package object | versions 4 and 3 |
 | Backup and bootstrap | versions 4 and 2 |
 | Read-only retention preview | version 1 |
@@ -114,13 +114,13 @@ relations, and fully validates the candidate under profile `prepared_once_full_o
 publication removes duplicate write-lock validation in both paths. A missing exact-index generation
 makes a local transaction widen to complete preparation; it does not narrow validation.
 
-Semantic summary contract 2 implements integrity-bound module signatures, implementation/effect
-digests, typed dependency facts, rebuildable reverse dependencies, private/public change
-classification, and an invalidation frontier. Codec, corruption, rebuild, and frontier tests exist.
-Content-addressed summaries and a revision-bound reverse index are persisted under disposable
-index storage. Every revision core authenticates the exact fact set with a revision-independent
-semantic certificate. Local preparation delta-updates and rebinds that index; missing cache bytes
-rebuild from canonical modules, while a certificate mismatch is corruption. This is not general
+Semantic-summary contract 2 implements integrity-bound module signatures, implementation/effect
+digests, and typed dependency facts. Semantic-fact contract 3 persists exact summary bindings,
+test owners, and flat typed reverse edges in three Merkle maps. Codec, corruption, rebuild,
+delta/full equality, private/public classification, and bounded-frontier tests exist. Every
+revision-4 core authenticates the exact fact roots with a revision-independent certificate. Local
+preparation path-copies changed fact branches; missing or malformed cache state rebuilds from
+canonical modules, while a rebuilt certificate mismatch is corruption. This is not general
 frontier-driven validation: only the four transaction classes above use local preparation. The
 complete validator and packed reconstruction remain the trusted oracles.
 
@@ -191,6 +191,10 @@ pass is not fresh. Gates that write a debug executable precede gates that launch
 release and non-Cargo work may still run in parallel. Default success remains one aggregate result
 plus a retained receipt.
 
+The current working-tree authoritative profile passed 17/17 fresh gates with no reuse in
+116.312 seconds at `.artifacts/check/20260822T152519.342035Z-853126/receipt.json`. This receipt is
+pre-commit evidence and will be superseded by final commit-bound and fresh-checkout verification.
+
 ## Current limits and unproved properties
 
 - The stored root has no explicit module-count field ceiling, but complete logical
@@ -210,8 +214,8 @@ plus a retained receipt.
   been retained as scale evidence. Restore verifies every entry and deep retained structure before
   visibility but does not rerun the complete cross-package semantic validator.
 - Query-index single objects are bounded to 128 MiB, 2,000,000 owners, and 10,000,000 relations.
-  Semantic reverse-index codec bounds are explicitly implementation/hostile-input bounds and
-  require sharding before they can constrain a legitimate project.
+  Semantic-fact keys and values use the persistent-map 256-byte/48-KiB boundaries and 64-KiB
+  hostile page decoder bound; these are physical object boundaries, not project count ceilings.
 - Imports, targets, exports, and declaration references are exact-ID bound; module and declaration
   rename are local. Declaration move is not a concise change-v3 form and exact references still
   carry their owning module ID, so no declaration-move locality claim is made.

@@ -91,12 +91,12 @@ foreign-domain use rejects; exact replay preserves allocation.
 
 A revision core binds its current contract versions, repository ID, zero to two exact parent
 revision/record pairs, persistent root digest, semantic certificate, semantic diff digest, and
-transaction digest. The certificate is the revision-independent digest of the exact validated
-module-summary and reverse-dependency fact set. Its domain-separated digest is the revision ID. A
-revision record binds that core to one receipt. HEAD binds the repository, revision, and record
-digest and is the single accepted visibility point. Persisted summary/index bytes remain
-disposable; the certificate authenticates their rebuild against canonical meaning rather than
-promoting them to a second graph.
+transaction digest. The certificate is the revision-independent digest of the exact persistent
+summary-binding, test-owner, and typed reverse-edge map roots. Its domain-separated digest is the
+revision ID. A revision record binds that core to one receipt. HEAD binds the repository, revision,
+and record digest and is the single accepted visibility point. Persisted summary objects, fact
+pages, and manifests remain disposable; the certificate authenticates their rebuild against
+canonical meaning rather than promoting them to a second graph.
 
 Accepted revisions are complete: they contain no holes or conflicts, and every reference resolves
 within the exact dependency closure. Names, scopes, types, generic substitution, effects,
@@ -144,20 +144,21 @@ mixed operations, selection uncertainty, index failure, and every other operatio
 complete logical reconstruction, canonicalization, and validation. Building a missing disposable
 index may itself require complete reconstruction.
 
-Either path carries a prepared result bound to the exact base root, result root, root delta,
-changed module set, summary delta, reverse-dependency index, semantic certificate, and validation
-facts. Under the write lock publication rereads HEAD, rejects a stale base, reapplies the delta to
-the accepted stored root, verifies the result and certificate bindings, writes immutable
+Either path carries a prepared result bound to the exact base root, result root, stored-root
+update, changed module set, semantic-fact map delta, semantic certificate, and validation facts.
+Under the write lock publication rereads HEAD, rejects a stale base, verifies the prepared update
+against the accepted stored root and the result/certificate bindings, writes immutable
 module/map-page/root/receipt/revision/dependency objects durably, and replaces HEAD once. It does
 not repeat the completed semantic validation.
 
-Semantic-summary contract 2 persists content-addressed module summaries and a revision-bound
-reverse-dependency index as disposable acceleration. The four local paths update these facts by
-delta. Missing or malformed cache bytes rebuild from canonical modules; a rebuilt certificate
-that differs from the accepted revision is corruption. The reverse-dependency frontier does not
-yet select general validation. Packed reconstruction and the complete validator remain explicit
-full-oracle and focused differential-test routes; deep doctor separately walks retained
-object/history bindings and checks the current rebuilt certificate.
+Semantic-summary contract 2 produces content-addressed module summaries. Semantic-fact contract 3
+persists exact summary bindings, test owners, and typed reverse dependency edges as three Merkle
+maps plus one revision/root-bound manifest. The four local paths apply key-sorted path-local edits.
+Missing or malformed cache bytes rebuild from canonical modules; a rebuilt certificate that differs
+from the accepted revision is corruption. The bounded dependency frontier does not yet select
+general validation. Packed reconstruction and the complete validator remain explicit full-oracle
+and focused differential-test routes; deep doctor separately walks retained object/history
+bindings and checks the current rebuilt certificate.
 
 ## Outcomes, ordering, and failure
 

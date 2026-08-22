@@ -141,10 +141,10 @@ commit-bound final performance receipt and does not replace the historical raw r
 - Graph-3 scale, service, RSS, I/O, fsync, and million-owner results were unavailable.
   No historical timing is relabeled as current evidence.
 
-## Current graph-4 cutover observation
+## Predecessor graph-4 exact-reference observation (historical)
 
-This section records the current working-tree identities after exact declaration-reference cutover.
-It is not a commit-bound final performance receipt.
+This section records the working-tree identities after the exact declaration-reference cutover and
+before revision contract 4. It is historical and not a commit-bound final performance receipt.
 
 - Current contracts are meaning graph 4, persistent root storage 2, CLI 4, change 3,
   transaction 4, revision/receipt 3, draft 4, diff/merge 2, semantic summary/validator 2,
@@ -185,6 +185,45 @@ It is not a commit-bound final performance receipt.
   `cargo clippy --locked --lib -- -D warnings` passed. A working-tree fresh full profile is recorded
   below. Final commit-bound and fresh-checkout profiles, the scale matrix, RSS, I/O, fsync, and
   million-owner results have not yet been run and are not claimed.
+
+## Current revision-4 semantic-fact cutover observation
+
+This section records the current working-tree identities after replacing the monolithic semantic
+dependency generation. It is not yet a commit-bound final performance receipt.
+
+- Current contracts are meaning graph 4, persistent-root storage 2, CLI 4, change 3,
+  transaction 4, revision/receipt 4/3, draft 4, diff/merge 2, semantic-summary 2,
+  semantic-fact 3, validator 2, executable/package artifact 4/3, backup 4, and bootstrap 2.
+- Semantic-fact contract 3 stores module-to-summary bindings, graph-owned test owners, and flat
+  typed reverse dependency edges in three path-compressed persistent Merkle maps. A constant-size
+  certificate over their roots replaces the predecessor packed complete reverse index. Local
+  changes use key-sorted batched edits and retain only new reachable path pages.
+- A bounded dependency frontier distinguishes unchanged, private-implementation, and
+  public-signature deltas, traverses exact typed edge prefixes, selects dependent test modules,
+  accounts page/byte work, and rejects stale or exhausted traversal. The general transaction
+  validator does not yet consume this frontier, so only the existing four local profiles are
+  claimed.
+- Focused tests cover 10,000-module full/delta root equality with fewer than 16 new pages,
+  dependency retargeting, test-owner replacement, private/public propagation, stale revision,
+  budget exhaustion, missing/corrupt derived fact-page rebuilding, and predecessor contract
+  rejection. `cargo check --locked --all-targets` and the focused semantic-fact test set pass.
+- Standard is revision
+  `rev_1af582dbebc01b43cd1050349f208b7c71c92ca4efd3f6b65624745f7d9c988e`, root
+  `root_object_61f185e6332b885353acf6312c779369bcca9ca82acc5141b9beb4bcc2e1aeeb`, package artifact
+  `artifact_6ea73654d153ac4410ff4aaad329373dce27a58bb0d8c61eaa31cd6d66bcb3f6`, bundle digest
+  `artifact_3648f87daea0164ef6e94ea6e731dd687db590b8889583f63cac6587f5e7a4d1`, 22,264 bundle bytes,
+  and 7 passing graph tests.
+- `lkjournal` is revision
+  `rev_eb60847c2ebc2098c65a3e425398fb63ae74e08f47cdda3067069acacea7fa90`, root
+  `root_object_f67b6e91af36e61f306ca80b315a82e1ffdceb36227be21bb554df6903d786f1`, root package artifact
+  `artifact_55c3b229f8cbdd53fb153e0859375404df5e31f66f6128736f5d8f95f71dfe98`, bundle digest
+  `artifact_fd1b07fbf5caafc92499eead7077f2ffe638bbf1a8c48f154eb9a09fcc3bf78d`, 178,766 bundle bytes,
+  and 12 passing checks across its exact two-package closure.
+- The predecessor maintained store directories were moved to
+  `/tmp/lkjscript-revision4-cutover-old-20260822` before direct replacement. This is recoverable
+  local scratch, not retained repository authority. No revision-3 reader remains in current code.
+- Updated 10,000/100,000/million-owner public scale, RSS, I/O, fsync, dense-fanout, and long-history
+  evidence remains unavailable and is not claimed.
 
 ## Verification notes
 
@@ -237,3 +276,18 @@ and completed in 22.781 ms and 45.653 ms, but wrote 842,666 and 843,519 derived-
 took 21.216 seconds for 3,053,899 payload bytes. These observations select monolithic semantic-index
 storage and bulk persistent-map mutation as prerequisites; 100,000 and one-million public runs were
 not attempted on the known linear path.
+
+## Semantic-fact cutover verification
+
+After the direct revision-4 authority and semantic-fact contract-3 cutover, the release executable
+opened both maintained stores, standard passed 7/7 graph tests, `lkjournal` passed 12/12 tests across
+its exact dependency closure, and both execution tiers agreed. Deep doctor passed both stores.
+Fresh release builds reproduced `applications/lkjournal/dependencies/standard.lkja` and
+`applications/lkjournal/lkjournal.lkja` byte-for-byte. The copied executable reported the exact
+built-in standard identities recorded above.
+
+`cargo test --locked --lib --no-fail-fast` passed 122 tests, the public CLI suite passed 7 tests,
+and all-target Clippy passed with warnings denied. The working-tree authoritative DAG then passed
+17/17 fresh gates with no reuse in 116.312 seconds at
+`.artifacts/check/20260822T152519.342035Z-853126/receipt.json`. This is pre-commit evidence; final
+commit-bound and fresh-checkout receipts remain required.

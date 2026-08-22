@@ -552,6 +552,7 @@ pub fn execute_transaction(
         let validation = match repository.canonicalize_proposal(
             request.base_revision,
             &reconstructed.current.root,
+            &reconstructed.current.stored_root,
             &mut root,
             &mut modules,
         ) {
@@ -808,6 +809,7 @@ fn prepare_local_pure_body_transaction(
     let validated = repository.canonicalize_slice(&mut root, &mut modules)?;
     let tombstone_upserts = root.tombstones.clone();
     let mut changed_modules = Vec::new();
+    let mut module_removals = Vec::new();
     let mut module_upserts = Vec::new();
     for reference in &root.modules {
         let Some(original) = original_objects.get(&reference.id) else {
@@ -830,9 +832,15 @@ fn prepare_local_pure_body_transaction(
                 )
             })?;
         changed_modules.push(module.clone());
+        module_removals.push(ModuleObjectRef {
+            id: reference.id,
+            name: reference.name.clone(),
+            object: *original,
+        });
         module_upserts.push(reference.clone());
     }
     let delta = StoredGraphRootDelta {
+        module_removals,
         module_upserts,
         tombstone_upserts,
         ..StoredGraphRootDelta::default()
@@ -870,18 +878,15 @@ fn prepare_local_module_creation(
             return Ok(None);
         };
         consume_work(&mut work, 1, request.budget)?;
-        if !module_ids.insert(*id)
-            || !module_names.insert(name.clone())
-            || repository.module_reference_by_id(current, *id)?.is_some()
-            || repository
-                .module_reference_by_name(current, name)?
-                .is_some()
-        {
+        if !module_ids.insert(*id) || !module_names.insert(name.clone()) {
             return Err(operation_error(
                 "create_module",
                 "module identity or name exists",
             ));
         }
+        // Accepted-base ID and name absence are exact `None -> value` preconditions in the
+        // persistent-map batch. Avoid two point reads per created module; the prepared batch
+        // remains closed and fails before publication if either accepted key exists.
         if repository
             .tombstone_by_identity(current, &TombstoneIdentity::Module(*id))?
             .is_some()
@@ -1321,6 +1326,7 @@ fn prepare_local_declaration_rename(
     let validated = repository.canonicalize_slice(&mut root, &mut modules)?;
 
     let mut changed_modules = Vec::new();
+    let mut module_removals = Vec::new();
     let mut module_upserts = Vec::new();
     for reference in &root.modules {
         let Some(original) = original_objects.get(&reference.id) else {
@@ -1343,9 +1349,15 @@ fn prepare_local_declaration_rename(
                 )
             })?;
         changed_modules.push(module.clone());
+        module_removals.push(ModuleObjectRef {
+            id: reference.id,
+            name: reference.name.clone(),
+            object: *original,
+        });
         module_upserts.push(reference.clone());
     }
     let delta = StoredGraphRootDelta {
+        module_removals,
         module_upserts,
         ..StoredGraphRootDelta::default()
     };

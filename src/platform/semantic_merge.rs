@@ -188,6 +188,7 @@ pub fn merge_revisions(
     let prepared_validation = match repository.canonicalize_proposal(
         current.head.revision,
         preparation_base,
+        &current.stored_root,
         &mut merged.root,
         &mut merged.modules,
     ) {
