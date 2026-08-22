@@ -298,7 +298,25 @@ impl SemanticRepository {
             store,
         };
         repository.current()?;
+        repository.ensure_operational_layout()?;
         Ok(repository)
+    }
+
+    /// Recreates only disposable and coordination state omitted by graph transport. Canonical
+    /// objects and HEAD are validated before this is called and are never created or changed here.
+    fn ensure_operational_layout(&self) -> Result<(), Diagnostic> {
+        ensure_directory(&self.store, "repository_store_type")?;
+        ensure_or_create_directory(
+            &self.store.join(DRAFT_OBJECTS),
+            "repository_draft_directory",
+        )?;
+        ensure_or_create_directory(
+            &self.store.join(INDEX_OBJECTS),
+            "repository_index_directory",
+        )?;
+        ensure_or_create_empty_file(&self.store.join(LOCK_FILE), "repository_lock_file")?;
+        sync_directory(&self.store)
+            .map_err(|error| io_error("repository_operational_layout_sync", &self.store, error))
     }
 
     pub fn initialize(
@@ -2065,8 +2083,40 @@ fn sharded_digest_path(store: &Path, directory: &str, bytes: &[u8], extension: &
 fn ensure_or_create_directory(path: &Path, code: &str) -> Result<(), Diagnostic> {
     match fs::symlink_metadata(path) {
         Ok(_) => ensure_directory(path, code),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => match fs::create_dir(path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                ensure_directory(path, code)
+            }
+            Err(error) => Err(io_error(code, path, error)),
+        },
+        Err(error) => Err(io_error(code, path, error)),
+    }
+}
+
+fn ensure_or_create_empty_file(path: &Path, code: &str) -> Result<(), Diagnostic> {
+    let validate = || -> Result<(), Diagnostic> {
+        let metadata = fs::symlink_metadata(path).map_err(|error| io_error(code, path, error))?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() != 0 {
+            return Err(repository_error(
+                DiagnosticClass::Corrupt,
+                code,
+                format!(
+                    "'{}' is not an empty regular non-symlink file",
+                    path.display()
+                ),
+            ));
+        }
+        Ok(())
+    };
+    match fs::symlink_metadata(path) {
+        Ok(_) => validate(),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            fs::create_dir(path).map_err(|error| io_error(code, path, error))
+            match OpenOptions::new().create_new(true).write(true).open(path) {
+                Ok(file) => file.sync_all().map_err(|error| io_error(code, path, error)),
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => validate(),
+                Err(error) => Err(io_error(code, path, error)),
+            }
         }
         Err(error) => Err(io_error(code, path, error)),
     }
@@ -2395,6 +2445,44 @@ mod tests {
         bytes[20] ^= 1;
         fs::write(path, bytes).expect("corrupt fixture");
         assert!(repository.reconstruct_current().is_err());
+    }
+
+    #[test]
+    fn open_recreates_only_transport_omitted_operational_state() {
+        let temporary = tempfile::TempDir::new().expect("temporary project");
+        let (root, modules) = fixture();
+        let (repository, _) = SemanticRepository::initialize(
+            temporary.path(),
+            InitialPublication {
+                root,
+                modules,
+                transaction: TransactionDigest::of(b"import"),
+                semantic_diff: SemanticDiffDigest::of(b"initial"),
+                intent: None,
+                validation_profile: None,
+                dependency_artifacts: Vec::new(),
+            },
+        )
+        .expect("initialize");
+        let expected = repository.current().expect("current").head;
+        fs::remove_dir(repository.store.join(DRAFT_OBJECTS)).expect("remove empty drafts");
+        fs::remove_dir(repository.store.join(INDEX_OBJECTS)).expect("remove empty indexes");
+        fs::remove_file(repository.store.join(LOCK_FILE)).expect("remove lock");
+        drop(repository);
+
+        let reopened =
+            SemanticRepository::open(temporary.path()).expect("reopen transported graph");
+        assert_eq!(reopened.current().expect("reopened current").head, expected);
+        assert!(reopened.store.join(DRAFT_OBJECTS).is_dir());
+        assert!(reopened.store.join(INDEX_OBJECTS).is_dir());
+        assert!(reopened.store.join(LOCK_FILE).is_file());
+        assert_eq!(
+            fs::metadata(reopened.store.join(LOCK_FILE))
+                .expect("lock metadata")
+                .len(),
+            0
+        );
+        reopened.backup().expect("backup after transport");
     }
 
     #[test]
