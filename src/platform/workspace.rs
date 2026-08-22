@@ -16,7 +16,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-pub const WORKSPACE_CONTRACT_VERSION: u16 = 2;
+pub const WORKSPACE_CONTRACT_VERSION: u16 = 3;
 pub const DEFAULT_ORIENTATION_ITEMS: usize = 64;
 pub const MAXIMUM_ORIENTATION_ITEMS: usize = 4_096;
 
@@ -132,7 +132,7 @@ impl SemanticWorkspace {
     }
 
     pub fn status(&self) -> Result<WorkspaceStatus, Diagnostic> {
-        let current = self.repository.current()?;
+        let current = self.repository.current_binding()?;
         Ok(WorkspaceStatus {
             contract_version: WORKSPACE_CONTRACT_VERSION,
             authority: "typed_semantic_graph",
@@ -140,8 +140,8 @@ impl SemanticWorkspace {
             graph_contract_version: GRAPH_CONTRACT_VERSION,
             root: self.root.display().to_string(),
             repository_id: current.head.repository_id,
-            package_id: current.root.package_id,
-            package_name: current.root.package_name,
+            package_id: current.stored_root.package_id,
+            package_name: current.stored_root.package_name,
             revision: current.head.revision,
             record: current.head.record,
             root_object: current.record.core.root,
@@ -194,16 +194,45 @@ impl SemanticWorkspace {
         let mut targets = root
             .targets
             .iter()
-            .map(|target| TargetOrientation {
-                id: target.id,
-                name: target.name.clone(),
-                component_module: target.component_module,
-                component_module_name: target.component_module_name.clone(),
-                component_name: target.component_name.clone(),
-                port_name: target.port_name.clone(),
-                runner: target.runner,
+            .map(|target| {
+                let module = index
+                    .owner_summary(&target.component_module.to_string())
+                    .ok_or_else(|| {
+                        workspace_error(
+                            DiagnosticClass::Corrupt,
+                            "semantic_orientation_target_module",
+                            "target presentation lost its exact component module",
+                        )
+                    })?;
+                let component = index
+                    .owner_summary(&target.component.to_string())
+                    .ok_or_else(|| {
+                        workspace_error(
+                            DiagnosticClass::Corrupt,
+                            "semantic_orientation_target_component",
+                            "target presentation lost its exact component",
+                        )
+                    })?;
+                let port = index
+                    .owner_summary(&target.port.to_string())
+                    .ok_or_else(|| {
+                        workspace_error(
+                            DiagnosticClass::Corrupt,
+                            "semantic_orientation_target_port",
+                            "target presentation lost its exact component port",
+                        )
+                    })?;
+                Ok(TargetOrientation {
+                    id: target.id,
+                    name: target.name.clone(),
+                    component_module: target.component_module,
+                    component_module_name: module.name.clone(),
+                    component_name: component.name.clone(),
+                    port_name: port.name.clone(),
+                    runner: target.runner,
+                })
             })
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>, Diagnostic>>()?;
         targets.sort_by(|left, right| {
             (left.name.as_str(), left.id).cmp(&(right.name.as_str(), right.id))
         });
@@ -230,9 +259,9 @@ impl SemanticWorkspace {
             target_count,
             truncated,
             expansion_commands: vec![
-                "lkjscript semantic owners --kind module --limit 64".to_owned(),
-                "lkjscript semantic owners --kind declaration --limit 64".to_owned(),
-                "lkjscript semantic targets --limit 64".to_owned(),
+                "lkjscript query owners --kind module --limit 64".to_owned(),
+                "lkjscript query owners --limit 64".to_owned(),
+                "lkjscript inspect targets --limit 64".to_owned(),
             ],
         })
     }

@@ -105,13 +105,26 @@ def base_gates(run_directory: Path) -> dict[str, Gate]:
             "--",
             "-D",
             "warnings",
+            dependencies=("fmt",),
         ),
-        "library_tests": cargo_gate("library_tests", "test", "--lib", "--locked"),
+        "library_tests": cargo_gate(
+            "library_tests", "test", "--lib", "--locked", dependencies=("fmt",)
+        ),
         "general_service_tests": cargo_gate(
-            "general_service_tests", "test", "--test", "general_service", "--locked"
+            "general_service_tests",
+            "test",
+            "--test",
+            "general_service",
+            "--locked",
+            dependencies=("fmt",),
         ),
         "public_cli_tests": cargo_gate(
-            "public_cli_tests", "test", "--test", "public_cli", "--locked"
+            "public_cli_tests",
+            "test",
+            "--test",
+            "public_cli",
+            "--locked",
+            dependencies=("library_tests", "general_service_tests"),
         ),
         "workspace_tests": cargo_gate(
             "workspace_tests",
@@ -120,10 +133,12 @@ def base_gates(run_directory: Path) -> dict[str, Gate]:
             "--all-targets",
             "--all-features",
             "--locked",
+            dependencies=("clippy", "release_build"),
         ),
         "release_build": Gate(
             "release_build",
             ("cargo", "build", "--workspace", "--release", "--locked"),
+            dependencies=("fmt",),
             required_outputs=(binary(),),
         ),
         "checker_self_test": Gate(
@@ -1541,6 +1556,21 @@ def self_test(machine: bool) -> int:
         graph_rejections["duplicate_command"] = False
     except RuntimeError:
         graph_rejections["duplicate_command"] = True
+    contract_directory = directory / "base-gate-contract"
+    contract_directory.mkdir()
+    contract_gates = base_gates(contract_directory)
+    executable_race_dependencies = {
+        "clippy": contract_gates["clippy"].dependencies,
+        "workspace_tests": contract_gates["workspace_tests"].dependencies,
+        "public_cli_tests": contract_gates["public_cli_tests"].dependencies,
+        "release_build": contract_gates["release_build"].dependencies,
+    }
+    executable_race_dependencies_expected = {
+        "clippy": ("fmt",),
+        "workspace_tests": ("clippy", "release_build"),
+        "public_cli_tests": ("library_tests", "general_service_tests"),
+        "release_build": ("fmt",),
+    }
     retention_actual = (
         managed_run(Path("20260821T000000.000000Z-123"), ""),
         managed_run(Path("20260821T000000.000000Z-123-full"), ""),
@@ -1555,6 +1585,7 @@ def self_test(machine: bool) -> int:
         and dag_passed
         and cache_passed
         and all(graph_rejections.values())
+        and executable_race_dependencies == executable_race_dependencies_expected
     )
     receipt = {
         "contract_version": CHECK_CONTRACT_VERSION,
@@ -1574,6 +1605,8 @@ def self_test(machine: bool) -> int:
             "corrupt_record": corrupt_lookup.reason,
         },
         "graph_rejections": graph_rejections,
+        "executable_race_dependencies_expected": executable_race_dependencies_expected,
+        "executable_race_dependencies_actual": executable_race_dependencies,
         "gates": results,
         "dag_gates": dag_results,
     }

@@ -6,7 +6,9 @@ Date: 2026-08-22 UTC. Starting Git commit:
 `642ea3f96a3801df4453efac178c58933eb9d0f6d457d0474b8f3528e40738aa`.
 
 This record retains conclusions, alternatives, prototype observations, deletion consequences, and
-reversal gates. It is evidence, not program authority.
+reversal gates. It is historical evidence for the meaning-graph-1 campaign endpoint, not program
+authority or current graph-4 documentation. Words such as “current” below refer to that recorded
+endpoint unless a paragraph explicitly says otherwise.
 
 ## Reproduced starting point
 
@@ -74,7 +76,7 @@ checking retained immutable objects. It is recorded as an unimplemented incremen
 not hidden by larger timeouts. Graph contract 1 caps one root at 100,000 modules, so a one-million
 module run rejects under current resource policy and was not performed.
 
-## Migration result and absence
+## Historical migration result and absence
 
 Standard retained package ID `10000000000000000000000000000001`, 12 modules, and 6 tests.
 lkjournal retained package ID `20000000000000000000000000000001`, 3 modules, 2 targets, and 11

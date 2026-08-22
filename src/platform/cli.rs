@@ -1,21 +1,25 @@
-//! Strict, bounded public semantic command projection.
+//! Strict, bounded public graph-native command projection.
 
 use super::artifact::{MAXIMUM_ARTIFACT_BYTES, load_artifact};
+use super::bootstrap::{
+    ProjectTemplate, builtin_package_info, create_project, export_builtin_standard,
+};
+use super::deployment::{MAXIMUM_DEPLOYMENT_BYTES, decode_deployment};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::execution::{PreparedProgram, ReferenceInterpreter, RunPolicy, Vm};
 use super::json::{JsonLimits, decode_strict, decode_typed, encode_typed};
 use super::meaning::{GRAPH_CONTRACT_IDENTITY, RelationRole};
 use super::package::RunnerKind;
-use super::repository::{MAXIMUM_BACKUP_BYTES, SemanticRepository};
+use super::repository::{
+    BACKUP_SEGMENT_ENTRY_LIMIT, MAXIMUM_BACKUP_MANIFEST_BYTES, MAXIMUM_BACKUP_SEGMENT_BYTES,
+    SemanticRepository,
+};
 use super::revision::{AffectedOwner, TransactionReceipt, ValidationFacts};
+use super::semantic_change::{ChangeRequest, execute_change};
 use super::semantic_diff::diff_revisions;
 use super::semantic_digest::{ReceiptDigest, SemanticDiffDigest, TransactionDigest};
 use super::semantic_draft::SemanticDraftStore;
-use super::semantic_id::{
-    AnnotationId, BindingId, CaseId, DeclarationId, DocumentationId, DraftId, ExpressionId,
-    FieldId, ModuleId, OperationId, ParameterId, PortId, RepositoryId, RequirementId, RevisionId,
-    TargetId,
-};
+use super::semantic_id::{DraftId, ModuleId, RepositoryId, RevisionId};
 use super::semantic_merge::{
     SEMANTIC_MERGE_CONTRACT_VERSION, SemanticMergeRequest, SemanticMergeResult,
     SemanticMergeStatus, merge_revisions,
@@ -23,7 +27,7 @@ use super::semantic_merge::{
 use super::semantic_projection::{MAXIMUM_REVIEW_PROJECTION_BYTES, render_review_projection};
 use super::semantic_query::{OwnerKind, QueryBudget, SemanticQueryIndex};
 use super::semantic_transaction::{
-    TransactionMode, TransactionRequest, TransactionResult, TransactionStatus, execute_transaction,
+    TransactionMode, TransactionRequest, TransactionResult, TransactionStatus,
 };
 use super::workspace::{DEFAULT_ORIENTATION_ITEMS, SemanticWorkspace};
 use serde::{Deserialize, Serialize};
@@ -34,7 +38,7 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-pub const CLI_CONTRACT_VERSION: u16 = 2;
+pub const CLI_CONTRACT_VERSION: u16 = 4;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
 const MAXIMUM_INLINE_AFFECTED_OWNERS: usize = 64;
@@ -63,64 +67,138 @@ impl CliSuccess {
 
 pub fn execute(arguments: Vec<String>) -> Result<CliSuccess, Diagnostic> {
     let (arguments, project) = extract_global_project(arguments)?;
-    let command = arguments.first().map(String::as_str).unwrap_or("help");
+    let command = arguments
+        .first()
+        .map(String::as_str)
+        .unwrap_or("capabilities");
     match command {
-        "help" => {
-            exact_arguments(&arguments, 1, "help")?;
-            semantic_help(None)
+        "capabilities" => capabilities_command(&arguments[1..]),
+        "new" => new_project_command(&arguments[1..]),
+        "inspect" => inspect_command(&arguments[1..], project.as_deref()),
+        "query" => public_query_command(&arguments[1..], project.as_deref()),
+        "change" => change_command(&arguments[1..], project.as_deref()),
+        "draft" => public_draft_command(&arguments[1..], project.as_deref()),
+        "history" => public_history_command(&arguments[1..], project.as_deref()),
+        "package" => package_command(&arguments[1..], project.as_deref()),
+        "check" => {
+            exact_arguments(&arguments, 1, "check")?;
+            let workspace = open_workspace(project.as_deref())?;
+            run_package_tests(&workspace.prepare()?)
         }
-        "semantic" => semantic_command(&arguments[1..], project.as_deref()),
+        "build" => build_command(&arguments[1..], project.as_deref()),
+        "run" => run_target_command(&arguments[1..], project.as_deref()),
+        "review" => text_projection_command("review", &arguments[1..], project.as_deref()),
+        "backup" => backup_command("backup", &arguments[1..], project.as_deref()),
+        "restore" => restore_command(&arguments[1..], project.as_deref()),
+        "doctor" => doctor_command(&arguments[1..], project.as_deref()),
         other => Err(usage_error(format!(
-            "unknown command '{other}'; current development commands are under 'semantic'"
+            "unknown command '{other}'; use 'capabilities'"
         ))),
     }
 }
 
-fn semantic_command(
-    arguments: &[String],
-    project: Option<&Path>,
-) -> Result<CliSuccess, Diagnostic> {
-    let subcommand = arguments.first().map(String::as_str).unwrap_or("help");
-    match subcommand {
-        "help" => {
-            if arguments.len() > 2 {
-                return Err(usage_error("semantic help accepts at most one command"));
-            }
-            semantic_help(arguments.get(1).map(String::as_str))
+fn new_project_command(arguments: &[String]) -> Result<CliSuccess, Diagnostic> {
+    let destination = arguments
+        .first()
+        .filter(|value| !value.starts_with("--"))
+        .ok_or_else(|| usage_error("new requires one destination directory"))?;
+    ensure_options(&arguments[1..], &["--template", "--name"], &[])?;
+    let template = ProjectTemplate::parse(
+        option_value(&arguments[1..], "--template")?
+            .as_deref()
+            .unwrap_or("minimal"),
+    )?;
+    let package_name = option_value(&arguments[1..], "--name")?.unwrap_or_else(|| {
+        Path::new(destination)
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("app")
+            .to_owned()
+    });
+    serialized(
+        "new",
+        &create_project(Path::new(destination), &package_name, template)?,
+    )
+}
+
+fn builtin_command(arguments: &[String]) -> Result<CliSuccess, Diagnostic> {
+    match arguments.first().map(String::as_str) {
+        Some("inspect") => {
+            exact_arguments(arguments, 1, "builtin inspect")?;
+            serialized("builtin.inspect", &builtin_package_info()?)
         }
-        "schema" => {
-            exact_arguments(arguments, 1, "semantic schema")?;
+        Some("export") => {
+            let output = option_value(&arguments[1..], "--output")?
+                .ok_or_else(|| usage_error("builtin export requires --output PATH"))?;
+            ensure_options(&arguments[1..], &["--output"], &[])?;
+            let (package, bytes) = export_builtin_standard(Path::new(&output))?;
             success(
-                "semantic.schema",
-                json!({
-                    "graph_contract": GRAPH_CONTRACT_IDENTITY,
-                    "cli_contract_version": CLI_CONTRACT_VERSION,
-                    "schema_digest": command_schema_digest(),
-                    "owner_kinds": owner_kind_names(),
-                    "relation_roles": relation_role_names(),
-                    "expansion_command": "lkjscript semantic help <command>",
-                }),
+                "builtin.export",
+                json!({"package": package, "output": output, "bytes": bytes}),
             )
         }
-        "id-allocate" => id_allocate_command(&arguments[1..]),
-        "dependency-stage" => dependency_stage_command(&arguments[1..], project),
-        "import" => import_command(&arguments[1..], project),
+        Some(other) => Err(usage_error(format!(
+            "unknown builtin action '{other}'; expected inspect or export"
+        ))),
+        None => Err(usage_error("builtin requires inspect or export")),
+    }
+}
+
+fn inspect_command(arguments: &[String], project: Option<&Path>) -> Result<CliSuccess, Diagnostic> {
+    let action = arguments.first().map(String::as_str).ok_or_else(|| {
+        usage_error("inspect requires status, project, owner, targets, artifact, or revision")
+    })?;
+    match action {
         "status" => {
-            exact_arguments(arguments, 1, "semantic status")?;
+            exact_arguments(arguments, 1, "inspect status")?;
             let workspace = open_workspace(project)?;
-            serialized("semantic.status", &workspace.status()?)
+            serialized("inspect.status", &workspace.status()?)
         }
-        "orient" => {
+        "project" => {
             let limit = optional_usize(&arguments[1..], "--limit", DEFAULT_ORIENTATION_ITEMS)?;
             ensure_options(&arguments[1..], &["--limit"], &[])?;
             let workspace = open_workspace(project)?;
-            serialized("semantic.orient", &workspace.orient(limit)?)
+            serialized("inspect.project", &workspace.orient(limit)?)
         }
+        "owner" => show_command(&arguments[1..], project),
+        "targets" => targets_command(&arguments[1..], project),
+        "artifact" => artifact_inspect_command(&arguments[1..]),
+        "deployment" => deployment_inspect_command(&arguments[1..]),
+        "revision" => revision_show_command(&arguments[1..], project),
+        other => Err(usage_error(format!(
+            "unknown inspect action '{other}'; use 'capabilities inspect'"
+        ))),
+    }
+}
+
+fn deployment_inspect_command(arguments: &[String]) -> Result<CliSuccess, Diagnostic> {
+    if arguments.len() != 1 {
+        return Err(usage_error(
+            "inspect deployment requires one descriptor path",
+        ));
+    }
+    let bytes = read_bounded(
+        Path::new(&arguments[0]),
+        MAXIMUM_DEPLOYMENT_BYTES,
+        "deployment descriptor",
+    )?;
+    serialized("inspect.deployment", &decode_deployment(&bytes)?)
+}
+
+fn public_query_command(
+    arguments: &[String],
+    project: Option<&Path>,
+) -> Result<CliSuccess, Diagnostic> {
+    let action = arguments.first().map(String::as_str).ok_or_else(|| {
+        usage_error(
+            "query requires owners, find, relations, callers, callees, types, capabilities, context, impact, or request",
+        )
+    })?;
+    match action {
         "owners" => owners_command(&arguments[1..], project),
         "find" => find_command(&arguments[1..], project),
-        "show" => show_command(&arguments[1..], project),
-        "refs" => relation_command(
-            "semantic.refs",
+        "relations" => relation_command(
+            "query.relations",
             &arguments[1..],
             project,
             true,
@@ -128,7 +206,7 @@ fn semantic_command(
             BTreeSet::new(),
         ),
         "callers" => relation_command(
-            "semantic.callers",
+            "query.callers",
             &arguments[1..],
             project,
             true,
@@ -136,15 +214,15 @@ fn semantic_command(
             BTreeSet::from([RelationRole::Call]),
         ),
         "callees" => relation_command(
-            "semantic.callees",
+            "query.callees",
             &arguments[1..],
             project,
             false,
             true,
             BTreeSet::from([RelationRole::Call]),
         ),
-        "type-uses" => relation_command(
-            "semantic.type_uses",
+        "types" => relation_command(
+            "query.types",
             &arguments[1..],
             project,
             true,
@@ -156,8 +234,8 @@ fn semantic_command(
                 RelationRole::VariantPattern,
             ]),
         ),
-        "capability-uses" => relation_command(
-            "semantic.capability_uses",
+        "capabilities" => relation_command(
+            "query.capabilities",
             &arguments[1..],
             project,
             true,
@@ -169,57 +247,185 @@ fn semantic_command(
         ),
         "context" => context_command(&arguments[1..], project, false),
         "impact" => context_command(&arguments[1..], project, true),
-        "query" => query_command(&arguments[1..], project),
-        "diff" => diff_command(&arguments[1..], project),
-        "merge" => merge_command(&arguments[1..], project),
-        "plan" => transaction_command(&arguments[1..], project, TransactionMode::Plan),
-        "validate" => transaction_command(&arguments[1..], project, TransactionMode::Validate),
-        "apply" => transaction_command(&arguments[1..], project, TransactionMode::Apply),
-        "draft-create" => draft_create_command(&arguments[1..], project),
-        "draft-status" => draft_status_command(&arguments[1..], project),
-        "draft-drop" => draft_drop_command(&arguments[1..], project),
-        "draft-rebase" => draft_rebase_command(&arguments[1..], project),
-        "draft-publish" => draft_publish_command(&arguments[1..], project),
-        "targets" => targets_command(&arguments[1..], project),
-        "build" => build_command(&arguments[1..], project),
-        "test" => {
-            exact_arguments(arguments, 1, "semantic test")?;
-            let workspace = open_workspace(project)?;
-            run_package_tests(&workspace.prepare()?)
-        }
-        "run" => run_target_command(&arguments[1..], project),
-        "artifact-inspect" => artifact_inspect_command(&arguments[1..]),
-        "text-project" | "export-text" => {
-            text_projection_command(subcommand, &arguments[1..], project)
-        }
-        "history" => history_command(&arguments[1..], project),
-        "revision-show" => revision_show_command(&arguments[1..], project),
-        "doctor" => doctor_command(&arguments[1..], project),
-        "backup" | "export-bundle" => backup_command(subcommand, &arguments[1..], project),
-        "restore" => restore_command(&arguments[1..], project),
+        "request" => query_command(&arguments[1..], project),
         other => Err(usage_error(format!(
-            "unknown semantic command '{other}'; use 'semantic help'"
+            "unknown query action '{other}'; use 'capabilities query'"
         ))),
     }
 }
 
-fn semantic_help(command: Option<&str>) -> Result<CliSuccess, Diagnostic> {
+fn public_draft_command(
+    arguments: &[String],
+    project: Option<&Path>,
+) -> Result<CliSuccess, Diagnostic> {
+    let action = arguments.first().map(String::as_str).ok_or_else(|| {
+        usage_error("draft requires create, status, append, rebase, publish, or drop")
+    })?;
+    match action {
+        "create" => draft_create_command(&arguments[1..], project),
+        "status" => draft_status_command(&arguments[1..], project),
+        "append" => transaction_command(&arguments[1..], project, TransactionMode::Apply),
+        "rebase" => draft_rebase_command(&arguments[1..], project),
+        "publish" => draft_publish_command(&arguments[1..], project),
+        "drop" => draft_drop_command(&arguments[1..], project),
+        other => Err(usage_error(format!(
+            "unknown draft action '{other}'; use 'capabilities draft'"
+        ))),
+    }
+}
+
+fn public_history_command(
+    arguments: &[String],
+    project: Option<&Path>,
+) -> Result<CliSuccess, Diagnostic> {
+    let action = arguments
+        .first()
+        .map(String::as_str)
+        .ok_or_else(|| usage_error("history requires list, show, diff, or merge"))?;
+    match action {
+        "list" => history_command(&arguments[1..], project),
+        "show" => revision_show_command(&arguments[1..], project),
+        "diff" => diff_command(&arguments[1..], project),
+        "merge" => merge_command(&arguments[1..], project),
+        other => Err(usage_error(format!(
+            "unknown history action '{other}'; use 'capabilities history'"
+        ))),
+    }
+}
+
+fn package_command(arguments: &[String], project: Option<&Path>) -> Result<CliSuccess, Diagnostic> {
+    let action = arguments
+        .first()
+        .map(String::as_str)
+        .ok_or_else(|| usage_error("package requires stage or builtin"))?;
+    match action {
+        "stage" => dependency_stage_command(&arguments[1..], project),
+        "builtin" => builtin_command(&arguments[1..]),
+        other => Err(usage_error(format!(
+            "unknown package action '{other}'; use 'capabilities package'"
+        ))),
+    }
+}
+
+fn change_command(arguments: &[String], project: Option<&Path>) -> Result<CliSuccess, Diagnostic> {
+    ensure_options(
+        arguments,
+        &["--request", "--request-file"],
+        &["--dry-run", "--commit"],
+    )?;
+    let dry_run = flag_present(arguments, "--dry-run")?;
+    let commit = flag_present(arguments, "--commit")?;
+    if dry_run && commit {
+        return Err(usage_error(
+            "change accepts only one of --dry-run or --commit",
+        ));
+    }
+    let inline = option_value(arguments, "--request")?;
+    let file = option_value(arguments, "--request-file")?;
+    let bytes = match (inline, file) {
+        (Some(value), None) if value.len() <= MAXIMUM_TRANSACTION_REQUEST_BYTES => {
+            value.into_bytes()
+        }
+        (Some(_), None) => {
+            return Err(Diagnostic::new(
+                DiagnosticClass::Resource,
+                "change_request_limit",
+                format!("change request exceeds {MAXIMUM_TRANSACTION_REQUEST_BYTES} bytes"),
+            ));
+        }
+        (None, Some(path)) => read_bounded(
+            Path::new(&path),
+            MAXIMUM_TRANSACTION_REQUEST_BYTES,
+            "change request",
+        )?,
+        (Some(_), Some(_)) => {
+            return Err(usage_error(
+                "supply exactly one of --request or --request-file",
+            ));
+        }
+        (None, None) => {
+            return Err(usage_error(
+                "change requires --request JSON or --request-file PATH",
+            ));
+        }
+    };
+    let mut deserializer = serde_json::Deserializer::from_slice(&bytes);
+    let request = ChangeRequest::deserialize(&mut deserializer).map_err(|error| {
+        Diagnostic::new(
+            DiagnosticClass::Source,
+            "change_request",
+            format!("change request is not strict current JSON: {error}"),
+        )
+    })?;
+    deserializer.end().map_err(|error| {
+        Diagnostic::new(
+            DiagnosticClass::Source,
+            "change_request_trailing",
+            format!("change request has trailing input: {error}"),
+        )
+    })?;
+    let workspace = open_workspace(project)?;
+    let change = execute_change(workspace.repository(), &request, commit)?;
+    let mut output = transaction_result("change", &change.transaction)?;
+    let fields = output.result.as_object_mut().ok_or_else(|| {
+        Diagnostic::new(
+            DiagnosticClass::Infrastructure,
+            "change_projection",
+            "normalized transaction projection was not an object",
+        )
+    })?;
+    fields.insert(
+        "change_contract_version".to_owned(),
+        serde_json::Value::from(change.contract_version),
+    );
+    fields.insert(
+        "base_revision".to_owned(),
+        serde_json::to_value(change.base_revision).map_err(internal_json)?,
+    );
+    fields.insert(
+        "allocated_identities".to_owned(),
+        serde_json::to_value(change.allocated_identities).map_err(internal_json)?,
+    );
+    Ok(output)
+}
+
+fn capabilities_command(arguments: &[String]) -> Result<CliSuccess, Diagnostic> {
     let commands = command_registry();
+    let command = arguments.first().filter(|value| !value.starts_with("--"));
     if let Some(command) = command {
+        exact_arguments(arguments, 1, "capabilities COMMAND")?;
         let entry = commands
             .iter()
-            .find(|entry| entry.name == command)
-            .ok_or_else(|| usage_error(format!("unknown semantic command '{command}'")))?;
-        return serialized("semantic.help", entry);
+            .find(|entry| entry.name == command.as_str())
+            .ok_or_else(|| usage_error(format!("unknown public command '{command}'")))?;
+        return serialized("capabilities.command", entry);
+    }
+    ensure_options(arguments, &["--known-schema"], &[])?;
+    let schema_digest = command_schema_digest();
+    if option_value(arguments, "--known-schema")?.as_deref() == Some(schema_digest.as_str()) {
+        return success(
+            "capabilities",
+            json!({"schema_digest": schema_digest, "unchanged": true}),
+        );
     }
     success(
-        "semantic.help",
+        "capabilities",
         json!({
-            "usage": "lkjscript [--project PATH] semantic <command> [options]",
+            "usage": "lkjscript [--project PATH] COMMAND [options]",
             "graph_contract": GRAPH_CONTRACT_IDENTITY,
-            "schema_digest": command_schema_digest(),
+            "cli_contract_version": CLI_CONTRACT_VERSION,
+            "schema_digest": schema_digest,
             "commands": commands.iter().map(|entry| entry.name).collect::<Vec<_>>(),
-            "details": "lkjscript semantic help <command>",
+            "project_templates": ["minimal", "command"],
+            "change_forms": change_form_names(),
+            "type_forms": type_form_names(),
+            "expression_forms": expression_form_names(),
+            "declaration_reference_forms": declaration_reference_form_names(),
+            "declaration_reference_syntax": declaration_reference_syntax(),
+            "owner_kinds": owner_kind_names(),
+            "relation_roles": relation_role_names(),
+            "limits": limit_registry(),
+            "details": "lkjscript capabilities COMMAND",
         }),
     )
 }
@@ -229,260 +435,177 @@ struct CommandHelp {
     name: &'static str,
     purpose: &'static str,
     usage: &'static str,
-    mutates_authority: bool,
+    project: &'static str,
+    authority_effect: &'static str,
 }
 
 fn command_registry() -> Vec<CommandHelp> {
     vec![
         CommandHelp {
-            name: "status",
-            purpose: "Show exact canonical authority and health.",
-            usage: "semantic status",
-            mutates_authority: false,
+            name: "capabilities",
+            purpose: "Discover the exact offline command and language contracts.",
+            usage: "capabilities [COMMAND] [--known-schema DIGEST]",
+            project: "none",
+            authority_effect: "none",
         },
         CommandHelp {
-            name: "orient",
-            purpose: "Return a compact package, module, dependency, and target map.",
-            usage: "semantic orient [--limit N]",
-            mutates_authority: false,
+            name: "new",
+            purpose: "Create fresh canonical authority in an empty destination.",
+            usage: "new DEST [--template minimal|command] [--name NAME]",
+            project: "destination",
+            authority_effect: "accepted",
         },
         CommandHelp {
-            name: "schema",
-            purpose: "Return command and graph contract identities.",
-            usage: "semantic schema",
-            mutates_authority: false,
-        },
-        CommandHelp {
-            name: "id-allocate",
-            purpose: "Allocate opaque stable IDs in one exact semantic domain.",
-            usage: "semantic id-allocate DOMAIN [--count N]",
-            mutates_authority: false,
-        },
-        CommandHelp {
-            name: "dependency-stage",
-            purpose: "Validate and stage an immutable dependency artifact before a transaction.",
-            usage: "semantic dependency-stage PATH",
-            mutates_authority: false,
-        },
-        CommandHelp {
-            name: "owners",
-            purpose: "List bounded semantic owners.",
-            usage: "semantic owners [--kind KIND] [--module ID] [query budgets]",
-            mutates_authority: false,
-        },
-        CommandHelp {
-            name: "find",
-            purpose: "Find bounded owners by identity or name.",
-            usage: "semantic find TEXT [--exact] [query budgets]",
-            mutates_authority: false,
-        },
-        CommandHelp {
-            name: "show",
-            purpose: "Show one exact owner.",
-            usage: "semantic show ID [--body] [--revision REV]",
-            mutates_authority: false,
-        },
-        CommandHelp {
-            name: "refs",
-            purpose: "Show incoming and outgoing semantic relations.",
-            usage: "semantic refs ID [query budgets]",
-            mutates_authority: false,
-        },
-        CommandHelp {
-            name: "callers",
-            purpose: "Show direct callers.",
-            usage: "semantic callers ID [query budgets]",
-            mutates_authority: false,
-        },
-        CommandHelp {
-            name: "callees",
-            purpose: "Show direct callees.",
-            usage: "semantic callees ID [query budgets]",
-            mutates_authority: false,
-        },
-        CommandHelp {
-            name: "type-uses",
-            purpose: "Show exact semantic type uses.",
-            usage: "semantic type-uses ID [query budgets]",
-            mutates_authority: false,
-        },
-        CommandHelp {
-            name: "capability-uses",
-            purpose: "Show capability requirements and operation uses.",
-            usage: "semantic capability-uses ID [query budgets]",
-            mutates_authority: false,
-        },
-        CommandHelp {
-            name: "context",
-            purpose: "Build a task-scoped semantic context bundle.",
-            usage: "semantic context --seed ID... [query budgets]",
-            mutates_authority: false,
-        },
-        CommandHelp {
-            name: "impact",
-            purpose: "Calculate conservative relation impact.",
-            usage: "semantic impact --seed ID... [query budgets]",
-            mutates_authority: false,
+            name: "inspect",
+            purpose: "Inspect project, owner, target, revision, artifact, or deployment state.",
+            usage: "inspect status|project|owner|targets|revision|artifact|deployment ...",
+            project: "required_by_action",
+            authority_effect: "none",
         },
         CommandHelp {
             name: "query",
-            purpose: "Execute one closed declarative query request.",
-            usage: "semantic query --request JSON",
-            mutates_authority: false,
+            purpose: "Select bounded owners, relations, context, and impact.",
+            usage: "query owners|find|relations|callers|callees|types|capabilities|context|impact|request ...",
+            project: "required",
+            authority_effect: "none",
         },
         CommandHelp {
-            name: "diff",
-            purpose: "Compare exact revisions by stable semantic identity.",
-            usage: "semantic diff --base REV --result REV [--offset N] [query budgets]",
-            mutates_authority: false,
+            name: "change",
+            purpose: "Normalize and validate or atomically commit one semantic change.",
+            usage: "change (--request JSON | --request-file PATH) [--dry-run|--commit]",
+            project: "required",
+            authority_effect: "accepted_on_commit",
         },
         CommandHelp {
-            name: "merge",
-            purpose: "Preview or publish one exact three-way semantic merge.",
-            usage: "semantic merge --base REV --left REV --right REV [--apply] [--work N]",
-            mutates_authority: true,
+            name: "draft",
+            purpose: "Create, inspect, append, rebase, publish, or drop non-executable work.",
+            usage: "draft create|status|append|rebase|publish|drop ...",
+            project: "required",
+            authority_effect: "draft_or_accepted",
         },
         CommandHelp {
-            name: "plan",
-            purpose: "Plan one exact-base semantic transaction without publication.",
-            usage: "semantic plan (--request JSON | --request-file PATH)",
-            mutates_authority: false,
+            name: "history",
+            purpose: "List, inspect, diff, or merge exact revisions.",
+            usage: "history list|show|diff|merge ...",
+            project: "required",
+            authority_effect: "accepted_only_for_merge_commit",
         },
         CommandHelp {
-            name: "validate",
-            purpose: "Validate one exact-base semantic transaction without publication.",
-            usage: "semantic validate (--request JSON | --request-file PATH)",
-            mutates_authority: false,
+            name: "package",
+            purpose: "Stage an exact dependency or inspect/export a built-in package.",
+            usage: "package stage PATH | package builtin inspect|export ...",
+            project: "required_for_stage",
+            authority_effect: "operational_or_external_output",
         },
         CommandHelp {
-            name: "apply",
-            purpose: "Atomically publish one exact-base semantic transaction.",
-            usage: "semantic apply (--request JSON | --request-file PATH)",
-            mutates_authority: true,
-        },
-        CommandHelp {
-            name: "draft-create",
-            purpose: "Create non-executable draft authority from one exact accepted base.",
-            usage: "semantic draft-create [--base REV] [--intent TEXT]",
-            mutates_authority: true,
-        },
-        CommandHelp {
-            name: "draft-status",
-            purpose: "Show one draft base, generation, operations, holes, and conflicts.",
-            usage: "semantic draft-status DRAFT",
-            mutates_authority: false,
-        },
-        CommandHelp {
-            name: "draft-drop",
-            purpose: "Discard one draft without changing accepted meaning.",
-            usage: "semantic draft-drop DRAFT",
-            mutates_authority: true,
-        },
-        CommandHelp {
-            name: "draft-rebase",
-            purpose: "Validate and move one draft onto the exact current revision.",
-            usage: "semantic draft-rebase DRAFT --base REV",
-            mutates_authority: true,
-        },
-        CommandHelp {
-            name: "draft-publish",
-            purpose: "Validate and publish one resolved draft, then remove it.",
-            usage: "semantic draft-publish DRAFT [--idempotency-key KEY]",
-            mutates_authority: true,
-        },
-        CommandHelp {
-            name: "targets",
-            purpose: "List bounded executable targets.",
-            usage: "semantic targets [--limit N]",
-            mutates_authority: false,
+            name: "check",
+            purpose: "Run graph-owned tests through production and independent execution.",
+            usage: "check",
+            project: "required",
+            authority_effect: "none",
         },
         CommandHelp {
             name: "build",
             purpose: "Build a deterministic graph-native artifact.",
-            usage: "semantic build [--output PATH]",
-            mutates_authority: false,
-        },
-        CommandHelp {
-            name: "test",
-            purpose: "Compare bytecode and the semantic oracle for graph-owned tests.",
-            usage: "semantic test",
-            mutates_authority: false,
+            usage: "build [--output PATH]",
+            project: "required",
+            authority_effect: "external_output",
         },
         CommandHelp {
             name: "run",
             purpose: "Run a pure command, batch, or test target through both execution tiers.",
-            usage: "semantic run TARGET [--arguments JSON]",
-            mutates_authority: false,
+            usage: "run TARGET [--arguments JSON]",
+            project: "required",
+            authority_effect: "none",
         },
         CommandHelp {
-            name: "artifact-inspect",
-            purpose: "Inspect a graph-native artifact without source parsing.",
-            usage: "semantic artifact-inspect PATH",
-            mutates_authority: false,
+            name: "serve",
+            purpose: "Run one plaintext HTTP deployment with bounded shutdown.",
+            usage: "serve --deployment DESCRIPTOR",
+            project: "descriptor_bound",
+            authority_effect: "external_runtime",
         },
         CommandHelp {
-            name: "text-project",
+            name: "worker",
+            purpose: "Run one bounded worker deployment.",
+            usage: "worker --deployment DESCRIPTOR",
+            project: "descriptor_bound",
+            authority_effect: "external_runtime",
+        },
+        CommandHelp {
+            name: "review",
             purpose: "Write a deterministic non-authoritative review projection.",
-            usage: "semantic text-project [--revision REV] [--output PATH]",
-            mutates_authority: false,
-        },
-        CommandHelp {
-            name: "export-text",
-            purpose: "Export the deterministic non-authoritative review projection.",
-            usage: "semantic export-text [--revision REV] [--output PATH]",
-            mutates_authority: false,
-        },
-        CommandHelp {
-            name: "history",
-            purpose: "Show bounded accepted semantic history.",
-            usage: "semantic history [--before REV] [--limit N]",
-            mutates_authority: false,
-        },
-        CommandHelp {
-            name: "revision-show",
-            purpose: "Inspect one exact semantic revision record.",
-            usage: "semantic revision-show REV",
-            mutates_authority: false,
-        },
-        CommandHelp {
-            name: "doctor",
-            purpose: "Validate current or complete retained authority.",
-            usage: "semantic doctor [--deep]",
-            mutates_authority: false,
+            usage: "review [--revision REV] [--output PATH]",
+            project: "required",
+            authority_effect: "external_output",
         },
         CommandHelp {
             name: "backup",
             purpose: "Capture one exact reachable canonical authority bundle.",
-            usage: "semantic backup [--output PATH]",
-            mutates_authority: false,
-        },
-        CommandHelp {
-            name: "export-bundle",
-            purpose: "Export one exact independently verifiable recovery bundle.",
-            usage: "semantic export-bundle [--output PATH]",
-            mutates_authority: false,
+            usage: "backup [--output PATH]",
+            project: "required",
+            authority_effect: "external_output",
         },
         CommandHelp {
             name: "restore",
             purpose: "Verify and atomically restore a canonical authority bundle.",
-            usage: "semantic restore --backup PATH (--output PROJECT | --project PROJECT)",
-            mutates_authority: true,
+            usage: "restore --backup PATH (--output PROJECT | --project PROJECT)",
+            project: "destination",
+            authority_effect: "accepted",
         },
         CommandHelp {
-            name: "import",
-            purpose: "Create new graph authority from a current graph-native artifact.",
-            usage: "semantic import --artifact PATH",
-            mutates_authority: true,
+            name: "doctor",
+            purpose: "Validate authority or preview exact retained/reclaimable storage.",
+            usage: "doctor [--deep] | doctor cleanup",
+            project: "required",
+            authority_effect: "operational_indexes_only",
         },
     ]
 }
 
 fn command_schema_digest() -> String {
-    let bytes = serde_json::to_vec(&command_registry()).unwrap_or_default();
-    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.semantic-cli-registry.v1");
+    let bytes = serde_json::to_vec(&json!({
+        "commands": command_registry(),
+        "project_templates": ["minimal", "command"],
+        "change_forms": change_form_names(),
+        "type_forms": type_form_names(),
+        "expression_forms": expression_form_names(),
+        "declaration_reference_forms": declaration_reference_form_names(),
+        "declaration_reference_syntax": declaration_reference_syntax(),
+        "owner_kinds": owner_kind_names(),
+        "relation_roles": relation_role_names(),
+        "limits": limit_registry(),
+    }))
+    .unwrap_or_default();
+    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.cli-registry.v4");
     hasher.update(&(bytes.len() as u64).to_be_bytes());
     hasher.update(&bytes);
     hasher.finalize().to_hex().to_string()
+}
+
+fn limit_registry() -> serde_json::Value {
+    json!({
+        "cli_response_bytes": {
+            "value": MAXIMUM_CLI_RESPONSE_BYTES,
+            "class": "hostile_output_boundary",
+        },
+        "change_request_bytes": {
+            "value": MAXIMUM_TRANSACTION_REQUEST_BYTES,
+            "class": "hostile_input_boundary",
+        },
+        "backup_manifest_bytes": {
+            "value": MAXIMUM_BACKUP_MANIFEST_BYTES,
+            "class": "segmented_decoder_boundary",
+        },
+        "backup_segment_bytes": {
+            "value": MAXIMUM_BACKUP_SEGMENT_BYTES,
+            "class": "segmented_decoder_boundary",
+        },
+        "backup_segment_entries": {
+            "value": BACKUP_SEGMENT_ENTRY_LIMIT,
+            "class": "segmented_encoding_boundary",
+        },
+    })
 }
 
 fn owner_kind_names() -> Vec<&'static str> {
@@ -502,6 +625,7 @@ fn owner_kind_names() -> Vec<&'static str> {
         "field",
         "case",
         "operation",
+        "type_parameter",
         "parameter",
         "binding",
         "expression",
@@ -511,6 +635,78 @@ fn owner_kind_names() -> Vec<&'static str> {
         "documentation",
         "annotation",
     ]
+}
+
+fn change_form_names() -> Vec<&'static str> {
+    vec![
+        "add_dependency",
+        "replace_dependency",
+        "remove_dependency",
+        "create_module",
+        "create_record",
+        "create_variant",
+        "create_function",
+        "create_component",
+        "create_test",
+        "create_target",
+        "rename_module",
+        "rename_declaration",
+        "replace_body",
+    ]
+}
+
+fn type_form_names() -> Vec<&'static str> {
+    vec![
+        "unit",
+        "bool",
+        "i64",
+        "bytes",
+        "text",
+        "static_text",
+        "secret",
+        "parameter",
+        "named",
+        "record",
+        "list",
+        "map",
+        "option",
+        "result",
+        "stream",
+        "function",
+    ]
+}
+
+fn expression_form_names() -> Vec<&'static str> {
+    vec![
+        "unit",
+        "bool",
+        "i64",
+        "text",
+        "static_text",
+        "variable",
+        "constant",
+        "call",
+        "function",
+        "invoke",
+        "record",
+        "list",
+    ]
+}
+
+fn declaration_reference_form_names() -> Vec<&'static str> {
+    vec![
+        "request_local_symbol",
+        "local_declaration_id",
+        "exact_package_module_declaration",
+    ]
+}
+
+fn declaration_reference_syntax() -> serde_json::Value {
+    json!({
+        "request_local_symbol": "$NAME",
+        "local_declaration_id": "decl_HEX",
+        "exact_package_module_declaration": "exact:PACKAGE_HEX/mod_HEX/decl_HEX",
+    })
 }
 
 fn relation_role_names() -> Vec<&'static str> {
@@ -532,76 +728,13 @@ fn relation_role_names() -> Vec<&'static str> {
     ]
 }
 
-fn id_allocate_command(arguments: &[String]) -> Result<CliSuccess, Diagnostic> {
-    let domain = arguments
-        .first()
-        .filter(|value| !value.starts_with("--"))
-        .ok_or_else(|| usage_error("semantic id-allocate requires one identity domain"))?;
-    ensure_options(&arguments[1..], &["--count"], &[])?;
-    let count = optional_usize(&arguments[1..], "--count", 1)?;
-    if count == 0 || count > 1_000 {
-        return Err(usage_error(
-            "identity allocation count must be 1 through 1000",
-        ));
-    }
-    let mut ids = Vec::with_capacity(count);
-    for _ in 0..count {
-        let id = match domain.as_str() {
-            "repository" => RepositoryId::generate()?.to_string(),
-            "module" => ModuleId::generate()?.to_string(),
-            "declaration" => DeclarationId::generate()?.to_string(),
-            "field" => FieldId::generate()?.to_string(),
-            "case" => CaseId::generate()?.to_string(),
-            "operation" => OperationId::generate()?.to_string(),
-            "parameter" => ParameterId::generate()?.to_string(),
-            "binding" => BindingId::generate()?.to_string(),
-            "expression" => ExpressionId::generate()?.to_string(),
-            "requirement" => RequirementId::generate()?.to_string(),
-            "port" => PortId::generate()?.to_string(),
-            "target" => TargetId::generate()?.to_string(),
-            "documentation" => DocumentationId::generate()?.to_string(),
-            "annotation" => AnnotationId::generate()?.to_string(),
-            _ => {
-                return Err(usage_error(format!(
-                    "unknown semantic identity domain '{domain}'"
-                )));
-            }
-        };
-        ids.push(id);
-    }
-    success(
-        "semantic.id_allocate",
-        json!({
-            "domain": domain,
-            "count": ids.len(),
-            "ids": ids,
-        }),
-    )
-}
-
-fn import_command(arguments: &[String], project: Option<&Path>) -> Result<CliSuccess, Diagnostic> {
-    let artifact = option_value(arguments, "--artifact")?
-        .ok_or_else(|| usage_error("semantic import requires --artifact PATH"))?;
-    ensure_options(arguments, &["--artifact"], &[])?;
-    let root = project_or_current(project)?;
-    let (workspace, receipt) =
-        SemanticWorkspace::initialize_from_artifact(&root, Path::new(&artifact))?;
-    success(
-        "semantic.import",
-        json!({
-            "receipt": receipt,
-            "status": workspace.status()?,
-        }),
-    )
-}
-
 fn dependency_stage_command(
     arguments: &[String],
     project: Option<&Path>,
 ) -> Result<CliSuccess, Diagnostic> {
     if arguments.len() != 1 {
         return Err(usage_error(
-            "semantic dependency-stage requires one graph artifact path",
+            "package stage requires one graph artifact path",
         ));
     }
     let bytes = read_bounded(
@@ -632,7 +765,7 @@ fn dependency_stage_command(
         })?;
     }
     success(
-        "semantic.dependency_stage",
+        "package.stage",
         json!({
             "status": "staged",
             "package_id": artifact.root_package_id,
@@ -660,14 +793,14 @@ fn owners_command(arguments: &[String], project: Option<&Path>) -> Result<CliSuc
         option_value(arguments, "--continue")?.as_deref(),
         query_budget(arguments)?,
     )?;
-    serialized("semantic.owners", &page)
+    serialized("query.owners", &page)
 }
 
 fn find_command(arguments: &[String], project: Option<&Path>) -> Result<CliSuccess, Diagnostic> {
     let text = arguments
         .first()
         .filter(|value| !value.starts_with("--"))
-        .ok_or_else(|| usage_error("semantic find requires one search text"))?;
+        .ok_or_else(|| usage_error("query find requires one search text"))?;
     ensure_options(&arguments[1..], &query_value_options([]), &["--exact"])?;
     let workspace = open_workspace(project)?;
     let exact = flag_present(&arguments[1..], "--exact")?;
@@ -690,18 +823,18 @@ fn find_command(arguments: &[String], project: Option<&Path>) -> Result<CliSucce
             budget,
         )?
     };
-    serialized("semantic.find", &page)
+    serialized("query.find", &page)
 }
 
 fn show_command(arguments: &[String], project: Option<&Path>) -> Result<CliSuccess, Diagnostic> {
     let id = arguments
         .first()
         .filter(|value| !value.starts_with("--"))
-        .ok_or_else(|| usage_error("semantic show requires one exact owner ID"))?;
+        .ok_or_else(|| usage_error("inspect owner requires one exact owner ID"))?;
     ensure_options(&arguments[1..], &["--revision"], &["--body"])?;
     let workspace = open_workspace(project)?;
     serialized(
-        "semantic.show",
+        "inspect.owner",
         &SemanticQueryIndex::show_revision(
             workspace.repository(),
             selected_revision(&workspace, &arguments[1..])?,
@@ -754,9 +887,9 @@ fn context_command(
     };
     serialized(
         if impact {
-            "semantic.impact"
+            "query.impact"
         } else {
-            "semantic.context"
+            "query.context"
         },
         &page,
     )
@@ -807,7 +940,7 @@ enum ClosedSelection {
 
 fn query_command(arguments: &[String], project: Option<&Path>) -> Result<CliSuccess, Diagnostic> {
     let request = option_value(arguments, "--request")?
-        .ok_or_else(|| usage_error("semantic query requires --request JSON"))?;
+        .ok_or_else(|| usage_error("query request requires --request JSON"))?;
     ensure_options(arguments, &["--request"], &[])?;
     let mut deserializer = serde_json::Deserializer::from_str(&request);
     let request = ClosedQuery::deserialize(&mut deserializer).map_err(|error| {
@@ -878,7 +1011,7 @@ fn query_command(arguments: &[String], project: Option<&Path>) -> Result<CliSucc
         )?)
         .map_err(internal_json)?,
     };
-    success("semantic.query", result)
+    success("query.request", result)
 }
 
 fn transaction_command(
@@ -937,26 +1070,20 @@ fn transaction_command(
     if request.draft.is_some() {
         let drafts = SemanticDraftStore::new(workspace.repository());
         return match mode {
-            TransactionMode::Apply => serialized("semantic.apply", &drafts.append(&request)?),
+            TransactionMode::Apply => serialized("draft.append", &drafts.append(&request)?),
             TransactionMode::Plan | TransactionMode::Validate => transaction_result(
                 if mode == TransactionMode::Plan {
-                    "semantic.plan"
+                    "draft.plan"
                 } else {
-                    "semantic.validate"
+                    "draft.validate"
                 },
                 &drafts.evaluate(&request, mode)?,
             ),
         };
     }
-    let result = execute_transaction(workspace.repository(), &request, mode)?;
-    transaction_result(
-        match mode {
-            TransactionMode::Plan => "semantic.plan",
-            TransactionMode::Validate => "semantic.validate",
-            TransactionMode::Apply => "semantic.apply",
-        },
-        &result,
-    )
+    Err(usage_error(
+        "draft append requires a transaction request bound to one draft",
+    ))
 }
 
 fn draft_create_command(
@@ -970,7 +1097,7 @@ fn draft_create_command(
     let intent = option_value(arguments, "--intent")?;
     let workspace = open_workspace(project)?;
     serialized(
-        "semantic.draft_create",
+        "draft.create",
         &SemanticDraftStore::new(workspace.repository()).create(base, intent)?,
     )
 }
@@ -980,12 +1107,12 @@ fn draft_status_command(
     project: Option<&Path>,
 ) -> Result<CliSuccess, Diagnostic> {
     if arguments.len() != 1 {
-        return Err(usage_error("semantic draft-status requires one draft ID"));
+        return Err(usage_error("draft status requires one draft ID"));
     }
     let id = arguments[0].parse::<DraftId>()?;
     let workspace = open_workspace(project)?;
     serialized(
-        "semantic.draft_status",
+        "draft.status",
         &SemanticDraftStore::new(workspace.repository()).status(id)?,
     )
 }
@@ -995,17 +1122,17 @@ fn draft_drop_command(
     project: Option<&Path>,
 ) -> Result<CliSuccess, Diagnostic> {
     if arguments.len() != 1 {
-        return Err(usage_error("semantic draft-drop requires one draft ID"));
+        return Err(usage_error("draft drop requires one draft ID"));
     }
     let id = arguments[0].parse::<DraftId>()?;
     let workspace = open_workspace(project)?;
     SemanticDraftStore::new(workspace.repository()).drop(id)?;
     success(
-        "semantic.draft_drop",
+        "draft.drop",
         json!({
             "status": "draft_dropped",
             "draft": id,
-            "revision": workspace.repository().current()?.head.revision,
+            "revision": workspace.repository().current_binding()?.head.revision,
         }),
     )
 }
@@ -1017,15 +1144,15 @@ fn draft_rebase_command(
     let id = arguments
         .first()
         .filter(|value| !value.starts_with("--"))
-        .ok_or_else(|| usage_error("semantic draft-rebase requires one draft ID"))?
+        .ok_or_else(|| usage_error("draft rebase requires one draft ID"))?
         .parse::<DraftId>()?;
     ensure_options(&arguments[1..], &["--base"], &[])?;
     let base = option_value(&arguments[1..], "--base")?
-        .ok_or_else(|| usage_error("semantic draft-rebase requires --base REV"))?
+        .ok_or_else(|| usage_error("draft rebase requires --base REV"))?
         .parse::<RevisionId>()?;
     let workspace = open_workspace(project)?;
     serialized(
-        "semantic.draft_rebase",
+        "draft.rebase",
         &SemanticDraftStore::new(workspace.repository()).rebase(id, base)?,
     )
 }
@@ -1037,13 +1164,13 @@ fn draft_publish_command(
     let id = arguments
         .first()
         .filter(|value| !value.starts_with("--"))
-        .ok_or_else(|| usage_error("semantic draft-publish requires one draft ID"))?
+        .ok_or_else(|| usage_error("draft publish requires one draft ID"))?
         .parse::<DraftId>()?;
     ensure_options(&arguments[1..], &["--idempotency-key"], &[])?;
     let idempotency_key = option_value(&arguments[1..], "--idempotency-key")?;
     let workspace = open_workspace(project)?;
     transaction_result(
-        "semantic.draft_publish",
+        "draft.publish",
         &SemanticDraftStore::new(workspace.repository()).publish(id, idempotency_key)?,
     )
 }
@@ -1054,7 +1181,7 @@ fn targets_command(arguments: &[String], project: Option<&Path>) -> Result<CliSu
     let workspace = open_workspace(project)?;
     let orientation = workspace.orient(limit)?;
     success(
-        "semantic.targets",
+        "inspect.targets",
         json!({
             "revision": orientation.revision,
             "returned_items": orientation.targets.len(),
@@ -1079,7 +1206,7 @@ fn build_command(arguments: &[String], project: Option<&Path>) -> Result<CliSucc
         "graph artifact",
     )?;
     success(
-        "semantic.build",
+        "build",
         json!({
             "receipt": receipt,
             "output": output.display().to_string(),
@@ -1151,7 +1278,7 @@ fn run_package_tests(program: &PreparedProgram) -> Result<CliSuccess, Diagnostic
         }
     }
     success(
-        "semantic.test",
+        "check",
         json!({
             "revision": program.artifact().root_revision,
             "passed": program.tests().len(),
@@ -1169,9 +1296,7 @@ fn run_package_tests(program: &PreparedProgram) -> Result<CliSuccess, Diagnostic
 
 fn artifact_inspect_command(arguments: &[String]) -> Result<CliSuccess, Diagnostic> {
     if arguments.len() != 1 {
-        return Err(usage_error(
-            "semantic artifact-inspect requires one artifact path",
-        ));
+        return Err(usage_error("inspect artifact requires one artifact path"));
     }
     let bytes = read_bounded(
         Path::new(&arguments[0]),
@@ -1218,7 +1343,7 @@ fn artifact_inspect_command(arguments: &[String]) -> Result<CliSuccess, Diagnost
         })
         .collect::<Vec<_>>();
     success(
-        "semantic.artifact_inspect",
+        "inspect.artifact",
         json!({
             "artifact_digest": program.artifact().artifact_digest,
             "root_package_artifact": program.artifact().root_package_artifact,
@@ -1251,13 +1376,13 @@ fn text_projection_command(
         "semantic review projection",
     )?;
     success(
-        &format!("semantic.{}", command.replace('-', "_")),
+        command,
         json!({
             "receipt": receipt,
             "output": output.display().to_string(),
             "publication": publication,
             "importable": false,
-            "recovery_command": "lkjscript semantic export-bundle --output target/meaning-backup.lkjb",
+            "recovery_command": "lkjscript backup --output target/meaning-backup.lkjb",
         }),
     )
 }
@@ -1269,7 +1394,7 @@ fn run_target_command(
     let target_name = arguments
         .first()
         .filter(|value| !value.starts_with("--"))
-        .ok_or_else(|| usage_error("semantic run requires one target name"))?;
+        .ok_or_else(|| usage_error("run requires one target name"))?;
     ensure_options(&arguments[1..], &["--arguments"], &[])?;
     let encoded_arguments =
         option_value(&arguments[1..], "--arguments")?.unwrap_or_else(|| "[]".to_owned());
@@ -1349,7 +1474,7 @@ fn run_target_command(
     )?;
     let result = decode_strict(&result_bytes, JsonLimits::default())?;
     success(
-        "semantic.run",
+        "run",
         json!({
             "revision": program.artifact().root_revision,
             "target": target.name,
@@ -1370,7 +1495,7 @@ fn history_command(arguments: &[String], project: Option<&Path>) -> Result<CliSu
     let workspace = open_workspace(project)?;
     let records = workspace.repository().history(before, limit)?;
     success(
-        "semantic.history",
+        "history.list",
         json!({
             "revision": workspace.status()?.revision,
             "returned_items": records.len(),
@@ -1386,15 +1511,15 @@ fn diff_command(arguments: &[String], project: Option<&Path>) -> Result<CliSucce
         &[],
     )?;
     let base = option_value(arguments, "--base")?
-        .ok_or_else(|| usage_error("semantic diff requires --base REV"))?
+        .ok_or_else(|| usage_error("history diff requires --base REV"))?
         .parse::<RevisionId>()?;
     let result = option_value(arguments, "--result")?
-        .ok_or_else(|| usage_error("semantic diff requires --result REV"))?
+        .ok_or_else(|| usage_error("history diff requires --result REV"))?
         .parse::<RevisionId>()?;
     let offset = optional_usize(arguments, "--offset", 0)?;
     let workspace = open_workspace(project)?;
     serialized(
-        "semantic.diff",
+        "history.diff",
         &diff_revisions(
             workspace.repository(),
             base,
@@ -1413,7 +1538,7 @@ fn merge_command(arguments: &[String], project: Option<&Path>) -> Result<CliSucc
     )?;
     let revision = |name: &str| -> Result<RevisionId, Diagnostic> {
         option_value(arguments, name)?
-            .ok_or_else(|| usage_error(format!("semantic merge requires {name} REV")))?
+            .ok_or_else(|| usage_error(format!("history merge requires {name} REV")))?
             .parse()
     };
     let request = SemanticMergeRequest {
@@ -1430,7 +1555,7 @@ fn merge_command(arguments: &[String], project: Option<&Path>) -> Result<CliSucc
     };
     let workspace = open_workspace(project)?;
     merge_result(
-        "semantic.merge",
+        "history.merge",
         &merge_revisions(
             workspace.repository(),
             &request,
@@ -1444,15 +1569,13 @@ fn revision_show_command(
     project: Option<&Path>,
 ) -> Result<CliSuccess, Diagnostic> {
     if arguments.len() != 1 {
-        return Err(usage_error(
-            "semantic revision-show requires one exact revision ID",
-        ));
+        return Err(usage_error("history show requires one exact revision ID"));
     }
     let revision = arguments[0].parse::<RevisionId>()?;
     let workspace = open_workspace(project)?;
     let snapshot = workspace.repository().reconstruct_revision(revision)?;
     success(
-        "semantic.revision_show",
+        "history.show",
         json!({
             "record": snapshot.record,
             "receipt": snapshot.receipt,
@@ -1470,10 +1593,18 @@ fn revision_show_command(
 }
 
 fn doctor_command(arguments: &[String], project: Option<&Path>) -> Result<CliSuccess, Diagnostic> {
+    if arguments.first().map(String::as_str) == Some("cleanup") {
+        exact_arguments(arguments, 1, "doctor cleanup")?;
+        let workspace = open_workspace(project)?;
+        return serialized(
+            "doctor.cleanup",
+            &workspace.repository().retention_preview()?,
+        );
+    }
     ensure_options(arguments, &[], &["--deep"])?;
     let workspace = open_workspace(project)?;
     serialized(
-        "semantic.doctor",
+        "doctor",
         &workspace
             .repository()
             .doctor(flag_present(arguments, "--deep")?)?,
@@ -1490,19 +1621,13 @@ fn backup_command(
     let output = option_value(arguments, "--output")?
         .map(PathBuf::from)
         .unwrap_or_else(|| workspace.root().join("target/meaning-backup.lkjb"));
-    let (bytes, receipt) = workspace.repository().backup()?;
-    let publication = write_derived_output(
-        &output,
-        &bytes,
-        MAXIMUM_BACKUP_BYTES + 50,
-        "semantic backup",
-    )?;
+    let receipt = workspace.repository().backup_to(&output)?;
     success(
-        &format!("semantic.{}", command.replace('-', "_")),
+        command,
         json!({
             "receipt": receipt,
             "output": output.display().to_string(),
-            "publication": publication,
+            "publication": "published",
         }),
     )
 }
@@ -1510,28 +1635,22 @@ fn backup_command(
 fn restore_command(arguments: &[String], project: Option<&Path>) -> Result<CliSuccess, Diagnostic> {
     ensure_options(arguments, &["--backup", "--output"], &[])?;
     let backup = option_value(arguments, "--backup")?
-        .ok_or_else(|| usage_error("semantic restore requires --backup PATH"))?;
+        .ok_or_else(|| usage_error("restore requires --backup PATH"))?;
     let explicit_output = option_value(arguments, "--output")?.map(PathBuf::from);
     if explicit_output.is_some() && project.is_some() {
         return Err(usage_error(
-            "semantic restore accepts either --output or global --project, not both",
+            "restore accepts either --output or global --project, not both",
         ));
     }
     let output = explicit_output
         .or_else(|| project.map(Path::to_path_buf))
-        .ok_or_else(|| {
-            usage_error("semantic restore requires --output PROJECT or --project PROJECT")
-        })?;
+        .ok_or_else(|| usage_error("restore requires --output PROJECT or --project PROJECT"))?;
     let output = fs::canonicalize(&output)
         .map_err(|error| io_error("semantic_restore_output", &output, error))?;
-    let bytes = read_bounded(
-        Path::new(&backup),
-        MAXIMUM_BACKUP_BYTES + 50,
-        "semantic backup",
-    )?;
-    let (repository, receipt) = SemanticRepository::restore_backup(&output, &bytes)?;
+    let (repository, receipt) =
+        SemanticRepository::restore_backup_from(&output, Path::new(&backup))?;
     success(
-        "semantic.restore",
+        "restore",
         json!({
             "receipt": receipt,
             "status": SemanticWorkspace::open(repository.project_root())?.status()?,
@@ -1895,7 +2014,7 @@ fn transaction_receipt_projection(
         result: receipt.result,
         semantic_diff: receipt.semantic_diff,
         validation: &receipt.validation,
-        expansion: format!("semantic revision-show {}", receipt.result),
+        expansion: format!("history show {}", receipt.result),
     })
 }
 
@@ -1936,7 +2055,7 @@ fn outcome(
     if bytes.len().saturating_add(1) > MAXIMUM_CLI_RESPONSE_BYTES {
         return Err(Diagnostic::new(
             DiagnosticClass::Resource,
-            "semantic_output_budget",
+            "cli_output_budget",
             format!("command response exceeds the hard {MAXIMUM_CLI_RESPONSE_BYTES}-byte bound"),
         ));
     }
@@ -1958,15 +2077,11 @@ fn execution_diagnostic(error: super::execution::ExecutionError) -> Diagnostic {
 }
 
 fn usage_error(message: impl Into<String>) -> Diagnostic {
-    Diagnostic::new(DiagnosticClass::Source, "semantic_cli_usage", message)
+    Diagnostic::new(DiagnosticClass::Source, "cli_usage", message)
 }
 
 fn internal_error(message: impl Into<String>) -> Diagnostic {
-    Diagnostic::new(
-        DiagnosticClass::Infrastructure,
-        "semantic_cli_internal",
-        message,
-    )
+    Diagnostic::new(DiagnosticClass::Infrastructure, "cli_internal", message)
 }
 
 fn internal_json(error: serde_json::Error) -> Diagnostic {

@@ -1,167 +1,196 @@
-# Semantic authority
+# Meaning-graph authority
 
-Status: normative. Contract: `lkjscript-meaning-graph-1`.
+Status: normative. Logical contract: `lkjscript-meaning-graph-4`. Physical root contract:
+`lkjscript-persistent-root-2`. Public change contract: version 3. Internal transaction contract:
+version 4.
 
-## Authority
+## Owned authority
 
-An accepted lkjscript program is exactly one validated typed semantic graph revision. The graph
-owns repository and package metadata, modules, declarations, types, expressions, components,
-ports, capability requirements, tests, semantic relations, retained documentation, annotations,
-targets, exact dependencies, and deleted-identity tombstones.
+An accepted lkjscript program is exactly one validated typed meaning-graph revision. The graph owns
+repository and package metadata, modules and namespaces, declarations, explicit types and
+expressions, imports/exports, components, ports, capability requirements, tests, retained semantic
+relations, documentation, annotations, targets, exact dependencies, and continuity tombstones.
 
-Names are mutable presentation and lookup data. Stable IDs express continuity. Content digests
-identify exact encoded content. Revision IDs identify exact accepted history nodes. Physical keys,
-compiler indexes, runtime handles, rendered coordinates, caches, deployment grants, secrets, and
-live resources are not program authority.
+Names are mutable locators and presentation. Stable semantic IDs express continuity. Content
+digests identify exact bytes in one domain. Revision IDs identify accepted history nodes. Physical
+page coordinates, compiler indexes, runtime handles, rendered coordinates, summaries, caches,
+deployment grants, secrets, and live resources do not become program authority. Reachable map-page
+bytes are the canonical physical encoding committed by the accepted root, but their paths are not
+semantic owner identity.
 
-Maintained `.lkj` modules and `lkjscript.package.json` descriptors are forbidden. A text file may
-be a non-authoritative review projection. A graph-native artifact may initialize a new authority,
-and a verified backup may restore the same authority. Neither mechanism creates a second writer.
+Maintained lkjscript source files and package descriptors are forbidden. A review file is a
+non-authoritative projection and has no apply path. The embedded standard artifact is exact
+derived bootstrap data, not mutable authority. A backup transports accepted authority but is not a
+writer until verified restore publishes it.
 
-## Logical model
+## Logical and physical models
 
-The canonical root owns one repository identity, package identity and name, an ordered set of
-module references, exact dependency bindings, targets, and tombstones. Each module reference binds
-a module ID and mutable name to one integrity-protected immutable module object.
+The logical `GraphRoot` contains one repository ID, one package ID and name, and deterministic
+sets of module references, exact dependency bindings, targets, and tombstones. Each module
+reference binds a module ID and current name to an immutable module object. Module objects own
+declarations, stable member identities, typed operation trees, documentation, annotations, and
+sorted semantic relations.
 
-A module object owns:
+The accepted revision does not encode those root sets as one flat physical vector. Its
+`StoredGraphRoot` is a bounded manifest with exact metadata and six persistent map roots:
 
-- module identity, namespace name, imports, exports, documentation, and annotations;
-- declarations and their distinct stable identities;
-- stable member identities for fields, cases, operations, parameters, requirements, and ports;
-- stable binding and expression-site identities where public operations or relations need them;
-- typed semantic operation trees; and
-- sorted reference, call, type, field, variant, capability, port, target, and test relations.
+- module ID to module object reference;
+- module name to module ID;
+- package ID to exact dependency binding;
+- dependency alias to package ID;
+- target ID to target binding; and
+- typed tombstone identity to tombstone.
 
-Package, module, declaration, record, variant, interface, constant, pure function, task function,
-component, port, capability requirement, test, expression, binding, documentation, annotation,
-target, dependency, revision, receipt, draft, and conflict are logical semantic kinds. They need
-not be separate physical records. Derived call/type/capability indexes are disposable acceleration;
-the canonical relations in module objects and full validator remain their oracle.
+The maps use canonical immutable path-compressed Merkle radix pages. Equal logical maps produce
+equal page/root digests independent of insertion history. Physical pages are integrity objects, not
+semantic owners. Full logical reconstruction remains the independent representation used by deep
+doctor and complete validation.
 
-Lexical comments, whitespace, source paths, source positions, and formatting preferences are not
-meaning. The current shared Rust operation structs contain coordinate-shaped padding used by the
-test-only text oracle; canonicalization sets it to one constant value, packed decoding rejects any
-other value, and public semantic projections remove it.
+Validation and canonical relations bind stable owner identities. Imports store exact package and
+module IDs, targets store exact module/component/port IDs, and types and value references store
+exact package/module/declaration IDs. Exports are declaration-ID sets, and constant references are
+distinct from lexical variables. Module and declaration rename therefore update their owning
+module plus persistent name/summary paths; importer objects and targets remain unchanged.
 
 ## Identity domains
 
-Stable semantic IDs contain 128 opaque bits, a textual domain prefix, and a packed domain tag.
-Production allocation uses operating-system randomness. Independent branches therefore allocate
-without coordination; collision remains an error, never an implicit merge. Test and one-time
-migration allocation use a domain-separated deterministic seed and canonical ordinal. The seed or
-ordinal is allocation input, not the resulting identity's meaning.
+Stable IDs have closed textual prefixes and packed tags. Foreign domains reject even when display
+bytes coincide. Creation never silently reuses an ID; deletion records a typed tombstone when
+continuity requires it. Clone creates new identities. Exact restore preserves historical identity.
 
-| Domain | Text prefix | Continuity |
+| Domain | Text prefix | Continuity consumer |
 |---|---|---|
-| repository | `repo_` | backup and exact restore |
-| module | `mod_` | rename and namespace change |
-| declaration | `decl_` | rename and move |
-| record field | `field_` | field rename |
-| variant case | `case_` | case rename |
-| interface operation | `op_` | operation change |
-| parameter | `param_` | signature member continuity |
-| binding | `bind_` | binding rename and selected rewrites |
-| expression site | `expr_` | exact semantic replacement/rebinding |
-| requirement | `req_` | task/component requirement continuity |
-| component port | `port_` | port continuity |
-| target | `target_` | runner-target continuity |
-| draft | `draft_` | one non-executable work authority |
-| conflict | `conflict_` | one closed conflict report |
-| documentation | `doc_` | retained prose continuity |
-| annotation | `annotation_` | retained metadata continuity |
+| repository | `repo_` | accepted store and exact restore |
+| module | `mod_` | rename and namespace continuity |
+| declaration | `decl_` | rename, move, references, diff/merge |
+| type parameter | `typeparam_` | generic substitution and rename |
+| field | `field_` | record evolution |
+| variant case | `case_` | variant evolution |
+| interface operation | `op_` | capability operation evolution |
+| value parameter | `param_` | signature member continuity |
+| binding | `bind_` | selected body rewrites |
+| expression site | `expr_` | exact expression selection |
+| requirement | `req_` | component capability continuity |
+| component port | `port_` | target binding |
+| target | `target_` | deployment selection |
+| documentation | `doc_` | retained documentation continuity |
+| annotation | `annotation_` | retained annotation continuity |
+| draft | `draft_` | non-executable work authority |
+| conflict | `conflict_` | one typed merge-conflict report |
 
-Revision IDs use the distinct `rev_` domain and 256 content-derived bits. Package IDs remain the
-language package domain and do not substitute for repository IDs. Every textual and packed decoder
-rejects a foreign domain even when raw bytes coincide. Deleted IDs enter canonical tombstones and
-may not be reused. Clone creates new IDs; restore applies explicit historical identity rules.
+Revision IDs use the content-derived `rev_` domain. Package IDs, object digests, map-page digests,
+compiler indexes, runtime handles, and temporary local symbols remain separate domains.
 
-## Accepted revisions
+Production project identities use fresh allocation. A change-v3 request may define a typed local
+symbol beginning with `$` and refer to it later in the same ordered request. Stable allocation is
+deterministically bound to repository, exact base, normalized request, domain, and request order.
+The public change result returns the complete local-symbol map. Duplicate, forward, ambiguous, or
+foreign-domain use rejects; exact replay preserves allocation.
 
-A revision core contains contract versions, repository ID, zero, one, or two exact parent
-revision/record pairs, canonical root digest, semantic diff digest, and transaction digest. Its
-domain-separated digest is the revision ID. A revision record binds that core to one receipt. HEAD
-binds repository ID, revision ID, and revision-record digest.
+## Revisions, drafts, and accepted history
 
-An accepted revision has no hole or conflict. All references resolve in its exact dependency
-closure; identities, names, scopes, types, effects, capabilities, components, targets, relations,
-and tests validate. Publication writes immutable module, root, receipt, revision, and dependency
-objects durably before replacing HEAD. Readers therefore observe the old complete revision or the
-new complete revision.
+A revision core binds its current contract versions, repository ID, zero to two exact parent
+revision/record pairs, persistent root digest, semantic certificate, semantic diff digest, and
+transaction digest. The certificate is the revision-independent digest of the exact validated
+module-summary and reverse-dependency fact set. Its domain-separated digest is the revision ID. A
+revision record binds that core to one receipt. HEAD binds the repository, revision, and record
+digest and is the single accepted visibility point. Persisted summary/index bytes remain
+disposable; the certificate authenticates their rebuild against canonical meaning rather than
+promoting them to a second graph.
 
-History is a DAG. Ordinary publication has one parent. An accepted semantic merge has two unique,
-canonically ordered parents. Initial import has no parent. Nonsemantic intent is bounded receipt
-metadata and does not enter revision identity.
+Accepted revisions are complete: they contain no holes or conflicts, and every reference resolves
+within the exact dependency closure. Names, scopes, types, generic substitution, effects,
+capabilities, components, targets, tests, identities, and canonical relations validate.
 
-## Drafts
+History is an immutable DAG. Ordinary accepted publication has one parent, merge publication has
+two unique canonically ordered parents, and bootstrap has none. Bounded intent belongs to the
+receipt and is nonsemantic.
 
-A draft is separate packed non-executable authority. It binds one repository, exact accepted base,
-generation, ordered operations and preconditions, typed holes, closed conflicts, and optional
-bounded intent. Draft mutation never changes HEAD. Draft validation uses the transaction validator
-but publishes nothing. A draft with holes or conflicts cannot publish. Rebase is explicit and
-updates the draft only after validation against the named base. Drop cannot affect accepted
-authority.
+A draft is separate packed non-executable authority. It binds one repository, exact base,
+generation, ordered transactions and preconditions, typed holes, closed conflicts, and bounded
+intent. Draft mutation cannot alter HEAD. A draft with holes or conflicts cannot build, run, serve,
+start a worker, or publish. Rebase is explicit; drop cannot affect accepted authority.
 
-Draft files are local operational state by default and are excluded from Git. Verified backups
-include retained drafts. Draft IDs never parse as revision IDs.
+## Sole normal writer and publication
 
-## Semantic transactions
+All normal program mutations lower through the exact transaction-v4 evaluator. CLI-v4 entry points
+that can publish accepted authority are:
 
-The public transaction contract is the sole normal writer. A request contains:
+- `new`, which creates initial authority in a private sibling stage;
+- `change --commit`;
+- `draft publish`;
+- `history merge --apply`; and
+- `restore`, which verifies and recreates the exact backed-up authority.
 
-- transaction and graph contract identities;
-- repository identity and exact base revision;
-- optional idempotency key;
-- ordered high-level operations and exact preconditions;
-- operation, work, and affected-owner budgets; and
-- optional nonsemantic intent.
+`change --dry-run`, queries, inspection, checks, builds, runs, review, package staging, and
+built-in export do not publish. Package staging only verifies and stores unreachable exact
+dependency objects for a later dependency-binding change.
 
-The implemented operation set covers package metadata and exact dependencies; module create,
-rename, and delete; declaration create, replace, rename, move, clone, restore, and delete; record
-field and variant-case evolution; interface-operation evolution; signature, body, expression,
-reference, binding, and test-expectation changes; and target create/delete. `CreateDeclaration`
-constructs records, variants, interfaces, constants, pure/task functions, components, and tests
-without product-specific native policy. `apply` executes an ordered batch atomically.
+A change-v3 request carries an optional exact base, optional idempotency key, ordered
+preconditions, ordered high-level changes, an explicit work budget, and bounded nonsemantic intent.
+Current high-level forms add/replace/remove a dependency; create a module, record, variant, pure
+function, component, test, or target; rename a module or declaration; and replace a function body.
+The exact internal transaction supports the additional lower-level operations required by drafts,
+merge, tests, and maintained reconstruction without exposing physical records.
 
-Plan calculates the exact candidate and impact without validation publication. Validate runs full
-canonicalization and the independent semantic validator but publishes nothing. Apply repeats the
-same deterministic operation semantics and then performs exact compare-and-publish. No raw table,
-arena, or byte-offset edit is public.
+Dry-run and commit share change normalization and lowering. Four precondition-free transaction
+classes may prepare locally: eligible pure-function body replacements, independent empty-module
+creation, module rename, and declaration rename. Body replacement resolves exact owners, validates
+selected modules plus their recursive local import dependencies, and emits exact tombstone deltas
+when a structurally different body removes nested identities. Independent creation validates the
+new empty modules. Module and declaration rename use exact root lookup and validate owning modules
+plus outgoing import dependencies without loading or rewriting importers or targets. Preconditions,
+mixed operations, selection uncertainty, index failure, and every other operation fall back to
+complete logical reconstruction, canonicalization, and validation. Building a missing disposable
+index may itself require complete reconstruction.
 
-Preconditions currently cover root digest, owner existence/absence, and owner name. An idempotency
-key is scoped to repository history: exact replay returns the retained receipt; reuse for different
-transaction bytes is a precondition failure.
+Either path carries a prepared result bound to the exact base root, result root, root delta,
+changed module set, summary delta, reverse-dependency index, semantic certificate, and validation
+facts. Under the write lock publication rereads HEAD, rejects a stale base, reapplies the delta to
+the accepted stored root, verifies the result and certificate bindings, writes immutable
+module/map-page/root/receipt/revision/dependency objects durably, and replaces HEAD once. It does
+not repeat the completed semantic validation.
 
-## Publication outcomes
+Semantic-summary contract 2 persists content-addressed module summaries and a revision-bound
+reverse-dependency index as disposable acceleration. The four local paths update these facts by
+delta. Missing or malformed cache bytes rebuild from canonical modules; a rebuilt certificate
+that differs from the accepted revision is corruption. The reverse-dependency frontier does not
+yet select general validation. Packed reconstruction and the complete validator remain explicit
+full-oracle and focused differential-test routes; deep doctor separately walks retained
+object/history bindings and checks the current rebuilt certificate.
 
-The closed transaction outcomes are:
+## Outcomes, ordering, and failure
 
-- `accepted_change`: one revision and receipt become visible;
-- `semantic_no_change`: nothing is published;
-- `replayed`: an exact idempotent receipt is returned without publication;
-- `stale_base`: the requested base is not current;
-- `precondition_failed`: an exact predicate or idempotency condition failed;
-- `foreign_identity`: repository or owner domain does not match;
-- `invalid_graph`: the candidate is not accepted meaning; and
-- `resource_exhausted`: a declared or hard budget was exhausted.
+Changes execute in request order after strict decoding and precondition evaluation. Canonical sets
+and diagnostics use deterministic order. Closed transaction outcomes distinguish accepted change,
+semantic no-change, exact replay, stale base, failed precondition, foreign identity, invalid graph,
+and resource exhaustion. Malformed protocol, corrupt authority, cancellation, capability failure,
+and infrastructure failure remain distinct diagnostics.
 
-Malformed protocol, corrupt authority, and infrastructure failures are diagnostics outside the
-semantic result. Validation, plan, query, stale input, rejection, and no-change publish nothing.
-Publication visibility that cannot be reconciled is an infrastructure failure; the caller must
-read HEAD and retained receipts before retrying.
+Validation, dry-run, query, stale input, rejection, no-change, and failed restore publish nothing.
+An uncertain visibility failure requires reading current HEAD and retained receipts before retrying;
+blind replay is forbidden.
 
-## Bounds
+## Bounds and security assumptions
 
-Current hard maxima include 16 MiB root payload, 64 MiB module payload, 100,000 modules per root,
-100,000 declarations per module, 2,000,000 retained identities or tombstones in the relevant
-container, expression depth 256, 4,096 dependencies, 65,536 targets, 10,000 operations per
-transaction, 10,000,000 transaction work, and 100,000 affected owners. Smaller request budgets are
-mandatory and are part of deterministic behavior. Checked arithmetic and pre-allocation bounds
-apply before decoding growth.
+Request, object, decoder, expression-depth, transaction-work, affected-owner, and finite-output
+bounds are checked before untrusted growth. Persistent map keys are at most 256 bytes, values at
+most 48 KiB, target leaf pages 16 KiB, and hostile page inputs 64 KiB; larger semantic data must
+remain in independently addressed objects. These are storage/decoder limits, not public counts of
+modules in a package.
 
-## Change of graph contract
+Current logical module and transaction containers still have implementation bounds documented in
+`docs/status.md`. Growing public results paginate or write to an explicit output. Raising a bound
+does not substitute for incremental algorithms.
 
-There is no compatibility edition or fallback reader. A future graph contract change requires an
-explicit new-authority reconstruction or exact one-time cutover, complete consumer migration,
-predecessor rejection, and deletion of the prior current reader. Git history may retain old bytes;
-the executable current tree does not interpret them.
+The local operator, executable, host OS, and filesystem durability behavior are trusted. The model
+does not claim hostile-code isolation, encrypted storage, authenticated artifact provenance,
+distributed consensus, or multi-tenant publication.
+
+## Compatibility and non-goals
+
+There is no compatibility edition, alias, fallback reader, writable text syntax, storage-record
+authoring API, ambient dependency resolution, or network registry in the authority contract. A
+future graph-contract change requires direct reconstruction, complete maintained-consumer cutover,
+predecessor rejection, and deletion of the former current reader. Git history may retain historical
+bytes; current execution does not interpret them.

@@ -1,42 +1,68 @@
 # Evidence-gated roadmap
 
-Implemented work is intentionally absent. Each item requires a complete consumer, exact contract,
-measured reversal gate, and direct-cutover deletion plan.
+Implemented work is intentionally absent. Meaning graph contract 4, direct CLI v4, binary-only
+`new`, six persistent Merkle maps, exact-ID imports and targets, local module rename, persisted
+authenticated semantic summaries, four local transaction classes, and explicit rank-1 generics
+with named pure function values are current architecture, not roadmap items.
 
-1. **Incremental validation and lowering.** Replace complete candidate reconstruction on every
-   transaction with stable-owner dependency invalidation while retaining the current full packed
-   oracle. Require operation-sequence differential tests and material improvement on 90,000-owner
-   retained-history workloads before selection.
-2. **Packed history compaction and garbage collection.** Add retention policy, reachability proof,
-   interrupted compaction tests, and before/after deep reconstruction. Do not delete any accepted
-   revision, draft, receipt, or backup without explicit policy.
-3. **Persistent semantic conflict workflow.** Convert a conflicted merge into an explicit draft and
-   add bounded conflict show/resolve operations. Accepted HEAD must remain conflict-free.
-4. **Convenience command projection.** Add create/replace/delete/rename/move/rebind,
-   change-signature, add/remove field/case, extract, inline, repair, receipt-show, and saved-query
-   commands only as projections onto the one transaction/query protocol.
-5. **Large-graph physical revision.** Revisit module-table sharding when a local edit rewrites more
-   than impact-proportional data, warm exact lookup exceeds 250 ms, or history/file-count overhead
-   dominates. Compare packed multi-module segments, canonical table shards, and an embedded
-   transactional index without changing logical graph authority.
-6. **Million-module policy.** Current graph contract 1 caps roots at 100,000 modules. A higher
-   contract needs measured memory, cold open, mutation, doctor, build, backup, restore, and
-   interruption behavior; raising the limit alone is forbidden.
-7. **Query and transaction evidence expansion.** Add explicit receipt retrieval, expansion handles
-   for complete affected-owner sets, selected-field transaction projections, elapsed cancellation,
-   and broader indexed/oracle topology suites.
-8. **Semantic collaboration transport.** Add Git/PR automation for exact semantic diff summaries,
-   graph bundle exchange, and branch allocation only after testing independent creation,
-   rename/move composition, delete/modify, and tampered transport.
-9. **Execution scaling.** Measure bytecode against the semantic oracle on sustained pure, HTTP,
-   JSON, database, and worker workloads. Consider specialization, AOT, or JIT only if execution is
-   at least 30 percent of a maintained complete workload.
-10. **Production adapter breadth.** PostgreSQL TLS/cancellation, live S3 conformance, response
+Each remaining item requires a complete consumer, exact contract, measured reversal gate, and
+direct-cutover deletion plan.
+
+1. **Extend incremental validation and lowering.** The current precondition-free pure-body,
+   independent-module-create, module-rename, and declaration-rename paths validate bounded slices
+   and delta-update the authenticated semantic index. Extend frontier-driven invalidation to
+   signatures, types, effects, capabilities, targets, tests, dependencies, and mixed changes. Remove
+   fallback candidate reconstruction/cloning only after randomized and adversarial differential
+   evidence is clean.
+2. **Finish publication and query locality.** Avoid reconstructing the complete logical graph
+   before applying a bounded root delta, delta-update disposable query indexes, verify only new
+   immutable bytes plus exact parent bindings during publication, and extend deep doctor to the
+   complete retained canonical/dependency/draft closure plus the full semantic oracle. Measure page
+   reads/writes, reused objects, fsyncs, and true semantic closure.
+3. **Complete declaration move.** Imports, targets, exports, and expressions are exact-ID bound;
+   module and declaration rename are local. Add declaration move, preserve expected-name
+   preconditions for caller intent, and prove declaration continuity and locality in diff/history.
+4. **Large-graph physical evidence.** Exercise persistent pages at 10,000, 100,000, and one million
+   logical owners across sparse, dense, wide-fanout, large-literal, and long-history topologies.
+   Compare the current object-per-module layout with immutable packs before selecting packing.
+   Exercise segmented backup/restore beyond the predecessor 128 MiB bound and retain peak RSS,
+   throughput, corruption, and cross-filesystem staging evidence. Do not infer end-to-end locality
+   from persistent-map unit tests or a one-at-a-time payload loop alone.
+5. **Retention, packing, compaction, and garbage collection.** Extend the current read-only
+   HEAD-plus-draft retention preview with exact revision pins, active-reader leases, registered
+   backup roots, an independent reachability oracle, and interruption evidence before enabling any
+   deletion. Add physical packing/compaction only after measurements. Never delete reachable
+   authority.
+6. **Persistent semantic conflict workflow.** Convert a conflicted merge into a typed
+   non-executable draft and add bounded conflict list/detail/resolve operations. Accepted HEAD must
+   remain conflict-free.
+7. **Remaining authoring and refactoring forms.** Add delete, move, rebind, change-signature,
+   add/remove field or case, extract, inline, repair, receipt expansion, and saved queries only as
+   projections onto change v3 and query v2. Complete machine discovery for nested type/expression
+   forms as part of that work.
+8. **Incremental compilation and specialization evidence.** Bind compiler units to exact semantic
+   inputs, compare incremental and clean artifacts, and measure maintained pure, HTTP, JSON,
+   database, and worker workloads. Consider specialization, AOT, or JIT only if complete-workload
+   evidence supports it.
+9. **Additional abstraction only from consumers.** Constraints, closure capture, type inference,
+    component composition, or graph-native recipes require multiple real users and end-to-end
+    graph/CLI/validator/compiler/reference/diff/merge semantics. Do not leave half-features or a
+    hidden macro language.
+10. **Agent and verification economy.** Retain stateless correctness. Add a resident stdio session
+    only if equal complete workflows show material benefit after exact revision pinning,
+    cancellation, and resource bounds. Expand verification fingerprints, graph-impact selection,
+    context handles, and optional real provider telemetry without inferring tokens or cost.
+11. **Production adapter breadth.** PostgreSQL cancellation, live S3 conformance, response
     streaming, outbound HTTP, terminal, selected filesystem, structured observations, secret
-    rotation, and cross-platform production each require a named consumer and failure workflow.
-    Hostile-code sandboxing remains a separate project.
+    rotation, and cross-platform production each require a named consumer and complete failure
+    workflow. Hostile-code sandboxing remains a separate project.
 
-Reversal gates remain: remove local short/index shards if they do not improve equal complete tasks;
-remove text recovery import if its independent value does not exceed grammar/security cost; retain
-bytecode only while differential equality holds; and keep the per-command topology until a daemon
-shows material complete-workflow gain without owning meaning.
+TLS is not a roadmap item. The supported HTTP listener is plaintext and PostgreSQL uses `NoTls`.
+lkjscript does not plan HTTP TLS termination, PostgreSQL TLS, certificate parsing, certificate
+management or rotation, ACME, or speculative TLS hooks. Encrypted transport belongs at an
+appropriate external trusted boundary or in a different adapter outside current product scope.
+
+Reversal gates remain: remove short/index shards if they do not improve equal tasks; remove the
+source-shaped test oracle if its independent value no longer exceeds its cost; retain bytecode only
+while differential equality holds; and reject any session or packing prototype whose
+complete-workflow evidence is not material.

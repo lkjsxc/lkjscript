@@ -1,8 +1,8 @@
-use super::{package_for, resolve_owner};
+use super::resolve_reference_owner;
 use crate::platform::artifact::LoadedArtifact;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::language::{Expression, MatchArm, Parameter};
-use crate::platform::semantic::{OwnerId, ValidatedModule, ValidatedPackage};
+use crate::platform::semantic::OwnerId;
 use std::collections::BTreeMap;
 
 #[derive(Clone, Debug)]
@@ -26,6 +26,9 @@ pub enum Instruction {
     Jump(usize),
     Call {
         function: OwnerId,
+        arguments: usize,
+    },
+    Invoke {
         arguments: usize,
     },
     Record {
@@ -65,15 +68,11 @@ pub struct VariantJump {
 
 pub fn compile_function(
     artifact: &LoadedArtifact,
-    package: &ValidatedPackage,
-    module: &ValidatedModule,
     parameters: &[Parameter],
     expression: &Expression,
 ) -> Result<CompiledFunction, Diagnostic> {
     let mut compiler = Compiler {
         artifact,
-        package,
-        module,
         instructions: Vec::new(),
         locals: BTreeMap::new(),
         next_local: 0,
@@ -91,8 +90,6 @@ pub fn compile_function(
 
 struct Compiler<'a> {
     artifact: &'a LoadedArtifact,
-    package: &'a ValidatedPackage,
-    module: &'a ValidatedModule,
     instructions: Vec<Instruction>,
     locals: BTreeMap<String, usize>,
     next_local: usize,
@@ -112,15 +109,20 @@ impl Compiler<'_> {
                     .push(Instruction::StaticText(value.clone()));
             }
             Expression::Variable(name, _) => {
-                if let Some(local) = self.locals.get(name) {
-                    self.instructions.push(Instruction::LoadLocal(*local));
-                } else {
-                    let owner = resolve_owner(self.artifact, self.package, self.module, name)?;
-                    self.instructions.push(Instruction::Call {
-                        function: owner,
-                        arguments: 0,
-                    });
-                }
+                let local = self.locals.get(name).copied().ok_or_else(|| {
+                    Diagnostic::new(
+                        DiagnosticClass::Corrupt,
+                        "compile_local_missing",
+                        format!("validated expression references absent local '{name}'"),
+                    )
+                })?;
+                self.instructions.push(Instruction::LoadLocal(local));
+            }
+            Expression::Constant(reference, _) => {
+                self.instructions.push(Instruction::Call {
+                    function: resolve_reference_owner(self.artifact, reference)?,
+                    arguments: 0,
+                });
             }
             Expression::If {
                 condition,
@@ -167,7 +169,18 @@ impl Compiler<'_> {
                     self.expression(argument)?;
                 }
                 self.instructions.push(Instruction::Call {
-                    function: resolve_owner(self.artifact, self.package, self.module, function)?,
+                    function: resolve_reference_owner(self.artifact, function)?,
+                    arguments: arguments.len(),
+                });
+            }
+            Expression::Invoke {
+                callee, arguments, ..
+            } => {
+                self.expression(callee)?;
+                for argument in arguments {
+                    self.expression(argument)?;
+                }
+                self.instructions.push(Instruction::Invoke {
                     arguments: arguments.len(),
                 });
             }
@@ -177,7 +190,7 @@ impl Compiler<'_> {
                 }
                 let owner = ty
                     .as_ref()
-                    .map(|name| resolve_owner(self.artifact, self.package, self.module, name))
+                    .map(|reference| resolve_reference_owner(self.artifact, reference))
                     .transpose()?;
                 self.instructions.push(Instruction::Record {
                     owner,
@@ -191,7 +204,7 @@ impl Compiler<'_> {
                     self.expression(payload)?;
                 }
                 self.instructions.push(Instruction::Variant {
-                    owner: resolve_owner(self.artifact, self.package, self.module, ty)?,
+                    owner: resolve_reference_owner(self.artifact, ty)?,
                     case: case.clone(),
                     has_payload: payload.is_some(),
                 });
@@ -218,12 +231,11 @@ impl Compiler<'_> {
                 self.compile_match(arms)?;
             }
             Expression::FunctionRef { function, .. } => {
-                self.instructions.push(Instruction::Function(resolve_owner(
-                    self.artifact,
-                    self.package,
-                    self.module,
-                    function,
-                )?));
+                self.instructions
+                    .push(Instruction::Function(resolve_reference_owner(
+                        self.artifact,
+                        function,
+                    )?));
             }
             Expression::Perform {
                 capability,
@@ -307,9 +319,4 @@ impl Compiler<'_> {
         self.locals.insert(name.to_owned(), local);
         Ok(local)
     }
-}
-
-#[allow(dead_code)]
-fn _assert_package_available(artifact: &LoadedArtifact, owner: &OwnerId) -> Result<(), Diagnostic> {
-    package_for(artifact, &owner.package).map(|_| ())
 }

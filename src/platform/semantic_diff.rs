@@ -9,7 +9,7 @@ use serde::Serialize;
 use serde_json::Value as JsonValue;
 use std::collections::BTreeSet;
 
-pub const SEMANTIC_DIFF_CONTRACT_VERSION: u16 = 1;
+pub const SEMANTIC_DIFF_CONTRACT_VERSION: u16 = 2;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "snake_case")]

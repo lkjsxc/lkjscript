@@ -14,9 +14,14 @@ The current graph has three stable modules:
 - `worker` (`mod_0510586a801c429b7a4a49a217de7fab`) owns queue claim and exact-attempt
   completion meaning.
 
-`lkjournal.lkja` is a deterministic graph-native bundle containing the exact standard dependency.
-It contains requirements and no grants, credentials, listener address, host paths, or deployment
-secrets.
+The maintained graph-4 revision is
+`rev_583079ff88a142c5a8553bb7fd3beffeda8e7d181651370cb6322819eb9f5dfc`. Its root package
+artifact is `artifact_231583fc727b1ce12854227f2031ed62332ef94eb7b7c6dfe58487047c94dcfd`, and
+`lkjournal.lkja` has bundle digest
+`artifact_3ea0c5e71f763319514a6747e580b02c02efbf7e35086420b9bfed74e3cd0444`. The bundle contains
+the exact standard package artifact
+`artifact_cef17b4730c708a9e3dfdaa934af28fad58902fb011db1e1305fd840f459c57a`. It contains
+requirements and no grants, credentials, listener address, host paths, or deployment secrets.
 
 ## Inspect and verify
 
@@ -24,17 +29,18 @@ From the repository root:
 
 ```sh
 cargo build --workspace --release --locked
-target/release/lkjscript --project applications/lkjournal semantic orient --limit 20
-target/release/lkjscript --project applications/lkjournal semantic show \
+target/release/lkjscript --project applications/lkjournal inspect project --limit 20
+target/release/lkjscript --project applications/lkjournal inspect owner \
   mod_50e2d3318b93f572dad082bd4f42c526 --body
-target/release/lkjscript --project applications/lkjournal semantic test
-target/release/lkjscript --project applications/lkjournal semantic build \
+target/release/lkjscript --project applications/lkjournal check
+target/release/lkjscript --project applications/lkjournal build \
   --output /tmp/lkjournal.lkja
-target/release/lkjscript --project applications/lkjournal semantic doctor --deep
+target/release/lkjscript --project applications/lkjournal doctor --deep
 ```
 
-The test command runs 11 accepted tests and requires equality between prepared bytecode and the
-semantic reference interpreter.
+The check command runs the exact two-package closure: 5 `lkjournal` tests plus 7 standard tests,
+for 12 passing checks, and requires equality between prepared bytecode and the semantic reference
+interpreter.
 
 ## Run
 
@@ -52,6 +58,12 @@ The service descriptor listens on `127.0.0.1:8080`, admits at most 16 active req
 queued requests, limits request bodies to 8 MiB and response bodies to 4 MiB, and assigns a
 30-second operational deadline. The worker runs at most two tasks. Deployment JSON binds runtime
 grants; it is not program authority.
+
+The HTTP listener is plaintext, and PostgreSQL connections use `NoTls`. The loopback listener and
+trusted local database path are deliberate deployment assumptions. Do not expose either adapter
+across an untrusted network without an appropriate external trusted transport boundary. lkjscript
+does not plan to add HTTP TLS termination, PostgreSQL TLS, certificate management, or ACME; the
+external boundary does not turn the runtime into a hostile-code or multi-tenant sandbox.
 
 ## Routes
 
@@ -91,9 +103,10 @@ evidence under `.artifacts/service/`.
 Canonical program backup is separate:
 
 ```sh
-target/release/lkjscript --project applications/lkjournal semantic backup \
+target/release/lkjscript --project applications/lkjournal backup \
   --output /tmp/lkjournal-meaning.lkjb
 ```
 
-Database, object, and canonical-meaning backups are distinct operational authorities and must be
-coordinated by deployment policy.
+The output is a segmented backup directory, not a monolithic file. Database, object, and
+canonical-meaning backups are distinct operational authorities and must be coordinated by
+deployment policy.

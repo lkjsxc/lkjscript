@@ -1,13 +1,15 @@
-# Semantic storage
+# Meaning-graph storage
 
-Status: normative for graph contract 1.
+Status: normative for meaning graph contract 4 and root storage contract
+`lkjscript-persistent-root-2`.
 
-## Physical model
+## Physical model and authority
 
-The selected model is a hybrid current root plus content-addressed immutable history. A small HEAD
-is the single visibility point. Roots, module shards, revision records, receipts, and dependency
-package objects are immutable and sharded by digest prefix. Drafts and query indexes are separate
-operational records. Logical graph ownership does not depend on this layout.
+A small HEAD is the single accepted visibility point. Immutable roots, persistent map pages, module
+objects, revision records, receipts, and exact dependency package objects reconstruct accepted
+authority. Drafts are separate non-executable authority. Query indexes, semantic summaries,
+compiler caches, lock state, and logs are operational or derived and cannot change accepted
+meaning.
 
 The store root is `.lkjscript/meaning`:
 
@@ -16,6 +18,7 @@ HEAD
 LOCK
 objects/modules/PP/DIGEST.lkjm
 objects/roots/PP/DIGEST.lkjr
+objects/map-pages/PP/DIGEST.lkjp
 revisions/PP/REVISION.lkjv
 receipts/PP/DIGEST.lkjt
 artifacts/PP/DIGEST.lkja
@@ -24,86 +27,170 @@ indexes/PP/REVISION.lkji
 indexes/PP/REVISION/local-manifest.lkix
 indexes/PP/REVISION/owners/BB.lkix
 indexes/PP/REVISION/names/BB.lkix
+indexes/PP/REVISION/semantic-dependencies.lkix
+indexes/summary-objects/PP/DIGEST.lkis
 ```
 
-`LOCK`, `drafts`, and `indexes` are local/derived by default and ignored by Git. Canonical HEAD,
-objects, revisions, receipts, and needed dependency artifacts are transportable authority.
+`LOCK` and indexes are local operational/derived state. Drafts are local non-executable authority.
+HEAD, reachable immutable objects, revision records, receipts, required dependency artifacts, and
+retained drafts are transportable authority. Filesystem location and page coordinates are not
+semantic identities.
 
-## Packed envelope
+## Persistent root
 
-Every packed object begins with an eight-byte domain magic, little-endian envelope version 1, a
-checked little-endian 64-bit payload length, the bincode-2 payload using little-endian variable
-integer encoding, and a 32-byte BLAKE3 domain-separated checksum over the exact header and payload.
+The accepted root object is a bounded `StoredGraphRoot` manifest. It binds storage and graph
+contracts, repository/package identity and name, and six `MapRoot` values: modules keyed by module
+ID, module names to module IDs, dependencies keyed by package ID, dependency aliases to package
+IDs, targets keyed by target ID, and typed tombstones. Each `MapRoot` binds one page digest and
+entry count.
 
-Decoding checks the file bound before allocation; magic, version, exact length, checksum, typed
-identity tags, closed enum values, contract version, sorted uniqueness, and semantic shape. Unknown
-contracts, duplicates, excess, malformed values, checksum mismatch, and trailing bytes reject.
-The global packed payload ceiling is 128 MiB; each object type selects a smaller or equal limit.
+Map pages implement a canonical path-compressed Merkle radix map. A subtree is a leaf when its
+canonical encoding fits the 16 KiB target or holds one record; otherwise it branches at the first
+byte following the longest common prefix. Equal sorted key/value sets therefore produce equal page
+and root digests regardless of insertion order. Pages are immutable and content-addressed.
 
-Object names are typed digests of complete packed bytes. Digest domains for modules, roots,
-receipts, records, artifacts, backups, indexes, transactions, diffs, and identities are distinct.
-A content digest proves equality only in its domain. It does not prove authority, provenance,
-freshness, permission, or revision visibility.
+Storage boundaries limit keys to 256 bytes, values to 48 KiB, and hostile page inputs to 64 KiB.
+These limits force larger values into separately addressed objects; they do not impose a module
+count on language meaning. A root manifest is at most 64 KiB.
 
-## Publication
+A local root update computes `StoredGraphRootDelta` from logical roots and path-copies affected
+map branches in an overlay page store. Exact module ID/name and dependency ID/alias lookup follows
+the appropriate map path. Deterministic full reconstruction and full-build equality remain the
+oracle for delta operations. Eligible pure-body replacement, independent empty-module creation,
+and module rename can derive bounded deltas. A missing disposable index and every fallback
+transaction still reconstruct and clone the logical graph before deriving the delta; persistent
+physical locality does not imply a fully incremental semantic engine.
 
-Writers acquire the repository lock and reread HEAD. A proposal whose exact base is not current
-returns stale without writes to authority. The publisher validates and canonicalizes the complete
-candidate, writes dependency artifacts, modules, root, receipt, and revision as immutable files,
-makes every object and directory entry durable, writes a unique HEAD stage, syncs it, atomically
-renames it over HEAD, and syncs the store directory. Linux batches object durability with `syncfs`
-after closing all object files; other targets synchronize each file. HEAD is never included in that
-batch and remains the separately synchronized visibility point.
+## Packed objects and integrity
 
-An interruption before HEAD replacement leaves only unreachable immutable objects. An interruption
-after replacement exposes the new complete revision. Existing immutable paths must contain equal
-bytes; conflicting bytes are corruption. Cleanup never removes a reachable object. A visibility
-sync failure is classified as indeterminate and requires HEAD/receipt reconciliation.
+Ordinary packed objects use an eight-byte domain magic, little-endian envelope version 1, checked
+little-endian 64-bit payload length, canonical bincode-2 little-endian variable-integer payload, and
+a 32-byte domain-separated BLAKE3 checksum over header and payload. Persistent map pages use their
+own fixed, versioned, domain-separated canonical envelope and checksum.
 
-Initial creation uses a sibling `.meaning-stage-*` directory with the complete store layout and
-atomically renames it into place. Restore uses the same staged-directory rule.
+Decoding checks the owning byte bound before length-directed allocation, then checks magic,
+version, exact length, checksum, typed identity tags, closed enum values, contract version, sorted
+uniqueness, and semantic shape. Unknown contracts, duplicates, malformed values, checksum mismatch,
+and trailing bytes reject. The shared packed-decoder payload ceiling is 128 MiB; object-specific
+bounds may be smaller. This hostile single-object ceiling is not a public project-size promise.
 
-## Reconstruction and indexes
+Object names are typed digests of complete bytes. Module, root, map-page, receipt, revision,
+artifact, backup, index, transaction, diff, and identity domains are distinct. A digest proves
+equality or integrity only in its exact domain, not provenance, authority, freshness, permission,
+or visibility.
 
-Deep reconstruction starts at HEAD, verifies every reachable parent record and receipt, decodes
-each root/module, checks all object-key digests, validates graph identity shape and tombstones, and
-runs semantic reconstruction. It does not trust query indexes.
+## Preparation and publication
 
-The broad query index is a revision-bound packed derived object containing ordered owner summaries,
-semantic owner projections, module facts, sorted relations, and incoming/outgoing adjacency. A
-local manifest and 256 deterministic owner and name buckets provide exact lookups without loading
-that broad object. Every key binds revision, root, package, repository, and index contract. The
-local manifest publishes last; an absent or corrupt expected bucket invalidates the local cache and
-rebuilds it. Missing, corrupt, foreign, or stale index bytes are discarded logically and rebuilt
-from canonical objects. Index loss cannot make a valid revision unavailable. Disposable index
-writes do not receive canonical durability synchronization.
+The common change path prepares semantic validation once before locking publication. Three
+precondition-free transaction classes may prepare locally: eligible pure-function body
+replacement validates selected modules and their recursive local import dependencies; independent
+creation validates new empty modules; and module rename validates renamed modules plus their
+outgoing import dependencies without rewriting importers or targets. Preconditions, mixed
+operations, declaration rename, and all other requests reconstruct current logical meaning, apply
+operations, canonicalize relations, and fully validate the candidate. The resulting prepared
+validation binds:
 
-## Backup and restore
+- exact expected revision and base root;
+- exact result root;
+- canonical root delta;
+- changed module objects;
+- changed semantic summaries and a revision-bound reverse-dependency index;
+- a revision-independent semantic certificate for the exact fact set; and
+- validation facts.
 
-A backup locks a single observed HEAD and includes every revision in its reachable DAG, every
-bound receipt/root/module, the complete exact dependency artifact closure, and retained drafts. It
-uses a sorted unique key table and its own packed/checksummed contract. The receipt binds repository
-ID, revision, backup digest, entry count, draft count, and byte count.
+Publication acquires the repository lock, rereads the current binding, and rejects a stale base
+before replaying the root delta. It verifies that the delta result, semantic-diff binding, summary
+delta, and semantic certificate equal the prepared values and reuses the prepared validation
+facts; it does not repeat semantic validation. Unprepared internal publication paths retain
+complete validation.
 
-Restore accepts an existing empty project directory, verifies the entire backup and every entry,
-reconstructs the exact authority in a private stage, runs deep doctor there, and only then renames
-the store into visibility. Repository IDs, stable semantic IDs, revision IDs, and history are
-preserved exactly. Importing a graph artifact is intentionally different: it creates new history
-from a history-free package snapshot.
+The publisher writes newly required dependency artifacts, changed module objects, new map pages,
+the fixed root manifest, receipt, and revision as immutable files. It also writes disposable
+content-addressed summary objects and the revision-bound semantic reverse index. New canonical
+bytes and directory entries become durable before a unique HEAD stage is synchronized and
+atomically renamed over HEAD. Linux batches immutable-object durability with `syncfs`; other
+targets synchronize individual files. HEAD remains the separately synchronized visibility point.
 
-## Threat model
+An interruption before HEAD replacement can leave only unreachable immutable bytes. An
+interruption after replacement exposes the complete new revision. An existing immutable path must
+contain equal bytes or corruption is reported. A visibility-sync failure is indeterminate and
+requires HEAD/receipt reconciliation.
 
-Persisted bytes and backup/artifact inputs are hostile decoding boundaries. Store traversal uses
-fixed domain directories and canonical hex keys. Reads require regular files; layout creation and
-restore reject symlinks and incompatible existing types. Temporary names use fresh typed IDs.
-Permission and durability behavior is the local-filesystem guarantee reproduced by tests; network
-filesystems, hostile concurrent filesystem principals, encrypted storage, and distributed
-consensus are not claimed.
+Initial project creation constructs a complete store in a private sibling stage and exposes the
+destination through one rename. Restore uses a private store stage under the selected destination
+and makes verified authority visible only after complete reconstruction.
 
-## Retention and compaction
+## Reconstruction and derived state
 
-All revisions reachable from HEAD are retained. Immutable identical module bodies are shared by
-digest across revisions. Query indexes are disposable and may be removed at any time. Contract 1
-does not yet expose canonical-history pruning, garbage collection, or segment repacking; those are
-explicit current limits, not implicit retention behavior. Any future implementation must preserve
-every retained revision/draft/receipt and prove deep reconstruction before and after layout change.
+Deep doctor starts at HEAD, verifies reachable parents and receipts, decodes each root and all
+referenced map pages/modules, checks object-key digests, reconstructs logical root sets, validates
+root/module identity and tombstone shape, and loads or rebuilds the current query and semantic
+indexes. It does not trust disposable index or summary bytes: a rebuilt semantic certificate must
+equal the value in the current revision. It does not currently rerun complete cross-package
+semantic validation for every historical revision. Initial publication runs complete direct and
+packed validation; focused differential tests retain the full validator for local changes. Restore
+runs deep structural/history verification but does not rerun complete cross-package semantic
+validation.
+
+The query system stores a revision-bound broad index plus a manifest and 256 deterministic owner
+and name buckets. Every generation binds repository, package, revision, root, and index contract.
+A missing, stale, foreign, or corrupt index invalidates derived state and triggers reconstruction.
+Disposable index writes are not canonical publication.
+
+Semantic summary contract 2 defines integrity-bound per-module facts and a reverse-dependency
+index under validator contract 2. Module summaries bind module object, package, validator, exact
+input, signatures, implementations, effects, and dependency edges; the reverse index additionally
+binds one revision. Summary objects are content-addressed under `indexes/summary-objects`; one
+`semantic-dependencies.lkix` generation is bound to each accepted revision. Local transaction
+paths replace or remove exact summary facts and rebind the reverse index. Missing or malformed
+cache state rebuilds from canonical modules; a certificate mismatch against the revision core is
+canonical corruption. These bytes remain derived acceleration and cannot alter accepted meaning.
+The implemented frontier is not yet used to select general validation.
+
+## Backup, restore, retention, and recovery
+
+Backup locks one observed HEAD and includes the reachable revision DAG, receipts, stored roots,
+map pages, modules, exact dependency artifact closure, and retained drafts under a globally sorted
+unique key table. Backup contract version 4 publishes a directory with `MANIFEST.lkjb`, bounded
+checksummed index segments, and individually copied canonical objects. The manifest binds segment
+order/digests/counts and aggregate payload bytes; each segment binds the exact key, length, and
+digest of every entry. Backup and restore process entries one at a time instead of allocating one
+complete bundle value, while retaining the complete O(object-count) sorted key set in memory. The
+manifest is bounded to 32 MiB, each index segment to 4 MiB and 4,096 entries, and retained history
+traversal to 10,000 revisions. Those hostile/implementation bounds do not establish a tested
+maximum total backup size or fully bounded memory.
+
+Restore accepts an explicit destination without current authority, verifies the manifest,
+consecutively ordered segments, every entry, and the exact recomputed retained closure; it
+reconstructs authority in a private stage, runs deep object/history and draft validation, and only
+then exposes it. Missing, reordered, corrupt, or predecessor monolithic inputs reject before
+visibility. Repository/stable/revision identities and history are preserved. Current
+restore does not rerun the complete cross-package semantic validator; that is an implementation
+limit rather than a weaker meaning-graph invariant. Package staging is intentionally different: it
+verifies a package artifact as unreachable dependency data and cannot publish HEAD.
+
+All revisions reachable from HEAD are retained. Each live draft additionally retains its base and
+that base's parent DAG. Identical immutable content is shared by digest. Retention contract 1
+exposes `doctor cleanup`, an exact read-only inventory that compares those roots with canonical
+store files, reports retained/reclaimable candidate counts and bytes, derived counts/bytes, unknown
+entry counts, and an integrity-bound plan digest. It always reports `destructive_ready: false` and
+identifies missing revision-pin, active-reader-lease, and registered-backup-root authority.
+
+No public history pruning, garbage collection, canonical deletion, or segment repacking exists.
+Derived indexes may be removed and rebuilt; canonical objects may not be deleted by the preview or
+treated as caches.
+
+## Security assumptions, failure classes, and non-goals
+
+Persisted bytes, artifacts, and backups are hostile decoding boundaries. Traversal uses fixed
+domain directories and canonical keys; reads require ordinary non-symlink files. Creation, output,
+and restore reject unsafe path types and use fresh private stages.
+
+Missing or malformed reachable canonical bytes are corruption and block writes. Missing derived
+bytes are rebuildable. Stale base, invalid graph, resource exhaustion, corruption, cancellation,
+and infrastructure/durability failure remain distinct.
+
+The guarantee assumes a trusted local operator and a filesystem that honors the documented
+operations. Network filesystems, a hostile concurrent filesystem administrator, encrypted graph
+storage, artifact signatures, distributed consensus, and multi-node publication are not claimed.
+Physical page or pack coordinates never become authoring syntax.

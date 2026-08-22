@@ -109,13 +109,13 @@ macro_rules! semantic_digest {
 semantic_digest!(
     ModuleObjectDigest,
     "module_object_",
-    "lkjscript.module-object.v1",
+    "lkjscript.module-object.v2",
     1u8
 );
 semantic_digest!(
     RootObjectDigest,
     "root_object_",
-    "lkjscript.root-object.v1",
+    "lkjscript.root-object.v2",
     2u8
 );
 semantic_digest!(
@@ -128,18 +128,19 @@ semantic_digest!(ReceiptDigest, "receipt_", "lkjscript.receipt.v1", 4u8);
 semantic_digest!(
     TransactionDigest,
     "transaction_",
-    "lkjscript.transaction.v1",
+    "lkjscript.transaction.v3",
     5u8
 );
-semantic_digest!(IndexDigest, "index_", "lkjscript.index.v1", 6u8);
-semantic_digest!(BackupDigest, "backup_", "lkjscript.backup.v1", 7u8);
-semantic_digest!(ArtifactDigest, "artifact_", "lkjscript.artifact.v2", 8u8);
+semantic_digest!(IndexDigest, "index_", "lkjscript.index.v2", 6u8);
+semantic_digest!(BackupDigest, "backup_", "lkjscript.backup.v2", 7u8);
+semantic_digest!(ArtifactDigest, "artifact_", "lkjscript.artifact.v3", 8u8);
 semantic_digest!(
     RevisionRecordDigest,
     "revision_record_",
-    "lkjscript.revision-record.v1",
+    "lkjscript.revision-record.v2",
     9u8
 );
+semantic_digest!(CleanupDigest, "cleanup_", "lkjscript.cleanup-plan.v1", 10u8);
 
 fn decode_digest(encoded: &str) -> Result<[u8; DIGEST_BYTES], Diagnostic> {
     if encoded.len() != DIGEST_BYTES * 2 {

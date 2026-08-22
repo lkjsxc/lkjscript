@@ -2,17 +2,20 @@
 
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::graph::{
-    DependencyBinding, GraphRoot, ModuleObjectRef, TargetBinding, Tombstone, TombstoneIdentity,
+    DependencyBinding, GraphRoot, ModuleObjectRef, StoredGraphRootDelta, TargetBinding, Tombstone,
+    TombstoneIdentity,
 };
 use super::language::{
-    Declaration, Effect, Expression, Field, InterfaceOperation, Module, Parameter, Type,
-    VariantCase,
+    Declaration, DeclarationReference, Effect, Expression, Field, InterfaceOperation, Module,
+    Parameter, Type, VariantCase,
 };
 use super::meaning::{
     BindingIdentity, DeclarationIdentity, ExpressionIdentity, MeaningModule, MemberIdentity,
     RelationRole, RelationSource, RelationTarget,
 };
-use super::repository::{PublicationOutcome, PublicationProposal, SemanticRepository};
+use super::repository::{
+    CurrentBinding, PreparedValidation, PublicationOutcome, PublicationProposal, SemanticRepository,
+};
 use super::revision::{
     AffectedOwner, ParentRevision, REVISION_CONTRACT_VERSION, ReceiptStatus, RevisionCore,
     TransactionReceipt,
@@ -24,11 +27,12 @@ use super::semantic_id::{
     ParameterId, RepositoryId, RevisionId, TargetId,
 };
 use super::syntax::SourceSpan;
+use super::{OwnerKind, SemanticQueryIndex};
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const TRANSACTION_CONTRACT_VERSION: u16 = 1;
+pub const TRANSACTION_CONTRACT_VERSION: u16 = 4;
 pub const MAXIMUM_TRANSACTION_OPERATIONS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_WORK: usize = 10_000_000;
 pub const MAXIMUM_TRANSACTION_AFFECTED_OWNERS: usize = 100_000;
@@ -297,7 +301,7 @@ pub enum SemanticOperation {
     },
     RebindReference {
         expression: ExpressionId,
-        locator: String,
+        reference: DeclarationReference,
     },
     RenameBinding {
         binding: BindingId,
@@ -362,6 +366,14 @@ pub struct TransactionResult {
     pub diagnostics: Vec<Diagnostic>,
 }
 
+struct PreparedTransaction {
+    root: Option<GraphRoot>,
+    modules: Vec<MeaningModule>,
+    validation: PreparedValidation,
+    result_root: RootObjectDigest,
+    affected_owners: Vec<AffectedOwner>,
+}
+
 pub fn execute_transaction(
     repository: &SemanticRepository,
     request: &TransactionRequest,
@@ -376,9 +388,9 @@ pub fn execute_transaction(
         ));
     }
     let transaction = request.digest()?;
-    let current = repository.reconstruct_current()?;
-    let current_revision = current.current.head.revision;
-    let repository_id = current.current.head.repository_id;
+    let current = repository.current_binding()?;
+    let current_revision = current.head.revision;
+    let repository_id = current.head.repository_id;
     let empty = |status, diagnostics| TransactionResult {
         contract_version: TRANSACTION_CONTRACT_VERSION,
         graph_contract: super::meaning::GRAPH_CONTRACT_IDENTITY,
@@ -430,87 +442,155 @@ pub fn execute_transaction(
     if request.base_revision != current_revision {
         return Ok(empty(TransactionStatus::StaleBase, Vec::new()));
     }
-    for precondition in &request.preconditions {
-        if let Err(error) = check_precondition(
-            precondition,
-            &current.current.root,
-            &current.modules,
-            current.current.record.core.root,
-        ) {
-            return Ok(empty(TransactionStatus::PreconditionFailed, vec![error]));
+    let local = if request.preconditions.is_empty() {
+        let prepared = match prepare_local_pure_body_transaction(repository, request, &current) {
+            Ok(prepared) => prepared,
+            Err(error) => {
+                return Ok(empty(
+                    transaction_failure_status(&error),
+                    vec![without_source_location(error)],
+                ));
+            }
+        };
+        if prepared.is_some() {
+            prepared
+        } else {
+            let prepared = match prepare_local_module_creation(repository, request, &current) {
+                Ok(prepared) => prepared,
+                Err(error) => {
+                    return Ok(empty(
+                        transaction_failure_status(&error),
+                        vec![without_source_location(error)],
+                    ));
+                }
+            };
+            if prepared.is_some() {
+                prepared
+            } else {
+                let prepared = match prepare_local_module_rename(repository, request, &current) {
+                    Ok(prepared) => prepared,
+                    Err(error) => {
+                        return Ok(empty(
+                            transaction_failure_status(&error),
+                            vec![without_source_location(error)],
+                        ));
+                    }
+                };
+                if prepared.is_some() {
+                    prepared
+                } else {
+                    match prepare_local_declaration_rename(repository, request, &current) {
+                        Ok(prepared) => prepared,
+                        Err(error) => {
+                            return Ok(empty(
+                                transaction_failure_status(&error),
+                                vec![without_source_location(error)],
+                            ));
+                        }
+                    }
+                }
+            }
         }
-    }
-
-    let mut root = current.current.root.clone();
-    let mut modules = current.modules.clone();
-    let mut module_ids = modules
-        .iter()
-        .map(|module| module.module_id)
-        .collect::<BTreeSet<_>>();
-    let mut module_names = modules
-        .iter()
-        .map(|module| module.module.name.clone())
-        .collect::<BTreeSet<_>>();
-    let mut affected = BTreeSet::new();
-    let mut work = 0usize;
-    for operation in &request.operations {
-        if let Err(error) = apply_operation(
-            repository,
-            operation,
+    } else {
+        None
+    };
+    let prepared = if let Some(prepared) = local {
+        prepared
+    } else {
+        let reconstructed = repository.reconstruct_current()?;
+        if reconstructed.current.head.revision != current_revision {
+            return Ok(empty(TransactionStatus::StaleBase, Vec::new()));
+        }
+        for precondition in &request.preconditions {
+            if let Err(error) = check_precondition(
+                precondition,
+                &reconstructed.current.root,
+                &reconstructed.modules,
+                reconstructed.current.record.core.root,
+            ) {
+                return Ok(empty(TransactionStatus::PreconditionFailed, vec![error]));
+            }
+        }
+        let mut root = reconstructed.current.root.clone();
+        let mut modules = reconstructed.modules.clone();
+        let mut module_ids = modules
+            .iter()
+            .map(|module| module.module_id)
+            .collect::<BTreeSet<_>>();
+        let mut module_names = modules
+            .iter()
+            .map(|module| module.module.name.clone())
+            .collect::<BTreeSet<_>>();
+        let mut affected = BTreeSet::new();
+        let mut work = 0usize;
+        for operation in &request.operations {
+            if let Err(error) = apply_operation(
+                repository,
+                operation,
+                request.base_revision,
+                &mut root,
+                &mut modules,
+                &mut module_ids,
+                &mut module_names,
+                &mut affected,
+                &mut work,
+                request.budget,
+            ) {
+                return Ok(empty(transaction_failure_status(&error), vec![error]));
+            }
+        }
+        if affected.len() > request.budget.maximum_affected_owners {
+            return Ok(empty(
+                TransactionStatus::ResourceExhausted,
+                vec![transaction_error(
+                    DiagnosticClass::Resource,
+                    "semantic_transaction_affected_limit",
+                    "transaction exceeds its affected-owner budget",
+                )],
+            ));
+        }
+        let validation = match repository.canonicalize_proposal(
             request.base_revision,
+            &reconstructed.current.root,
             &mut root,
             &mut modules,
-            &mut module_ids,
-            &mut module_names,
-            &mut affected,
-            &mut work,
-            request.budget,
         ) {
-            let status = if error.class == DiagnosticClass::Resource {
-                TransactionStatus::ResourceExhausted
-            } else {
-                TransactionStatus::InvalidGraph
-            };
-            return Ok(empty(status, vec![error]));
-        }
-    }
-    if affected.len() > request.budget.maximum_affected_owners {
-        return Ok(empty(
-            TransactionStatus::ResourceExhausted,
-            vec![transaction_error(
-                DiagnosticClass::Resource,
-                "semantic_transaction_affected_limit",
-                "transaction exceeds its affected-owner budget",
-            )],
-        ));
-    }
-    if let Err(error) = repository.canonicalize_proposal(&mut root, &mut modules) {
-        let status = if error.class == DiagnosticClass::Resource {
-            TransactionStatus::ResourceExhausted
-        } else {
-            TransactionStatus::InvalidGraph
+            Ok(prepared) => prepared,
+            Err(error) => {
+                return Ok(empty(
+                    transaction_failure_status(&error),
+                    vec![without_source_location(error)],
+                ));
+            }
         };
-        return Ok(empty(status, vec![without_source_location(error)]));
-    }
-    let new_root_digest = root.digest()?;
-    if new_root_digest == current.current.record.core.root {
+        let result_root = validation.result_root();
+        PreparedTransaction {
+            root: Some(root),
+            modules,
+            validation,
+            result_root,
+            affected_owners: affected.into_iter().collect(),
+        }
+    };
+    if prepared.result_root == current.record.core.root {
         return Ok(empty(TransactionStatus::SemanticNoChange, Vec::new()));
     }
-    let semantic_diff = semantic_diff_digest(current.current.record.core.root, new_root_digest);
+    let semantic_diff = semantic_diff_digest(current.record.core.root, prepared.result_root);
     let predicted_core = RevisionCore {
         contract_version: REVISION_CONTRACT_VERSION,
         graph_contract_version: super::meaning::GRAPH_CONTRACT_VERSION,
         repository_id,
         parents: vec![ParentRevision {
             revision: current_revision,
-            record: current.current.head.record,
+            record: current.head.record,
         }],
-        root: new_root_digest,
+        root: prepared.result_root,
+        semantic_certificate: prepared.validation.semantic_certificate(),
         semantic_diff,
         transaction,
     };
     let predicted_revision = predicted_core.revision_id()?;
-    let affected_owners = affected.into_iter().collect::<Vec<_>>();
+    let affected_owners = prepared.affected_owners;
     if mode != TransactionMode::Apply {
         return Ok(TransactionResult {
             contract_version: TRANSACTION_CONTRACT_VERSION,
@@ -534,8 +614,9 @@ pub fn execute_transaction(
     }
     let (outcome, receipt) = repository.publish(PublicationProposal {
         expected_base: request.base_revision,
-        root,
-        modules,
+        repository_id,
+        root: prepared.root,
+        modules: prepared.modules,
         transaction,
         idempotency_key: request.idempotency_key.clone(),
         semantic_diff,
@@ -543,6 +624,7 @@ pub fn execute_transaction(
         affected_owners: affected_owners.clone(),
         intent: request.intent.clone(),
         dependency_artifacts: Vec::new(),
+        prepared_validation: Some(prepared.validation),
     })?;
     match outcome {
         PublicationOutcome::Accepted { revision, .. } => Ok(TransactionResult {
@@ -564,6 +646,728 @@ pub fn execute_transaction(
             Ok(empty(TransactionStatus::SemanticNoChange, Vec::new()))
         }
         PublicationOutcome::StaleBase { .. } => Ok(empty(TransactionStatus::StaleBase, Vec::new())),
+    }
+}
+
+fn prepare_local_pure_body_transaction(
+    repository: &SemanticRepository,
+    request: &TransactionRequest,
+    current: &CurrentBinding,
+) -> Result<Option<PreparedTransaction>, Diagnostic> {
+    let mut target_modules = BTreeSet::new();
+    for operation in &request.operations {
+        let SemanticOperation::ReplaceBody { declaration, .. } = operation else {
+            return Ok(None);
+        };
+        let summary = match SemanticQueryIndex::owner_summary_revision(
+            repository,
+            current.head.revision,
+            &declaration.to_string(),
+        ) {
+            Ok(summary) => summary,
+            Err(_) => return Ok(None),
+        };
+        if summary.kind != OwnerKind::PureFunction {
+            return Ok(None);
+        }
+        let Some(module_id) = summary.module_id else {
+            return Ok(None);
+        };
+        target_modules.insert(module_id);
+    }
+
+    let mut pending = target_modules.clone();
+    let mut references = BTreeMap::new();
+    let mut modules = BTreeMap::new();
+    let mut dependencies = BTreeMap::new();
+    let mut dependency_lookups =
+        BTreeMap::<super::package::PackageId, Option<DependencyBinding>>::new();
+    let mut work = 0usize;
+    while let Some(module_id) = pending.pop_first() {
+        if modules.contains_key(&module_id) {
+            continue;
+        }
+        consume_work(&mut work, 1, request.budget)?;
+        let reference = repository
+            .module_reference_by_id(current, module_id)?
+            .ok_or_else(|| {
+                transaction_error(
+                    DiagnosticClass::Corrupt,
+                    "semantic_local_module_binding",
+                    "accepted persistent root lost a selected module binding",
+                )
+            })?;
+        let module = repository.read_module(reference.object)?;
+        for import in &module.module.imports {
+            consume_work(&mut work, 1, request.budget)?;
+            if import.target.package != current.stored_root.package_id {
+                let dependency =
+                    if let Some(cached) = dependency_lookups.get(&import.target.package) {
+                        cached.clone()
+                    } else {
+                        let binding = repository
+                            .dependency_binding_by_package(current, &import.target.package)?;
+                        dependency_lookups.insert(import.target.package.clone(), binding.clone());
+                        binding
+                    };
+                let binding = dependency.ok_or_else(|| {
+                    transaction_error(
+                        DiagnosticClass::Corrupt,
+                        "semantic_local_import_package",
+                        format!(
+                            "accepted module '{}' imports missing dependency package '{}'",
+                            module.module.name,
+                            import.target.package.as_str()
+                        ),
+                    )
+                })?;
+                dependencies.insert(binding.alias.clone(), binding);
+                continue;
+            }
+            let imported = repository
+                .module_reference_by_id(current, import.target.module)?
+                .ok_or_else(|| {
+                    transaction_error(
+                        DiagnosticClass::Corrupt,
+                        "semantic_local_import_binding",
+                        format!(
+                            "accepted module '{}' imports missing local module '{}'",
+                            module.module.name, import.target.module
+                        ),
+                    )
+                })?;
+            pending.insert(imported.id);
+        }
+        references.insert(module_id, reference);
+        modules.insert(module_id, module);
+    }
+
+    for operation in &request.operations {
+        let SemanticOperation::ReplaceBody { declaration, .. } = operation else {
+            unreachable!("local preparation admitted only body replacements");
+        };
+        let Some((_identity, Declaration::Function(function))) = modules
+            .values()
+            .find_map(|module| module.declaration(*declaration))
+        else {
+            return Ok(None);
+        };
+        if function.effect != Effect::Pure {
+            return Ok(None);
+        }
+    }
+
+    let original_objects = references
+        .iter()
+        .map(|(id, reference)| (*id, reference.object))
+        .collect::<BTreeMap<_, _>>();
+    let mut root = GraphRoot {
+        graph_contract_version: current.stored_root.graph_contract_version,
+        repository_id: current.stored_root.repository_id,
+        package_id: current.stored_root.package_id.clone(),
+        package_name: current.stored_root.package_name.clone(),
+        modules: references.into_values().collect(),
+        dependencies: dependencies.into_values().collect(),
+        targets: Vec::new(),
+        tombstones: Vec::new(),
+    };
+    root.modules.sort();
+    root.dependencies.sort();
+    let mut modules = modules.into_values().collect::<Vec<_>>();
+    modules.sort_by_key(|module| module.module_id);
+    let mut module_ids = modules
+        .iter()
+        .map(|module| module.module_id)
+        .collect::<BTreeSet<_>>();
+    let mut module_names = modules
+        .iter()
+        .map(|module| module.module.name.clone())
+        .collect::<BTreeSet<_>>();
+    let mut affected = BTreeSet::new();
+    for operation in &request.operations {
+        apply_operation(
+            repository,
+            operation,
+            request.base_revision,
+            &mut root,
+            &mut modules,
+            &mut module_ids,
+            &mut module_names,
+            &mut affected,
+            &mut work,
+            request.budget,
+        )?;
+    }
+    if affected.len() > request.budget.maximum_affected_owners {
+        return Err(transaction_error(
+            DiagnosticClass::Resource,
+            "semantic_transaction_affected_limit",
+            "transaction exceeds its affected-owner budget",
+        ));
+    }
+    let validated = repository.canonicalize_slice(&mut root, &mut modules)?;
+    let tombstone_upserts = root.tombstones.clone();
+    let mut changed_modules = Vec::new();
+    let mut module_upserts = Vec::new();
+    for reference in &root.modules {
+        let Some(original) = original_objects.get(&reference.id) else {
+            return Ok(None);
+        };
+        if *original == reference.object {
+            continue;
+        }
+        if !target_modules.contains(&reference.id) {
+            return Ok(None);
+        }
+        let module = modules
+            .iter()
+            .find(|module| module.module_id == reference.id)
+            .ok_or_else(|| {
+                transaction_error(
+                    DiagnosticClass::Infrastructure,
+                    "semantic_local_changed_module",
+                    "local canonicalization lost a changed module",
+                )
+            })?;
+        changed_modules.push(module.clone());
+        module_upserts.push(reference.clone());
+    }
+    let delta = StoredGraphRootDelta {
+        module_upserts,
+        tombstone_upserts,
+        ..StoredGraphRootDelta::default()
+    };
+    let validation = repository.prepare_local_validation(
+        current,
+        delta,
+        changed_modules,
+        &validated,
+        "incremental_pure_body_slice",
+    )?;
+    let result_root = validation.result_root();
+    Ok(Some(PreparedTransaction {
+        root: None,
+        modules: Vec::new(),
+        validation,
+        result_root,
+        affected_owners: affected.into_iter().collect(),
+    }))
+}
+
+fn prepare_local_module_creation(
+    repository: &SemanticRepository,
+    request: &TransactionRequest,
+    current: &CurrentBinding,
+) -> Result<Option<PreparedTransaction>, Diagnostic> {
+    let mut module_ids = BTreeSet::new();
+    let mut module_names = BTreeSet::new();
+    let mut modules = Vec::with_capacity(request.operations.len());
+    let mut references = Vec::with_capacity(request.operations.len());
+    let mut affected = Vec::with_capacity(request.operations.len());
+    let mut work = 0usize;
+    for operation in &request.operations {
+        let SemanticOperation::CreateModule { id, name } = operation else {
+            return Ok(None);
+        };
+        consume_work(&mut work, 1, request.budget)?;
+        if !module_ids.insert(*id)
+            || !module_names.insert(name.clone())
+            || repository.module_reference_by_id(current, *id)?.is_some()
+            || repository
+                .module_reference_by_name(current, name)?
+                .is_some()
+        {
+            return Err(operation_error(
+                "create_module",
+                "module identity or name exists",
+            ));
+        }
+        if repository
+            .tombstone_by_identity(current, &TombstoneIdentity::Module(*id))?
+            .is_some()
+        {
+            return Err(operation_error(
+                "create_module",
+                "deleted module identity cannot be reused",
+            ));
+        }
+        let module = MeaningModule {
+            graph_contract_version: super::meaning::GRAPH_CONTRACT_VERSION,
+            module_id: *id,
+            module: Module {
+                name: name.clone(),
+                imports: Vec::new(),
+                exports: Vec::new(),
+                declarations: Vec::new(),
+            },
+            declarations: Vec::new(),
+            relations: Vec::new(),
+            documentation: Vec::new(),
+            annotations: Vec::new(),
+        };
+        references.push(ModuleObjectRef {
+            id: *id,
+            name: name.clone(),
+            object: module.digest()?,
+        });
+        modules.push(module);
+        affected.push(AffectedOwner::Module(*id));
+    }
+    references.sort();
+    modules.sort_by_key(|module| module.module_id);
+    affected.sort();
+    if affected.len() > request.budget.maximum_affected_owners {
+        return Err(transaction_error(
+            DiagnosticClass::Resource,
+            "semantic_transaction_affected_limit",
+            "transaction exceeds its affected-owner budget",
+        ));
+    }
+    let mut root = GraphRoot {
+        graph_contract_version: current.stored_root.graph_contract_version,
+        repository_id: current.stored_root.repository_id,
+        package_id: current.stored_root.package_id.clone(),
+        package_name: current.stored_root.package_name.clone(),
+        modules: references,
+        dependencies: Vec::new(),
+        targets: Vec::new(),
+        tombstones: Vec::new(),
+    };
+    let validated = repository.canonicalize_slice(&mut root, &mut modules)?;
+    let delta = StoredGraphRootDelta {
+        module_upserts: root.modules,
+        ..StoredGraphRootDelta::default()
+    };
+    let validation = repository.prepare_local_validation(
+        current,
+        delta,
+        modules,
+        &validated,
+        "incremental_independent_module_create",
+    )?;
+    let result_root = validation.result_root();
+    Ok(Some(PreparedTransaction {
+        root: None,
+        modules: Vec::new(),
+        validation,
+        result_root,
+        affected_owners: affected,
+    }))
+}
+
+fn prepare_local_module_rename(
+    repository: &SemanticRepository,
+    request: &TransactionRequest,
+    current: &CurrentBinding,
+) -> Result<Option<PreparedTransaction>, Diagnostic> {
+    let mut requested = BTreeMap::<ModuleId, String>::new();
+    for operation in &request.operations {
+        let SemanticOperation::RenameModule { module, new_name } = operation else {
+            return Ok(None);
+        };
+        if requested.insert(*module, new_name.clone()).is_some() {
+            return Ok(None);
+        }
+    }
+
+    let mut original_references = BTreeMap::new();
+    for module in requested.keys() {
+        let reference = repository
+            .module_reference_by_id(current, *module)?
+            .ok_or_else(|| operation_error("module_selection", "selected module is absent"))?;
+        original_references.insert(*module, reference);
+    }
+    let final_names = requested.values().collect::<BTreeSet<_>>();
+    if final_names.len() != requested.len() {
+        return Err(operation_error(
+            "rename_module",
+            "two renamed modules cannot have the same destination name",
+        ));
+    }
+    for (module, new_name) in &requested {
+        if let Some(existing) = repository.module_reference_by_name(current, new_name)?
+            && existing.id != *module
+            && !requested.contains_key(&existing.id)
+        {
+            return Err(operation_error(
+                "rename_module",
+                "destination module name exists",
+            ));
+        }
+    }
+
+    // Validation follows only outgoing import dependencies of renamed modules. Importers are
+    // deliberately absent: accepted imports bind stable package/module identities and therefore
+    // do not change when presentation names change.
+    let mut pending = requested.keys().copied().collect::<BTreeSet<_>>();
+    let mut references = BTreeMap::new();
+    let mut modules = BTreeMap::new();
+    let mut dependencies = BTreeMap::new();
+    let mut dependency_lookups =
+        BTreeMap::<super::package::PackageId, Option<DependencyBinding>>::new();
+    let mut work = 0usize;
+    while let Some(module_id) = pending.pop_first() {
+        if modules.contains_key(&module_id) {
+            continue;
+        }
+        consume_work(&mut work, 1, request.budget)?;
+        let reference = repository
+            .module_reference_by_id(current, module_id)?
+            .ok_or_else(|| {
+                transaction_error(
+                    DiagnosticClass::Corrupt,
+                    "semantic_local_module_binding",
+                    "accepted persistent root lost a selected module binding",
+                )
+            })?;
+        let module = repository.read_module(reference.object)?;
+        for import in &module.module.imports {
+            consume_work(&mut work, 1, request.budget)?;
+            if import.target.package != current.stored_root.package_id {
+                let dependency =
+                    if let Some(cached) = dependency_lookups.get(&import.target.package) {
+                        cached.clone()
+                    } else {
+                        let binding = repository
+                            .dependency_binding_by_package(current, &import.target.package)?;
+                        dependency_lookups.insert(import.target.package.clone(), binding.clone());
+                        binding
+                    };
+                let binding = dependency.ok_or_else(|| {
+                    transaction_error(
+                        DiagnosticClass::Corrupt,
+                        "semantic_local_import_package",
+                        format!(
+                            "accepted module '{}' imports missing dependency package '{}'",
+                            module.module.name,
+                            import.target.package.as_str()
+                        ),
+                    )
+                })?;
+                dependencies.insert(binding.alias.clone(), binding);
+            } else {
+                let imported = repository
+                    .module_reference_by_id(current, import.target.module)?
+                    .ok_or_else(|| {
+                        transaction_error(
+                            DiagnosticClass::Corrupt,
+                            "semantic_local_import_binding",
+                            format!(
+                                "accepted module '{}' imports missing local module '{}'",
+                                module.module.name, import.target.module
+                            ),
+                        )
+                    })?;
+                pending.insert(imported.id);
+            }
+        }
+        references.insert(module_id, reference);
+        modules.insert(module_id, module);
+    }
+
+    let mut affected = Vec::new();
+    for (module_id, new_name) in &requested {
+        let module = modules.get_mut(module_id).ok_or_else(|| {
+            transaction_error(
+                DiagnosticClass::Infrastructure,
+                "semantic_local_rename_module",
+                "local rename preparation lost a selected module",
+            )
+        })?;
+        if module.module.name != *new_name {
+            module.module.name.clone_from(new_name);
+            affected.push(AffectedOwner::Module(*module_id));
+        }
+    }
+    affected.sort();
+    if affected.len() > request.budget.maximum_affected_owners {
+        return Err(transaction_error(
+            DiagnosticClass::Resource,
+            "semantic_transaction_affected_limit",
+            "transaction exceeds its affected-owner budget",
+        ));
+    }
+
+    let mut root = GraphRoot {
+        graph_contract_version: current.stored_root.graph_contract_version,
+        repository_id: current.stored_root.repository_id,
+        package_id: current.stored_root.package_id.clone(),
+        package_name: current.stored_root.package_name.clone(),
+        modules: references.into_values().collect(),
+        dependencies: dependencies.into_values().collect(),
+        targets: Vec::new(),
+        tombstones: Vec::new(),
+    };
+    root.modules.sort();
+    root.dependencies.sort();
+    let mut modules = modules.into_values().collect::<Vec<_>>();
+    modules.sort_by_key(|module| module.module_id);
+    let validated = repository.canonicalize_slice(&mut root, &mut modules)?;
+
+    let mut module_removals = Vec::new();
+    let mut module_upserts = Vec::new();
+    let mut changed_modules = Vec::new();
+    for (module_id, new_name) in &requested {
+        let original = original_references.get(module_id).ok_or_else(|| {
+            transaction_error(
+                DiagnosticClass::Infrastructure,
+                "semantic_local_rename_original",
+                "local rename preparation lost an original module binding",
+            )
+        })?;
+        if original.name == *new_name {
+            continue;
+        }
+        let replacement = root
+            .modules
+            .iter()
+            .find(|reference| reference.id == *module_id)
+            .ok_or_else(|| {
+                transaction_error(
+                    DiagnosticClass::Infrastructure,
+                    "semantic_local_rename_binding",
+                    "local canonicalization lost a renamed module binding",
+                )
+            })?
+            .clone();
+        let changed = modules
+            .iter()
+            .find(|module| module.module_id == *module_id)
+            .ok_or_else(|| {
+                transaction_error(
+                    DiagnosticClass::Infrastructure,
+                    "semantic_local_rename_meaning",
+                    "local canonicalization lost renamed module meaning",
+                )
+            })?
+            .clone();
+        module_removals.push(original.clone());
+        module_upserts.push(replacement);
+        changed_modules.push(changed);
+    }
+    let delta = StoredGraphRootDelta {
+        module_removals,
+        module_upserts,
+        ..StoredGraphRootDelta::default()
+    };
+    let validation = repository.prepare_local_validation(
+        current,
+        delta,
+        changed_modules,
+        &validated,
+        "incremental_module_rename",
+    )?;
+    let result_root = validation.result_root();
+    Ok(Some(PreparedTransaction {
+        root: None,
+        modules: Vec::new(),
+        validation,
+        result_root,
+        affected_owners: affected,
+    }))
+}
+
+fn prepare_local_declaration_rename(
+    repository: &SemanticRepository,
+    request: &TransactionRequest,
+    current: &CurrentBinding,
+) -> Result<Option<PreparedTransaction>, Diagnostic> {
+    let mut requested = BTreeMap::<DeclarationId, String>::new();
+    let mut target_modules = BTreeSet::new();
+    for operation in &request.operations {
+        let SemanticOperation::RenameDeclaration {
+            declaration,
+            new_name,
+        } = operation
+        else {
+            return Ok(None);
+        };
+        if requested.insert(*declaration, new_name.clone()).is_some() {
+            return Ok(None);
+        }
+        let summary = SemanticQueryIndex::owner_summary_revision(
+            repository,
+            current.head.revision,
+            &declaration.to_string(),
+        )?;
+        let module = summary.module_id.ok_or_else(|| {
+            operation_error(
+                "declaration_selection",
+                "selected declaration has no owning module",
+            )
+        })?;
+        target_modules.insert(module);
+    }
+
+    // Only the renamed owners and their outgoing import closure are needed. Canonical references
+    // bind declaration identities, so importer modules have no semantic or physical update.
+    let mut pending = target_modules.clone();
+    let mut references = BTreeMap::new();
+    let mut modules = BTreeMap::new();
+    let mut dependencies = BTreeMap::new();
+    let mut dependency_lookups =
+        BTreeMap::<super::package::PackageId, Option<DependencyBinding>>::new();
+    let mut work = 0usize;
+    while let Some(module_id) = pending.pop_first() {
+        if modules.contains_key(&module_id) {
+            continue;
+        }
+        consume_work(&mut work, 1, request.budget)?;
+        let reference = repository
+            .module_reference_by_id(current, module_id)?
+            .ok_or_else(|| {
+                transaction_error(
+                    DiagnosticClass::Corrupt,
+                    "semantic_local_module_binding",
+                    "accepted persistent root lost a selected module binding",
+                )
+            })?;
+        let module = repository.read_module(reference.object)?;
+        for import in &module.module.imports {
+            consume_work(&mut work, 1, request.budget)?;
+            if import.target.package != current.stored_root.package_id {
+                let dependency =
+                    if let Some(cached) = dependency_lookups.get(&import.target.package) {
+                        cached.clone()
+                    } else {
+                        let binding = repository
+                            .dependency_binding_by_package(current, &import.target.package)?;
+                        dependency_lookups.insert(import.target.package.clone(), binding.clone());
+                        binding
+                    };
+                let binding = dependency.ok_or_else(|| {
+                    transaction_error(
+                        DiagnosticClass::Corrupt,
+                        "semantic_local_import_package",
+                        format!(
+                            "accepted module '{}' imports missing dependency package '{}'",
+                            module.module.name,
+                            import.target.package.as_str()
+                        ),
+                    )
+                })?;
+                dependencies.insert(binding.alias.clone(), binding);
+            } else {
+                let imported = repository
+                    .module_reference_by_id(current, import.target.module)?
+                    .ok_or_else(|| {
+                        transaction_error(
+                            DiagnosticClass::Corrupt,
+                            "semantic_local_import_binding",
+                            format!(
+                                "accepted module '{}' imports missing local module '{}'",
+                                module.module.name, import.target.module
+                            ),
+                        )
+                    })?;
+                pending.insert(imported.id);
+            }
+        }
+        references.insert(module_id, reference);
+        modules.insert(module_id, module);
+    }
+
+    let original_objects = references
+        .iter()
+        .map(|(id, reference)| (*id, reference.object))
+        .collect::<BTreeMap<_, _>>();
+    let mut root = GraphRoot {
+        graph_contract_version: current.stored_root.graph_contract_version,
+        repository_id: current.stored_root.repository_id,
+        package_id: current.stored_root.package_id.clone(),
+        package_name: current.stored_root.package_name.clone(),
+        modules: references.into_values().collect(),
+        dependencies: dependencies.into_values().collect(),
+        targets: Vec::new(),
+        tombstones: Vec::new(),
+    };
+    root.modules.sort();
+    root.dependencies.sort();
+    let mut modules = modules.into_values().collect::<Vec<_>>();
+    modules.sort_by_key(|module| module.module_id);
+    let mut module_ids = modules
+        .iter()
+        .map(|module| module.module_id)
+        .collect::<BTreeSet<_>>();
+    let mut module_names = modules
+        .iter()
+        .map(|module| module.module.name.clone())
+        .collect::<BTreeSet<_>>();
+    let mut affected = BTreeSet::new();
+    for operation in &request.operations {
+        apply_operation(
+            repository,
+            operation,
+            request.base_revision,
+            &mut root,
+            &mut modules,
+            &mut module_ids,
+            &mut module_names,
+            &mut affected,
+            &mut work,
+            request.budget,
+        )?;
+    }
+    if affected.len() > request.budget.maximum_affected_owners {
+        return Err(transaction_error(
+            DiagnosticClass::Resource,
+            "semantic_transaction_affected_limit",
+            "transaction exceeds its affected-owner budget",
+        ));
+    }
+    let validated = repository.canonicalize_slice(&mut root, &mut modules)?;
+
+    let mut changed_modules = Vec::new();
+    let mut module_upserts = Vec::new();
+    for reference in &root.modules {
+        let Some(original) = original_objects.get(&reference.id) else {
+            return Ok(None);
+        };
+        if *original == reference.object {
+            continue;
+        }
+        if !target_modules.contains(&reference.id) {
+            return Ok(None);
+        }
+        let module = modules
+            .iter()
+            .find(|module| module.module_id == reference.id)
+            .ok_or_else(|| {
+                transaction_error(
+                    DiagnosticClass::Infrastructure,
+                    "semantic_local_changed_module",
+                    "local canonicalization lost a changed module",
+                )
+            })?;
+        changed_modules.push(module.clone());
+        module_upserts.push(reference.clone());
+    }
+    let delta = StoredGraphRootDelta {
+        module_upserts,
+        ..StoredGraphRootDelta::default()
+    };
+    let validation = repository.prepare_local_validation(
+        current,
+        delta,
+        changed_modules,
+        &validated,
+        "incremental_declaration_rename",
+    )?;
+    let result_root = validation.result_root();
+    Ok(Some(PreparedTransaction {
+        root: None,
+        modules: Vec::new(),
+        validation,
+        result_root,
+        affected_owners: affected.into_iter().collect(),
+    }))
+}
+
+fn transaction_failure_status(error: &Diagnostic) -> TransactionStatus {
+    if error.class == DiagnosticClass::Resource {
+        TransactionStatus::ResourceExhausted
+    } else {
+        TransactionStatus::InvalidGraph
     }
 }
 
@@ -723,18 +1527,6 @@ fn apply_operation(
                 ));
             }
             modules[index].module.name.clone_from(new_name);
-            for candidate in modules.iter_mut() {
-                for import in &mut candidate.module.imports {
-                    if import.module == old_name {
-                        import.module.clone_from(new_name);
-                    }
-                }
-            }
-            for target in &mut root.targets {
-                if target.component_module == *module {
-                    target.component_module_name.clone_from(new_name);
-                }
-            }
             module_names.remove(&old_name);
             module_names.insert(new_name.clone());
             affected.insert(AffectedOwner::Module(*module));
@@ -832,7 +1624,7 @@ fn apply_operation(
         SemanticOperation::RenameDeclaration {
             declaration,
             new_name,
-        } => rename_declaration(*declaration, new_name, root, modules, affected)?,
+        } => rename_declaration(*declaration, new_name, modules, affected)?,
         SemanticOperation::MoveDeclaration {
             declaration,
             destination,
@@ -1044,10 +1836,10 @@ fn apply_operation(
         }
         SemanticOperation::RebindReference {
             expression,
-            locator,
+            reference,
         } => {
             let (module_index, declaration_index) =
-                rebind_reference(*expression, locator, modules)?;
+                rebind_reference(*expression, reference, modules)?;
             affected.insert(AffectedOwner::Declaration(
                 modules[module_index].declarations[declaration_index].id,
             ));
@@ -1208,7 +2000,7 @@ fn insert_declaration(
     }
     modules[index].module.declarations.push(declaration);
     if exported {
-        modules[index].module.exports.push(identity.name.clone());
+        modules[index].module.exports.push(identity.id);
         modules[index].module.exports.sort();
         modules[index].module.exports.dedup();
     }
@@ -1221,13 +2013,10 @@ fn insert_declaration(
 fn rename_declaration(
     declaration: DeclarationId,
     new_name: &str,
-    root: &mut GraphRoot,
     modules: &mut [MeaningModule],
     affected: &mut BTreeSet<AffectedOwner>,
 ) -> Result<(), Diagnostic> {
     let (module_index, declaration_index) = declaration_location(modules, declaration)?;
-    let module_id = modules[module_index].module_id;
-    let module_name = modules[module_index].module.name.clone();
     let old_name = modules[module_index].declarations[declaration_index]
         .name
         .clone();
@@ -1244,37 +2033,12 @@ fn rename_declaration(
             "destination declaration name exists",
         ));
     }
-    let referencing_modules = relation_modules_for_declaration(modules, declaration);
-    for index in referencing_modules {
-        let old_locators = declaration_locators(&modules[index].module, &module_name, &old_name);
-        let new_locators = old_locators
-            .iter()
-            .map(|old| {
-                old.rsplit_once('.').map_or_else(
-                    || new_name.to_owned(),
-                    |(alias, _)| format!("{alias}.{new_name}"),
-                )
-            })
-            .collect::<Vec<_>>();
-        replace_locators_in_module(&mut modules[index].module, &old_locators, &new_locators);
-    }
     let identity = &mut modules[module_index].declarations[declaration_index];
     identity.name = new_name.to_owned();
     set_declaration_name(
         &mut modules[module_index].module.declarations[declaration_index],
         new_name,
     );
-    for export in &mut modules[module_index].module.exports {
-        if *export == old_name {
-            *export = new_name.to_owned();
-        }
-    }
-    modules[module_index].module.exports.sort();
-    for target in &mut root.targets {
-        if target.component_module == module_id && target.component == declaration {
-            target.component_name = new_name.to_owned();
-        }
-    }
     affected.insert(AffectedOwner::Declaration(declaration));
     Ok(())
 }
@@ -1291,7 +2055,6 @@ fn move_declaration(
     if source_index == destination_index {
         return Ok(());
     }
-    let source_name = modules[source_index].module.name.clone();
     let destination_name = modules[destination_index].module.name.clone();
     let declaration_name = modules[source_index].declarations[declaration_index]
         .name
@@ -1306,38 +2069,32 @@ fn move_declaration(
             "destination module already owns that declaration name",
         ));
     }
+    let source_module = modules[source_index].module_id;
     let referencing_modules = relation_modules_for_declaration(modules, declaration);
-    let mut repairs = Vec::new();
     for index in referencing_modules {
-        let old_locators =
-            declaration_locators(&modules[index].module, &source_name, &declaration_name);
-        if old_locators.is_empty() {
-            continue;
+        if modules[index].module_id != destination {
+            ensure_import(
+                &mut modules[index].module,
+                super::language::ModuleReference {
+                    package: root.package_id.clone(),
+                    module: destination,
+                },
+                &destination_name,
+            )?;
         }
-        let new_locator = if modules[index].module_id == destination {
-            declaration_name.clone()
-        } else {
-            let alias = ensure_import(&mut modules[index].module, &destination_name)?;
-            format!("{alias}.{declaration_name}")
-        };
-        repairs.push((index, old_locators, new_locator));
+        replace_declaration_module_references_in_module(
+            &mut modules[index].module,
+            &root.package_id,
+            source_module,
+            declaration,
+            destination,
+        );
     }
-    for (index, old_locators, new_locator) in repairs {
-        let replacements = old_locators
-            .iter()
-            .map(|_| new_locator.clone())
-            .collect::<Vec<_>>();
-        replace_locators_in_module(&mut modules[index].module, &old_locators, &replacements);
-    }
-    let was_exported = modules[source_index]
-        .module
-        .exports
-        .iter()
-        .any(|value| value == &declaration_name);
+    let was_exported = modules[source_index].module.exports.contains(&declaration);
     modules[source_index]
         .module
         .exports
-        .retain(|value| value != &declaration_name);
+        .retain(|value| *value != declaration);
     let identity = modules[source_index].declarations.remove(declaration_index);
     let value = modules[source_index]
         .module
@@ -1346,17 +2103,13 @@ fn move_declaration(
     modules[destination_index].declarations.push(identity);
     modules[destination_index].module.declarations.push(value);
     if was_exported {
-        modules[destination_index]
-            .module
-            .exports
-            .push(declaration_name.clone());
+        modules[destination_index].module.exports.push(declaration);
         modules[destination_index].module.exports.sort();
         modules[destination_index].module.exports.dedup();
     }
     for target in &mut root.targets {
         if target.component == declaration {
             target.component_module = destination;
-            target.component_module_name = destination_name.clone();
         }
     }
     affected.insert(AffectedOwner::Declaration(declaration));
@@ -1407,14 +2160,14 @@ fn delete_owner(
                 ));
             }
             let identity = modules[module_index].declarations.remove(declaration_index);
-            let value = modules[module_index]
+            modules[module_index]
                 .module
                 .declarations
                 .remove(declaration_index);
             modules[module_index]
                 .module
                 .exports
-                .retain(|name| name != value.name());
+                .retain(|id| *id != declaration);
             tombstone_declaration(root, &identity, base);
             affected.insert(AffectedOwner::Declaration(declaration));
             affected.insert(AffectedOwner::Module(modules[module_index].module_id));
@@ -1444,11 +2197,9 @@ fn delete_module(
     }
     if modules.iter().any(|candidate| {
         candidate.module_id != module
-            && candidate
-                .module
-                .imports
-                .iter()
-                .any(|import| import.module == modules[index].module.name)
+            && candidate.module.imports.iter().any(|import| {
+                import.target.package == root.package_id && import.target.module == module
+            })
     }) {
         return Err(operation_error(
             "delete_module",
@@ -1801,17 +2552,17 @@ fn replace_expression(
 
 fn rebind_reference(
     expression: ExpressionId,
-    locator: &str,
+    reference: &DeclarationReference,
     modules: &mut [MeaningModule],
 ) -> Result<(usize, usize), Diagnostic> {
     let (module_index, declaration_index, selected) = expression_mut_by_id(modules, expression)?;
     match selected {
         Expression::Call { function, .. } | Expression::FunctionRef { function, .. } => {
-            *function = locator.to_owned();
+            function.clone_from(reference);
         }
-        Expression::Record { ty, .. } => *ty = Some(locator.to_owned()),
-        Expression::Variant { ty, .. } => *ty = locator.to_owned(),
-        Expression::Perform { operation, .. } => *operation = locator.to_owned(),
+        Expression::Constant(target, _) => target.clone_from(reference),
+        Expression::Record { ty, .. } => *ty = Some(reference.clone()),
+        Expression::Variant { ty, .. } => ty.clone_from(reference),
         _ => {
             return Err(operation_error(
                 "rebind_reference",
@@ -1956,36 +2707,15 @@ fn relation_sources_for_member(modules: &[MeaningModule], key: MemberKey) -> Vec
         .collect()
 }
 
-fn declaration_locators(module: &Module, target_module: &str, declaration: &str) -> Vec<String> {
-    let mut locators = Vec::new();
-    if module.name == target_module {
-        locators.push(declaration.to_owned());
+fn ensure_import(
+    module: &mut Module,
+    target: super::language::ModuleReference,
+    target_name: &str,
+) -> Result<(), Diagnostic> {
+    if module.imports.iter().any(|import| import.target == target) {
+        return Ok(());
     }
-    locators.extend(
-        module
-            .imports
-            .iter()
-            .filter(|import| import.module == target_module)
-            .map(|import| format!("{}.{}", import.alias, declaration)),
-    );
-    locators.sort();
-    locators.dedup();
-    locators
-}
-
-fn ensure_import(module: &mut Module, target_module: &str) -> Result<String, Diagnostic> {
-    if let Some(import) = module
-        .imports
-        .iter()
-        .find(|import| import.module == target_module)
-    {
-        return Ok(import.alias.clone());
-    }
-    let base = target_module
-        .rsplit('.')
-        .next()
-        .unwrap_or("moved")
-        .to_owned();
+    let base = target_name.rsplit('.').next().unwrap_or("moved").to_owned();
     let mut alias = base.clone();
     let mut ordinal = 2usize;
     while module.imports.iter().any(|import| import.alias == alias) {
@@ -1996,109 +2726,269 @@ fn ensure_import(module: &mut Module, target_module: &str) -> Result<String, Dia
     }
     module.imports.push(super::language::Import {
         alias: alias.clone(),
-        module: target_module.to_owned(),
+        target,
         span: semantic_span(),
     });
     module
         .imports
         .sort_by(|left, right| left.alias.cmp(&right.alias));
-    Ok(alias)
+    Ok(())
 }
 
-fn replace_locators_in_module(module: &mut Module, old: &[String], new: &[String]) {
-    let replacements = old
-        .iter()
-        .zip(new)
-        .map(|(old, new)| (old.as_str(), new.as_str()))
-        .collect::<BTreeMap<_, _>>();
+fn replace_declaration_module_references_in_module(
+    module: &mut Module,
+    package: &super::package::PackageId,
+    source_module: ModuleId,
+    target_declaration: DeclarationId,
+    destination_module: ModuleId,
+) {
     for declaration in &mut module.declarations {
-        replace_locators_in_declaration(declaration, &replacements);
+        replace_declaration_module_references_in_declaration(
+            declaration,
+            package,
+            source_module,
+            target_declaration,
+            destination_module,
+        );
     }
 }
 
-fn replace_locators_in_declaration(
+fn replace_declaration_module_references_in_declaration(
     declaration: &mut Declaration,
-    replacements: &BTreeMap<&str, &str>,
+    package: &super::package::PackageId,
+    source_module: ModuleId,
+    target_declaration: DeclarationId,
+    destination_module: ModuleId,
 ) {
     match declaration {
         Declaration::Record(record) => {
             for field in &mut record.fields {
-                replace_locators_in_type(&mut field.ty, replacements);
+                replace_declaration_module_references_in_type(
+                    &mut field.ty,
+                    package,
+                    source_module,
+                    target_declaration,
+                    destination_module,
+                );
             }
         }
         Declaration::Variant(variant) => {
             for case in &mut variant.cases {
                 if let Some(payload) = &mut case.payload {
-                    replace_locators_in_type(payload, replacements);
+                    replace_declaration_module_references_in_type(
+                        payload,
+                        package,
+                        source_module,
+                        target_declaration,
+                        destination_module,
+                    );
                 }
             }
         }
         Declaration::Interface(interface) => {
             for operation in &mut interface.operations {
                 for parameter in &mut operation.parameters {
-                    replace_locators_in_type(&mut parameter.ty, replacements);
+                    replace_declaration_module_references_in_type(
+                        &mut parameter.ty,
+                        package,
+                        source_module,
+                        target_declaration,
+                        destination_module,
+                    );
                 }
-                replace_locators_in_type(&mut operation.result, replacements);
+                replace_declaration_module_references_in_type(
+                    &mut operation.result,
+                    package,
+                    source_module,
+                    target_declaration,
+                    destination_module,
+                );
             }
         }
         Declaration::External(function) => {
             for parameter in &mut function.parameters {
-                replace_locators_in_type(&mut parameter.ty, replacements);
+                replace_declaration_module_references_in_type(
+                    &mut parameter.ty,
+                    package,
+                    source_module,
+                    target_declaration,
+                    destination_module,
+                );
             }
-            replace_locators_in_type(&mut function.result, replacements);
+            replace_declaration_module_references_in_type(
+                &mut function.result,
+                package,
+                source_module,
+                target_declaration,
+                destination_module,
+            );
         }
         Declaration::Function(function) => {
             for parameter in &mut function.parameters {
-                replace_locators_in_type(&mut parameter.ty, replacements);
+                replace_declaration_module_references_in_type(
+                    &mut parameter.ty,
+                    package,
+                    source_module,
+                    target_declaration,
+                    destination_module,
+                );
             }
-            replace_locators_in_type(&mut function.result, replacements);
+            replace_declaration_module_references_in_type(
+                &mut function.result,
+                package,
+                source_module,
+                target_declaration,
+                destination_module,
+            );
             if let Effect::Task { capabilities } = &mut function.effect {
                 for capability in capabilities {
-                    replace_locator(&mut capability.interface, replacements);
+                    replace_declaration_module_reference(
+                        &mut capability.interface,
+                        package,
+                        source_module,
+                        target_declaration,
+                        destination_module,
+                    );
                 }
             }
-            replace_locators_in_expression(&mut function.body, replacements);
+            replace_declaration_module_references_in_expression(
+                &mut function.body,
+                package,
+                source_module,
+                target_declaration,
+                destination_module,
+            );
         }
         Declaration::Constant(constant) => {
-            replace_locators_in_type(&mut constant.ty, replacements);
-            replace_locators_in_expression(&mut constant.value, replacements);
+            replace_declaration_module_references_in_type(
+                &mut constant.ty,
+                package,
+                source_module,
+                target_declaration,
+                destination_module,
+            );
+            replace_declaration_module_references_in_expression(
+                &mut constant.value,
+                package,
+                source_module,
+                target_declaration,
+                destination_module,
+            );
         }
         Declaration::Component(component) => {
             for requirement in &mut component.requirements {
-                replace_locator(&mut requirement.interface, replacements);
+                replace_declaration_module_reference(
+                    &mut requirement.interface,
+                    package,
+                    source_module,
+                    target_declaration,
+                    destination_module,
+                );
             }
             for port in &mut component.ports {
-                replace_locators_in_type(&mut port.ty, replacements);
-                replace_locators_in_expression(&mut port.value, replacements);
+                replace_declaration_module_references_in_type(
+                    &mut port.ty,
+                    package,
+                    source_module,
+                    target_declaration,
+                    destination_module,
+                );
+                replace_declaration_module_references_in_expression(
+                    &mut port.value,
+                    package,
+                    source_module,
+                    target_declaration,
+                    destination_module,
+                );
             }
         }
         Declaration::Test(test) => {
-            replace_locators_in_expression(&mut test.actual, replacements);
-            replace_locators_in_expression(&mut test.expected, replacements);
+            replace_declaration_module_references_in_expression(
+                &mut test.actual,
+                package,
+                source_module,
+                target_declaration,
+                destination_module,
+            );
+            replace_declaration_module_references_in_expression(
+                &mut test.expected,
+                package,
+                source_module,
+                target_declaration,
+                destination_module,
+            );
         }
     }
 }
 
-fn replace_locators_in_type(ty: &mut Type, replacements: &BTreeMap<&str, &str>) {
+fn replace_declaration_module_references_in_type(
+    ty: &mut Type,
+    package: &super::package::PackageId,
+    source_module: ModuleId,
+    target_declaration: DeclarationId,
+    destination_module: ModuleId,
+) {
     match ty {
-        Type::Named(value) => replace_locator(value, replacements),
+        Type::Named(value) => replace_declaration_module_reference(
+            value,
+            package,
+            source_module,
+            target_declaration,
+            destination_module,
+        ),
         Type::Record(fields) => {
             for field in fields {
-                replace_locators_in_type(&mut field.ty, replacements);
+                replace_declaration_module_references_in_type(
+                    &mut field.ty,
+                    package,
+                    source_module,
+                    target_declaration,
+                    destination_module,
+                );
             }
         }
         Type::List(item) | Type::Option(item) | Type::Stream(item) => {
-            replace_locators_in_type(item, replacements);
+            replace_declaration_module_references_in_type(
+                item,
+                package,
+                source_module,
+                target_declaration,
+                destination_module,
+            );
         }
         Type::Map(key, value) | Type::Result(key, value) => {
-            replace_locators_in_type(key, replacements);
-            replace_locators_in_type(value, replacements);
+            replace_declaration_module_references_in_type(
+                key,
+                package,
+                source_module,
+                target_declaration,
+                destination_module,
+            );
+            replace_declaration_module_references_in_type(
+                value,
+                package,
+                source_module,
+                target_declaration,
+                destination_module,
+            );
         }
         Type::Function(parameters, result) => {
             for parameter in parameters {
-                replace_locators_in_type(parameter, replacements);
+                replace_declaration_module_references_in_type(
+                    parameter,
+                    package,
+                    source_module,
+                    target_declaration,
+                    destination_module,
+                );
             }
-            replace_locators_in_type(result, replacements);
+            replace_declaration_module_references_in_type(
+                result,
+                package,
+                source_module,
+                target_declaration,
+                destination_module,
+            );
         }
         Type::Unit
         | Type::Bool
@@ -2106,96 +2996,284 @@ fn replace_locators_in_type(ty: &mut Type, replacements: &BTreeMap<&str, &str>) 
         | Type::Bytes
         | Type::Text
         | Type::StaticText
+        | Type::Parameter(_)
         | Type::Secret => {}
     }
 }
 
-fn replace_locators_in_expression(
+fn replace_declaration_module_references_in_expression(
     expression: &mut Expression,
-    replacements: &BTreeMap<&str, &str>,
+    package: &super::package::PackageId,
+    source_module: ModuleId,
+    target_declaration: DeclarationId,
+    destination_module: ModuleId,
 ) {
     match expression {
+        Expression::Constant(reference, _) => replace_declaration_module_reference(
+            reference,
+            package,
+            source_module,
+            target_declaration,
+            destination_module,
+        ),
         Expression::Call {
             function,
+            type_arguments,
             arguments,
             ..
         } => {
-            replace_locator(function, replacements);
+            replace_declaration_module_reference(
+                function,
+                package,
+                source_module,
+                target_declaration,
+                destination_module,
+            );
+            for argument in type_arguments {
+                replace_declaration_module_references_in_type(
+                    argument,
+                    package,
+                    source_module,
+                    target_declaration,
+                    destination_module,
+                );
+            }
             for argument in arguments {
-                replace_locators_in_expression(argument, replacements);
+                replace_declaration_module_references_in_expression(
+                    argument,
+                    package,
+                    source_module,
+                    target_declaration,
+                    destination_module,
+                );
+            }
+        }
+        Expression::Invoke {
+            callee, arguments, ..
+        } => {
+            replace_declaration_module_references_in_expression(
+                callee,
+                package,
+                source_module,
+                target_declaration,
+                destination_module,
+            );
+            for argument in arguments {
+                replace_declaration_module_references_in_expression(
+                    argument,
+                    package,
+                    source_module,
+                    target_declaration,
+                    destination_module,
+                );
             }
         }
         Expression::Record { ty, fields, .. } => {
             if let Some(ty) = ty {
-                replace_locator(ty, replacements);
+                replace_declaration_module_reference(
+                    ty,
+                    package,
+                    source_module,
+                    target_declaration,
+                    destination_module,
+                );
             }
             for field in fields {
-                replace_locators_in_expression(&mut field.value, replacements);
+                replace_declaration_module_references_in_expression(
+                    &mut field.value,
+                    package,
+                    source_module,
+                    target_declaration,
+                    destination_module,
+                );
             }
         }
         Expression::Variant { ty, payload, .. } => {
-            replace_locator(ty, replacements);
+            replace_declaration_module_reference(
+                ty,
+                package,
+                source_module,
+                target_declaration,
+                destination_module,
+            );
             if let Some(payload) = payload {
-                replace_locators_in_expression(payload, replacements);
+                replace_declaration_module_references_in_expression(
+                    payload,
+                    package,
+                    source_module,
+                    target_declaration,
+                    destination_module,
+                );
             }
         }
-        Expression::FunctionRef { function, .. } => replace_locator(function, replacements),
+        Expression::FunctionRef {
+            function,
+            type_arguments,
+            ..
+        } => {
+            replace_declaration_module_reference(
+                function,
+                package,
+                source_module,
+                target_declaration,
+                destination_module,
+            );
+            for argument in type_arguments {
+                replace_declaration_module_references_in_type(
+                    argument,
+                    package,
+                    source_module,
+                    target_declaration,
+                    destination_module,
+                );
+            }
+        }
         Expression::If {
             condition,
             when_true,
             when_false,
             ..
         } => {
-            replace_locators_in_expression(condition, replacements);
-            replace_locators_in_expression(when_true, replacements);
-            replace_locators_in_expression(when_false, replacements);
+            for expression in [condition, when_true, when_false] {
+                replace_declaration_module_references_in_expression(
+                    expression,
+                    package,
+                    source_module,
+                    target_declaration,
+                    destination_module,
+                );
+            }
         }
         Expression::Let { bindings, body, .. } => {
             for binding in bindings {
-                replace_locators_in_expression(&mut binding.value, replacements);
+                replace_declaration_module_references_in_expression(
+                    &mut binding.value,
+                    package,
+                    source_module,
+                    target_declaration,
+                    destination_module,
+                );
             }
-            replace_locators_in_expression(body, replacements);
+            replace_declaration_module_references_in_expression(
+                body,
+                package,
+                source_module,
+                target_declaration,
+                destination_module,
+            );
         }
         Expression::Do { expressions, .. } => {
             for expression in expressions {
-                replace_locators_in_expression(expression, replacements);
+                replace_declaration_module_references_in_expression(
+                    expression,
+                    package,
+                    source_module,
+                    target_declaration,
+                    destination_module,
+                );
             }
         }
         Expression::List {
             item_type, items, ..
         } => {
-            replace_locators_in_type(item_type, replacements);
+            replace_declaration_module_references_in_type(
+                item_type,
+                package,
+                source_module,
+                target_declaration,
+                destination_module,
+            );
             for expression in items {
-                replace_locators_in_expression(expression, replacements);
+                replace_declaration_module_references_in_expression(
+                    expression,
+                    package,
+                    source_module,
+                    target_declaration,
+                    destination_module,
+                );
             }
         }
-        Expression::Field { value, .. } => replace_locators_in_expression(value, replacements),
+        Expression::Field { value, .. } => replace_declaration_module_references_in_expression(
+            value,
+            package,
+            source_module,
+            target_declaration,
+            destination_module,
+        ),
         Expression::Map {
             key_type,
             value_type,
             entries,
             ..
         } => {
-            replace_locators_in_type(key_type, replacements);
-            replace_locators_in_type(value_type, replacements);
+            replace_declaration_module_references_in_type(
+                key_type,
+                package,
+                source_module,
+                target_declaration,
+                destination_module,
+            );
+            replace_declaration_module_references_in_type(
+                value_type,
+                package,
+                source_module,
+                target_declaration,
+                destination_module,
+            );
             for entry in entries {
-                replace_locators_in_expression(&mut entry.key, replacements);
-                replace_locators_in_expression(&mut entry.value, replacements);
+                replace_declaration_module_references_in_expression(
+                    &mut entry.key,
+                    package,
+                    source_module,
+                    target_declaration,
+                    destination_module,
+                );
+                replace_declaration_module_references_in_expression(
+                    &mut entry.value,
+                    package,
+                    source_module,
+                    target_declaration,
+                    destination_module,
+                );
             }
         }
         Expression::Match { value, arms, .. } => {
-            replace_locators_in_expression(value, replacements);
+            replace_declaration_module_references_in_expression(
+                value,
+                package,
+                source_module,
+                target_declaration,
+                destination_module,
+            );
             for arm in arms {
-                replace_locators_in_expression(&mut arm.body, replacements);
+                replace_declaration_module_references_in_expression(
+                    &mut arm.body,
+                    package,
+                    source_module,
+                    target_declaration,
+                    destination_module,
+                );
             }
         }
         Expression::Perform { arguments, .. } => {
             for argument in arguments {
-                replace_locators_in_expression(argument, replacements);
+                replace_declaration_module_references_in_expression(
+                    argument,
+                    package,
+                    source_module,
+                    target_declaration,
+                    destination_module,
+                );
             }
         }
         Expression::Transaction { body, .. } => {
-            replace_locators_in_expression(body, replacements);
+            replace_declaration_module_references_in_expression(
+                body,
+                package,
+                source_module,
+                target_declaration,
+                destination_module,
+            );
         }
         Expression::Unit(_)
         | Expression::Bool(_, _)
@@ -2206,9 +3284,18 @@ fn replace_locators_in_expression(
     }
 }
 
-fn replace_locator(value: &mut String, replacements: &BTreeMap<&str, &str>) {
-    if let Some(replacement) = replacements.get(value.as_str()) {
-        *value = (*replacement).to_owned();
+fn replace_declaration_module_reference(
+    reference: &mut DeclarationReference,
+    package: &super::package::PackageId,
+    source_module: ModuleId,
+    declaration: DeclarationId,
+    destination_module: ModuleId,
+) {
+    if reference.package == *package
+        && reference.module == source_module
+        && reference.declaration == declaration
+    {
+        reference.module = destination_module;
     }
 }
 
@@ -2324,6 +3411,17 @@ fn expression_child_mut(
         }
         Expression::Call { arguments, .. } | Expression::Perform { arguments, .. } => {
             arguments.get_mut(index).ok_or_else(stale_expression_path)
+        }
+        Expression::Invoke {
+            callee, arguments, ..
+        } => {
+            if index == 0 {
+                Ok(callee)
+            } else {
+                arguments
+                    .get_mut(index - 1)
+                    .ok_or_else(stale_expression_path)
+            }
         }
         Expression::Record { fields, .. } => fields
             .get_mut(index)
@@ -2456,6 +3554,7 @@ fn following_parameter_end(members: &[MemberIdentity], operation_index: usize) -
 fn set_member_name(member: &mut MemberIdentity, new_name: &str) {
     match member {
         MemberIdentity::Field { name, .. }
+        | MemberIdentity::TypeParameter { name, .. }
         | MemberIdentity::Case { name, .. }
         | MemberIdentity::Operation { name, .. }
         | MemberIdentity::Parameter { name, .. }
@@ -2554,6 +3653,9 @@ fn tombstone_declaration(root: &mut GraphRoot, identity: &DeclarationIdentity, b
     );
     for member in &identity.members {
         let (identity, name) = match member {
+            MemberIdentity::TypeParameter { id, name } => {
+                (TombstoneIdentity::TypeParameter(*id), name)
+            }
             MemberIdentity::Field { id, name } => (TombstoneIdentity::Field(*id), name),
             MemberIdentity::Case { id, name } => (TombstoneIdentity::Case(*id), name),
             MemberIdentity::Operation { id, name } => (TombstoneIdentity::Operation(*id), name),
@@ -2586,6 +3688,7 @@ fn tombstone_declaration(root: &mut GraphRoot, identity: &DeclarationIdentity, b
 
 fn member_tombstone(identity: MemberIdentity) -> (TombstoneIdentity, String) {
     match identity {
+        MemberIdentity::TypeParameter { id, name } => (TombstoneIdentity::TypeParameter(id), name),
         MemberIdentity::Field { id, name } => (TombstoneIdentity::Field(id), name),
         MemberIdentity::Case { id, name } => (TombstoneIdentity::Case(id), name),
         MemberIdentity::Operation { id, name } => (TombstoneIdentity::Operation(id), name),
@@ -2660,6 +3763,7 @@ fn remove_restored_tombstones(root: &mut GraphRoot, declaration: &DeclarationIde
     restored.insert(TombstoneIdentity::Declaration(declaration.id));
     for member in &declaration.members {
         restored.insert(match member {
+            MemberIdentity::TypeParameter { id, .. } => TombstoneIdentity::TypeParameter(*id),
             MemberIdentity::Field { id, .. } => TombstoneIdentity::Field(*id),
             MemberIdentity::Case { id, .. } => TombstoneIdentity::Case(*id),
             MemberIdentity::Operation { id, .. } => TombstoneIdentity::Operation(*id),
@@ -2783,8 +3887,10 @@ fn transaction_error(class: DiagnosticClass, code: &str, message: impl Into<Stri
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::platform::language::RecordType;
-    use crate::platform::{GRAPH_CONTRACT_VERSION, InitialPublication, PackageId};
+    use crate::platform::language::{Function, Import, RecordType};
+    use crate::platform::{
+        GRAPH_CONTRACT_VERSION, InitialPublication, PackageId, RequestIdentityAllocator,
+    };
 
     struct Fixture {
         _temporary: tempfile::TempDir,
@@ -2805,7 +3911,7 @@ mod tests {
             module: Module {
                 name: "sample".to_owned(),
                 imports: Vec::new(),
-                exports: vec!["Item".to_owned()],
+                exports: vec![declaration_id],
                 declarations: vec![Declaration::Record(RecordType {
                     name: "Item".to_owned(),
                     fields: vec![Field {
@@ -2860,6 +3966,7 @@ mod tests {
                 intent: None,
                 validation_profile: None,
                 dependency_artifacts: Vec::new(),
+                status: ReceiptStatus::ImportAccepted,
             },
         )
         .expect("initialize semantic repository");
@@ -2895,6 +4002,623 @@ mod tests {
             budget: TransactionBudget::default(),
             intent: None,
         }
+    }
+
+    #[test]
+    fn pure_body_edit_validates_only_its_import_closure_and_matches_full_oracle() {
+        let temporary = tempfile::TempDir::new().expect("temporary semantic repository");
+        let package =
+            PackageId::parse("20000000000000000000000000000002").expect("package identity");
+        let mut helper = MeaningModule::create(
+            Module {
+                name: "helper".to_owned(),
+                imports: Vec::new(),
+                exports: Vec::new(),
+                declarations: vec![
+                    Declaration::Function(Function {
+                        name: "one".to_owned(),
+                        type_parameters: Vec::new(),
+                        parameters: Vec::new(),
+                        result: Type::I64,
+                        effect: Effect::Pure,
+                        body: Expression::I64(1, semantic_span()),
+                        span: semantic_span(),
+                    }),
+                    Declaration::Function(Function {
+                        name: "two".to_owned(),
+                        type_parameters: Vec::new(),
+                        parameters: Vec::new(),
+                        result: Type::I64,
+                        effect: Effect::Pure,
+                        body: Expression::I64(2, semantic_span()),
+                        span: semantic_span(),
+                    }),
+                ],
+            },
+            &mut RequestIdentityAllocator::new(b"local-body-helper".to_vec()),
+        )
+        .expect("helper module");
+        let helper_module = helper.module_id;
+        let helper_one = helper.declarations[0].id;
+        let helper_two = helper.declarations[1].id;
+        helper.module.exports = vec![helper_one, helper_two];
+        helper.module.exports.sort();
+        let mut target = MeaningModule::create(
+            Module {
+                name: "target".to_owned(),
+                imports: vec![Import {
+                    alias: "helper".to_owned(),
+                    target: crate::platform::language::ModuleReference {
+                        package: package.clone(),
+                        module: helper.module_id,
+                    },
+                    span: semantic_span(),
+                }],
+                exports: Vec::new(),
+                declarations: vec![Declaration::Function(Function {
+                    name: "answer".to_owned(),
+                    type_parameters: Vec::new(),
+                    parameters: Vec::new(),
+                    result: Type::I64,
+                    effect: Effect::Pure,
+                    body: Expression::Call {
+                        function: DeclarationReference {
+                            package: package.clone(),
+                            module: helper_module,
+                            declaration: helper_one,
+                        },
+                        type_arguments: Vec::new(),
+                        arguments: Vec::new(),
+                        span: semantic_span(),
+                    },
+                    span: semantic_span(),
+                })],
+            },
+            &mut RequestIdentityAllocator::new(b"local-body-target".to_vec()),
+        )
+        .expect("target module");
+        let declaration = target.declarations[0].id;
+        let expressions = target.declarations[0].expressions.clone();
+        let bindings = target.declarations[0].bindings.clone();
+        let mut modules = vec![target.clone(), helper];
+        for ordinal in 0..64u64 {
+            let name = format!("unrelated-{ordinal:02}");
+            let mut seed = b"local-body-unrelated".to_vec();
+            seed.extend_from_slice(&ordinal.to_be_bytes());
+            modules.push(
+                MeaningModule::create(
+                    Module {
+                        name,
+                        imports: Vec::new(),
+                        exports: Vec::new(),
+                        declarations: Vec::new(),
+                    },
+                    &mut RequestIdentityAllocator::new(seed),
+                )
+                .expect("unrelated module"),
+            );
+        }
+        let mut root = GraphRoot {
+            graph_contract_version: GRAPH_CONTRACT_VERSION,
+            repository_id: RepositoryId::migrate(b"local-body-repository", 1),
+            package_id: package.clone(),
+            package_name: "local-body".to_owned(),
+            modules: modules
+                .iter()
+                .map(|module| {
+                    Ok(ModuleObjectRef {
+                        id: module.module_id,
+                        name: module.module.name.clone(),
+                        object: module.digest()?,
+                    })
+                })
+                .collect::<Result<Vec<_>, Diagnostic>>()
+                .expect("module references"),
+            dependencies: Vec::new(),
+            targets: Vec::new(),
+            tombstones: Vec::new(),
+        };
+        root.modules.sort();
+        crate::platform::semantic::canonicalize_graph_package(&mut root, &mut modules, &[])
+            .expect("canonical fixture");
+        target = modules
+            .iter()
+            .find(|module| module.module_id == target.module_id)
+            .expect("canonical target")
+            .clone();
+        let (repository, _) = SemanticRepository::initialize(
+            temporary.path(),
+            InitialPublication {
+                root,
+                modules,
+                transaction: TransactionDigest::of(b"local body import"),
+                semantic_diff: SemanticDiffDigest::of(b"local body initial"),
+                intent: None,
+                validation_profile: None,
+                dependency_artifacts: Vec::new(),
+                status: ReceiptStatus::ImportAccepted,
+            },
+        )
+        .expect("initialize local body repository");
+        let base = repository.reconstruct_current().expect("base");
+        SemanticQueryIndex::owner_summary_revision(
+            &repository,
+            base.current.head.revision,
+            &declaration.to_string(),
+        )
+        .expect("warm exact owner index");
+
+        let operation = SemanticOperation::ReplaceBody {
+            declaration,
+            body: Expression::Call {
+                function: DeclarationReference {
+                    package: package.clone(),
+                    module: helper_module,
+                    declaration: helper_two,
+                },
+                type_arguments: Vec::new(),
+                arguments: Vec::new(),
+                span: semantic_span(),
+            },
+            bindings,
+            expressions,
+        };
+        let mut oracle_root = base.current.root.clone();
+        let mut oracle_modules = base.modules.clone();
+        let mut module_ids = oracle_modules
+            .iter()
+            .map(|module| module.module_id)
+            .collect::<BTreeSet<_>>();
+        let mut module_names = oracle_modules
+            .iter()
+            .map(|module| module.module.name.clone())
+            .collect::<BTreeSet<_>>();
+        apply_operation(
+            &repository,
+            &operation,
+            base.current.head.revision,
+            &mut oracle_root,
+            &mut oracle_modules,
+            &mut module_ids,
+            &mut module_names,
+            &mut BTreeSet::new(),
+            &mut 0,
+            TransactionBudget::default(),
+        )
+        .expect("apply oracle operation");
+        crate::platform::semantic::canonicalize_graph_package(
+            &mut oracle_root,
+            &mut oracle_modules,
+            &[],
+        )
+        .expect("full oracle canonicalization");
+        let expected_root = oracle_root.digest().expect("oracle root");
+
+        let fixture = Fixture {
+            _temporary: temporary,
+            repository,
+            module: target.module_id,
+            declaration,
+            field: FieldId::migrate(b"unused-local-body-field", 1),
+        };
+        let request = request(&fixture, base.current.head.revision, None, vec![operation]);
+        let result = execute_transaction(&fixture.repository, &request, TransactionMode::Apply)
+            .expect("local body apply");
+        assert_eq!(
+            result.status,
+            TransactionStatus::AcceptedChange,
+            "{:?}",
+            result.diagnostics
+        );
+        let receipt = result.receipt.expect("local receipt");
+        assert_eq!(receipt.validation.profile, "incremental_pure_body_slice");
+        assert_eq!(receipt.validation.modules_checked, 2);
+        assert_eq!(receipt.validation.declarations_checked, 3);
+        let accepted = fixture
+            .repository
+            .reconstruct_current()
+            .expect("accepted result");
+        assert_eq!(accepted.current.record.core.root, expected_root);
+        crate::platform::semantic::validate_graph_package(
+            &accepted.current.root,
+            accepted.modules,
+            &[],
+            Some(accepted.current.head.revision),
+        )
+        .expect("accepted result matches full semantic oracle");
+    }
+
+    #[test]
+    fn module_rename_rewrites_only_the_stable_owner_and_matches_full_oracle() {
+        let temporary = tempfile::TempDir::new().expect("temporary semantic repository");
+        let package =
+            PackageId::parse("30000000000000000000000000000003").expect("package identity");
+        let helper = MeaningModule::create(
+            Module {
+                name: "helper".to_owned(),
+                imports: Vec::new(),
+                exports: Vec::new(),
+                declarations: Vec::new(),
+            },
+            &mut RequestIdentityAllocator::new(b"local-rename-helper".to_vec()),
+        )
+        .expect("helper module");
+        let helper_id = helper.module_id;
+        let mut modules = vec![helper];
+        for ordinal in 0..256u64 {
+            let name = format!("importer-{ordinal:03}");
+            let mut seed = b"local-rename-importer".to_vec();
+            seed.extend_from_slice(&ordinal.to_be_bytes());
+            modules.push(
+                MeaningModule::create(
+                    Module {
+                        name,
+                        imports: vec![Import {
+                            alias: "helper".to_owned(),
+                            target: crate::platform::language::ModuleReference {
+                                package: package.clone(),
+                                module: helper_id,
+                            },
+                            span: semantic_span(),
+                        }],
+                        exports: Vec::new(),
+                        declarations: Vec::new(),
+                    },
+                    &mut RequestIdentityAllocator::new(seed),
+                )
+                .expect("importer module"),
+            );
+        }
+        let mut root = GraphRoot {
+            graph_contract_version: GRAPH_CONTRACT_VERSION,
+            repository_id: RepositoryId::migrate(b"local-rename-repository", 1),
+            package_id: package,
+            package_name: "local-rename".to_owned(),
+            modules: modules
+                .iter()
+                .map(|module| {
+                    Ok(ModuleObjectRef {
+                        id: module.module_id,
+                        name: module.module.name.clone(),
+                        object: module.digest()?,
+                    })
+                })
+                .collect::<Result<Vec<_>, Diagnostic>>()
+                .expect("module references"),
+            dependencies: Vec::new(),
+            targets: Vec::new(),
+            tombstones: Vec::new(),
+        };
+        root.modules.sort();
+        crate::platform::semantic::canonicalize_graph_package(&mut root, &mut modules, &[])
+            .expect("canonical fixture");
+        let (repository, _) = SemanticRepository::initialize(
+            temporary.path(),
+            InitialPublication {
+                root,
+                modules,
+                transaction: TransactionDigest::of(b"local rename import"),
+                semantic_diff: SemanticDiffDigest::of(b"local rename initial"),
+                intent: None,
+                validation_profile: None,
+                dependency_artifacts: Vec::new(),
+                status: ReceiptStatus::ImportAccepted,
+            },
+        )
+        .expect("initialize local rename repository");
+        let base = repository.reconstruct_current().expect("base");
+        let importer_objects = base
+            .current
+            .root
+            .modules
+            .iter()
+            .filter(|reference| reference.id != helper_id)
+            .map(|reference| (reference.id, reference.object))
+            .collect::<BTreeMap<_, _>>();
+
+        let operation = SemanticOperation::RenameModule {
+            module: helper_id,
+            new_name: "foundation".to_owned(),
+        };
+        let mut oracle_root = base.current.root.clone();
+        let mut oracle_modules = base.modules.clone();
+        let mut module_ids = oracle_modules
+            .iter()
+            .map(|module| module.module_id)
+            .collect::<BTreeSet<_>>();
+        let mut module_names = oracle_modules
+            .iter()
+            .map(|module| module.module.name.clone())
+            .collect::<BTreeSet<_>>();
+        apply_operation(
+            &repository,
+            &operation,
+            base.current.head.revision,
+            &mut oracle_root,
+            &mut oracle_modules,
+            &mut module_ids,
+            &mut module_names,
+            &mut BTreeSet::new(),
+            &mut 0,
+            TransactionBudget::default(),
+        )
+        .expect("apply oracle operation");
+        crate::platform::semantic::canonicalize_graph_package(
+            &mut oracle_root,
+            &mut oracle_modules,
+            &[],
+        )
+        .expect("full oracle canonicalization");
+        let expected_root = oracle_root.digest().expect("oracle root");
+
+        let fixture = Fixture {
+            _temporary: temporary,
+            repository,
+            module: helper_id,
+            declaration: DeclarationId::migrate(b"unused-local-rename-declaration", 1),
+            field: FieldId::migrate(b"unused-local-rename-field", 1),
+        };
+        let request = request(&fixture, base.current.head.revision, None, vec![operation]);
+        let result = execute_transaction(&fixture.repository, &request, TransactionMode::Apply)
+            .expect("local rename apply");
+        assert_eq!(
+            result.status,
+            TransactionStatus::AcceptedChange,
+            "{:?}",
+            result.diagnostics
+        );
+        let receipt = result.receipt.expect("local receipt");
+        assert_eq!(receipt.validation.profile, "incremental_module_rename");
+        assert_eq!(receipt.validation.modules_checked, 1);
+        assert_eq!(receipt.validation.declarations_checked, 0);
+
+        let accepted = fixture
+            .repository
+            .reconstruct_current()
+            .expect("accepted result");
+        assert_eq!(accepted.current.record.core.root, expected_root);
+        assert!(
+            accepted
+                .current
+                .root
+                .modules
+                .iter()
+                .any(|reference| reference.id == helper_id && reference.name == "foundation")
+        );
+        for reference in accepted
+            .current
+            .root
+            .modules
+            .iter()
+            .filter(|reference| reference.id != helper_id)
+        {
+            assert_eq!(importer_objects.get(&reference.id), Some(&reference.object));
+        }
+        assert!(
+            accepted
+                .modules
+                .iter()
+                .filter(|module| module.module_id != helper_id)
+                .all(|module| module.module.imports
+                    == vec![Import {
+                        alias: "helper".to_owned(),
+                        target: crate::platform::language::ModuleReference {
+                            package: accepted.current.root.package_id.clone(),
+                            module: helper_id,
+                        },
+                        span: semantic_span(),
+                    }])
+        );
+        crate::platform::semantic::validate_graph_package(
+            &accepted.current.root,
+            accepted.modules,
+            &[],
+            Some(accepted.current.head.revision),
+        )
+        .expect("accepted result matches full semantic oracle");
+    }
+
+    #[test]
+    fn declaration_rename_rewrites_no_importers_and_matches_full_oracle() {
+        let temporary = tempfile::TempDir::new().expect("temporary semantic repository");
+        let package =
+            PackageId::parse("40000000000000000000000000000004").expect("package identity");
+        let mut helper = MeaningModule::create(
+            Module {
+                name: "helper".to_owned(),
+                imports: Vec::new(),
+                exports: Vec::new(),
+                declarations: vec![Declaration::Function(Function {
+                    name: "answer".to_owned(),
+                    type_parameters: Vec::new(),
+                    parameters: Vec::new(),
+                    result: Type::I64,
+                    effect: Effect::Pure,
+                    body: Expression::I64(42, semantic_span()),
+                    span: semantic_span(),
+                })],
+            },
+            &mut RequestIdentityAllocator::new(b"local-declaration-rename-helper".to_vec()),
+        )
+        .expect("helper module");
+        let helper_id = helper.module_id;
+        let declaration = helper.declarations[0].id;
+        helper.module.exports = vec![declaration];
+
+        let mut modules = vec![helper];
+        for ordinal in 0..256u64 {
+            let name = format!("importer-{ordinal:03}");
+            let mut seed = b"local-declaration-rename-importer".to_vec();
+            seed.extend_from_slice(&ordinal.to_be_bytes());
+            modules.push(
+                MeaningModule::create(
+                    Module {
+                        name,
+                        imports: vec![Import {
+                            alias: "helper".to_owned(),
+                            target: crate::platform::language::ModuleReference {
+                                package: package.clone(),
+                                module: helper_id,
+                            },
+                            span: semantic_span(),
+                        }],
+                        exports: Vec::new(),
+                        declarations: vec![Declaration::Function(Function {
+                            name: "use-answer".to_owned(),
+                            type_parameters: Vec::new(),
+                            parameters: Vec::new(),
+                            result: Type::I64,
+                            effect: Effect::Pure,
+                            body: Expression::Call {
+                                function: DeclarationReference {
+                                    package: package.clone(),
+                                    module: helper_id,
+                                    declaration,
+                                },
+                                type_arguments: Vec::new(),
+                                arguments: Vec::new(),
+                                span: semantic_span(),
+                            },
+                            span: semantic_span(),
+                        })],
+                    },
+                    &mut RequestIdentityAllocator::new(seed),
+                )
+                .expect("importer module"),
+            );
+        }
+        let mut root = GraphRoot {
+            graph_contract_version: GRAPH_CONTRACT_VERSION,
+            repository_id: RepositoryId::migrate(b"local-declaration-rename-repository", 1),
+            package_id: package,
+            package_name: "local-declaration-rename".to_owned(),
+            modules: modules
+                .iter()
+                .map(|module| {
+                    Ok(ModuleObjectRef {
+                        id: module.module_id,
+                        name: module.module.name.clone(),
+                        object: module.digest()?,
+                    })
+                })
+                .collect::<Result<Vec<_>, Diagnostic>>()
+                .expect("module references"),
+            dependencies: Vec::new(),
+            targets: Vec::new(),
+            tombstones: Vec::new(),
+        };
+        root.modules.sort();
+        crate::platform::semantic::canonicalize_graph_package(&mut root, &mut modules, &[])
+            .expect("canonical fixture");
+        let (repository, _) = SemanticRepository::initialize(
+            temporary.path(),
+            InitialPublication {
+                root,
+                modules,
+                transaction: TransactionDigest::of(b"local declaration rename import"),
+                semantic_diff: SemanticDiffDigest::of(b"local declaration rename initial"),
+                intent: None,
+                validation_profile: None,
+                dependency_artifacts: Vec::new(),
+                status: ReceiptStatus::ImportAccepted,
+            },
+        )
+        .expect("initialize local declaration rename repository");
+        let base = repository.reconstruct_current().expect("base");
+        let importer_objects = base
+            .current
+            .root
+            .modules
+            .iter()
+            .filter(|reference| reference.id != helper_id)
+            .map(|reference| (reference.id, reference.object))
+            .collect::<BTreeMap<_, _>>();
+
+        let operation = SemanticOperation::RenameDeclaration {
+            declaration,
+            new_name: "result".to_owned(),
+        };
+        let mut oracle_root = base.current.root.clone();
+        let mut oracle_modules = base.modules.clone();
+        let mut module_ids = oracle_modules
+            .iter()
+            .map(|module| module.module_id)
+            .collect::<BTreeSet<_>>();
+        let mut module_names = oracle_modules
+            .iter()
+            .map(|module| module.module.name.clone())
+            .collect::<BTreeSet<_>>();
+        apply_operation(
+            &repository,
+            &operation,
+            base.current.head.revision,
+            &mut oracle_root,
+            &mut oracle_modules,
+            &mut module_ids,
+            &mut module_names,
+            &mut BTreeSet::new(),
+            &mut 0,
+            TransactionBudget::default(),
+        )
+        .expect("apply oracle operation");
+        crate::platform::semantic::canonicalize_graph_package(
+            &mut oracle_root,
+            &mut oracle_modules,
+            &[],
+        )
+        .expect("full oracle canonicalization");
+        let expected_root = oracle_root.digest().expect("oracle root");
+
+        let fixture = Fixture {
+            _temporary: temporary,
+            repository,
+            module: helper_id,
+            declaration,
+            field: FieldId::migrate(b"unused-local-declaration-rename-field", 1),
+        };
+        let request = request(&fixture, base.current.head.revision, None, vec![operation]);
+        let result = execute_transaction(&fixture.repository, &request, TransactionMode::Apply)
+            .expect("local declaration rename apply");
+        assert_eq!(
+            result.status,
+            TransactionStatus::AcceptedChange,
+            "{:?}",
+            result.diagnostics
+        );
+        let receipt = result.receipt.expect("local receipt");
+        assert_eq!(receipt.validation.profile, "incremental_declaration_rename");
+        assert_eq!(receipt.validation.modules_checked, 1);
+        assert_eq!(receipt.validation.declarations_checked, 1);
+
+        let accepted = fixture
+            .repository
+            .reconstruct_current()
+            .expect("accepted result");
+        assert_eq!(accepted.current.record.core.root, expected_root);
+        let renamed = accepted
+            .modules
+            .iter()
+            .find(|module| module.module_id == helper_id)
+            .and_then(|module| module.declarations.first())
+            .expect("renamed declaration");
+        assert_eq!(renamed.id, declaration);
+        assert_eq!(renamed.name, "result");
+        for reference in accepted
+            .current
+            .root
+            .modules
+            .iter()
+            .filter(|reference| reference.id != helper_id)
+        {
+            assert_eq!(importer_objects.get(&reference.id), Some(&reference.object));
+        }
+        crate::platform::semantic::validate_graph_package(
+            &accepted.current.root,
+            accepted.modules,
+            &[],
+            Some(accepted.current.head.revision),
+        )
+        .expect("accepted result matches full semantic oracle");
     }
 
     #[test]
@@ -2941,6 +4665,15 @@ mod tests {
             .expect("apply");
         assert_eq!(applied.status, TransactionStatus::AcceptedChange);
         assert_eq!(applied.predicted_revision, applied.published_revision);
+        assert_eq!(
+            applied
+                .receipt
+                .as_ref()
+                .expect("prepared publication receipt")
+                .validation
+                .profile,
+            "incremental_declaration_rename"
+        );
         let current = fixture.repository.reconstruct_current().expect("current");
         assert_eq!(current.modules[0].declarations[0].id, fixture.declaration);
         assert_eq!(current.modules[0].declarations[0].name, "Entry");

@@ -1,124 +1,263 @@
-# Public semantic CLI
+# Public CLI
 
-Status: normative. CLI contract version: 2.
+Status: normative.
 
-## Executable command owner
+Contract identities: CLI contract version 4, change contract version 3, query contract version 2,
+bootstrap contract version 2, internal transaction contract version 4, draft contract version 4,
+diff and merge contract version 2, backup contract version 4, package artifact contract version 3,
+executable artifact contract version 4, read-only retention contract version 1, and meaning-graph
+contract `lkjscript-meaning-graph-4`.
 
-The command registry in `src/platform/cli.rs` is the only command-reference owner. Run
-`lkjscript semantic help` for its names and schema digest, and `lkjscript semantic help COMMAND`
-for exact usage. Documentation may group workflows and show tested examples but must not maintain
-a second exhaustive grammar.
+## Authority and executable owner
 
-The CLI is the ordinary interface for reading, changing, validating, reviewing, testing, building,
-backing up, and restoring lkjscript meaning. A caller does not read packed objects, use Rust enum
-layouts, or edit a maintained program file.
+The registry in `src/platform/cli.rs` is the sole exhaustive owner of finite command names,
+purposes, usage, project requirements, authority effects, and its schema digest. The executable
+projects that registry through:
 
-## Response contract
+```sh
+lkjscript capabilities
+lkjscript capabilities COMMAND
+lkjscript capabilities --known-schema DIGEST
+```
 
-Every ordinary invocation writes one strict JSON value and no stderr on a classified result.
-Success and semantic rejection share this envelope:
+The last form returns only the digest and `unchanged: true` when the caller already knows the
+current registry. Documentation may describe workflows, but it does not define a second grammar.
+An unknown command or option fails with the `cli_usage` diagnostic; no compatibility routing is
+performed.
+
+The public CLI reads and writes accepted meaning only through repository APIs. `new`, committed
+`change`, published drafts, committed merges, and `restore` are the accepted-authority operations.
+Package staging, review and artifact output, query indexes, logs, and runtime deployments are not
+accepted program authority.
+
+## Direct command groups
+
+CLI v4 has no universal namespace prefix. Its direct commands are grouped by objective:
+
+- discover and create: `capabilities`, `new`;
+- inspect and select: `inspect`, `query`;
+- author and collaborate: `change`, `draft`, `history`;
+- manage exact packages: `package`;
+- verify and execute: `check`, `build`, `run`, `serve`, `worker`;
+- project and recover: `review`, `backup`, `restore`, `doctor`.
+
+Use `capabilities COMMAND` for the current subcommand and option grammar. One behavior has one
+public name.
+
+Global `--project PATH` selects a project for commands that require one. Otherwise repository
+discovery begins at the current directory and walks ordinary ancestors. Discovery is deterministic
+and rejects source-era project markers when no current meaning graph exists. Artifact, deployment,
+built-in-package, project creation, and restore actions use their explicit paths instead.
+
+## Binary-only project creation
+
+`new DEST [--template minimal|command] [--name NAME]` creates fresh accepted authority without a
+repository checkout, external artifact, network access, Cargo, or Rust toolchain. The parent of
+`DEST` must exist. `DEST` may be absent or an empty ordinary directory; a nonempty destination,
+non-directory, or symlinked destination or parent path rejects without publication.
+
+Creation allocates fresh repository and package identities, constructs and fully validates an
+initial graph in a private sibling stage, makes its canonical bytes durable, and exposes the
+project through one filesystem rename. Its receipt names the template, project path, repository,
+package, accepted revision, root, built-in dependency when present, allocated identities, and
+publication evidence.
+
+The `minimal` template contains one empty module and no dependency. The `command` template binds
+the exact embedded standard package and uses the public change lowering path to add a function,
+component, port, test, and command target named `main`. `check`, `build`, and `run main` operate on
+the result as on any other current project.
+
+The embedded package is derived data carried by the executable, not mutable accepted authority.
+`package builtin inspect` exposes its graph contract, package ID, semantic revision, package
+artifact digest, bundle digest, and byte count. `package builtin export --output PATH` writes its
+exact bytes to a newly created file. Runtime loading verifies artifact integrity, and black-box
+reproduction compares the exported bytes with the maintained standard artifact.
+
+## Finite response contract
+
+Each finite invocation writes one strict JSON value followed by a newline and writes no stderr for
+a classified outcome. A success has this envelope:
 
 ```json
 {
-  "contract_version": 2,
+  "contract_version": 4,
   "ok": true,
   "status": "success",
-  "command": "semantic.status",
+  "command": "inspect.status",
   "result": {}
 }
 ```
 
-`ok` says whether the requested semantic outcome succeeded. `status` is closed per command;
-transaction and merge statuses appear at the outer level as well as in the typed result. An
-unrepresentable request, corrupt store, or infrastructure failure returns `ok: false`,
-`status: "failure"`, and one structured diagnostic. Stack traces, schemas, passing-test lists,
-secrets, and child logs are absent by default.
+`status` is closed per command. A valid request whose requested semantic result is rejected, such
+as a stale base or invalid candidate, uses the same envelope with `ok: false` and the exact typed
+status. A decoding, corruption, capability, resource, cancellation, or infrastructure failure has
+`status: "failure"` and one structured `error` containing class, code, message, and only bounded
+optional location or notes. Normal output excludes stack traces, full schemas, passing-test lists,
+secrets, and child logs.
 
-The hard response limit is 4 MiB. Normal defaults are much smaller. Large bodies require explicit
-`--body`, fields in a closed query, a continuation, or an out-of-band output file. An all-pass
-package test returns aggregates only.
+The hard finite-response limit is 4 MiB. Large bodies require explicit selection; growing results
+use budgets and continuations or publish bytes to an explicit output file. Project-bound reads
+name their observed revision. Results and diagnostics use deterministic ordering.
 
-Process exits are 0 success, 2 rejected source/semantic request, 3 capability or cancellation, 4
-resource exhaustion, 5 corrupt authority, 6 infrastructure failure, 7 stale base/head, and 8
-invalid candidate graph.
+Process exits are 0 for success, 2 for usage/source or semantic rejection, 3 for capability failure
+or cancellation, 4 for resource exhaustion, 5 for corrupt authority, and 6 for infrastructure
+failure. Transaction-style semantic outcomes additionally use 7 for stale base or HEAD and 8 for
+an invalid candidate graph.
 
-## Revision pinning and selection
+`serve` and `worker` are resident modes rather than finite commands. They emit bounded JSON event
+records under resident protocol version 1 for ready and stopped observations and continue until
+shutdown or failure.
 
-Read commands return the exact observed revision. `--revision REV` selects retained history where
-the command supports it. Mutations always name `repository_id` and `base_revision`; there is no
-implicit "latest" write.
+## Inspection, queries, and bounds
 
-Owners are selected by typed stable ID or bounded exact/name filters. IDs and names may appear
-together, but names do not substitute for continuity. Zero result, multiple result, truncation,
-stale continuation, foreign identity, exhaustion, and corruption are distinct.
+`inspect` covers status, bounded project orientation, one exact owner with optional body, targets,
+one revision, artifacts, and deployment descriptors. `query` covers owners, exact or broad name
+search, relations, callers, callees, type uses, capability uses, task context, impact, and a closed
+structured request. Owner selection uses typed stable identities; a name is a locator, not
+continuity.
 
-`status` shows authority health. `orient` returns the smallest package/module/dependency/target map.
-`owners`, `find`, and `show` select owners. `refs`, `callers`, `callees`, `type-uses`, and
-`capability-uses` traverse exact semantic relations. `context` returns a task slice with inclusion
-reasons; `impact` returns conservative affected meaning. `query` accepts the closed declarative
-query request rather than host scripting.
+Growing queries have item, byte, work, depth, and fanout budgets. Defaults are 50 items, 64 KiB,
+100,000 work, depth 4, and fanout 1,000. Current hostile/resource maxima are 10,000 items, 4 MiB,
+10,000,000 work, depth 32, and fanout 10,000. Exhaustion is explicit and does not alter meaning.
 
-## Query budgets and continuations
+Ordering is independent of hash iteration and physical index position. A continuation binds the
+query contract, exact revision, normalized query, and cursor with a domain-separated integrity
+check. Changed or malformed inputs reject. Query indexes are revision-bound disposable state;
+missing or corrupt state rebuilds from canonical authority.
 
-Every growing query has item, byte, work, depth, and fanout budgets. Defaults are 50 items, 64 KiB,
-100,000 work, depth 4, and fanout 1,000. Hard maxima are 10,000 items, 4 MiB, 10,000,000 work,
-depth 32, and fanout 10,000.
+## Public change protocol
 
-Ordering is independent of hash maps and physical shard position. Truncation is explicit.
-Continuation handles bind query contract, exact revision, normalized query digest, and cursor,
-plus a domain-separated integrity check. A changed query, changed revision, malformed handle, or
-tampered cursor rejects; pagination neither omits nor duplicates an item.
+`change (--request JSON | --request-file PATH) [--dry-run|--commit]` accepts one strict change
+contract v3 request. With no mode flag or with `--dry-run`, it normalizes and validates without
+publication. `--commit` lowers the same request to the exact internal transaction protocol and may
+publish at most one revision.
 
-The production query path uses a revision-bound disposable broad relation index plus 256-way local
-owner/name shards. The independent path reconstructs owners and relations from canonical
-roots/module tables. Missing or corrupt manifests or shards rebuild automatically. A warm exact
-name or ID query reads the relevant local shard; an exact body query additionally reads only the
-owning canonical module table.
+The request envelope contains:
 
-## Mutation workflow
+- `contract_version` equal to 3;
+- optional `base_revision` and `idempotency_key`;
+- ordered `preconditions` and `changes`;
+- a bounded transaction `budget`;
+- optional bounded nonsemantic `intent`.
 
-`id-allocate` creates opaque IDs in an explicit domain. `plan`, `validate`, and `apply` consume the
-same strict transaction JSON from `--request` or `--request-file`. `dependency-stage` verifies a
-graph-native artifact and makes its exact package objects available before the transaction that
-adds or replaces the canonical binding. Staging cannot change HEAD.
+An omitted base is resolved to the observed current revision once. An idempotency key requires an
+explicit base. One commit prepares semantic validation once, carries the exact result into
+publication, rereads HEAD under the repository write lock, and verifies the base, result root,
+root delta, changed modules, summary delta, semantic certificate, and validation-fact bindings
+before publishing. A precondition-free request may prepare locally when it contains only eligible
+pure-function body replacements, only independent empty-module creations, only module renames, or
+only declaration renames. Body replacement validates selected modules and their recursive local
+import dependencies and carries removed nested-identity tombstones in the same delta. Module and
+declaration rename validate owning modules plus outgoing imports without rewriting importers or
+targets. Preconditions, mixed operations, and every other request use complete candidate
+preparation. A separate dry-run and later commit are separate invocations and each prepare
+independently; no reusable public prepared handle exists. Rejection, validation, no-change, and
+dry-run publish nothing.
 
-Ordinary transaction results inline at most 64 canonically ordered affected owners, state the full
-count and truncation, and include an exact `revision-show` expansion for the durable receipt. The
-receipt retains the complete bounded affected-owner set out of band.
+Current high-level forms are `add_dependency`, `replace_dependency`, `remove_dependency`,
+`create_module`, `create_record`, `create_variant`, `create_function`, `create_component`,
+`create_test`, `create_target`, `rename_module`, `rename_declaration`, and `replace_body`.
+Accepted type forms are unit, Boolean, signed 64-bit integer, bytes, text, static text, secret, a
+type-parameter reference, nominal type, structural record, list, ordered map, option, result,
+stream, and function. Accepted concise expression forms are unit, Boolean, signed 64-bit integer,
+text, static text, lexical variable, exact constant reference, direct call with explicit type
+arguments, named function value with explicit type arguments, invocation, record, and typed list.
 
-Draft commands create, inspect, append through transaction requests, rebase, publish, or drop a
-non-executable draft. Draft publication rejects unresolved holes or conflicts. The current CLI
-exposes the generic transaction form as the complete writer; convenience commands must compile to
-that same form and may not become alternate writers.
+Declaration references accept a typed request-local symbol, a local `decl_` identity resolved at
+the selected revision, or a fully exact
+`exact:PACKAGE_HEX/mod_HEX/decl_HEX` selector. The last form is required for direct dependency
+references that cannot be derived from a local declaration identity. Every form lowers to the same
+typed package/module/declaration reference before validation; the selector string is not graph
+authority.
 
-`diff` classifies stable-owner additions, removals, renames, moves, and semantic modifications.
-`merge` previews or atomically publishes a three-way identity merge from one exact base. A merge
-with conflicts publishes nothing.
+`capabilities` names every current high-level change, top-level type form, concise expression form,
+owner kind, relation role, and declaration-reference form. CLI v4 does not yet publish the complete nested JSON schema for each
+form; on-demand command help provides command grammar but not every nested request field. Unknown
+request-envelope fields and trailing input reject at the owning boundary.
 
-## Build, execution, review, and recovery
+A created construct uses an `as` symbol beginning with `$`. The remaining 1–64 bytes contain only
+ASCII alphanumeric characters, `-`, or `_`. A symbol is request-local, unique, defined before use,
+and valid only in its typed identity domain. Allocation is deterministic from repository, exact
+base, and request content. The result returns the complete symbol-to-domain-and-stable-ID map plus
+the exact lowered transaction digest. Repeating a dry-run against the same base yields the same
+map; exact idempotent replay preserves it.
 
-`build` lowers the exact graph revision and dependency closure directly to a deterministic packed
-graph artifact. `test` compares prepared bytecode with the implementation-disjoint semantic
-reference interpreter. `run` supports pure command, batch, and test targets; resident HTTP and
-worker runners use deployment commands over the same prepared artifact path.
+Preconditions can bind a root digest, owner existence or absence, or an expected owner name. A
+transaction result names requested base, observed current revision, transaction digest, semantic
+diff and predicted or published revision when applicable, diagnostics, and affected-owner count.
+At most 64 affected owners are inline; an accepted receipt gives `history show REVISION` as exact
+expansion.
 
-`text-project` and `export-text` write the same deterministic, span-free, explicitly
-non-authoritative JSON review projection and return its digest and counts. That projection cannot
-be applied or imported. `backup` and `export-bundle` write the same independently verifiable
-canonical recovery bundle. `restore` verifies every entry before publishing a new repository
-directory. `artifact-inspect`, `history`, `revision-show`, and `doctor --deep` expose bounded exact
-evidence.
+## Drafts, history, and packages
 
-## Filesystem behavior
+A draft is non-executable authority bound to an exact repository, base revision, and generation.
+`draft` creates, inspects, appends an exact draft-bound transaction, rebases, publishes, or drops
+it. Append and validation cannot alter accepted HEAD. Publication rejects stale or incomplete
+draft state.
 
-Global `--project PATH` selects a repository root or a descendant from which discovery succeeds.
-Discovery rejects source-era markers when no current graph exists. Output publication rejects
-symlinks and non-regular existing targets, writes a unique sibling stage, syncs it, renames it, and
-syncs the parent. Equal existing bytes return `unchanged`.
+`history` lists bounded revisions, shows one revision and receipt, compares two exact revisions, or
+previews/commits a three-way merge. Stable identities distinguish addition, removal, rename, move,
+and modification. A conflicting merge publishes nothing. Persistent typed conflict resolution is
+not implemented in CLI v4.
 
-## Machine help stability
+`package stage PATH` verifies a graph-native artifact and stores its exact package objects for a
+later dependency-binding change. Staging is operational and cannot alter HEAD. Built-in package
+inspection and export do not require a project.
 
-The registry schema digest commits to command name, purpose, usage, and mutation classification.
-Clients should cache help by this digest, request only the needed command detail, and reject an
-unknown CLI contract. JSONL is reserved for an explicitly named future streaming command; no
-ordinary command emits multiple values.
+## Check, build, run, review, and recovery
+
+`check` executes graph-owned tests through prepared bytecode and an implementation-disjoint
+semantic reference interpreter. All-pass output contains aggregate counts, tier identities,
+revision, work observations, and differential equality rather than every passing test.
+
+`build` lowers the exact accepted revision and dependency closure to a deterministic graph-native
+artifact. `run` invokes a selected pure command, batch, or test target through both execution tiers
+and rejects a mismatch. `serve` starts a bounded plaintext HTTP deployment; `worker` starts a
+bounded worker deployment. Deployment descriptors contain external grants and secret bindings,
+not accepted program meaning.
+
+`review` produces deterministic span-free JSON marked non-authoritative and not importable.
+`backup` writes a contract-4 segmented directory containing a bounded manifest, bounded index
+segments, and individually copied canonical object files; it does not accumulate the complete
+backup payload in one in-memory value, but it retains an O(object-count) sorted key index. It is not
+a bounded-memory object pack. `restore` requires an existing destination directory without current
+authority, verifies each segment and entry in a private stage, runs deep
+structural/history doctor, and then makes the restored store visible. It does not currently rerun
+the complete cross-package semantic validator as part of restore. Backup and restore preserve
+repository identity. Disposable indexes rebuild. `doctor --deep` is the explicit exhaustive
+retained revision/root/page/module/receipt walk within the history bound; it does not currently
+walk dependency artifacts or drafts or rerun cross-package semantics. `doctor cleanup` is a
+read-only retention-contract-1 preview rooted at HEAD's parent DAG plus every live draft base DAG.
+It reports retained/reclaimable candidate counts and bytes, derived counts/bytes, unknown-entry
+counts, and a plan digest; it always reports `destructive_ready: false` because revision pins,
+active-reader leases, and registered backup roots are not represented. It has no delete mode.
+
+Output files are created or replaced only through bounded publication rules. Ordinary derived
+output rejects symlinks and non-regular targets, writes a unique sibling stage, synchronizes it,
+renames it, and synchronizes the parent; an equal existing value reports `unchanged`. Built-in
+export requires a new output file.
+
+## Concurrency, recovery, security, and non-goals
+
+Every accepted write observes or names one exact base and has one visibility point. Newly written
+canonical data becomes durable before HEAD. After an uncertain external interruption, callers
+reconcile by reading `inspect status` and retained history rather than blindly retrying.
+
+The CLI treats request files, artifacts, backups, continuations, deployments, paths, and runtime
+inputs as hostile decoding boundaries and applies checked byte/count budgets before publication.
+Ordinary output and retained excerpts must not expose deployment secrets.
+
+The HTTP server is plaintext and the PostgreSQL adapter uses `NoTls`. There is no CLI path for TLS,
+certificates, or ACME, and no such implementation is planned. Encrypted deployments require an
+appropriate external trusted transport boundary. That boundary does not provide hostile-code or
+multi-tenant isolation.
+
+CLI v4 can author explicit rank-1 generic pure functions, direct calls with exact type arguments,
+named pure function values, and invocation. It does not claim constraints, type-argument inference,
+generic task functions, closure capture, persistent conflict resolution, fully incremental
+validation or compilation, garbage collection, live-store packing, bounded-memory backup key
+enumeration, or an agent session protocol. Those mechanisms require separate completed contracts
+and consumers; physical storage records never become public authoring syntax.
+
+Compatibility policy is direct cutover. Unknown contracts and predecessor commands, artifacts,
+stores, source-era projects, and schemas reject rather than selecting a migration reader.

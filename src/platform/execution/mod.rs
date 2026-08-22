@@ -8,10 +8,11 @@ mod vm;
 
 use super::artifact::LoadedArtifact;
 use super::diagnostic::{Diagnostic, DiagnosticClass};
-use super::language::{Declaration, Expression};
+use super::language::{Declaration, DeclarationReference, Expression};
+use super::meaning::MemberIdentity;
 use super::package::{PackageId, RunnerKind};
 use super::semantic::{FunctionSignature, OwnerId, ResolvedOperation};
-use super::semantic_id::ExpressionId;
+use super::semantic_id::{ExpressionId, PortId};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -54,7 +55,7 @@ pub struct PreparedRequirement {
 pub struct PreparedComponent {
     pub owner: OwnerId,
     pub requirements: BTreeMap<String, PreparedRequirement>,
-    pub ports: BTreeMap<String, PreparedPort>,
+    pub ports: BTreeMap<PortId, PreparedPort>,
 }
 
 #[derive(Clone, Debug)]
@@ -112,8 +113,6 @@ impl PreparedProgram {
                                 })?;
                             let compiled = compiler::compile_function(
                                 &artifact,
-                                package,
-                                module,
                                 &function.parameters,
                                 &function.body,
                             )?;
@@ -180,18 +179,14 @@ impl PreparedProgram {
                                         ),
                                     )
                                 })?;
-                            let compiled = compiler::compile_function(
-                                &artifact,
-                                package,
-                                module,
-                                &[],
-                                &constant.value,
-                            )?;
+                            let compiled =
+                                compiler::compile_function(&artifact, &[], &constant.value)?;
                             functions.insert(
                                 owner.clone(),
                                 PreparedFunction {
                                     signature: FunctionSignature {
                                         owner,
+                                        type_parameters: Vec::new(),
                                         parameters: Vec::new(),
                                         result,
                                         task_capabilities: Vec::new(),
@@ -212,18 +207,14 @@ impl PreparedProgram {
                             for (owner, expression) in
                                 [(actual, &test.actual), (expected, &test.expected)]
                             {
-                                let compiled = compiler::compile_function(
-                                    &artifact,
-                                    package,
-                                    module,
-                                    &[],
-                                    expression,
-                                )?;
+                                let compiled =
+                                    compiler::compile_function(&artifact, &[], expression)?;
                                 test_expressions.insert(
                                     owner,
                                     PreparedFunction {
                                         signature: FunctionSignature {
                                             owner: test_owner.clone(),
+                                            type_parameters: Vec::new(),
                                             parameters: Vec::new(),
                                             result: super::semantic::ResolvedType::Unit,
                                             task_capabilities: Vec::new(),
@@ -263,8 +254,7 @@ impl PreparedProgram {
                     let owner = module.owner(&package.descriptor.package_id, &component.name)?;
                     let mut requirements = BTreeMap::new();
                     for requirement in &component.requirements {
-                        let interface =
-                            resolve_owner(&artifact, package, module, &requirement.interface)?;
+                        let interface = resolve_reference_owner(&artifact, &requirement.interface)?;
                         let interface_contract = artifact
                             .packages
                             .get(&interface.package)
@@ -317,6 +307,28 @@ impl PreparedProgram {
                     }
                     let mut ports = BTreeMap::new();
                     for port in &component.ports {
+                        let port_id = module
+                            .declaration_identities
+                            .iter()
+                            .find(|identity| identity.id == owner.declaration_id)
+                            .and_then(|identity| {
+                                identity.members.iter().find_map(|member| match member {
+                                    MemberIdentity::Port { id, name } if name == &port.name => {
+                                        Some(*id)
+                                    }
+                                    _ => None,
+                                })
+                            })
+                            .ok_or_else(|| {
+                                execution_diagnostic(
+                                    "prepare_port_identity",
+                                    format!(
+                                        "component port '{}.{}' has no stable identity",
+                                        owner.diagnostic_name(),
+                                        port.name
+                                    ),
+                                )
+                            })?;
                         let Expression::FunctionRef { function, .. } = &port.value else {
                             return Err(execution_diagnostic(
                                 "prepare_port_value",
@@ -327,7 +339,7 @@ impl PreparedProgram {
                                 ),
                             ));
                         };
-                        let function = resolve_owner(&artifact, package, module, function)?;
+                        let function = resolve_reference_owner(&artifact, function)?;
                         let prepared = functions.get(&function).ok_or_else(|| {
                             execution_diagnostic(
                                 "prepare_port_function",
@@ -340,7 +352,7 @@ impl PreparedProgram {
                             )
                         })?;
                         ports.insert(
-                            port.name.clone(),
+                            port_id,
                             PreparedPort {
                                 name: port.name.clone(),
                                 function,
@@ -361,28 +373,17 @@ impl PreparedProgram {
         }
 
         let root = artifact.root()?;
+        let graph_root = artifact.root_graph()?;
         let mut targets = BTreeMap::new();
-        for target in &root.descriptor.targets {
-            let Some((module, component)) = target.component.rsplit_once('.') else {
-                return Err(execution_diagnostic(
-                    "prepare_target_component",
-                    format!("target '{}' has an invalid component owner", target.name),
-                ));
-            };
-            let target_module = root
-                .modules
-                .iter()
-                .find(|candidate| candidate.module.name == module)
-                .ok_or_else(|| {
-                    execution_diagnostic(
-                        "prepare_target_module",
-                        format!(
-                            "target '{}' references absent module '{module}'",
-                            target.name
-                        ),
-                    )
-                })?;
-            let owner = target_module.owner(&root.descriptor.package_id, component)?;
+        for target in &graph_root.targets {
+            let owner = resolve_reference_owner(
+                &artifact,
+                &DeclarationReference {
+                    package: root.descriptor.package_id.clone(),
+                    module: target.component_module,
+                    declaration: target.component,
+                },
+            )?;
             let prepared_component = components.get(&owner).ok_or_else(|| {
                 execution_diagnostic(
                     "prepare_target_component",
@@ -496,18 +497,73 @@ impl PreparedProgram {
                     format!("module '{module_name}' is absent"),
                 )
             })?;
-        resolve_owner(&self.artifact, package, module, name)
+        resolve_name_owner(&self.artifact, package, module, name)
     }
 }
 
-pub(crate) fn resolve_owner(
+pub(crate) fn resolve_reference_owner(
+    artifact: &LoadedArtifact,
+    reference: &DeclarationReference,
+) -> Result<OwnerId, Diagnostic> {
+    let package = artifact.packages.get(&reference.package).ok_or_else(|| {
+        execution_diagnostic(
+            "prepare_reference_package_missing",
+            format!(
+                "exact declaration reference names absent package '{}'",
+                reference.package.as_str()
+            ),
+        )
+    })?;
+    let module = package
+        .modules
+        .iter()
+        .find(|module| module.module_id == reference.module)
+        .ok_or_else(|| {
+            execution_diagnostic(
+                "prepare_reference_module_missing",
+                format!(
+                    "exact declaration reference names absent module '{}' in package '{}'",
+                    reference.module,
+                    reference.package.as_str()
+                ),
+            )
+        })?;
+    let identity = module
+        .declaration_identities
+        .iter()
+        .zip(&module.module.declarations)
+        .find(|(identity, _)| identity.id == reference.declaration)
+        .map(|(identity, _)| identity)
+        .ok_or_else(|| {
+            execution_diagnostic(
+                "prepare_reference_declaration_missing",
+                format!(
+                    "exact declaration reference names absent declaration '{}' in package '{}' module '{}'",
+                    reference.declaration,
+                    reference.package.as_str(),
+                    reference.module
+                ),
+            )
+        })?;
+    Ok(OwnerId {
+        package: reference.package.clone(),
+        module_id: reference.module,
+        declaration_id: reference.declaration,
+        module: module.module.name.clone(),
+        declaration: identity.name.clone(),
+    })
+}
+
+fn resolve_name_owner(
     artifact: &LoadedArtifact,
     package: &super::semantic::ValidatedPackage,
     module: &super::semantic::ValidatedModule,
     name: &str,
 ) -> Result<OwnerId, Diagnostic> {
     let Some((alias, declaration)) = name.split_once('.') else {
-        return module.owner(&package.descriptor.package_id, name);
+        let reference =
+            declaration_reference_by_name(&package.descriptor.package_id, module, name)?;
+        return resolve_reference_owner(artifact, &reference);
     };
     let import = module
         .module
@@ -523,48 +579,62 @@ pub(crate) fn resolve_owner(
                 ),
             )
         })?;
-    if let Some((dependency_alias, dependency_module)) = import.module.split_once('.')
-        && let Some(dependency) = package
-            .descriptor
-            .dependencies
-            .iter()
-            .find(|dependency| dependency.alias == dependency_alias)
-    {
-        let dependency_package =
-            artifact
-                .packages
-                .get(&dependency.package_id)
-                .ok_or_else(|| {
-                    execution_diagnostic(
-                        "prepare_dependency_missing",
-                        format!("exact dependency '{dependency_alias}' is absent"),
-                    )
-                })?;
-        let dependency_module = dependency_package
-            .modules
-            .iter()
-            .find(|module| module.module.name == dependency_module)
+    let imported_package = if import.target.package == package.descriptor.package_id {
+        package
+    } else {
+        artifact
+            .packages
+            .get(&import.target.package)
             .ok_or_else(|| {
                 execution_diagnostic(
-                    "prepare_dependency_module_missing",
+                    "prepare_dependency_missing",
                     format!(
-                        "exact dependency '{dependency_alias}' has no module '{dependency_module}'"
+                        "exact imported package '{}' is absent",
+                        import.target.package.as_str()
                     ),
                 )
-            })?;
-        return dependency_module.owner(&dependency.package_id, declaration);
-    }
-    let imported_module = package
+            })?
+    };
+    let imported_module = imported_package
         .modules
         .iter()
-        .find(|module| module.module.name == import.module)
+        .find(|module| module.module_id == import.target.module)
         .ok_or_else(|| {
             execution_diagnostic(
                 "prepare_import_module_missing",
-                format!("imported module '{}' is absent", import.module),
+                format!("imported module '{}' is absent", import.target.module),
             )
         })?;
-    imported_module.owner(&package.descriptor.package_id, declaration)
+    let reference =
+        declaration_reference_by_name(&import.target.package, imported_module, declaration)?;
+    resolve_reference_owner(artifact, &reference)
+}
+
+fn declaration_reference_by_name(
+    package: &PackageId,
+    module: &super::semantic::ValidatedModule,
+    name: &str,
+) -> Result<DeclarationReference, Diagnostic> {
+    let declaration = module
+        .declaration_identities
+        .iter()
+        .zip(&module.module.declarations)
+        .find(|(identity, _)| identity.name == name)
+        .map(|(identity, _)| identity.id)
+        .ok_or_else(|| {
+            execution_diagnostic(
+                "prepare_declaration_missing",
+                format!(
+                    "module '{}' has no declaration '{name}'",
+                    module.module.name
+                ),
+            )
+        })?;
+    Ok(DeclarationReference {
+        package: package.clone(),
+        module: module.module_id,
+        declaration,
+    })
 }
 
 pub(crate) fn package_for<'a>(
@@ -586,6 +656,15 @@ fn execution_diagnostic(code: &str, message: impl Into<String>) -> Diagnostic {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::platform::graph::{GraphRoot, ModuleObjectRef};
+    use crate::platform::language::{
+        Function, Parameter, TestCase, Type, TypeParameter, unresolved_declaration_reference,
+    };
+    use crate::platform::meaning::{MeaningModule, MigrationIdentityAllocator};
+    use crate::platform::package::PackageId;
+    use crate::platform::semantic::canonicalize_graph_package;
+    use crate::platform::semantic_id::RepositoryId;
+    use crate::platform::syntax::SourceSpan;
     use crate::platform::{
         SourceLimits, Value, build_artifact, decode_package, load_artifact, parse_source,
         validate_package_documents,
@@ -605,6 +684,298 @@ mod tests {
         let (bytes, _) = build_artifact(&package, &[&package]).expect("build artifact");
         PreparedProgram::prepare(load_artifact(&bytes).expect("load artifact"))
             .expect("prepare program")
+    }
+
+    fn graph_span() -> SourceSpan {
+        SourceSpan {
+            byte_start: 0,
+            byte_end: 0,
+            line: 1,
+            column: 1,
+        }
+    }
+
+    fn generic_program() -> PreparedProgram {
+        let span = graph_span();
+        let parameter_type = Type::Parameter("T".to_owned());
+        let identity = Declaration::Function(Function {
+            name: "identity".to_owned(),
+            type_parameters: vec![TypeParameter {
+                name: "T".to_owned(),
+                span: span.clone(),
+            }],
+            parameters: vec![Parameter {
+                name: "value".to_owned(),
+                ty: parameter_type.clone(),
+                span: span.clone(),
+            }],
+            result: parameter_type.clone(),
+            effect: super::super::language::Effect::Pure,
+            body: Expression::Variable("value".to_owned(), span.clone()),
+            span: span.clone(),
+        });
+        let apply = Declaration::Function(Function {
+            name: "apply".to_owned(),
+            type_parameters: vec![TypeParameter {
+                name: "T".to_owned(),
+                span: span.clone(),
+            }],
+            parameters: vec![
+                Parameter {
+                    name: "mapper".to_owned(),
+                    ty: Type::Function(
+                        vec![parameter_type.clone()],
+                        Box::new(parameter_type.clone()),
+                    ),
+                    span: span.clone(),
+                },
+                Parameter {
+                    name: "value".to_owned(),
+                    ty: parameter_type.clone(),
+                    span: span.clone(),
+                },
+            ],
+            result: parameter_type,
+            effect: super::super::language::Effect::Pure,
+            body: Expression::Invoke {
+                callee: Box::new(Expression::Variable("mapper".to_owned(), span.clone())),
+                arguments: vec![Expression::Variable("value".to_owned(), span.clone())],
+                span: span.clone(),
+            },
+            span: span.clone(),
+        });
+        let text_main = generic_application_function(
+            "text-main",
+            Type::Text,
+            Expression::Text("generic text".to_owned(), span.clone()),
+            span.clone(),
+        );
+        let integer_main = generic_application_function(
+            "integer-main",
+            Type::I64,
+            Expression::I64(41, span.clone()),
+            span.clone(),
+        );
+        let tests = [
+            (
+                "text-application",
+                "text-main",
+                Expression::Text("generic text".to_owned(), span.clone()),
+            ),
+            (
+                "integer-application",
+                "integer-main",
+                Expression::I64(41, span.clone()),
+            ),
+        ]
+        .into_iter()
+        .map(|(name, function, expected)| {
+            Declaration::Test(TestCase {
+                name: name.to_owned(),
+                actual: Expression::Call {
+                    function: unresolved_declaration_reference(function),
+                    type_arguments: Vec::new(),
+                    arguments: Vec::new(),
+                    span: span.clone(),
+                },
+                expected,
+                span: span.clone(),
+            })
+        });
+        let module = super::super::language::Module {
+            name: "main".to_owned(),
+            imports: Vec::new(),
+            exports: vec![
+                unresolved_declaration_reference("identity").declaration,
+                unresolved_declaration_reference("apply").declaration,
+            ],
+            declarations: [identity, apply, text_main, integer_main]
+                .into_iter()
+                .chain(tests)
+                .collect(),
+        };
+        let mut allocator = MigrationIdentityAllocator::new(b"generic-execution".to_vec());
+        let mut meaning = MeaningModule::import(module, &mut allocator).expect("generic meaning");
+        let package_id = PackageId::parse("1234567890abcdef1234567890abcdef").expect("package id");
+        let identity_reference = fixture_declaration_reference(&meaning, &package_id, "identity");
+        let apply_reference = fixture_declaration_reference(&meaning, &package_id, "apply");
+        let text_main_reference = fixture_declaration_reference(&meaning, &package_id, "text-main");
+        let integer_main_reference =
+            fixture_declaration_reference(&meaning, &package_id, "integer-main");
+        meaning.module.exports = vec![identity_reference.declaration, apply_reference.declaration];
+        for declaration in &mut meaning.module.declarations {
+            match declaration {
+                Declaration::Function(function)
+                    if function.name == "text-main" || function.name == "integer-main" =>
+                {
+                    let Expression::Call {
+                        function,
+                        arguments,
+                        ..
+                    } = &mut function.body
+                    else {
+                        panic!("generic fixture application body must be a direct call");
+                    };
+                    *function = apply_reference.clone();
+                    let Some(Expression::FunctionRef { function, .. }) = arguments.first_mut()
+                    else {
+                        panic!("generic fixture application must pass a function reference");
+                    };
+                    *function = identity_reference.clone();
+                }
+                Declaration::Test(test) => {
+                    let Expression::Call { function, .. } = &mut test.actual else {
+                        panic!("generic fixture test actual must be a direct call");
+                    };
+                    *function = match test.name.as_str() {
+                        "text-application" => text_main_reference.clone(),
+                        "integer-application" => integer_main_reference.clone(),
+                        name => panic!("unexpected generic fixture test '{name}'"),
+                    };
+                }
+                _ => {}
+            }
+        }
+        let mut root = GraphRoot {
+            graph_contract_version: super::super::meaning::GRAPH_CONTRACT_VERSION,
+            repository_id: RepositoryId::migrate(b"generic-execution", 1),
+            package_id,
+            package_name: "generic-execution".to_owned(),
+            modules: vec![ModuleObjectRef {
+                id: meaning.module_id,
+                name: meaning.module.name.clone(),
+                object: meaning.digest().expect("meaning digest"),
+            }],
+            dependencies: Vec::new(),
+            targets: Vec::new(),
+            tombstones: Vec::new(),
+        };
+        let mut meanings = vec![meaning];
+        let package = canonicalize_graph_package(&mut root, &mut meanings, &[])
+            .expect("generic package validates");
+        let encoded = meanings[0].encode().expect("generic meaning encodes");
+        assert_eq!(
+            MeaningModule::decode(&encoded).expect("generic meaning decodes"),
+            meanings[0]
+        );
+        assert!(meanings[0].relations.iter().any(|relation| matches!(
+            relation.target,
+            super::super::meaning::RelationTarget::TypeParameter { .. }
+        )));
+        let (bytes, _) = build_artifact(&package, &[&package]).expect("build generic artifact");
+        PreparedProgram::prepare(load_artifact(&bytes).expect("load generic artifact"))
+            .expect("prepare generic program")
+    }
+
+    fn generic_application_function(
+        name: &str,
+        ty: Type,
+        value: Expression,
+        span: SourceSpan,
+    ) -> Declaration {
+        Declaration::Function(Function {
+            name: name.to_owned(),
+            type_parameters: Vec::new(),
+            parameters: Vec::new(),
+            result: ty.clone(),
+            effect: super::super::language::Effect::Pure,
+            body: Expression::Call {
+                function: unresolved_declaration_reference("apply"),
+                type_arguments: vec![ty.clone()],
+                arguments: vec![
+                    Expression::FunctionRef {
+                        function: unresolved_declaration_reference("identity"),
+                        type_arguments: vec![ty],
+                        span: span.clone(),
+                    },
+                    value,
+                ],
+                span: span.clone(),
+            },
+            span,
+        })
+    }
+
+    fn fixture_declaration_reference(
+        meaning: &MeaningModule,
+        package: &PackageId,
+        name: &str,
+    ) -> DeclarationReference {
+        let declaration = meaning
+            .declarations
+            .iter()
+            .find(|identity| identity.name == name)
+            .map(|identity| identity.id)
+            .unwrap_or_else(|| panic!("generic fixture declaration '{name}' is absent"));
+        DeclarationReference {
+            package: package.clone(),
+            module: meaning.module_id,
+            declaration,
+        }
+    }
+
+    #[test]
+    fn explicit_generics_and_named_higher_order_calls_match_both_execution_tiers() {
+        let program = generic_program();
+        let package = program.artifact().root().expect("root package");
+        for (name, expected) in [
+            ("text-main", Value::text("generic text")),
+            ("integer-main", Value::I64(41)),
+        ] {
+            let owner = package.modules[0]
+                .owner(&package.descriptor.package_id, name)
+                .expect("generic consumer owner");
+            let (actual, _) = Vm::new(&program, RunPolicy::default())
+                .invoke(&owner, Vec::new())
+                .expect("bytecode generic execution");
+            let (reference, _) = ReferenceInterpreter::new(&program, RunPolicy::default())
+                .invoke(&owner, Vec::new())
+                .expect("reference generic execution");
+            assert_eq!(actual.canonical_json(), expected.canonical_json());
+            assert_eq!(actual.canonical_json(), reference.canonical_json());
+        }
+        assert_eq!(program.tests().len(), 2);
+    }
+
+    #[test]
+    fn exact_constant_references_remain_distinct_from_lexical_variables() {
+        let program = prepared(
+            br#"(module main
+  (export App)
+  (const answer I64 42)
+  (fn global () I64 answer)
+  (fn local ((answer I64)) I64 answer)
+  (component App (port main (Function () I64) (function global))))
+"#,
+        );
+        let target = program.target("run").expect("target");
+        let package = program.artifact().root().expect("root package");
+        let local = package.modules[0]
+            .owner(&package.descriptor.package_id, "local")
+            .expect("local owner");
+        for interpreter in ["bytecode", "reference"] {
+            let global = match interpreter {
+                "bytecode" => Vm::new(&program, RunPolicy::default())
+                    .invoke(&target.port.function, Vec::new())
+                    .expect("bytecode exact constant"),
+                "reference" => ReferenceInterpreter::new(&program, RunPolicy::default())
+                    .invoke(&target.port.function, Vec::new())
+                    .expect("reference exact constant"),
+                _ => unreachable!(),
+            };
+            assert_eq!(global.0.canonical_json(), Value::I64(42).canonical_json());
+
+            let lexical = match interpreter {
+                "bytecode" => Vm::new(&program, RunPolicy::default())
+                    .invoke(&local, vec![Value::I64(7)])
+                    .expect("bytecode lexical variable"),
+                "reference" => ReferenceInterpreter::new(&program, RunPolicy::default())
+                    .invoke(&local, vec![Value::I64(7)])
+                    .expect("reference lexical variable"),
+                _ => unreachable!(),
+            };
+            assert_eq!(lexical.0.canonical_json(), Value::I64(7).canonical_json());
+        }
     }
 
     #[test]

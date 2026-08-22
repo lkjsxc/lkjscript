@@ -67,6 +67,9 @@ restart re-reads descriptor/artifact/secrets and reconstructs database/object/qu
 streams, task IDs, random state, connections, and compiled code are disposable.
 
 The trust and denial model is normative in `docs/security.md`. First-party Rust forbids `unsafe`,
-but dependencies and the operator/OS are trusted. Contract 1 does not claim TLS termination,
-PostgreSQL TLS, credential rotation without restart, a hostile-code sandbox, tenant resource
-isolation, provenance, artifact signatures, or distributed atomicity.
+but dependencies and the operator/OS are trusted. The HTTP listener is plaintext and PostgreSQL
+uses `NoTls`. TLS termination, PostgreSQL TLS, certificate management, and ACME are deliberately
+out of scope and not planned; encrypted deployments require an external trusted transport boundary
+or a different adapter. Contract 1 also does not claim credential rotation without restart, a
+hostile-code sandbox, tenant resource isolation, provenance, artifact signatures, or distributed
+atomicity.

@@ -336,6 +336,13 @@ impl<'a> Vm<'a> {
                     let arguments = machine.pop_many(arguments)?;
                     machine.call(&function, arguments)?;
                 }
+                Instruction::Invoke { arguments } => {
+                    let arguments = machine.pop_many(arguments)?;
+                    let Value::Function(function) = machine.pop()? else {
+                        return Err(runtime_type("invoke callee is not a function"));
+                    };
+                    machine.call(&function, arguments)?;
+                }
                 Instruction::Record { owner, fields } => {
                     let values = machine.pop_many(fields.len())?;
                     machine.push(Value::record(owner, fields.into_iter().zip(values)))?;

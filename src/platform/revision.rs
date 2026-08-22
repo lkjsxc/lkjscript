@@ -8,19 +8,20 @@ use super::semantic_digest::{
     ReceiptDigest, RevisionRecordDigest, RootObjectDigest, SemanticDiffDigest, TransactionDigest,
 };
 use super::semantic_id::{DeclarationId, ModuleId, RepositoryId, RevisionId, TargetId};
+use super::semantic_summary::SemanticSummaryDigest;
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
-pub const REVISION_CONTRACT_VERSION: u16 = 1;
-pub const RECEIPT_CONTRACT_VERSION: u16 = 1;
+pub const REVISION_CONTRACT_VERSION: u16 = 3;
+pub const RECEIPT_CONTRACT_VERSION: u16 = 3;
 pub const MAXIMUM_REVISION_BYTES: usize = 256 * 1024;
 pub const MAXIMUM_RECEIPT_BYTES: usize = 4 * 1_048_576;
-const REVISION_MAGIC: [u8; 8] = *b"LKJREV01";
-const REVISION_DOMAIN: &str = "lkjscript.revision-record-envelope.v1";
-const RECEIPT_MAGIC: [u8; 8] = *b"LKJRCPT1";
-const RECEIPT_DOMAIN: &str = "lkjscript.transaction-receipt-envelope.v1";
-const HEAD_MAGIC: [u8; 8] = *b"LKJHEAD1";
-const HEAD_DOMAIN: &str = "lkjscript.semantic-head-envelope.v1";
+const REVISION_MAGIC: [u8; 8] = *b"LKJREV03";
+const REVISION_DOMAIN: &str = "lkjscript.revision-record-envelope.v3";
+const RECEIPT_MAGIC: [u8; 8] = *b"LKJRCPT3";
+const RECEIPT_DOMAIN: &str = "lkjscript.transaction-receipt-envelope.v3";
+const HEAD_MAGIC: [u8; 8] = *b"LKJHEAD3";
+const HEAD_DOMAIN: &str = "lkjscript.semantic-head-envelope.v3";
 
 #[derive(Decode, Encode, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -49,6 +50,10 @@ pub struct RevisionCore {
     pub repository_id: RepositoryId,
     pub parents: Vec<ParentRevision>,
     pub root: RootObjectDigest,
+    /// Exact revision-independent digest of the validated semantic summaries and reverse
+    /// dependency facts for this root. The fact files remain disposable and can be reconstructed
+    /// from canonical meaning; this binding authenticates reuse.
+    pub semantic_certificate: SemanticSummaryDigest,
     pub semantic_diff: SemanticDiffDigest,
     pub transaction: TransactionDigest,
 }
@@ -155,6 +160,7 @@ pub enum ReceiptStatus {
     MergeAccepted,
     RestoreAccepted,
     ImportAccepted,
+    ProjectCreated,
 }
 
 #[derive(Decode, Encode, Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
@@ -330,6 +336,7 @@ mod tests {
             repository_id,
             parents: Vec::new(),
             root: RootObjectDigest::of(b"root"),
+            semantic_certificate: SemanticSummaryDigest::from_bytes([7; 32]),
             semantic_diff,
             transaction,
         };

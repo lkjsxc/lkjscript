@@ -64,5 +64,8 @@ database/object/queue publication. Adapter-generated failure responses contain a
 
 The in-memory dispatcher constructs the same `HttpRequest`, registers the same body stream, and
 invokes the same prepared port used by the live listener. Tests may replace grants but not handlers.
-Current responses are whole bounded byte values; response streaming, trailers, HTTP/2/3, TLS,
-multipart, compression, WebSocket, and outbound HTTP are not part of contract 1.
+Current responses are whole bounded byte values; response streaming, trailers, HTTP/2/3,
+multipart, compression, WebSocket, and outbound HTTP are not part of contract 1. The listener is
+plaintext. TLS termination, certificate management, and ACME are deliberately out of scope and
+not planned; encrypted deployments require an external trusted transport boundary or a different
+adapter outside the current product scope.

@@ -1,8 +1,9 @@
 # General-platform campaign ledger
 
 Status: completed implementation evidence ledger, started and finalized 2026-08-21 UTC. This file
-records reproduced facts and decision gates for the campaign in `prompts/202608211949.md`; it is not
-semantic authority.
+records reproduced facts and decision gates for the campaign in `prompts/202608211949.md`; it is
+historical evidence, not semantic authority or current graph-4 documentation. Words such as
+“current” below refer to that campaign's recorded endpoint.
 
 ## Starting authority
 

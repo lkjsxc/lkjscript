@@ -4,8 +4,9 @@ use super::{
     ExecutionError, ExecutionFailureClass, PreparedFunction, PreparedProgram, RunObservation,
     RunPolicy,
 };
-use crate::platform::language::{Binding, Expression, MapEntry, MatchArm, RecordField};
-use crate::platform::package::PackageId;
+use crate::platform::language::{
+    Binding, DeclarationReference, Expression, MapEntry, MatchArm, RecordField,
+};
 use crate::platform::semantic::OwnerId;
 use crate::platform::semantic_id::ExpressionId;
 use crate::platform::value::{MapKey, Value};
@@ -105,8 +106,6 @@ impl<'a> ReferenceInterpreter<'a> {
 
 #[derive(Clone)]
 struct Context {
-    package: PackageId,
-    module: String,
     locals: BTreeMap<String, Value>,
 }
 
@@ -138,6 +137,10 @@ enum Continuation {
         arguments: Vec<Expression>,
         completed: usize,
         values: Vec<Value>,
+        context: Context,
+    },
+    InvokeCallee {
+        arguments: Vec<Expression>,
         context: Context,
     },
     Record {
@@ -246,6 +249,23 @@ impl Continuation {
                     Ok(Control::Evaluate(argument.clone(), context))
                 } else {
                     machine.invoke_function(function, values)
+                }
+            }
+            Self::InvokeCallee { arguments, context } => {
+                let Value::Function(function) = value else {
+                    return Err(runtime_type("invoke callee is not a function"));
+                };
+                if let Some(first) = arguments.first() {
+                    machine.continuations.push(Self::Call {
+                        function,
+                        arguments: arguments.clone(),
+                        completed: 0,
+                        values: Vec::new(),
+                        context: context.clone(),
+                    });
+                    Ok(Control::Evaluate(first.clone(), context))
+                } else {
+                    machine.invoke_function(function, Vec::new())
                 }
             }
             Self::Record {
@@ -410,11 +430,16 @@ impl Machine<'_> {
             Expression::StaticText(value, _) => Ok(Control::Value(Value::static_text(value))),
             Expression::Variable(name, _) => match context.locals.get(&name).cloned() {
                 Some(value) => Ok(Control::Value(value)),
-                None => {
-                    let owner = self.resolve(&context, &name)?;
-                    self.invoke_function(owner, Vec::new())
-                }
+                None => Err(ExecutionError::new(
+                    ExecutionFailureClass::Infrastructure,
+                    "reference_local_missing",
+                    format!("validated expression references absent local '{name}'"),
+                )),
             },
+            Expression::Constant(reference, _) => {
+                let owner = self.resolve(&reference)?;
+                self.invoke_function(owner, Vec::new())
+            }
             Expression::If {
                 condition,
                 when_true,
@@ -460,7 +485,7 @@ impl Machine<'_> {
                 arguments,
                 ..
             } => {
-                let owner = self.resolve(&context, &function)?;
+                let owner = self.resolve(&function)?;
                 if let Some(first) = arguments.first() {
                     self.continuations.push(Continuation::Call {
                         function: owner,
@@ -474,10 +499,19 @@ impl Machine<'_> {
                     self.invoke_function(owner, Vec::new())
                 }
             }
+            Expression::Invoke {
+                callee, arguments, ..
+            } => {
+                self.continuations.push(Continuation::InvokeCallee {
+                    arguments,
+                    context: context.clone(),
+                });
+                Ok(Control::Evaluate(*callee, context))
+            }
             Expression::Record { ty, fields, .. } => {
                 let owner = ty
-                    .as_deref()
-                    .map(|name| self.resolve(&context, name))
+                    .as_ref()
+                    .map(|reference| self.resolve(reference))
                     .transpose()?;
                 if let Some(first) = fields.first() {
                     self.continuations.push(Continuation::Record {
@@ -495,7 +529,7 @@ impl Machine<'_> {
             Expression::Variant {
                 ty, case, payload, ..
             } => {
-                let owner = self.resolve(&context, &ty)?;
+                let owner = self.resolve(&ty)?;
                 if let Some(payload) = payload {
                     self.continuations
                         .push(Continuation::Variant { owner, case });
@@ -542,9 +576,9 @@ impl Machine<'_> {
                 });
                 Ok(Control::Evaluate(*value, context))
             }
-            Expression::FunctionRef { function, .. } => Ok(Control::Value(Value::Function(
-                self.resolve(&context, &function)?,
-            ))),
+            Expression::FunctionRef { function, .. } => {
+                Ok(Control::Value(Value::Function(self.resolve(&function)?)))
+            }
             Expression::Perform { .. } | Expression::Transaction { .. } => {
                 Err(ExecutionError::new(
                     ExecutionFailureClass::Capability,
@@ -604,26 +638,17 @@ impl Machine<'_> {
         self.observation.maximum_call_depth =
             self.observation.maximum_call_depth.max(self.call_depth);
         self.continuations.push(Continuation::FunctionReturn);
-        Ok(Control::Evaluate(
-            source,
-            Context {
-                package: function.signature.owner.package.clone(),
-                module: function.signature.owner.module.clone(),
-                locals,
-            },
-        ))
+        Ok(Control::Evaluate(source, Context { locals }))
     }
 
-    fn resolve(&self, context: &Context, name: &str) -> Result<OwnerId, ExecutionError> {
-        self.program
-            .resolve_name(&context.package, &context.module, name)
-            .map_err(|error| {
-                ExecutionError::new(
-                    ExecutionFailureClass::Infrastructure,
-                    error.code,
-                    error.message,
-                )
-            })
+    fn resolve(&self, reference: &DeclarationReference) -> Result<OwnerId, ExecutionError> {
+        super::resolve_reference_owner(self.program.artifact(), reference).map_err(|error| {
+            ExecutionError::new(
+                ExecutionFailureClass::Infrastructure,
+                error.code,
+                error.message,
+            )
+        })
     }
 }
 

@@ -24,6 +24,20 @@ pub const MAXIMUM_TARGETS: usize = 1_024;
 pub struct PackageId(String);
 
 impl PackageId {
+    pub fn generate() -> Result<Self, Diagnostic> {
+        let mut bytes = [0_u8; 16];
+        getrandom::fill(&mut bytes).map_err(|_| {
+            package_error(
+                "package_identity_entropy",
+                "operating-system entropy is unavailable",
+            )
+        })?;
+        if bytes == [0; 16] {
+            bytes[15] = 1;
+        }
+        Self::parse(&super::semantic_id::encode_hex(&bytes))
+    }
+
     pub fn parse(value: &str) -> Result<Self, Diagnostic> {
         validate_hex(value, 32, "package_id")?;
         if value.bytes().all(|byte| byte == b'0') {

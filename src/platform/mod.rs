@@ -5,6 +5,7 @@
 //! derived consumers.
 
 pub mod artifact;
+pub mod bootstrap;
 pub mod cli;
 pub mod configuration;
 pub mod database;
@@ -20,6 +21,7 @@ pub mod meaning;
 pub mod object;
 pub mod package;
 pub(crate) mod packed;
+pub mod persistent_map;
 pub mod queue;
 pub mod repository;
 pub mod revision;
@@ -27,6 +29,7 @@ pub mod runtime;
 pub mod secrets;
 pub mod security;
 pub mod semantic;
+pub mod semantic_change;
 pub mod semantic_diff;
 pub mod semantic_digest;
 pub mod semantic_draft;
@@ -34,6 +37,7 @@ pub mod semantic_id;
 pub mod semantic_merge;
 pub mod semantic_projection;
 pub mod semantic_query;
+pub mod semantic_summary;
 pub mod semantic_transaction;
 pub mod stream;
 mod syntax;
@@ -44,6 +48,10 @@ pub mod workspace;
 #[cfg(test)]
 pub(crate) use artifact::build_artifact;
 pub use artifact::{ARTIFACT_CONTRACT_VERSION, ArtifactReceipt, LoadedArtifact, load_artifact};
+pub use bootstrap::{
+    BOOTSTRAP_CONTRACT_VERSION, BuiltinPackageInfo, ProjectCreationReceipt, ProjectTemplate,
+    builtin_package_info, create_project, export_builtin_standard,
+};
 pub use cli::{CLI_CONTRACT_VERSION, CliSuccess, execute as execute_cli};
 pub use configuration::{
     CONFIGURATION_ADAPTER_CONTRACT_VERSION, ConfigurationAdapter, ConfigurationObservation,
@@ -80,13 +88,13 @@ pub use json::{
 #[cfg(test)]
 pub(crate) use language::parse_module;
 pub use language::{
-    Component, Declaration, Effect, Expression, Function, Module, Requirement, Type,
+    Component, Declaration, Effect, Expression, Function, Module, Requirement, Type, TypeParameter,
 };
 pub use meaning::{
     Annotation, AnnotationClass, DeclarationIdentity, DeclarationKind, Documentation,
     ExpressionIdentity, ExpressionKind, GRAPH_CONTRACT_IDENTITY, GRAPH_CONTRACT_VERSION,
     MeaningModule, MemberIdentity, MigrationIdentityAllocator, RelationRole, RelationSource,
-    RelationTarget, SemanticRelation,
+    RelationTarget, RequestIdentityAllocator, SemanticRelation,
 };
 pub use object::{
     OBJECT_ADAPTER_CONTRACT_VERSION, ObjectAdapterIdentity, ObjectLimits, ObjectStorageAdapter,
@@ -100,10 +108,11 @@ pub use queue::{
     QueueLimits,
 };
 pub use repository::{
-    BACKUP_CONTRACT_VERSION, BackupReceipt, CurrentRevision, DependencyArtifactObject,
-    DoctorReport, InitialPublication, MAXIMUM_BACKUP_BYTES, PublicationOutcome,
-    PublicationProposal, ReconstructedRevision, RestoreReceipt, RevisionSnapshot,
-    SemanticRepository,
+    BACKUP_CONTRACT_VERSION, BACKUP_SEGMENT_ENTRY_LIMIT, BackupReceipt, CurrentBinding,
+    CurrentRevision, DependencyArtifactObject, DoctorReport, InitialPublication,
+    MAXIMUM_BACKUP_MANIFEST_BYTES, MAXIMUM_BACKUP_SEGMENT_BYTES, PublicationOutcome,
+    RETENTION_CONTRACT_VERSION, ReconstructedRevision, RestoreReceipt, RetentionReport,
+    RevisionSnapshot, SemanticRepository,
 };
 pub use revision::{
     AffectedOwner, ParentRevision, ReceiptStatus, RevisionCore, RevisionRecord, SemanticHead,
@@ -128,12 +137,16 @@ pub use semantic::{
     ExactDependency, ExactGraphDependency, OwnerId, ResolvedType, ValidatedModule,
     ValidatedPackage, validate_graph_package,
 };
+pub use semantic_change::{
+    AllocatedIdentity, CHANGE_CONTRACT_VERSION, Change, ChangeRequest, ChangeResult,
+    ExpressionForm, TypeForm, TypeParameterForm, execute_change,
+};
 pub use semantic_diff::{
     SEMANTIC_DIFF_CONTRACT_VERSION, SemanticChangeClass, SemanticDiffReport, SemanticDiffStatus,
     SemanticOwnerChange, SemanticOwnerState, diff_revisions,
 };
 pub use semantic_digest::{
-    ArtifactDigest, BackupDigest, IndexDigest, ModuleObjectDigest, ReceiptDigest,
+    ArtifactDigest, BackupDigest, CleanupDigest, IndexDigest, ModuleObjectDigest, ReceiptDigest,
     RevisionRecordDigest, RootObjectDigest, SemanticDiffDigest, TransactionDigest,
 };
 pub use semantic_draft::{
@@ -143,7 +156,7 @@ pub use semantic_draft::{
 pub use semantic_id::{
     AnnotationId, BindingId, CaseId, ConflictId, DeclarationId, DocumentationId, DraftId,
     ExpressionId, FieldId, ModuleId, OperationId, ParameterId, PortId, RepositoryId, RequirementId,
-    RevisionId, TargetId,
+    RevisionId, TargetId, TypeParameterId,
 };
 pub use semantic_merge::{
     MAXIMUM_MERGE_CONFLICTS, SEMANTIC_MERGE_CONTRACT_VERSION, SemanticMergeConflict,

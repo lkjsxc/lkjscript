@@ -9,7 +9,7 @@ use super::semantic_id::{RepositoryId, RevisionId};
 use serde::Serialize;
 use serde_json::Value as JsonValue;
 
-pub const REVIEW_PROJECTION_CONTRACT_VERSION: u16 = 1;
+pub const REVIEW_PROJECTION_CONTRACT_VERSION: u16 = 2;
 pub const MAXIMUM_REVIEW_PROJECTION_BYTES: usize = 128 * 1_048_576;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -47,7 +47,7 @@ pub fn render_review_projection(
     repository: &SemanticRepository,
     revision: Option<RevisionId>,
 ) -> Result<(Vec<u8>, ReviewProjectionReceipt), Diagnostic> {
-    let revision = revision.unwrap_or(repository.current()?.head.revision);
+    let revision = revision.unwrap_or(repository.current_binding()?.head.revision);
     let snapshot = repository.reconstruct_revision(revision)?;
     render_snapshot(snapshot)
 }
@@ -221,6 +221,7 @@ mod tests {
                 intent: None,
                 validation_profile: None,
                 dependency_artifacts: Vec::new(),
+                status: crate::platform::ReceiptStatus::ImportAccepted,
             },
         )
         .expect("initialize");

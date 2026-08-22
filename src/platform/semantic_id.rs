@@ -49,6 +49,23 @@ impl IdentityBytes {
         Self(bytes)
     }
 
+    fn request_local(domain: &str, seed: &[u8], ordinal: u64) -> Self {
+        let mut hasher = blake3::Hasher::new_derive_key(
+            "lkjscript.semantic-identity.request-local-allocation.v1",
+        );
+        hasher.update(&(domain.len() as u64).to_be_bytes());
+        hasher.update(domain.as_bytes());
+        hasher.update(&(seed.len() as u64).to_be_bytes());
+        hasher.update(seed);
+        hasher.update(&ordinal.to_be_bytes());
+        let mut bytes = [0_u8; IDENTITY_BYTES];
+        bytes.copy_from_slice(&hasher.finalize().as_bytes()[..IDENTITY_BYTES]);
+        if bytes == [0; IDENTITY_BYTES] {
+            bytes[IDENTITY_BYTES - 1] = 1;
+        }
+        Self(bytes)
+    }
+
     fn parse(value: &str) -> Result<Self, Diagnostic> {
         if value.len() != ENCODED_IDENTITY_BYTES {
             return Err(identity_error(
@@ -97,6 +114,13 @@ macro_rules! semantic_id {
             /// ordinal, never a path, name, byte position, or content digest identity.
             pub fn migrate(seed: &[u8], ordinal: u64) -> Self {
                 Self(IdentityBytes::deterministic(Self::DOMAIN, seed, ordinal))
+            }
+
+            /// Exact allocation for one normalized request. The caller-owned seed binds the
+            /// repository, base revision, normalized request, and idempotency identity. The
+            /// ordinal is the canonical request-local allocation order within this ID domain.
+            pub fn allocate(seed: &[u8], ordinal: u64) -> Self {
+                Self(IdentityBytes::request_local(Self::DOMAIN, seed, ordinal))
             }
 
             pub const fn bytes(self) -> [u8; IDENTITY_BYTES] {
@@ -198,6 +222,7 @@ semantic_id!(DraftId, "draft_", "draft", 13u8);
 semantic_id!(ConflictId, "conflict_", "conflict", 14u8);
 semantic_id!(DocumentationId, "doc_", "documentation", 15u8);
 semantic_id!(AnnotationId, "annotation_", "annotation", 16u8);
+semantic_id!(TypeParameterId, "typeparam_", "type_parameter", 17u8);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct RevisionId([u8; 32]);

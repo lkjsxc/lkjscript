@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value as JsonValue, json};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-pub const QUERY_CONTRACT_VERSION: u16 = 1;
+pub const QUERY_CONTRACT_VERSION: u16 = 2;
 pub const DEFAULT_ITEM_LIMIT: usize = 50;
 pub const DEFAULT_BYTE_LIMIT: usize = 64 * 1024;
 pub const DEFAULT_WORK_LIMIT: usize = 100_000;
@@ -26,21 +26,21 @@ pub const MAXIMUM_BYTE_LIMIT: usize = 4 * 1_048_576;
 pub const MAXIMUM_WORK_LIMIT: usize = 10_000_000;
 pub const MAXIMUM_QUERY_DEPTH: usize = 32;
 pub const MAXIMUM_QUERY_FANOUT: usize = 10_000;
-pub const QUERY_INDEX_CONTRACT_VERSION: u16 = 1;
+pub const QUERY_INDEX_CONTRACT_VERSION: u16 = 2;
 pub const MAXIMUM_QUERY_INDEX_BYTES: usize = 128 * 1_048_576;
 pub const MAXIMUM_QUERY_INDEX_OWNERS: usize = 2_000_000;
 pub const MAXIMUM_QUERY_INDEX_RELATIONS: usize = 10_000_000;
-const QUERY_INDEX_MAGIC: [u8; 8] = *b"LKJIDX01";
-const QUERY_INDEX_DOMAIN: &str = "lkjscript.semantic-query-index.v1";
-const LOCAL_INDEX_CONTRACT_VERSION: u16 = 1;
+const QUERY_INDEX_MAGIC: [u8; 8] = *b"LKJIDX02";
+const QUERY_INDEX_DOMAIN: &str = "lkjscript.semantic-query-index.v2";
+const LOCAL_INDEX_CONTRACT_VERSION: u16 = 2;
 const LOCAL_INDEX_BUCKETS: usize = 256;
 const MAXIMUM_LOCAL_INDEX_PART_BYTES: usize = 16 * 1_048_576;
-const LOCAL_MANIFEST_MAGIC: [u8; 8] = *b"LKJIXM01";
-const LOCAL_OWNER_MAGIC: [u8; 8] = *b"LKJIXO01";
-const LOCAL_NAME_MAGIC: [u8; 8] = *b"LKJIXN01";
-const LOCAL_MANIFEST_DOMAIN: &str = "lkjscript.semantic-local-index-manifest.v1";
-const LOCAL_OWNER_DOMAIN: &str = "lkjscript.semantic-local-owner-index.v1";
-const LOCAL_NAME_DOMAIN: &str = "lkjscript.semantic-local-name-index.v1";
+const LOCAL_MANIFEST_MAGIC: [u8; 8] = *b"LKJIXM02";
+const LOCAL_OWNER_MAGIC: [u8; 8] = *b"LKJIXO02";
+const LOCAL_NAME_MAGIC: [u8; 8] = *b"LKJIXN02";
+const LOCAL_MANIFEST_DOMAIN: &str = "lkjscript.semantic-local-index-manifest.v2";
+const LOCAL_OWNER_DOMAIN: &str = "lkjscript.semantic-local-owner-index.v2";
+const LOCAL_NAME_DOMAIN: &str = "lkjscript.semantic-local-name-index.v2";
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -123,6 +123,7 @@ pub enum OwnerKind {
     Field,
     Case,
     Operation,
+    TypeParameter,
     Parameter,
     Binding,
     Expression,
@@ -151,6 +152,7 @@ impl OwnerKind {
             "field" => Ok(Self::Field),
             "case" => Ok(Self::Case),
             "operation" => Ok(Self::Operation),
+            "type_parameter" => Ok(Self::TypeParameter),
             "parameter" => Ok(Self::Parameter),
             "binding" => Ok(Self::Binding),
             "expression" => Ok(Self::Expression),
@@ -320,7 +322,7 @@ pub struct SemanticQueryIndex {
 
 impl SemanticQueryIndex {
     pub fn current(repository: &SemanticRepository) -> Result<Self, Diagnostic> {
-        Self::load_or_rebuild(repository, repository.current()?.head.revision)
+        Self::load_or_rebuild(repository, repository.current_binding()?.head.revision)
     }
 
     pub fn revision(
@@ -379,6 +381,10 @@ impl SemanticQueryIndex {
                 ))
             })
             .collect()
+    }
+
+    pub(crate) fn owner_summary(&self, id: &str) -> Option<&OwnerSummary> {
+        self.owners.get(id).map(|owner| &owner.summary)
     }
 
     fn load_or_rebuild(
@@ -689,12 +695,43 @@ impl SemanticQueryIndex {
         index.show(id, true)
     }
 
+    pub(crate) fn owner_summary_revision(
+        repository: &SemanticRepository,
+        revision: RevisionId,
+        id: &str,
+    ) -> Result<OwnerSummary, Diagnostic> {
+        if id.is_empty() || id.len() > 4_096 {
+            return Err(query_error(
+                DiagnosticClass::Source,
+                "semantic_owner_id",
+                "owner identity must contain 1 through 4096 bytes",
+            ));
+        }
+        let manifest = Self::ensure_local_index(repository, revision)?;
+        let bucket = local_bucket("owner", id);
+        Self::local_owner_shard(repository, &manifest, bucket)?
+            .and_then(|shard| {
+                shard
+                    .owners
+                    .binary_search_by(|owner| owner.id.as_str().cmp(id))
+                    .ok()
+                    .and_then(|index| shard.owners.get(index).cloned())
+            })
+            .ok_or_else(|| {
+                query_error(
+                    DiagnosticClass::Source,
+                    "semantic_owner_missing",
+                    format!("revision {revision} has no owner '{id}'"),
+                )
+            })
+    }
+
     fn ensure_local_index(
         repository: &SemanticRepository,
         revision: RevisionId,
     ) -> Result<PackedLocalIndexManifest, Diagnostic> {
         let record = repository.read_revision(revision)?;
-        let root = repository.read_root(record.core.root)?;
+        let root = repository.read_stored_root(record.core.root)?;
         let cached = repository
             .read_index_part(revision, DisposableIndexPart::Manifest, 64 * 1024 + 50)?
             .and_then(|bytes| PackedLocalIndexManifest::decode(&bytes).ok())
@@ -1316,7 +1353,6 @@ impl PackedQueryIndex {
         if self.owners.is_empty()
             || self.owners.len() > MAXIMUM_QUERY_INDEX_OWNERS
             || self.relations.len() > MAXIMUM_QUERY_INDEX_RELATIONS
-            || self.modules.len() > super::graph::MAXIMUM_ROOT_MODULES
         {
             return Err(query_error(
                 DiagnosticClass::Resource,
@@ -1790,6 +1826,9 @@ fn declaration_owner_kind(kind: DeclarationKind) -> OwnerKind {
 
 fn member_parts(member: &MemberIdentity) -> (OwnerKind, String, String) {
     match member {
+        MemberIdentity::TypeParameter { id, name } => {
+            (OwnerKind::TypeParameter, id.to_string(), name.clone())
+        }
         MemberIdentity::Field { id, name } => (OwnerKind::Field, id.to_string(), name.clone()),
         MemberIdentity::Case { id, name } => (OwnerKind::Case, id.to_string(), name.clone()),
         MemberIdentity::Operation { id, name } => {
@@ -1837,6 +1876,7 @@ fn relation_target_id(target: &RelationTarget) -> String {
         RelationTarget::Field { field, .. } => field.to_string(),
         RelationTarget::Case { case, .. } => case.to_string(),
         RelationTarget::Operation { operation, .. } => operation.to_string(),
+        RelationTarget::TypeParameter { type_parameter, .. } => type_parameter.to_string(),
         RelationTarget::Parameter { parameter, .. } => parameter.to_string(),
         RelationTarget::Binding { binding, .. } => binding.to_string(),
         RelationTarget::Requirement { requirement, .. } => requirement.to_string(),
@@ -2072,6 +2112,7 @@ mod tests {
                 intent: None,
                 validation_profile: None,
                 dependency_artifacts: Vec::new(),
+                status: crate::platform::ReceiptStatus::ImportAccepted,
             },
         )
         .expect("initialize");

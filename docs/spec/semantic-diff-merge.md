@@ -1,6 +1,6 @@
 # Semantic diff and merge
 
-Status: normative for diff and merge contract 1.
+Status: normative for diff and merge contract 2 and draft contract 4.
 
 ## Diff
 
@@ -52,23 +52,24 @@ revision with both exact parents, and returns one receipt. A result equal to cur
 `semantic_no_change`. A moved HEAD is `stale_head`. Any conflict publishes nothing.
 
 Conflict IDs are deterministic domain-separated IDs derived from the exact merge request and
-canonical conflict ordinal. Reports are bounded to 10,000 conflicts. Contract 1 returns conflicts
+canonical conflict ordinal. Reports are bounded to 10,000 conflicts. Contract 2 returns conflicts
 in the merge result; persistent interactive conflict drafts and a dedicated conflict-resolution
 command remain unimplemented. Resolution currently occurs by creating an explicit repaired draft
-or transaction and then rerunning merge.
+or change and then rerunning merge.
 
 ## Identity-sensitive cases
 
 Rename plus independent body change composes when both retain the same declaration ID. A move plus
 independent body change composes under the same rule. Two unrelated creations with equal names or
 bodies remain different identities and may still fail namespace validation. Delete plus modify is
-a conflict. Clone never aliases the original identity. Restore is a normal explicit transaction
-and may not silently reuse a tombstoned ID outside its historical rule.
+a conflict. Clone never aliases the original identity. Exact backup restore recreates the backed-up
+repository and revision identities in a private stage; it is not a merge operation and cannot
+silently synthesize new identity.
 
 ## Review projection
 
-The deterministic text projection records repository/revision/package identities, parents,
+The deterministic review projection records repository/revision/package identities, parents,
 dependencies, targets, tombstones, and ordered span-free module meaning. It is labeled
 `non_authoritative_review_projection`, has a separate digest contract, and cannot be imported or
 applied. Full projection is intentionally explicit and out of band; routine review uses bounded
-semantic diff and exact `show` expansion.
+semantic diff and exact `inspect owner` or `history show` expansion.

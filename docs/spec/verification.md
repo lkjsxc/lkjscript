@@ -8,6 +8,14 @@ Canonical decoding and deep reconstruction ignore disposable indexes. Full seman
 reconstructs names, scopes, types, effects, capabilities, components, targets, tests, and retained
 relations from root/module objects. Incremental/query acceleration must agree with that route.
 
+Meaning graph 4 revisions authenticate semantic-summary contract 2 facts with a semantic
+certificate. Content-addressed summaries and the revision-bound reverse-dependency index remain
+disposable: missing bytes rebuild from canonical modules, while a rebuilt certificate mismatch is
+canonical corruption. Focused differential tests compare the four current local preparation
+classes—eligible pure-body replacement, independent empty-module creation, module rename, and
+declaration rename—with complete canonicalization and validation. This is not evidence for general incremental
+validation; every other transaction class keeps complete preparation.
+
 Execution has two implementation-disjoint tiers: prepared bytecode is production; the semantic
 reference interpreter walks validated operation structures. Every graph-owned package test runs
 actual and expected expressions through both tiers, requires tier equality, then requires expected
@@ -15,11 +23,17 @@ value equality. A missing, skipped, unavailable, exhausted, cancelled, or unrun 
 
 ## Profiles
 
-`tools/check` is the executable verification owner. `focused` runs format, static analysis,
-locked tests, semantic package tests, deep graph doctors, and deterministic artifact reproduction
-appropriate to iteration. `changed` is selection convenience and widens uncertainty. `product`
-adds public workflows. `service` requires isolated PostgreSQL service/worker acceptance. `full`
-runs the complete authoritative local profile and never treats a prior receipt as a fresh pass.
+`tools/check` is the executable verification owner. `focused` runs formatting, locked library and
+public integration tests, and diff checks. `changed` is selection convenience and widens
+uncertainty. `product` builds release and checks maintained packages, deep doctors, and artifact /
+built-in reproduction. `service` runs release-build and isolated PostgreSQL service/worker
+acceptance. `full` adds Clippy, all workspace targets, checker self-tests, every product gate, and
+service acceptance, and never treats a prior receipt as a fresh pass.
+
+Independent ready nodes may run in parallel only when they do not mutate an executable another
+node can launch. The DAG serializes debug executable producers before public/workspace tests and
+requires formatting before compiler-producing gates. Checker self-test owns this dependency
+contract so an `ETXTBSY` race cannot be normalized as flakiness.
 
 Successful checks emit one aggregate JSON line and a receipt locator. Each gate retains bounded
 stdout/stderr separately under `.artifacts/check`. Failure returns bounded excerpts and exact log
@@ -46,8 +60,9 @@ does not reuse a prior pass.
 Tests cover unknown contracts, foreign identity domains, duplicate/trailing/excess input, checked
 allocation, corrupt object bytes, missing/corrupt derived indexes, stale base, no-change,
 precondition failure, idempotent replay, interrupted publication boundaries, two-parent history,
-draft separation/rebase, deterministic backup/restore, predecessor rejection, and public output
-bounds.
+draft separation/rebase, deterministic backup/restore, read-only retention-preview reachability and
+plan stability, predecessor rejection, and public output bounds. Retention-preview tests assert
+`destructive_ready: false`; they are not garbage-collection or compaction evidence.
 
 Scale evidence must name exact generated topology, revision, toolchain, platform, command, cold or
 warm cache state, wall/CPU/memory where available, storage growth, output bytes, semantic work

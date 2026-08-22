@@ -206,6 +206,7 @@ fn json_decodable(ty: &ResolvedType) -> bool {
         ResolvedType::Map(key, value) => json_decodable(key) && json_decodable(value),
         ResolvedType::StaticText
         | ResolvedType::Secret
+        | ResolvedType::Parameter(_)
         | ResolvedType::Option(_)
         | ResolvedType::Result(_, _)
         | ResolvedType::Stream(_)

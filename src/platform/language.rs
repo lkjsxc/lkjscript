@@ -3,6 +3,10 @@
 #[cfg(test)]
 use super::diagnostic::{Diagnostic, SourceLocation};
 use super::syntax::SourceSpan;
+use super::{
+    package::PackageId,
+    semantic_id::{DeclarationId, ModuleId},
+};
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -12,7 +16,7 @@ use std::collections::BTreeSet;
 pub struct Module {
     pub name: String,
     pub imports: Vec<Import>,
-    pub exports: Vec<String>,
+    pub exports: Vec<DeclarationId>,
     pub declarations: Vec<Declaration>,
 }
 
@@ -20,8 +24,42 @@ pub struct Module {
 #[serde(deny_unknown_fields)]
 pub struct Import {
     pub alias: String,
-    pub module: String,
+    pub target: ModuleReference,
     pub span: SourceSpan,
+}
+
+#[derive(Decode, Encode, Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleReference {
+    pub package: PackageId,
+    pub module: ModuleId,
+}
+
+#[derive(Decode, Encode, Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct DeclarationReference {
+    pub package: PackageId,
+    pub module: ModuleId,
+    pub declaration: DeclarationId,
+}
+
+#[cfg(test)]
+pub(crate) fn unresolved_import_reference(locator: &str) -> ModuleReference {
+    ModuleReference {
+        package: PackageId::parse("ffffffffffffffffffffffffffffffff")
+            .expect("source-oracle placeholder package identity"),
+        module: ModuleId::migrate(locator.as_bytes(), 0),
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn unresolved_declaration_reference(locator: &str) -> DeclarationReference {
+    DeclarationReference {
+        package: PackageId::parse("ffffffffffffffffffffffffffffffff")
+            .expect("source-oracle placeholder package identity"),
+        module: ModuleId::migrate(locator.as_bytes(), 0),
+        declaration: DeclarationId::migrate(locator.as_bytes(), 0),
+    }
 }
 
 #[derive(Decode, Encode, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -136,6 +174,7 @@ pub enum Visibility {
 #[serde(deny_unknown_fields)]
 pub struct ExternalFunction {
     pub name: String,
+    pub type_parameters: Vec<TypeParameter>,
     pub parameters: Vec<Parameter>,
     pub result: Type,
     pub implementation: String,
@@ -146,10 +185,18 @@ pub struct ExternalFunction {
 #[serde(deny_unknown_fields)]
 pub struct Function {
     pub name: String,
+    pub type_parameters: Vec<TypeParameter>,
     pub parameters: Vec<Parameter>,
     pub result: Type,
     pub effect: Effect,
     pub body: Expression,
+    pub span: SourceSpan,
+}
+
+#[derive(Decode, Encode, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TypeParameter {
+    pub name: String,
     pub span: SourceSpan,
 }
 
@@ -172,7 +219,7 @@ pub enum Effect {
 #[serde(deny_unknown_fields)]
 pub struct TaskCapability {
     pub alias: String,
-    pub interface: String,
+    pub interface: DeclarationReference,
     pub span: SourceSpan,
 }
 
@@ -198,7 +245,7 @@ pub struct Component {
 #[serde(deny_unknown_fields)]
 pub struct Requirement {
     pub alias: String,
-    pub interface: String,
+    pub interface: DeclarationReference,
     pub operations: Vec<String>,
     pub limits: Vec<NamedLimit>,
     pub span: SourceSpan,
@@ -239,7 +286,8 @@ pub enum Type {
     Text,
     StaticText,
     Secret,
-    Named(String),
+    Parameter(String),
+    Named(DeclarationReference),
     Record(Vec<TypeField>),
     List(Box<Type>),
     Map(Box<Type>, Box<Type>),
@@ -252,7 +300,7 @@ pub enum Type {
 impl Type {
     pub fn is_durable(&self) -> bool {
         match self {
-            Self::Secret | Self::Stream(_) | Self::Function(_, _) => false,
+            Self::Secret | Self::Stream(_) | Self::Function(_, _) | Self::Parameter(_) => false,
             Self::List(item) | Self::Option(item) => item.is_durable(),
             Self::Record(fields) => fields.iter().all(|field| field.ty.is_durable()),
             Self::Map(key, value) | Self::Result(key, value) => {
@@ -285,6 +333,7 @@ pub enum Expression {
     Text(String, SourceSpan),
     StaticText(String, SourceSpan),
     Variable(String, SourceSpan),
+    Constant(DeclarationReference, SourceSpan),
     If {
         condition: Box<Expression>,
         when_true: Box<Expression>,
@@ -301,17 +350,23 @@ pub enum Expression {
         span: SourceSpan,
     },
     Call {
-        function: String,
+        function: DeclarationReference,
+        type_arguments: Vec<Type>,
+        arguments: Vec<Expression>,
+        span: SourceSpan,
+    },
+    Invoke {
+        callee: Box<Expression>,
         arguments: Vec<Expression>,
         span: SourceSpan,
     },
     Record {
-        ty: Option<String>,
+        ty: Option<DeclarationReference>,
         fields: Vec<RecordField>,
         span: SourceSpan,
     },
     Variant {
-        ty: String,
+        ty: DeclarationReference,
         case: String,
         payload: Option<Box<Expression>>,
         span: SourceSpan,
@@ -338,7 +393,8 @@ pub enum Expression {
         span: SourceSpan,
     },
     FunctionRef {
-        function: String,
+        function: DeclarationReference,
+        type_arguments: Vec<Type>,
         span: SourceSpan,
     },
     Perform {
@@ -363,11 +419,13 @@ impl Expression {
             | Self::I64(_, span)
             | Self::Text(_, span)
             | Self::StaticText(_, span)
-            | Self::Variable(_, span) => span,
+            | Self::Variable(_, span)
+            | Self::Constant(_, span) => span,
             Self::If { span, .. }
             | Self::Let { span, .. }
             | Self::Do { span, .. }
             | Self::Call { span, .. }
+            | Self::Invoke { span, .. }
             | Self::Record { span, .. }
             | Self::Variant { span, .. }
             | Self::Field { span, .. }
@@ -427,6 +485,14 @@ impl Expression {
                     argument.performed_capabilities(output);
                 }
             }
+            Self::Invoke {
+                callee, arguments, ..
+            } => {
+                callee.performed_capabilities(output);
+                for argument in arguments {
+                    argument.performed_capabilities(output);
+                }
+            }
             Self::Record { fields, .. } => {
                 for field in fields {
                     field.value.performed_capabilities(output);
@@ -457,6 +523,7 @@ impl Expression {
             | Self::Text(_, _)
             | Self::StaticText(_, _)
             | Self::Variable(_, _)
+            | Self::Constant(_, _)
             | Self::FunctionRef { .. } => {}
         }
     }
@@ -526,7 +593,7 @@ mod source_oracle {
         }
         let name = identifier(document, &root[1], IdentifierKind::Module)?;
         let mut imports = Vec::new();
-        let mut exports = Vec::new();
+        let mut export_names = Vec::new();
         let mut declarations = Vec::new();
         for form in &root[2..] {
             let items = list(document, form, "module_item", "module item must be a list")?;
@@ -540,7 +607,7 @@ mod source_oracle {
             }
             match atom(document, &items[0], "module_item_kind")? {
                 "import" => imports.push(parse_import(document, form, items)?),
-                "export" => parse_exports(document, form, items, &mut exports)?,
+                "export" => parse_exports(document, form, items, &mut export_names)?,
                 "record" => {
                     declarations.push(Declaration::Record(parse_record(document, form, items)?))
                 }
@@ -589,14 +656,17 @@ mod source_oracle {
         )?;
         reject_duplicates(
             document,
-            exports.iter().map(|value| (value, &root[0].span)),
+            export_names.iter().map(|value| (value, &root[0].span)),
             "export_duplicate",
             "export",
         )?;
         Ok(Module {
             name,
             imports,
-            exports,
+            exports: export_names
+                .iter()
+                .map(|name| unresolved_declaration_reference(name).declaration)
+                .collect(),
             declarations,
         })
     }
@@ -609,7 +679,11 @@ mod source_oracle {
         exact_arity(document, form, items, 3, "import_arity")?;
         Ok(Import {
             alias: identifier(document, &items[1], IdentifierKind::Value)?,
-            module: identifier(document, &items[2], IdentifierKind::Module)?,
+            target: unresolved_import_reference(&identifier(
+                document,
+                &items[2],
+                IdentifierKind::Module,
+            )?),
             span: form.span.clone(),
         })
     }
@@ -816,6 +890,7 @@ mod source_oracle {
         exact_arity(document, form, items, 5, "external_arity")?;
         Ok(ExternalFunction {
             name: identifier(document, &items[1], IdentifierKind::Value)?,
+            type_parameters: Vec::new(),
             parameters: parse_parameters(document, &items[2])?,
             result: parse_type(document, &items[3])?,
             implementation: identifier(document, &items[4], IdentifierKind::Qualified)?,
@@ -862,7 +937,11 @@ mod source_oracle {
                 exact_arity(document, item, pair, 2, "task_capability_arity")?;
                 capabilities.push(TaskCapability {
                     alias: identifier(document, &pair[0], IdentifierKind::Value)?,
-                    interface: identifier(document, &pair[1], IdentifierKind::Qualified)?,
+                    interface: unresolved_declaration_reference(&identifier(
+                        document,
+                        &pair[1],
+                        IdentifierKind::Qualified,
+                    )?),
                     span: item.span.clone(),
                 });
             }
@@ -878,6 +957,7 @@ mod source_oracle {
         };
         Ok(Function {
             name,
+            type_parameters: Vec::new(),
             parameters,
             result,
             effect,
@@ -1028,7 +1108,11 @@ mod source_oracle {
             ));
         }
         let alias = identifier(document, &items[1], IdentifierKind::Value)?;
-        let interface = identifier(document, &items[2], IdentifierKind::Qualified)?;
+        let interface = unresolved_declaration_reference(&identifier(
+            document,
+            &items[2],
+            IdentifierKind::Qualified,
+        )?);
         let operations_form = list(
             document,
             &items[3],
@@ -1132,7 +1216,7 @@ mod source_oracle {
                 _ => {
                     validate_identifier(name, IdentifierKind::Qualified)
                         .map_err(|message| at(document, form, "type_name", message))?;
-                    Type::Named(name.to_owned())
+                    Type::Named(unresolved_declaration_reference(name))
                 }
             });
         }
@@ -1312,7 +1396,12 @@ mod source_oracle {
                     ));
                 }
                 Ok(Expression::Call {
-                    function: identifier(document, &items[1], IdentifierKind::Qualified)?,
+                    function: unresolved_declaration_reference(&identifier(
+                        document,
+                        &items[1],
+                        IdentifierKind::Qualified,
+                    )?),
+                    type_arguments: Vec::new(),
                     arguments: items[2..]
                         .iter()
                         .map(|value| parse_expression(document, value))
@@ -1331,7 +1420,11 @@ mod source_oracle {
                     ));
                 }
                 Ok(Expression::Variant {
-                    ty: identifier(document, &items[1], IdentifierKind::Qualified)?,
+                    ty: unresolved_declaration_reference(&identifier(
+                        document,
+                        &items[1],
+                        IdentifierKind::Qualified,
+                    )?),
                     case: identifier(document, &items[2], IdentifierKind::Type)?,
                     payload: items
                         .get(3)
@@ -1371,7 +1464,12 @@ mod source_oracle {
             "function" => {
                 exact_arity(document, form, items, 2, "function_reference_arity")?;
                 Ok(Expression::FunctionRef {
-                    function: identifier(document, &items[1], IdentifierKind::Qualified)?,
+                    function: unresolved_declaration_reference(&identifier(
+                        document,
+                        &items[1],
+                        IdentifierKind::Qualified,
+                    )?),
+                    type_arguments: Vec::new(),
                     span: form.span.clone(),
                 })
             }
@@ -1471,7 +1569,7 @@ mod source_oracle {
         } else {
             validate_identifier(type_name, IdentifierKind::Qualified)
                 .map_err(|message| at(document, &items[1], "record_expression_type", message))?;
-            Some(type_name.to_owned())
+            Some(unresolved_declaration_reference(type_name))
         };
         let mut fields = Vec::new();
         for item in &items[2..] {
@@ -1824,12 +1922,18 @@ mod tests {
         assert_eq!(
             capabilities
                 .iter()
-                .map(|capability| (capability.alias.as_str(), capability.interface.as_str()))
+                .map(|capability| (capability.alias.as_str(), capability.interface.clone()))
                 .collect::<Vec<_>>(),
             vec![
-                ("db", "relational.Database"),
-                ("clock", "clock.Clock"),
-                ("random", "random.SecureRandom")
+                (
+                    "db",
+                    unresolved_declaration_reference("relational.Database")
+                ),
+                ("clock", unresolved_declaration_reference("clock.Clock")),
+                (
+                    "random",
+                    unresolved_declaration_reference("random.SecureRandom")
+                )
             ]
         );
         let mut performed = BTreeSet::new();

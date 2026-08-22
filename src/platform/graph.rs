@@ -4,22 +4,29 @@ use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::meaning::{GRAPH_CONTRACT_VERSION, MeaningModule};
 use super::package::{PackageId, RunnerKind};
 use super::packed;
+use super::persistent_map::{
+    MapError, MapErrorClass, MapRoot, MapWork, MemoryPageStore, OverlayPageStore, PageStore,
+    PersistentMap, RemoveOutcome,
+};
 use super::semantic_digest::{ArtifactDigest, ModuleObjectDigest, RootObjectDigest};
 use super::semantic_id::{
     AnnotationId, BindingId, CaseId, DeclarationId, DocumentationId, ExpressionId, FieldId,
     ModuleId, OperationId, ParameterId, PortId, RepositoryId, RequirementId, RevisionId, TargetId,
+    TypeParameterId,
 };
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub const MAXIMUM_ROOT_BYTES: usize = 16 * 1_048_576;
-pub const MAXIMUM_ROOT_MODULES: usize = 100_000;
-pub const MAXIMUM_ROOT_DEPENDENCIES: usize = 4_096;
-pub const MAXIMUM_ROOT_TARGETS: usize = 65_536;
-pub const MAXIMUM_TOMBSTONES: usize = 2_000_000;
-const ROOT_MAGIC: [u8; 8] = *b"LKJROOT1";
-const ROOT_DIGEST_DOMAIN: &str = "lkjscript.semantic-root-object.v1";
+pub const ROOT_STORAGE_CONTRACT_VERSION: u16 = 2;
+pub const ROOT_STORAGE_CONTRACT_IDENTITY: &str = "lkjscript-persistent-root-2";
+pub const MAXIMUM_STORED_ROOT_BYTES: usize = 64 * 1024;
+const ROOT_MAGIC: [u8; 8] = *b"LKJGRF04";
+const ROOT_DIGEST_DOMAIN: &str = "lkjscript.logical-graph-root.v4";
+const STORED_ROOT_MAGIC: [u8; 8] = *b"LKJROOT3";
+const STORED_ROOT_DIGEST_DOMAIN: &str = "lkjscript.persistent-root-object.v2";
+const ROOT_VALUE_LIMIT: usize = 64 * 1024;
 
 #[derive(Decode, Encode, Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -44,11 +51,8 @@ pub struct TargetBinding {
     pub id: TargetId,
     pub name: String,
     pub component_module: ModuleId,
-    pub component_module_name: String,
     pub component: DeclarationId,
-    pub component_name: String,
     pub port: PortId,
-    pub port_name: String,
     pub runner: RunnerKind,
 }
 
@@ -60,6 +64,7 @@ pub enum TombstoneIdentity {
     Field(FieldId),
     Case(CaseId),
     Operation(OperationId),
+    TypeParameter(TypeParameterId),
     Parameter(ParameterId),
     Binding(BindingId),
     Expression(ExpressionId),
@@ -93,6 +98,53 @@ pub struct GraphRoot {
     pub tombstones: Vec<Tombstone>,
 }
 
+/// Fixed-size canonical root manifest. Collection contents live in immutable Merkle radix pages;
+/// this object is the value bound by an accepted revision record.
+#[derive(Decode, Encode, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct StoredGraphRoot {
+    pub storage_contract_version: u16,
+    pub graph_contract_version: u16,
+    pub repository_id: RepositoryId,
+    pub package_id: PackageId,
+    pub package_name: String,
+    pub modules: MapRoot,
+    pub module_names: MapRoot,
+    /// Exact dependency objects keyed by stable package identity.
+    pub dependencies: MapRoot,
+    /// Presentation aliases keyed to exact package identity.
+    pub dependency_aliases: MapRoot,
+    pub targets: MapRoot,
+    pub tombstones: MapRoot,
+}
+
+#[derive(Clone, Debug)]
+pub struct StoredGraphRootBuild {
+    pub root: StoredGraphRoot,
+    pub pages: MemoryPageStore,
+    pub work: MapWork,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct StoredGraphRootDelta {
+    pub package_name: Option<String>,
+    pub module_removals: Vec<ModuleObjectRef>,
+    pub module_upserts: Vec<ModuleObjectRef>,
+    pub dependency_removals: Vec<DependencyBinding>,
+    pub dependency_upserts: Vec<DependencyBinding>,
+    pub target_removals: Vec<TargetBinding>,
+    pub target_upserts: Vec<TargetBinding>,
+    pub tombstone_removals: Vec<Tombstone>,
+    pub tombstone_upserts: Vec<Tombstone>,
+}
+
+#[derive(Clone, Debug)]
+pub struct StoredGraphRootUpdate {
+    pub root: StoredGraphRoot,
+    pub pages: MemoryPageStore,
+    pub work: MapWork,
+}
+
 impl GraphRoot {
     pub fn encode(&self) -> Result<Vec<u8>, Diagnostic> {
         self.validate_shape()?;
@@ -107,7 +159,7 @@ impl GraphRoot {
     }
 
     pub fn digest(&self) -> Result<RootObjectDigest, Diagnostic> {
-        Ok(RootObjectDigest::of(&self.encode()?))
+        StoredGraphRoot::build(self)?.root.digest()
     }
 
     pub fn validate_shape(&self) -> Result<(), Diagnostic> {
@@ -122,21 +174,11 @@ impl GraphRoot {
             ));
         }
         validate_name(&self.package_name, "package name", true)?;
-        if self.modules.is_empty() || self.modules.len() > MAXIMUM_ROOT_MODULES {
+        if self.modules.is_empty() {
             return Err(graph_error(
-                DiagnosticClass::Resource,
+                DiagnosticClass::Semantic,
                 "graph_root_module_count",
-                format!("graph root must contain 1 through {MAXIMUM_ROOT_MODULES} modules"),
-            ));
-        }
-        if self.dependencies.len() > MAXIMUM_ROOT_DEPENDENCIES
-            || self.targets.len() > MAXIMUM_ROOT_TARGETS
-            || self.tombstones.len() > MAXIMUM_TOMBSTONES
-        {
-            return Err(graph_error(
-                DiagnosticClass::Resource,
-                "graph_root_item_count",
-                "graph root exceeds a canonical collection bound",
+                "graph root must contain at least one module",
             ));
         }
         require_sorted_unique(&self.modules, "graph_root_module_order")?;
@@ -157,13 +199,16 @@ impl GraphRoot {
             }
         }
         let mut aliases = BTreeSet::new();
+        let mut dependency_packages = BTreeSet::new();
         for dependency in &self.dependencies {
             validate_name(&dependency.alias, "dependency alias", false)?;
-            if !aliases.insert(&dependency.alias) {
+            if !aliases.insert(&dependency.alias)
+                || !dependency_packages.insert(&dependency.package_id)
+            {
                 return Err(graph_error(
                     DiagnosticClass::Corrupt,
                     "graph_root_dependency_duplicate",
-                    "dependency alias is duplicated",
+                    "dependency alias or exact package identity is duplicated",
                 ));
             }
         }
@@ -171,9 +216,6 @@ impl GraphRoot {
         let mut target_ids = BTreeSet::new();
         for target in &self.targets {
             validate_name(&target.name, "target name", false)?;
-            validate_name(&target.component_module_name, "component module name", true)?;
-            validate_declaration_name(&target.component_name, "component name")?;
-            validate_name(&target.port_name, "port name", false)?;
             if !target_names.insert(&target.name) || !target_ids.insert(target.id) {
                 return Err(graph_error(
                     DiagnosticClass::Corrupt,
@@ -257,6 +299,9 @@ impl GraphRoot {
                         super::meaning::MemberIdentity::Operation { id, .. } => {
                             ("operation", id.bytes())
                         }
+                        super::meaning::MemberIdentity::TypeParameter { id, .. } => {
+                            ("type_parameter", id.bytes())
+                        }
                         super::meaning::MemberIdentity::Parameter { id, .. } => {
                             ("parameter", id.bytes())
                         }
@@ -326,16 +371,6 @@ impl GraphRoot {
                     ),
                 ));
             };
-            if module.module.name != target.component_module_name {
-                return Err(graph_error(
-                    DiagnosticClass::Corrupt,
-                    "graph_target_component_module_name",
-                    format!(
-                        "target '{}' has a stale component module locator",
-                        target.name
-                    ),
-                ));
-            }
             let Some((_, component)) = module.declaration(target.component) else {
                 return Err(graph_error(
                     DiagnosticClass::Corrupt,
@@ -343,11 +378,11 @@ impl GraphRoot {
                     format!("target '{}' references a missing component", target.name),
                 ));
             };
-            if component.name() != target.component_name {
+            if !matches!(component, super::language::Declaration::Component(_)) {
                 return Err(graph_error(
                     DiagnosticClass::Corrupt,
-                    "graph_target_component_name",
-                    format!("target '{}' has a stale component locator", target.name),
+                    "graph_target_component_kind",
+                    format!("target '{}' does not reference a component", target.name),
                 ));
             }
             let port_matches = module.declarations.iter().any(|declaration| {
@@ -355,8 +390,8 @@ impl GraphRoot {
                     && declaration.members.iter().any(|member| {
                         matches!(
                             member,
-                            super::meaning::MemberIdentity::Port { id, name }
-                                if *id == target.port && *name == target.port_name
+                            super::meaning::MemberIdentity::Port { id, .. }
+                                if *id == target.port
                         )
                     })
             });
@@ -385,6 +420,867 @@ impl GraphRoot {
     }
 }
 
+impl StoredGraphRootDelta {
+    pub fn between(before: &GraphRoot, after: &GraphRoot) -> Result<Self, Diagnostic> {
+        before.validate_shape()?;
+        after.validate_shape()?;
+        if before.repository_id != after.repository_id || before.package_id != after.package_id {
+            return Err(graph_error(
+                DiagnosticClass::Source,
+                "graph_root_delta_identity",
+                "a persistent-root delta cannot change repository or package identity",
+            ));
+        }
+        let (module_removals, module_upserts) =
+            collection_delta(&before.modules, &after.modules, |value| value.id);
+        let (dependency_removals, dependency_upserts) =
+            collection_delta(&before.dependencies, &after.dependencies, |value| {
+                value.alias.clone()
+            });
+        let (target_removals, target_upserts) =
+            collection_delta(&before.targets, &after.targets, |value| value.id);
+        let (tombstone_removals, tombstone_upserts) =
+            collection_delta(&before.tombstones, &after.tombstones, |value| {
+                value.identity.clone()
+            });
+        Ok(Self {
+            package_name: (before.package_name != after.package_name)
+                .then(|| after.package_name.clone()),
+            module_removals,
+            module_upserts,
+            dependency_removals,
+            dependency_upserts,
+            target_removals,
+            target_upserts,
+            tombstone_removals,
+            tombstone_upserts,
+        })
+    }
+}
+
+impl StoredGraphRoot {
+    pub fn build(graph: &GraphRoot) -> Result<StoredGraphRootBuild, Diagnostic> {
+        graph.validate_shape()?;
+        let mut staging = MemoryPageStore::default();
+        let mut work = MapWork::default();
+        let modules = PersistentMap::from_sorted(
+            &mut staging,
+            graph
+                .modules
+                .iter()
+                .map(|reference| Ok((reference.id.bytes().to_vec(), encode_root_value(reference)?)))
+                .collect::<Result<Vec<_>, Diagnostic>>()?,
+            &mut work,
+        )
+        .map_err(map_diagnostic)?;
+        let mut module_name_entries = graph
+            .modules
+            .iter()
+            .map(|reference| {
+                Ok((
+                    reference.name.as_bytes().to_vec(),
+                    encode_root_value(&reference.id)?,
+                ))
+            })
+            .collect::<Result<Vec<_>, Diagnostic>>()?;
+        module_name_entries.sort_by(|left, right| left.0.cmp(&right.0));
+        let module_names = PersistentMap::from_sorted(&mut staging, module_name_entries, &mut work)
+            .map_err(map_diagnostic)?;
+        let mut dependency_entries = graph
+            .dependencies
+            .iter()
+            .map(|binding| {
+                Ok((
+                    binding.package_id.bytes().to_vec(),
+                    encode_root_value(binding)?,
+                ))
+            })
+            .collect::<Result<Vec<_>, Diagnostic>>()?;
+        dependency_entries.sort_by(|left, right| left.0.cmp(&right.0));
+        let dependencies = PersistentMap::from_sorted(&mut staging, dependency_entries, &mut work)
+            .map_err(map_diagnostic)?;
+        let mut dependency_alias_entries = graph
+            .dependencies
+            .iter()
+            .map(|binding| {
+                Ok((
+                    binding.alias.as_bytes().to_vec(),
+                    encode_root_value(&binding.package_id)?,
+                ))
+            })
+            .collect::<Result<Vec<_>, Diagnostic>>()?;
+        dependency_alias_entries.sort_by(|left, right| left.0.cmp(&right.0));
+        let dependency_aliases =
+            PersistentMap::from_sorted(&mut staging, dependency_alias_entries, &mut work)
+                .map_err(map_diagnostic)?;
+        let targets = PersistentMap::from_sorted(
+            &mut staging,
+            graph
+                .targets
+                .iter()
+                .map(|binding| Ok((binding.id.bytes().to_vec(), encode_root_value(binding)?)))
+                .collect::<Result<Vec<_>, Diagnostic>>()?,
+            &mut work,
+        )
+        .map_err(map_diagnostic)?;
+        let tombstones = PersistentMap::from_sorted(
+            &mut staging,
+            graph
+                .tombstones
+                .iter()
+                .map(|tombstone| {
+                    Ok((
+                        tombstone_key(&tombstone.identity),
+                        encode_root_value(tombstone)?,
+                    ))
+                })
+                .collect::<Result<Vec<_>, Diagnostic>>()?,
+            &mut work,
+        )
+        .map_err(map_diagnostic)?;
+
+        let root = Self {
+            storage_contract_version: ROOT_STORAGE_CONTRACT_VERSION,
+            graph_contract_version: graph.graph_contract_version,
+            repository_id: graph.repository_id,
+            package_id: graph.package_id.clone(),
+            package_name: graph.package_name.clone(),
+            modules: modules.root(),
+            module_names: module_names.root(),
+            dependencies: dependencies.root(),
+            dependency_aliases: dependency_aliases.root(),
+            targets: targets.root(),
+            tombstones: tombstones.root(),
+        };
+        root.validate_shape()?;
+
+        // Path-copy construction may leave unreachable staging pages. Only the exact reachable
+        // closure is returned for publication, backup, or artifact assembly.
+        let mut pages = MemoryPageStore::default();
+        for map in [
+            modules,
+            module_names,
+            dependencies,
+            dependency_aliases,
+            targets,
+            tombstones,
+        ] {
+            map.copy_reachable(&staging, &mut pages, &mut work)
+                .map_err(map_diagnostic)?;
+        }
+        Ok(StoredGraphRootBuild { root, pages, work })
+    }
+
+    /// Applies an exact logical delta by path-copying only affected persistent-map pages. The
+    /// returned page set contains only newly reachable pages, never unchanged base pages or
+    /// intermediate mutation roots.
+    pub fn apply_delta<S: PageStore + ?Sized>(
+        &self,
+        store: &S,
+        delta: &StoredGraphRootDelta,
+    ) -> Result<StoredGraphRootUpdate, Diagnostic> {
+        self.validate_shape()?;
+        let mut overlay = OverlayPageStore::new(store);
+        let mut work = MapWork::default();
+        let mut modules = PersistentMap::from_root(self.modules);
+        let mut module_names = PersistentMap::from_root(self.module_names);
+        let mut dependencies = PersistentMap::from_root(self.dependencies);
+        let mut dependency_aliases = PersistentMap::from_root(self.dependency_aliases);
+        let mut targets = PersistentMap::from_root(self.targets);
+        let mut tombstones = PersistentMap::from_root(self.tombstones);
+
+        for reference in &delta.module_removals {
+            modules = remove_exact(
+                modules,
+                &mut overlay,
+                &reference.id.bytes(),
+                reference,
+                &mut work,
+                "graph_root_delta_module_missing",
+            )?;
+            module_names = remove_exact(
+                module_names,
+                &mut overlay,
+                reference.name.as_bytes(),
+                &reference.id,
+                &mut work,
+                "graph_root_delta_module_name_missing",
+            )?;
+        }
+        for reference in &delta.module_upserts {
+            if let Some(existing) = module_names
+                .lookup(&overlay, reference.name.as_bytes(), &mut work)
+                .map_err(map_diagnostic)?
+            {
+                let existing: ModuleId = decode_root_value(&existing)?;
+                if existing != reference.id {
+                    return Err(graph_error(
+                        DiagnosticClass::Semantic,
+                        "graph_root_delta_module_name_duplicate",
+                        "module name is already bound to a different stable identity",
+                    ));
+                }
+            }
+            modules = modules
+                .insert(
+                    &mut overlay,
+                    &reference.id.bytes(),
+                    &encode_root_value(reference)?,
+                    &mut work,
+                )
+                .map_err(map_diagnostic)?
+                .0;
+            module_names = module_names
+                .insert(
+                    &mut overlay,
+                    reference.name.as_bytes(),
+                    &encode_root_value(&reference.id)?,
+                    &mut work,
+                )
+                .map_err(map_diagnostic)?
+                .0;
+        }
+        for binding in &delta.dependency_removals {
+            dependencies = remove_exact(
+                dependencies,
+                &mut overlay,
+                &binding.package_id.bytes(),
+                binding,
+                &mut work,
+                "graph_root_delta_dependency_missing",
+            )?;
+            dependency_aliases = remove_exact(
+                dependency_aliases,
+                &mut overlay,
+                binding.alias.as_bytes(),
+                &binding.package_id,
+                &mut work,
+                "graph_root_delta_dependency_alias_missing",
+            )?;
+        }
+        for binding in &delta.dependency_upserts {
+            if let Some(existing) = dependency_aliases
+                .lookup(&overlay, binding.alias.as_bytes(), &mut work)
+                .map_err(map_diagnostic)?
+            {
+                let existing: PackageId = decode_root_value(&existing)?;
+                if existing != binding.package_id {
+                    return Err(graph_error(
+                        DiagnosticClass::Semantic,
+                        "graph_root_delta_dependency_alias_duplicate",
+                        "dependency alias is already bound to a different package identity",
+                    ));
+                }
+            }
+            dependencies = dependencies
+                .insert(
+                    &mut overlay,
+                    &binding.package_id.bytes(),
+                    &encode_root_value(binding)?,
+                    &mut work,
+                )
+                .map_err(map_diagnostic)?
+                .0;
+            dependency_aliases = dependency_aliases
+                .insert(
+                    &mut overlay,
+                    binding.alias.as_bytes(),
+                    &encode_root_value(&binding.package_id)?,
+                    &mut work,
+                )
+                .map_err(map_diagnostic)?
+                .0;
+        }
+        for binding in &delta.target_removals {
+            targets = remove_exact(
+                targets,
+                &mut overlay,
+                &binding.id.bytes(),
+                binding,
+                &mut work,
+                "graph_root_delta_target_missing",
+            )?;
+        }
+        for binding in &delta.target_upserts {
+            targets = targets
+                .insert(
+                    &mut overlay,
+                    &binding.id.bytes(),
+                    &encode_root_value(binding)?,
+                    &mut work,
+                )
+                .map_err(map_diagnostic)?
+                .0;
+        }
+        for tombstone in &delta.tombstone_removals {
+            tombstones = remove_exact(
+                tombstones,
+                &mut overlay,
+                &tombstone_key(&tombstone.identity),
+                tombstone,
+                &mut work,
+                "graph_root_delta_tombstone_missing",
+            )?;
+        }
+        for tombstone in &delta.tombstone_upserts {
+            tombstones = tombstones
+                .insert(
+                    &mut overlay,
+                    &tombstone_key(&tombstone.identity),
+                    &encode_root_value(tombstone)?,
+                    &mut work,
+                )
+                .map_err(map_diagnostic)?
+                .0;
+        }
+
+        let root = Self {
+            storage_contract_version: self.storage_contract_version,
+            graph_contract_version: self.graph_contract_version,
+            repository_id: self.repository_id,
+            package_id: self.package_id.clone(),
+            package_name: delta
+                .package_name
+                .clone()
+                .unwrap_or_else(|| self.package_name.clone()),
+            modules: modules.root(),
+            module_names: module_names.root(),
+            dependencies: dependencies.root(),
+            dependency_aliases: dependency_aliases.root(),
+            targets: targets.root(),
+            tombstones: tombstones.root(),
+        };
+        root.validate_shape()?;
+
+        let mut reachable = OverlayPageStore::new(store);
+        for map in [
+            modules,
+            module_names,
+            dependencies,
+            dependency_aliases,
+            targets,
+            tombstones,
+        ] {
+            map.copy_reachable(&overlay, &mut reachable, &mut work)
+                .map_err(map_diagnostic)?;
+        }
+        Ok(StoredGraphRootUpdate {
+            root,
+            pages: reachable.into_pages(),
+            work,
+        })
+    }
+
+    pub fn encode(&self) -> Result<Vec<u8>, Diagnostic> {
+        self.validate_shape()?;
+        packed::encode(
+            STORED_ROOT_MAGIC,
+            STORED_ROOT_DIGEST_DOMAIN,
+            self,
+            MAXIMUM_STORED_ROOT_BYTES,
+        )
+    }
+
+    pub fn decode(bytes: &[u8]) -> Result<Self, Diagnostic> {
+        let root: Self = packed::decode(
+            bytes,
+            STORED_ROOT_MAGIC,
+            STORED_ROOT_DIGEST_DOMAIN,
+            MAXIMUM_STORED_ROOT_BYTES,
+        )?;
+        root.validate_shape()?;
+        Ok(root)
+    }
+
+    pub fn digest(&self) -> Result<RootObjectDigest, Diagnostic> {
+        Ok(RootObjectDigest::of(&self.encode()?))
+    }
+
+    pub fn validate_shape(&self) -> Result<(), Diagnostic> {
+        if self.storage_contract_version != ROOT_STORAGE_CONTRACT_VERSION {
+            return Err(graph_error(
+                DiagnosticClass::Source,
+                "graph_root_storage_contract",
+                format!(
+                    "persistent root storage contract {} is not current contract {ROOT_STORAGE_CONTRACT_VERSION}",
+                    self.storage_contract_version
+                ),
+            ));
+        }
+        if self.graph_contract_version != GRAPH_CONTRACT_VERSION {
+            return Err(graph_error(
+                DiagnosticClass::Source,
+                "graph_root_contract",
+                format!(
+                    "graph root contract {} is not current contract {GRAPH_CONTRACT_VERSION}",
+                    self.graph_contract_version
+                ),
+            ));
+        }
+        validate_name(&self.package_name, "package name", true)?;
+        if self.modules.entries() == 0 || self.modules.entries() != self.module_names.entries() {
+            return Err(graph_error(
+                DiagnosticClass::Corrupt,
+                "graph_root_module_summary",
+                "persistent module and name maps must contain the same nonzero item count",
+            ));
+        }
+        if self.dependencies.entries() != self.dependency_aliases.entries() {
+            return Err(graph_error(
+                DiagnosticClass::Corrupt,
+                "graph_root_dependency_summary",
+                "persistent dependency identity and alias maps must contain the same item count",
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn reconstruct<S: PageStore + ?Sized>(
+        &self,
+        store: &S,
+        work: &mut MapWork,
+    ) -> Result<GraphRoot, Diagnostic> {
+        self.validate_shape()?;
+        let mut modules = Vec::new();
+        PersistentMap::from_root(self.modules)
+            .for_each(store, work, |key, value| {
+                let reference: ModuleObjectRef =
+                    decode_root_value(value).map_err(diagnostic_map)?;
+                if key != reference.id.bytes() {
+                    return Err(storage_map_error(
+                        "graph_root_module_key",
+                        "module map key does not match its typed stable identity",
+                    ));
+                }
+                modules.push(reference);
+                Ok(())
+            })
+            .map_err(map_diagnostic)?;
+
+        let mut names = BTreeMap::<String, ModuleId>::new();
+        PersistentMap::from_root(self.module_names)
+            .for_each(store, work, |key, value| {
+                let name = std::str::from_utf8(key).map_err(|_| {
+                    storage_map_error(
+                        "graph_root_module_name_utf8",
+                        "module name map contains non-UTF-8 key bytes",
+                    )
+                })?;
+                let id = module_id_from_bytes(value)?;
+                if names.insert(name.to_owned(), id).is_some() {
+                    return Err(storage_map_error(
+                        "graph_root_module_name_duplicate",
+                        "module name map contains a duplicate name",
+                    ));
+                }
+                Ok(())
+            })
+            .map_err(map_diagnostic)?;
+        if modules.len() != names.len()
+            || modules
+                .iter()
+                .any(|reference| names.get(&reference.name) != Some(&reference.id))
+        {
+            return Err(graph_error(
+                DiagnosticClass::Corrupt,
+                "graph_root_module_name_binding",
+                "module identity and name maps do not describe the same namespace",
+            ));
+        }
+
+        let dependencies = decode_map_values::<DependencyBinding, _>(
+            PersistentMap::from_root(self.dependencies),
+            store,
+            work,
+            |value| value.package_id.bytes().to_vec(),
+            "graph_root_dependency_key",
+        )?;
+        let mut dependency_aliases = BTreeMap::<String, PackageId>::new();
+        PersistentMap::from_root(self.dependency_aliases)
+            .for_each(store, work, |key, value| {
+                let alias = std::str::from_utf8(key).map_err(|_| {
+                    storage_map_error(
+                        "graph_root_dependency_alias_utf8",
+                        "dependency alias map contains non-UTF-8 key bytes",
+                    )
+                })?;
+                let package: PackageId = decode_root_value(value).map_err(diagnostic_map)?;
+                if dependency_aliases
+                    .insert(alias.to_owned(), package)
+                    .is_some()
+                {
+                    return Err(storage_map_error(
+                        "graph_root_dependency_alias_duplicate",
+                        "dependency alias map contains a duplicate alias",
+                    ));
+                }
+                Ok(())
+            })
+            .map_err(map_diagnostic)?;
+        if dependencies.len() != dependency_aliases.len()
+            || dependencies
+                .iter()
+                .any(|binding| dependency_aliases.get(&binding.alias) != Some(&binding.package_id))
+        {
+            return Err(graph_error(
+                DiagnosticClass::Corrupt,
+                "graph_root_dependency_alias_binding",
+                "dependency identity and alias maps do not describe the same bindings",
+            ));
+        }
+        let targets = decode_map_values::<TargetBinding, _>(
+            PersistentMap::from_root(self.targets),
+            store,
+            work,
+            |value| value.id.bytes().to_vec(),
+            "graph_root_target_key",
+        )?;
+        let tombstones = decode_map_values::<Tombstone, _>(
+            PersistentMap::from_root(self.tombstones),
+            store,
+            work,
+            |value| tombstone_key(&value.identity),
+            "graph_root_tombstone_key",
+        )?;
+        let graph = GraphRoot {
+            graph_contract_version: self.graph_contract_version,
+            repository_id: self.repository_id,
+            package_id: self.package_id.clone(),
+            package_name: self.package_name.clone(),
+            modules,
+            dependencies,
+            targets,
+            tombstones,
+        };
+        graph.validate_shape()?;
+        Ok(graph)
+    }
+
+    pub fn module_by_id<S: PageStore + ?Sized>(
+        &self,
+        store: &S,
+        id: ModuleId,
+        work: &mut MapWork,
+    ) -> Result<Option<ModuleObjectRef>, Diagnostic> {
+        PersistentMap::from_root(self.modules)
+            .lookup(store, &id.bytes(), work)
+            .map_err(map_diagnostic)?
+            .map(|bytes| decode_root_value(&bytes))
+            .transpose()
+    }
+
+    /// Visits exact module bindings without reconstructing the other logical root maps.
+    pub fn for_each_module_reference<S, F>(
+        &self,
+        store: &S,
+        work: &mut MapWork,
+        mut visitor: F,
+    ) -> Result<(), Diagnostic>
+    where
+        S: PageStore + ?Sized,
+        F: FnMut(&ModuleObjectRef) -> Result<(), Diagnostic>,
+    {
+        PersistentMap::from_root(self.modules)
+            .for_each(store, work, |key, value| {
+                let reference: ModuleObjectRef =
+                    decode_root_value(value).map_err(diagnostic_map)?;
+                if key != reference.id.bytes() {
+                    return Err(storage_map_error(
+                        "graph_root_module_key",
+                        "module map key does not match its typed stable identity",
+                    ));
+                }
+                visitor(&reference).map_err(diagnostic_map)
+            })
+            .map_err(map_diagnostic)
+    }
+
+    pub fn module_by_name<S: PageStore + ?Sized>(
+        &self,
+        store: &S,
+        name: &str,
+        work: &mut MapWork,
+    ) -> Result<Option<ModuleObjectRef>, Diagnostic> {
+        let Some(bytes) = PersistentMap::from_root(self.module_names)
+            .lookup(store, name.as_bytes(), work)
+            .map_err(map_diagnostic)?
+        else {
+            return Ok(None);
+        };
+        let id = module_id_from_bytes(&bytes).map_err(map_diagnostic)?;
+        self.module_by_id(store, id, work)
+    }
+
+    pub fn dependency_bindings<S: PageStore + ?Sized>(
+        &self,
+        store: &S,
+        work: &mut MapWork,
+    ) -> Result<Vec<DependencyBinding>, Diagnostic> {
+        decode_map_values::<DependencyBinding, _>(
+            PersistentMap::from_root(self.dependencies),
+            store,
+            work,
+            |value| value.package_id.bytes().to_vec(),
+            "graph_root_dependency_key",
+        )
+    }
+
+    /// Visits exact dependency bindings without reconstructing unrelated root maps.
+    pub fn for_each_dependency_binding<S, F>(
+        &self,
+        store: &S,
+        work: &mut MapWork,
+        mut visitor: F,
+    ) -> Result<(), Diagnostic>
+    where
+        S: PageStore + ?Sized,
+        F: FnMut(&DependencyBinding) -> Result<(), Diagnostic>,
+    {
+        PersistentMap::from_root(self.dependencies)
+            .for_each(store, work, |key, value| {
+                let binding: DependencyBinding =
+                    decode_root_value(value).map_err(diagnostic_map)?;
+                if key != binding.package_id.bytes() {
+                    return Err(storage_map_error(
+                        "graph_root_dependency_key",
+                        "dependency map key does not match its typed package identity",
+                    ));
+                }
+                visitor(&binding).map_err(diagnostic_map)
+            })
+            .map_err(map_diagnostic)
+    }
+
+    pub fn dependency_by_alias<S: PageStore + ?Sized>(
+        &self,
+        store: &S,
+        alias: &str,
+        work: &mut MapWork,
+    ) -> Result<Option<DependencyBinding>, Diagnostic> {
+        let Some(bytes) = PersistentMap::from_root(self.dependency_aliases)
+            .lookup(store, alias.as_bytes(), work)
+            .map_err(map_diagnostic)?
+        else {
+            return Ok(None);
+        };
+        let package: PackageId = decode_root_value(&bytes)?;
+        self.dependency_by_package(store, &package, work)
+    }
+
+    pub fn dependency_by_package<S: PageStore + ?Sized>(
+        &self,
+        store: &S,
+        package: &PackageId,
+        work: &mut MapWork,
+    ) -> Result<Option<DependencyBinding>, Diagnostic> {
+        PersistentMap::from_root(self.dependencies)
+            .lookup(store, &package.bytes(), work)
+            .map_err(map_diagnostic)?
+            .map(|bytes| decode_root_value(&bytes))
+            .transpose()
+    }
+
+    pub fn tombstone_by_identity<S: PageStore + ?Sized>(
+        &self,
+        store: &S,
+        identity: &TombstoneIdentity,
+        work: &mut MapWork,
+    ) -> Result<Option<Tombstone>, Diagnostic> {
+        PersistentMap::from_root(self.tombstones)
+            .lookup(store, &tombstone_key(identity), work)
+            .map_err(map_diagnostic)?
+            .map(|bytes| decode_root_value(&bytes))
+            .transpose()
+    }
+}
+
+fn collection_delta<T, K>(before: &[T], after: &[T], key: impl Fn(&T) -> K) -> (Vec<T>, Vec<T>)
+where
+    T: Clone + Eq,
+    K: Clone + Ord,
+{
+    let before = before
+        .iter()
+        .map(|value| (key(value), value.clone()))
+        .collect::<BTreeMap<_, _>>();
+    let after = after
+        .iter()
+        .map(|value| (key(value), value.clone()))
+        .collect::<BTreeMap<_, _>>();
+    let mut removals = Vec::new();
+    for (identity, value) in &before {
+        if after.get(identity) != Some(value) {
+            removals.push(value.clone());
+        }
+    }
+    let mut upserts = Vec::new();
+    for (identity, value) in &after {
+        if before.get(identity) != Some(value) {
+            upserts.push(value.clone());
+        }
+    }
+    (removals, upserts)
+}
+
+fn remove_exact<T, S>(
+    map: PersistentMap,
+    store: &mut S,
+    key: &[u8],
+    expected: &T,
+    work: &mut MapWork,
+    code: &'static str,
+) -> Result<PersistentMap, Diagnostic>
+where
+    T: Decode<()> + Eq,
+    S: PageStore + ?Sized,
+{
+    let (next, outcome) = map.remove(store, key, work).map_err(map_diagnostic)?;
+    let RemoveOutcome::Removed { previous } = outcome else {
+        return Err(graph_error(
+            DiagnosticClass::Corrupt,
+            code,
+            "persistent-root delta expected an exact base entry that is absent",
+        ));
+    };
+    let previous: T = decode_root_value(&previous)?;
+    if &previous != expected {
+        return Err(graph_error(
+            DiagnosticClass::Corrupt,
+            code,
+            "persistent-root delta base entry differs from its exact expected value",
+        ));
+    }
+    Ok(next)
+}
+
+fn decode_map_values<T, S>(
+    map: PersistentMap,
+    store: &S,
+    work: &mut MapWork,
+    key: impl Fn(&T) -> Vec<u8>,
+    code: &'static str,
+) -> Result<Vec<T>, Diagnostic>
+where
+    T: Decode<()> + Ord,
+    S: PageStore + ?Sized,
+{
+    let mut values = Vec::new();
+    map.for_each(store, work, |encoded_key, encoded_value| {
+        let value: T = decode_root_value(encoded_value).map_err(diagnostic_map)?;
+        if encoded_key != key(&value) {
+            return Err(storage_map_error(
+                code,
+                "persistent root key disagrees with its typed value",
+            ));
+        }
+        values.push(value);
+        Ok(())
+    })
+    .map_err(map_diagnostic)?;
+    values.sort();
+    Ok(values)
+}
+
+fn encode_root_value<T: Encode>(value: &T) -> Result<Vec<u8>, Diagnostic> {
+    let configuration = bincode::config::standard()
+        .with_little_endian()
+        .with_variable_int_encoding()
+        .with_limit::<ROOT_VALUE_LIMIT>();
+    bincode::encode_to_vec(value, configuration).map_err(|error| {
+        graph_error(
+            DiagnosticClass::Infrastructure,
+            "graph_root_value_encode",
+            format!("persistent root value could not be encoded: {error}"),
+        )
+    })
+}
+
+fn decode_root_value<T: Decode<()>>(bytes: &[u8]) -> Result<T, Diagnostic> {
+    let configuration = bincode::config::standard()
+        .with_little_endian()
+        .with_variable_int_encoding()
+        .with_limit::<ROOT_VALUE_LIMIT>();
+    let (value, consumed): (T, usize) =
+        bincode::decode_from_slice(bytes, configuration).map_err(|error| {
+            graph_error(
+                DiagnosticClass::Corrupt,
+                "graph_root_value_decode",
+                format!("persistent root value is malformed: {error}"),
+            )
+        })?;
+    if consumed != bytes.len() {
+        return Err(graph_error(
+            DiagnosticClass::Corrupt,
+            "graph_root_value_trailing",
+            "persistent root value has trailing bytes",
+        ));
+    }
+    Ok(value)
+}
+
+fn tombstone_key(identity: &TombstoneIdentity) -> Vec<u8> {
+    let (tag, bytes) = match identity {
+        TombstoneIdentity::Module(id) => (1, id.bytes()),
+        TombstoneIdentity::Declaration(id) => (2, id.bytes()),
+        TombstoneIdentity::Field(id) => (3, id.bytes()),
+        TombstoneIdentity::Case(id) => (4, id.bytes()),
+        TombstoneIdentity::Operation(id) => (5, id.bytes()),
+        TombstoneIdentity::Parameter(id) => (6, id.bytes()),
+        TombstoneIdentity::Binding(id) => (7, id.bytes()),
+        TombstoneIdentity::Expression(id) => (8, id.bytes()),
+        TombstoneIdentity::Requirement(id) => (9, id.bytes()),
+        TombstoneIdentity::Port(id) => (10, id.bytes()),
+        TombstoneIdentity::Target(id) => (11, id.bytes()),
+        TombstoneIdentity::Documentation(id) => (12, id.bytes()),
+        TombstoneIdentity::Annotation(id) => (13, id.bytes()),
+        TombstoneIdentity::TypeParameter(id) => (14, id.bytes()),
+    };
+    let mut key = Vec::with_capacity(17);
+    key.push(tag);
+    key.extend_from_slice(&bytes);
+    key
+}
+
+fn module_id_from_bytes(bytes: &[u8]) -> Result<ModuleId, MapError> {
+    decode_root_value(bytes).map_err(diagnostic_map)
+}
+
+fn storage_map_error(code: &'static str, message: impl Into<String>) -> MapError {
+    MapError {
+        class: MapErrorClass::Corrupt,
+        code,
+        message: message.into(),
+    }
+}
+
+fn diagnostic_map(error: Diagnostic) -> MapError {
+    MapError {
+        class: match error.class {
+            DiagnosticClass::Source | DiagnosticClass::Semantic => MapErrorClass::Input,
+            DiagnosticClass::Resource => MapErrorClass::Resource,
+            DiagnosticClass::Corrupt => MapErrorClass::Corrupt,
+            DiagnosticClass::Capability
+            | DiagnosticClass::Cancelled
+            | DiagnosticClass::Infrastructure => MapErrorClass::Store,
+        },
+        code: "graph_root_value",
+        message: error.message,
+    }
+}
+
+fn map_diagnostic(error: MapError) -> Diagnostic {
+    graph_error(
+        match error.class {
+            MapErrorClass::Input => DiagnosticClass::Source,
+            MapErrorClass::Resource => DiagnosticClass::Resource,
+            MapErrorClass::Corrupt => DiagnosticClass::Corrupt,
+            MapErrorClass::Store => DiagnosticClass::Infrastructure,
+        },
+        error.code,
+        error.message,
+    )
+}
+
 fn live_module_identity_domains(
     root: &GraphRoot,
     modules: &[MeaningModule],
@@ -403,6 +1299,9 @@ fn live_module_identity_domains(
                     }
                     super::meaning::MemberIdentity::Operation { id, .. } => {
                         live.insert(("operation", id.bytes()));
+                    }
+                    super::meaning::MemberIdentity::TypeParameter { id, .. } => {
+                        live.insert(("type_parameter", id.bytes()));
                     }
                     super::meaning::MemberIdentity::Parameter { id, .. } => {
                         live.insert(("parameter", id.bytes()));
@@ -462,6 +1361,7 @@ fn tombstone_domain_bytes(identity: &TombstoneIdentity) -> (&'static str, [u8; 1
         TombstoneIdentity::Field(id) => ("field", id.bytes()),
         TombstoneIdentity::Case(id) => ("case", id.bytes()),
         TombstoneIdentity::Operation(id) => ("operation", id.bytes()),
+        TombstoneIdentity::TypeParameter(id) => ("type_parameter", id.bytes()),
         TombstoneIdentity::Parameter(id) => ("parameter", id.bytes()),
         TombstoneIdentity::Binding(id) => ("binding", id.bytes()),
         TombstoneIdentity::Expression(id) => ("expression", id.bytes()),
@@ -504,26 +1404,6 @@ fn validate_name(value: &str, label: &str, qualified: bool) -> Result<(), Diagno
     Ok(())
 }
 
-fn validate_declaration_name(value: &str, label: &str) -> Result<(), Diagnostic> {
-    if value.is_empty()
-        || value.len() > 128
-        || value
-            .bytes()
-            .next()
-            .is_none_or(|byte| !byte.is_ascii_uppercase())
-        || !value
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
-    {
-        return Err(graph_error(
-            DiagnosticClass::Semantic,
-            "graph_declaration_name",
-            format!("{label} is not a canonical declaration name"),
-        ));
-    }
-    Ok(())
-}
-
 fn graph_error(class: DiagnosticClass, code: &str, message: impl Into<String>) -> Diagnostic {
     Diagnostic::new(class, code, message)
 }
@@ -561,5 +1441,46 @@ mod tests {
         let bytes = root.encode().expect("encode");
         assert_eq!(GraphRoot::decode(&bytes).expect("decode"), root);
         root.validate_modules(&[meaning]).expect("modules");
+
+        let stored = StoredGraphRoot::build(&root).expect("persistent root");
+        let reconstructed = stored
+            .root
+            .reconstruct(&stored.pages, &mut MapWork::default())
+            .expect("persistent root reconstruction");
+        assert_eq!(reconstructed, root);
+        assert_eq!(
+            stored.root.digest().expect("stored digest"),
+            root.digest().expect("root digest")
+        );
+
+        let mut changed = root.clone();
+        changed.modules[0].object = ModuleObjectDigest::of(b"changed module object");
+        let delta = StoredGraphRootDelta::between(&root, &changed).expect("root delta");
+        let update = stored
+            .root
+            .apply_delta(&stored.pages, &delta)
+            .expect("local persistent-root update");
+        let rebuilt = StoredGraphRoot::build(&changed).expect("full root oracle");
+        assert_eq!(update.root, rebuilt.root);
+        assert_eq!(update.pages.object_count(), 1);
+
+        let mut combined = stored.pages.clone();
+        let new_pages = update
+            .pages
+            .objects()
+            .map(|(digest, bytes)| (digest, bytes.to_vec()))
+            .collect::<Vec<_>>();
+        for (digest, bytes) in new_pages {
+            combined
+                .write_page(digest, &bytes)
+                .expect("new root page must publish");
+        }
+        assert_eq!(
+            update
+                .root
+                .reconstruct(&combined, &mut MapWork::default())
+                .expect("updated root reconstruction"),
+            changed
+        );
     }
 }

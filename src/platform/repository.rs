@@ -5,9 +5,13 @@ use super::artifact::{
     encode_package_object, load_artifact, load_package_object_closure,
 };
 use super::diagnostic::{Diagnostic, DiagnosticClass};
-use super::graph::GraphRoot;
+use super::graph::{GraphRoot, StoredGraphRoot, StoredGraphRootDelta};
 use super::meaning::{GRAPH_CONTRACT_VERSION, MeaningModule};
 use super::packed;
+use super::persistent_map::{
+    MapError, MapErrorClass, MapWork, MemoryPageStore, PageDigest, PageStore, PageWrite,
+    PersistentMap,
+};
 use super::revision::{
     AffectedOwner, ParentRevision, RECEIPT_CONTRACT_VERSION, REVISION_CONTRACT_VERSION,
     ReceiptStatus, RevisionCore, RevisionRecord, SemanticHead, TransactionReceipt, ValidationFacts,
@@ -15,17 +19,24 @@ use super::revision::{
 use super::semantic::{
     ExactGraphDependency, ValidatedPackage, canonicalize_graph_package, validate_graph_package,
 };
+use super::semantic_diff::semantic_diff_digest;
 use super::semantic_digest::{
-    ArtifactDigest, BackupDigest, ModuleObjectDigest, ReceiptDigest, RevisionRecordDigest,
-    RootObjectDigest, SemanticDiffDigest, TransactionDigest,
+    ArtifactDigest, BackupDigest, CleanupDigest, ModuleObjectDigest, ReceiptDigest,
+    RevisionRecordDigest, RootObjectDigest, SemanticDiffDigest, TransactionDigest,
 };
 use super::semantic_draft::{DraftRecord, MAXIMUM_DRAFT_BYTES, SemanticDraftStore};
 use super::semantic_id::{DraftId, ModuleId, RepositoryId, RevisionId};
 use super::semantic_query::SemanticQueryIndex;
+use super::semantic_summary::{
+    MAXIMUM_MODULE_SUMMARY_ENCODED_BYTES, MAXIMUM_REVERSE_INDEX_ENCODED_BYTES,
+    ModuleSemanticSummary, ReverseDependencyIndex, SemanticSummaryDigest, build_module_summary,
+    build_reverse_dependency_index, rebind_reverse_dependency_index,
+    update_reverse_dependency_index,
+};
 use bincode::{Decode, Encode};
 use fs2::FileExt;
 use serde::Serialize;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -34,28 +45,40 @@ pub const SEMANTIC_STORE_RELATIVE: &str = ".lkjscript/meaning";
 pub const MAXIMUM_HEAD_BYTES: usize = 4_096;
 pub const MAXIMUM_HISTORY_ITEMS: usize = 10_000;
 pub const MAXIMUM_ARTIFACT_OBJECT_BYTES: usize = 256 * 1_048_576;
-pub const BACKUP_CONTRACT_VERSION: u16 = 1;
-pub const MAXIMUM_BACKUP_BYTES: usize = 128 * 1_048_576;
-pub const MAXIMUM_BACKUP_ENTRIES: usize = 2_000_000;
+pub const BACKUP_CONTRACT_VERSION: u16 = 4;
+pub const MAXIMUM_BACKUP_MANIFEST_BYTES: usize = 32 * 1_048_576;
+pub const MAXIMUM_BACKUP_SEGMENT_BYTES: usize = 4 * 1_048_576;
+pub const BACKUP_SEGMENT_ENTRY_LIMIT: usize = 4_096;
+pub const RETENTION_CONTRACT_VERSION: u16 = 1;
 
-const BACKUP_MAGIC: [u8; 8] = *b"LKJBKP01";
-const BACKUP_DIGEST_DOMAIN: &str = "lkjscript.semantic-backup.v1";
+const BACKUP_MAGIC: [u8; 8] = *b"LKJBKP04";
+const BACKUP_DIGEST_DOMAIN: &str = "lkjscript.semantic-backup.v4";
+const BACKUP_SEGMENT_MAGIC: [u8; 8] = *b"LKJBKS04";
+const BACKUP_SEGMENT_DIGEST_DOMAIN: &str = "lkjscript.semantic-backup-segment.v4";
+const BACKUP_SEGMENT_REFERENCE_DIGEST_DOMAIN: &str =
+    "lkjscript.semantic-backup-segment-reference.v4";
+const BACKUP_ENTRY_DIGEST_DOMAIN: &str = "lkjscript.semantic-backup-entry.v4";
+const BACKUP_MANIFEST_FILE: &str = "MANIFEST.lkjb";
+const BACKUP_SEGMENTS: &str = "segments";
 
 const HEAD_FILE: &str = "HEAD";
 const LOCK_FILE: &str = "LOCK";
 const MODULE_OBJECTS: &str = "objects/modules";
 const ROOT_OBJECTS: &str = "objects/roots";
+const MAP_PAGE_OBJECTS: &str = "objects/map-pages";
 const REVISION_OBJECTS: &str = "revisions";
 const RECEIPT_OBJECTS: &str = "receipts";
 const ARTIFACT_OBJECTS: &str = "artifacts";
 const DRAFT_OBJECTS: &str = "drafts";
 const INDEX_OBJECTS: &str = "indexes";
+const SUMMARY_INDEX_OBJECTS: &str = "indexes/summary-objects";
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum DisposableIndexPart {
     Manifest,
     Owners(u8),
     Names(u8),
+    SemanticDependencies,
 }
 
 #[derive(Clone, Debug)]
@@ -64,11 +87,127 @@ pub struct SemanticRepository {
     store: PathBuf,
 }
 
+struct RepositoryPageStore<'a> {
+    store: &'a Path,
+    publication_writes: bool,
+}
+
+impl<'a> RepositoryPageStore<'a> {
+    const fn read_only(store: &'a Path) -> Self {
+        Self {
+            store,
+            publication_writes: false,
+        }
+    }
+
+    const fn writer(store: &'a Path, publication_writes: bool) -> Self {
+        Self {
+            store,
+            publication_writes,
+        }
+    }
+}
+
+impl PageStore for RepositoryPageStore<'_> {
+    fn read_page(&self, digest: PageDigest) -> Result<Option<Vec<u8>>, MapError> {
+        let path = map_page_path(self.store, digest);
+        match fs::symlink_metadata(&path) {
+            Ok(metadata) => {
+                if metadata.file_type().is_symlink() || !metadata.is_file() {
+                    return Err(repository_map_error(repository_error(
+                        DiagnosticClass::Corrupt,
+                        "repository_map_page_type",
+                        format!(
+                            "persistent root page '{}' is not a regular non-symlink file",
+                            path.display()
+                        ),
+                    )));
+                }
+                read_bounded(
+                    &path,
+                    super::persistent_map::MAXIMUM_PAGE_BYTES,
+                    "persistent root page",
+                )
+                .map(Some)
+                .map_err(repository_map_error)
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(repository_map_error(io_error(
+                "repository_map_page_metadata",
+                &path,
+                error,
+            ))),
+        }
+    }
+
+    fn write_page(&mut self, digest: PageDigest, bytes: &[u8]) -> Result<PageWrite, MapError> {
+        if bytes.len() > super::persistent_map::MAXIMUM_PAGE_BYTES
+            || PageDigest::of(bytes) != digest
+        {
+            return Err(MapError {
+                class: MapErrorClass::Corrupt,
+                code: "repository_map_page_digest",
+                message: "persistent root page bytes do not match their exact key".to_owned(),
+            });
+        }
+        let path = map_page_path(self.store, digest);
+        let existed = fs::symlink_metadata(&path).is_ok();
+        let result = if self.publication_writes {
+            write_publication_immutable(&path, bytes, "persistent root page")
+        } else {
+            write_immutable(&path, bytes, "persistent root page")
+        };
+        result.map_err(repository_map_error)?;
+        Ok(if existed {
+            PageWrite::Reused
+        } else {
+            PageWrite::Inserted
+        })
+    }
+}
+
+#[derive(Default)]
+struct BackupPageCollector {
+    pages: BTreeSet<PageDigest>,
+}
+
+impl PageStore for BackupPageCollector {
+    fn read_page(&self, _digest: PageDigest) -> Result<Option<Vec<u8>>, MapError> {
+        Ok(None)
+    }
+
+    fn write_page(&mut self, digest: PageDigest, bytes: &[u8]) -> Result<PageWrite, MapError> {
+        if bytes.len() > super::persistent_map::MAXIMUM_PAGE_BYTES
+            || PageDigest::of(bytes) != digest
+        {
+            return Err(MapError {
+                class: MapErrorClass::Corrupt,
+                code: "semantic_backup_map_page_digest",
+                message: "reachable map page bytes do not match their exact key".to_owned(),
+            });
+        }
+        Ok(if self.pages.insert(digest) {
+            PageWrite::Inserted
+        } else {
+            PageWrite::Reused
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct CurrentBinding {
+    pub head: SemanticHead,
+    pub record: RevisionRecord,
+    pub receipt: TransactionReceipt,
+    pub stored_root: StoredGraphRoot,
+}
+
 #[derive(Clone, Debug)]
 pub struct CurrentRevision {
     pub head: SemanticHead,
     pub record: RevisionRecord,
     pub receipt: TransactionReceipt,
+    pub stored_root: StoredGraphRoot,
     pub root: GraphRoot,
 }
 
@@ -95,12 +234,36 @@ pub struct InitialPublication {
     pub intent: Option<String>,
     pub validation_profile: Option<String>,
     pub dependency_artifacts: Vec<DependencyArtifactObject>,
+    pub status: ReceiptStatus,
 }
 
 #[derive(Clone, Debug)]
-pub struct PublicationProposal {
+pub(crate) struct PreparedValidation {
+    expected_base: RevisionId,
+    base_root: RootObjectDigest,
+    result_root: RootObjectDigest,
+    delta: StoredGraphRootDelta,
+    changed_modules: Vec<MeaningModule>,
+    semantic_index: ReverseDependencyIndex,
+    semantic_summaries: Vec<ModuleSemanticSummary>,
+    facts: ValidationFacts,
+}
+
+impl PreparedValidation {
+    pub(crate) fn result_root(&self) -> RootObjectDigest {
+        self.result_root
+    }
+
+    pub(crate) fn semantic_certificate(&self) -> SemanticSummaryDigest {
+        self.semantic_index.certificate
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct PublicationProposal {
     pub expected_base: RevisionId,
-    pub root: GraphRoot,
+    pub repository_id: RepositoryId,
+    pub root: Option<GraphRoot>,
     pub modules: Vec<MeaningModule>,
     pub transaction: TransactionDigest,
     pub idempotency_key: Option<String>,
@@ -109,6 +272,7 @@ pub struct PublicationProposal {
     pub affected_owners: Vec<AffectedOwner>,
     pub intent: Option<String>,
     pub dependency_artifacts: Vec<DependencyArtifactObject>,
+    pub(crate) prepared_validation: Option<PreparedValidation>,
 }
 
 #[derive(Clone, Debug)]
@@ -155,9 +319,10 @@ pub struct BackupReceipt {
     pub repository_id: RepositoryId,
     pub revision: RevisionId,
     pub digest: BackupDigest,
-    pub entries: usize,
-    pub drafts: usize,
-    pub bytes: usize,
+    pub segments: usize,
+    pub entries: u64,
+    pub drafts: u64,
+    pub bytes: u64,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -167,14 +332,36 @@ pub struct RestoreReceipt {
     pub repository_id: RepositoryId,
     pub revision: RevisionId,
     pub digest: BackupDigest,
-    pub entries: usize,
-    pub drafts: usize,
+    pub segments: usize,
+    pub entries: u64,
+    pub drafts: u64,
     pub deep_valid: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RetentionReport {
+    pub contract_version: u16,
+    pub repository_id: RepositoryId,
+    pub revision: RevisionId,
+    pub policy: &'static str,
+    pub retained_revisions: u64,
+    pub retained_drafts: u64,
+    pub retained_objects: u64,
+    pub reclaimable_objects: u64,
+    pub reclaimable_bytes: u64,
+    pub unknown_entries: u64,
+    pub derived_objects: u64,
+    pub derived_bytes: u64,
+    pub plan: CleanupDigest,
+    pub destructive_ready: bool,
+    pub missing_authority: Vec<&'static str>,
 }
 
 #[derive(Decode, Encode, Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 enum BackupEntryKey {
     Module(ModuleObjectDigest),
+    MapPage(PageDigest),
     Root(RootObjectDigest),
     Revision(RevisionId),
     Receipt(ReceiptDigest),
@@ -185,54 +372,54 @@ enum BackupEntryKey {
 #[derive(Decode, Encode, Clone, Debug, Eq, PartialEq)]
 struct BackupEntry {
     key: BackupEntryKey,
-    bytes: Vec<u8>,
+    bytes: u64,
+    digest: [u8; 32],
 }
 
 #[derive(Decode, Encode, Clone, Debug, Eq, PartialEq)]
-struct BackupBundle {
+struct BackupSegment {
     contract_version: u16,
-    repository_id: RepositoryId,
-    head: SemanticHead,
+    ordinal: u64,
     entries: Vec<BackupEntry>,
 }
 
-impl BackupBundle {
+impl BackupSegment {
     fn encode(&self) -> Result<Vec<u8>, Diagnostic> {
         self.validate_entries()?;
         packed::encode(
-            BACKUP_MAGIC,
-            BACKUP_DIGEST_DOMAIN,
+            BACKUP_SEGMENT_MAGIC,
+            BACKUP_SEGMENT_DIGEST_DOMAIN,
             self,
-            MAXIMUM_BACKUP_BYTES,
+            MAXIMUM_BACKUP_SEGMENT_BYTES,
         )
     }
 
     fn decode(bytes: &[u8]) -> Result<Self, Diagnostic> {
         let value: Self = packed::decode(
             bytes,
-            BACKUP_MAGIC,
-            BACKUP_DIGEST_DOMAIN,
-            MAXIMUM_BACKUP_BYTES,
+            BACKUP_SEGMENT_MAGIC,
+            BACKUP_SEGMENT_DIGEST_DOMAIN,
+            MAXIMUM_BACKUP_SEGMENT_BYTES,
         )?;
         value.validate_entries()?;
         Ok(value)
     }
 
     fn validate_entries(&self) -> Result<(), Diagnostic> {
-        if self.contract_version != BACKUP_CONTRACT_VERSION
-            || self.head.repository_id != self.repository_id
-        {
+        if self.contract_version != BACKUP_CONTRACT_VERSION {
             return Err(repository_error(
                 DiagnosticClass::Source,
                 "semantic_backup_contract",
-                "backup uses an unknown contract or inconsistent repository identity",
+                "backup segment uses an unknown contract",
             ));
         }
-        if self.entries.is_empty() || self.entries.len() > MAXIMUM_BACKUP_ENTRIES {
+        if self.entries.is_empty() || self.entries.len() > BACKUP_SEGMENT_ENTRY_LIMIT {
             return Err(repository_error(
                 DiagnosticClass::Resource,
                 "semantic_backup_entry_limit",
-                format!("backup must contain 1 through {MAXIMUM_BACKUP_ENTRIES} entries"),
+                format!(
+                    "backup segment must contain 1 through {BACKUP_SEGMENT_ENTRY_LIMIT} entries"
+                ),
             ));
         }
         if self
@@ -246,8 +433,104 @@ impl BackupBundle {
                 "backup entries are not uniquely and canonically ordered",
             ));
         }
-        for entry in &self.entries {
-            validate_backup_entry(entry)?;
+        if self.entries.iter().any(|entry| entry.bytes == 0) {
+            return Err(repository_error(
+                DiagnosticClass::Corrupt,
+                "semantic_backup_entry_length",
+                "backup entries must bind a nonempty canonical object",
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Decode, Encode, Clone, Debug, Eq, PartialEq)]
+struct BackupSegmentReference {
+    ordinal: u64,
+    digest: [u8; 32],
+    entries: u32,
+    encoded_bytes: u64,
+}
+
+#[derive(Decode, Encode, Clone, Debug, Eq, PartialEq)]
+struct BackupManifest {
+    contract_version: u16,
+    repository_id: RepositoryId,
+    head: SemanticHead,
+    segments: Vec<BackupSegmentReference>,
+    entries: u64,
+    drafts: u64,
+    payload_bytes: u64,
+}
+
+impl BackupManifest {
+    fn encode(&self) -> Result<Vec<u8>, Diagnostic> {
+        self.validate()?;
+        packed::encode(
+            BACKUP_MAGIC,
+            BACKUP_DIGEST_DOMAIN,
+            self,
+            MAXIMUM_BACKUP_MANIFEST_BYTES,
+        )
+    }
+
+    fn decode(bytes: &[u8]) -> Result<Self, Diagnostic> {
+        let value: Self = packed::decode(
+            bytes,
+            BACKUP_MAGIC,
+            BACKUP_DIGEST_DOMAIN,
+            MAXIMUM_BACKUP_MANIFEST_BYTES,
+        )?;
+        value.validate()?;
+        Ok(value)
+    }
+
+    fn validate(&self) -> Result<(), Diagnostic> {
+        if self.contract_version != BACKUP_CONTRACT_VERSION
+            || self.head.repository_id != self.repository_id
+        {
+            return Err(repository_error(
+                DiagnosticClass::Source,
+                "semantic_backup_contract",
+                "backup uses an unknown contract or inconsistent repository identity",
+            ));
+        }
+        if self.segments.is_empty() || self.entries == 0 || self.payload_bytes == 0 {
+            return Err(repository_error(
+                DiagnosticClass::Corrupt,
+                "semantic_backup_manifest_empty",
+                "backup manifest must describe at least one segment and canonical object",
+            ));
+        }
+        let mut entries = 0_u64;
+        for (index, segment) in self.segments.iter().enumerate() {
+            let ordinal = u64::try_from(index).map_err(|_| count_overflow("backup segment"))?;
+            if segment.ordinal != ordinal
+                || segment.entries == 0
+                || usize::try_from(segment.entries)
+                    .ok()
+                    .is_none_or(|count| count > BACKUP_SEGMENT_ENTRY_LIMIT)
+                || segment.encoded_bytes == 0
+                || segment.encoded_bytes
+                    > u64::try_from(MAXIMUM_BACKUP_SEGMENT_BYTES)
+                        .map_err(|_| count_overflow("backup segment bytes"))?
+            {
+                return Err(repository_error(
+                    DiagnosticClass::Corrupt,
+                    "semantic_backup_segment_reference",
+                    "backup segment references are not canonical and consecutively ordered",
+                ));
+            }
+            entries = entries
+                .checked_add(u64::from(segment.entries))
+                .ok_or_else(|| count_overflow("backup entry"))?;
+        }
+        if entries != self.entries || self.drafts > self.entries {
+            return Err(repository_error(
+                DiagnosticClass::Corrupt,
+                "semantic_backup_manifest_count",
+                "backup manifest aggregate counts disagree with its segment references",
+            ));
         }
         Ok(())
     }
@@ -297,7 +580,7 @@ impl SemanticRepository {
             project_root,
             store,
         };
-        repository.current()?;
+        repository.current_binding()?;
         repository.ensure_operational_layout()?;
         Ok(repository)
     }
@@ -374,7 +657,7 @@ impl SemanticRepository {
             project_root,
             store,
         };
-        let observed = repository.current()?;
+        let observed = repository.current_binding()?;
         if observed.head != head {
             return Err(repository_error(
                 DiagnosticClass::Infrastructure,
@@ -394,6 +677,24 @@ impl SemanticRepository {
     }
 
     pub fn current(&self) -> Result<CurrentRevision, Diagnostic> {
+        let binding = self.current_binding()?;
+        let root = binding.stored_root.reconstruct(
+            &RepositoryPageStore::read_only(&self.store),
+            &mut MapWork::default(),
+        )?;
+        Ok(CurrentRevision {
+            head: binding.head,
+            record: binding.record,
+            receipt: binding.receipt,
+            stored_root: binding.stored_root,
+            root,
+        })
+    }
+
+    /// Verifies the visible authority chain without traversing any persistent collection page.
+    /// Exact lookups and revision-pinned operations use this path so repository size does not
+    /// become an implicit cost of opening a project.
+    pub fn current_binding(&self) -> Result<CurrentBinding, Diagnostic> {
         let head = self.read_head()?;
         let record = self.read_revision(head.revision)?;
         if record.digest()? != head.record
@@ -418,19 +719,19 @@ impl SemanticRepository {
                 "revision record and transaction receipt disagree",
             ));
         }
-        let root = self.read_root(record.core.root)?;
-        if root.repository_id != head.repository_id {
+        let stored_root = self.read_stored_root(record.core.root)?;
+        if stored_root.repository_id != head.repository_id {
             return Err(repository_error(
                 DiagnosticClass::Corrupt,
                 "repository_root_identity",
                 "graph root belongs to a foreign repository identity",
             ));
         }
-        Ok(CurrentRevision {
+        Ok(CurrentBinding {
             head,
             record,
             receipt,
-            root,
+            stored_root,
         })
     }
 
@@ -507,6 +808,7 @@ impl SemanticRepository {
                 intent: root_object.receipt.intent,
                 validation_profile: Some(root_object.receipt.validation.profile),
                 dependency_artifacts,
+                status: ReceiptStatus::ImportAccepted,
             },
         )
     }
@@ -544,7 +846,86 @@ impl SemanticRepository {
         build_artifact_from_objects(root_digest, objects)
     }
 
-    pub fn canonicalize_proposal(
+    pub(crate) fn canonicalize_proposal(
+        &self,
+        expected_base: RevisionId,
+        base: &GraphRoot,
+        root: &mut GraphRoot,
+        modules: &mut [MeaningModule],
+    ) -> Result<PreparedValidation, Diagnostic> {
+        let dependencies = root.dependencies.clone();
+        let loaded = dependencies
+            .iter()
+            .map(|binding| load_stored_artifact_closure(&self.store, binding.artifact))
+            .collect::<Result<Vec<_>, Diagnostic>>()?;
+        let exact = dependencies
+            .iter()
+            .zip(&loaded)
+            .map(|(binding, artifact)| {
+                let package = artifact.packages.get(&binding.package_id).ok_or_else(|| {
+                    repository_error(
+                        DiagnosticClass::Semantic,
+                        "repository_dependency_package_missing",
+                        format!(
+                            "dependency artifact '{}' does not contain package '{}'",
+                            binding.alias,
+                            binding.package_id.as_str()
+                        ),
+                    )
+                })?;
+                Ok(ExactGraphDependency {
+                    alias: &binding.alias,
+                    package,
+                    artifact: binding.artifact,
+                })
+            })
+            .collect::<Result<Vec<_>, Diagnostic>>()?;
+        let validated = canonicalize_graph_package(root, modules, &exact)?;
+        let result_root = root.digest()?;
+        let base_root = base.digest()?;
+        let delta = StoredGraphRootDelta::between(base, root)?;
+        let changed_modules = delta
+            .module_upserts
+            .iter()
+            .map(|reference| {
+                let module = modules
+                    .iter()
+                    .find(|module| module.module_id == reference.id)
+                    .ok_or_else(|| {
+                        repository_error(
+                            DiagnosticClass::Infrastructure,
+                            "repository_prepared_module_missing",
+                            "prepared root delta lost one changed semantic module",
+                        )
+                    })?;
+                if module.digest()? != reference.object {
+                    return Err(repository_error(
+                        DiagnosticClass::Infrastructure,
+                        "repository_prepared_module_digest",
+                        "prepared changed module does not bind its root object digest",
+                    ));
+                }
+                Ok(module.clone())
+            })
+            .collect::<Result<Vec<_>, Diagnostic>>()?;
+        let semantic_summaries = build_semantic_summaries(&root.package_id, modules)?;
+        let semantic_index =
+            build_reverse_dependency_index(RevisionId::from_digest([0; 32]), &semantic_summaries)?;
+        let mut facts = validation_facts(&validated)?;
+        facts.profile = "prepared_once_full_oracle".to_owned();
+        Ok(PreparedValidation {
+            expected_base,
+            base_root,
+            result_root,
+            delta,
+            changed_modules,
+            semantic_index,
+            semantic_summaries,
+            facts,
+        })
+    }
+
+    pub(crate) fn canonicalize_slice(
         &self,
         root: &mut GraphRoot,
         modules: &mut [MeaningModule],
@@ -579,17 +960,140 @@ impl SemanticRepository {
         canonicalize_graph_package(root, modules, &exact)
     }
 
+    pub(crate) fn prepare_local_validation(
+        &self,
+        current: &CurrentBinding,
+        delta: StoredGraphRootDelta,
+        changed_modules: Vec<MeaningModule>,
+        validated: &ValidatedPackage,
+        profile: &str,
+    ) -> Result<PreparedValidation, Diagnostic> {
+        let update = current
+            .stored_root
+            .apply_delta(&RepositoryPageStore::read_only(&self.store), &delta)?;
+        let result_root = update.root.digest()?;
+        let expected = delta
+            .module_upserts
+            .iter()
+            .map(|reference| (reference.id, reference.object))
+            .collect::<BTreeMap<_, _>>();
+        let observed = changed_modules
+            .iter()
+            .map(|module| Ok((module.module_id, module.digest()?)))
+            .collect::<Result<BTreeMap<_, _>, Diagnostic>>()?;
+        if expected != observed {
+            return Err(repository_error(
+                DiagnosticClass::Infrastructure,
+                "repository_local_preparation_modules",
+                "local preparation modules do not equal the persistent-root delta",
+            ));
+        }
+        let semantic_summaries =
+            build_semantic_summaries(&current.stored_root.package_id, &changed_modules)?;
+        let (base_semantic_index, _) = self.load_or_rebuild_semantic_index(current)?;
+        let replaced_modules = delta
+            .module_upserts
+            .iter()
+            .map(|reference| reference.id)
+            .collect::<BTreeSet<_>>();
+        let removed_modules = delta
+            .module_removals
+            .iter()
+            .filter(|reference| !replaced_modules.contains(&reference.id))
+            .map(|reference| reference.id)
+            .collect::<Vec<_>>();
+        let semantic_index = update_reverse_dependency_index(
+            RevisionId::from_digest([0; 32]),
+            &base_semantic_index,
+            &semantic_summaries,
+            &removed_modules,
+        )?;
+        let mut facts = validation_facts(validated)?;
+        facts.profile = profile.to_owned();
+        Ok(PreparedValidation {
+            expected_base: current.head.revision,
+            base_root: current.record.core.root,
+            result_root,
+            delta,
+            changed_modules,
+            semantic_index,
+            semantic_summaries,
+            facts,
+        })
+    }
+
+    pub(crate) fn semantic_certificate_for_modules(
+        package: &super::package::PackageId,
+        modules: &[MeaningModule],
+    ) -> Result<SemanticSummaryDigest, Diagnostic> {
+        let summaries = build_semantic_summaries(package, modules)?;
+        Ok(
+            build_reverse_dependency_index(RevisionId::from_digest([0; 32]), &summaries)?
+                .certificate,
+        )
+    }
+
+    pub(crate) fn dependency_binding_by_package(
+        &self,
+        current: &CurrentBinding,
+        package: &super::package::PackageId,
+    ) -> Result<Option<super::graph::DependencyBinding>, Diagnostic> {
+        current.stored_root.dependency_by_package(
+            &RepositoryPageStore::read_only(&self.store),
+            package,
+            &mut MapWork::default(),
+        )
+    }
+
+    pub(crate) fn module_reference_by_id(
+        &self,
+        current: &CurrentBinding,
+        id: ModuleId,
+    ) -> Result<Option<super::graph::ModuleObjectRef>, Diagnostic> {
+        current.stored_root.module_by_id(
+            &RepositoryPageStore::read_only(&self.store),
+            id,
+            &mut MapWork::default(),
+        )
+    }
+
+    pub(crate) fn tombstone_by_identity(
+        &self,
+        current: &CurrentBinding,
+        identity: &super::graph::TombstoneIdentity,
+    ) -> Result<Option<super::graph::Tombstone>, Diagnostic> {
+        current.stored_root.tombstone_by_identity(
+            &RepositoryPageStore::read_only(&self.store),
+            identity,
+            &mut MapWork::default(),
+        )
+    }
+
+    pub(crate) fn module_reference_by_name(
+        &self,
+        current: &CurrentBinding,
+        name: &str,
+    ) -> Result<Option<super::graph::ModuleObjectRef>, Diagnostic> {
+        current.stored_root.module_by_name(
+            &RepositoryPageStore::read_only(&self.store),
+            name,
+            &mut MapWork::default(),
+        )
+    }
+
     pub fn module_by_id(
         &self,
         revision: RevisionId,
         module_id: ModuleId,
     ) -> Result<MeaningModule, Diagnostic> {
         let record = self.read_revision(revision)?;
-        let root = self.read_root(record.core.root)?;
+        let root = self.read_stored_root(record.core.root)?;
         let reference = root
-            .modules
-            .iter()
-            .find(|reference| reference.id == module_id)
+            .module_by_id(
+                &RepositoryPageStore::read_only(&self.store),
+                module_id,
+                &mut MapWork::default(),
+            )?
             .ok_or_else(|| {
                 repository_error(
                     DiagnosticClass::Source,
@@ -606,11 +1110,13 @@ impl SemanticRepository {
         name: &str,
     ) -> Result<MeaningModule, Diagnostic> {
         let record = self.read_revision(revision)?;
-        let root = self.read_root(record.core.root)?;
+        let root = self.read_stored_root(record.core.root)?;
         let reference = root
-            .modules
-            .iter()
-            .find(|reference| reference.name == name)
+            .module_by_name(
+                &RepositoryPageStore::read_only(&self.store),
+                name,
+                &mut MapWork::default(),
+            )?
             .ok_or_else(|| {
                 repository_error(
                     DiagnosticClass::Source,
@@ -647,11 +1153,14 @@ impl SemanticRepository {
         TransactionReceipt::decode(&bytes)
     }
 
-    pub fn read_root(&self, digest: RootObjectDigest) -> Result<GraphRoot, Diagnostic> {
+    pub fn read_stored_root(
+        &self,
+        digest: RootObjectDigest,
+    ) -> Result<StoredGraphRoot, Diagnostic> {
         let path = root_path(&self.store, digest);
         let bytes = read_bounded(
             &path,
-            super::graph::MAXIMUM_ROOT_BYTES + 50,
+            super::graph::MAXIMUM_STORED_ROOT_BYTES + 50,
             "graph root object",
         )?;
         if RootObjectDigest::of(&bytes) != digest {
@@ -661,7 +1170,14 @@ impl SemanticRepository {
                 "graph root bytes do not match their physical key",
             ));
         }
-        GraphRoot::decode(&bytes)
+        StoredGraphRoot::decode(&bytes)
+    }
+
+    pub fn read_root(&self, digest: RootObjectDigest) -> Result<GraphRoot, Diagnostic> {
+        self.read_stored_root(digest)?.reconstruct(
+            &RepositoryPageStore::read_only(&self.store),
+            &mut MapWork::default(),
+        )
     }
 
     pub fn read_module(
@@ -699,14 +1215,14 @@ impl SemanticRepository {
         )?)
     }
 
-    pub fn publish(
+    pub(crate) fn publish(
         &self,
         mut proposal: PublicationProposal,
     ) -> Result<(PublicationOutcome, Option<TransactionReceipt>), Diagnostic> {
         self.publish_with_additional_parent(&mut proposal, None)
     }
 
-    pub fn publish_merge(
+    pub(crate) fn publish_merge(
         &self,
         mut proposal: PublicationProposal,
         additional_parent: ParentRevision,
@@ -719,7 +1235,19 @@ impl SemanticRepository {
         proposal: &mut PublicationProposal,
         additional_parent: Option<ParentRevision>,
     ) -> Result<(PublicationOutcome, Option<TransactionReceipt>), Diagnostic> {
-        proposal.root.validate_modules(&proposal.modules)?;
+        if proposal.prepared_validation.is_none() {
+            proposal
+                .root
+                .as_ref()
+                .ok_or_else(|| {
+                    repository_error(
+                        DiagnosticClass::Infrastructure,
+                        "repository_proposal_root_missing",
+                        "an unprepared publication requires a complete logical root",
+                    )
+                })?
+                .validate_modules(&proposal.modules)?;
+        }
         let lock_path = self.store.join(LOCK_FILE);
         let lock = OpenOptions::new()
             .read(true)
@@ -738,7 +1266,7 @@ impl SemanticRepository {
         proposal: &mut PublicationProposal,
         additional_parent: Option<ParentRevision>,
     ) -> Result<(PublicationOutcome, Option<TransactionReceipt>), Diagnostic> {
-        let current = self.current()?;
+        let current = self.current_binding()?;
         if current.head.revision != proposal.expected_base {
             return Ok((
                 PublicationOutcome::StaleBase {
@@ -748,15 +1276,78 @@ impl SemanticRepository {
                 None,
             ));
         }
-        if proposal.root.repository_id != current.head.repository_id {
+        if proposal.repository_id != current.head.repository_id {
             return Err(repository_error(
                 DiagnosticClass::Source,
                 "repository_foreign_identity",
                 "proposed graph root belongs to a foreign repository",
             ));
         }
-        let root_bytes = proposal.root.encode()?;
-        let root_digest = RootObjectDigest::of(&root_bytes);
+        let (stored, changed_modules, prepared_facts, semantic_index, semantic_summaries) =
+            if let Some(prepared) = proposal.prepared_validation.as_ref() {
+                if prepared.expected_base != proposal.expected_base
+                    || prepared.base_root != current.record.core.root
+                {
+                    return Err(repository_error(
+                        DiagnosticClass::Infrastructure,
+                        "repository_prepared_base_binding",
+                        "prepared validation does not bind the exact visible base",
+                    ));
+                }
+                let stored = current.stored_root.apply_delta(
+                    &RepositoryPageStore::read_only(&self.store),
+                    &prepared.delta,
+                )?;
+                (
+                    stored,
+                    prepared.changed_modules.clone(),
+                    Some(prepared.facts.clone()),
+                    prepared.semantic_index.clone(),
+                    prepared.semantic_summaries.clone(),
+                )
+            } else {
+                let proposed_root = proposal.root.as_ref().ok_or_else(|| {
+                    repository_error(
+                        DiagnosticClass::Infrastructure,
+                        "repository_proposal_root_missing",
+                        "an unprepared publication requires a complete logical root",
+                    )
+                })?;
+                let current_root = current.stored_root.reconstruct(
+                    &RepositoryPageStore::read_only(&self.store),
+                    &mut MapWork::default(),
+                )?;
+                let delta = StoredGraphRootDelta::between(&current_root, proposed_root)?;
+                let stored = current
+                    .stored_root
+                    .apply_delta(&RepositoryPageStore::read_only(&self.store), &delta)?;
+                let semantic_summaries =
+                    build_semantic_summaries(&proposed_root.package_id, &proposal.modules)?;
+                let semantic_index = build_reverse_dependency_index(
+                    RevisionId::from_digest([0; 32]),
+                    &semantic_summaries,
+                )?;
+                (
+                    stored,
+                    proposal.modules.clone(),
+                    None,
+                    semantic_index,
+                    semantic_summaries,
+                )
+            };
+        let root_bytes = stored.root.encode()?;
+        let root_digest = stored.root.digest()?;
+        if let Some(prepared) = proposal.prepared_validation.as_ref()
+            && (prepared.result_root != root_digest
+                || proposal.semantic_diff
+                    != semantic_diff_digest(prepared.base_root, prepared.result_root))
+        {
+            return Err(repository_error(
+                DiagnosticClass::Infrastructure,
+                "repository_prepared_result_binding",
+                "prepared validation does not bind the exact proposed result",
+            ));
+        }
         if root_digest == current.record.core.root {
             return Ok((
                 PublicationOutcome::SemanticNoChange {
@@ -799,20 +1390,31 @@ impl SemanticRepository {
         let core = RevisionCore {
             contract_version: REVISION_CONTRACT_VERSION,
             graph_contract_version: GRAPH_CONTRACT_VERSION,
-            repository_id: proposal.root.repository_id,
+            repository_id: proposal.repository_id,
             parents,
             root: root_digest,
+            semantic_certificate: semantic_index.certificate,
             semantic_diff: proposal.semantic_diff,
             transaction: proposal.transaction,
         };
         let revision = core.revision_id()?;
-        let validated = validate_repository_graph(
-            &self.store,
-            &proposal.root,
-            &proposal.modules,
-            Some(revision),
-        )?;
-        for module in &proposal.modules {
+        let semantic_index = rebind_reverse_dependency_index(revision, &semantic_index)?;
+        let validation = match prepared_facts {
+            Some(facts) => facts,
+            None => validation_facts(&validate_repository_graph(
+                &self.store,
+                proposal.root.as_ref().ok_or_else(|| {
+                    repository_error(
+                        DiagnosticClass::Infrastructure,
+                        "repository_proposal_root_missing",
+                        "an unprepared publication requires a complete logical root",
+                    )
+                })?,
+                &proposal.modules,
+                Some(revision),
+            )?)?,
+        };
+        for module in &changed_modules {
             let bytes = module.encode()?;
             write_publication_immutable(
                 &module_path(&self.store, module.digest()?),
@@ -820,17 +1422,19 @@ impl SemanticRepository {
                 "meaning module object",
             )?;
         }
+        persist_map_pages(&self.store, &stored.pages, true)?;
         write_publication_immutable(
             &root_path(&self.store, root_digest),
             &root_bytes,
             "graph root object",
         )?;
+        self.write_semantic_cache(&semantic_index, &semantic_summaries)?;
         proposal.affected_owners.sort();
         proposal.affected_owners.dedup();
         let receipt = TransactionReceipt {
             contract_version: RECEIPT_CONTRACT_VERSION,
             graph_contract_version: GRAPH_CONTRACT_VERSION,
-            repository_id: proposal.root.repository_id,
+            repository_id: proposal.repository_id,
             status: proposal.status,
             base: Some(proposal.expected_base),
             result: revision,
@@ -838,7 +1442,7 @@ impl SemanticRepository {
             idempotency_key: proposal.idempotency_key.clone(),
             semantic_diff: proposal.semantic_diff,
             affected_owners: proposal.affected_owners.clone(),
-            validation: validation_facts(&validated)?,
+            validation,
             intent: proposal.intent.clone(),
         };
         let receipt_bytes = receipt.encode()?;
@@ -860,7 +1464,7 @@ impl SemanticRepository {
         let head = SemanticHead {
             contract_version: REVISION_CONTRACT_VERSION,
             graph_contract_version: GRAPH_CONTRACT_VERSION,
-            repository_id: proposal.root.repository_id,
+            repository_id: proposal.repository_id,
             revision,
             record: record_digest,
         };
@@ -1037,14 +1641,25 @@ impl SemanticRepository {
                 ));
             }
             let receipt = self.read_receipt(record.receipt)?;
-            if receipt.result != record.revision {
+            if receipt.result != record.revision
+                || receipt.repository_id != record.core.repository_id
+                || receipt.transaction != record.core.transaction
+                || receipt.semantic_diff != record.core.semantic_diff
+            {
                 return Err(repository_error(
                     DiagnosticClass::Corrupt,
                     "repository_history_receipt_binding",
-                    "historical receipt names a different result revision",
+                    "historical receipt disagrees with its revision identity or semantic inputs",
                 ));
             }
             let root = self.read_root(record.core.root)?;
+            if root.repository_id != record.core.repository_id {
+                return Err(repository_error(
+                    DiagnosticClass::Corrupt,
+                    "repository_history_root_binding",
+                    "historical graph root belongs to a foreign repository identity",
+                ));
+            }
             let modules = self.read_modules(&root)?;
             root.validate_modules(&modules)?;
             revisions_checked = checked_increment(revisions_checked, "revision")?;
@@ -1061,7 +1676,11 @@ impl SemanticRepository {
                     .map(|parent| (parent.revision, parent.record)),
             );
         }
-        let rebuilt_indexes = usize::from(SemanticQueryIndex::current(self)?.rebuilt_index());
+        let rebuilt_query = SemanticQueryIndex::current(self)?.rebuilt_index();
+        let rebuilt_semantic = self
+            .load_or_rebuild_semantic_index(&self.current_binding()?)?
+            .1;
+        let rebuilt_indexes = usize::from(rebuilt_query) + usize::from(rebuilt_semantic);
         Ok(DoctorReport {
             valid: true,
             deep: true,
@@ -1074,7 +1693,105 @@ impl SemanticRepository {
         })
     }
 
-    pub fn backup(&self) -> Result<(Vec<u8>, BackupReceipt), Diagnostic> {
+    /// Computes an exact, read-only inventory for the current retention policy. Destructive
+    /// cleanup remains disabled until pins and active-reader leases become explicit authority.
+    pub fn retention_preview(&self) -> Result<RetentionReport, Diagnostic> {
+        let lock_path = self.store.join(LOCK_FILE);
+        let lock = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&lock_path)
+            .map_err(|error| io_error("repository_retention_lock_open", &lock_path, error))?;
+        FileExt::lock_shared(&lock)
+            .map_err(|error| io_error("repository_retention_lock", &lock_path, error))?;
+        let result = (|| {
+            let head = self.read_head()?;
+            let (retained, retained_drafts) = self.collect_backup_entries(&head)?;
+            let retained_paths = retained
+                .iter()
+                .map(|key| backup_entry_path(&self.store, key))
+                .collect::<BTreeSet<_>>();
+            let actual = canonical_store_files(&self.store)?;
+            let mut reclaimable = Vec::new();
+            let mut unknown_entries = 0_u64;
+            for path in actual {
+                if retained_paths.contains(&path) {
+                    continue;
+                }
+                let relative = path.strip_prefix(&self.store).map_err(|_| {
+                    repository_error(
+                        DiagnosticClass::Infrastructure,
+                        "repository_retention_relative_path",
+                        "canonical object inventory escaped the repository store",
+                    )
+                })?;
+                let bytes = fs::symlink_metadata(&path)
+                    .map_err(|error| io_error("repository_retention_metadata", &path, error))?
+                    .len();
+                if canonical_object_path_shape(relative) {
+                    reclaimable.push((relative.to_path_buf(), bytes, hash_file(&path)?));
+                } else {
+                    unknown_entries = unknown_entries
+                        .checked_add(1)
+                        .ok_or_else(|| count_overflow("unknown retention entry"))?;
+                }
+            }
+            reclaimable.sort_by(|left, right| left.0.cmp(&right.0));
+            let reclaimable_bytes = reclaimable.iter().try_fold(0_u64, |total, value| {
+                total
+                    .checked_add(value.1)
+                    .ok_or_else(|| count_overflow("reclaimable bytes"))
+            })?;
+            let (derived_objects, derived_bytes) =
+                directory_file_totals(&self.store.join(INDEX_OBJECTS))?;
+            let retained_revisions = u64::try_from(
+                retained
+                    .iter()
+                    .filter(|key| matches!(key, BackupEntryKey::Revision(_)))
+                    .count(),
+            )
+            .map_err(|_| count_overflow("retained revisions"))?;
+            let plan = retention_plan_digest(
+                head.repository_id,
+                head.revision,
+                &retained,
+                &reclaimable,
+                unknown_entries,
+            )?;
+            Ok(RetentionReport {
+                contract_version: RETENTION_CONTRACT_VERSION,
+                repository_id: head.repository_id,
+                revision: head.revision,
+                policy: "head_parent_dag_and_live_draft_bases",
+                retained_revisions,
+                retained_drafts,
+                retained_objects: u64::try_from(retained.len())
+                    .map_err(|_| count_overflow("retained objects"))?,
+                reclaimable_objects: u64::try_from(reclaimable.len())
+                    .map_err(|_| count_overflow("reclaimable objects"))?,
+                reclaimable_bytes,
+                unknown_entries,
+                derived_objects,
+                derived_bytes,
+                plan,
+                destructive_ready: false,
+                missing_authority: vec![
+                    "revision_pins",
+                    "active_reader_leases",
+                    "registered_backup_roots",
+                ],
+            })
+        })();
+        FileExt::unlock(&lock)
+            .map_err(|error| io_error("repository_retention_unlock", &lock_path, error))?;
+        result
+    }
+
+    /// Writes a deterministic segmented backup directory through one atomic visibility point.
+    /// Canonical objects are copied one at a time; the complete authority is never accumulated in
+    /// one in-memory container.
+    pub fn backup_to(&self, output: &Path) -> Result<BackupReceipt, Diagnostic> {
+        let (output, parent, stage) = prepare_backup_stage(output)?;
         let lock_path = self.store.join(LOCK_FILE);
         let lock = OpenOptions::new()
             .read(true)
@@ -1085,131 +1802,156 @@ impl SemanticRepository {
             .map_err(|error| io_error("repository_backup_lock", &lock_path, error))?;
         let result = (|| {
             let head = self.read_head()?;
-            let mut entries = BTreeMap::<BackupEntryKey, Vec<u8>>::new();
-            let mut pending = vec![head.revision];
-            let mut seen = std::collections::BTreeSet::new();
-            while let Some(revision) = pending.pop() {
-                if !seen.insert(revision) {
-                    continue;
+            let (entries, draft_count) = self.collect_backup_entries(&head)?;
+            fs::create_dir(&stage)
+                .map_err(|error| io_error("semantic_backup_stage_create", &stage, error))?;
+            for relative in [
+                MODULE_OBJECTS,
+                MAP_PAGE_OBJECTS,
+                ROOT_OBJECTS,
+                REVISION_OBJECTS,
+                RECEIPT_OBJECTS,
+                ARTIFACT_OBJECTS,
+                DRAFT_OBJECTS,
+            ] {
+                let directory = stage.join(relative);
+                fs::create_dir_all(&directory).map_err(|error| {
+                    io_error("semantic_backup_payload_directory", &directory, error)
+                })?;
+            }
+            let segment_directory = stage.join(BACKUP_SEGMENTS);
+            fs::create_dir(&segment_directory).map_err(|error| {
+                io_error(
+                    "semantic_backup_segment_directory",
+                    &segment_directory,
+                    error,
+                )
+            })?;
+
+            let mut segment_references = Vec::new();
+            let mut payload_bytes = 0_u64;
+            let mut total_bytes = 0_u64;
+            let mut remaining = entries.iter();
+            for ordinal in 0_usize.. {
+                let keys = remaining
+                    .by_ref()
+                    .take(BACKUP_SEGMENT_ENTRY_LIMIT)
+                    .collect::<Vec<_>>();
+                if keys.is_empty() {
+                    break;
                 }
-                if seen.len() > MAXIMUM_HISTORY_ITEMS {
-                    return Err(repository_error(
-                        DiagnosticClass::Resource,
-                        "semantic_backup_history_limit",
-                        format!("backup exceeds {MAXIMUM_HISTORY_ITEMS} retained revisions"),
-                    ));
-                }
-                let record = self.read_revision(revision)?;
-                insert_backup_entry(
-                    &mut entries,
-                    BackupEntryKey::Revision(revision),
-                    record.encode()?,
-                )?;
-                let receipt = self.read_receipt(record.receipt)?;
-                insert_backup_entry(
-                    &mut entries,
-                    BackupEntryKey::Receipt(record.receipt),
-                    receipt.encode()?,
-                )?;
-                let root = self.read_root(record.core.root)?;
-                insert_backup_entry(
-                    &mut entries,
-                    BackupEntryKey::Root(record.core.root),
-                    root.encode()?,
-                )?;
-                for reference in &root.modules {
-                    let module = self.read_module(reference.object)?;
-                    insert_backup_entry(
-                        &mut entries,
-                        BackupEntryKey::Module(reference.object),
-                        module.encode()?,
+                let ordinal =
+                    u64::try_from(ordinal).map_err(|_| count_overflow("backup segment ordinal"))?;
+                let mut segment_entries = Vec::with_capacity(keys.len());
+                for key in keys {
+                    let bytes = read_backup_entry(&self.store, key)?;
+                    validate_backup_entry(key, &bytes)?;
+                    let length = u64::try_from(bytes.len())
+                        .map_err(|_| count_overflow("backup entry bytes"))?;
+                    let digest = backup_entry_digest(&bytes);
+                    write_immutable(
+                        &backup_entry_path(&stage, key),
+                        &bytes,
+                        "segmented backup object",
                     )?;
+                    payload_bytes = payload_bytes
+                        .checked_add(length)
+                        .ok_or_else(|| count_overflow("backup payload bytes"))?;
+                    segment_entries.push(BackupEntry {
+                        key: (*key).clone(),
+                        bytes: length,
+                        digest,
+                    });
                 }
-                for dependency in &root.dependencies {
-                    let loaded = load_stored_artifact_closure(&self.store, dependency.artifact)?;
-                    for (digest, bytes) in loaded.package_objects {
-                        insert_backup_entry(&mut entries, BackupEntryKey::Artifact(digest), bytes)?;
-                    }
-                }
-                pending.extend(record.core.parents.iter().map(|parent| parent.revision));
+                let segment = BackupSegment {
+                    contract_version: BACKUP_CONTRACT_VERSION,
+                    ordinal,
+                    entries: segment_entries,
+                };
+                let bytes = segment.encode()?;
+                let digest = backup_segment_digest(&bytes);
+                let encoded_bytes = u64::try_from(bytes.len())
+                    .map_err(|_| count_overflow("backup segment bytes"))?;
+                let path = backup_segment_path(&stage, ordinal, digest);
+                write_immutable(&path, &bytes, "backup index segment")?;
+                total_bytes = total_bytes
+                    .checked_add(encoded_bytes)
+                    .ok_or_else(|| count_overflow("backup total bytes"))?;
+                segment_references.push(BackupSegmentReference {
+                    ordinal,
+                    digest,
+                    entries: u32::try_from(segment.entries.len())
+                        .map_err(|_| count_overflow("backup segment entries"))?,
+                    encoded_bytes,
+                });
             }
-            let mut draft_count = 0usize;
-            let drafts = self.store.join(DRAFT_OBJECTS);
-            for entry in fs::read_dir(&drafts)
-                .map_err(|error| io_error("semantic_backup_draft_list", &drafts, error))?
-            {
-                let entry = entry
-                    .map_err(|error| io_error("semantic_backup_draft_list", &drafts, error))?;
-                let path = entry.path();
-                let metadata = fs::symlink_metadata(&path)
-                    .map_err(|error| io_error("semantic_backup_draft_type", &path, error))?;
-                let id = path
-                    .file_stem()
-                    .and_then(|value| value.to_str())
-                    .and_then(|value| value.parse::<DraftId>().ok())
-                    .ok_or_else(|| {
-                        repository_error(
-                            DiagnosticClass::Corrupt,
-                            "semantic_backup_draft_name",
-                            "draft authority has a noncanonical physical name",
-                        )
-                    })?;
-                if metadata.file_type().is_symlink()
-                    || !metadata.is_file()
-                    || path.extension().and_then(|value| value.to_str()) != Some("lkjd")
-                {
-                    return Err(repository_error(
-                        DiagnosticClass::Corrupt,
-                        "semantic_backup_draft_type",
-                        "draft authority is not a regular canonical draft object",
-                    ));
-                }
-                let bytes =
-                    read_bounded(&path, MAXIMUM_DRAFT_BYTES + 50, "semantic draft authority")?;
-                let draft = DraftRecord::decode(&bytes)?;
-                if draft.id != id || draft.repository_id != head.repository_id {
-                    return Err(repository_error(
-                        DiagnosticClass::Corrupt,
-                        "semantic_backup_draft_binding",
-                        "draft identity or repository binding is inconsistent",
-                    ));
-                }
-                self.reconstruct_revision(draft.base_revision)?;
-                insert_backup_entry(&mut entries, BackupEntryKey::Draft(id), bytes)?;
-                draft_count = checked_increment(draft_count, "draft")?;
-            }
-            let bundle = BackupBundle {
+            let manifest = BackupManifest {
                 contract_version: BACKUP_CONTRACT_VERSION,
                 repository_id: head.repository_id,
                 head,
-                entries: entries
-                    .into_iter()
-                    .map(|(key, bytes)| BackupEntry { key, bytes })
-                    .collect(),
+                segments: segment_references,
+                entries: u64::try_from(entries.len())
+                    .map_err(|_| count_overflow("backup entries"))?,
+                drafts: draft_count,
+                payload_bytes,
             };
-            let bytes = bundle.encode()?;
+            let bytes = manifest.encode()?;
+            write_new_file(&stage.join(BACKUP_MANIFEST_FILE), &bytes, "backup manifest")?;
+            total_bytes = total_bytes
+                .checked_add(payload_bytes)
+                .and_then(|total| total.checked_add(u64::try_from(bytes.len()).ok()?))
+                .ok_or_else(|| count_overflow("backup total bytes"))?;
+            sync_backup_tree(&stage)?;
             let receipt = BackupReceipt {
                 contract_version: BACKUP_CONTRACT_VERSION,
-                repository_id: head.repository_id,
-                revision: head.revision,
+                repository_id: manifest.repository_id,
+                revision: manifest.head.revision,
                 digest: BackupDigest::of(&bytes),
-                entries: bundle.entries.len(),
-                drafts: draft_count,
-                bytes: bytes.len(),
+                segments: manifest.segments.len(),
+                entries: manifest.entries,
+                drafts: manifest.drafts,
+                bytes: total_bytes,
             };
-            Ok((bytes, receipt))
+            Ok(receipt)
         })();
-        FileExt::unlock(&lock)
-            .map_err(|error| io_error("repository_backup_unlock", &lock_path, error))?;
-        result
+        let unlock = FileExt::unlock(&lock)
+            .map_err(|error| io_error("repository_backup_unlock", &lock_path, error));
+        let receipt = match (result, unlock) {
+            (Ok(receipt), Ok(())) => receipt,
+            (Err(error), _) | (Ok(_), Err(error)) => {
+                remove_backup_stage(&stage);
+                return Err(error);
+            }
+        };
+        if let Err(error) = fs::rename(&stage, &output) {
+            remove_backup_stage(&stage);
+            return Err(io_error("semantic_backup_publish", &output, error));
+        }
+        sync_directory(&parent).map_err(|error| {
+            repository_error(
+                DiagnosticClass::Infrastructure,
+                "semantic_backup_visibility_indeterminate",
+                format!(
+                    "segmented backup is visible but parent durability is indeterminate: {error}"
+                ),
+            )
+        })?;
+        Ok(receipt)
     }
 
-    pub fn restore_backup(
+    pub fn restore_backup_from(
         project_root: &Path,
-        backup: &[u8],
+        backup: &Path,
     ) -> Result<(Self, RestoreReceipt), Diagnostic> {
-        let bundle = BackupBundle::decode(backup)?;
-        let digest = BackupDigest::of(backup);
+        let backup = canonical_existing(backup)?;
+        ensure_directory(&backup, "semantic_backup_directory")?;
+        let manifest_bytes = read_bounded(
+            &backup.join(BACKUP_MANIFEST_FILE),
+            MAXIMUM_BACKUP_MANIFEST_BYTES,
+            "backup manifest",
+        )?;
+        let manifest = BackupManifest::decode(&manifest_bytes)?;
+        let digest = BackupDigest::of(&manifest_bytes);
         let project_root = canonical_existing(project_root)?;
         ensure_directory(&project_root, "repository_restore_project_type")?;
         let semantic_parent = project_root.join(".lkjscript");
@@ -1229,55 +1971,123 @@ impl SemanticRepository {
         let stage = semantic_parent.join(format!(".meaning-stage-{stage_identity}"));
         create_store_layout(&stage)?;
         let restored = (|| {
-            for entry in &bundle.entries {
-                match entry.key {
-                    BackupEntryKey::Module(digest) => write_immutable(
-                        &module_path(&stage, digest),
-                        &entry.bytes,
-                        "restored meaning module",
-                    )?,
-                    BackupEntryKey::Root(digest) => write_immutable(
-                        &root_path(&stage, digest),
-                        &entry.bytes,
-                        "restored graph root",
-                    )?,
-                    BackupEntryKey::Revision(revision) => write_immutable(
-                        &revision_path(&stage, revision),
-                        &entry.bytes,
-                        "restored revision record",
-                    )?,
-                    BackupEntryKey::Receipt(digest) => write_immutable(
-                        &receipt_path(&stage, digest),
-                        &entry.bytes,
-                        "restored transaction receipt",
-                    )?,
-                    BackupEntryKey::Artifact(digest) => write_immutable(
-                        &artifact_path(&stage, digest),
-                        &entry.bytes,
-                        "restored dependency artifact",
-                    )?,
-                    BackupEntryKey::Draft(id) => write_immutable(
-                        &stage.join(DRAFT_OBJECTS).join(format!("{id}.lkjd")),
-                        &entry.bytes,
-                        "restored semantic draft",
-                    )?,
+            let mut observed_entries = 0_u64;
+            let mut observed_payload_bytes = 0_u64;
+            let mut previous_key = None::<BackupEntryKey>;
+            let mut observed_keys = BTreeSet::new();
+            for reference in &manifest.segments {
+                let path = backup_segment_path(&backup, reference.ordinal, reference.digest);
+                let bytes =
+                    read_bounded(&path, MAXIMUM_BACKUP_SEGMENT_BYTES, "backup index segment")?;
+                if backup_segment_digest(&bytes) != reference.digest
+                    || u64::try_from(bytes.len()).ok() != Some(reference.encoded_bytes)
+                {
+                    return Err(repository_error(
+                        DiagnosticClass::Corrupt,
+                        "semantic_backup_segment_digest",
+                        "backup segment bytes do not match their manifest binding",
+                    ));
                 }
+                let segment = BackupSegment::decode(&bytes)?;
+                if segment.ordinal != reference.ordinal
+                    || u32::try_from(segment.entries.len()).ok() != Some(reference.entries)
+                {
+                    return Err(repository_error(
+                        DiagnosticClass::Corrupt,
+                        "semantic_backup_segment_binding",
+                        "backup segment content does not match its manifest reference",
+                    ));
+                }
+                for entry in segment.entries {
+                    if previous_key.as_ref().is_some_and(|key| key >= &entry.key) {
+                        return Err(repository_error(
+                            DiagnosticClass::Corrupt,
+                            "semantic_backup_entry_order",
+                            "backup entries are not globally unique and canonically ordered",
+                        ));
+                    }
+                    let source = backup_entry_path(&backup, &entry.key);
+                    let object = read_backup_entry(&backup, &entry.key)?;
+                    if u64::try_from(object.len()).ok() != Some(entry.bytes)
+                        || backup_entry_digest(&object) != entry.digest
+                    {
+                        return Err(repository_error(
+                            DiagnosticClass::Corrupt,
+                            "semantic_backup_entry_digest",
+                            format!(
+                                "backup payload '{}' does not match its segment binding",
+                                source.display()
+                            ),
+                        ));
+                    }
+                    validate_backup_entry(&entry.key, &object)?;
+                    write_immutable(
+                        &backup_entry_path(&stage, &entry.key),
+                        &object,
+                        "restored canonical object",
+                    )?;
+                    observed_entries = observed_entries
+                        .checked_add(1)
+                        .ok_or_else(|| count_overflow("restored backup entries"))?;
+                    observed_payload_bytes = observed_payload_bytes
+                        .checked_add(entry.bytes)
+                        .ok_or_else(|| count_overflow("restored backup bytes"))?;
+                    previous_key = Some(entry.key.clone());
+                    observed_keys.insert(entry.key);
+                }
+            }
+            if observed_entries != manifest.entries
+                || observed_payload_bytes != manifest.payload_bytes
+            {
+                return Err(repository_error(
+                    DiagnosticClass::Corrupt,
+                    "semantic_backup_aggregate",
+                    "restored backup counts disagree with its manifest",
+                ));
+            }
+            let mut expected_backup_files = observed_keys
+                .iter()
+                .map(|key| backup_entry_path(&backup, key))
+                .collect::<BTreeSet<_>>();
+            expected_backup_files.extend(manifest.segments.iter().map(|reference| {
+                backup_segment_path(&backup, reference.ordinal, reference.digest)
+            }));
+            expected_backup_files.insert(backup.join(BACKUP_MANIFEST_FILE));
+            let mut actual_backup_files = Vec::new();
+            collect_regular_files(&backup, &mut actual_backup_files)?;
+            if expected_backup_files != actual_backup_files.into_iter().collect() {
+                return Err(repository_error(
+                    DiagnosticClass::Corrupt,
+                    "semantic_backup_file_inventory",
+                    "backup files do not exactly match its manifest and segment entries",
+                ));
             }
             sync_publication_objects(&stage)?;
             sync_tree_directories(&stage.join(ARTIFACT_OBJECTS))?;
-            replace_head(&stage, &bundle.head)?;
+            replace_head(&stage, &manifest.head)?;
             let staged = Self {
                 project_root: project_root.clone(),
                 store: stage.clone(),
             };
-            staged.doctor(true)?;
-            SemanticDraftStore::new(&staged).validate_all()?;
-            Ok(())
+            let (retained_keys, retained_drafts) = staged.collect_backup_entries(&manifest.head)?;
+            if retained_keys != observed_keys || retained_drafts != manifest.drafts {
+                return Err(repository_error(
+                    DiagnosticClass::Corrupt,
+                    "semantic_backup_reachability",
+                    "backup entries are not exactly the HEAD-and-draft retained closure",
+                ));
+            }
+            let report = staged.doctor(true)?;
+            let drafts = SemanticDraftStore::new(&staged).validate_all()?;
+            Ok((report, drafts))
         })();
-        if let Err(error) = restored {
-            remove_owned_stage(&stage);
-            return Err(error);
-        }
+        let (report, drafts) = match restored {
+            Ok(evidence) => evidence,
+            Err(error) => {
+                remove_owned_stage(&stage);
+                return Err(error);
+            }
+        };
         if let Err(error) = fs::rename(&stage, &store) {
             remove_owned_stage(&stage);
             return Err(io_error("repository_restore_publish", &store, error));
@@ -1295,20 +2105,175 @@ impl SemanticRepository {
             project_root,
             store,
         };
-        let report = repository.doctor(true)?;
-        let drafts = SemanticDraftStore::new(&repository).validate_all()?;
+        let visible = repository.current_binding()?;
+        if visible.head != manifest.head {
+            return Err(repository_error(
+                DiagnosticClass::Infrastructure,
+                "repository_restore_reconcile",
+                "visible restored HEAD differs from the privately verified authority",
+            ));
+        }
         Ok((
             repository,
             RestoreReceipt {
                 contract_version: BACKUP_CONTRACT_VERSION,
-                repository_id: bundle.repository_id,
-                revision: bundle.head.revision,
+                repository_id: manifest.repository_id,
+                revision: manifest.head.revision,
                 digest,
-                entries: bundle.entries.len(),
-                drafts,
+                segments: manifest.segments.len(),
+                entries: manifest.entries,
+                drafts: u64::try_from(drafts).map_err(|_| count_overflow("restored drafts"))?,
                 deep_valid: report.valid,
             },
         ))
+    }
+
+    fn collect_backup_entries(
+        &self,
+        head: &SemanticHead,
+    ) -> Result<(BTreeSet<BackupEntryKey>, u64), Diagnostic> {
+        let mut entries = BTreeSet::new();
+        let mut pending = vec![(head.revision, Some(head.record))];
+
+        let mut draft_count = 0_u64;
+        let drafts = self.store.join(DRAFT_OBJECTS);
+        for entry in fs::read_dir(&drafts)
+            .map_err(|error| io_error("semantic_backup_draft_list", &drafts, error))?
+        {
+            let entry =
+                entry.map_err(|error| io_error("semantic_backup_draft_list", &drafts, error))?;
+            let path = entry.path();
+            let metadata = fs::symlink_metadata(&path)
+                .map_err(|error| io_error("semantic_backup_draft_type", &path, error))?;
+            let id = path
+                .file_stem()
+                .and_then(|value| value.to_str())
+                .and_then(|value| value.parse::<DraftId>().ok())
+                .ok_or_else(|| {
+                    repository_error(
+                        DiagnosticClass::Corrupt,
+                        "semantic_backup_draft_name",
+                        "draft authority has a noncanonical physical name",
+                    )
+                })?;
+            if metadata.file_type().is_symlink()
+                || !metadata.is_file()
+                || path.extension().and_then(|value| value.to_str()) != Some("lkjd")
+            {
+                return Err(repository_error(
+                    DiagnosticClass::Corrupt,
+                    "semantic_backup_draft_type",
+                    "draft authority is not a regular canonical draft object",
+                ));
+            }
+            let bytes = read_bounded(&path, MAXIMUM_DRAFT_BYTES + 50, "semantic draft authority")?;
+            let draft = DraftRecord::decode(&bytes)?;
+            if draft.id != id || draft.repository_id != head.repository_id {
+                return Err(repository_error(
+                    DiagnosticClass::Corrupt,
+                    "semantic_backup_draft_binding",
+                    "draft identity or repository binding is inconsistent",
+                ));
+            }
+            pending.push((draft.base_revision, None));
+            entries.insert(BackupEntryKey::Draft(id));
+            draft_count = draft_count
+                .checked_add(1)
+                .ok_or_else(|| count_overflow("backup draft"))?;
+        }
+
+        let mut seen = BTreeMap::<RevisionId, RevisionRecordDigest>::new();
+        let source = RepositoryPageStore::read_only(&self.store);
+        while let Some((revision, expected_record)) = pending.pop() {
+            let record = self.read_revision(revision)?;
+            let record_digest = record.digest()?;
+            if expected_record.is_some_and(|expected| expected != record_digest) {
+                return Err(repository_error(
+                    DiagnosticClass::Corrupt,
+                    "semantic_backup_parent_binding",
+                    "revision parent or HEAD record digest does not match stored bytes",
+                ));
+            }
+            if let Some(previous) = seen.insert(revision, record_digest) {
+                if previous != record_digest {
+                    return Err(repository_error(
+                        DiagnosticClass::Corrupt,
+                        "semantic_backup_revision_binding",
+                        "one retained revision is bound to conflicting record digests",
+                    ));
+                }
+                continue;
+            }
+            if seen.len() > MAXIMUM_HISTORY_ITEMS {
+                return Err(repository_error(
+                    DiagnosticClass::Resource,
+                    "semantic_backup_history_limit",
+                    format!("backup exceeds {MAXIMUM_HISTORY_ITEMS} retained revisions"),
+                ));
+            }
+            entries.insert(BackupEntryKey::Revision(revision));
+            let receipt = self.read_receipt(record.receipt)?;
+            if receipt.result != record.revision
+                || receipt.repository_id != record.core.repository_id
+                || receipt.transaction != record.core.transaction
+                || receipt.semantic_diff != record.core.semantic_diff
+            {
+                return Err(repository_error(
+                    DiagnosticClass::Corrupt,
+                    "semantic_backup_receipt_binding",
+                    "retained receipt disagrees with its revision identity or semantic inputs",
+                ));
+            }
+            entries.insert(BackupEntryKey::Receipt(record.receipt));
+            let stored_root = self.read_stored_root(record.core.root)?;
+            if stored_root.repository_id != record.core.repository_id {
+                return Err(repository_error(
+                    DiagnosticClass::Corrupt,
+                    "semantic_backup_root_binding",
+                    "retained graph root belongs to a foreign repository identity",
+                ));
+            }
+            entries.insert(BackupEntryKey::Root(record.core.root));
+
+            let mut page_collector = BackupPageCollector::default();
+            let mut page_work = MapWork::default();
+            for map_root in stored_root_map_roots(&stored_root) {
+                PersistentMap::from_root(map_root)
+                    .copy_reachable(&source, &mut page_collector, &mut page_work)
+                    .map_err(repository_map_diagnostic)?;
+            }
+            entries.extend(
+                page_collector
+                    .pages
+                    .into_iter()
+                    .map(BackupEntryKey::MapPage),
+            );
+
+            stored_root.for_each_module_reference(
+                &source,
+                &mut MapWork::default(),
+                |reference| {
+                    self.read_module(reference.object)?;
+                    entries.insert(BackupEntryKey::Module(reference.object));
+                    Ok(())
+                },
+            )?;
+            stored_root.for_each_dependency_binding(
+                &source,
+                &mut MapWork::default(),
+                |dependency| {
+                    collect_stored_artifact_keys(&self.store, dependency.artifact, &mut entries)
+                },
+            )?;
+            pending.extend(
+                record
+                    .core
+                    .parents
+                    .iter()
+                    .map(|parent| (parent.revision, Some(parent.record))),
+            );
+        }
+        Ok((entries, draft_count))
     }
 
     pub fn write_artifact_object(
@@ -1344,6 +2309,125 @@ impl SemanticRepository {
             ));
         }
         Ok(bytes)
+    }
+
+    /// Loads the revision-bound semantic dependency certificate when its disposable bytes match
+    /// the accepted revision binding. Missing or malformed cache state is rebuilt from canonical
+    /// modules; it never changes accepted meaning.
+    fn load_or_rebuild_semantic_index(
+        &self,
+        current: &CurrentBinding,
+    ) -> Result<(ReverseDependencyIndex, bool), Diagnostic> {
+        let cached = self
+            .read_index_part(
+                current.head.revision,
+                DisposableIndexPart::SemanticDependencies,
+                MAXIMUM_REVERSE_INDEX_ENCODED_BYTES,
+            )?
+            .and_then(|bytes| ReverseDependencyIndex::decode(&bytes).ok())
+            .filter(|index| {
+                index.revision == current.head.revision
+                    && index.package == current.stored_root.package_id
+                    && index.certificate == current.record.core.semantic_certificate
+            });
+        if let Some(index) = cached {
+            return Ok((index, false));
+        }
+
+        let snapshot = self.reconstruct_revision(current.head.revision)?;
+        let summaries = build_semantic_summaries(&snapshot.root.package_id, &snapshot.modules)?;
+        let index = build_reverse_dependency_index(current.head.revision, &summaries)?;
+        if index.certificate != current.record.core.semantic_certificate {
+            return Err(repository_error(
+                DiagnosticClass::Corrupt,
+                "repository_semantic_certificate_binding",
+                "accepted revision does not bind the semantic certificate rebuilt from canonical meaning",
+            ));
+        }
+        self.write_semantic_cache(&index, &summaries)?;
+        Ok((index, true))
+    }
+
+    fn write_semantic_cache(
+        &self,
+        index: &ReverseDependencyIndex,
+        summaries: &[ModuleSemanticSummary],
+    ) -> Result<(), Diagnostic> {
+        index.validate()?;
+        for summary in summaries {
+            summary.validate()?;
+            let bytes = summary.encode()?;
+            self.write_summary_object(summary.digest, &bytes)?;
+        }
+        let bytes = index.encode()?;
+        self.write_index_part(
+            index.revision,
+            DisposableIndexPart::SemanticDependencies,
+            &bytes,
+            MAXIMUM_REVERSE_INDEX_ENCODED_BYTES,
+        )
+    }
+
+    fn write_summary_object(
+        &self,
+        digest: SemanticSummaryDigest,
+        bytes: &[u8],
+    ) -> Result<(), Diagnostic> {
+        if bytes.len() > MAXIMUM_MODULE_SUMMARY_ENCODED_BYTES {
+            return Err(repository_error(
+                DiagnosticClass::Resource,
+                "repository_summary_limit",
+                "disposable semantic summary exceeds its single-object decoder budget",
+            ));
+        }
+        let decoded = ModuleSemanticSummary::decode(bytes)?;
+        if decoded.digest != digest {
+            return Err(repository_error(
+                DiagnosticClass::Corrupt,
+                "repository_summary_digest",
+                "disposable semantic summary bytes do not match their content-addressed key",
+            ));
+        }
+        let root = self.store.join(SUMMARY_INDEX_OBJECTS);
+        ensure_or_create_directory(
+            &self.store.join(INDEX_OBJECTS),
+            "repository_index_directory",
+        )?;
+        ensure_or_create_directory(&root, "repository_summary_directory")?;
+        let path = summary_object_path(&self.store, digest);
+        let parent = path.parent().ok_or_else(|| {
+            repository_error(
+                DiagnosticClass::Infrastructure,
+                "repository_summary_parent",
+                "disposable semantic summary path has no parent",
+            )
+        })?;
+        ensure_or_create_directory(parent, "repository_summary_shard")?;
+        if let Ok(metadata) = fs::symlink_metadata(&path)
+            && (metadata.file_type().is_symlink() || !metadata.is_file())
+        {
+            return Err(repository_error(
+                DiagnosticClass::Corrupt,
+                "repository_summary_type",
+                format!(
+                    "disposable semantic summary '{}' is not a regular non-symlink file",
+                    path.display()
+                ),
+            ));
+        }
+        let temporary = parent.join(format!(".summary-stage-{}", RepositoryId::generate()?));
+        let result = (|| {
+            write_new_file(&temporary, bytes, "temporary semantic summary")?;
+            fs::rename(&temporary, &path)
+                .map_err(|error| io_error("repository_summary_publish", &path, error))?;
+            sync_directory(parent)
+                .map_err(|error| io_error("repository_summary_sync", parent, error))?;
+            Ok(())
+        })();
+        if result.is_err() {
+            let _ = fs::remove_file(&temporary);
+        }
+        result
     }
 
     /// Reads a disposable revision-bound index object. Missing indexes are normal and callers
@@ -1522,70 +2606,498 @@ impl SemanticRepository {
     }
 }
 
-fn insert_backup_entry(
-    entries: &mut BTreeMap<BackupEntryKey, Vec<u8>>,
-    key: BackupEntryKey,
-    bytes: Vec<u8>,
+fn stored_root_map_roots(root: &StoredGraphRoot) -> [super::persistent_map::MapRoot; 6] {
+    [
+        root.modules,
+        root.module_names,
+        root.dependencies,
+        root.dependency_aliases,
+        root.targets,
+        root.tombstones,
+    ]
+}
+
+fn persist_map_pages(
+    store: &Path,
+    pages: &MemoryPageStore,
+    publication_writes: bool,
 ) -> Result<(), Diagnostic> {
-    match entries.get(&key) {
-        Some(existing) if existing != &bytes => Err(repository_error(
-            DiagnosticClass::Corrupt,
-            "semantic_backup_object_conflict",
-            "one backup object key resolves to different canonical bytes",
-        )),
-        Some(_) => Ok(()),
-        None => {
-            if entries.len() >= MAXIMUM_BACKUP_ENTRIES {
-                return Err(repository_error(
-                    DiagnosticClass::Resource,
-                    "semantic_backup_entry_limit",
-                    format!("backup exceeds {MAXIMUM_BACKUP_ENTRIES} entries"),
-                ));
-            }
-            entries.insert(key, bytes);
-            Ok(())
-        }
+    let mut destination = RepositoryPageStore::writer(store, publication_writes);
+    for (digest, bytes) in pages.objects() {
+        destination
+            .write_page(digest, bytes)
+            .map_err(repository_map_diagnostic)?;
+    }
+    Ok(())
+}
+
+fn repository_map_error(error: Diagnostic) -> MapError {
+    MapError {
+        class: match error.class {
+            DiagnosticClass::Source | DiagnosticClass::Semantic => MapErrorClass::Input,
+            DiagnosticClass::Resource => MapErrorClass::Resource,
+            DiagnosticClass::Corrupt => MapErrorClass::Corrupt,
+            DiagnosticClass::Capability
+            | DiagnosticClass::Cancelled
+            | DiagnosticClass::Infrastructure => MapErrorClass::Store,
+        },
+        code: "repository_map_store",
+        message: format!("{}: {}", error.code, error.message),
     }
 }
 
-fn validate_backup_entry(entry: &BackupEntry) -> Result<(), Diagnostic> {
-    match entry.key {
+fn repository_map_diagnostic(error: MapError) -> Diagnostic {
+    repository_error(
+        match error.class {
+            MapErrorClass::Input => DiagnosticClass::Source,
+            MapErrorClass::Resource => DiagnosticClass::Resource,
+            MapErrorClass::Corrupt => DiagnosticClass::Corrupt,
+            MapErrorClass::Store => DiagnosticClass::Infrastructure,
+        },
+        error.code,
+        error.message,
+    )
+}
+
+fn validate_backup_entry(key: &BackupEntryKey, bytes: &[u8]) -> Result<(), Diagnostic> {
+    match *key {
         BackupEntryKey::Module(digest) => {
-            if MeaningModule::decode(&entry.bytes)?.digest()? != digest {
+            if MeaningModule::decode(bytes)?.digest()? != digest {
+                return Err(backup_digest_error());
+            }
+        }
+        BackupEntryKey::MapPage(digest) => {
+            if bytes.len() > super::persistent_map::MAXIMUM_PAGE_BYTES
+                || PageDigest::of(bytes) != digest
+            {
                 return Err(backup_digest_error());
             }
         }
         BackupEntryKey::Root(digest) => {
-            if GraphRoot::decode(&entry.bytes)?.digest()? != digest {
+            if StoredGraphRoot::decode(bytes)?.digest()? != digest {
                 return Err(backup_digest_error());
             }
         }
         BackupEntryKey::Revision(revision) => {
-            let record = RevisionRecord::decode(&entry.bytes)?;
+            let record = RevisionRecord::decode(bytes)?;
             if record.revision != revision || record.core.revision_id()? != revision {
                 return Err(backup_digest_error());
             }
         }
         BackupEntryKey::Receipt(digest) => {
-            if ReceiptDigest::of(&TransactionReceipt::decode(&entry.bytes)?.encode()?) != digest {
+            TransactionReceipt::decode(bytes)?;
+            if ReceiptDigest::of(bytes) != digest {
                 return Err(backup_digest_error());
             }
         }
         BackupEntryKey::Artifact(digest) => {
-            if entry.bytes.len() > MAXIMUM_ARTIFACT_OBJECT_BYTES
-                || ArtifactDigest::of(&entry.bytes) != digest
-            {
+            if bytes.len() > MAXIMUM_ARTIFACT_OBJECT_BYTES || ArtifactDigest::of(bytes) != digest {
                 return Err(backup_digest_error());
             }
+            decode_package_object(bytes)?;
         }
         BackupEntryKey::Draft(id) => {
-            let draft = DraftRecord::decode(&entry.bytes)?;
+            let draft = DraftRecord::decode(bytes)?;
             if draft.id != id {
                 return Err(backup_digest_error());
             }
         }
     }
     Ok(())
+}
+
+fn read_backup_entry(root: &Path, key: &BackupEntryKey) -> Result<Vec<u8>, Diagnostic> {
+    let (maximum, label) = match key {
+        BackupEntryKey::Module(_) => (
+            super::meaning::MAXIMUM_MODULE_SEGMENT_BYTES + 50,
+            "backup meaning module",
+        ),
+        BackupEntryKey::MapPage(_) => (
+            super::persistent_map::MAXIMUM_PAGE_BYTES + 50,
+            "backup persistent root page",
+        ),
+        BackupEntryKey::Root(_) => (
+            super::graph::MAXIMUM_STORED_ROOT_BYTES + 50,
+            "backup graph root",
+        ),
+        BackupEntryKey::Revision(_) => (
+            super::revision::MAXIMUM_REVISION_BYTES + 50,
+            "backup revision record",
+        ),
+        BackupEntryKey::Receipt(_) => (
+            super::revision::MAXIMUM_RECEIPT_BYTES + 50,
+            "backup transaction receipt",
+        ),
+        BackupEntryKey::Artifact(_) => (
+            MAXIMUM_ARTIFACT_OBJECT_BYTES + 50,
+            "backup dependency artifact",
+        ),
+        BackupEntryKey::Draft(_) => (MAXIMUM_DRAFT_BYTES + 50, "backup semantic draft"),
+    };
+    read_bounded(&backup_entry_path(root, key), maximum, label)
+}
+
+fn backup_entry_path(root: &Path, key: &BackupEntryKey) -> PathBuf {
+    match *key {
+        BackupEntryKey::Module(digest) => module_path(root, digest),
+        BackupEntryKey::MapPage(digest) => map_page_path(root, digest),
+        BackupEntryKey::Root(digest) => root_path(root, digest),
+        BackupEntryKey::Revision(revision) => revision_path(root, revision),
+        BackupEntryKey::Receipt(digest) => receipt_path(root, digest),
+        BackupEntryKey::Artifact(digest) => artifact_path(root, digest),
+        BackupEntryKey::Draft(id) => root.join(DRAFT_OBJECTS).join(format!("{id}.lkjd")),
+    }
+}
+
+fn backup_segment_path(root: &Path, ordinal: u64, digest: [u8; 32]) -> PathBuf {
+    root.join(BACKUP_SEGMENTS).join(format!(
+        "{ordinal:016x}-{}.lkbs",
+        super::semantic_id::encode_hex(&digest)
+    ))
+}
+
+fn backup_entry_digest(bytes: &[u8]) -> [u8; 32] {
+    domain_digest(BACKUP_ENTRY_DIGEST_DOMAIN, bytes)
+}
+
+fn backup_segment_digest(bytes: &[u8]) -> [u8; 32] {
+    domain_digest(BACKUP_SEGMENT_REFERENCE_DIGEST_DOMAIN, bytes)
+}
+
+fn domain_digest(domain: &str, bytes: &[u8]) -> [u8; 32] {
+    let mut hasher = blake3::Hasher::new_derive_key(domain);
+    hasher.update(&(bytes.len() as u64).to_be_bytes());
+    hasher.update(bytes);
+    *hasher.finalize().as_bytes()
+}
+
+fn prepare_backup_stage(output: &Path) -> Result<(PathBuf, PathBuf, PathBuf), Diagnostic> {
+    let output = if output.is_absolute() {
+        output.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map_err(|error| {
+                repository_error(
+                    DiagnosticClass::Infrastructure,
+                    "semantic_backup_current_directory",
+                    format!("current directory is unavailable: {error}"),
+                )
+            })?
+            .join(output)
+    };
+    let file_name = output
+        .file_name()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            repository_error(
+                DiagnosticClass::Source,
+                "semantic_backup_output_name",
+                "backup output must have a portable UTF-8 final component",
+            )
+        })?;
+    let parent = output.parent().ok_or_else(|| {
+        repository_error(
+            DiagnosticClass::Source,
+            "semantic_backup_output_parent",
+            "backup output has no parent directory",
+        )
+    })?;
+    fs::create_dir_all(parent)
+        .map_err(|error| io_error("semantic_backup_output_parent", parent, error))?;
+    let parent = canonical_existing(parent)?;
+    ensure_directory(&parent, "semantic_backup_output_parent")?;
+    let output = parent.join(file_name);
+    match fs::symlink_metadata(&output) {
+        Ok(_) => {
+            return Err(repository_error(
+                DiagnosticClass::Source,
+                "semantic_backup_destination_exists",
+                format!("backup destination '{}' already exists", output.display()),
+            ));
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(io_error("semantic_backup_destination", &output, error)),
+    }
+    let stage = parent.join(format!(
+        ".{file_name}.backup-stage-{}",
+        RepositoryId::generate()?
+    ));
+    Ok((output, parent, stage))
+}
+
+fn sync_backup_tree(stage: &Path) -> Result<(), Diagnostic> {
+    sync_directory_tree(stage)?;
+    sync_directory(stage).map_err(|error| io_error("semantic_backup_stage_sync", stage, error))
+}
+
+fn sync_directory_tree(root: &Path) -> Result<(), Diagnostic> {
+    ensure_directory(root, "semantic_backup_tree_type")?;
+    for entry in
+        fs::read_dir(root).map_err(|error| io_error("semantic_backup_tree_read", root, error))?
+    {
+        let entry = entry.map_err(|error| io_error("semantic_backup_tree_entry", root, error))?;
+        let path = entry.path();
+        let file_type = entry
+            .file_type()
+            .map_err(|error| io_error("semantic_backup_tree_type", &path, error))?;
+        if file_type.is_symlink() {
+            return Err(repository_error(
+                DiagnosticClass::Corrupt,
+                "semantic_backup_tree_symlink",
+                format!(
+                    "backup stage contains forbidden symlink '{}'",
+                    path.display()
+                ),
+            ));
+        }
+        if file_type.is_dir() {
+            sync_directory_tree(&path)?;
+        } else if !file_type.is_file() {
+            return Err(repository_error(
+                DiagnosticClass::Corrupt,
+                "semantic_backup_tree_entry_type",
+                format!(
+                    "backup stage contains unsupported entry '{}'",
+                    path.display()
+                ),
+            ));
+        }
+    }
+    sync_directory(root).map_err(|error| io_error("semantic_backup_tree_sync", root, error))
+}
+
+fn remove_backup_stage(stage: &Path) {
+    if stage
+        .file_name()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| value.starts_with('.') && value.contains(".backup-stage-repo_"))
+    {
+        let _ = fs::remove_dir_all(stage);
+    }
+}
+
+fn canonical_store_files(store: &Path) -> Result<Vec<PathBuf>, Diagnostic> {
+    let mut files = Vec::new();
+    for relative in [
+        MODULE_OBJECTS,
+        MAP_PAGE_OBJECTS,
+        ROOT_OBJECTS,
+        REVISION_OBJECTS,
+        RECEIPT_OBJECTS,
+        ARTIFACT_OBJECTS,
+        DRAFT_OBJECTS,
+    ] {
+        collect_regular_files(&store.join(relative), &mut files)?;
+    }
+    files.sort();
+    Ok(files)
+}
+
+fn collect_regular_files(root: &Path, files: &mut Vec<PathBuf>) -> Result<(), Diagnostic> {
+    ensure_directory(root, "repository_inventory_directory")?;
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(directory) = pending.pop() {
+        for entry in fs::read_dir(&directory)
+            .map_err(|error| io_error("repository_inventory_read", &directory, error))?
+        {
+            let entry =
+                entry.map_err(|error| io_error("repository_inventory_entry", &directory, error))?;
+            let path = entry.path();
+            let file_type = entry
+                .file_type()
+                .map_err(|error| io_error("repository_inventory_type", &path, error))?;
+            if file_type.is_symlink() {
+                return Err(repository_error(
+                    DiagnosticClass::Corrupt,
+                    "repository_inventory_symlink",
+                    format!(
+                        "canonical object inventory found symlink '{}'",
+                        path.display()
+                    ),
+                ));
+            }
+            if file_type.is_dir() {
+                pending.push(path);
+            } else if file_type.is_file() {
+                files.push(path);
+            } else {
+                return Err(repository_error(
+                    DiagnosticClass::Corrupt,
+                    "repository_inventory_entry_type",
+                    format!(
+                        "canonical object inventory found unsupported entry '{}'",
+                        path.display()
+                    ),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn directory_file_totals(root: &Path) -> Result<(u64, u64), Diagnostic> {
+    let mut files = Vec::new();
+    collect_regular_files(root, &mut files)?;
+    files.into_iter().try_fold((0_u64, 0_u64), |totals, path| {
+        let bytes = fs::symlink_metadata(&path)
+            .map_err(|error| io_error("repository_inventory_metadata", &path, error))?
+            .len();
+        Ok((
+            totals
+                .0
+                .checked_add(1)
+                .ok_or_else(|| count_overflow("derived object"))?,
+            totals
+                .1
+                .checked_add(bytes)
+                .ok_or_else(|| count_overflow("derived bytes"))?,
+        ))
+    })
+}
+
+fn canonical_object_path_shape(relative: &Path) -> bool {
+    let parts = relative
+        .components()
+        .map(|component| component.as_os_str().to_str())
+        .collect::<Option<Vec<_>>>();
+    let Some(parts) = parts else {
+        return false;
+    };
+    match parts.as_slice() {
+        ["objects", "modules", shard, file] => canonical_sharded_name(shard, file, "lkjm"),
+        ["objects", "map-pages", shard, file] => canonical_sharded_name(shard, file, "lkjp"),
+        ["objects", "roots", shard, file] => canonical_sharded_name(shard, file, "lkjr"),
+        ["revisions", shard, file] => canonical_sharded_name(shard, file, "lkjv"),
+        ["receipts", shard, file] => canonical_sharded_name(shard, file, "lkjt"),
+        ["artifacts", shard, file] => canonical_sharded_name(shard, file, "lkja"),
+        ["drafts", file] => file
+            .strip_suffix(".lkjd")
+            .and_then(|name| name.parse::<DraftId>().ok())
+            .is_some(),
+        _ => false,
+    }
+}
+
+fn canonical_sharded_name(shard: &str, file: &str, extension: &str) -> bool {
+    let Some(encoded) = file.strip_suffix(&format!(".{extension}")) else {
+        return false;
+    };
+    encoded.len() == 64
+        && shard.len() == 2
+        && encoded.starts_with(shard)
+        && encoded
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+fn hash_file(path: &Path) -> Result<[u8; 32], Diagnostic> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|error| io_error("repository_inventory_metadata", path, error))?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(repository_error(
+            DiagnosticClass::Corrupt,
+            "repository_inventory_file_type",
+            format!(
+                "inventory candidate '{}' is not a regular file",
+                path.display()
+            ),
+        ));
+    }
+    let maximum = u64::try_from(MAXIMUM_ARTIFACT_OBJECT_BYTES + 50)
+        .map_err(|_| count_overflow("inventory file bound"))?;
+    if metadata.len() > maximum {
+        return Err(repository_error(
+            DiagnosticClass::Resource,
+            "repository_inventory_file_limit",
+            format!(
+                "inventory candidate '{}' exceeds the largest canonical object bound",
+                path.display()
+            ),
+        ));
+    }
+    let mut file = File::open(path)
+        .map_err(|error| io_error("repository_inventory_file_open", path, error))?;
+    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.cleanup-candidate.v1");
+    hasher.update(&metadata.len().to_be_bytes());
+    let mut buffer = [0_u8; 64 * 1024];
+    let mut observed = 0_u64;
+    loop {
+        let count = file
+            .read(&mut buffer)
+            .map_err(|error| io_error("repository_inventory_file_read", path, error))?;
+        if count == 0 {
+            break;
+        }
+        observed = observed
+            .checked_add(u64::try_from(count).map_err(|_| count_overflow("inventory read"))?)
+            .ok_or_else(|| count_overflow("inventory read"))?;
+        hasher.update(&buffer[..count]);
+    }
+    if observed != metadata.len() {
+        return Err(repository_error(
+            DiagnosticClass::Infrastructure,
+            "repository_inventory_file_changed",
+            format!(
+                "inventory candidate '{}' changed while read",
+                path.display()
+            ),
+        ));
+    }
+    Ok(*hasher.finalize().as_bytes())
+}
+
+fn retention_plan_digest(
+    repository: RepositoryId,
+    revision: RevisionId,
+    retained: &BTreeSet<BackupEntryKey>,
+    reclaimable: &[(PathBuf, u64, [u8; 32])],
+    unknown_entries: u64,
+) -> Result<CleanupDigest, Diagnostic> {
+    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.cleanup-plan.v1");
+    hasher.update(&repository.bytes());
+    hasher.update(&revision.bytes());
+    hasher.update(
+        &u64::try_from(retained.len())
+            .map_err(|_| count_overflow("retention digest entries"))?
+            .to_be_bytes(),
+    );
+    let configuration = bincode::config::standard()
+        .with_little_endian()
+        .with_variable_int_encoding();
+    for key in retained {
+        let bytes = bincode::encode_to_vec(key, configuration).map_err(|error| {
+            repository_error(
+                DiagnosticClass::Infrastructure,
+                "repository_retention_digest_encode",
+                format!("retained object key could not be encoded: {error}"),
+            )
+        })?;
+        hasher.update(
+            &u64::try_from(bytes.len())
+                .map_err(|_| count_overflow("retention key bytes"))?
+                .to_be_bytes(),
+        );
+        hasher.update(&bytes);
+    }
+    hasher.update(
+        &u64::try_from(reclaimable.len())
+            .map_err(|_| count_overflow("reclaimable digest entries"))?
+            .to_be_bytes(),
+    );
+    for (path, bytes, digest) in reclaimable {
+        let encoded = path.as_os_str().as_encoded_bytes();
+        hasher.update(
+            &u64::try_from(encoded.len())
+                .map_err(|_| count_overflow("retention path bytes"))?
+                .to_be_bytes(),
+        );
+        hasher.update(encoded);
+        hasher.update(&bytes.to_be_bytes());
+        hasher.update(digest);
+    }
+    hasher.update(&unknown_entries.to_be_bytes());
+    Ok(CleanupDigest::from_bytes(*hasher.finalize().as_bytes()))
 }
 
 fn backup_digest_error() -> Diagnostic {
@@ -1608,6 +3120,7 @@ fn initialize_stage(
         intent,
         validation_profile,
         dependency_artifacts,
+        status,
     } = initial;
     for artifact in &dependency_artifacts {
         write_artifact_at(store, artifact)?;
@@ -1620,33 +3133,45 @@ fn initialize_stage(
             "meaning module object",
         )?;
     }
-    let root_bytes = root.encode()?;
-    let root_digest = RootObjectDigest::of(&root_bytes);
+    let stored = StoredGraphRoot::build(&root)?;
+    persist_map_pages(store, &stored.pages, false)?;
+    let root_bytes = stored.root.encode()?;
+    let root_digest = stored.root.digest()?;
     write_immutable(
         &root_path(store, root_digest),
         &root_bytes,
         "graph root object",
     )?;
+    let semantic_summaries = build_semantic_summaries(&root.package_id, &modules)?;
+    let semantic_index =
+        build_reverse_dependency_index(RevisionId::from_digest([0; 32]), &semantic_summaries)?;
     let core = RevisionCore {
         contract_version: REVISION_CONTRACT_VERSION,
         graph_contract_version: GRAPH_CONTRACT_VERSION,
         repository_id: root.repository_id,
         parents: Vec::new(),
         root: root_digest,
+        semantic_certificate: semantic_index.certificate,
         semantic_diff,
         transaction,
     };
     let revision = core.revision_id()?;
+    let semantic_index = rebind_reverse_dependency_index(revision, &semantic_index)?;
     let validated = validate_repository_graph(store, &root, &modules, Some(revision))?;
     let mut validation = validation_facts(&validated)?;
     if let Some(profile) = validation_profile {
         validation.profile = profile;
     }
+    SemanticRepository {
+        project_root: PathBuf::new(),
+        store: store.to_path_buf(),
+    }
+    .write_semantic_cache(&semantic_index, &semantic_summaries)?;
     let receipt = TransactionReceipt {
         contract_version: RECEIPT_CONTRACT_VERSION,
         graph_contract_version: GRAPH_CONTRACT_VERSION,
         repository_id: root.repository_id,
-        status: ReceiptStatus::ImportAccepted,
+        status,
         base: None,
         result: revision,
         transaction,
@@ -1737,6 +3262,18 @@ fn validate_repository_graph(
     Ok(validated)
 }
 
+fn build_semantic_summaries(
+    package: &super::package::PackageId,
+    modules: &[MeaningModule],
+) -> Result<Vec<ModuleSemanticSummary>, Diagnostic> {
+    let mut summaries = modules
+        .iter()
+        .map(|module| build_module_summary(package, module))
+        .collect::<Result<Vec<_>, Diagnostic>>()?;
+    summaries.sort_by_key(|summary| summary.module);
+    Ok(summaries)
+}
+
 fn load_stored_artifact_closure(
     store: &Path,
     root: ArtifactDigest,
@@ -1771,6 +3308,43 @@ fn load_stored_artifact_closure(
         }
     }
     load_package_object_closure(root, objects)
+}
+
+fn collect_stored_artifact_keys(
+    store: &Path,
+    root: ArtifactDigest,
+    entries: &mut BTreeSet<BackupEntryKey>,
+) -> Result<(), Diagnostic> {
+    let mut pending = vec![root];
+    let mut seen = BTreeSet::new();
+    while let Some(digest) = pending.pop() {
+        if !seen.insert(digest) {
+            continue;
+        }
+        let bytes = read_bounded(
+            &artifact_path(store, digest),
+            MAXIMUM_ARTIFACT_OBJECT_BYTES,
+            "dependency package artifact",
+        )?;
+        if ArtifactDigest::of(&bytes) != digest {
+            return Err(repository_error(
+                DiagnosticClass::Corrupt,
+                "repository_dependency_artifact_digest",
+                "dependency package artifact does not match its canonical key",
+            ));
+        }
+        let package = decode_package_object(&bytes)?;
+        pending.extend(package.dependencies());
+        entries.insert(BackupEntryKey::Artifact(digest));
+        if seen.len() > MAXIMUM_ARTIFACT_PACKAGES {
+            return Err(repository_error(
+                DiagnosticClass::Resource,
+                "repository_dependency_artifact_count",
+                "dependency package closure exceeds its package bound",
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn validation_facts(package: &ValidatedPackage) -> Result<ValidationFacts, Diagnostic> {
@@ -1810,6 +3384,7 @@ fn create_store_layout(store: &Path) -> Result<(), Diagnostic> {
     fs::create_dir(store).map_err(|error| io_error("repository_stage_create", store, error))?;
     for relative in [
         MODULE_OBJECTS,
+        MAP_PAGE_OBJECTS,
         ROOT_OBJECTS,
         REVISION_OBJECTS,
         RECEIPT_OBJECTS,
@@ -1862,15 +3437,22 @@ fn sync_publication_objects(store: &Path) -> Result<(), Diagnostic> {
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
     for relative in [
         MODULE_OBJECTS,
+        MAP_PAGE_OBJECTS,
         ROOT_OBJECTS,
         REVISION_OBJECTS,
         RECEIPT_OBJECTS,
+        ARTIFACT_OBJECTS,
+        DRAFT_OBJECTS,
     ] {
         let path = store.join(relative);
         sync_tree_directories(&path)?;
     }
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
-    Ok(())
+    {
+        sync_directory(&store.join("objects"))
+            .map_err(|error| io_error("repository_sync_objects", &store.join("objects"), error))?;
+        sync_directory(store).map_err(|error| io_error("repository_sync_store", store, error))
+    }
 }
 
 fn sync_tree_directories(root: &Path) -> Result<(), Diagnostic> {
@@ -2034,6 +3616,10 @@ fn module_path(store: &Path, digest: super::semantic_digest::ModuleObjectDigest)
     sharded_digest_path(store, MODULE_OBJECTS, &digest.bytes(), "lkjm")
 }
 
+fn map_page_path(store: &Path, digest: PageDigest) -> PathBuf {
+    sharded_digest_path(store, MAP_PAGE_OBJECTS, &digest.bytes(), "lkjp")
+}
+
 fn root_path(store: &Path, digest: RootObjectDigest) -> PathBuf {
     sharded_digest_path(store, ROOT_OBJECTS, &digest.bytes(), "lkjr")
 }
@@ -2069,7 +3655,12 @@ fn index_part_path(store: &Path, revision: RevisionId, part: DisposableIndexPart
         DisposableIndexPart::Names(bucket) => {
             revision.join("names").join(format!("{bucket:02x}.lkix"))
         }
+        DisposableIndexPart::SemanticDependencies => revision.join("semantic-dependencies.lkix"),
     }
+}
+
+fn summary_object_path(store: &Path, digest: SemanticSummaryDigest) -> PathBuf {
+    sharded_digest_path(store, SUMMARY_INDEX_OBJECTS, &digest.bytes(), "lkis")
 }
 
 fn sharded_digest_path(store: &Path, directory: &str, bytes: &[u8], extension: &str) -> PathBuf {
@@ -2188,6 +3779,32 @@ mod tests {
         SourceLimits, parse_module, parse_source,
     };
 
+    fn directory_snapshot(root: &Path) -> Vec<(PathBuf, Vec<u8>)> {
+        fn visit(root: &Path, path: &Path, output: &mut Vec<(PathBuf, Vec<u8>)>) {
+            let mut entries = fs::read_dir(path)
+                .expect("read snapshot directory")
+                .map(|entry| entry.expect("snapshot entry"))
+                .collect::<Vec<_>>();
+            entries.sort_by_key(|entry| entry.file_name());
+            for entry in entries {
+                let path = entry.path();
+                if entry.file_type().expect("snapshot type").is_dir() {
+                    visit(root, &path, output);
+                } else {
+                    output.push((
+                        path.strip_prefix(root)
+                            .expect("relative snapshot")
+                            .to_path_buf(),
+                        fs::read(path).expect("snapshot bytes"),
+                    ));
+                }
+            }
+        }
+        let mut output = Vec::new();
+        visit(root, root, &mut output);
+        output
+    }
+
     fn fixture() -> (GraphRoot, Vec<MeaningModule>) {
         let document = parse_source(
             "fixture.lkj",
@@ -2229,6 +3846,7 @@ mod tests {
                 intent: None,
                 validation_profile: None,
                 dependency_artifacts: Vec::new(),
+                status: ReceiptStatus::ImportAccepted,
             },
         )
         .expect("initialize");
@@ -2237,7 +3855,8 @@ mod tests {
         let (no_change, receipt) = repository
             .publish(PublicationProposal {
                 expected_base: initial.current.head.revision,
-                root: root.clone(),
+                repository_id: initial.current.head.repository_id,
+                root: Some(root.clone()),
                 modules: modules.clone(),
                 transaction: TransactionDigest::of(b"no-change"),
                 idempotency_key: None,
@@ -2246,6 +3865,7 @@ mod tests {
                 affected_owners: Vec::new(),
                 intent: None,
                 dependency_artifacts: Vec::new(),
+                prepared_validation: None,
             })
             .expect("no change");
         assert!(matches!(
@@ -2271,7 +3891,8 @@ mod tests {
         let (stale, receipt) = repository
             .publish(PublicationProposal {
                 expected_base: foreign_base,
-                root: renamed_root.clone(),
+                repository_id: initial.current.head.repository_id,
+                root: Some(renamed_root.clone()),
                 modules: renamed_modules.clone(),
                 transaction: TransactionDigest::of(b"stale"),
                 idempotency_key: None,
@@ -2280,6 +3901,7 @@ mod tests {
                 affected_owners: Vec::new(),
                 intent: None,
                 dependency_artifacts: Vec::new(),
+                prepared_validation: None,
             })
             .expect("stale");
         assert!(matches!(stale, PublicationOutcome::StaleBase { .. }));
@@ -2289,7 +3911,8 @@ mod tests {
         let (accepted, receipt) = repository
             .publish(PublicationProposal {
                 expected_base: initial.current.head.revision,
-                root: renamed_root,
+                repository_id: initial.current.head.repository_id,
+                root: Some(renamed_root),
                 modules: renamed_modules,
                 transaction: TransactionDigest::of(b"rename"),
                 idempotency_key: None,
@@ -2298,6 +3921,7 @@ mod tests {
                 affected_owners: vec![AffectedOwner::Declaration(declaration_id)],
                 intent: Some("rename fixture record".to_owned()),
                 dependency_artifacts: Vec::new(),
+                prepared_validation: None,
             })
             .expect("accepted");
         assert!(matches!(accepted, PublicationOutcome::Accepted { .. }));
@@ -2330,6 +3954,7 @@ mod tests {
                 intent: None,
                 validation_profile: None,
                 dependency_artifacts: Vec::new(),
+                status: ReceiptStatus::ImportAccepted,
             },
         )
         .expect("initialize merge fixture");
@@ -2349,7 +3974,8 @@ mod tests {
         let (left_outcome, _) = repository
             .publish(PublicationProposal {
                 expected_base: base.current.head.revision,
-                root: left_root,
+                repository_id: base.current.head.repository_id,
+                root: Some(left_root),
                 modules: left_modules,
                 transaction: TransactionDigest::of(b"left"),
                 idempotency_key: None,
@@ -2358,6 +3984,7 @@ mod tests {
                 affected_owners: vec![AffectedOwner::Declaration(declaration_id)],
                 intent: None,
                 dependency_artifacts: Vec::new(),
+                prepared_validation: None,
             })
             .expect("publish left");
         let PublicationOutcome::Accepted {
@@ -2374,7 +4001,8 @@ mod tests {
         let (right_outcome, _) = repository
             .publish(PublicationProposal {
                 expected_base: base.current.head.revision,
-                root: right_root,
+                repository_id: base.current.head.repository_id,
+                root: Some(right_root),
                 modules: base_modules,
                 transaction: TransactionDigest::of(b"right"),
                 idempotency_key: None,
@@ -2383,6 +4011,7 @@ mod tests {
                 affected_owners: Vec::new(),
                 intent: None,
                 dependency_artifacts: Vec::new(),
+                prepared_validation: None,
             })
             .expect("publish right");
         let PublicationOutcome::Accepted {
@@ -2437,6 +4066,7 @@ mod tests {
                 intent: None,
                 validation_profile: None,
                 dependency_artifacts: Vec::new(),
+                status: ReceiptStatus::ImportAccepted,
             },
         )
         .expect("initialize");
@@ -2461,12 +4091,14 @@ mod tests {
                 intent: None,
                 validation_profile: None,
                 dependency_artifacts: Vec::new(),
+                status: ReceiptStatus::ImportAccepted,
             },
         )
         .expect("initialize");
         let expected = repository.current().expect("current").head;
         fs::remove_dir(repository.store.join(DRAFT_OBJECTS)).expect("remove empty drafts");
-        fs::remove_dir(repository.store.join(INDEX_OBJECTS)).expect("remove empty indexes");
+        fs::remove_dir_all(repository.store.join(INDEX_OBJECTS))
+            .expect("remove disposable indexes");
         fs::remove_file(repository.store.join(LOCK_FILE)).expect("remove lock");
         drop(repository);
 
@@ -2482,7 +4114,9 @@ mod tests {
                 .len(),
             0
         );
-        reopened.backup().expect("backup after transport");
+        reopened
+            .backup_to(&temporary.path().join("transport.lkjb"))
+            .expect("backup after transport");
     }
 
     #[test]
@@ -2499,17 +4133,21 @@ mod tests {
                 intent: None,
                 validation_profile: None,
                 dependency_artifacts: Vec::new(),
+                status: ReceiptStatus::ImportAccepted,
             },
         )
         .expect("initialize");
-        let (first, first_receipt) = repository.backup().expect("first backup");
-        let (second, second_receipt) = repository.backup().expect("second backup");
-        assert_eq!(first, second);
+        let first = source.path().join("first.lkjb");
+        let second = source.path().join("second.lkjb");
+        let first_receipt = repository.backup_to(&first).expect("first backup");
+        let second_receipt = repository.backup_to(&second).expect("second backup");
+        assert_eq!(directory_snapshot(&first), directory_snapshot(&second));
         assert_eq!(first_receipt, second_receipt);
+        assert!(repository.backup_to(&first).is_err());
 
         let destination = tempfile::TempDir::new().expect("temporary restore project");
         let (restored, receipt) =
-            SemanticRepository::restore_backup(destination.path(), &first).expect("restore");
+            SemanticRepository::restore_backup_from(destination.path(), &first).expect("restore");
         assert!(receipt.deep_valid);
         assert_eq!(receipt.digest, first_receipt.digest);
         assert_eq!(
@@ -2522,15 +4160,159 @@ mod tests {
         );
 
         let corrupt_destination = tempfile::TempDir::new().expect("corrupt restore project");
-        let mut corrupt = first;
+        let segment = fs::read_dir(first.join(BACKUP_SEGMENTS))
+            .expect("segments")
+            .next()
+            .expect("one segment")
+            .expect("segment entry")
+            .path();
+        let mut corrupt = fs::read(&segment).expect("segment bytes");
         let index = corrupt.len() / 2;
         corrupt[index] ^= 1;
-        assert!(SemanticRepository::restore_backup(corrupt_destination.path(), &corrupt).is_err());
+        fs::write(&segment, corrupt).expect("corrupt segment");
+        assert!(
+            SemanticRepository::restore_backup_from(corrupt_destination.path(), &first).is_err()
+        );
         assert!(
             !corrupt_destination
                 .path()
                 .join(SEMANTIC_STORE_RELATIVE)
                 .exists()
         );
+    }
+
+    #[test]
+    fn segmented_backup_rejects_missing_reordered_and_legacy_inputs_before_visibility() {
+        let source = tempfile::TempDir::new().expect("temporary source project");
+        let (root, modules) = fixture();
+        let (repository, _) = SemanticRepository::initialize(
+            source.path(),
+            InitialPublication {
+                root,
+                modules,
+                transaction: TransactionDigest::of(b"import"),
+                semantic_diff: SemanticDiffDigest::of(b"initial"),
+                intent: None,
+                validation_profile: None,
+                dependency_artifacts: Vec::new(),
+                status: ReceiptStatus::ImportAccepted,
+            },
+        )
+        .expect("initialize");
+
+        let missing = source.path().join("missing.lkjb");
+        repository.backup_to(&missing).expect("missing backup");
+        let missing_segment = fs::read_dir(missing.join(BACKUP_SEGMENTS))
+            .expect("segments")
+            .next()
+            .expect("one segment")
+            .expect("segment entry")
+            .path();
+        fs::remove_file(missing_segment).expect("remove segment");
+        let missing_destination = tempfile::TempDir::new().expect("missing destination");
+        assert!(
+            SemanticRepository::restore_backup_from(missing_destination.path(), &missing).is_err()
+        );
+        assert!(
+            !missing_destination
+                .path()
+                .join(SEMANTIC_STORE_RELATIVE)
+                .exists()
+        );
+
+        let reordered = source.path().join("reordered.lkjb");
+        repository.backup_to(&reordered).expect("reordered backup");
+        let manifest_path = reordered.join(BACKUP_MANIFEST_FILE);
+        let mut manifest = BackupManifest::decode(&fs::read(&manifest_path).expect("manifest"))
+            .expect("decode manifest");
+        let reference = manifest.segments.first_mut().expect("segment reference");
+        let old_segment_path = backup_segment_path(&reordered, reference.ordinal, reference.digest);
+        let mut segment =
+            BackupSegment::decode(&fs::read(&old_segment_path).expect("read ordered segment"))
+                .expect("decode ordered segment");
+        assert!(segment.entries.len() > 1);
+        segment.entries.swap(0, 1);
+        let malformed = packed::encode(
+            BACKUP_SEGMENT_MAGIC,
+            BACKUP_SEGMENT_DIGEST_DOMAIN,
+            &segment,
+            MAXIMUM_BACKUP_SEGMENT_BYTES,
+        )
+        .expect("encode deliberately reordered segment");
+        reference.digest = backup_segment_digest(&malformed);
+        reference.encoded_bytes = u64::try_from(malformed.len()).expect("segment length");
+        let malformed_path = backup_segment_path(&reordered, reference.ordinal, reference.digest);
+        write_new_file(&malformed_path, &malformed, "malformed backup segment")
+            .expect("write malformed segment");
+        fs::write(&manifest_path, manifest.encode().expect("updated manifest"))
+            .expect("write updated manifest");
+        let reordered_destination = tempfile::TempDir::new().expect("reordered destination");
+        assert!(
+            SemanticRepository::restore_backup_from(reordered_destination.path(), &reordered,)
+                .is_err()
+        );
+        assert!(
+            !reordered_destination
+                .path()
+                .join(SEMANTIC_STORE_RELATIVE)
+                .exists()
+        );
+
+        let legacy = source.path().join("legacy.lkjb");
+        fs::write(&legacy, b"LKJBKP03 predecessor").expect("legacy fixture");
+        let legacy_destination = tempfile::TempDir::new().expect("legacy destination");
+        let error = SemanticRepository::restore_backup_from(legacy_destination.path(), &legacy)
+            .expect_err("legacy monolith must reject");
+        assert_eq!(error.code, "semantic_backup_directory");
+        assert!(
+            !legacy_destination
+                .path()
+                .join(SEMANTIC_STORE_RELATIVE)
+                .exists()
+        );
+    }
+
+    #[test]
+    fn retention_preview_is_exact_read_only_and_refuses_destructive_readiness() {
+        let source = tempfile::TempDir::new().expect("temporary source project");
+        let (root, modules) = fixture();
+        let (repository, _) = SemanticRepository::initialize(
+            source.path(),
+            InitialPublication {
+                root,
+                modules,
+                transaction: TransactionDigest::of(b"import"),
+                semantic_diff: SemanticDiffDigest::of(b"initial"),
+                intent: None,
+                validation_profile: None,
+                dependency_artifacts: Vec::new(),
+                status: ReceiptStatus::ImportAccepted,
+            },
+        )
+        .expect("initialize");
+        let clean = repository.retention_preview().expect("clean preview");
+        assert_eq!(clean.reclaimable_objects, 0);
+        assert!(!clean.destructive_ready);
+
+        let orphan = b"unreachable-corrupt-module-object";
+        let orphan_digest = ModuleObjectDigest::of(orphan);
+        write_immutable(
+            &module_path(&repository.store, orphan_digest),
+            orphan,
+            "orphan cleanup fixture",
+        )
+        .expect("write orphan");
+        let before = directory_snapshot(&repository.store);
+        let report = repository.retention_preview().expect("orphan preview");
+        let after = directory_snapshot(&repository.store);
+        assert_eq!(before, after);
+        assert_eq!(report.reclaimable_objects, 1);
+        assert_eq!(
+            report.reclaimable_bytes,
+            u64::try_from(orphan.len()).expect("orphan bytes")
+        );
+        assert_ne!(report.plan, clean.plan);
+        assert!(!report.destructive_ready);
+        assert_eq!(report.missing_authority.len(), 3);
     }
 }

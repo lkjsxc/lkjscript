@@ -21,14 +21,14 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
-pub const DRAFT_CONTRACT_VERSION: u16 = 1;
+pub const DRAFT_CONTRACT_VERSION: u16 = 4;
 pub const MAXIMUM_DRAFT_BYTES: usize = 64 * 1_048_576;
 pub const MAXIMUM_DRAFTS: usize = 10_000;
 pub const MAXIMUM_DRAFT_HOLES: usize = 100_000;
 pub const MAXIMUM_DRAFT_CONFLICTS: usize = 100_000;
 
-const DRAFT_MAGIC: [u8; 8] = *b"LKJDRF01";
-const DRAFT_DIGEST_DOMAIN: &str = "lkjscript.semantic-draft.v1";
+const DRAFT_MAGIC: [u8; 8] = *b"LKJDRF04";
+const DRAFT_DIGEST_DOMAIN: &str = "lkjscript.semantic-draft.v4";
 const DRAFT_DIRECTORY: &str = "drafts";
 const REPOSITORY_LOCK: &str = "LOCK";
 
@@ -299,7 +299,7 @@ impl<'a> SemanticDraftStore<'a> {
                 "draft intent exceeds 4096 bytes",
             ));
         }
-        let current = self.repository.current()?;
+        let current = self.repository.current_binding()?;
         let base_revision = base_revision.unwrap_or(current.head.revision);
         let historical = self.repository.reconstruct_revision(base_revision)?;
         if historical.record.core.repository_id != current.head.repository_id {
@@ -462,7 +462,7 @@ impl<'a> SemanticDraftStore<'a> {
         id: DraftId,
         new_base: RevisionId,
     ) -> Result<DraftRebaseResult, Diagnostic> {
-        let current = self.repository.current()?;
+        let current = self.repository.current_binding()?;
         if new_base != current.head.revision {
             return Err(draft_error(
                 DiagnosticClass::Source,
@@ -531,7 +531,7 @@ impl<'a> SemanticDraftStore<'a> {
     }
 
     fn summary(&self, draft: &DraftRecord) -> Result<DraftSummary, Diagnostic> {
-        let current = self.repository.current()?;
+        let current = self.repository.current_binding()?;
         Ok(DraftSummary {
             contract_version: DRAFT_CONTRACT_VERSION,
             repository_id: draft.repository_id,
@@ -571,7 +571,7 @@ impl<'a> SemanticDraftStore<'a> {
     fn read(&self, id: DraftId) -> Result<DraftRecord, Diagnostic> {
         let bytes = read_regular(&self.path(id))?;
         let record = DraftRecord::decode(&bytes)?;
-        let repository = self.repository.current()?;
+        let repository = self.repository.current_binding()?;
         if record.id != id || record.repository_id != repository.head.repository_id {
             return Err(draft_error(
                 DiagnosticClass::Corrupt,
@@ -775,6 +775,7 @@ mod tests {
                 intent: None,
                 validation_profile: None,
                 dependency_artifacts: Vec::new(),
+                status: crate::platform::ReceiptStatus::ImportAccepted,
             },
         )
         .expect("repository");
@@ -908,12 +909,17 @@ mod tests {
         store
             .append(&append_request(&fixture, &draft))
             .expect("append draft");
-        let (backup, backup_receipt) = fixture.repository.backup().expect("backup with draft");
+        let backup_root = tempfile::TempDir::new().expect("backup parent");
+        let backup = backup_root.path().join("drafts.lkjb");
+        let backup_receipt = fixture
+            .repository
+            .backup_to(&backup)
+            .expect("backup with draft");
         assert_eq!(backup_receipt.drafts, 1);
 
         let destination = tempfile::TempDir::new().expect("restore destination");
         let (restored, restore_receipt) =
-            SemanticRepository::restore_backup(destination.path(), &backup)
+            SemanticRepository::restore_backup_from(destination.path(), &backup)
                 .expect("restore with draft");
         assert_eq!(restore_receipt.drafts, 1);
         assert_eq!(

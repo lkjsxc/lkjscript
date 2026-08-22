@@ -22,7 +22,7 @@ use super::semantic_id::{ConflictId, DeclarationId, ModuleId, RevisionId, Target
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const SEMANTIC_MERGE_CONTRACT_VERSION: u16 = 1;
+pub const SEMANTIC_MERGE_CONTRACT_VERSION: u16 = 2;
 pub const MAXIMUM_MERGE_CONFLICTS: usize = 10_000;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -125,7 +125,7 @@ pub fn merge_revisions(
     apply: bool,
 ) -> Result<SemanticMergeResult, Diagnostic> {
     validate_request(request)?;
-    let current = repository.current()?;
+    let current = repository.current_binding()?;
     let transaction = merge_transaction_digest(request);
     let empty = |status, conflicts| SemanticMergeResult {
         contract_version: SEMANTIC_MERGE_CONTRACT_VERSION,
@@ -178,19 +178,34 @@ pub fn merge_revisions(
             materialize_conflicts(request, pending),
         ));
     }
-    if let Err(error) = repository.canonicalize_proposal(&mut merged.root, &mut merged.modules) {
-        return Ok(empty(
-            SemanticMergeStatus::Conflicted,
-            materialize_conflicts(
-                request,
-                vec![PendingConflict {
-                    kind: SemanticMergeConflictKind::InvalidMergedGraph,
-                    owner_id: None,
-                    summary: format!("{}: {}", error.code, error.message),
-                }],
-            ),
-        ));
-    }
+    let preparation_base = if current.head.revision == request.left_revision {
+        &left.root
+    } else if current.head.revision == request.right_revision {
+        &right.root
+    } else {
+        &base.root
+    };
+    let prepared_validation = match repository.canonicalize_proposal(
+        current.head.revision,
+        preparation_base,
+        &mut merged.root,
+        &mut merged.modules,
+    ) {
+        Ok(prepared) => prepared,
+        Err(error) => {
+            return Ok(empty(
+                SemanticMergeStatus::Conflicted,
+                materialize_conflicts(
+                    request,
+                    vec![PendingConflict {
+                        kind: SemanticMergeConflictKind::InvalidMergedGraph,
+                        owner_id: None,
+                        summary: format!("{}: {}", error.code, error.message),
+                    }],
+                ),
+            ));
+        }
+    };
 
     if !apply {
         let current_root = if current.head.revision == request.left_revision {
@@ -238,12 +253,17 @@ pub fn merge_revisions(
         },
     ];
     parents.sort();
+    let semantic_certificate = SemanticRepository::semantic_certificate_for_modules(
+        &merged.root.package_id,
+        &merged.modules,
+    )?;
     let predicted_revision = RevisionCore {
         contract_version: REVISION_CONTRACT_VERSION,
         graph_contract_version: GRAPH_CONTRACT_VERSION,
         repository_id: current.head.repository_id,
         parents,
         root: result_root,
+        semantic_certificate,
         semantic_diff,
         transaction,
     }
@@ -255,7 +275,8 @@ pub fn merge_revisions(
     let (outcome, receipt) = repository.publish_merge(
         PublicationProposal {
             expected_base: current.head.revision,
-            root: merged.root,
+            repository_id: current.head.repository_id,
+            root: Some(merged.root),
             modules: merged.modules,
             transaction,
             idempotency_key: None,
@@ -264,6 +285,7 @@ pub fn merge_revisions(
             affected_owners: merged.affected.clone(),
             intent: request.intent.clone(),
             dependency_artifacts: Vec::new(),
+            prepared_validation: Some(prepared_validation),
         },
         additional_parent,
     )?;
@@ -399,7 +421,7 @@ fn merge_snapshots(
         let mut exports = entries
             .iter()
             .filter(|(_, declaration)| declaration.exported)
-            .map(|(_, declaration)| declaration.identity.name.clone())
+            .map(|(id, _)| *id)
             .collect::<Vec<_>>();
         exports.sort();
         exports.dedup();
@@ -506,7 +528,7 @@ fn declaration_states(snapshot: &RevisionSnapshot) -> BTreeMap<DeclarationId, De
                     module: module.module_id,
                     identity: identity.clone(),
                     declaration: declaration.clone(),
-                    exported: module.module.exports.contains(&identity.name),
+                    exported: module.module.exports.contains(&identity.id),
                 },
             );
         }
@@ -716,6 +738,7 @@ impl MergeKey for TombstoneIdentity {
             TombstoneIdentity::Field(id) => id.to_string(),
             TombstoneIdentity::Case(id) => id.to_string(),
             TombstoneIdentity::Operation(id) => id.to_string(),
+            TombstoneIdentity::TypeParameter(id) => id.to_string(),
             TombstoneIdentity::Parameter(id) => id.to_string(),
             TombstoneIdentity::Binding(id) => id.to_string(),
             TombstoneIdentity::Expression(id) => id.to_string(),
@@ -913,11 +936,6 @@ mod tests {
             &mut left.modules[0].module.declarations[0],
             left_name.clone(),
         );
-        for export in &mut left.modules[0].module.exports {
-            if export == &old_name {
-                export.clone_from(&left_name);
-            }
-        }
         let mut right = base.clone();
         right.root.package_name.push_str("-right");
 

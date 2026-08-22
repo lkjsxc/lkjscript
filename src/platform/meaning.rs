@@ -2,27 +2,27 @@
 
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::language::{Declaration, Effect, Expression, Module};
-use super::package::PackageId;
+pub use super::language::{DeclarationReference, ModuleReference};
 use super::packed;
 use super::semantic_digest::ModuleObjectDigest;
 use super::semantic_id::{
     AnnotationId, BindingId, CaseId, DeclarationId, DocumentationId, ExpressionId, FieldId,
-    ModuleId, OperationId, ParameterId, PortId, RequirementId, TargetId,
+    ModuleId, OperationId, ParameterId, PortId, RequirementId, TargetId, TypeParameterId,
 };
 use super::syntax::SourceSpan;
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
-pub const GRAPH_CONTRACT_VERSION: u16 = 1;
-pub const GRAPH_CONTRACT_IDENTITY: &str = "lkjscript-meaning-graph-1";
+pub const GRAPH_CONTRACT_VERSION: u16 = 4;
+pub const GRAPH_CONTRACT_IDENTITY: &str = "lkjscript-meaning-graph-4";
 pub const MAXIMUM_MODULE_SEGMENT_BYTES: usize = 64 * 1_048_576;
 pub const MAXIMUM_MODULE_DECLARATIONS: usize = 100_000;
 pub const MAXIMUM_MODULE_IDENTITIES: usize = 2_000_000;
 pub const MAXIMUM_EXPRESSION_DEPTH: usize = 256;
 pub const MAXIMUM_DOCUMENTATION_BYTES: usize = 16 * 1_048_576;
-const MODULE_MAGIC: [u8; 8] = *b"LKJMOD01";
-const MODULE_DIGEST_DOMAIN: &str = "lkjscript.semantic-module-object.v1";
+const MODULE_MAGIC: [u8; 8] = *b"LKJMOD04";
+const MODULE_DIGEST_DOMAIN: &str = "lkjscript.semantic-module-object.v4";
 
 #[derive(
     Decode, Encode, Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize,
@@ -61,6 +61,7 @@ impl DeclarationKind {
 #[derive(Decode, Encode, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum MemberIdentity {
+    TypeParameter { id: TypeParameterId, name: String },
     Field { id: FieldId, name: String },
     Case { id: CaseId, name: String },
     Operation { id: OperationId, name: String },
@@ -73,7 +74,8 @@ pub enum MemberIdentity {
 impl MemberIdentity {
     pub fn name(&self) -> &str {
         match self {
-            Self::Field { name, .. }
+            Self::TypeParameter { name, .. }
+            | Self::Field { name, .. }
             | Self::Case { name, .. }
             | Self::Operation { name, .. }
             | Self::Parameter { name, .. }
@@ -104,10 +106,12 @@ pub enum ExpressionKind {
     Text,
     StaticText,
     Variable,
+    ConstantReference,
     If,
     Let,
     Do,
     Call,
+    Invoke,
     Record,
     Variant,
     Field,
@@ -155,21 +159,6 @@ pub enum RelationSource {
 }
 
 #[derive(Decode, Encode, Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct ModuleReference {
-    pub package: PackageId,
-    pub module: ModuleId,
-}
-
-#[derive(Decode, Encode, Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct DeclarationReference {
-    pub package: PackageId,
-    pub module: ModuleId,
-    pub declaration: DeclarationId,
-}
-
-#[derive(Decode, Encode, Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(tag = "kind", content = "id", rename_all = "snake_case")]
 pub enum RelationTarget {
     Module(ModuleReference),
@@ -185,6 +174,10 @@ pub enum RelationTarget {
     Operation {
         owner: DeclarationReference,
         operation: OperationId,
+    },
+    TypeParameter {
+        owner: DeclarationReference,
+        type_parameter: TypeParameterId,
     },
     Parameter {
         owner: DeclarationReference,
@@ -286,7 +279,30 @@ impl MeaningModule {
         mut module: Module,
         allocator: &mut MigrationIdentityAllocator,
     ) -> Result<Self, Diagnostic> {
-        normalize_module_spans(&mut module);
+        Self::allocate(&mut module, allocator)
+    }
+
+    /// Allocates stable semantic identities for a normalized public change. Request allocation
+    /// is domain-separated from one-time migration and is deterministic under its exact seed.
+    pub fn create(
+        mut module: Module,
+        allocator: &mut RequestIdentityAllocator,
+    ) -> Result<Self, Diagnostic> {
+        Self::allocate(&mut module, allocator)
+    }
+
+    pub fn create_declaration_identity(
+        declaration: &Declaration,
+        allocator: &mut RequestIdentityAllocator,
+    ) -> Result<DeclarationIdentity, Diagnostic> {
+        import_declaration_identity(declaration, allocator)
+    }
+
+    fn allocate(
+        module: &mut Module,
+        allocator: &mut impl IdentityAllocation,
+    ) -> Result<Self, Diagnostic> {
+        normalize_module_spans(module);
         let module_id = allocator.module()?;
         let mut declarations = Vec::with_capacity(module.declarations.len());
         for declaration in &module.declarations {
@@ -295,7 +311,7 @@ impl MeaningModule {
         let value = Self {
             graph_contract_version: GRAPH_CONTRACT_VERSION,
             module_id,
-            module,
+            module: module.clone(),
             declarations,
             relations: Vec::new(),
             documentation: Vec::new(),
@@ -448,6 +464,20 @@ impl MeaningModule {
     }
 }
 
+trait IdentityAllocation {
+    fn module(&mut self) -> Result<ModuleId, Diagnostic>;
+    fn declaration(&mut self) -> Result<DeclarationId, Diagnostic>;
+    fn field(&mut self) -> Result<FieldId, Diagnostic>;
+    fn case(&mut self) -> Result<CaseId, Diagnostic>;
+    fn operation(&mut self) -> Result<OperationId, Diagnostic>;
+    fn type_parameter(&mut self) -> Result<TypeParameterId, Diagnostic>;
+    fn parameter(&mut self) -> Result<ParameterId, Diagnostic>;
+    fn binding(&mut self) -> Result<BindingId, Diagnostic>;
+    fn expression(&mut self) -> Result<ExpressionId, Diagnostic>;
+    fn requirement(&mut self) -> Result<RequirementId, Diagnostic>;
+    fn port(&mut self) -> Result<PortId, Diagnostic>;
+}
+
 #[derive(Clone, Debug)]
 pub struct MigrationIdentityAllocator {
     seed: Vec<u8>,
@@ -456,6 +486,7 @@ pub struct MigrationIdentityAllocator {
     field: u64,
     case: u64,
     operation: u64,
+    type_parameter: u64,
     parameter: u64,
     binding: u64,
     expression: u64,
@@ -472,6 +503,7 @@ impl MigrationIdentityAllocator {
             field: 0,
             case: 0,
             operation: 0,
+            type_parameter: 0,
             parameter: 0,
             binding: 0,
             expression: 0,
@@ -517,6 +549,13 @@ impl MigrationIdentityAllocator {
         ))
     }
 
+    fn type_parameter(&mut self) -> Result<TypeParameterId, Diagnostic> {
+        Ok(TypeParameterId::migrate(
+            &self.seed,
+            Self::next(&mut self.type_parameter)?,
+        ))
+    }
+
     fn parameter(&mut self) -> Result<ParameterId, Diagnostic> {
         Ok(ParameterId::migrate(
             &self.seed,
@@ -550,9 +589,184 @@ impl MigrationIdentityAllocator {
     }
 }
 
+impl IdentityAllocation for MigrationIdentityAllocator {
+    fn module(&mut self) -> Result<ModuleId, Diagnostic> {
+        Self::module(self)
+    }
+
+    fn declaration(&mut self) -> Result<DeclarationId, Diagnostic> {
+        Self::declaration(self)
+    }
+
+    fn field(&mut self) -> Result<FieldId, Diagnostic> {
+        Self::field(self)
+    }
+
+    fn case(&mut self) -> Result<CaseId, Diagnostic> {
+        Self::case(self)
+    }
+
+    fn operation(&mut self) -> Result<OperationId, Diagnostic> {
+        Self::operation(self)
+    }
+
+    fn type_parameter(&mut self) -> Result<TypeParameterId, Diagnostic> {
+        Self::type_parameter(self)
+    }
+
+    fn parameter(&mut self) -> Result<ParameterId, Diagnostic> {
+        Self::parameter(self)
+    }
+
+    fn binding(&mut self) -> Result<BindingId, Diagnostic> {
+        Self::binding(self)
+    }
+
+    fn expression(&mut self) -> Result<ExpressionId, Diagnostic> {
+        Self::expression(self)
+    }
+
+    fn requirement(&mut self) -> Result<RequirementId, Diagnostic> {
+        Self::requirement(self)
+    }
+
+    fn port(&mut self) -> Result<PortId, Diagnostic> {
+        Self::port(self)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct RequestIdentityAllocator {
+    seed: Vec<u8>,
+    module: u64,
+    declaration: u64,
+    field: u64,
+    case: u64,
+    operation: u64,
+    type_parameter: u64,
+    parameter: u64,
+    binding: u64,
+    expression: u64,
+    requirement: u64,
+    port: u64,
+    target: u64,
+}
+
+impl RequestIdentityAllocator {
+    pub fn new(seed: impl Into<Vec<u8>>) -> Self {
+        Self {
+            seed: seed.into(),
+            module: 0,
+            declaration: 0,
+            field: 0,
+            case: 0,
+            operation: 0,
+            type_parameter: 0,
+            parameter: 0,
+            binding: 0,
+            expression: 0,
+            requirement: 0,
+            port: 0,
+            target: 0,
+        }
+    }
+
+    fn next(counter: &mut u64) -> Result<u64, Diagnostic> {
+        *counter = counter.checked_add(1).ok_or_else(|| {
+            meaning_error(
+                DiagnosticClass::Resource,
+                "meaning_request_identity_ordinal_exhausted",
+                "request-local identity allocation ordinal was exhausted",
+            )
+        })?;
+        Ok(*counter)
+    }
+
+    pub fn allocate_module(&mut self) -> Result<ModuleId, Diagnostic> {
+        <Self as IdentityAllocation>::module(self)
+    }
+
+    pub fn allocate_target(&mut self) -> Result<TargetId, Diagnostic> {
+        Ok(TargetId::allocate(
+            &self.seed,
+            Self::next(&mut self.target)?,
+        ))
+    }
+}
+
+impl IdentityAllocation for RequestIdentityAllocator {
+    fn module(&mut self) -> Result<ModuleId, Diagnostic> {
+        Ok(ModuleId::allocate(
+            &self.seed,
+            Self::next(&mut self.module)?,
+        ))
+    }
+
+    fn declaration(&mut self) -> Result<DeclarationId, Diagnostic> {
+        Ok(DeclarationId::allocate(
+            &self.seed,
+            Self::next(&mut self.declaration)?,
+        ))
+    }
+
+    fn field(&mut self) -> Result<FieldId, Diagnostic> {
+        Ok(FieldId::allocate(&self.seed, Self::next(&mut self.field)?))
+    }
+
+    fn case(&mut self) -> Result<CaseId, Diagnostic> {
+        Ok(CaseId::allocate(&self.seed, Self::next(&mut self.case)?))
+    }
+
+    fn operation(&mut self) -> Result<OperationId, Diagnostic> {
+        Ok(OperationId::allocate(
+            &self.seed,
+            Self::next(&mut self.operation)?,
+        ))
+    }
+
+    fn type_parameter(&mut self) -> Result<TypeParameterId, Diagnostic> {
+        Ok(TypeParameterId::allocate(
+            &self.seed,
+            Self::next(&mut self.type_parameter)?,
+        ))
+    }
+
+    fn parameter(&mut self) -> Result<ParameterId, Diagnostic> {
+        Ok(ParameterId::allocate(
+            &self.seed,
+            Self::next(&mut self.parameter)?,
+        ))
+    }
+
+    fn binding(&mut self) -> Result<BindingId, Diagnostic> {
+        Ok(BindingId::allocate(
+            &self.seed,
+            Self::next(&mut self.binding)?,
+        ))
+    }
+
+    fn expression(&mut self) -> Result<ExpressionId, Diagnostic> {
+        Ok(ExpressionId::allocate(
+            &self.seed,
+            Self::next(&mut self.expression)?,
+        ))
+    }
+
+    fn requirement(&mut self) -> Result<RequirementId, Diagnostic> {
+        Ok(RequirementId::allocate(
+            &self.seed,
+            Self::next(&mut self.requirement)?,
+        ))
+    }
+
+    fn port(&mut self) -> Result<PortId, Diagnostic> {
+        Ok(PortId::allocate(&self.seed, Self::next(&mut self.port)?))
+    }
+}
+
 fn import_declaration_identity(
     declaration: &Declaration,
-    allocator: &mut MigrationIdentityAllocator,
+    allocator: &mut impl IdentityAllocation,
 ) -> Result<DeclarationIdentity, Diagnostic> {
     let mut members = Vec::new();
     let mut bindings = Vec::new();
@@ -589,6 +803,12 @@ fn import_declaration_identity(
             }
         }
         Declaration::External(function) => {
+            for type_parameter in &function.type_parameters {
+                members.push(MemberIdentity::TypeParameter {
+                    id: allocator.type_parameter()?,
+                    name: type_parameter.name.clone(),
+                });
+            }
             for parameter in &function.parameters {
                 members.push(MemberIdentity::Parameter {
                     id: allocator.parameter()?,
@@ -597,6 +817,12 @@ fn import_declaration_identity(
             }
         }
         Declaration::Function(function) => {
+            for type_parameter in &function.type_parameters {
+                members.push(MemberIdentity::TypeParameter {
+                    id: allocator.type_parameter()?,
+                    name: type_parameter.name.clone(),
+                });
+            }
             for parameter in &function.parameters {
                 members.push(MemberIdentity::Parameter {
                     id: allocator.parameter()?,
@@ -677,7 +903,7 @@ fn import_declaration_identity(
 fn index_expression(
     expression: &Expression,
     path: Vec<u32>,
-    allocator: &mut MigrationIdentityAllocator,
+    allocator: &mut impl IdentityAllocation,
     output: &mut Vec<ExpressionIdentity>,
     bindings: &mut Vec<BindingIdentity>,
 ) -> Result<(), Diagnostic> {
@@ -745,6 +971,24 @@ fn index_expression(
                     child,
                     &path,
                     u32::try_from(index).map_err(|_| expression_limit())?,
+                    allocator,
+                    output,
+                    bindings,
+                )?;
+            }
+        }
+        Expression::Invoke {
+            callee, arguments, ..
+        } => {
+            index_child(callee, &path, 0, allocator, output, bindings)?;
+            for (index, child) in arguments.iter().enumerate() {
+                index_child(
+                    child,
+                    &path,
+                    u32::try_from(index)
+                        .map_err(|_| expression_limit())?
+                        .checked_add(1)
+                        .ok_or_else(expression_limit)?,
                     allocator,
                     output,
                     bindings,
@@ -830,6 +1074,7 @@ fn index_expression(
         | Expression::Text(_, _)
         | Expression::StaticText(_, _)
         | Expression::Variable(_, _)
+        | Expression::Constant(_, _)
         | Expression::FunctionRef { .. } => {}
     }
     Ok(())
@@ -839,7 +1084,7 @@ fn index_child(
     expression: &Expression,
     parent: &[u32],
     ordinal: u32,
-    allocator: &mut MigrationIdentityAllocator,
+    allocator: &mut impl IdentityAllocation,
     output: &mut Vec<ExpressionIdentity>,
     bindings: &mut Vec<BindingIdentity>,
 ) -> Result<(), Diagnostic> {
@@ -856,10 +1101,12 @@ fn expression_kind(expression: &Expression) -> ExpressionKind {
         Expression::Text(_, _) => ExpressionKind::Text,
         Expression::StaticText(_, _) => ExpressionKind::StaticText,
         Expression::Variable(_, _) => ExpressionKind::Variable,
+        Expression::Constant(_, _) => ExpressionKind::ConstantReference,
         Expression::If { .. } => ExpressionKind::If,
         Expression::Let { .. } => ExpressionKind::Let,
         Expression::Do { .. } => ExpressionKind::Do,
         Expression::Call { .. } => ExpressionKind::Call,
+        Expression::Invoke { .. } => ExpressionKind::Invoke,
         Expression::Record { .. } => ExpressionKind::Record,
         Expression::Variant { .. } => ExpressionKind::Variant,
         Expression::Field { .. } => ExpressionKind::Field,
@@ -902,16 +1149,28 @@ fn validate_member_shape(
             expected
         }
         Declaration::External(function) => function
-            .parameters
+            .type_parameters
             .iter()
-            .map(|parameter| ("parameter", parameter.name.as_str()))
+            .map(|parameter| ("type_parameter", parameter.name.as_str()))
+            .chain(
+                function
+                    .parameters
+                    .iter()
+                    .map(|parameter| ("parameter", parameter.name.as_str())),
+            )
             .collect(),
         Declaration::Function(function) => {
             let mut expected = function
-                .parameters
+                .type_parameters
                 .iter()
-                .map(|parameter| ("parameter", parameter.name.as_str()))
+                .map(|parameter| ("type_parameter", parameter.name.as_str()))
                 .collect::<Vec<_>>();
+            expected.extend(
+                function
+                    .parameters
+                    .iter()
+                    .map(|parameter| ("parameter", parameter.name.as_str())),
+            );
             if let Effect::Task { capabilities } = &function.effect {
                 expected.extend(
                     capabilities
@@ -964,6 +1223,7 @@ fn validate_member_shape(
 
 fn member_kind(member: &MemberIdentity) -> &'static str {
     match member {
+        MemberIdentity::TypeParameter { .. } => "type_parameter",
         MemberIdentity::Field { .. } => "field",
         MemberIdentity::Case { .. } => "case",
         MemberIdentity::Operation { .. } => "operation",
@@ -976,6 +1236,7 @@ fn member_kind(member: &MemberIdentity) -> &'static str {
 
 fn member_domain_bytes(member: &MemberIdentity) -> (&'static str, [u8; 16]) {
     match member {
+        MemberIdentity::TypeParameter { id, .. } => ("type_parameter", id.bytes()),
         MemberIdentity::Field { id, .. } => ("field", id.bytes()),
         MemberIdentity::Case { id, .. } => ("case", id.bytes()),
         MemberIdentity::Operation { id, .. } => ("operation", id.bytes()),
@@ -1146,12 +1407,18 @@ fn normalize_declaration_spans(declaration: &mut Declaration) {
         }
         Declaration::External(function) => {
             function.span = semantic_span();
+            for type_parameter in &mut function.type_parameters {
+                type_parameter.span = semantic_span();
+            }
             for parameter in &mut function.parameters {
                 parameter.span = semantic_span();
             }
         }
         Declaration::Function(function) => {
             function.span = semantic_span();
+            for type_parameter in &mut function.type_parameters {
+                type_parameter.span = semantic_span();
+            }
             for parameter in &mut function.parameters {
                 parameter.span = semantic_span();
             }
@@ -1191,7 +1458,8 @@ fn normalize_expression_spans(expression: &mut Expression) {
         | Expression::I64(_, span)
         | Expression::Text(_, span)
         | Expression::StaticText(_, span)
-        | Expression::Variable(_, span) => *span = semantic_span(),
+        | Expression::Variable(_, span)
+        | Expression::Constant(_, span) => *span = semantic_span(),
         Expression::If {
             condition,
             when_true,
@@ -1234,6 +1502,17 @@ fn normalize_expression_spans(expression: &mut Expression) {
             arguments, span, ..
         } => {
             *span = semantic_span();
+            for argument in arguments {
+                normalize_expression_spans(argument);
+            }
+        }
+        Expression::Invoke {
+            callee,
+            arguments,
+            span,
+        } => {
+            *span = semantic_span();
+            normalize_expression_spans(callee);
             for argument in arguments {
                 normalize_expression_spans(argument);
             }

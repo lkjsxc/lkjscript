@@ -29,19 +29,21 @@ use super::semantic_digest::{SemanticDiffDigest, TransactionDigest};
 use super::semantic_id::RevisionId;
 #[cfg(test)]
 use super::semantic_id::{RepositoryId, TargetId};
+#[cfg(test)]
+use super::semantic_summary::{build_module_summary, build_semantic_certificate};
 use bincode::{Decode, Encode};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 2;
-pub const PACKAGE_ARTIFACT_CONTRACT_VERSION: u16 = 1;
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 4;
+pub const PACKAGE_ARTIFACT_CONTRACT_VERSION: u16 = 3;
 pub const MAXIMUM_ARTIFACT_BYTES: usize = 128 * 1_048_576;
 pub const MAXIMUM_ARTIFACT_PACKAGES: usize = 1_024;
 const MAXIMUM_PACKAGE_ARTIFACT_BYTES: usize = 128 * 1_048_576;
-const ARTIFACT_MAGIC: [u8; 8] = *b"LKJART02";
-const ARTIFACT_DOMAIN: &str = "lkjscript.graph-artifact-bundle.v2";
-const PACKAGE_MAGIC: [u8; 8] = *b"LKJPKG01";
-const PACKAGE_DOMAIN: &str = "lkjscript.graph-package-artifact.v1";
+const ARTIFACT_MAGIC: [u8; 8] = *b"LKJART04";
+const ARTIFACT_DOMAIN: &str = "lkjscript.graph-artifact-bundle.v4";
+const PACKAGE_MAGIC: [u8; 8] = *b"LKJPKG03";
+const PACKAGE_DOMAIN: &str = "lkjscript.graph-package-artifact.v3";
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -65,6 +67,7 @@ pub struct LoadedArtifact {
     pub root_revision: RevisionId,
     pub packages: BTreeMap<PackageId, ValidatedPackage>,
     pub package_artifacts: BTreeMap<PackageId, ArtifactDigest>,
+    pub(crate) graph_roots: BTreeMap<PackageId, GraphRoot>,
     pub(crate) package_objects: BTreeMap<ArtifactDigest, Vec<u8>>,
 }
 
@@ -77,6 +80,20 @@ impl LoadedArtifact {
                 "validated artifact has no root package",
             )
         })
+    }
+
+    pub(crate) fn graph_root(&self, package: &PackageId) -> Result<&GraphRoot, Diagnostic> {
+        self.graph_roots.get(package).ok_or_else(|| {
+            artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_graph_root_missing",
+                "validated artifact has no canonical graph root for a package",
+            )
+        })
+    }
+
+    pub(crate) fn root_graph(&self) -> Result<&GraphRoot, Diagnostic> {
+        self.graph_root(&self.root_package_id)
     }
 
     pub fn target(&self, name: &str) -> Result<&Target, Diagnostic> {
@@ -462,6 +479,7 @@ fn load_bundle_objects(
     let mut pending = decoded;
     let mut validated_by_digest = BTreeMap::<ArtifactDigest, ValidatedPackage>::new();
     let mut artifacts_by_package = BTreeMap::new();
+    let mut graph_roots = BTreeMap::new();
     while !pending.is_empty() {
         let ready = pending
             .iter()
@@ -527,6 +545,7 @@ fn load_bundle_objects(
                     "artifact contains two objects for one package identity",
                 ));
             }
+            graph_roots.insert(package.root.package_id.clone(), package.root);
             validated_by_digest.insert(digest, validated);
         }
     }
@@ -557,6 +576,7 @@ fn load_bundle_objects(
         root_revision,
         packages,
         package_artifacts: artifacts_by_package,
+        graph_roots,
         package_objects: object_bytes,
     })
 }
@@ -727,12 +747,18 @@ fn migration_package_artifact(
     let root_bytes = root.encode()?;
     let transaction = TransactionDigest::of(&root_bytes);
     let semantic_diff = SemanticDiffDigest::of(&root_bytes);
+    let summaries = modules
+        .iter()
+        .map(|module| build_module_summary(&root.package_id, module))
+        .collect::<Result<Vec<_>, Diagnostic>>()?;
+    let semantic_certificate = build_semantic_certificate(&summaries)?;
     let core = RevisionCore {
         contract_version: REVISION_CONTRACT_VERSION,
         graph_contract_version: GRAPH_CONTRACT_VERSION,
         repository_id,
         parents: Vec::new(),
         root: root.digest()?,
+        semantic_certificate,
         semantic_diff,
         transaction,
     };
@@ -841,11 +867,8 @@ fn migration_target(
         ),
         name: target.name.clone(),
         component_module: module.module_id,
-        component_module_name: module_name.to_owned(),
         component: identity.id,
-        component_name: component_name.to_owned(),
         port,
-        port_name: target.port.clone(),
         runner: target.runner,
     })
 }

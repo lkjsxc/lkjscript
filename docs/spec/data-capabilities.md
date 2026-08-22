@@ -21,8 +21,10 @@ no-publication connection class within the declared pool-wait bound. Individual 
 are bounded to one quarter of that interval, clamped to 250 through 5,000 ms. When invoked from an
 async runtime thread, synchronous driver connection establishment runs on one named blocking thread;
 thread creation and panic are closed infrastructure failures. Current transport uses `NoTls`.
-Malformed connection descriptors reject immediately as a nonretryable capability failure and are
-never included in diagnostics.
+PostgreSQL TLS is deliberately out of scope and not planned; encrypted database transport requires
+an external trusted boundary or a different adapter outside current scope. Malformed connection
+descriptors reject immediately as a nonretryable capability failure and are never included in
+diagnostics.
 
 Lexical transactions execute multiple parameterized statements on one connection. Normal body
 success commits; body error rolls back; dropped scope attempts rollback; commit connection loss is
