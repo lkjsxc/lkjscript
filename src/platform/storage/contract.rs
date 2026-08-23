@@ -26,8 +26,9 @@ pub use crate::platform::kernel::contract::{
     OWNER_OBJECT_DIGEST_DOMAIN, PACKAGE_OBJECT_DIGEST_DOMAIN, RETIREMENT_OBJECT_DIGEST_DOMAIN,
     SEMANTIC_ROOT_DIGEST_DOMAIN, SEQUENCE_OBJECT_DIGEST_DOMAIN, TYPE_OBJECT_DIGEST_DOMAIN,
 };
-pub const VALIDATION_WITNESS_DIGEST_DOMAIN: &str = "lkjscript.validation-witness.v1";
-pub const OWNER_SUMMARY_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.v1";
+pub use crate::platform::witness::contract::{
+    OWNER_SUMMARY_DIGEST_DOMAIN, VALIDATION_WITNESS_DIGEST_DOMAIN,
+};
 pub const REVISION_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.revision-object.v5";
 pub const RECEIPT_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.receipt-object.v5";
 pub const DRAFT_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.draft-object.v5";

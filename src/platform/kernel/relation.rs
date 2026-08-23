@@ -66,6 +66,64 @@ pub enum PropagationClass {
 }
 
 impl RelationKind {
+    pub const ALL: [Self; 25] = [
+        Self::DeclarationModule,
+        Self::MemberDeclaration,
+        Self::ParameterOperation,
+        Self::ExpressionParent,
+        Self::ExpressionRoot,
+        Self::TypeParameterUse,
+        Self::NamedTypeUse,
+        Self::LocalValueReference,
+        Self::ConstantReference,
+        Self::FunctionCall,
+        Self::FunctionValue,
+        Self::NominalFieldConstruction,
+        Self::NominalFieldAccess,
+        Self::VariantConstruction,
+        Self::VariantMatch,
+        Self::CapabilityInterface,
+        Self::CapabilityOperation,
+        Self::ComponentRequirement,
+        Self::ComponentPort,
+        Self::TargetComponent,
+        Self::TargetPort,
+        Self::TestExecutionDependency,
+        Self::DocumentationOwnership,
+        Self::AnnotationOwnership,
+        Self::PackageDependency,
+    ];
+
+    pub const fn tag(self) -> u8 {
+        match self {
+            Self::DeclarationModule => 1,
+            Self::MemberDeclaration => 2,
+            Self::ParameterOperation => 3,
+            Self::ExpressionParent => 4,
+            Self::ExpressionRoot => 5,
+            Self::TypeParameterUse => 6,
+            Self::NamedTypeUse => 7,
+            Self::LocalValueReference => 8,
+            Self::ConstantReference => 9,
+            Self::FunctionCall => 10,
+            Self::FunctionValue => 11,
+            Self::NominalFieldConstruction => 12,
+            Self::NominalFieldAccess => 13,
+            Self::VariantConstruction => 14,
+            Self::VariantMatch => 15,
+            Self::CapabilityInterface => 16,
+            Self::CapabilityOperation => 17,
+            Self::ComponentRequirement => 18,
+            Self::ComponentPort => 19,
+            Self::TargetComponent => 20,
+            Self::TargetPort => 21,
+            Self::TestExecutionDependency => 22,
+            Self::DocumentationOwnership => 23,
+            Self::AnnotationOwnership => 24,
+            Self::PackageDependency => 25,
+        }
+    }
+
     pub const fn propagation(self) -> PropagationClass {
         match self {
             Self::DeclarationModule
@@ -91,6 +149,22 @@ impl RelationKind {
                 PropagationClass::Presentation
             }
             Self::PackageDependency => PropagationClass::Package,
+        }
+    }
+}
+
+impl PropagationClass {
+    pub const fn tag(self) -> u8 {
+        match self {
+            Self::Ownership => 1,
+            Self::Type => 2,
+            Self::Value => 3,
+            Self::Behavior => 4,
+            Self::Capability => 5,
+            Self::Target => 6,
+            Self::Test => 7,
+            Self::Presentation => 8,
+            Self::Package => 9,
         }
     }
 }

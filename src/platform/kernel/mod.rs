@@ -16,6 +16,7 @@ mod expression;
 mod id;
 mod infer;
 mod name;
+mod namespace;
 mod owner;
 mod reference;
 mod relation;
@@ -34,12 +35,15 @@ pub use digest::{
 pub use expression::*;
 pub use id::{EncodedOwnerKey, ExactOwnerKey, OwnerHeader, OwnerKey, OwnerKind, PackageId};
 pub use name::Name;
+pub use namespace::{NamespaceClass, NamespaceEntryRef, owner_namespace};
 pub use owner::*;
 pub use reference::*;
-pub use relation::{RelationEdge, RelationEndpoint, RelationKind, extract_relations};
+pub use relation::{
+    PropagationClass, RelationEdge, RelationEndpoint, RelationKind, extract_relations,
+};
 pub use root::*;
 pub use type_object::*;
 pub use validate::{FullValidationReport, KernelSnapshot, validate_full};
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

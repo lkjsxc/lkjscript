@@ -97,6 +97,34 @@ impl OwnerKind {
             Self::Annotation => 22,
         }
     }
+
+    pub const fn accepts_owner(self, owner: OwnerKey) -> bool {
+        matches!(
+            (self, owner),
+            (Self::Module, OwnerKey::Module(_))
+                | (Self::Record, OwnerKey::Declaration(_))
+                | (Self::Variant, OwnerKey::Declaration(_))
+                | (Self::Interface, OwnerKey::Declaration(_))
+                | (Self::External, OwnerKey::Declaration(_))
+                | (Self::PureFunction, OwnerKey::Declaration(_))
+                | (Self::TaskFunction, OwnerKey::Declaration(_))
+                | (Self::Constant, OwnerKey::Declaration(_))
+                | (Self::Component, OwnerKey::Declaration(_))
+                | (Self::Test, OwnerKey::Declaration(_))
+                | (Self::TypeParameter, OwnerKey::TypeParameter(_))
+                | (Self::Field, OwnerKey::Field(_))
+                | (Self::Case, OwnerKey::Case(_))
+                | (Self::Operation, OwnerKey::Operation(_))
+                | (Self::Parameter, OwnerKey::Parameter(_))
+                | (Self::Binding, OwnerKey::Binding(_))
+                | (Self::Expression, OwnerKey::Expression(_))
+                | (Self::Requirement, OwnerKey::Requirement(_))
+                | (Self::Port, OwnerKey::Port(_))
+                | (Self::Target, OwnerKey::Target(_))
+                | (Self::Documentation, OwnerKey::Documentation(_))
+                | (Self::Annotation, OwnerKey::Annotation(_))
+        )
+    }
 }
 
 #[derive(

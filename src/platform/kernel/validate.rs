@@ -8,6 +8,7 @@ use super::owner::{
     BindingKind, DeclarationPayload, FunctionEffect, OwnerRecord, ParameterParent,
     PortImplementation,
 };
+use super::owner_namespace;
 use super::relation::{RelationEdge, extract_relations};
 use super::root::{DependencyRecord, RetirementRecord, SemanticRoot};
 use super::type_object::{TypeForm, TypeObject};
@@ -205,73 +206,20 @@ impl FullValidator<'_> {
             if !self.consume_work() {
                 return;
             }
-            let Some((parent, class, name)) = self.namespace_entry(record) else {
+            let Some(entry) = owner_namespace(record) else {
                 continue;
             };
-            let namespace = (parent, class, name.to_owned());
+            let namespace = (
+                entry.parent,
+                entry.class.tag(),
+                entry.name.as_str().to_owned(),
+            );
             if let Some(previous) = names.insert(namespace, *key) {
                 self.error(
                     "kernel_full_namespace_duplicate",
                     format!("owners {previous:?} and {key:?} have the same canonical name"),
                 );
             }
-        }
-    }
-
-    fn namespace_entry<'a>(
-        &self,
-        record: &'a OwnerRecord,
-    ) -> Option<(Option<OwnerKey>, u8, &'a str)> {
-        match record {
-            OwnerRecord::Module(module) => Some((None, 1, module.name.as_str())),
-            OwnerRecord::Declaration(declaration) => Some((
-                Some(OwnerKey::Module(declaration.module)),
-                2,
-                declaration.name.as_str(),
-            )),
-            OwnerRecord::TypeParameter(parameter) => Some((
-                Some(OwnerKey::Declaration(parameter.declaration)),
-                3,
-                parameter.name.as_str(),
-            )),
-            OwnerRecord::Field(field) => Some((
-                Some(OwnerKey::Declaration(field.declaration)),
-                4,
-                field.name.as_str(),
-            )),
-            OwnerRecord::Case(case) => Some((
-                Some(OwnerKey::Declaration(case.declaration)),
-                5,
-                case.name.as_str(),
-            )),
-            OwnerRecord::Operation(operation) => Some((
-                Some(OwnerKey::Declaration(operation.declaration)),
-                6,
-                operation.name.as_str(),
-            )),
-            OwnerRecord::Parameter(parameter) => Some((
-                Some(match parameter.parent {
-                    ParameterParent::Function(declaration) => OwnerKey::Declaration(declaration),
-                    ParameterParent::Operation(operation) => OwnerKey::Operation(operation),
-                }),
-                7,
-                parameter.name.as_str(),
-            )),
-            OwnerRecord::Requirement(requirement) => Some((
-                Some(OwnerKey::Declaration(requirement.declaration)),
-                8,
-                requirement.name.as_str(),
-            )),
-            OwnerRecord::Port(port) => Some((
-                Some(OwnerKey::Declaration(port.declaration)),
-                9,
-                port.name.as_str(),
-            )),
-            OwnerRecord::Target(target) => Some((None, 10, target.name.as_str())),
-            OwnerRecord::Binding(_)
-            | OwnerRecord::Expression(_)
-            | OwnerRecord::Documentation(_)
-            | OwnerRecord::Annotation(_) => None,
         }
     }
 

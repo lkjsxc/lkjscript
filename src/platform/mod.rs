@@ -54,6 +54,11 @@ pub(crate) mod storage;
 pub mod stream;
 mod syntax;
 pub mod value;
+#[allow(
+    dead_code,
+    reason = "Graph 5 validation witness remains private until repository publication cuts over"
+)]
+pub(crate) mod witness;
 pub mod worker;
 pub mod workspace;
 

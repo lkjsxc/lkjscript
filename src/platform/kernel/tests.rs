@@ -568,6 +568,10 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
     )
 }
 
+pub(crate) fn witness_snapshot() -> KernelSnapshot {
+    prototype_snapshot().0
+}
+
 fn encoded_owner(snapshot: &KernelSnapshot, owner: OwnerKey) -> (OwnerObjectDigest, Vec<u8>) {
     encode_owner(snapshot.owners.get(&owner).expect("test owner must exist"))
         .expect("test owner must encode")

@@ -207,7 +207,7 @@ pub struct ExpressionChild {
     pub ordinal: u32,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Decode, Encode, Eq, Ord, PartialEq, PartialOrd)]
 pub enum ExpressionChildRole {
     Condition,
     TrueBranch,
