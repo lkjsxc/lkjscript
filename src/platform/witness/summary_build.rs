@@ -168,6 +168,9 @@ fn direct_children(
 }
 
 fn aggregation_mode(role: OwnershipRole) -> AggregationMode {
+    if !role.aggregates_into_parent() {
+        return AggregationMode::None;
+    }
     match role {
         OwnershipRole::DeclarationTypeParameter
         | OwnershipRole::DeclarationField

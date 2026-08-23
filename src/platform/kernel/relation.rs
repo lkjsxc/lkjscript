@@ -180,7 +180,14 @@ pub fn extract_relations(
     for (key, record) in owners {
         consume_work(&mut work)?;
         let source = exact(package, *key);
-        extract_owner(source, record, package, types, &mut edges, &mut work)?;
+        extract_owner(
+            source,
+            record,
+            package,
+            &mut |digest| types.get(&digest).cloned(),
+            &mut edges,
+            &mut work,
+        )?;
     }
     for dependency in dependencies.keys() {
         consume_work(&mut work)?;
@@ -193,14 +200,47 @@ pub fn extract_relations(
     Ok(edges.into_iter().collect())
 }
 
-fn extract_owner(
+/// Extracts the exact relation set contributed by one canonical owner record. Incremental witness
+/// maintenance and the full oracle call this same switch; only traversal scheduling differs.
+pub fn extract_owner_relations<F>(
+    package: PackageId,
+    owner: OwnerKey,
+    record: &OwnerRecord,
+    mut type_object: F,
+) -> Result<Vec<RelationEdge>, Diagnostic>
+where
+    F: FnMut(TypeObjectDigest) -> Option<TypeObject>,
+{
+    if record.owner() != owner {
+        return Err(relation_error(
+            "kernel_relation_owner_key",
+            "relation extraction owner key disagrees with the canonical record header",
+        ));
+    }
+    let mut edges = BTreeSet::new();
+    let mut work = 0;
+    extract_owner(
+        exact(package, owner),
+        record,
+        package,
+        &mut type_object,
+        &mut edges,
+        &mut work,
+    )?;
+    Ok(edges.into_iter().collect())
+}
+
+fn extract_owner<F>(
     source: ExactOwnerKey,
     record: &OwnerRecord,
     package: PackageId,
-    types: &BTreeMap<TypeObjectDigest, TypeObject>,
+    type_object: &mut F,
     edges: &mut BTreeSet<RelationEdge>,
     work: &mut usize,
-) -> Result<(), Diagnostic> {
+) -> Result<(), Diagnostic>
+where
+    F: FnMut(TypeObjectDigest) -> Option<TypeObject>,
+{
     match record {
         OwnerRecord::Module(_) => {}
         OwnerRecord::Declaration(declaration) => {
@@ -431,7 +471,7 @@ fn extract_owner(
     }
 
     for root in record.type_roots() {
-        extract_type_relations(source, root, package, types, edges, work)?;
+        extract_type_relations(source, root, package, type_object, edges, work)?;
     }
     Ok(())
 }
@@ -578,14 +618,17 @@ fn extract_expression(
     }
 }
 
-fn extract_type_relations(
+fn extract_type_relations<F>(
     source: ExactOwnerKey,
     root: TypeObjectDigest,
     package: PackageId,
-    types: &BTreeMap<TypeObjectDigest, TypeObject>,
+    type_object: &mut F,
     edges: &mut BTreeSet<RelationEdge>,
     work: &mut usize,
-) -> Result<(), Diagnostic> {
+) -> Result<(), Diagnostic>
+where
+    F: FnMut(TypeObjectDigest) -> Option<TypeObject>,
+{
     let mut pending = vec![root];
     let mut observed = BTreeSet::new();
     while let Some(digest) = pending.pop() {
@@ -593,7 +636,7 @@ fn extract_type_relations(
         if !observed.insert(digest) {
             continue;
         }
-        let object = types.get(&digest).ok_or_else(|| {
+        let object = type_object(digest).ok_or_else(|| {
             relation_error(
                 "kernel_relation_missing_type",
                 format!("type object {digest} is missing"),

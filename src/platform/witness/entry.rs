@@ -88,6 +88,28 @@ pub enum OwnershipRole {
     Annotation,
 }
 
+impl OwnershipRole {
+    /// Whether this child's semantic dimensions contribute to its parent's owner summary.
+    /// Module membership and retained attachments remain separate witness facts so local edits do
+    /// not create module-sized or documentation-driven compiler invalidation.
+    pub const fn aggregates_into_parent(self) -> bool {
+        matches!(
+            self,
+            Self::DeclarationTypeParameter
+                | Self::DeclarationField
+                | Self::DeclarationCase
+                | Self::DeclarationOperation
+                | Self::DeclarationParameter
+                | Self::OperationParameter
+                | Self::DeclarationRequirement
+                | Self::DeclarationPort
+                | Self::ExpressionRoot(_)
+                | Self::ExpressionChild { .. }
+                | Self::ExpressionBinding { .. }
+        )
+    }
+}
+
 #[derive(Clone, Copy, Debug, Decode, Encode, Eq, Ord, PartialEq, PartialOrd)]
 pub struct OwnershipEntry {
     pub contract_version: u16,

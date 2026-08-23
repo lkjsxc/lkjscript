@@ -39,7 +39,8 @@ pub use namespace::{NamespaceClass, NamespaceEntryRef, owner_namespace};
 pub use owner::*;
 pub use reference::*;
 pub use relation::{
-    PropagationClass, RelationEdge, RelationEndpoint, RelationKind, extract_relations,
+    PropagationClass, RelationEdge, RelationEndpoint, RelationKind, extract_owner_relations,
+    extract_relations,
 };
 pub use root::*;
 pub use type_object::*;

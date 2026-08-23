@@ -6,6 +6,11 @@
 
 pub mod artifact;
 pub mod bootstrap;
+#[allow(
+    dead_code,
+    reason = "Graph 5 generic changes remain private until repository publication cuts over"
+)]
+pub(crate) mod change;
 pub mod cli;
 pub mod configuration;
 pub mod contract;

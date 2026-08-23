@@ -26,6 +26,7 @@ pub use digest::{
 };
 pub use entry::*;
 pub use full::{FullWitness, WitnessBuildReport, WitnessEntries, rebuild_full_witness};
+pub(crate) use ownership::ownership_contributions;
 pub use summary::{OwnerSummary, SummaryBinding, ValidationWitnessManifest, WitnessRoots};
 
 fn witness_error(

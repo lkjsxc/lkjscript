@@ -41,176 +41,9 @@ pub(super) fn derive_ownership(
     snapshot: &KernelSnapshot,
 ) -> Result<BTreeMap<OwnerKey, OwnershipEntry>, Diagnostic> {
     let mut ownership = BTreeMap::new();
-    for (owner, record) in &snapshot.owners {
-        let entry = match record {
-            OwnerRecord::Module(_) => Some(OwnershipEntry::new(
-                OwnershipParent::Package,
-                OwnershipRole::PackageModule,
-            )),
-            OwnerRecord::Declaration(record) => Some(OwnershipEntry::new(
-                OwnershipParent::Owner(OwnerKey::Module(record.module)),
-                OwnershipRole::ModuleDeclaration,
-            )),
-            OwnerRecord::TypeParameter(record) => Some(OwnershipEntry::new(
-                OwnershipParent::Owner(OwnerKey::Declaration(record.declaration)),
-                OwnershipRole::DeclarationTypeParameter,
-            )),
-            OwnerRecord::Field(record) => Some(OwnershipEntry::new(
-                OwnershipParent::Owner(OwnerKey::Declaration(record.declaration)),
-                OwnershipRole::DeclarationField,
-            )),
-            OwnerRecord::Case(record) => Some(OwnershipEntry::new(
-                OwnershipParent::Owner(OwnerKey::Declaration(record.declaration)),
-                OwnershipRole::DeclarationCase,
-            )),
-            OwnerRecord::Operation(record) => Some(OwnershipEntry::new(
-                OwnershipParent::Owner(OwnerKey::Declaration(record.declaration)),
-                OwnershipRole::DeclarationOperation,
-            )),
-            OwnerRecord::Parameter(record) => Some(match record.parent {
-                ParameterParent::Function(declaration) => OwnershipEntry::new(
-                    OwnershipParent::Owner(OwnerKey::Declaration(declaration)),
-                    OwnershipRole::DeclarationParameter,
-                ),
-                ParameterParent::Operation(operation) => OwnershipEntry::new(
-                    OwnershipParent::Owner(OwnerKey::Operation(operation)),
-                    OwnershipRole::OperationParameter,
-                ),
-            }),
-            OwnerRecord::Requirement(record) => Some(OwnershipEntry::new(
-                OwnershipParent::Owner(OwnerKey::Declaration(record.declaration)),
-                OwnershipRole::DeclarationRequirement,
-            )),
-            OwnerRecord::Port(record) => Some(OwnershipEntry::new(
-                OwnershipParent::Owner(OwnerKey::Declaration(record.declaration)),
-                OwnershipRole::DeclarationPort,
-            )),
-            OwnerRecord::Target(_) => Some(OwnershipEntry::new(
-                OwnershipParent::Package,
-                OwnershipRole::PackageTarget,
-            )),
-            OwnerRecord::Documentation(record) => Some(OwnershipEntry::new(
-                OwnershipParent::Owner(record.owner),
-                OwnershipRole::Documentation,
-            )),
-            OwnerRecord::Annotation(record) => Some(OwnershipEntry::new(
-                OwnershipParent::Owner(record.owner),
-                OwnershipRole::Annotation,
-            )),
-            OwnerRecord::Binding(_) | OwnerRecord::Expression(_) => None,
-        };
-        if let Some(entry) = entry {
-            insert_ownership(&mut ownership, *owner, entry)?;
-        }
-    }
-
     for record in snapshot.owners.values() {
-        match record {
-            OwnerRecord::Declaration(record) => match &record.payload {
-                DeclarationPayload::Function(function) => insert_expression_root(
-                    &mut ownership,
-                    function.body,
-                    record.header.owner,
-                    ExpressionRootRole::FunctionBody,
-                )?,
-                DeclarationPayload::Constant { value, .. } => insert_expression_root(
-                    &mut ownership,
-                    *value,
-                    record.header.owner,
-                    ExpressionRootRole::ConstantValue,
-                )?,
-                DeclarationPayload::Test {
-                    actual, expected, ..
-                } => {
-                    insert_expression_root(
-                        &mut ownership,
-                        *actual,
-                        record.header.owner,
-                        ExpressionRootRole::TestActual,
-                    )?;
-                    insert_expression_root(
-                        &mut ownership,
-                        *expected,
-                        record.header.owner,
-                        ExpressionRootRole::TestExpected,
-                    )?;
-                }
-                DeclarationPayload::Record { .. }
-                | DeclarationPayload::Variant { .. }
-                | DeclarationPayload::Interface { .. }
-                | DeclarationPayload::External(_)
-                | DeclarationPayload::Component { .. } => {}
-            },
-            OwnerRecord::Binding(record) => {
-                if let Some(value) = record.value {
-                    insert_expression_root(
-                        &mut ownership,
-                        value,
-                        record.header.owner,
-                        ExpressionRootRole::BindingValue,
-                    )?;
-                }
-            }
-            OwnerRecord::Port(record) => {
-                if let PortImplementation::Expression(expression) = record.implementation {
-                    insert_expression_root(
-                        &mut ownership,
-                        expression,
-                        record.header.owner,
-                        ExpressionRootRole::PortImplementation,
-                    )?;
-                }
-            }
-            OwnerRecord::Expression(record) => {
-                for child in record.children() {
-                    insert_ownership(
-                        &mut ownership,
-                        OwnerKey::Expression(child.expression),
-                        OwnershipEntry::new(
-                            OwnershipParent::Owner(OwnerKey::Expression(record.id)),
-                            OwnershipRole::ExpressionChild {
-                                role: child.role,
-                                ordinal: child.ordinal,
-                            },
-                        ),
-                    )?;
-                }
-                match &record.operation {
-                    ExpressionOperation::Let { bindings, .. } => {
-                        for (ordinal, binding) in bindings.iter().enumerate() {
-                            insert_binding_parent(
-                                &mut ownership,
-                                *binding,
-                                record.id,
-                                BindingContainerRole::Let,
-                                ordinal,
-                            )?;
-                        }
-                    }
-                    ExpressionOperation::Match { arms, .. } => {
-                        for (ordinal, arm) in arms.iter().enumerate() {
-                            if let Some(binding) = arm.payload_binding {
-                                insert_binding_parent(
-                                    &mut ownership,
-                                    binding,
-                                    record.id,
-                                    BindingContainerRole::MatchPayload,
-                                    ordinal,
-                                )?;
-                            }
-                        }
-                    }
-                    ExpressionOperation::Transaction { binding, .. } => insert_binding_parent(
-                        &mut ownership,
-                        *binding,
-                        record.id,
-                        BindingContainerRole::Transaction,
-                        0,
-                    )?,
-                    _ => {}
-                }
-            }
-            _ => {}
+        for (owner, entry) in ownership_contributions(record)? {
+            insert_ownership(&mut ownership, owner, entry)?;
         }
     }
 
@@ -226,6 +59,184 @@ pub(super) fn derive_ownership(
             "witness_ownership_incomplete",
             format!("ownership derivation omitted owners {missing:?}"),
         ));
+    }
+    Ok(ownership)
+}
+
+/// Returns every ownership fact contributed by one canonical owner record. An expression's
+/// parent fact is contributed by the record that contains it, so a local record edit can derive
+/// exact removals and insertions without scanning unrelated owners.
+pub(crate) fn ownership_contributions(
+    record: &OwnerRecord,
+) -> Result<BTreeMap<OwnerKey, OwnershipEntry>, Diagnostic> {
+    let mut ownership = BTreeMap::new();
+    let self_entry = match record {
+        OwnerRecord::Module(_) => Some(OwnershipEntry::new(
+            OwnershipParent::Package,
+            OwnershipRole::PackageModule,
+        )),
+        OwnerRecord::Declaration(record) => Some(OwnershipEntry::new(
+            OwnershipParent::Owner(OwnerKey::Module(record.module)),
+            OwnershipRole::ModuleDeclaration,
+        )),
+        OwnerRecord::TypeParameter(record) => Some(OwnershipEntry::new(
+            OwnershipParent::Owner(OwnerKey::Declaration(record.declaration)),
+            OwnershipRole::DeclarationTypeParameter,
+        )),
+        OwnerRecord::Field(record) => Some(OwnershipEntry::new(
+            OwnershipParent::Owner(OwnerKey::Declaration(record.declaration)),
+            OwnershipRole::DeclarationField,
+        )),
+        OwnerRecord::Case(record) => Some(OwnershipEntry::new(
+            OwnershipParent::Owner(OwnerKey::Declaration(record.declaration)),
+            OwnershipRole::DeclarationCase,
+        )),
+        OwnerRecord::Operation(record) => Some(OwnershipEntry::new(
+            OwnershipParent::Owner(OwnerKey::Declaration(record.declaration)),
+            OwnershipRole::DeclarationOperation,
+        )),
+        OwnerRecord::Parameter(record) => Some(match record.parent {
+            ParameterParent::Function(declaration) => OwnershipEntry::new(
+                OwnershipParent::Owner(OwnerKey::Declaration(declaration)),
+                OwnershipRole::DeclarationParameter,
+            ),
+            ParameterParent::Operation(operation) => OwnershipEntry::new(
+                OwnershipParent::Owner(OwnerKey::Operation(operation)),
+                OwnershipRole::OperationParameter,
+            ),
+        }),
+        OwnerRecord::Requirement(record) => Some(OwnershipEntry::new(
+            OwnershipParent::Owner(OwnerKey::Declaration(record.declaration)),
+            OwnershipRole::DeclarationRequirement,
+        )),
+        OwnerRecord::Port(record) => Some(OwnershipEntry::new(
+            OwnershipParent::Owner(OwnerKey::Declaration(record.declaration)),
+            OwnershipRole::DeclarationPort,
+        )),
+        OwnerRecord::Target(_) => Some(OwnershipEntry::new(
+            OwnershipParent::Package,
+            OwnershipRole::PackageTarget,
+        )),
+        OwnerRecord::Documentation(record) => Some(OwnershipEntry::new(
+            OwnershipParent::Owner(record.owner),
+            OwnershipRole::Documentation,
+        )),
+        OwnerRecord::Annotation(record) => Some(OwnershipEntry::new(
+            OwnershipParent::Owner(record.owner),
+            OwnershipRole::Annotation,
+        )),
+        OwnerRecord::Binding(_) | OwnerRecord::Expression(_) => None,
+    };
+    if let Some(entry) = self_entry {
+        insert_ownership(&mut ownership, record.owner(), entry)?;
+    }
+
+    match record {
+        OwnerRecord::Declaration(record) => match &record.payload {
+            DeclarationPayload::Function(function) => insert_expression_root(
+                &mut ownership,
+                function.body,
+                record.header.owner,
+                ExpressionRootRole::FunctionBody,
+            )?,
+            DeclarationPayload::Constant { value, .. } => insert_expression_root(
+                &mut ownership,
+                *value,
+                record.header.owner,
+                ExpressionRootRole::ConstantValue,
+            )?,
+            DeclarationPayload::Test {
+                actual, expected, ..
+            } => {
+                insert_expression_root(
+                    &mut ownership,
+                    *actual,
+                    record.header.owner,
+                    ExpressionRootRole::TestActual,
+                )?;
+                insert_expression_root(
+                    &mut ownership,
+                    *expected,
+                    record.header.owner,
+                    ExpressionRootRole::TestExpected,
+                )?;
+            }
+            DeclarationPayload::Record { .. }
+            | DeclarationPayload::Variant { .. }
+            | DeclarationPayload::Interface { .. }
+            | DeclarationPayload::External(_)
+            | DeclarationPayload::Component { .. } => {}
+        },
+        OwnerRecord::Binding(record) => {
+            if let Some(value) = record.value {
+                insert_expression_root(
+                    &mut ownership,
+                    value,
+                    record.header.owner,
+                    ExpressionRootRole::BindingValue,
+                )?;
+            }
+        }
+        OwnerRecord::Port(record) => {
+            if let PortImplementation::Expression(expression) = record.implementation {
+                insert_expression_root(
+                    &mut ownership,
+                    expression,
+                    record.header.owner,
+                    ExpressionRootRole::PortImplementation,
+                )?;
+            }
+        }
+        OwnerRecord::Expression(record) => {
+            for child in record.children() {
+                insert_ownership(
+                    &mut ownership,
+                    OwnerKey::Expression(child.expression),
+                    OwnershipEntry::new(
+                        OwnershipParent::Owner(OwnerKey::Expression(record.id)),
+                        OwnershipRole::ExpressionChild {
+                            role: child.role,
+                            ordinal: child.ordinal,
+                        },
+                    ),
+                )?;
+            }
+            match &record.operation {
+                ExpressionOperation::Let { bindings, .. } => {
+                    for (ordinal, binding) in bindings.iter().enumerate() {
+                        insert_binding_parent(
+                            &mut ownership,
+                            *binding,
+                            record.id,
+                            BindingContainerRole::Let,
+                            ordinal,
+                        )?;
+                    }
+                }
+                ExpressionOperation::Match { arms, .. } => {
+                    for (ordinal, arm) in arms.iter().enumerate() {
+                        if let Some(binding) = arm.payload_binding {
+                            insert_binding_parent(
+                                &mut ownership,
+                                binding,
+                                record.id,
+                                BindingContainerRole::MatchPayload,
+                                ordinal,
+                            )?;
+                        }
+                    }
+                }
+                ExpressionOperation::Transaction { binding, .. } => insert_binding_parent(
+                    &mut ownership,
+                    *binding,
+                    record.id,
+                    BindingContainerRole::Transaction,
+                    0,
+                )?,
+                _ => {}
+            }
+        }
+        _ => {}
     }
     Ok(ownership)
 }
