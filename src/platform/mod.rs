@@ -46,6 +46,11 @@ pub mod semantic_projection;
 pub mod semantic_query;
 pub mod semantic_summary;
 pub mod semantic_transaction;
+#[allow(
+    dead_code,
+    reason = "packed Graph 5 storage remains private until repository publication cuts over"
+)]
+pub(crate) mod storage;
 pub mod stream;
 mod syntax;
 pub mod value;
