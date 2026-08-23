@@ -4,16 +4,19 @@ use super::artifact::{MAXIMUM_ARTIFACT_BYTES, load_artifact};
 use super::bootstrap::{
     ProjectTemplate, builtin_package_info, create_project, export_builtin_standard,
 };
+use super::contract::{
+    CLI_CONTRACT_VERSION, MAXIMUM_CLI_RESPONSE_BYTES, MAXIMUM_TRANSACTION_REQUEST_BYTES,
+    PublicOperation, REGISTRY_CONTRACT_IDENTITY, RegistrySection, generated_documents,
+    limit_descriptors, nonclaims, operation_descriptors, outcome_exit_status,
+    protocol_schema_bytes, protocol_schema_digest, registry_snapshot,
+};
 use super::deployment::{MAXIMUM_DEPLOYMENT_BYTES, decode_deployment};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::execution::{PreparedProgram, ReferenceInterpreter, RunPolicy, Vm};
 use super::json::{JsonLimits, decode_strict, decode_typed, encode_typed};
 use super::meaning::{GRAPH_CONTRACT_IDENTITY, RelationRole};
 use super::package::RunnerKind;
-use super::repository::{
-    BACKUP_SEGMENT_ENTRY_LIMIT, MAXIMUM_BACKUP_MANIFEST_BYTES, MAXIMUM_BACKUP_SEGMENT_BYTES,
-    SemanticRepository,
-};
+use super::repository::SemanticRepository;
 use super::revision::{AffectedOwner, TransactionReceipt, ValidationFacts};
 use super::semantic_change::{ChangeRequest, execute_change};
 use super::semantic_diff::diff_revisions;
@@ -38,9 +41,6 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-pub const CLI_CONTRACT_VERSION: u16 = 4;
-pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
-pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
 const MAXIMUM_INLINE_AFFECTED_OWNERS: usize = 64;
 
 #[derive(Clone, Debug, Serialize)]
@@ -55,45 +55,47 @@ pub struct CliSuccess {
 
 impl CliSuccess {
     pub fn process_exit_code(&self) -> u8 {
-        match self.status {
-            "stale_base" | "stale_head" => 7,
-            "invalid_graph" => 8,
-            "resource_exhausted" => 4,
-            "precondition_failed" | "foreign_identity" | "conflicted" => 2,
-            _ => 0,
-        }
+        outcome_exit_status(self.status)
     }
 }
 
 pub fn execute(arguments: Vec<String>) -> Result<CliSuccess, Diagnostic> {
     let (arguments, project) = extract_global_project(arguments)?;
-    let command = arguments
-        .first()
-        .map(String::as_str)
-        .unwrap_or("capabilities");
+    if arguments.is_empty() {
+        return capabilities_command(&[]);
+    }
+    let command = PublicOperation::parse(&arguments[0]).ok_or_else(|| {
+        usage_error(format!(
+            "unknown command '{}'; use 'capabilities'",
+            arguments[0]
+        ))
+    })?;
     match command {
-        "capabilities" => capabilities_command(&arguments[1..]),
-        "new" => new_project_command(&arguments[1..]),
-        "inspect" => inspect_command(&arguments[1..], project.as_deref()),
-        "query" => public_query_command(&arguments[1..], project.as_deref()),
-        "change" => change_command(&arguments[1..], project.as_deref()),
-        "draft" => public_draft_command(&arguments[1..], project.as_deref()),
-        "history" => public_history_command(&arguments[1..], project.as_deref()),
-        "package" => package_command(&arguments[1..], project.as_deref()),
-        "check" => {
+        PublicOperation::Capabilities => capabilities_command(&arguments[1..]),
+        PublicOperation::New => new_project_command(&arguments[1..]),
+        PublicOperation::Inspect => inspect_command(&arguments[1..], project.as_deref()),
+        PublicOperation::Query => public_query_command(&arguments[1..], project.as_deref()),
+        PublicOperation::Change => change_command(&arguments[1..], project.as_deref()),
+        PublicOperation::Draft => public_draft_command(&arguments[1..], project.as_deref()),
+        PublicOperation::History => public_history_command(&arguments[1..], project.as_deref()),
+        PublicOperation::Package => package_command(&arguments[1..], project.as_deref()),
+        PublicOperation::Check => {
             exact_arguments(&arguments, 1, "check")?;
             let workspace = open_workspace(project.as_deref())?;
             run_package_tests(&workspace.prepare()?)
         }
-        "build" => build_command(&arguments[1..], project.as_deref()),
-        "run" => run_target_command(&arguments[1..], project.as_deref()),
-        "review" => text_projection_command("review", &arguments[1..], project.as_deref()),
-        "backup" => backup_command("backup", &arguments[1..], project.as_deref()),
-        "restore" => restore_command(&arguments[1..], project.as_deref()),
-        "doctor" => doctor_command(&arguments[1..], project.as_deref()),
-        other => Err(usage_error(format!(
-            "unknown command '{other}'; use 'capabilities'"
+        PublicOperation::Build => build_command(&arguments[1..], project.as_deref()),
+        PublicOperation::Run => run_target_command(&arguments[1..], project.as_deref()),
+        PublicOperation::Serve | PublicOperation::Worker => Err(usage_error(format!(
+            "'{}' is a resident runner command and must use the executable process boundary",
+            command.name()
         ))),
+        PublicOperation::Review => {
+            text_projection_command("review", &arguments[1..], project.as_deref())
+        }
+        PublicOperation::Backup => backup_command("backup", &arguments[1..], project.as_deref()),
+        PublicOperation::Restore => restore_command(&arguments[1..], project.as_deref()),
+        PublicOperation::Doctor => doctor_command(&arguments[1..], project.as_deref()),
     }
 }
 
@@ -390,22 +392,219 @@ fn change_command(arguments: &[String], project: Option<&Path>) -> Result<CliSuc
 }
 
 fn capabilities_command(arguments: &[String]) -> Result<CliSuccess, Diagnostic> {
-    let commands = command_registry();
     let command = arguments.first().filter(|value| !value.starts_with("--"));
     if let Some(command) = command {
         exact_arguments(arguments, 1, "capabilities COMMAND")?;
-        let entry = commands
-            .iter()
-            .find(|entry| entry.name == command.as_str())
+        let operation = PublicOperation::parse(command)
             .ok_or_else(|| usage_error(format!("unknown public command '{command}'")))?;
-        return serialized("capabilities.command", entry);
+        let entry = operation_descriptors()
+            .iter()
+            .find(|entry| entry.operation == operation)
+            .ok_or_else(|| internal_error("registered public operation has no descriptor"))?;
+        return success(
+            "capabilities.command",
+            json!({
+                "name": entry.operation.name(),
+                "purpose": entry.purpose,
+                "usage": entry.usage,
+                "request_schema": entry.request_schema.name(),
+                "response_schema": entry.response_schema.name(),
+                "project_requirement": entry.project_requirement,
+                "authority_effect": entry.authority_effect,
+                "default_budget": entry.default_budget,
+            }),
+        );
     }
-    ensure_options(arguments, &["--known-schema"], &[])?;
-    let schema_digest = command_schema_digest();
-    if option_value(arguments, "--known-schema")?.as_deref() == Some(schema_digest.as_str()) {
+    ensure_options(
+        arguments,
+        &[
+            "--known-schema",
+            "--known-section",
+            "--section",
+            "--output",
+            "--generate-docs",
+            "--verify-generated",
+        ],
+        &[],
+    )?;
+    let protocol_digest = protocol_schema_digest().map_err(contract_registry_error)?;
+    let snapshot = registry_snapshot(&protocol_digest).map_err(contract_registry_error)?;
+    let selected_section = option_value(arguments, "--section")?
+        .map(|value| {
+            RegistrySection::parse(&value)
+                .ok_or_else(|| usage_error(format!("unknown registry section '{value}'")))
+        })
+        .transpose()?;
+    let known_sections = parse_known_sections(&option_values(arguments, "--known-section")?)?;
+    let output = option_value(arguments, "--output")?;
+    let generated_directory = option_value(arguments, "--generate-docs")?;
+    let verify_directory = option_value(arguments, "--verify-generated")?;
+    if [
+        output.is_some(),
+        generated_directory.is_some(),
+        verify_directory.is_some(),
+    ]
+    .into_iter()
+    .filter(|selected| *selected)
+    .count()
+        > 1
+    {
+        return Err(usage_error(
+            "--output, --generate-docs, and --verify-generated are mutually exclusive",
+        ));
+    }
+    if let Some(directory) = generated_directory {
+        let documents = generated_documents().map_err(contract_registry_error)?;
+        let directory = PathBuf::from(directory);
+        let mut files = Vec::new();
+        for document in documents {
+            let path = directory.join(document.relative_path);
+            let status = write_derived_output(
+                &path,
+                &document.bytes,
+                MAXIMUM_CLI_RESPONSE_BYTES.saturating_mul(8),
+                "generated contract document",
+            )?;
+            files.push(json!({
+                "path": path,
+                "bytes": document.bytes.len(),
+                "status": status,
+            }));
+        }
+        return success(
+            "capabilities.generate_docs",
+            json!({
+                "registry_digest": snapshot.digest,
+                "schema_digest": protocol_digest,
+                "files": files,
+            }),
+        );
+    }
+    if let Some(directory) = verify_directory {
+        let documents = generated_documents().map_err(contract_registry_error)?;
+        let directory = PathBuf::from(directory);
+        for document in &documents {
+            let path = directory.join(document.relative_path);
+            let observed = read_bounded(
+                &path,
+                MAXIMUM_CLI_RESPONSE_BYTES.saturating_mul(8),
+                "generated contract document",
+            )?;
+            if observed != document.bytes {
+                return Err(Diagnostic::new(
+                    DiagnosticClass::Source,
+                    "contract_generated_drift",
+                    format!(
+                        "generated contract document '{}' is stale; run 'lkjscript capabilities --generate-docs {}'",
+                        path.display(),
+                        directory.display()
+                    ),
+                ));
+            }
+        }
+        return success(
+            "capabilities.verify_generated",
+            json!({
+                "registry_digest": snapshot.digest,
+                "schema_digest": protocol_digest,
+                "directory": directory,
+                "documents": documents.len(),
+                "status": "current",
+            }),
+        );
+    }
+    if let Some(path) = output {
+        let (bytes, digest, projection) = if let Some(section) = selected_section {
+            let value = snapshot
+                .section_values
+                .get(&section)
+                .ok_or_else(|| internal_error("registered section has no value"))?;
+            let mut bytes = serde_json::to_vec_pretty(value).map_err(internal_json)?;
+            bytes.push(b'\n');
+            let digest = snapshot
+                .manifest
+                .sections
+                .get(section.name())
+                .cloned()
+                .ok_or_else(|| internal_error("registered section has no digest"))?;
+            (bytes, digest, section.name())
+        } else {
+            (
+                protocol_schema_bytes().map_err(contract_registry_error)?,
+                protocol_digest.clone(),
+                "protocol_schema",
+            )
+        };
+        let path = PathBuf::from(path);
+        let status = write_derived_output(
+            &path,
+            &bytes,
+            MAXIMUM_CLI_RESPONSE_BYTES.saturating_mul(8),
+            "contract schema output",
+        )?;
+        return success(
+            "capabilities.output",
+            json!({
+                "projection": projection,
+                "digest": digest,
+                "output": path,
+                "bytes": bytes.len(),
+                "status": status,
+            }),
+        );
+    }
+    if let Some(section) = selected_section {
+        let value = snapshot
+            .section_values
+            .get(&section)
+            .ok_or_else(|| internal_error("registered section has no value"))?;
+        return success(
+            "capabilities.section",
+            json!({
+                "registry_digest": snapshot.digest,
+                "schema_digest": protocol_digest,
+                "section": section.name(),
+                "section_digest": snapshot.manifest.sections.get(section.name()),
+                "value": value,
+            }),
+        );
+    }
+    if !known_sections.is_empty() {
+        let mut changed = serde_json::Map::new();
+        for (section, known_digest) in known_sections {
+            let current_digest = snapshot
+                .manifest
+                .sections
+                .get(section.name())
+                .ok_or_else(|| internal_error("registered section has no digest"))?;
+            if current_digest != &known_digest {
+                changed.insert(
+                    section.name().to_owned(),
+                    json!({
+                        "digest": current_digest,
+                        "value": snapshot.section_values.get(&section),
+                    }),
+                );
+            }
+        }
+        return success(
+            "capabilities.changed_sections",
+            json!({
+                "registry_digest": snapshot.digest,
+                "schema_digest": protocol_digest,
+                "unchanged": changed.is_empty(),
+                "changed_sections": changed,
+            }),
+        );
+    }
+    if option_value(arguments, "--known-schema")?.as_deref() == Some(snapshot.digest.as_str()) {
         return success(
             "capabilities",
-            json!({"schema_digest": schema_digest, "unchanged": true}),
+            json!({
+                "protocol": REGISTRY_CONTRACT_IDENTITY,
+                "schema_digest": snapshot.digest,
+                "unchanged": true,
+            }),
         );
     }
     success(
@@ -414,318 +613,63 @@ fn capabilities_command(arguments: &[String]) -> Result<CliSuccess, Diagnostic> 
             "usage": "lkjscript [--project PATH] COMMAND [options]",
             "graph_contract": GRAPH_CONTRACT_IDENTITY,
             "cli_contract_version": CLI_CONTRACT_VERSION,
-            "schema_digest": schema_digest,
-            "commands": commands.iter().map(|entry| entry.name).collect::<Vec<_>>(),
-            "project_templates": ["minimal", "command"],
-            "change_forms": change_form_names(),
-            "type_forms": type_form_names(),
-            "expression_forms": expression_form_names(),
-            "declaration_reference_forms": declaration_reference_form_names(),
-            "declaration_reference_syntax": declaration_reference_syntax(),
-            "owner_kinds": owner_kind_names(),
-            "relation_roles": relation_role_names(),
-            "limits": limit_registry(),
-            "details": "lkjscript capabilities COMMAND",
+            "schema_digest": snapshot.digest,
+            "protocol_schema_digest": protocol_digest,
+            "section_digests": snapshot.manifest.sections,
+            "operations": operation_descriptors()
+                .iter()
+                .map(|entry| entry.operation.name())
+                .collect::<Vec<_>>(),
+            "limits": {
+                "count": limit_descriptors().len(),
+                "response_bytes": MAXIMUM_CLI_RESPONSE_BYTES,
+                "change_request_bytes": MAXIMUM_TRANSACTION_REQUEST_BYTES,
+            },
+            "nonclaims": nonclaims(),
+            "expand": {
+                "operation": "lkjscript capabilities COMMAND",
+                "section": "lkjscript capabilities --section SECTION",
+                "schema": "lkjscript capabilities --output schema.json",
+            },
         }),
     )
 }
 
-#[derive(Serialize)]
-struct CommandHelp {
-    name: &'static str,
-    purpose: &'static str,
-    usage: &'static str,
-    project: &'static str,
-    authority_effect: &'static str,
+fn parse_known_sections(
+    values: &[String],
+) -> Result<std::collections::BTreeMap<RegistrySection, String>, Diagnostic> {
+    let mut output = std::collections::BTreeMap::new();
+    for value in values {
+        let (name, digest) = value
+            .split_once('=')
+            .ok_or_else(|| usage_error("--known-section requires the exact SECTION=DIGEST form"))?;
+        let section = RegistrySection::parse(name)
+            .ok_or_else(|| usage_error(format!("unknown registry section '{name}'")))?;
+        if digest.len() != 64
+            || !digest
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            return Err(usage_error(
+                "--known-section digest must be 64 lowercase hexadecimal characters",
+            ));
+        }
+        if output.insert(section, digest.to_owned()).is_some() {
+            return Err(usage_error(format!(
+                "known section '{}' may be supplied only once",
+                section.name()
+            )));
+        }
+    }
+    Ok(output)
 }
 
-fn command_registry() -> Vec<CommandHelp> {
-    vec![
-        CommandHelp {
-            name: "capabilities",
-            purpose: "Discover the exact offline command and language contracts.",
-            usage: "capabilities [COMMAND] [--known-schema DIGEST]",
-            project: "none",
-            authority_effect: "none",
-        },
-        CommandHelp {
-            name: "new",
-            purpose: "Create fresh canonical authority in an empty destination.",
-            usage: "new DEST [--template minimal|command] [--name NAME]",
-            project: "destination",
-            authority_effect: "accepted",
-        },
-        CommandHelp {
-            name: "inspect",
-            purpose: "Inspect project, owner, target, revision, artifact, or deployment state.",
-            usage: "inspect status|project|owner|targets|revision|artifact|deployment ...",
-            project: "required_by_action",
-            authority_effect: "none",
-        },
-        CommandHelp {
-            name: "query",
-            purpose: "Select bounded owners, relations, context, and impact.",
-            usage: "query owners|find|relations|callers|callees|types|capabilities|context|impact|request ...",
-            project: "required",
-            authority_effect: "none",
-        },
-        CommandHelp {
-            name: "change",
-            purpose: "Normalize and validate or atomically commit one semantic change.",
-            usage: "change (--request JSON | --request-file PATH) [--dry-run|--commit]",
-            project: "required",
-            authority_effect: "accepted_on_commit",
-        },
-        CommandHelp {
-            name: "draft",
-            purpose: "Create, inspect, append, rebase, publish, or drop non-executable work.",
-            usage: "draft create|status|append|rebase|publish|drop ...",
-            project: "required",
-            authority_effect: "draft_or_accepted",
-        },
-        CommandHelp {
-            name: "history",
-            purpose: "List, inspect, diff, or merge exact revisions.",
-            usage: "history list|show|diff|merge ...",
-            project: "required",
-            authority_effect: "accepted_only_for_merge_commit",
-        },
-        CommandHelp {
-            name: "package",
-            purpose: "Stage an exact dependency or inspect/export a built-in package.",
-            usage: "package stage PATH | package builtin inspect|export ...",
-            project: "required_for_stage",
-            authority_effect: "operational_or_external_output",
-        },
-        CommandHelp {
-            name: "check",
-            purpose: "Run graph-owned tests through production and independent execution.",
-            usage: "check",
-            project: "required",
-            authority_effect: "none",
-        },
-        CommandHelp {
-            name: "build",
-            purpose: "Build a deterministic graph-native artifact.",
-            usage: "build [--output PATH]",
-            project: "required",
-            authority_effect: "external_output",
-        },
-        CommandHelp {
-            name: "run",
-            purpose: "Run a pure command, batch, or test target through both execution tiers.",
-            usage: "run TARGET [--arguments JSON]",
-            project: "required",
-            authority_effect: "none",
-        },
-        CommandHelp {
-            name: "serve",
-            purpose: "Run one plaintext HTTP deployment with bounded shutdown.",
-            usage: "serve --deployment DESCRIPTOR",
-            project: "descriptor_bound",
-            authority_effect: "external_runtime",
-        },
-        CommandHelp {
-            name: "worker",
-            purpose: "Run one bounded worker deployment.",
-            usage: "worker --deployment DESCRIPTOR",
-            project: "descriptor_bound",
-            authority_effect: "external_runtime",
-        },
-        CommandHelp {
-            name: "review",
-            purpose: "Write a deterministic non-authoritative review projection.",
-            usage: "review [--revision REV] [--output PATH]",
-            project: "required",
-            authority_effect: "external_output",
-        },
-        CommandHelp {
-            name: "backup",
-            purpose: "Capture one exact reachable canonical authority bundle.",
-            usage: "backup [--output PATH]",
-            project: "required",
-            authority_effect: "external_output",
-        },
-        CommandHelp {
-            name: "restore",
-            purpose: "Verify and atomically restore a canonical authority bundle.",
-            usage: "restore --backup PATH (--output PROJECT | --project PROJECT)",
-            project: "destination",
-            authority_effect: "accepted",
-        },
-        CommandHelp {
-            name: "doctor",
-            purpose: "Validate authority or preview exact retained/reclaimable storage.",
-            usage: "doctor [--deep] | doctor cleanup",
-            project: "required",
-            authority_effect: "operational_indexes_only",
-        },
-    ]
-}
-
-fn command_schema_digest() -> String {
-    let bytes = serde_json::to_vec(&json!({
-        "commands": command_registry(),
-        "project_templates": ["minimal", "command"],
-        "change_forms": change_form_names(),
-        "type_forms": type_form_names(),
-        "expression_forms": expression_form_names(),
-        "declaration_reference_forms": declaration_reference_form_names(),
-        "declaration_reference_syntax": declaration_reference_syntax(),
-        "owner_kinds": owner_kind_names(),
-        "relation_roles": relation_role_names(),
-        "limits": limit_registry(),
-    }))
-    .unwrap_or_default();
-    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.cli-registry.v4");
-    hasher.update(&(bytes.len() as u64).to_be_bytes());
-    hasher.update(&bytes);
-    hasher.finalize().to_hex().to_string()
-}
-
-fn limit_registry() -> serde_json::Value {
-    json!({
-        "cli_response_bytes": {
-            "value": MAXIMUM_CLI_RESPONSE_BYTES,
-            "class": "hostile_output_boundary",
-        },
-        "change_request_bytes": {
-            "value": MAXIMUM_TRANSACTION_REQUEST_BYTES,
-            "class": "hostile_input_boundary",
-        },
-        "backup_manifest_bytes": {
-            "value": MAXIMUM_BACKUP_MANIFEST_BYTES,
-            "class": "segmented_decoder_boundary",
-        },
-        "backup_segment_bytes": {
-            "value": MAXIMUM_BACKUP_SEGMENT_BYTES,
-            "class": "segmented_decoder_boundary",
-        },
-        "backup_segment_entries": {
-            "value": BACKUP_SEGMENT_ENTRY_LIMIT,
-            "class": "segmented_encoding_boundary",
-        },
-    })
-}
-
-fn owner_kind_names() -> Vec<&'static str> {
-    vec![
-        "repository",
-        "package",
-        "module",
-        "record",
-        "variant",
-        "interface",
-        "external",
-        "pure_function",
-        "task_function",
-        "constant",
-        "component",
-        "test",
-        "field",
-        "case",
-        "operation",
-        "type_parameter",
-        "parameter",
-        "binding",
-        "expression",
-        "requirement",
-        "port",
-        "target",
-        "documentation",
-        "annotation",
-    ]
-}
-
-fn change_form_names() -> Vec<&'static str> {
-    vec![
-        "add_dependency",
-        "replace_dependency",
-        "remove_dependency",
-        "create_module",
-        "create_record",
-        "create_variant",
-        "create_function",
-        "create_component",
-        "create_test",
-        "create_target",
-        "rename_module",
-        "rename_declaration",
-        "replace_body",
-    ]
-}
-
-fn type_form_names() -> Vec<&'static str> {
-    vec![
-        "unit",
-        "bool",
-        "i64",
-        "bytes",
-        "text",
-        "static_text",
-        "secret",
-        "parameter",
-        "named",
-        "record",
-        "list",
-        "map",
-        "option",
-        "result",
-        "stream",
-        "function",
-    ]
-}
-
-fn expression_form_names() -> Vec<&'static str> {
-    vec![
-        "unit",
-        "bool",
-        "i64",
-        "text",
-        "static_text",
-        "variable",
-        "constant",
-        "call",
-        "function",
-        "invoke",
-        "record",
-        "list",
-    ]
-}
-
-fn declaration_reference_form_names() -> Vec<&'static str> {
-    vec![
-        "request_local_symbol",
-        "local_declaration_id",
-        "exact_package_module_declaration",
-    ]
-}
-
-fn declaration_reference_syntax() -> serde_json::Value {
-    json!({
-        "request_local_symbol": "$NAME",
-        "local_declaration_id": "decl_HEX",
-        "exact_package_module_declaration": "exact:PACKAGE_HEX/mod_HEX/decl_HEX",
-    })
-}
-
-fn relation_role_names() -> Vec<&'static str> {
-    vec![
-        "import",
-        "export",
-        "type_use",
-        "value_reference",
-        "call",
-        "field_use",
-        "variant_construction",
-        "variant_pattern",
-        "capability_interface",
-        "capability_operation",
-        "component_port_function",
-        "target_component",
-        "target_port",
-        "test_dependency",
-    ]
+fn contract_registry_error(message: String) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticClass::Corrupt,
+        "contract_registry_invalid",
+        message,
+    )
 }
 
 fn dependency_stage_command(
@@ -2109,12 +2053,12 @@ mod tests {
 
     #[test]
     fn command_registry_has_unique_names_and_stable_digest() {
-        let commands = command_registry();
+        let commands = operation_descriptors();
         let names = commands
             .iter()
-            .map(|entry| entry.name)
+            .map(|entry| entry.operation.name())
             .collect::<BTreeSet<_>>();
         assert_eq!(commands.len(), names.len());
-        assert_eq!(command_schema_digest().len(), 64);
+        assert_eq!(protocol_schema_digest().expect("schema digest").len(), 64);
     }
 }

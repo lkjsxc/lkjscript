@@ -1,5 +1,11 @@
 //! Domain-separated digests for semantic content and operational evidence.
 
+use super::contract::registry::{
+    ARTIFACT_OBJECT_DIGEST_DOMAIN, BACKUP_OBJECT_DIGEST_DOMAIN, CLEANUP_PLAN_DIGEST_DOMAIN,
+    INDEX_DIGEST_DOMAIN, MODULE_OBJECT_DIGEST_DOMAIN, RECEIPT_DIGEST_DOMAIN,
+    REVISION_RECORD_DIGEST_DOMAIN, ROOT_OBJECT_DIGEST_DOMAIN, SEMANTIC_CERTIFICATE_DOMAIN,
+    SEMANTIC_DIFF_DIGEST_DOMAIN, TRANSACTION_DIGEST_DOMAIN,
+};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use bincode::de::Decoder;
 use bincode::enc::Encoder;
@@ -12,7 +18,7 @@ use std::str::FromStr;
 const DIGEST_BYTES: usize = 32;
 
 macro_rules! semantic_digest {
-    ($name:ident, $prefix:literal, $derive_key:literal, $tag:literal) => {
+    ($name:ident, $prefix:literal, $derive_key:expr, $tag:literal) => {
         #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
         pub struct $name([u8; DIGEST_BYTES]);
 
@@ -109,42 +115,47 @@ macro_rules! semantic_digest {
 semantic_digest!(
     ModuleObjectDigest,
     "module_object_",
-    "lkjscript.module-object.v2",
+    MODULE_OBJECT_DIGEST_DOMAIN,
     1u8
 );
 semantic_digest!(
     RootObjectDigest,
     "root_object_",
-    "lkjscript.root-object.v2",
+    ROOT_OBJECT_DIGEST_DOMAIN,
     2u8
 );
 semantic_digest!(
     SemanticDiffDigest,
     "diff_",
-    "lkjscript.semantic-diff.v1",
+    SEMANTIC_DIFF_DIGEST_DOMAIN,
     3u8
 );
-semantic_digest!(ReceiptDigest, "receipt_", "lkjscript.receipt.v1", 4u8);
+semantic_digest!(ReceiptDigest, "receipt_", RECEIPT_DIGEST_DOMAIN, 4u8);
 semantic_digest!(
     TransactionDigest,
     "transaction_",
-    "lkjscript.transaction.v3",
+    TRANSACTION_DIGEST_DOMAIN,
     5u8
 );
-semantic_digest!(IndexDigest, "index_", "lkjscript.index.v2", 6u8);
-semantic_digest!(BackupDigest, "backup_", "lkjscript.backup.v2", 7u8);
-semantic_digest!(ArtifactDigest, "artifact_", "lkjscript.artifact.v3", 8u8);
+semantic_digest!(IndexDigest, "index_", INDEX_DIGEST_DOMAIN, 6u8);
+semantic_digest!(BackupDigest, "backup_", BACKUP_OBJECT_DIGEST_DOMAIN, 7u8);
+semantic_digest!(
+    ArtifactDigest,
+    "artifact_",
+    ARTIFACT_OBJECT_DIGEST_DOMAIN,
+    8u8
+);
 semantic_digest!(
     RevisionRecordDigest,
     "revision_record_",
-    "lkjscript.revision-record.v2",
+    REVISION_RECORD_DIGEST_DOMAIN,
     9u8
 );
-semantic_digest!(CleanupDigest, "cleanup_", "lkjscript.cleanup-plan.v1", 10u8);
+semantic_digest!(CleanupDigest, "cleanup_", CLEANUP_PLAN_DIGEST_DOMAIN, 10u8);
 semantic_digest!(
     SemanticCertificateDigest,
     "semantic_certificate_",
-    "lkjscript.semantic-certificate.v3",
+    SEMANTIC_CERTIFICATE_DOMAIN,
     11u8
 );
 
@@ -156,7 +167,7 @@ fn decode_digest(encoded: &str) -> Result<[u8; DIGEST_BYTES], Diagnostic> {
         ));
     }
     let mut bytes = [0_u8; DIGEST_BYTES];
-    for (index, pair) in encoded.as_bytes().chunks_exact(2).enumerate() {
+    for (index, pair) in encoded.as_bytes().as_chunks::<2>().0.iter().enumerate() {
         let high = decode_hex(pair[0]).ok_or_else(|| invalid_hex(encoded))?;
         let low = decode_hex(pair[1]).ok_or_else(|| invalid_hex(encoded))?;
         bytes[index] = (high << 4) | low;

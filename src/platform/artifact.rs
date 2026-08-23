@@ -5,6 +5,10 @@
 //! receipt. Compilation and execution consume those graph records directly; textual input is
 //! neither stored nor reparsed here.
 
+use super::contract::registry::{
+    ARTIFACT_DOMAIN, ARTIFACT_MAGIC, PACKAGE_ARTIFACT_DOMAIN as PACKAGE_DOMAIN,
+    PACKAGE_ARTIFACT_MAGIC as PACKAGE_MAGIC,
+};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::graph::GraphRoot;
 #[cfg(test)]
@@ -42,10 +46,6 @@ pub const PACKAGE_ARTIFACT_CONTRACT_VERSION: u16 = 3;
 pub const MAXIMUM_ARTIFACT_BYTES: usize = 128 * 1_048_576;
 pub const MAXIMUM_ARTIFACT_PACKAGES: usize = 1_024;
 const MAXIMUM_PACKAGE_ARTIFACT_BYTES: usize = 128 * 1_048_576;
-const ARTIFACT_MAGIC: [u8; 8] = *b"LKJART04";
-const ARTIFACT_DOMAIN: &str = "lkjscript.graph-artifact-bundle.v4";
-const PACKAGE_MAGIC: [u8; 8] = *b"LKJPKG03";
-const PACKAGE_DOMAIN: &str = "lkjscript.graph-package-artifact.v3";
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]

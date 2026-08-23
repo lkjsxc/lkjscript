@@ -144,6 +144,16 @@ def base_gates(run_directory: Path) -> dict[str, Gate]:
         "checker_self_test": Gate(
             "checker_self_test", (str(ROOT / "tools" / "check"), "--self-test", "--machine")
         ),
+        "contract_registry_conformance": Gate(
+            "contract_registry_conformance",
+            (
+                binary(),
+                "capabilities",
+                "--verify-generated",
+                str(ROOT / "docs" / "generated"),
+            ),
+            dependencies=("release_build",),
+        ),
         "standard_package_test": Gate(
             "standard_package_test",
             (binary(), "--project", "packages/standard", "check"),
@@ -298,6 +308,7 @@ PROFILES: dict[str, tuple[str, ...]] = {
     "product": (
         "fmt",
         "release_build",
+        "contract_registry_conformance",
         "standard_package_test",
         "application_package_test",
         "standard_deep_doctor",
@@ -317,6 +328,7 @@ PROFILES: dict[str, tuple[str, ...]] = {
         "clippy",
         "workspace_tests",
         "release_build",
+        "contract_registry_conformance",
         "standard_package_test",
         "application_package_test",
         "standard_deep_doctor",

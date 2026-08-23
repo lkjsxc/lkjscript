@@ -373,7 +373,7 @@ impl<'a> Vm<'a> {
                 Instruction::Map(length) => {
                     let entries = machine.pop_many(length.saturating_mul(2))?;
                     let mut map = BTreeMap::new();
-                    for pair in entries.chunks_exact(2) {
+                    for pair in entries.as_chunks::<2>().0 {
                         let key = MapKey::from_value(pair[0].clone()).map_err(|error| {
                             ExecutionError::new(
                                 ExecutionFailureClass::Infrastructure,

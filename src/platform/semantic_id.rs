@@ -3,6 +3,9 @@
 //! Identity bytes are opaque continuity tokens. Human names, content digests, revision digests,
 //! physical object keys, dense compiler indexes, and runtime handles are deliberately separate.
 
+use super::contract::registry::{
+    IDENTITY_MIGRATION_DIGEST_DOMAIN, REQUEST_LOCAL_IDENTITY_DIGEST_DOMAIN,
+};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use bincode::de::Decoder;
 use bincode::enc::Encoder;
@@ -35,7 +38,7 @@ impl IdentityBytes {
     }
 
     fn deterministic(domain: &str, seed: &[u8], ordinal: u64) -> Self {
-        let mut hasher = blake3::Hasher::new_derive_key("lkjscript.semantic-identity.migration.v1");
+        let mut hasher = blake3::Hasher::new_derive_key(IDENTITY_MIGRATION_DIGEST_DOMAIN);
         hasher.update(&(domain.len() as u64).to_be_bytes());
         hasher.update(domain.as_bytes());
         hasher.update(&(seed.len() as u64).to_be_bytes());
@@ -50,9 +53,7 @@ impl IdentityBytes {
     }
 
     fn request_local(domain: &str, seed: &[u8], ordinal: u64) -> Self {
-        let mut hasher = blake3::Hasher::new_derive_key(
-            "lkjscript.semantic-identity.request-local-allocation.v1",
-        );
+        let mut hasher = blake3::Hasher::new_derive_key(REQUEST_LOCAL_IDENTITY_DIGEST_DOMAIN);
         hasher.update(&(domain.len() as u64).to_be_bytes());
         hasher.update(domain.as_bytes());
         hasher.update(&(seed.len() as u64).to_be_bytes());
@@ -77,7 +78,7 @@ impl IdentityBytes {
             ));
         }
         let mut bytes = [0_u8; IDENTITY_BYTES];
-        for (index, pair) in value.as_bytes().chunks_exact(2).enumerate() {
+        for (index, pair) in value.as_bytes().as_chunks::<2>().0.iter().enumerate() {
             let high = decode_hex(pair[0]).ok_or_else(|| invalid_hex(value))?;
             let low = decode_hex(pair[1]).ok_or_else(|| invalid_hex(value))?;
             bytes[index] = (high << 4) | low;
@@ -269,7 +270,7 @@ impl FromStr for RevisionId {
             ));
         }
         let mut bytes = [0_u8; 32];
-        for (index, pair) in encoded.as_bytes().chunks_exact(2).enumerate() {
+        for (index, pair) in encoded.as_bytes().as_chunks::<2>().0.iter().enumerate() {
             let high = decode_hex(pair[0]).ok_or_else(|| invalid_hex(encoded))?;
             let low = decode_hex(pair[1]).ok_or_else(|| invalid_hex(encoded))?;
             bytes[index] = (high << 4) | low;

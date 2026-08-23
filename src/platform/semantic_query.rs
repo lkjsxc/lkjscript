@@ -1,5 +1,11 @@
 //! Revision-pinned, deterministic, bounded semantic owner and relation queries.
 
+use super::contract::registry::{
+    CONTINUATION_DIGEST_DOMAIN, LOCAL_INDEX_BUCKET_DIGEST_DOMAIN, LOCAL_INDEX_CONTRACT_VERSION,
+    LOCAL_MANIFEST_DOMAIN, LOCAL_MANIFEST_MAGIC, LOCAL_NAME_DOMAIN, LOCAL_NAME_MAGIC,
+    LOCAL_OWNER_DOMAIN, LOCAL_OWNER_MAGIC, QUERY_DIGEST_DOMAIN, QUERY_INDEX_DOMAIN,
+    QUERY_INDEX_MAGIC,
+};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::graph::{GraphRoot, StoredGraphRootDelta};
 use super::meaning::{
@@ -32,17 +38,8 @@ pub const QUERY_INDEX_CONTRACT_VERSION: u16 = 2;
 pub const MAXIMUM_QUERY_INDEX_BYTES: usize = 128 * 1_048_576;
 pub const MAXIMUM_QUERY_INDEX_OWNERS: usize = 2_000_000;
 pub const MAXIMUM_QUERY_INDEX_RELATIONS: usize = 10_000_000;
-const QUERY_INDEX_MAGIC: [u8; 8] = *b"LKJIDX02";
-const QUERY_INDEX_DOMAIN: &str = "lkjscript.semantic-query-index.v2";
-const LOCAL_INDEX_CONTRACT_VERSION: u16 = 3;
 const LOCAL_INDEX_BUCKETS: usize = 256;
 const MAXIMUM_LOCAL_INDEX_PART_BYTES: usize = 16 * 1_048_576;
-const LOCAL_MANIFEST_MAGIC: [u8; 8] = *b"LKJIXM03";
-const LOCAL_OWNER_MAGIC: [u8; 8] = *b"LKJIXO03";
-const LOCAL_NAME_MAGIC: [u8; 8] = *b"LKJIXN03";
-const LOCAL_MANIFEST_DOMAIN: &str = "lkjscript.semantic-local-index-manifest.v3";
-const LOCAL_OWNER_DOMAIN: &str = "lkjscript.semantic-local-owner-index.v3";
-const LOCAL_NAME_DOMAIN: &str = "lkjscript.semantic-local-name-index.v3";
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -137,38 +134,73 @@ pub enum OwnerKind {
 }
 
 impl OwnerKind {
-    pub fn parse(value: &str) -> Result<Self, Diagnostic> {
-        match value {
-            "repository" => Ok(Self::Repository),
-            "package" => Ok(Self::Package),
-            "module" => Ok(Self::Module),
-            "record" => Ok(Self::Record),
-            "variant" => Ok(Self::Variant),
-            "interface" => Ok(Self::Interface),
-            "external" => Ok(Self::External),
-            "pure_function" | "function" => Ok(Self::PureFunction),
-            "task_function" | "task" => Ok(Self::TaskFunction),
-            "constant" => Ok(Self::Constant),
-            "component" => Ok(Self::Component),
-            "test" => Ok(Self::Test),
-            "field" => Ok(Self::Field),
-            "case" => Ok(Self::Case),
-            "operation" => Ok(Self::Operation),
-            "type_parameter" => Ok(Self::TypeParameter),
-            "parameter" => Ok(Self::Parameter),
-            "binding" => Ok(Self::Binding),
-            "expression" => Ok(Self::Expression),
-            "requirement" => Ok(Self::Requirement),
-            "port" => Ok(Self::Port),
-            "target" => Ok(Self::Target),
-            "documentation" => Ok(Self::Documentation),
-            "annotation" => Ok(Self::Annotation),
-            _ => Err(query_error(
-                DiagnosticClass::Source,
-                "semantic_query_owner_kind",
-                format!("unknown semantic owner kind '{value}'"),
-            )),
+    pub const ALL: [Self; 24] = [
+        Self::Repository,
+        Self::Package,
+        Self::Module,
+        Self::Record,
+        Self::Variant,
+        Self::Interface,
+        Self::External,
+        Self::PureFunction,
+        Self::TaskFunction,
+        Self::Constant,
+        Self::Component,
+        Self::Test,
+        Self::Field,
+        Self::Case,
+        Self::Operation,
+        Self::TypeParameter,
+        Self::Parameter,
+        Self::Binding,
+        Self::Expression,
+        Self::Requirement,
+        Self::Port,
+        Self::Target,
+        Self::Documentation,
+        Self::Annotation,
+    ];
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Repository => "repository",
+            Self::Package => "package",
+            Self::Module => "module",
+            Self::Record => "record",
+            Self::Variant => "variant",
+            Self::Interface => "interface",
+            Self::External => "external",
+            Self::PureFunction => "pure_function",
+            Self::TaskFunction => "task_function",
+            Self::Constant => "constant",
+            Self::Component => "component",
+            Self::Test => "test",
+            Self::Field => "field",
+            Self::Case => "case",
+            Self::Operation => "operation",
+            Self::TypeParameter => "type_parameter",
+            Self::Parameter => "parameter",
+            Self::Binding => "binding",
+            Self::Expression => "expression",
+            Self::Requirement => "requirement",
+            Self::Port => "port",
+            Self::Target => "target",
+            Self::Documentation => "documentation",
+            Self::Annotation => "annotation",
         }
+    }
+
+    pub fn parse(value: &str) -> Result<Self, Diagnostic> {
+        Self::ALL
+            .into_iter()
+            .find(|kind| kind.name() == value)
+            .ok_or_else(|| {
+                query_error(
+                    DiagnosticClass::Source,
+                    "semantic_query_owner_kind",
+                    format!("unknown semantic owner kind '{value}'"),
+                )
+            })
     }
 }
 
@@ -1952,7 +1984,7 @@ fn local_index_error(message: &str) -> Diagnostic {
 }
 
 fn local_bucket(domain: &str, value: &str) -> u8 {
-    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.semantic-local-index-bucket.v1");
+    let mut hasher = blake3::Hasher::new_derive_key(LOCAL_INDEX_BUCKET_DIGEST_DOMAIN);
     hasher.update(&(domain.len() as u64).to_be_bytes());
     hasher.update(domain.as_bytes());
     hasher.update(&(value.len() as u64).to_be_bytes());
@@ -2697,14 +2729,14 @@ fn decode_continuation(
 }
 
 fn continuation_checksum(payload: &[u8]) -> [u8; 32] {
-    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.semantic-continuation.v1");
+    let mut hasher = blake3::Hasher::new_derive_key(CONTINUATION_DIGEST_DOMAIN);
     hasher.update(&(payload.len() as u64).to_be_bytes());
     hasher.update(payload);
     *hasher.finalize().as_bytes()
 }
 
 fn query_digest(query: &[u8]) -> [u8; 32] {
-    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.semantic-query.v1");
+    let mut hasher = blake3::Hasher::new_derive_key(QUERY_DIGEST_DOMAIN);
     hasher.update(&(query.len() as u64).to_be_bytes());
     hasher.update(query);
     *hasher.finalize().as_bytes()

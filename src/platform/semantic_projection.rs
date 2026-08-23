@@ -1,5 +1,6 @@
 //! Deterministic, non-authoritative review projection of accepted semantic meaning.
 
+use super::contract::registry::REVIEW_PROJECTION_DIGEST_DOMAIN;
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::meaning::GRAPH_CONTRACT_IDENTITY;
 #[cfg(test)]
@@ -108,7 +109,7 @@ fn render_snapshot(
             ),
         ));
     }
-    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.semantic-review-projection.v1");
+    let mut hasher = blake3::Hasher::new_derive_key(REVIEW_PROJECTION_DIGEST_DOMAIN);
     hasher.update(&(bytes.len() as u64).to_be_bytes());
     hasher.update(&bytes);
     let receipt = ReviewProjectionReceipt {

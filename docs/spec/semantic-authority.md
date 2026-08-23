@@ -151,8 +151,9 @@ against the accepted stored root and the result/certificate bindings, writes imm
 module/map-page/root/receipt/revision/dependency objects durably, and replaces HEAD once. It does
 not repeat the completed semantic validation.
 
-Semantic-summary contract 2 produces content-addressed module summaries. Semantic-fact contract 3
-persists exact summary bindings, test owners, and typed reverse dependency edges as three Merkle
+The generated [contract registry](../generated/contracts.md) owns the current summary, fact, and
+validator identities. The semantic-summary contract produces content-addressed module summaries.
+The semantic-fact contract persists exact summary bindings, test owners, and typed reverse dependency edges as three Merkle
 maps plus one revision/root-bound manifest. The four local paths apply key-sorted path-local edits.
 Missing or malformed cache bytes rebuild from canonical modules; a rebuilt certificate that differs
 from the accepted revision is corruption. The bounded dependency frontier does not yet select

@@ -24,8 +24,8 @@ All live repository-managed paths are below `.lkjscript/meaning`.
 | `artifacts/*/*.lkja` | exact dependency authority | Immutable package-object closure required by accepted dependency bindings. Staging alone introduces no graph binding or new reachability and cannot change HEAD. |
 | `receipts/*/*.lkjt` | integrity-bound evidence | Accepted revision records bind receipts proving transaction, diff, affected owners, and validation. Receipts explain acceptance but are not a second program graph. |
 | `drafts/*.lkjd` | non-executable draft authority | Pending operations, base, generation, holes, conflicts, and intent. Draft mutation cannot change accepted HEAD. |
-| `indexes/semantic/summaries/*/*.lkss` | derived cache | Content-addressed semantic-summary contract-2 objects. Loss rebuilds from canonical modules. |
-| `indexes/semantic/pages/*/*.lksp` | derived cache | Persistent semantic-fact contract-3 pages for exact summary bindings, test owners, and reverse dependency edges. Loss or corruption rebuilds. |
+| `indexes/semantic/summaries/*/*.lkss` | derived cache | Content-addressed semantic-summary objects under the current executable [contract registry](../generated/contracts.md). Loss rebuilds from canonical modules. |
+| `indexes/semantic/pages/*/*.lksp` | derived cache | Persistent semantic-fact pages for exact summary bindings, test owners, and reverse dependency edges. Loss or corruption rebuilds. |
 | `indexes/*/*/facts.lkix` | derived cache | Revision/root-bound semantic-fact manifest. Its constant-size certificate must match the accepted revision; a rebuilt mismatch is canonical corruption. |
 | `indexes/local-objects/{owners,names}/**` plus revision manifests | derived cache | Local-index contract-3 owner/name shards are revision-independent content-addressed objects; each small revision/root-bound manifest selects 256 optional digests per index. Loss or corruption rebuilds from canonical authority. |
 | other `indexes/**` | derived cache | Revision-bound broad query indexes and operational generations. Loss or corruption rebuilds from canonical authority. |

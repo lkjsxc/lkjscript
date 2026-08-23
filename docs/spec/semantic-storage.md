@@ -161,9 +161,10 @@ triggers reconstruction from canonical authority. Rebuild output must equal delt
 same revision. Disposable index writes are not canonical publication. The broad relation index is
 still rebuilt lazily rather than updated by accepted deltas.
 
-Semantic-summary contract 2 defines integrity-bound per-module facts under validator contract 2.
-Module summaries bind module object, package, validator, exact input, signatures, implementations,
-effects, and dependency edges. Semantic-fact contract 3 binds summary input/content digests,
+The generated [contract registry](../generated/contracts.md) owns the current summary, fact, and
+validator identities. The semantic-summary contract defines integrity-bound per-module facts under
+the current validator contract. Module summaries bind module object, package, validator, exact
+input, signatures, implementations, effects, and dependency edges. The semantic-fact contract binds summary input/content digests,
 graph-owned test owners, and flat typed reverse edges in three persistent maps. Summary objects are
 content-addressed under `indexes/semantic/summaries`, map pages under `indexes/semantic/pages`, and
 one `facts.lkix` manifest is bound to each accepted revision and canonical root. Local transaction

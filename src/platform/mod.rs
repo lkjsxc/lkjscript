@@ -8,6 +8,7 @@ pub mod artifact;
 pub mod bootstrap;
 pub mod cli;
 pub mod configuration;
+pub mod contract;
 pub mod database;
 pub mod deployment;
 pub mod diagnostic;
@@ -53,11 +54,12 @@ pub use bootstrap::{
     BOOTSTRAP_CONTRACT_VERSION, BuiltinPackageInfo, ProjectCreationReceipt, ProjectTemplate,
     builtin_package_info, create_project, export_builtin_standard,
 };
-pub use cli::{CLI_CONTRACT_VERSION, CliSuccess, execute as execute_cli};
+pub use cli::{CliSuccess, execute as execute_cli};
 pub use configuration::{
     CONFIGURATION_ADAPTER_CONTRACT_VERSION, ConfigurationAdapter, ConfigurationObservation,
     ConfigurationValue,
 };
+pub use contract::{CLI_CONTRACT_VERSION, PublicOperation};
 pub use database::{
     POSTGRES_ADAPTER_CONTRACT_VERSION, PostgresAdapter, PostgresPool, PostgresPoolConfig,
     PostgresPoolObservation, PostgresSecret,

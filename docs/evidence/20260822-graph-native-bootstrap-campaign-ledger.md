@@ -193,9 +193,10 @@ This section records the implementation identities after replacing the monolithi
 dependency generation. The implementation is committed at
 `8ec09e24efc9968d900cfd3a4fa9ef63035a06d8`; final publication evidence belongs to the handoff.
 
-- Current contracts are meaning graph 4, persistent-root storage 2, CLI 4, change 3,
-  transaction 4, revision/receipt 4/3, draft 4, diff/merge 2, semantic-summary 2,
-  semantic-fact 3, validator 2, executable/package artifact 4/3, backup 4, and bootstrap 2.
+- Historical correction: this ledger originally repeated stale semantic-summary and validator
+  version 2 claims even though its checkout implemented both as contract 3. Current identities are
+  no longer restated in historical evidence; the executable
+  [contract registry](../generated/contracts.md) owns them.
 - Semantic-fact contract 3 stores module-to-summary bindings, graph-owned test owners, and flat
   typed reverse dependency edges in three path-compressed persistent Merkle maps. A constant-size
   certificate over their roots replaces the predecessor packed complete reverse index. Local

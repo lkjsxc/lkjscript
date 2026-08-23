@@ -23,21 +23,15 @@ template does the same. These are maintained abstraction consumers, not test-onl
 
 ## Current contracts
 
-| Domain | Current contract |
-|---|---|
-| Meaning graph | `lkjscript-meaning-graph-4`, version 4 |
-| Physical accepted root | `lkjscript-persistent-root-2`, storage version 2 |
-| Revisions and receipts | versions 4 and 3 |
-| Public CLI | version 4, strict JSON |
-| Public change and internal transaction | versions 3 and 4 |
-| Query / broad index / local exact index | versions 2 / 2 / 3 |
-| Draft, semantic diff, and merge | versions 4, 2, and 2 |
-| Semantic summary / fact / validator | `lkjscript-semantic-summary-2` / `lkjscript-semantic-facts-3` / `lkjscript-semantic-validator-2` |
-| Executable artifact / package object | versions 4 and 3 |
-| Backup and bootstrap | versions 4 and 2 |
-| Read-only retention preview | version 1 |
-| Deployment | version 1 |
-| Execution | `bytecode_v1` and `semantic_reference_v1` |
+The executable registry is the current owner of contract identities, versions, storage magic,
+digest domains, operations, schemas, limits, diagnostic classes, and security nonclaims. See the
+generated [contract table](generated/contracts.md), [operation table](generated/operations.md),
+and [machine manifest](generated/manifest.json). `tools/check` verifies those bytes against the
+release executable. This status file deliberately does not repeat the current version table.
+
+Execution currently retains the independently implemented `bytecode_v1` and
+`semantic_reference_v1` routes; their replacement is part of the active Graph 5 campaign rather
+than a registry fact claimed complete here.
 
 Unknown contracts and fields, malformed tagged identities, duplicate/noncanonical order, trailing
 bytes, checksum mismatch, foreign IDs, and configured exhaustion reject at their owning boundary.
@@ -47,11 +41,7 @@ objects, and query-v1 requests are not current readers.
 
 ## Direct CLI and binary-only bootstrap
 
-CLI v4 has 17 direct top-level commands:
-
-`capabilities`, `new`, `inspect`, `query`, `change`, `draft`, `history`, `package`,
-`check`, `build`, `run`, `serve`, `worker`, `review`, `backup`, `restore`, and
-`doctor`.
+The current executable operation set is generated in [operations.md](generated/operations.md).
 
 There is no universal command namespace and no compatibility aliases. Removed names such as the
 old namespace, separate ID allocator, graph import, text projection aliases, and backup aliases
@@ -114,8 +104,9 @@ relations, and fully validates the candidate under profile `prepared_once_full_o
 publication removes duplicate write-lock validation in both paths. A missing exact-index generation
 makes a local transaction widen to complete preparation; it does not narrow validation.
 
-Semantic-summary contract 2 implements integrity-bound module signatures, implementation/effect
-digests, and typed dependency facts. Semantic-fact contract 3 persists exact summary bindings,
+The current semantic-summary contract implements integrity-bound module signatures,
+implementation/effect digests, and typed dependency facts. The current semantic-fact contract
+persists exact summary bindings,
 test owners, and flat typed reverse edges in three Merkle maps. Codec, corruption, rebuild,
 delta/full equality, private/public classification, and bounded-frontier tests exist. Every
 revision-4 core authenticates the exact fact roots with a revision-independent certificate. Local

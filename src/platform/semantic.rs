@@ -1,5 +1,6 @@
 //! Package resolution, nominal identity, type checking, and effect discovery.
 
+use super::contract::registry::PACKAGE_REVISION_DIGEST_DOMAIN;
 use super::diagnostic::{Diagnostic, SourceLocation};
 use super::graph::GraphRoot;
 use super::language::{
@@ -5332,7 +5333,7 @@ fn package_revision_digest(
     descriptor: &PackageDescriptor,
     modules: &[ValidatedModule],
 ) -> Result<String, Diagnostic> {
-    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.package-revision.v1");
+    let mut hasher = blake3::Hasher::new_derive_key(PACKAGE_REVISION_DIGEST_DOMAIN);
     let metadata = semantic_dependency_bytes(descriptor)?;
     hasher.update(&(metadata.len() as u64).to_be_bytes());
     hasher.update(&metadata);

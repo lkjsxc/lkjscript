@@ -2,26 +2,28 @@
 
 Status: normative.
 
-Contract identities: CLI contract version 4, change contract version 3, query contract version 2,
-bootstrap contract version 2, internal transaction contract version 4, draft contract version 4,
-diff and merge contract version 2, backup contract version 4, package artifact contract version 3,
-executable artifact contract version 4, read-only retention contract version 1, and meaning-graph
-contract `lkjscript-meaning-graph-4`.
+Current contract identities and versions are executable-derived in the generated
+[contract table](../generated/contracts.md) and [machine manifest](../generated/manifest.json).
+This normative document does not maintain a parallel version catalog.
 
 ## Authority and executable owner
 
-The registry in `src/platform/cli.rs` is the sole exhaustive owner of finite command names,
-purposes, usage, project requirements, authority effects, and its schema digest. The executable
-projects that registry through:
+The registry in `src/platform/contract/` is the sole exhaustive owner of finite command names,
+purposes, usage, project requirements, authority effects, request and response schemas, limits,
+diagnostic classes, and schema digests. CLI dispatch consumes its closed operation enum. The
+executable projects that registry through:
 
 ```sh
 lkjscript capabilities
 lkjscript capabilities COMMAND
 lkjscript capabilities --known-schema DIGEST
+lkjscript capabilities --section SECTION
+lkjscript capabilities --known-section SECTION=DIGEST
+lkjscript capabilities --output schema.json
 ```
 
-The last form returns only the digest and `unchanged: true` when the caller already knows the
-current registry. Documentation may describe workflows, but it does not define a second grammar.
+The `--known-schema` form returns only the digest and `unchanged: true` when the caller already
+knows the current registry. Documentation may describe workflows, but it does not define a second grammar.
 An unknown command or option fails with the `cli_usage` diagnostic; no compatibility routing is
 performed.
 
@@ -32,14 +34,8 @@ accepted program authority.
 
 ## Direct command groups
 
-CLI v4 has no universal namespace prefix. Its direct commands are grouped by objective:
-
-- discover and create: `capabilities`, `new`;
-- inspect and select: `inspect`, `query`;
-- author and collaborate: `change`, `draft`, `history`;
-- manage exact packages: `package`;
-- verify and execute: `check`, `build`, `run`, `serve`, `worker`;
-- project and recover: `review`, `backup`, `restore`, `doctor`.
+The current CLI has no universal namespace prefix. Its exact direct operations and schemas are in
+the generated [operation table](../generated/operations.md).
 
 Use `capabilities COMMAND` for the current subcommand and option grammar. One behavior has one
 public name.
@@ -156,14 +152,10 @@ preparation. A separate dry-run and later commit are separate invocations and ea
 independently; no reusable public prepared handle exists. Rejection, validation, no-change, and
 dry-run publish nothing.
 
-Current high-level forms are `add_dependency`, `replace_dependency`, `remove_dependency`,
-`create_module`, `create_record`, `create_variant`, `create_function`, `create_component`,
-`create_test`, `create_target`, `rename_module`, `rename_declaration`, and `replace_body`.
-Accepted type forms are unit, Boolean, signed 64-bit integer, bytes, text, static text, secret, a
-type-parameter reference, nominal type, structural record, list, ordered map, option, result,
-stream, and function. Accepted concise expression forms are unit, Boolean, signed 64-bit integer,
-text, static text, lexical variable, exact constant reference, direct call with explicit type
-arguments, named function value with explicit type arguments, invocation, record, and typed list.
+The exact accepted change, type, and expression form catalogs come from `capabilities --section
+change`, `capabilities --section type`, and `capabilities --section expression`. The complete nested
+change schema is available through `capabilities --output schema.json` and is retained as
+[generated JSON Schema](../generated/protocol.schema.json).
 
 Declaration references accept a typed request-local symbol, a local `decl_` identity resolved at
 the selected revision, or a fully exact
@@ -172,10 +164,10 @@ references that cannot be derived from a local declaration identity. Every form 
 typed package/module/declaration reference before validation; the selector string is not graph
 authority.
 
-`capabilities` names every current high-level change, top-level type form, concise expression form,
-owner kind, relation role, and declaration-reference form. CLI v4 does not yet publish the complete nested JSON schema for each
-form; on-demand command help provides command grammar but not every nested request field. Unknown
-request-envelope fields and trailing input reject at the owning boundary.
+`capabilities` publishes every current high-level change, top-level type form, concise expression
+form, owner kind, relation role, and declaration-reference form through digest-addressed sections.
+Unknown request-envelope fields and trailing input reject at the owning boundary. Executable
+decoder conformance remains an independent oracle for generated schema strictness.
 
 A created construct uses an `as` symbol beginning with `$`. The remaining 1–64 bytes contain only
 ASCII alphanumeric characters, `-`, or `_`. A symbol is request-local, unique, defined before use,
@@ -200,7 +192,7 @@ draft state.
 `history` lists bounded revisions, shows one revision and receipt, compares two exact revisions, or
 previews/commits a three-way merge. Stable identities distinguish addition, removal, rename, move,
 and modification. A conflicting merge publishes nothing. Persistent typed conflict resolution is
-not implemented in CLI v4.
+not implemented in the current CLI.
 
 `package stage PATH` verifies a graph-native artifact and stores its exact package objects for a
 later dependency-binding change. Staging is operational and cannot alter HEAD. Built-in package
@@ -254,7 +246,7 @@ certificates, or ACME, and no such implementation is planned. Encrypted deployme
 appropriate external trusted transport boundary. That boundary does not provide hostile-code or
 multi-tenant isolation.
 
-CLI v4 can author explicit rank-1 generic pure functions, direct calls with exact type arguments,
+The current CLI can author explicit rank-1 generic pure functions, direct calls with exact type arguments,
 named pure function values, and invocation. It does not claim constraints, type-argument inference,
 generic task functions, closure capture, persistent conflict resolution, fully incremental
 validation or compilation, garbage collection, live-store packing, bounded-memory backup key

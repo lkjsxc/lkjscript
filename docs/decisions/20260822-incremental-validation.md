@@ -4,10 +4,11 @@ Date: 2026-08-22 UTC.
 
 ## Status
 
-Accepted and partially implemented for meaning graph contract 4, semantic-summary contract 2,
-semantic-fact contract 3, and validator identity `lkjscript-semantic-validator-2`. Three persistent
-fact maps, a constant-size authenticated certificate, a bounded dependency frontier, and four
-local transaction classes are current. General frontier-driven publication validation is not yet
+Accepted and partially implemented for the then-current meaning graph, semantic-summary,
+semantic-fact, and validator contracts. Their current executable identities are generated in the
+[contract registry](../generated/contracts.md); this decision does not duplicate them. Three
+persistent fact maps, a constant-size authenticated certificate, a bounded dependency frontier,
+and four local transaction classes are current. General frontier-driven publication validation is not yet
 implemented; unsupported changes retain complete preparation.
 
 ## Selected model

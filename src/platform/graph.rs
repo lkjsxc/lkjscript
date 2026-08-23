@@ -1,5 +1,9 @@
 //! Canonical repository/package root for packed meaning-module shards.
 
+use super::contract::registry::{
+    LOGICAL_ROOT_DIGEST_DOMAIN as ROOT_DIGEST_DOMAIN, LOGICAL_ROOT_MAGIC as ROOT_MAGIC,
+    STORED_ROOT_DIGEST_DOMAIN, STORED_ROOT_MAGIC,
+};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::meaning::{GRAPH_CONTRACT_VERSION, MeaningModule};
 use super::package::{PackageId, RunnerKind};
@@ -22,10 +26,6 @@ pub const MAXIMUM_ROOT_BYTES: usize = 16 * 1_048_576;
 pub const ROOT_STORAGE_CONTRACT_VERSION: u16 = 2;
 pub const ROOT_STORAGE_CONTRACT_IDENTITY: &str = "lkjscript-persistent-root-2";
 pub const MAXIMUM_STORED_ROOT_BYTES: usize = 64 * 1024;
-const ROOT_MAGIC: [u8; 8] = *b"LKJGRF04";
-const ROOT_DIGEST_DOMAIN: &str = "lkjscript.logical-graph-root.v4";
-const STORED_ROOT_MAGIC: [u8; 8] = *b"LKJROOT3";
-const STORED_ROOT_DIGEST_DOMAIN: &str = "lkjscript.persistent-root-object.v2";
 const ROOT_VALUE_LIMIT: usize = 64 * 1024;
 
 #[derive(Decode, Encode, Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]

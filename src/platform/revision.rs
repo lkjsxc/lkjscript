@@ -1,5 +1,9 @@
 //! Immutable semantic revisions, atomic visibility records, and compact transaction receipts.
 
+use super::contract::registry::{
+    HEAD_DOMAIN, HEAD_MAGIC, RECEIPT_DOMAIN, RECEIPT_MAGIC, REVISION_DOMAIN, REVISION_MAGIC,
+    SEMANTIC_REVISION_DIGEST_DOMAIN,
+};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::meaning::GRAPH_CONTRACT_VERSION;
 use super::package::PackageId;
@@ -16,12 +20,6 @@ pub const REVISION_CONTRACT_VERSION: u16 = 4;
 pub const RECEIPT_CONTRACT_VERSION: u16 = 3;
 pub const MAXIMUM_REVISION_BYTES: usize = 256 * 1024;
 pub const MAXIMUM_RECEIPT_BYTES: usize = 4 * 1_048_576;
-const REVISION_MAGIC: [u8; 8] = *b"LKJREV04";
-const REVISION_DOMAIN: &str = "lkjscript.revision-record-envelope.v4";
-const RECEIPT_MAGIC: [u8; 8] = *b"LKJRCPT3";
-const RECEIPT_DOMAIN: &str = "lkjscript.transaction-receipt-envelope.v3";
-const HEAD_MAGIC: [u8; 8] = *b"LKJHEAD4";
-const HEAD_DOMAIN: &str = "lkjscript.semantic-head-envelope.v4";
 
 #[derive(Decode, Encode, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -68,7 +66,7 @@ impl RevisionCore {
                 format!("revision identity encoding failed: {error}"),
             )
         })?;
-        let mut hasher = blake3::Hasher::new_derive_key("lkjscript.semantic-revision.v1");
+        let mut hasher = blake3::Hasher::new_derive_key(SEMANTIC_REVISION_DIGEST_DOMAIN);
         hasher.update(&(bytes.len() as u64).to_be_bytes());
         hasher.update(&bytes);
         Ok(RevisionId::from_digest(*hasher.finalize().as_bytes()))

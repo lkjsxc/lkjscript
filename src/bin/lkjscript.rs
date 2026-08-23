@@ -5,7 +5,10 @@
     reason = "the process boundary preserves the complete structured diagnostic"
 )]
 
-use lkjscript::platform::{CLI_CONTRACT_VERSION, Diagnostic, PreparedDeployment, execute_cli};
+use lkjscript::platform::contract::exit_status_for;
+use lkjscript::platform::{
+    CLI_CONTRACT_VERSION, Diagnostic, PreparedDeployment, PublicOperation, execute_cli,
+};
 use serde::Serialize;
 use serde_json::json;
 use std::io::Write;
@@ -13,25 +16,22 @@ use std::path::Path;
 use std::process::ExitCode;
 use tokio::net::TcpListener;
 
-const EXIT_USAGE_OR_SOURCE: u8 = 2;
-const EXIT_CAPABILITY: u8 = 3;
-const EXIT_RESOURCE: u8 = 4;
-const EXIT_CORRUPT: u8 = 5;
-const EXIT_INFRASTRUCTURE: u8 = 6;
-
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> ExitCode {
     let arguments = std::env::args().skip(1).collect::<Vec<_>>();
+    let operation = arguments
+        .first()
+        .and_then(|value| PublicOperation::parse(value));
     if !matches!(
-        arguments.first().map(String::as_str),
-        Some("serve" | "worker")
+        operation,
+        Some(PublicOperation::Serve | PublicOperation::Worker)
     ) {
         return cli(arguments);
     }
-    let outcome = match arguments.first().map(String::as_str) {
-        Some("serve") => serve(&arguments[1..]).await,
-        Some("worker") => worker(&arguments[1..]).await,
-        _ => unreachable!("standalone commands returned above"),
+    let outcome = match operation {
+        Some(PublicOperation::Serve) => serve(&arguments[1..]).await,
+        Some(PublicOperation::Worker) => worker(&arguments[1..]).await,
+        _ => return cli(arguments),
     };
     match outcome {
         Ok(()) => ExitCode::SUCCESS,
@@ -44,7 +44,9 @@ fn cli(arguments: Vec<String>) -> ExitCode {
         Ok(receipt) => {
             let exit = receipt.process_exit_code();
             if write_json(&receipt).is_err() {
-                return ExitCode::from(EXIT_INFRASTRUCTURE);
+                return ExitCode::from(exit_status_for(
+                    lkjscript::platform::DiagnosticClass::Infrastructure,
+                ));
             }
             ExitCode::from(exit)
         }
@@ -61,7 +63,9 @@ fn write_failure(error: &Diagnostic, contract_version: u16) -> ExitCode {
         "error": error,
     });
     if write_json(&failure).is_err() {
-        ExitCode::from(EXIT_INFRASTRUCTURE)
+        ExitCode::from(exit_status_for(
+            lkjscript::platform::DiagnosticClass::Infrastructure,
+        ))
     } else {
         ExitCode::from(exit)
     }
@@ -168,12 +172,5 @@ fn cli_error(message: impl Into<String>) -> Diagnostic {
 }
 
 fn exit_for(error: &Diagnostic) -> u8 {
-    use lkjscript::platform::DiagnosticClass;
-    match error.class {
-        DiagnosticClass::Source | DiagnosticClass::Semantic => EXIT_USAGE_OR_SOURCE,
-        DiagnosticClass::Capability | DiagnosticClass::Cancelled => EXIT_CAPABILITY,
-        DiagnosticClass::Resource => EXIT_RESOURCE,
-        DiagnosticClass::Corrupt => EXIT_CORRUPT,
-        DiagnosticClass::Infrastructure => EXIT_INFRASTRUCTURE,
-    }
+    exit_status_for(error.class)
 }

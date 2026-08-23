@@ -37,6 +37,8 @@ pub enum ProjectTemplate {
 }
 
 impl ProjectTemplate {
+    pub const ALL: [Self; 2] = [Self::Minimal, Self::Command];
+
     pub fn parse(value: &str) -> Result<Self, Diagnostic> {
         match value {
             "minimal" => Ok(Self::Minimal),
@@ -434,10 +436,10 @@ fn command_recipe(
                 name: "main".to_owned(),
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result: TypeForm::Text,
+                result: TypeForm::Text {},
                 body: ExpressionForm::Call {
                     call: exact_reference_selector(&identity),
-                    type_arguments: vec![TypeForm::Text],
+                    type_arguments: vec![TypeForm::Text {}],
                     arguments: vec![ExpressionForm::Text {
                         text: "hello".to_owned(),
                     }],
@@ -452,7 +454,7 @@ fn command_recipe(
                     r#as: "$main-port".to_owned(),
                     name: "main".to_owned(),
                     parameters: Vec::new(),
-                    result: TypeForm::Text,
+                    result: TypeForm::Text {},
                     function: "$main".to_owned(),
                 }],
                 exported: true,

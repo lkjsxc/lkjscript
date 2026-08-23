@@ -1,5 +1,6 @@
 //! Concise public changes with typed request-local identity allocation.
 
+use super::contract::registry::CHANGE_ALLOCATION_SEED_DOMAIN;
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::graph::DependencyBinding;
 use super::language::{
@@ -22,16 +23,19 @@ use super::semantic_transaction::{
     TransactionRequest, TransactionResult, execute_transaction,
 };
 use super::syntax::SourceSpan;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 pub const CHANGE_CONTRACT_VERSION: u16 = 3;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[schemars(rename = "lkjscript.ChangeRequestV3")]
 #[serde(deny_unknown_fields)]
 pub struct ChangeRequest {
     pub contract_version: u16,
     #[serde(default)]
+    #[schemars(with = "Option<String>")]
     pub base_revision: Option<RevisionId>,
     #[serde(default)]
     pub idempotency_key: Option<String>,
@@ -44,19 +48,26 @@ pub struct ChangeRequest {
     pub intent: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "change", rename_all = "snake_case")]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[schemars(rename = "lkjscript.ChangeV3")]
+#[serde(tag = "change", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Change {
     AddDependency {
         alias: String,
+        #[schemars(with = "String")]
         package_id: PackageId,
+        #[schemars(with = "String")]
         semantic_revision: RevisionId,
+        #[schemars(with = "String")]
         artifact: ArtifactDigest,
     },
     ReplaceDependency {
         alias: String,
+        #[schemars(with = "String")]
         package_id: PackageId,
+        #[schemars(with = "String")]
         semantic_revision: RevisionId,
+        #[schemars(with = "String")]
         artifact: ArtifactDigest,
     },
     RemoveDependency {
@@ -132,7 +143,81 @@ pub enum Change {
     },
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum ChangeKind {
+    AddDependency,
+    ReplaceDependency,
+    RemoveDependency,
+    CreateModule,
+    CreateRecord,
+    CreateVariant,
+    CreateFunction,
+    CreateComponent,
+    CreateTest,
+    CreateTarget,
+    RenameModule,
+    RenameDeclaration,
+    ReplaceBody,
+}
+
+impl ChangeKind {
+    pub const ALL: [Self; 13] = [
+        Self::AddDependency,
+        Self::ReplaceDependency,
+        Self::RemoveDependency,
+        Self::CreateModule,
+        Self::CreateRecord,
+        Self::CreateVariant,
+        Self::CreateFunction,
+        Self::CreateComponent,
+        Self::CreateTest,
+        Self::CreateTarget,
+        Self::RenameModule,
+        Self::RenameDeclaration,
+        Self::ReplaceBody,
+    ];
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::AddDependency => "add_dependency",
+            Self::ReplaceDependency => "replace_dependency",
+            Self::RemoveDependency => "remove_dependency",
+            Self::CreateModule => "create_module",
+            Self::CreateRecord => "create_record",
+            Self::CreateVariant => "create_variant",
+            Self::CreateFunction => "create_function",
+            Self::CreateComponent => "create_component",
+            Self::CreateTest => "create_test",
+            Self::CreateTarget => "create_target",
+            Self::RenameModule => "rename_module",
+            Self::RenameDeclaration => "rename_declaration",
+            Self::ReplaceBody => "replace_body",
+        }
+    }
+}
+
+impl Change {
+    pub const fn kind(&self) -> ChangeKind {
+        match self {
+            Self::AddDependency { .. } => ChangeKind::AddDependency,
+            Self::ReplaceDependency { .. } => ChangeKind::ReplaceDependency,
+            Self::RemoveDependency { .. } => ChangeKind::RemoveDependency,
+            Self::CreateModule { .. } => ChangeKind::CreateModule,
+            Self::CreateRecord { .. } => ChangeKind::CreateRecord,
+            Self::CreateVariant { .. } => ChangeKind::CreateVariant,
+            Self::CreateFunction { .. } => ChangeKind::CreateFunction,
+            Self::CreateComponent { .. } => ChangeKind::CreateComponent,
+            Self::CreateTest { .. } => ChangeKind::CreateTest,
+            Self::CreateTarget { .. } => ChangeKind::CreateTarget,
+            Self::RenameModule { .. } => ChangeKind::RenameModule,
+            Self::RenameDeclaration { .. } => ChangeKind::RenameDeclaration,
+            Self::ReplaceBody { .. } => ChangeKind::ReplaceBody,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[schemars(rename = "lkjscript.ChangeFieldFormV3")]
 #[serde(deny_unknown_fields)]
 pub struct FieldForm {
     #[serde(default)]
@@ -141,7 +226,8 @@ pub struct FieldForm {
     pub r#type: TypeForm,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[schemars(rename = "lkjscript.ChangeCaseFormV3")]
 #[serde(deny_unknown_fields)]
 pub struct CaseForm {
     #[serde(default)]
@@ -151,7 +237,8 @@ pub struct CaseForm {
     pub payload: Option<TypeForm>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[schemars(rename = "lkjscript.ChangeParameterFormV3")]
 #[serde(deny_unknown_fields)]
 pub struct ParameterForm {
     #[serde(default)]
@@ -160,14 +247,16 @@ pub struct ParameterForm {
     pub r#type: TypeForm,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[schemars(rename = "lkjscript.ChangeTypeParameterFormV3")]
 #[serde(deny_unknown_fields)]
 pub struct TypeParameterForm {
     pub r#as: String,
     pub name: String,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[schemars(rename = "lkjscript.ChangePortFormV3")]
 #[serde(deny_unknown_fields)]
 pub struct PortForm {
     pub r#as: String,
@@ -178,16 +267,17 @@ pub struct PortForm {
     pub function: String,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[schemars(rename = "lkjscript.TypeFormV3")]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum TypeForm {
-    Unit,
-    Bool,
-    I64,
-    Bytes,
-    Text,
-    StaticText,
-    Secret,
+    Unit {},
+    Bool {},
+    I64 {},
+    Bytes {},
+    Text {},
+    StaticText {},
+    Secret {},
     Parameter {
         parameter: String,
     },
@@ -220,15 +310,102 @@ pub enum TypeForm {
     },
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum TypeFormKind {
+    Unit,
+    Bool,
+    I64,
+    Bytes,
+    Text,
+    StaticText,
+    Secret,
+    Parameter,
+    Named,
+    Record,
+    List,
+    Map,
+    Option,
+    Result,
+    Stream,
+    Function,
+}
+
+impl TypeFormKind {
+    pub const ALL: [Self; 16] = [
+        Self::Unit,
+        Self::Bool,
+        Self::I64,
+        Self::Bytes,
+        Self::Text,
+        Self::StaticText,
+        Self::Secret,
+        Self::Parameter,
+        Self::Named,
+        Self::Record,
+        Self::List,
+        Self::Map,
+        Self::Option,
+        Self::Result,
+        Self::Stream,
+        Self::Function,
+    ];
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Unit => "unit",
+            Self::Bool => "bool",
+            Self::I64 => "i64",
+            Self::Bytes => "bytes",
+            Self::Text => "text",
+            Self::StaticText => "static_text",
+            Self::Secret => "secret",
+            Self::Parameter => "parameter",
+            Self::Named => "named",
+            Self::Record => "record",
+            Self::List => "list",
+            Self::Map => "map",
+            Self::Option => "option",
+            Self::Result => "result",
+            Self::Stream => "stream",
+            Self::Function => "function",
+        }
+    }
+}
+
+impl TypeForm {
+    pub const fn kind(&self) -> TypeFormKind {
+        match self {
+            Self::Unit { .. } => TypeFormKind::Unit,
+            Self::Bool { .. } => TypeFormKind::Bool,
+            Self::I64 { .. } => TypeFormKind::I64,
+            Self::Bytes { .. } => TypeFormKind::Bytes,
+            Self::Text { .. } => TypeFormKind::Text,
+            Self::StaticText { .. } => TypeFormKind::StaticText,
+            Self::Secret { .. } => TypeFormKind::Secret,
+            Self::Parameter { .. } => TypeFormKind::Parameter,
+            Self::Named { .. } => TypeFormKind::Named,
+            Self::Record { .. } => TypeFormKind::Record,
+            Self::List { .. } => TypeFormKind::List,
+            Self::Map { .. } => TypeFormKind::Map,
+            Self::Option { .. } => TypeFormKind::Option,
+            Self::Result { .. } => TypeFormKind::Result,
+            Self::Stream { .. } => TypeFormKind::Stream,
+            Self::Function { .. } => TypeFormKind::Function,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[schemars(rename = "lkjscript.ChangeTypeFieldFormV3")]
 #[serde(deny_unknown_fields)]
 pub struct TypeFieldForm {
     pub name: String,
     pub r#type: TypeForm,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(untagged)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[schemars(rename = "lkjscript.ExpressionFormV3")]
+#[serde(untagged, deny_unknown_fields)]
 pub enum ExpressionForm {
     Unit {
         unit: bool,
@@ -277,7 +454,77 @@ pub enum ExpressionForm {
     },
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum ExpressionFormKind {
+    Unit,
+    Bool,
+    I64,
+    Text,
+    StaticText,
+    Variable,
+    Constant,
+    Call,
+    Function,
+    Invoke,
+    Record,
+    List,
+}
+
+impl ExpressionFormKind {
+    pub const ALL: [Self; 12] = [
+        Self::Unit,
+        Self::Bool,
+        Self::I64,
+        Self::Text,
+        Self::StaticText,
+        Self::Variable,
+        Self::Constant,
+        Self::Call,
+        Self::Function,
+        Self::Invoke,
+        Self::Record,
+        Self::List,
+    ];
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Unit => "unit",
+            Self::Bool => "bool",
+            Self::I64 => "i64",
+            Self::Text => "text",
+            Self::StaticText => "static_text",
+            Self::Variable => "variable",
+            Self::Constant => "constant",
+            Self::Call => "call",
+            Self::Function => "function",
+            Self::Invoke => "invoke",
+            Self::Record => "record",
+            Self::List => "list",
+        }
+    }
+}
+
+impl ExpressionForm {
+    pub const fn kind(&self) -> ExpressionFormKind {
+        match self {
+            Self::Unit { .. } => ExpressionFormKind::Unit,
+            Self::Bool { .. } => ExpressionFormKind::Bool,
+            Self::I64 { .. } => ExpressionFormKind::I64,
+            Self::Text { .. } => ExpressionFormKind::Text,
+            Self::StaticText { .. } => ExpressionFormKind::StaticText,
+            Self::Variable { .. } => ExpressionFormKind::Variable,
+            Self::Constant { .. } => ExpressionFormKind::Constant,
+            Self::Call { .. } => ExpressionFormKind::Call,
+            Self::Function { .. } => ExpressionFormKind::Function,
+            Self::Invoke { .. } => ExpressionFormKind::Invoke,
+            Self::Record { .. } => ExpressionFormKind::Record,
+            Self::List { .. } => ExpressionFormKind::List,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
+#[schemars(rename = "lkjscript.ChangeExpressionFieldFormV3")]
 #[serde(deny_unknown_fields)]
 pub struct ExpressionFieldForm {
     pub name: String,
@@ -417,7 +664,7 @@ fn lower_changes(
             format!("normalized change could not be encoded: {error}"),
         )
     })?;
-    let mut seed_hasher = blake3::Hasher::new_derive_key("lkjscript.change-allocation-seed.v1");
+    let mut seed_hasher = blake3::Hasher::new_derive_key(CHANGE_ALLOCATION_SEED_DOMAIN);
     seed_hasher.update(&repository_id.bytes());
     seed_hasher.update(&base_revision.bytes());
     seed_hasher.update(&(request_bytes.len() as u64).to_be_bytes());
@@ -1258,13 +1505,13 @@ fn lower_type_in_scope(
     type_parameters: &BTreeMap<String, String>,
 ) -> Result<Type, Diagnostic> {
     Ok(match value {
-        TypeForm::Unit => Type::Unit,
-        TypeForm::Bool => Type::Bool,
-        TypeForm::I64 => Type::I64,
-        TypeForm::Bytes => Type::Bytes,
-        TypeForm::Text => Type::Text,
-        TypeForm::StaticText => Type::StaticText,
-        TypeForm::Secret => Type::Secret,
+        TypeForm::Unit {} => Type::Unit,
+        TypeForm::Bool {} => Type::Bool,
+        TypeForm::I64 {} => Type::I64,
+        TypeForm::Bytes {} => Type::Bytes,
+        TypeForm::Text {} => Type::Text,
+        TypeForm::StaticText {} => Type::StaticText,
+        TypeForm::Secret {} => Type::Secret,
         TypeForm::Parameter { parameter } => {
             let name = type_parameters.get(parameter).ok_or_else(|| {
                 if parameter.starts_with('$') {

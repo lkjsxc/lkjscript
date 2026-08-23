@@ -5,6 +5,7 @@ use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 #[cfg(test)]
 use std::collections::BTreeSet;
@@ -55,7 +56,7 @@ impl PackageId {
 
     pub fn bytes(&self) -> [u8; 16] {
         let mut bytes = [0_u8; 16];
-        for (index, pair) in self.0.as_bytes().chunks_exact(2).enumerate() {
+        for (index, pair) in self.0.as_bytes().as_chunks::<2>().0.iter().enumerate() {
             let high = decode_hex(pair[0]);
             let low = decode_hex(pair[1]);
             bytes[index] = (high << 4) | low;
@@ -129,8 +130,20 @@ pub struct Dependency {
 }
 
 #[derive(
-    Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, Ord, PartialEq, PartialOrd, Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Decode,
+    Deserialize,
+    Encode,
+    Eq,
+    JsonSchema,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
 )]
+#[schemars(rename = "lkjscript.RunnerKindV1")]
 #[serde(rename_all = "snake_case")]
 pub enum RunnerKind {
     Command,
@@ -139,6 +152,28 @@ pub enum RunnerKind {
     Batch,
     Worker,
     Test,
+}
+
+impl RunnerKind {
+    pub const ALL: [Self; 6] = [
+        Self::Command,
+        Self::Http,
+        Self::Interactive,
+        Self::Batch,
+        Self::Worker,
+        Self::Test,
+    ];
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Command => "command",
+            Self::Http => "http",
+            Self::Interactive => "interactive",
+            Self::Batch => "batch",
+            Self::Worker => "worker",
+            Self::Test => "test",
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

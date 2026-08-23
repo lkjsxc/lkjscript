@@ -17,7 +17,7 @@ The verified bootstrap is stable Rust 2024 on Linux x86-64.
 
 ## Start from one binary
 
-Discover the exact CLI v4 contract and create a command application:
+Discover the exact current CLI contract and create a command application:
 
 ```sh
 lkjscript capabilities
@@ -58,7 +58,7 @@ lkjscript --project ./hello query find main --exact --limit 10
 lkjscript --project ./hello query context --seed DECLARATION_ID --depth 4
 ```
 
-Every finite command emits one strict CLI v4 JSON value. Growing reads accept item, byte, work,
+Every finite command emits one strict current-protocol JSON value. Growing reads accept item, byte, work,
 depth, fanout, revision, and continuation controls. Project-bound results identify the exact
 observed revision where applicable, and every response stays below the 4 MiB hard response bound.
 
@@ -91,9 +91,11 @@ stable owner and persistent name/summary paths; importer objects are unchanged. 
 may use a request-local symbol, a local `decl_` identity, or the discoverable
 `exact:PACKAGE/mod_ID/decl_ID` selector.
 
-Semantic-summary contract 2 defines integrity-bound, rebuildable module summaries for public
-signatures, implementations, types, calls, effects, capabilities, deployment, and tests.
-Semantic-fact contract 3 stores exact summary bindings, graph-owned test owners, and typed reverse
+The executable registry owns the current semantic-summary, semantic-fact, and validator identities;
+see [the generated contract table](docs/generated/contracts.md). The summary contract defines
+integrity-bound, rebuildable module summaries for public signatures, implementations, types, calls,
+effects, capabilities, deployment, and tests. The semantic-fact contract stores exact summary
+bindings, graph-owned test owners, and typed reverse
 dependency edges in three persistent Merkle maps. Content-addressed summaries, map pages, and one
 revision/root-bound manifest are disposable acceleration. Every accepted revision commits to a
 constant-size, revision-independent certificate over the exact fact roots; missing or malformed

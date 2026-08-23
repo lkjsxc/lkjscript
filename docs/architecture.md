@@ -3,11 +3,14 @@
 This document maps the implemented graph-to-runtime system. Normative behavior belongs to
 `docs/spec/`; current limitations belong to `docs/status.md`.
 
+The exact current identities for the named layers below are generated from the executable
+[contract registry](generated/contracts.md).
+
 ```text
-direct CLI v4 / strict change v3 / transaction v4
+direct CLI / strict authored change / exact transaction
                          │
                          ▼
-           typed stable-ID meaning graph v4
+           typed stable-ID meaning graph
                          │
        ┌─────────────────┴─────────────────┐
        ▼                                   ▼
@@ -146,9 +149,10 @@ are disposable and rebuildable.
 
 ## Summaries, queries, compiler, and runtime
 
-Semantic-summary contract 2 encodes per-module public signatures, implementations, effects, tests,
-and typed dependency edges, bound to exact module content, package, and validator contract 2.
-Semantic-fact contract 3 persists summary bindings, test owners, and flat typed reverse edges as
+The executable [contract registry](generated/contracts.md) owns the current summary, fact, and
+validator identities. The summary contract encodes per-module public signatures, implementations,
+effects, tests, and typed dependency edges, bound to exact module content, package, and validator
+contract. The semantic-fact contract persists summary bindings, test owners, and flat typed reverse edges as
 three path-compressed Merkle maps. Summary objects live below `indexes/semantic/summaries`, fact
 pages below `indexes/semantic/pages`, and each revision has one disposable `facts.lkix` manifest.
 The change classifier and bounded invalidation frontier distinguish unchanged,

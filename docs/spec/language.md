@@ -5,7 +5,8 @@ Status: normative for meaning graph contract 4.
 ## Representation and evaluation
 
 Language constructs are typed semantic records in canonical module objects. There is no maintained
-source grammar. Change-v2 JSON describes bounded authoring intent; deterministic review JSON is a
+source grammar. The current change JSON contract, identified by the executable
+[contract registry](../generated/contracts.md), describes bounded authoring intent; deterministic review JSON is a
 non-authoritative projection. Names locate meaning, while typed stable IDs own references,
 continuity, generic parameters, and selected expression/member sites.
 
@@ -145,8 +146,9 @@ every mixed request, and every other change uses complete package reconstruction
 canonicalization, and validation. Focused tests compare local results
 with the complete oracle; inability to prove eligibility widens rather than narrowing.
 
-Semantic-summary contract 2 produces disposable content-addressed module summaries.
-Semantic-fact contract 3 binds their exact inputs and digests, graph-owned test owners, and typed
+The generated [contract registry](../generated/contracts.md) owns the current summary, fact, and
+validator identities. The semantic-summary contract produces disposable content-addressed module
+summaries. The semantic-fact contract binds their exact inputs and digests, graph-owned test owners, and typed
 reverse dependency edges in three persistent maps. The accepted revision authenticates the map
 roots with a revision-independent semantic certificate. The four local transaction paths update
 those facts by path-local delta, but the dependency frontier does not yet select general

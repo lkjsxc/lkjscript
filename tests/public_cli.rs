@@ -71,7 +71,7 @@ fn failure(arguments: &[&str]) -> Value {
 fn direct_cli_discovery_query_check_build_and_inspection_are_compact() {
     let capabilities = success(&["capabilities"]);
     assert_eq!(
-        capabilities["result"]["commands"],
+        capabilities["result"]["operations"],
         serde_json::json!([
             "capabilities",
             "new",
@@ -97,32 +97,42 @@ fn direct_cli_discovery_query_check_build_and_inspection_are_compact() {
         .expect("schema digest");
     let cached = success(&["capabilities", "--known-schema", schema]);
     assert_eq!(cached["result"]["unchanged"], true);
+    let implicit = success_output(command(&[]));
+    assert_eq!(implicit["result"]["schema_digest"], schema);
+
+    let type_section = success(&["capabilities", "--section", "type"]);
     assert!(
-        capabilities["result"]["type_forms"]
+        type_section["result"]["value"]["forms"]
             .as_array()
             .expect("type forms")
             .contains(&serde_json::json!("parameter"))
     );
+
+    let owner_section = success(&["capabilities", "--section", "owners"]);
     assert!(
-        capabilities["result"]["owner_kinds"]
+        owner_section["result"]["value"]["kinds"]
             .as_array()
             .expect("owner kinds")
             .contains(&serde_json::json!("type_parameter"))
     );
+
+    let expression_section = success(&["capabilities", "--section", "expression"]);
     assert!(
-        capabilities["result"]["expression_forms"]
+        expression_section["result"]["value"]["forms"]
             .as_array()
             .expect("expression forms")
             .contains(&serde_json::json!("invoke"))
     );
     assert!(
-        capabilities["result"]["expression_forms"]
+        expression_section["result"]["value"]["forms"]
             .as_array()
             .expect("expression forms")
             .contains(&serde_json::json!("constant"))
     );
+
+    let change_section = success(&["capabilities", "--section", "change"]);
     assert_eq!(
-        capabilities["result"]["declaration_reference_forms"],
+        change_section["result"]["value"]["reference_forms"],
         serde_json::json!([
             "request_local_symbol",
             "local_declaration_id",
@@ -130,9 +140,20 @@ fn direct_cli_discovery_query_check_build_and_inspection_are_compact() {
         ])
     );
     assert_eq!(
-        capabilities["result"]["declaration_reference_syntax"]["exact_package_module_declaration"],
+        change_section["result"]["value"]["reference_syntax"]["exact_package_module_declaration"],
         "exact:PACKAGE_HEX/mod_HEX/decl_HEX"
     );
+    let known_type_digest = type_section["result"]["section_digest"]
+        .as_str()
+        .expect("type section digest");
+    let known_type = format!("type={known_type_digest}");
+    let unchanged_type = success(&["capabilities", "--known-section", &known_type]);
+    assert_eq!(
+        unchanged_type["result"]["changed_sections"],
+        serde_json::json!({})
+    );
+    assert_eq!(unchanged_type["result"]["unchanged"], true);
+
     let change_help = success(&["capabilities", "change"]);
     assert_eq!(change_help["result"]["name"], "change");
     assert!(

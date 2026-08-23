@@ -451,7 +451,7 @@ pub fn parse_uuid(value: &str) -> Result<[u8; 16], ExecutionError> {
         return Err(adapter_argument("UUID spelling is not canonical"));
     }
     let mut output = [0u8; 16];
-    for (index, pair) in compact.chunks_exact(2).enumerate() {
+    for (index, pair) in compact.as_chunks::<2>().0.iter().enumerate() {
         output[index] = hex_value(pair[0])?
             .checked_mul(16)
             .and_then(|high| high.checked_add(hex_value(pair[1]).ok()?))

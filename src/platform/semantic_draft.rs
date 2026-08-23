@@ -1,5 +1,6 @@
 //! Explicit non-executable draft authority over one accepted semantic base.
 
+use super::contract::registry::{DRAFT_DIGEST_DOMAIN, DRAFT_MAGIC};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::language::Type;
 use super::meaning::GRAPH_CONTRACT_IDENTITY;
@@ -27,8 +28,6 @@ pub const MAXIMUM_DRAFTS: usize = 10_000;
 pub const MAXIMUM_DRAFT_HOLES: usize = 100_000;
 pub const MAXIMUM_DRAFT_CONFLICTS: usize = 100_000;
 
-const DRAFT_MAGIC: [u8; 8] = *b"LKJDRF04";
-const DRAFT_DIGEST_DOMAIN: &str = "lkjscript.semantic-draft.v4";
 const DRAFT_DIRECTORY: &str = "drafts";
 const REPOSITORY_LOCK: &str = "LOCK";
 

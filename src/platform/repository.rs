@@ -4,6 +4,11 @@ use super::artifact::{
     ArtifactReceipt, MAXIMUM_ARTIFACT_PACKAGES, build_artifact_from_objects, decode_package_object,
     encode_package_object, load_artifact, load_package_object_closure,
 };
+use super::contract::registry::{
+    BACKUP_DIGEST_DOMAIN, BACKUP_ENTRY_DIGEST_DOMAIN, BACKUP_MAGIC, BACKUP_SEGMENT_DIGEST_DOMAIN,
+    BACKUP_SEGMENT_MAGIC, BACKUP_SEGMENT_REFERENCE_DIGEST_DOMAIN, CLEANUP_CANDIDATE_DIGEST_DOMAIN,
+    CLEANUP_PLAN_DIGEST_DOMAIN,
+};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::graph::{GraphRoot, StoredGraphRoot, StoredGraphRootDelta, StoredGraphRootUpdate};
 use super::meaning::{GRAPH_CONTRACT_VERSION, MeaningModule};
@@ -54,13 +59,6 @@ pub const MAXIMUM_BACKUP_SEGMENT_BYTES: usize = 4 * 1_048_576;
 pub const BACKUP_SEGMENT_ENTRY_LIMIT: usize = 4_096;
 pub const RETENTION_CONTRACT_VERSION: u16 = 1;
 
-const BACKUP_MAGIC: [u8; 8] = *b"LKJBKP04";
-const BACKUP_DIGEST_DOMAIN: &str = "lkjscript.semantic-backup.v4";
-const BACKUP_SEGMENT_MAGIC: [u8; 8] = *b"LKJBKS04";
-const BACKUP_SEGMENT_DIGEST_DOMAIN: &str = "lkjscript.semantic-backup-segment.v4";
-const BACKUP_SEGMENT_REFERENCE_DIGEST_DOMAIN: &str =
-    "lkjscript.semantic-backup-segment-reference.v4";
-const BACKUP_ENTRY_DIGEST_DOMAIN: &str = "lkjscript.semantic-backup-entry.v4";
 const BACKUP_MANIFEST_FILE: &str = "MANIFEST.lkjb";
 const BACKUP_SEGMENTS: &str = "segments";
 
@@ -3302,7 +3300,7 @@ fn hash_file(path: &Path) -> Result<[u8; 32], Diagnostic> {
     }
     let mut file = File::open(path)
         .map_err(|error| io_error("repository_inventory_file_open", path, error))?;
-    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.cleanup-candidate.v1");
+    let mut hasher = blake3::Hasher::new_derive_key(CLEANUP_CANDIDATE_DIGEST_DOMAIN);
     hasher.update(&metadata.len().to_be_bytes());
     let mut buffer = [0_u8; 64 * 1024];
     let mut observed = 0_u64;
@@ -3338,7 +3336,7 @@ fn retention_plan_digest(
     reclaimable: &[(PathBuf, u64, [u8; 32])],
     unknown_entries: u64,
 ) -> Result<CleanupDigest, Diagnostic> {
-    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.cleanup-plan.v1");
+    let mut hasher = blake3::Hasher::new_derive_key(CLEANUP_PLAN_DIGEST_DOMAIN);
     hasher.update(&repository.bytes());
     hasher.update(&revision.bytes());
     hasher.update(

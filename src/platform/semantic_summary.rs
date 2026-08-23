@@ -5,6 +5,13 @@
 //! Neither derived form authorizes accepted meaning, and callers rebuild from canonical modules
 //! after any contract or integrity mismatch.
 
+use super::contract::registry::{
+    DECLARATION_EFFECT_DIGEST_DOMAIN, DECLARATION_IMPLEMENTATION_DIGEST_DOMAIN,
+    DECLARATION_SIGNATURE_DIGEST_DOMAIN, MODULE_IMPLEMENTATION_DIGEST_DOMAIN,
+    PUBLIC_SIGNATURE_DIGEST_DOMAIN, SUMMARY_DEPENDENCY_DIGEST_DOMAIN as DEPENDENCY_DIGEST_DOMAIN,
+    SUMMARY_ENVELOPE_DOMAIN, SUMMARY_INPUT_DIGEST_DOMAIN, SUMMARY_MAGIC,
+    SUMMARY_RECORD_DIGEST_DOMAIN, VALIDATOR_DIGEST_DOMAIN,
+};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::language::Declaration;
 use super::meaning::{
@@ -31,18 +38,6 @@ pub const MAXIMUM_MODULE_SUMMARY_ENCODED_BYTES: usize =
 const MAXIMUM_SUMMARY_DECLARATIONS: usize = 100_000;
 const MAXIMUM_SUMMARY_DEPENDENCIES: usize = 2_000_000;
 const PACKED_ENVELOPE_BYTES: usize = 8 + 2 + 8 + 32;
-
-const SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM03";
-const SUMMARY_ENVELOPE_DOMAIN: &str = "lkjscript.semantic-summary-envelope.v3";
-const VALIDATOR_DIGEST_DOMAIN: &str = "lkjscript.semantic-validator-contract.v3";
-const SUMMARY_INPUT_DIGEST_DOMAIN: &str = "lkjscript.semantic-summary-input.v3";
-const PUBLIC_SIGNATURE_DIGEST_DOMAIN: &str = "lkjscript.public-signature-summary.v3";
-const DECLARATION_SIGNATURE_DIGEST_DOMAIN: &str = "lkjscript.declaration-signature.v3";
-const DECLARATION_IMPLEMENTATION_DIGEST_DOMAIN: &str = "lkjscript.declaration-implementation.v3";
-const DECLARATION_EFFECT_DIGEST_DOMAIN: &str = "lkjscript.declaration-effect.v3";
-const MODULE_IMPLEMENTATION_DIGEST_DOMAIN: &str = "lkjscript.module-implementation.v3";
-const DEPENDENCY_DIGEST_DOMAIN: &str = "lkjscript.semantic-summary-dependencies.v3";
-const SUMMARY_RECORD_DIGEST_DOMAIN: &str = "lkjscript.semantic-summary-record.v3";
 
 #[derive(
     Decode, Encode, Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize,

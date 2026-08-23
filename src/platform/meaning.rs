@@ -1,5 +1,6 @@
 //! Canonical logical meaning graph records and packed module shards.
 
+use super::contract::registry::{MODULE_DIGEST_DOMAIN, MODULE_MAGIC};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::language::{Declaration, Effect, Expression, Module};
 pub use super::language::{DeclarationReference, ModuleReference};
@@ -21,8 +22,6 @@ pub const MAXIMUM_MODULE_DECLARATIONS: usize = 100_000;
 pub const MAXIMUM_MODULE_IDENTITIES: usize = 2_000_000;
 pub const MAXIMUM_EXPRESSION_DEPTH: usize = 256;
 pub const MAXIMUM_DOCUMENTATION_BYTES: usize = 16 * 1_048_576;
-const MODULE_MAGIC: [u8; 8] = *b"LKJMOD04";
-const MODULE_DIGEST_DOMAIN: &str = "lkjscript.semantic-module-object.v4";
 
 #[derive(
     Decode, Encode, Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize,
@@ -216,6 +215,44 @@ pub enum RelationRole {
     TargetComponent,
     TargetPort,
     TestDependency,
+}
+
+impl RelationRole {
+    pub const ALL: [Self; 14] = [
+        Self::Import,
+        Self::Export,
+        Self::TypeUse,
+        Self::ValueReference,
+        Self::Call,
+        Self::FieldUse,
+        Self::VariantConstruction,
+        Self::VariantPattern,
+        Self::CapabilityInterface,
+        Self::CapabilityOperation,
+        Self::ComponentPortFunction,
+        Self::TargetComponent,
+        Self::TargetPort,
+        Self::TestDependency,
+    ];
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Import => "import",
+            Self::Export => "export",
+            Self::TypeUse => "type_use",
+            Self::ValueReference => "value_reference",
+            Self::Call => "call",
+            Self::FieldUse => "field_use",
+            Self::VariantConstruction => "variant_construction",
+            Self::VariantPattern => "variant_pattern",
+            Self::CapabilityInterface => "capability_interface",
+            Self::CapabilityOperation => "capability_operation",
+            Self::ComponentPortFunction => "component_port_function",
+            Self::TargetComponent => "target_component",
+            Self::TargetPort => "target_port",
+            Self::TestDependency => "test_dependency",
+        }
+    }
 }
 
 #[derive(Decode, Encode, Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]

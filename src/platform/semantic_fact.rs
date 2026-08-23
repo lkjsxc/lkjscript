@@ -5,6 +5,10 @@
 //! Merkle maps. Accepted revisions authenticate the map roots through a constant-size semantic
 //! certificate; the pages and manifest remain disposable and rebuildable from canonical meaning.
 
+use super::contract::registry::{
+    FACT_MANIFEST_DOMAIN as MANIFEST_DOMAIN, FACT_MANIFEST_MAGIC as MANIFEST_MAGIC,
+    SEMANTIC_CERTIFICATE_DOMAIN as CERTIFICATE_DOMAIN,
+};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::meaning::{DeclarationKind, GRAPH_CONTRACT_VERSION};
 use super::package::PackageId;
@@ -27,9 +31,6 @@ pub const SEMANTIC_FACT_CONTRACT_VERSION: u16 = 3;
 pub const SEMANTIC_FACT_CONTRACT_IDENTITY: &str = "lkjscript-semantic-facts-3";
 pub const MAXIMUM_SEMANTIC_FACT_MANIFEST_BYTES: usize = 64 * 1024;
 
-const MANIFEST_MAGIC: [u8; 8] = *b"LKJSFI03";
-const MANIFEST_DOMAIN: &str = "lkjscript.semantic-fact-manifest.v3";
-const CERTIFICATE_DOMAIN: &str = "lkjscript.semantic-certificate.v3";
 const SUMMARY_KEY_TAG: u8 = 1;
 const TEST_KEY_TAG: u8 = 2;
 const REVERSE_KEY_TAG: u8 = 3;

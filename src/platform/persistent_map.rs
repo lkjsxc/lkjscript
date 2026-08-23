@@ -15,10 +15,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-const PAGE_MAGIC: [u8; 8] = *b"LKJPMAP1";
-const PAGE_CONTRACT_VERSION: u16 = 1;
-const PAGE_DIGEST_DOMAIN: &str = "lkjscript.persistent-map-page.v1";
-const PAGE_CHECKSUM_DOMAIN: &str = "lkjscript.persistent-map-checksum.v1";
+use super::contract::registry::{
+    MAP_PAGE_CHECKSUM_DOMAIN as PAGE_CHECKSUM_DOMAIN,
+    MAP_PAGE_CONTRACT_VERSION as PAGE_CONTRACT_VERSION,
+    MAP_PAGE_DIGEST_DOMAIN as PAGE_DIGEST_DOMAIN, MAP_PAGE_MAGIC as PAGE_MAGIC,
+};
 const PAGE_HEADER_BYTES: usize = 8 + 2 + 1 + 1 + 8;
 const PAGE_CHECKSUM_BYTES: usize = 32;
 const PAGE_COMMON_PAYLOAD_BYTES: usize = 2 + 8 + 8;
