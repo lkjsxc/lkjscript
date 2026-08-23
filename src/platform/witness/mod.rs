@@ -28,6 +28,9 @@ pub use entry::*;
 pub use full::{FullWitness, WitnessBuildReport, WitnessEntries, rebuild_full_witness};
 pub(crate) use ownership::ownership_contributions;
 pub use summary::{OwnerSummary, SummaryBinding, ValidationWitnessManifest, WitnessRoots};
+pub(crate) use summary_build::{
+    SummaryRead, aggregation_children, rebuild_selected_owner_summaries,
+};
 
 fn witness_error(
     class: crate::platform::diagnostic::DiagnosticClass,

@@ -42,7 +42,7 @@ pub struct ValidatorFeatureDescriptor {
 
 /// This list is the executable owner for rules that affect acceptance or safe witness reuse.
 /// Changing one rule requires changing its feature version, which changes the validator digest.
-pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 10] = [
+pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 14] = [
     ValidatorFeatureDescriptor {
         name: "graph_5_full_validation",
         version: 1,
@@ -81,6 +81,22 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 10] = [
     },
     ValidatorFeatureDescriptor {
         name: "full_witness_rebuild",
+        version: 1,
+    },
+    ValidatorFeatureDescriptor {
+        name: "generic_owner_delta",
+        version: 1,
+    },
+    ValidatorFeatureDescriptor {
+        name: "reverse_impact_planner",
+        version: 1,
+    },
+    ValidatorFeatureDescriptor {
+        name: "incremental_owner_frontier",
+        version: 1,
+    },
+    ValidatorFeatureDescriptor {
+        name: "path_copy_witness_update",
         version: 1,
     },
 ];

@@ -5,17 +5,36 @@ use super::contract::{
     INTERFACE_DIGEST_DOMAIN, PRESENTATION_DIGEST_DOMAIN, RELATION_DIGEST_DOMAIN,
     TEST_DIGEST_DOMAIN, TYPE_DIGEST_DOMAIN, VALIDATION_DEPENDENCY_DIGEST_DOMAIN,
 };
-use super::entry::{OwnershipEntry, OwnershipParent, OwnershipRole, encode_endpoint};
+use super::entry::{
+    BindingContainerRole, ExpressionRootRole, OwnershipEntry, OwnershipParent, OwnershipRole,
+    encode_endpoint,
+};
 use super::summary::{OwnerSummary, current_summary_contract};
 use super::{SemanticDigest, witness_error};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     AnnotationClass, DeclarationPayload, DocumentationClass, EncodedOwnerKey, ExactOwnerKey,
-    FunctionEffect, KernelSnapshot, OwnerKey, OwnerKind, OwnerRecord, PropagationClass,
-    RelationEdge, RelationEndpoint,
+    ExpressionOperation, FunctionEffect, KernelSnapshot, OwnerKey, OwnerKind, OwnerRecord,
+    PackageId, PortImplementation, PropagationClass, RelationEdge, RelationEndpoint,
 };
 use bincode::Encode;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+
+/// Exact point-read surface needed to rebuild a bounded set of owner summaries. Implementations
+/// may read accepted authority directly or through an isolated candidate overlay.
+pub(crate) trait SummaryRead {
+    fn package_id(&self) -> PackageId;
+
+    fn owner(&self, owner: OwnerKey) -> Option<&OwnerRecord>;
+
+    fn dependency(&self, package: PackageId) -> Option<&crate::platform::kernel::DependencyRecord>;
+
+    fn ownership(&self, owner: OwnerKey) -> Option<OwnershipEntry>;
+
+    fn outgoing_relations(&self, owner: OwnerKey) -> Result<Vec<RelationEdge>, Diagnostic>;
+
+    fn base_summary(&self, owner: OwnerKey) -> Option<&OwnerSummary>;
+}
 
 #[derive(Clone)]
 struct WorkingSummary {
@@ -31,6 +50,45 @@ struct WorkingSummary {
     presentation: SemanticDigest,
     validation_dependencies: SemanticDigest,
     test_seed: Option<SemanticDigest>,
+}
+
+#[derive(Clone, Copy)]
+struct SummaryDimensions {
+    semantic_interface: SemanticDigest,
+    implementation: SemanticDigest,
+    type_digest: SemanticDigest,
+    effect: SemanticDigest,
+    capability: SemanticDigest,
+    relations: SemanticDigest,
+    validation_dependencies: SemanticDigest,
+}
+
+impl From<&WorkingSummary> for SummaryDimensions {
+    fn from(summary: &WorkingSummary) -> Self {
+        Self {
+            semantic_interface: summary.semantic_interface,
+            implementation: summary.implementation,
+            type_digest: summary.type_digest,
+            effect: summary.effect,
+            capability: summary.capability,
+            relations: summary.relations,
+            validation_dependencies: summary.validation_dependencies,
+        }
+    }
+}
+
+impl From<&OwnerSummary> for SummaryDimensions {
+    fn from(summary: &OwnerSummary) -> Self {
+        Self {
+            semantic_interface: summary.semantic_interface,
+            implementation: summary.implementation,
+            type_digest: summary.type_digest,
+            effect: summary.effect,
+            capability: summary.capability,
+            relations: summary.relations,
+            validation_dependencies: summary.validation_dependencies,
+        }
+    }
 }
 
 impl WorkingSummary {
@@ -94,6 +152,195 @@ pub(super) fn build_owner_summaries(
         .into_iter()
         .map(|(owner, summary)| (owner, summary.finish()))
         .collect())
+}
+
+/// Rebuilds only selected live owner summaries. Unselected child and relation-target summaries are
+/// reused from the exact base witness. The selected set must include every aggregating ancestor of
+/// a changed owner and every owner whose validation-dependency digest must be refreshed.
+pub(crate) fn rebuild_selected_owner_summaries<R: SummaryRead>(
+    view: &R,
+    selected: &BTreeSet<OwnerKey>,
+) -> Result<BTreeMap<OwnerKey, OwnerSummary>, Diagnostic> {
+    let live = selected
+        .iter()
+        .copied()
+        .filter(|owner| view.owner(*owner).is_some())
+        .collect::<BTreeSet<_>>();
+    let depths = selected_ownership_depths(view, &live)?;
+    let mut working = BTreeMap::new();
+    for owner in &live {
+        let record = view.owner(*owner).ok_or_else(|| {
+            witness_error(
+                DiagnosticClass::Corrupt,
+                "witness_selected_owner_missing",
+                "selected live owner disappeared during summary construction",
+            )
+        })?;
+        let outgoing = view.outgoing_relations(*owner)?;
+        working.insert(*owner, local_summary(*owner, record, Some(&outgoing))?);
+    }
+
+    let mut deepest_first = depths
+        .iter()
+        .map(|(owner, depth)| (*depth, *owner))
+        .collect::<Vec<_>>();
+    deepest_first.sort_by(|left, right| right.cmp(left));
+    for (_, owner) in &deepest_first {
+        let record = view.owner(*owner).ok_or_else(|| {
+            witness_error(
+                DiagnosticClass::Corrupt,
+                "witness_selected_owner_missing",
+                "selected owner has no candidate record",
+            )
+        })?;
+        let children = aggregation_children(record)?;
+        let child_summaries = children
+            .into_iter()
+            .filter(|(role, _)| aggregation_mode(*role) != AggregationMode::None)
+            .map(|(role, child)| {
+                let dimensions = working
+                    .get(&child)
+                    .map(SummaryDimensions::from)
+                    .or_else(|| {
+                        (!selected.contains(&child))
+                            .then(|| view.base_summary(child).map(SummaryDimensions::from))
+                            .flatten()
+                    })
+                    .ok_or_else(|| {
+                        witness_error(
+                            DiagnosticClass::Corrupt,
+                            "witness_selected_child_summary",
+                            format!("aggregating child {child:?} has no candidate summary"),
+                        )
+                    })?;
+                Ok((role, child, aggregation_mode(role), dimensions))
+            })
+            .collect::<Result<Vec<_>, Diagnostic>>()?;
+        let parent = working.get_mut(owner).ok_or_else(|| {
+            witness_error(
+                DiagnosticClass::Corrupt,
+                "witness_selected_parent_summary",
+                "selected parent has no local working summary",
+            )
+        })?;
+        if !child_summaries.is_empty() {
+            aggregate_semantic_parent(parent, &child_summaries)?;
+        }
+    }
+
+    let semantic = working.clone();
+    for (owner, summary) in &mut working {
+        let outgoing = view.outgoing_relations(*owner)?;
+        summary.validation_dependencies = validation_dependency_digest(
+            view.package_id(),
+            summary.kind,
+            &outgoing,
+            |target| {
+                semantic
+                    .get(&target)
+                    .map(SummaryDimensions::from)
+                    .or_else(|| view.base_summary(target).map(SummaryDimensions::from))
+            },
+            |package| {
+                view.dependency(package)
+                    .map(crate::platform::kernel::encode_dependency)
+                    .transpose()
+                    .map(|encoded| encoded.map(|(digest, _)| digest))
+            },
+        )?;
+    }
+
+    for (_, owner) in deepest_first {
+        let record = view.owner(owner).ok_or_else(|| {
+            witness_error(
+                DiagnosticClass::Corrupt,
+                "witness_selected_owner_missing",
+                "selected owner has no candidate record",
+            )
+        })?;
+        let children = aggregation_children(record)?;
+        let child_validations = children
+            .into_iter()
+            .filter(|(role, _)| aggregation_mode(*role) != AggregationMode::None)
+            .map(|(role, child)| {
+                let digest = working
+                    .get(&child)
+                    .map(|summary| summary.validation_dependencies)
+                    .or_else(|| {
+                        (!selected.contains(&child))
+                            .then(|| {
+                                view.base_summary(child)
+                                    .map(|summary| summary.validation_dependencies)
+                            })
+                            .flatten()
+                    })
+                    .ok_or_else(|| {
+                        witness_error(
+                            DiagnosticClass::Corrupt,
+                            "witness_selected_child_validation",
+                            format!("aggregating child {child:?} has no validation summary"),
+                        )
+                    })?;
+                Ok((role, child, digest))
+            })
+            .collect::<Result<Vec<_>, Diagnostic>>()?;
+        let parent = working.get_mut(&owner).ok_or_else(|| {
+            witness_error(
+                DiagnosticClass::Corrupt,
+                "witness_selected_parent_summary",
+                "selected parent has no working validation summary",
+            )
+        })?;
+        if !child_validations.is_empty() {
+            aggregate_validation_parent(parent, child_validations)?;
+        }
+    }
+
+    Ok(working
+        .into_iter()
+        .map(|(owner, summary)| (owner, summary.finish()))
+        .collect())
+}
+
+fn selected_ownership_depths<R: SummaryRead>(
+    view: &R,
+    selected: &BTreeSet<OwnerKey>,
+) -> Result<BTreeMap<OwnerKey, usize>, Diagnostic> {
+    let mut depths = BTreeMap::new();
+    for owner in selected {
+        let mut current = *owner;
+        let mut observed = BTreeSet::new();
+        let mut depth = 0_usize;
+        loop {
+            if !observed.insert(current) {
+                return Err(witness_error(
+                    DiagnosticClass::Corrupt,
+                    "witness_selected_ownership_cycle",
+                    "selected summary ownership path is cyclic",
+                ));
+            }
+            let entry = view.ownership(current).ok_or_else(|| {
+                witness_error(
+                    DiagnosticClass::Corrupt,
+                    "witness_selected_ownership_missing",
+                    format!("selected owner {current:?} has no candidate ownership entry"),
+                )
+            })?;
+            depth = depth.checked_add(1).ok_or_else(|| {
+                witness_error(
+                    DiagnosticClass::Resource,
+                    "witness_selected_ownership_depth",
+                    "selected ownership depth overflowed",
+                )
+            })?;
+            match entry.parent {
+                OwnershipParent::Package => break,
+                OwnershipParent::Owner(parent) => current = parent,
+            }
+        }
+        depths.insert(*owner, depth);
+    }
+    Ok(depths)
 }
 
 fn ownership_depths(
@@ -213,7 +460,7 @@ fn aggregate_semantic_children(
                     .then(|| {
                         summaries
                             .get(child)
-                            .cloned()
+                            .map(SummaryDimensions::from)
                             .map(|value| (*role, *child, mode, value))
                     })
                     .flatten()
@@ -229,71 +476,79 @@ fn aggregate_semantic_children(
                 "ownership parent has no owner summary",
             )
         })?;
-        parent.semantic_interface = aggregate_dimension(
-            INTERFACE_DIGEST_DOMAIN,
-            parent.semantic_interface,
-            child_summaries
-                .iter()
-                .filter(|(_, _, mode, _)| *mode == AggregationMode::Interface)
-                .map(|(role, child, _, summary)| {
-                    (
-                        *role,
-                        *child,
-                        vec![
-                            summary.semantic_interface,
-                            summary.type_digest,
-                            summary.effect,
-                            summary.capability,
-                        ],
-                    )
-                }),
-        )?;
-        parent.implementation = aggregate_dimension(
-            IMPLEMENTATION_DIGEST_DOMAIN,
-            parent.implementation,
-            child_summaries.iter().map(|(role, child, mode, summary)| {
-                let mut dimensions = vec![summary.implementation];
-                if *mode == AggregationMode::Implementation {
-                    dimensions.extend([
+        aggregate_semantic_parent(parent, &child_summaries)?;
+    }
+    Ok(())
+}
+
+fn aggregate_semantic_parent(
+    parent: &mut WorkingSummary,
+    child_summaries: &[(OwnershipRole, OwnerKey, AggregationMode, SummaryDimensions)],
+) -> Result<(), Diagnostic> {
+    parent.semantic_interface = aggregate_dimension(
+        INTERFACE_DIGEST_DOMAIN,
+        parent.semantic_interface,
+        child_summaries
+            .iter()
+            .filter(|(_, _, mode, _)| *mode == AggregationMode::Interface)
+            .map(|(role, child, _, summary)| {
+                (
+                    *role,
+                    *child,
+                    vec![
                         summary.semantic_interface,
                         summary.type_digest,
                         summary.effect,
                         summary.capability,
-                        summary.relations,
-                    ]);
-                }
-                (*role, *child, dimensions)
+                    ],
+                )
             }),
-        )?;
-        parent.type_digest = aggregate_dimension(
-            TYPE_DIGEST_DOMAIN,
-            parent.type_digest,
-            child_summaries
-                .iter()
-                .map(|(role, child, _, summary)| (*role, *child, vec![summary.type_digest])),
-        )?;
-        parent.effect = aggregate_dimension(
-            EFFECT_DIGEST_DOMAIN,
-            parent.effect,
-            child_summaries
-                .iter()
-                .map(|(role, child, _, summary)| (*role, *child, vec![summary.effect])),
-        )?;
-        parent.capability = aggregate_dimension(
-            CAPABILITY_DIGEST_DOMAIN,
-            parent.capability,
-            child_summaries
-                .iter()
-                .map(|(role, child, _, summary)| (*role, *child, vec![summary.capability])),
-        )?;
-        parent.relations = aggregate_dimension(
-            RELATION_DIGEST_DOMAIN,
-            parent.relations,
-            child_summaries
-                .iter()
-                .map(|(role, child, _, summary)| (*role, *child, vec![summary.relations])),
-        )?;
-    }
+    )?;
+    parent.implementation = aggregate_dimension(
+        IMPLEMENTATION_DIGEST_DOMAIN,
+        parent.implementation,
+        child_summaries.iter().map(|(role, child, mode, summary)| {
+            let mut dimensions = vec![summary.implementation];
+            if *mode == AggregationMode::Implementation {
+                dimensions.extend([
+                    summary.semantic_interface,
+                    summary.type_digest,
+                    summary.effect,
+                    summary.capability,
+                    summary.relations,
+                ]);
+            }
+            (*role, *child, dimensions)
+        }),
+    )?;
+    parent.type_digest = aggregate_dimension(
+        TYPE_DIGEST_DOMAIN,
+        parent.type_digest,
+        child_summaries
+            .iter()
+            .map(|(role, child, _, summary)| (*role, *child, vec![summary.type_digest])),
+    )?;
+    parent.effect = aggregate_dimension(
+        EFFECT_DIGEST_DOMAIN,
+        parent.effect,
+        child_summaries
+            .iter()
+            .map(|(role, child, _, summary)| (*role, *child, vec![summary.effect])),
+    )?;
+    parent.capability = aggregate_dimension(
+        CAPABILITY_DIGEST_DOMAIN,
+        parent.capability,
+        child_summaries
+            .iter()
+            .map(|(role, child, _, summary)| (*role, *child, vec![summary.capability])),
+    )?;
+    parent.relations = aggregate_dimension(
+        RELATION_DIGEST_DOMAIN,
+        parent.relations,
+        child_summaries
+            .iter()
+            .map(|(role, child, _, summary)| (*role, *child, vec![summary.relations])),
+    )?;
     Ok(())
 }
 
@@ -305,62 +560,89 @@ fn derive_validation_dependencies(
     let package = snapshot.root.package_id;
     let frozen = summaries.clone();
     for (owner, summary) in summaries.iter_mut() {
-        let mut material = Material::new(summary.kind);
-        for edge in outgoing.get(owner).into_iter().flatten() {
-            let propagation = edge.kind.propagation();
-            if matches!(
-                propagation,
-                PropagationClass::Ownership | PropagationClass::Presentation
-            ) {
-                continue;
+        summary.validation_dependencies = validation_dependency_digest(
+            package,
+            summary.kind,
+            outgoing.get(owner).map_or(&[], Vec::as_slice),
+            |target| frozen.get(&target).map(SummaryDimensions::from),
+            |target_package| {
+                snapshot
+                    .dependencies
+                    .get(&target_package)
+                    .map(crate::platform::kernel::encode_dependency)
+                    .transpose()
+                    .map(|encoded| encoded.map(|(digest, _)| digest))
+            },
+        )?;
+    }
+    Ok(())
+}
+
+fn validation_dependency_digest<T, D>(
+    package: PackageId,
+    kind: OwnerKind,
+    outgoing: &[RelationEdge],
+    mut target_summary: T,
+    mut dependency_digest: D,
+) -> Result<SemanticDigest, Diagnostic>
+where
+    T: FnMut(OwnerKey) -> Option<SummaryDimensions>,
+    D: FnMut(
+        PackageId,
+    ) -> Result<Option<crate::platform::kernel::DependencyObjectDigest>, Diagnostic>,
+{
+    let mut material = Material::new(kind);
+    for edge in outgoing {
+        let propagation = edge.kind.propagation();
+        if matches!(
+            propagation,
+            PropagationClass::Ownership | PropagationClass::Presentation
+        ) {
+            continue;
+        }
+        let mut edge_bytes = Vec::new();
+        edge_bytes.push(edge.kind.tag());
+        encode_endpoint(&mut edge_bytes, edge.target);
+        material.raw_piece(1, &edge_bytes);
+        match edge.target {
+            RelationEndpoint::Owner(ExactOwnerKey {
+                package: target_package,
+                owner: target_owner,
+            }) if target_package == package => {
+                let target = target_summary(target_owner).ok_or_else(|| {
+                    witness_error(
+                        DiagnosticClass::Corrupt,
+                        "witness_validation_target",
+                        format!("local relation target {target_owner:?} has no summary"),
+                    )
+                })?;
+                append_dependency_dimensions(&mut material, propagation, target);
             }
-            let mut edge_bytes = Vec::new();
-            edge_bytes.push(edge.kind.tag());
-            encode_endpoint(&mut edge_bytes, edge.target);
-            material.raw_piece(1, &edge_bytes);
-            match edge.target {
-                RelationEndpoint::Owner(ExactOwnerKey {
-                    package: target_package,
-                    owner: target_owner,
-                }) if target_package == package => {
-                    let target = frozen.get(&target_owner).ok_or_else(|| {
+            RelationEndpoint::Owner(ExactOwnerKey {
+                package: target_package,
+                ..
+            })
+            | RelationEndpoint::Package(target_package) => {
+                if target_package != package {
+                    let digest = dependency_digest(target_package)?.ok_or_else(|| {
                         witness_error(
                             DiagnosticClass::Corrupt,
-                            "witness_validation_target",
-                            format!("local relation target {target_owner:?} has no summary"),
+                            "witness_dependency_target",
+                            "foreign relation target has no exact dependency binding",
                         )
                     })?;
-                    append_dependency_dimensions(&mut material, propagation, target);
-                }
-                RelationEndpoint::Owner(ExactOwnerKey {
-                    package: target_package,
-                    ..
-                })
-                | RelationEndpoint::Package(target_package) => {
-                    if target_package != package {
-                        let dependency =
-                            snapshot.dependencies.get(&target_package).ok_or_else(|| {
-                                witness_error(
-                                    DiagnosticClass::Corrupt,
-                                    "witness_dependency_target",
-                                    "foreign relation target has no exact dependency binding",
-                                )
-                            })?;
-                        let (digest, _) = crate::platform::kernel::encode_dependency(dependency)?;
-                        material.piece(2, &digest)?;
-                    }
+                    material.piece(2, &digest)?;
                 }
             }
         }
-        summary.validation_dependencies = material.finish(VALIDATION_DEPENDENCY_DIGEST_DOMAIN);
     }
-    Ok(())
+    Ok(material.finish(VALIDATION_DEPENDENCY_DIGEST_DOMAIN))
 }
 
 fn append_dependency_dimensions(
     material: &mut Material,
     propagation: PropagationClass,
-    target: &WorkingSummary,
+    target: SummaryDimensions,
 ) {
     match propagation {
         PropagationClass::Type | PropagationClass::Value => {
@@ -398,7 +680,7 @@ fn aggregate_validation_children(
         .collect::<Vec<_>>();
     owners.sort_by(|left, right| right.cmp(left));
     for (_, owner) in owners {
-        let selected = children
+        let child_validations = children
             .get(&owner)
             .into_iter()
             .flatten()
@@ -409,7 +691,7 @@ fn aggregate_validation_children(
                     .map(|summary| (*role, *child, summary.validation_dependencies))
             })
             .collect::<Vec<_>>();
-        if selected.is_empty() {
+        if child_validations.is_empty() {
             continue;
         }
         let parent = summaries.get_mut(&owner).ok_or_else(|| {
@@ -419,15 +701,205 @@ fn aggregate_validation_children(
                 "validation aggregation parent has no summary",
             )
         })?;
-        parent.validation_dependencies = aggregate_dimension(
-            VALIDATION_DEPENDENCY_DIGEST_DOMAIN,
-            parent.validation_dependencies,
-            selected
-                .into_iter()
-                .map(|(role, child, digest)| (role, child, vec![digest])),
-        )?;
+        aggregate_validation_parent(parent, child_validations)?;
     }
     Ok(())
+}
+
+fn aggregate_validation_parent(
+    parent: &mut WorkingSummary,
+    children: impl IntoIterator<Item = (OwnershipRole, OwnerKey, SemanticDigest)>,
+) -> Result<(), Diagnostic> {
+    parent.validation_dependencies = aggregate_dimension(
+        VALIDATION_DEPENDENCY_DIGEST_DOMAIN,
+        parent.validation_dependencies,
+        children
+            .into_iter()
+            .map(|(role, child, digest)| (role, child, vec![digest])),
+    )?;
+    Ok(())
+}
+
+pub(crate) fn aggregation_children(
+    record: &OwnerRecord,
+) -> Result<Vec<(OwnershipRole, OwnerKey)>, Diagnostic> {
+    let mut children = Vec::new();
+    match record {
+        OwnerRecord::Declaration(record) => match &record.payload {
+            DeclarationPayload::Record { fields } => children.extend(
+                fields
+                    .iter()
+                    .map(|field| (OwnershipRole::DeclarationField, OwnerKey::Field(*field))),
+            ),
+            DeclarationPayload::Variant { cases } => children.extend(
+                cases
+                    .iter()
+                    .map(|case| (OwnershipRole::DeclarationCase, OwnerKey::Case(*case))),
+            ),
+            DeclarationPayload::Interface { operations } => {
+                children.extend(operations.iter().map(|operation| {
+                    (
+                        OwnershipRole::DeclarationOperation,
+                        OwnerKey::Operation(*operation),
+                    )
+                }));
+            }
+            DeclarationPayload::External(function) => {
+                children.extend(function.type_parameters.iter().map(|parameter| {
+                    (
+                        OwnershipRole::DeclarationTypeParameter,
+                        OwnerKey::TypeParameter(*parameter),
+                    )
+                }));
+                children.extend(function.parameters.iter().map(|parameter| {
+                    (
+                        OwnershipRole::DeclarationParameter,
+                        OwnerKey::Parameter(*parameter),
+                    )
+                }));
+            }
+            DeclarationPayload::Function(function) => {
+                children.extend(function.type_parameters.iter().map(|parameter| {
+                    (
+                        OwnershipRole::DeclarationTypeParameter,
+                        OwnerKey::TypeParameter(*parameter),
+                    )
+                }));
+                children.extend(function.parameters.iter().map(|parameter| {
+                    (
+                        OwnershipRole::DeclarationParameter,
+                        OwnerKey::Parameter(*parameter),
+                    )
+                }));
+                children.push((
+                    OwnershipRole::ExpressionRoot(ExpressionRootRole::FunctionBody),
+                    OwnerKey::Expression(function.body),
+                ));
+            }
+            DeclarationPayload::Constant { value, .. } => children.push((
+                OwnershipRole::ExpressionRoot(ExpressionRootRole::ConstantValue),
+                OwnerKey::Expression(*value),
+            )),
+            DeclarationPayload::Component {
+                requirements,
+                ports,
+            } => {
+                children.extend(requirements.iter().map(|requirement| {
+                    (
+                        OwnershipRole::DeclarationRequirement,
+                        OwnerKey::Requirement(*requirement),
+                    )
+                }));
+                children.extend(
+                    ports
+                        .iter()
+                        .map(|port| (OwnershipRole::DeclarationPort, OwnerKey::Port(*port))),
+                );
+            }
+            DeclarationPayload::Test {
+                actual, expected, ..
+            } => {
+                children.push((
+                    OwnershipRole::ExpressionRoot(ExpressionRootRole::TestActual),
+                    OwnerKey::Expression(*actual),
+                ));
+                children.push((
+                    OwnershipRole::ExpressionRoot(ExpressionRootRole::TestExpected),
+                    OwnerKey::Expression(*expected),
+                ));
+            }
+        },
+        OwnerRecord::Operation(record) => {
+            children.extend(record.parameters.iter().map(|parameter| {
+                (
+                    OwnershipRole::OperationParameter,
+                    OwnerKey::Parameter(*parameter),
+                )
+            }));
+        }
+        OwnerRecord::Binding(record) => {
+            if let Some(value) = record.value {
+                children.push((
+                    OwnershipRole::ExpressionRoot(ExpressionRootRole::BindingValue),
+                    OwnerKey::Expression(value),
+                ));
+            }
+        }
+        OwnerRecord::Port(record) => {
+            if let PortImplementation::Expression(expression) = record.implementation {
+                children.push((
+                    OwnershipRole::ExpressionRoot(ExpressionRootRole::PortImplementation),
+                    OwnerKey::Expression(expression),
+                ));
+            }
+        }
+        OwnerRecord::Expression(record) => {
+            children.extend(record.children().into_iter().map(|child| {
+                (
+                    OwnershipRole::ExpressionChild {
+                        role: child.role,
+                        ordinal: child.ordinal,
+                    },
+                    OwnerKey::Expression(child.expression),
+                )
+            }));
+            match &record.operation {
+                ExpressionOperation::Let { bindings, .. } => {
+                    for (ordinal, binding) in bindings.iter().enumerate() {
+                        children.push((
+                            OwnershipRole::ExpressionBinding {
+                                role: BindingContainerRole::Let,
+                                ordinal: summary_ordinal(ordinal)?,
+                            },
+                            OwnerKey::Binding(*binding),
+                        ));
+                    }
+                }
+                ExpressionOperation::Match { arms, .. } => {
+                    for (ordinal, arm) in arms.iter().enumerate() {
+                        if let Some(binding) = arm.payload_binding {
+                            children.push((
+                                OwnershipRole::ExpressionBinding {
+                                    role: BindingContainerRole::MatchPayload,
+                                    ordinal: summary_ordinal(ordinal)?,
+                                },
+                                OwnerKey::Binding(binding),
+                            ));
+                        }
+                    }
+                }
+                ExpressionOperation::Transaction { binding, .. } => children.push((
+                    OwnershipRole::ExpressionBinding {
+                        role: BindingContainerRole::Transaction,
+                        ordinal: 0,
+                    },
+                    OwnerKey::Binding(*binding),
+                )),
+                _ => {}
+            }
+        }
+        OwnerRecord::Module(_)
+        | OwnerRecord::TypeParameter(_)
+        | OwnerRecord::Field(_)
+        | OwnerRecord::Case(_)
+        | OwnerRecord::Parameter(_)
+        | OwnerRecord::Requirement(_)
+        | OwnerRecord::Target(_)
+        | OwnerRecord::Documentation(_)
+        | OwnerRecord::Annotation(_) => {}
+    }
+    children.sort_unstable();
+    Ok(children)
+}
+
+fn summary_ordinal(ordinal: usize) -> Result<u32, Diagnostic> {
+    u32::try_from(ordinal).map_err(|_| {
+        witness_error(
+            DiagnosticClass::Resource,
+            "witness_summary_ordinal",
+            "summary child ordinal cannot be represented",
+        )
+    })
 }
 
 fn outgoing_relations(

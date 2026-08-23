@@ -36,6 +36,11 @@ fn rename_overlay_and_local_delta_match_the_full_witness_oracle() {
     assert!(derived.relations.removed.is_empty());
     assert!(derived.relations.added.is_empty());
     assert_eq!(derived.summary_candidates, BTreeSet::from([callee]));
+    let prepared =
+        prepare_change_analysis(&base, &base_witness, delta.clone()).expect("rename preparation");
+    assert!(prepared.summaries.plan.semantically_checked.is_empty());
+    assert!(prepared.summaries.plan.compiler_units.is_empty());
+    assert_eq!(prepared.summaries.final_delta.edits.len(), 1);
     assert_matches_full_oracle(&base_witness, &overlay, &derived);
 }
 
@@ -61,6 +66,10 @@ fn move_derives_one_ownership_and_relation_rebind() {
     assert_eq!(derived.relations.removed.len(), 1);
     assert_eq!(derived.relations.added.len(), 1);
     assert_eq!(derived.summary_candidates, BTreeSet::from([callee]));
+    let prepared =
+        prepare_change_analysis(&base, &base_witness, delta.clone()).expect("move preparation");
+    assert!(prepared.summaries.plan.semantically_checked.is_empty());
+    assert!(prepared.summaries.plan.compiler_units.is_empty());
     assert_matches_full_oracle(&base_witness, &overlay, &derived);
 }
 
@@ -84,6 +93,172 @@ fn body_edit_derives_local_relation_removal_and_enclosing_summary_candidates() {
     assert_eq!(derived.relations.removed.len(), 1);
     assert!(derived.relations.added.is_empty());
     assert_eq!(derived.summary_candidates, BTreeSet::from([callee, body]));
+    let prepared =
+        prepare_change_analysis(&base, &base_witness, delta.clone()).expect("body preparation");
+    assert_eq!(
+        prepared.validation.structurally_checked,
+        BTreeSet::from([body])
+    );
+    assert!(prepared.validation.semantically_checked.contains(&callee));
+    assert!(prepared.validation.summaries_reused >= 41);
+    assert!(prepared.witness.work.pages_read <= 12);
+    assert_matches_full_oracle(&base_witness, &overlay, &derived);
+}
+
+#[test]
+fn interface_change_uses_reverse_relations_for_validation_and_compiler_impact() {
+    let base = crate::platform::kernel::tests::witness_snapshot();
+    let base_witness = rebuild_full_witness(&base).expect("base witness");
+    let callee = declaration_named(&base, "callee");
+    let caller = declaration_named(&base, "caller");
+    let mut replacement = base.owners[&callee].clone();
+    let OwnerRecord::Declaration(record) = &mut replacement else {
+        panic!("callee must be a declaration");
+    };
+    record.visibility = crate::platform::kernel::DeclarationVisibility::Public;
+    let delta = replace_owner_delta(&base, callee, replacement);
+    let overlay = KernelOverlay::new(&base, &delta);
+    let derived =
+        derive_local_delta(&base, &overlay, &delta, &base_witness).expect("derived interface edit");
+    let planned = plan_impact_and_summaries(&overlay, &delta, &derived, &base_witness)
+        .expect("interface impact");
+    assert!(planned.plan.semantically_checked.contains(&callee));
+    assert!(planned.plan.semantically_checked.contains(&caller));
+    assert!(planned.plan.compiler_units.contains(&callee));
+    assert!(planned.plan.compiler_units.contains(&caller));
+    assert!(planned.plan.tests.is_empty());
+    assert!(planned.plan.reasons.iter().any(|reason| {
+        reason.kind == ImpactReasonKind::ValidationDependency
+            && reason.target == callee
+            && reason.relation == Some(crate::platform::kernel::RelationKind::FunctionCall)
+    }));
+    assert_eq!(overlay.owner(caller), base.owners.get(&caller));
+    assert_matches_full_oracle(&base_witness, &overlay, &derived);
+}
+
+#[test]
+fn private_implementation_change_walks_behavior_edges_to_dependent_tests() {
+    let base = crate::platform::kernel::tests::witness_snapshot();
+    let base_witness = rebuild_full_witness(&base).expect("base witness");
+    let binding = binding_named(&base, "local");
+    let function = declaration_named(&base, "with_binding");
+    let test = declaration_named(&base, "caller_test");
+    let mut replacement = base.owners[&binding].clone();
+    let OwnerRecord::Binding(record) = &mut replacement else {
+        panic!("binding owner expected");
+    };
+    record.declared_type = None;
+    let delta = replace_owner_delta(&base, binding, replacement);
+    let overlay = KernelOverlay::new(&base, &delta);
+    let derived = derive_local_delta(&base, &overlay, &delta, &base_witness)
+        .expect("derived implementation edit");
+    let planned = plan_impact_and_summaries(&overlay, &delta, &derived, &base_witness)
+        .expect("implementation impact");
+    assert!(planned.plan.semantically_checked.contains(&function));
+    assert!(planned.plan.compiler_units.contains(&function));
+    assert_eq!(planned.plan.tests, BTreeSet::from([test]));
+    assert!(planned.plan.reasons.iter().any(|reason| {
+        reason.kind == ImpactReasonKind::TestBehavior
+            && reason.source == test
+            && reason.target == function
+    }));
+    assert_matches_full_oracle(&base_witness, &overlay, &derived);
+}
+
+#[test]
+fn test_relation_rebind_updates_only_the_affected_test_dependency_entries() {
+    let base = crate::platform::kernel::tests::witness_snapshot();
+    let base_witness = rebuild_full_witness(&base).expect("base witness");
+    let test = declaration_named(&base, "caller_test");
+    let test_actual = test_actual(&base, "caller_test");
+    let old_function = declaration_named(&base, "with_binding");
+    let old_record = &base.owners[&old_function];
+    let OwnerRecord::Declaration(old_declaration) = old_record else {
+        panic!("function declaration expected");
+    };
+    let DeclarationPayload::Function(old_function_payload) = &old_declaration.payload else {
+        panic!("function payload expected");
+    };
+    let new_function =
+        crate::platform::semantic_id::DeclarationId::migrate(b"change-test-dependency", 1);
+    let new_body =
+        crate::platform::semantic_id::ExpressionId::migrate(b"change-test-dependency", 1);
+    let body_record = OwnerRecord::Expression(
+        crate::platform::kernel::ExpressionRecord::new(new_body, ExpressionOperation::Unit)
+            .expect("new body"),
+    );
+    let function_record = OwnerRecord::Declaration(crate::platform::kernel::DeclarationRecord {
+        header: crate::platform::kernel::OwnerHeader::new(
+            OwnerKey::Declaration(new_function),
+            crate::platform::kernel::OwnerKind::PureFunction,
+        ),
+        module: old_declaration.module,
+        name: Name::new("other_function").expect("valid name"),
+        visibility: crate::platform::kernel::DeclarationVisibility::Private,
+        payload: DeclarationPayload::Function(crate::platform::kernel::FunctionDeclaration {
+            type_parameters: Vec::new(),
+            parameters: Vec::new(),
+            result: old_function_payload.result,
+            effect: crate::platform::kernel::FunctionEffect::Pure,
+            body: new_body,
+        }),
+    });
+    let mut actual_record = base.owners[&OwnerKey::Expression(test_actual)].clone();
+    let OwnerRecord::Expression(actual) = &mut actual_record else {
+        panic!("test actual expression expected");
+    };
+    actual.operation = ExpressionOperation::Call {
+        function: crate::platform::kernel::DeclarationReference {
+            package: base.root.package_id,
+            declaration: new_function,
+        },
+        type_arguments: Vec::new(),
+        arguments: Vec::new(),
+    };
+    let delta = CanonicalDelta::normalize(
+        &base,
+        vec![
+            PrimitiveEdit::InsertOwner {
+                record: body_record,
+            },
+            PrimitiveEdit::InsertOwner {
+                record: function_record,
+            },
+            PrimitiveEdit::ReplaceOwner {
+                expected: encode_owner(&base.owners[&OwnerKey::Expression(test_actual)])
+                    .expect("test actual")
+                    .0,
+                record: actual_record,
+            },
+        ],
+    )
+    .expect("test rebind delta");
+    let overlay = KernelOverlay::new(&base, &delta);
+    let derived = derive_local_delta(&base, &overlay, &delta, &base_witness)
+        .expect("derived test relation rebind");
+    let test_delta = derive_test_dependency_delta(&overlay, &delta, &derived, &base_witness)
+        .expect("test dependency delta");
+    assert_eq!(test_delta.affected_tests, BTreeSet::from([test]));
+    assert_eq!(test_delta.removed.len(), 1);
+    assert_eq!(test_delta.added.len(), 1);
+    assert!(test_delta.removed.iter().any(|dependency| {
+        dependency.target
+            == crate::platform::kernel::RelationEndpoint::Owner(
+                crate::platform::kernel::ExactOwnerKey {
+                    package: base.root.package_id,
+                    owner: old_function,
+                },
+            )
+    }));
+    assert!(test_delta.added.iter().any(|dependency| {
+        dependency.target
+            == crate::platform::kernel::RelationEndpoint::Owner(
+                crate::platform::kernel::ExactOwnerKey {
+                    package: base.root.package_id,
+                    owner: OwnerKey::Declaration(new_function),
+                },
+            )
+    }));
     assert_matches_full_oracle(&base_witness, &overlay, &derived);
 }
 
@@ -244,6 +419,62 @@ fn exact_preconditions_duplicates_and_live_retired_overlap_reject() {
     );
 }
 
+#[test]
+fn generic_preparation_rejects_an_invalid_result_type_on_the_owner_frontier() {
+    let base = crate::platform::kernel::tests::witness_snapshot();
+    let base_witness = rebuild_full_witness(&base).expect("base witness");
+    let callee = declaration_named(&base, "callee");
+    let function_type = base
+        .owners
+        .values()
+        .find_map(|record| match record {
+            OwnerRecord::Port(record) => Some(record.function_type),
+            _ => None,
+        })
+        .expect("fixture function type");
+    let mut replacement = base.owners[&callee].clone();
+    let OwnerRecord::Declaration(record) = &mut replacement else {
+        panic!("callee declaration expected");
+    };
+    let DeclarationPayload::Function(function) = &mut record.payload else {
+        panic!("function payload expected");
+    };
+    function.result = function_type;
+    let delta = replace_owner_delta(&base, callee, replacement);
+    let diagnostics = prepare_change_analysis(&base, &base_witness, delta)
+        .expect_err("invalid function result must reject incrementally");
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "kernel_type_root")
+    );
+}
+
+#[test]
+fn generic_preparation_rejects_deleting_a_still_referenced_expression() {
+    let base = crate::platform::kernel::tests::witness_snapshot();
+    let base_witness = rebuild_full_witness(&base).expect("base witness");
+    let callee = declaration_named(&base, "callee");
+    let body = function_body(&base, callee);
+    let delta = CanonicalDelta::normalize(
+        &base,
+        vec![PrimitiveEdit::DeleteOwner {
+            owner: body,
+            expected: encode_owner(&base.owners[&body]).expect("base body").0,
+        }],
+    )
+    .expect("expression deletion delta");
+    let diagnostics = prepare_change_analysis(&base, &base_witness, delta)
+        .expect_err("a live declaration cannot retain a deleted expression root");
+    assert!(
+        diagnostics.iter().any(|diagnostic| {
+            diagnostic.class == crate::platform::diagnostic::DiagnosticClass::Semantic
+                && diagnostic.code == "change_validate_ownership_stale"
+        }),
+        "unexpected diagnostics: {diagnostics:#?}"
+    );
+}
+
 fn assert_matches_full_oracle(
     base: &FullWitness,
     overlay: &KernelOverlay<'_>,
@@ -279,6 +510,59 @@ fn assert_matches_full_oracle(
             .copied()
             .collect::<BTreeSet<_>>()
     );
+
+    let prepared = prepare_change_analysis(overlay.base(), base, overlay.delta().clone())
+        .expect("generic candidate preparation");
+    assert_eq!(&prepared.derived, derived);
+    let validation = &prepared.validation;
+    assert_eq!(validation.profile, INCREMENTAL_VALIDATION_PROFILE);
+    assert_eq!(
+        validation.canonical_owners_changed,
+        overlay.delta().changed_owner_count() as u64
+    );
+    let summary_delta = &prepared.summaries.final_delta;
+    let mut summaries = base.summaries.clone();
+    let mut summary_bindings = base.entries.summaries.clone();
+    for edit in &summary_delta.edits {
+        match (&edit.after, edit.after_digest) {
+            (Some(summary), Some(digest)) => {
+                summaries.insert(edit.owner, summary.clone());
+                summary_bindings.insert(edit.owner, digest);
+            }
+            (None, None) => {
+                summaries.remove(&edit.owner);
+                summary_bindings.remove(&edit.owner);
+            }
+            _ => panic!("summary value and digest must share one domain"),
+        }
+    }
+    for owner in summaries
+        .keys()
+        .chain(full.summaries.keys())
+        .copied()
+        .collect::<BTreeSet<_>>()
+    {
+        assert_eq!(
+            summaries.get(&owner),
+            full.summaries.get(&owner),
+            "summary mismatch for {owner:?}"
+        );
+        assert_eq!(
+            summary_bindings.get(&owner),
+            full.entries.summaries.get(&owner),
+            "summary binding mismatch for {owner:?}"
+        );
+    }
+
+    let test_delta = &prepared.tests;
+    let mut test_dependencies = base.entries.test_dependencies.clone();
+    for dependency in &test_delta.removed {
+        assert!(test_dependencies.remove(dependency));
+    }
+    test_dependencies.extend(test_delta.added.iter().copied());
+    assert_eq!(test_dependencies, full.entries.test_dependencies);
+
+    assert_eq!(prepared.witness.roots, full.manifest.roots);
 }
 
 fn apply_value_edits<K: Clone + Ord, V: Clone>(

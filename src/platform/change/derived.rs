@@ -3,8 +3,8 @@
 use super::{CanonicalDelta, KernelOverlay};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    OwnerKey, OwnerRecord, RelationEdge, RelationEndpoint, RelationKind, extract_owner_relations,
-    owner_namespace,
+    ExactOwnerKey, OwnerKey, OwnerRecord, RelationEdge, RelationEndpoint, RelationKind,
+    extract_owner_relations, owner_namespace,
 };
 use crate::platform::witness::{
     FullWitness, NamespaceKey, OwnershipEntry, OwnershipParent, ownership_contributions,
@@ -125,7 +125,14 @@ pub fn derive_local_delta(
         }
     }
 
-    let summary_candidates = summary_candidates(delta, &ownership, base_witness);
+    let summary_candidates = summary_candidates(
+        base.root.package_id,
+        delta,
+        &ownership,
+        &removed,
+        &added,
+        base_witness,
+    );
     Ok(DerivedDelta {
         namespaces,
         ownership,
@@ -237,20 +244,32 @@ fn package_dependency(
 }
 
 fn summary_candidates(
+    package: crate::platform::kernel::PackageId,
     delta: &CanonicalDelta,
     ownership: &[DerivedValueEdit<OwnerKey, OwnershipEntry>],
+    removed_relations: &BTreeSet<RelationEdge>,
+    added_relations: &BTreeSet<RelationEdge>,
     witness: &FullWitness,
 ) -> BTreeSet<OwnerKey> {
     let candidate_edits = ownership
         .iter()
         .map(|edit| (edit.key, edit.after))
         .collect::<BTreeMap<_, _>>();
-    let seeds = delta
+    let mut seeds = delta
         .owners
         .keys()
         .chain(ownership.iter().map(|edit| &edit.key))
         .copied()
         .collect::<BTreeSet<_>>();
+    seeds.extend(removed_relations.iter().chain(added_relations).filter_map(
+        |edge| match edge.source {
+            RelationEndpoint::Owner(ExactOwnerKey {
+                package: source_package,
+                owner,
+            }) if source_package == package => Some(owner),
+            RelationEndpoint::Owner(_) | RelationEndpoint::Package(_) => None,
+        },
+    ));
     let mut affected = BTreeSet::new();
     for seed in seeds {
         walk_summary_ancestors(

@@ -27,7 +27,11 @@ pub struct WitnessEntries {
     pub namespaces: BTreeMap<NamespaceKey, OwnerKey>,
     pub ownership: BTreeMap<OwnerKey, OwnershipEntry>,
     pub relations: Vec<RelationEdge>,
+    /// The same exact edges ordered by `(target, kind, source)` for bounded reverse impact reads.
+    pub reverse_relations: Vec<RelationEdge>,
     pub test_dependencies: BTreeSet<TestDependency>,
+    /// Prefix-oriented in-memory view matching the persisted forward test-dependency map.
+    pub test_dependencies_by_test: BTreeMap<OwnerKey, BTreeSet<TestDependency>>,
 }
 
 #[derive(Clone, Debug)]
@@ -92,12 +96,23 @@ fn build_validated_witness(
     }
 
     let test_dependencies = derive_test_dependencies(snapshot, &ownership, &relations)?;
+    let mut test_dependencies_by_test = BTreeMap::<OwnerKey, BTreeSet<TestDependency>>::new();
+    for dependency in &test_dependencies {
+        test_dependencies_by_test
+            .entry(dependency.test)
+            .or_default()
+            .insert(*dependency);
+    }
+    let mut reverse_relations = relations.clone();
+    reverse_relations.sort_unstable_by_key(|edge| (edge.target, edge.kind, edge.source));
     let entries = WitnessEntries {
         summaries: summary_bindings,
         namespaces,
         ownership,
         relations,
+        reverse_relations,
         test_dependencies,
+        test_dependencies_by_test,
     };
 
     let mut pages = MemoryPageStore::default();

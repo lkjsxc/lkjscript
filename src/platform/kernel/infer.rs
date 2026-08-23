@@ -31,34 +31,79 @@ struct FunctionSignature {
     task: bool,
 }
 
+/// Exact point-read surface required by declaration-local expression validation.
+pub(crate) trait ExpressionRead {
+    fn package_id(&self) -> PackageId;
+
+    fn owner(&self, owner: OwnerKey) -> Option<&OwnerRecord>;
+
+    fn type_object(&self, digest: TypeObjectDigest) -> Option<&TypeObject>;
+
+    fn has_dependency(&self, package: PackageId) -> bool;
+}
+
+impl ExpressionRead for KernelSnapshot {
+    fn package_id(&self) -> PackageId {
+        self.root.package_id
+    }
+
+    fn owner(&self, owner: OwnerKey) -> Option<&OwnerRecord> {
+        self.owners.get(&owner)
+    }
+
+    fn type_object(&self, digest: TypeObjectDigest) -> Option<&TypeObject> {
+        self.types.get(&digest)
+    }
+
+    fn has_dependency(&self, package: PackageId) -> bool {
+        self.dependencies.contains_key(&package)
+    }
+}
+
 pub(super) fn validate_expression_meaning(
     snapshot: &KernelSnapshot,
     diagnostics: &mut Vec<Diagnostic>,
     work: &mut usize,
 ) {
+    let roots = snapshot.owners.keys().copied().collect::<Vec<_>>();
+    validate_expression_roots(snapshot, roots, diagnostics, work);
+}
+
+pub(crate) fn validate_expression_roots<R: ExpressionRead>(
+    read: &R,
+    roots: impl IntoIterator<Item = OwnerKey>,
+    diagnostics: &mut Vec<Diagnostic>,
+    work: &mut usize,
+) {
     let mut validator = ExpressionValidator {
-        snapshot,
+        read,
         diagnostics,
         work,
         ephemeral_types: BTreeMap::new(),
     };
-    validator.validate_roots();
+    validator.validate_roots(roots);
 }
 
-struct ExpressionValidator<'a, 'b> {
-    snapshot: &'a KernelSnapshot,
+struct ExpressionValidator<'a, 'b, R> {
+    read: &'a R,
     diagnostics: &'b mut Vec<Diagnostic>,
     work: &'b mut usize,
     ephemeral_types: BTreeMap<TypeObjectDigest, TypeObject>,
 }
 
-impl ExpressionValidator<'_, '_> {
-    fn validate_roots(&mut self) {
-        let owners = self.snapshot.owners.values().cloned().collect::<Vec<_>>();
-        for owner in owners {
+impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
+    fn validate_roots(&mut self, roots: impl IntoIterator<Item = OwnerKey>) {
+        for owner in roots {
             if self.exhausted() {
                 return;
             }
+            let Some(owner) = self.read.owner(owner).cloned() else {
+                self.error(
+                    "kernel_type_frontier_owner_missing",
+                    "expression-validation frontier names a missing owner",
+                );
+                continue;
+            };
             match owner {
                 OwnerRecord::Declaration(declaration) => match declaration.payload {
                     DeclarationPayload::Function(function) => {
@@ -179,7 +224,7 @@ impl ExpressionValidator<'_, '_> {
                 "expression inference exceeded its structural depth bound",
             ));
         }
-        let record = match self.snapshot.owners.get(&OwnerKey::Expression(expression)) {
+        let record = match self.read.owner(OwnerKey::Expression(expression)) {
             Some(OwnerRecord::Expression(record)) => record.clone(),
             _ => {
                 return Err(type_error(
@@ -222,8 +267,7 @@ impl ExpressionValidator<'_, '_> {
             }
             ExpressionOperation::Let { bindings, body } => {
                 for binding in bindings {
-                    let binding_record = match self.snapshot.owners.get(&OwnerKey::Binding(binding))
-                    {
+                    let binding_record = match self.read.owner(OwnerKey::Binding(binding)) {
                         Some(OwnerRecord::Binding(record)) => record.clone(),
                         _ => {
                             return Err(type_error(
@@ -300,10 +344,10 @@ impl ExpressionValidator<'_, '_> {
                 fields,
             } => self.infer_record(nominal_type, &fields, context, next),
             ExpressionOperation::Variant { case, payload } => {
-                if case.package != self.snapshot.root.package_id {
+                if case.package != self.read.package_id() {
                     return Err(self.foreign_interface("variant case", case.package));
                 }
-                let case_record = match self.snapshot.owners.get(&OwnerKey::Case(case.case)) {
+                let case_record = match self.read.owner(OwnerKey::Case(case.case)) {
                     Some(OwnerRecord::Case(record)) => record.clone(),
                     _ => {
                         return Err(type_error(
@@ -379,8 +423,8 @@ impl ExpressionValidator<'_, '_> {
                         "pure expression performs a capability operation",
                     ));
                 }
-                if requirement.package != self.snapshot.root.package_id
-                    || operation.package != self.snapshot.root.package_id
+                if requirement.package != self.read.package_id()
+                    || operation.package != self.read.package_id()
                 {
                     return Err(self.foreign_interface("capability", requirement.package));
                 }
@@ -390,19 +434,16 @@ impl ExpressionValidator<'_, '_> {
                         "capability requirement is unavailable in this task context",
                     ));
                 }
-                let operation_record = match self
-                    .snapshot
-                    .owners
-                    .get(&OwnerKey::Operation(operation.operation))
-                {
-                    Some(OwnerRecord::Operation(record)) => record.clone(),
-                    _ => {
-                        return Err(type_error(
-                            "kernel_type_operation_missing",
-                            "capability operation is missing",
-                        ));
-                    }
-                };
+                let operation_record =
+                    match self.read.owner(OwnerKey::Operation(operation.operation)) {
+                        Some(OwnerRecord::Operation(record)) => record.clone(),
+                        _ => {
+                            return Err(type_error(
+                                "kernel_type_operation_missing",
+                                "capability operation is missing",
+                            ));
+                        }
+                    };
                 let parameters = self.parameter_types(&operation_record.parameters)?;
                 self.validate_arguments(&arguments, &parameters, context, next)?;
                 Ok(operation_record.result)
@@ -416,7 +457,7 @@ impl ExpressionValidator<'_, '_> {
                         "pure expression opens a live transaction",
                     ));
                 }
-                if requirement.package != self.snapshot.root.package_id
+                if requirement.package != self.read.package_id()
                     || !context.requirements.contains(&requirement.requirement)
                 {
                     return Err(type_error(
@@ -437,7 +478,7 @@ impl ExpressionValidator<'_, '_> {
     ) -> Result<TypeObjectDigest, Diagnostic> {
         match reference {
             LocalValueReference::FunctionParameter(parameter) => {
-                let record = match self.snapshot.owners.get(&OwnerKey::Parameter(parameter)) {
+                let record = match self.read.owner(OwnerKey::Parameter(parameter)) {
                     Some(OwnerRecord::Parameter(record)) => record,
                     _ => {
                         return Err(type_error(
@@ -461,7 +502,7 @@ impl ExpressionValidator<'_, '_> {
                 Ok(record.ty)
             }
             LocalValueReference::OperationParameter(parameter) => {
-                let record = match self.snapshot.owners.get(&OwnerKey::Parameter(parameter)) {
+                let record = match self.read.owner(OwnerKey::Parameter(parameter)) {
                     Some(OwnerRecord::Parameter(record)) => record,
                     _ => {
                         return Err(type_error(
@@ -481,7 +522,7 @@ impl ExpressionValidator<'_, '_> {
             LocalValueReference::LexicalBinding(binding)
             | LocalValueReference::MatchPayload(binding)
             | LocalValueReference::TransactionBinding(binding) => {
-                let record = match self.snapshot.owners.get(&OwnerKey::Binding(binding)) {
+                let record = match self.read.owner(OwnerKey::Binding(binding)) {
                     Some(OwnerRecord::Binding(record)) => record.clone(),
                     _ => {
                         return Err(type_error(
@@ -512,13 +553,12 @@ impl ExpressionValidator<'_, '_> {
         depth: usize,
     ) -> Result<TypeObjectDigest, Diagnostic> {
         if let Some(declaration) = nominal_type {
-            if declaration.package != self.snapshot.root.package_id {
+            if declaration.package != self.read.package_id() {
                 return Err(self.foreign_interface("record", declaration.package));
             }
             let expected = match self
-                .snapshot
-                .owners
-                .get(&OwnerKey::Declaration(declaration.declaration))
+                .read
+                .owner(OwnerKey::Declaration(declaration.declaration))
             {
                 Some(OwnerRecord::Declaration(record)) => match &record.payload {
                     DeclarationPayload::Record { fields } => fields.clone(),
@@ -543,8 +583,7 @@ impl ExpressionValidator<'_, '_> {
                 ));
             }
             for expected_field in expected {
-                let field_record = match self.snapshot.owners.get(&OwnerKey::Field(expected_field))
-                {
+                let field_record = match self.read.owner(OwnerKey::Field(expected_field)) {
                     Some(OwnerRecord::Field(record)) => record.clone(),
                     _ => {
                         return Err(type_error(
@@ -601,10 +640,10 @@ impl ExpressionValidator<'_, '_> {
     ) -> Result<TypeObjectDigest, Diagnostic> {
         match selector {
             FieldSelector::Nominal(reference) => {
-                if reference.package != self.snapshot.root.package_id {
+                if reference.package != self.read.package_id() {
                     return Err(self.foreign_interface("field", reference.package));
                 }
-                let field = match self.snapshot.owners.get(&OwnerKey::Field(reference.field)) {
+                let field = match self.read.owner(OwnerKey::Field(reference.field)) {
                     Some(OwnerRecord::Field(record)) => record,
                     _ => {
                         return Err(type_error(
@@ -664,13 +703,12 @@ impl ExpressionValidator<'_, '_> {
                 "match value is not a nominal variant",
             ));
         };
-        if declaration.package != self.snapshot.root.package_id {
+        if declaration.package != self.read.package_id() {
             return Err(self.foreign_interface("match", declaration.package));
         }
         let expected_cases = match self
-            .snapshot
-            .owners
-            .get(&OwnerKey::Declaration(declaration.declaration))
+            .read
+            .owner(OwnerKey::Declaration(declaration.declaration))
         {
             Some(OwnerRecord::Declaration(record)) => match &record.payload {
                 DeclarationPayload::Variant { cases } => cases.clone(),
@@ -697,7 +735,7 @@ impl ExpressionValidator<'_, '_> {
         }
         let mut result = None;
         for arm in arms {
-            let case = match self.snapshot.owners.get(&OwnerKey::Case(arm.case.case)) {
+            let case = match self.read.owner(OwnerKey::Case(arm.case.case)) {
                 Some(OwnerRecord::Case(record)) => record,
                 _ => {
                     return Err(type_error(
@@ -714,7 +752,7 @@ impl ExpressionValidator<'_, '_> {
             }
             match (case.payload, arm.payload_binding) {
                 (Some(expected), Some(binding)) => {
-                    let declared = match self.snapshot.owners.get(&OwnerKey::Binding(binding)) {
+                    let declared = match self.read.owner(OwnerKey::Binding(binding)) {
                         Some(OwnerRecord::Binding(record))
                             if record.kind == BindingKind::MatchPayload =>
                         {
@@ -775,13 +813,12 @@ impl ExpressionValidator<'_, '_> {
         &self,
         reference: DeclarationReference,
     ) -> Result<TypeObjectDigest, Diagnostic> {
-        if reference.package != self.snapshot.root.package_id {
+        if reference.package != self.read.package_id() {
             return Err(self.foreign_interface("constant", reference.package));
         }
         match self
-            .snapshot
-            .owners
-            .get(&OwnerKey::Declaration(reference.declaration))
+            .read
+            .owner(OwnerKey::Declaration(reference.declaration))
         {
             Some(OwnerRecord::Declaration(record)) => match record.payload {
                 DeclarationPayload::Constant { ty, .. } => Ok(ty),
@@ -802,13 +839,12 @@ impl ExpressionValidator<'_, '_> {
         reference: DeclarationReference,
         type_arguments: &[TypeObjectDigest],
     ) -> Result<FunctionSignature, Diagnostic> {
-        if reference.package != self.snapshot.root.package_id {
+        if reference.package != self.read.package_id() {
             return Err(self.foreign_interface("function", reference.package));
         }
         let record = match self
-            .snapshot
-            .owners
-            .get(&OwnerKey::Declaration(reference.declaration))
+            .read
+            .owner(OwnerKey::Declaration(reference.declaration))
         {
             Some(OwnerRecord::Declaration(record)) => record.clone(),
             _ => {
@@ -878,7 +914,7 @@ impl ExpressionValidator<'_, '_> {
         parameters
             .iter()
             .map(
-                |parameter| match self.snapshot.owners.get(&OwnerKey::Parameter(*parameter)) {
+                |parameter| match self.read.owner(OwnerKey::Parameter(*parameter)) {
                     Some(OwnerRecord::Parameter(record)) => Ok(record.ty),
                     _ => Err(type_error(
                         "kernel_type_parameter_missing",
@@ -1021,9 +1057,8 @@ impl ExpressionValidator<'_, '_> {
     }
 
     fn type_object(&self, digest: TypeObjectDigest) -> Result<TypeObject, Diagnostic> {
-        self.snapshot
-            .types
-            .get(&digest)
+        self.read
+            .type_object(digest)
             .or_else(|| self.ephemeral_types.get(&digest))
             .cloned()
             .ok_or_else(|| {
@@ -1035,11 +1070,7 @@ impl ExpressionValidator<'_, '_> {
     }
 
     fn component_requirements(&self, declaration: DeclarationId) -> BTreeSet<RequirementId> {
-        match self
-            .snapshot
-            .owners
-            .get(&OwnerKey::Declaration(declaration))
-        {
+        match self.read.owner(OwnerKey::Declaration(declaration)) {
             Some(OwnerRecord::Declaration(record)) => match &record.payload {
                 DeclarationPayload::Component { requirements, .. } => {
                     requirements.iter().copied().collect()
@@ -1051,7 +1082,7 @@ impl ExpressionValidator<'_, '_> {
     }
 
     fn foreign_interface(&self, label: &str, package: PackageId) -> Diagnostic {
-        if self.snapshot.dependencies.contains_key(&package) {
+        if self.read.has_dependency(package) {
             type_error(
                 "kernel_type_dependency_interface",
                 format!(
