@@ -17,6 +17,11 @@ pub mod graph;
 pub mod http;
 mod intrinsic_contract;
 pub mod json;
+#[allow(
+    dead_code,
+    reason = "Graph 5 remains private until its dependency-closed direct public cutover"
+)]
+pub(crate) mod kernel;
 pub mod language;
 pub mod meaning;
 pub mod object;

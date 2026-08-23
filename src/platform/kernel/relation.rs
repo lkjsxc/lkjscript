@@ -1,0 +1,590 @@
+//! Single deterministic relation extractor for Graph 5 records.
+
+use super::TypeObjectDigest;
+use super::contract::MAXIMUM_VALIDATION_WORK;
+use super::expression::{ExpressionOperation, FieldSelector, LocalValueReference};
+use super::id::{ExactOwnerKey, OwnerKey, PackageId};
+use super::owner::{DeclarationPayload, OwnerRecord, ParameterParent, PortImplementation};
+use super::root::DependencyRecord;
+use super::type_object::{TypeForm, TypeObject};
+use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
+use std::collections::{BTreeMap, BTreeSet};
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct RelationEdge {
+    pub source: RelationEndpoint,
+    pub kind: RelationKind,
+    pub target: RelationEndpoint,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum RelationEndpoint {
+    Owner(ExactOwnerKey),
+    Package(PackageId),
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum RelationKind {
+    DeclarationModule,
+    MemberDeclaration,
+    ParameterOperation,
+    ExpressionParent,
+    ExpressionRoot,
+    TypeParameterUse,
+    NamedTypeUse,
+    LocalValueReference,
+    ConstantReference,
+    FunctionCall,
+    FunctionValue,
+    NominalFieldConstruction,
+    NominalFieldAccess,
+    VariantConstruction,
+    VariantMatch,
+    CapabilityInterface,
+    CapabilityOperation,
+    ComponentRequirement,
+    ComponentPort,
+    TargetComponent,
+    TargetPort,
+    TestExecutionDependency,
+    DocumentationOwnership,
+    AnnotationOwnership,
+    PackageDependency,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PropagationClass {
+    Ownership,
+    Type,
+    Value,
+    Behavior,
+    Capability,
+    Target,
+    Test,
+    Presentation,
+    Package,
+}
+
+impl RelationKind {
+    pub const fn propagation(self) -> PropagationClass {
+        match self {
+            Self::DeclarationModule
+            | Self::MemberDeclaration
+            | Self::ParameterOperation
+            | Self::ExpressionParent
+            | Self::ExpressionRoot => PropagationClass::Ownership,
+            Self::TypeParameterUse | Self::NamedTypeUse => PropagationClass::Type,
+            Self::LocalValueReference
+            | Self::ConstantReference
+            | Self::NominalFieldConstruction
+            | Self::NominalFieldAccess
+            | Self::VariantConstruction
+            | Self::VariantMatch => PropagationClass::Value,
+            Self::FunctionCall | Self::FunctionValue => PropagationClass::Behavior,
+            Self::CapabilityInterface
+            | Self::CapabilityOperation
+            | Self::ComponentRequirement
+            | Self::ComponentPort => PropagationClass::Capability,
+            Self::TargetComponent | Self::TargetPort => PropagationClass::Target,
+            Self::TestExecutionDependency => PropagationClass::Test,
+            Self::DocumentationOwnership | Self::AnnotationOwnership => {
+                PropagationClass::Presentation
+            }
+            Self::PackageDependency => PropagationClass::Package,
+        }
+    }
+}
+
+pub fn extract_relations(
+    package: PackageId,
+    owners: &BTreeMap<OwnerKey, OwnerRecord>,
+    types: &BTreeMap<TypeObjectDigest, TypeObject>,
+    dependencies: &BTreeMap<PackageId, DependencyRecord>,
+) -> Result<Vec<RelationEdge>, Diagnostic> {
+    let mut edges = BTreeSet::new();
+    let mut work = 0_usize;
+    for (key, record) in owners {
+        consume_work(&mut work)?;
+        let source = exact(package, *key);
+        extract_owner(source, record, package, types, &mut edges, &mut work)?;
+    }
+    for dependency in dependencies.keys() {
+        consume_work(&mut work)?;
+        edges.insert(RelationEdge {
+            source: RelationEndpoint::Package(package),
+            kind: RelationKind::PackageDependency,
+            target: RelationEndpoint::Package(*dependency),
+        });
+    }
+    Ok(edges.into_iter().collect())
+}
+
+fn extract_owner(
+    source: ExactOwnerKey,
+    record: &OwnerRecord,
+    package: PackageId,
+    types: &BTreeMap<TypeObjectDigest, TypeObject>,
+    edges: &mut BTreeSet<RelationEdge>,
+    work: &mut usize,
+) -> Result<(), Diagnostic> {
+    match record {
+        OwnerRecord::Module(_) => {}
+        OwnerRecord::Declaration(declaration) => {
+            owner_edge(
+                edges,
+                source,
+                RelationKind::DeclarationModule,
+                package,
+                OwnerKey::Module(declaration.module),
+            );
+            match &declaration.payload {
+                DeclarationPayload::Record { fields } => {
+                    for field in fields {
+                        owner_edge(
+                            edges,
+                            exact(package, OwnerKey::Field(*field)),
+                            RelationKind::MemberDeclaration,
+                            package,
+                            source.owner,
+                        );
+                    }
+                }
+                DeclarationPayload::Variant { cases } => {
+                    for case in cases {
+                        owner_edge(
+                            edges,
+                            exact(package, OwnerKey::Case(*case)),
+                            RelationKind::MemberDeclaration,
+                            package,
+                            source.owner,
+                        );
+                    }
+                }
+                DeclarationPayload::Interface { operations } => {
+                    for operation in operations {
+                        owner_edge(
+                            edges,
+                            exact(package, OwnerKey::Operation(*operation)),
+                            RelationKind::MemberDeclaration,
+                            package,
+                            source.owner,
+                        );
+                    }
+                }
+                DeclarationPayload::Component {
+                    requirements,
+                    ports,
+                } => {
+                    for requirement in requirements {
+                        owner_edge(
+                            edges,
+                            source,
+                            RelationKind::ComponentRequirement,
+                            package,
+                            OwnerKey::Requirement(*requirement),
+                        );
+                    }
+                    for port in ports {
+                        owner_edge(
+                            edges,
+                            source,
+                            RelationKind::ComponentPort,
+                            package,
+                            OwnerKey::Port(*port),
+                        );
+                    }
+                }
+                DeclarationPayload::Test {
+                    actual, expected, ..
+                } => {
+                    for root in [actual, expected] {
+                        owner_edge(
+                            edges,
+                            source,
+                            RelationKind::TestExecutionDependency,
+                            package,
+                            OwnerKey::Expression(*root),
+                        );
+                    }
+                }
+                DeclarationPayload::External(_)
+                | DeclarationPayload::Function(_)
+                | DeclarationPayload::Constant { .. } => {}
+            }
+            for root in record.expression_roots() {
+                owner_edge(
+                    edges,
+                    exact(package, OwnerKey::Expression(root)),
+                    RelationKind::ExpressionRoot,
+                    package,
+                    source.owner,
+                );
+            }
+        }
+        OwnerRecord::TypeParameter(parameter) => owner_edge(
+            edges,
+            source,
+            RelationKind::MemberDeclaration,
+            package,
+            OwnerKey::Declaration(parameter.declaration),
+        ),
+        OwnerRecord::Field(field) => owner_edge(
+            edges,
+            source,
+            RelationKind::MemberDeclaration,
+            package,
+            OwnerKey::Declaration(field.declaration),
+        ),
+        OwnerRecord::Case(case) => owner_edge(
+            edges,
+            source,
+            RelationKind::MemberDeclaration,
+            package,
+            OwnerKey::Declaration(case.declaration),
+        ),
+        OwnerRecord::Operation(operation) => owner_edge(
+            edges,
+            source,
+            RelationKind::MemberDeclaration,
+            package,
+            OwnerKey::Declaration(operation.declaration),
+        ),
+        OwnerRecord::Parameter(parameter) => match parameter.parent {
+            ParameterParent::Function(declaration) => owner_edge(
+                edges,
+                source,
+                RelationKind::MemberDeclaration,
+                package,
+                OwnerKey::Declaration(declaration),
+            ),
+            ParameterParent::Operation(operation) => owner_edge(
+                edges,
+                source,
+                RelationKind::ParameterOperation,
+                package,
+                OwnerKey::Operation(operation),
+            ),
+        },
+        OwnerRecord::Binding(binding) => {
+            if let Some(value) = binding.value {
+                owner_edge(
+                    edges,
+                    exact(package, OwnerKey::Expression(value)),
+                    RelationKind::ExpressionRoot,
+                    package,
+                    source.owner,
+                );
+            }
+        }
+        OwnerRecord::Expression(expression) => {
+            for child in expression.children() {
+                owner_edge(
+                    edges,
+                    exact(package, OwnerKey::Expression(child.expression)),
+                    RelationKind::ExpressionParent,
+                    package,
+                    source.owner,
+                );
+            }
+            extract_expression(source, &expression.operation, package, edges);
+        }
+        OwnerRecord::Requirement(requirement) => {
+            exact_edge(
+                edges,
+                source,
+                RelationKind::CapabilityInterface,
+                requirement.interface.package,
+                OwnerKey::Declaration(requirement.interface.declaration),
+            );
+            for operation in &requirement.operations {
+                exact_edge(
+                    edges,
+                    source,
+                    RelationKind::CapabilityOperation,
+                    operation.package,
+                    OwnerKey::Operation(operation.operation),
+                );
+            }
+        }
+        OwnerRecord::Port(port) => {
+            owner_edge(
+                edges,
+                source,
+                RelationKind::MemberDeclaration,
+                package,
+                OwnerKey::Declaration(port.declaration),
+            );
+            if let PortImplementation::Function(function) = &port.implementation {
+                exact_edge(
+                    edges,
+                    source,
+                    RelationKind::FunctionValue,
+                    function.package,
+                    OwnerKey::Declaration(function.declaration),
+                );
+            }
+        }
+        OwnerRecord::Target(target) => {
+            exact_edge(
+                edges,
+                source,
+                RelationKind::TargetComponent,
+                target.component.package,
+                OwnerKey::Declaration(target.component.declaration),
+            );
+            exact_edge(
+                edges,
+                source,
+                RelationKind::TargetPort,
+                target.port.package,
+                OwnerKey::Port(target.port.port),
+            );
+        }
+        OwnerRecord::Documentation(documentation) => owner_edge(
+            edges,
+            source,
+            RelationKind::DocumentationOwnership,
+            package,
+            documentation.owner,
+        ),
+        OwnerRecord::Annotation(annotation) => owner_edge(
+            edges,
+            source,
+            RelationKind::AnnotationOwnership,
+            package,
+            annotation.owner,
+        ),
+    }
+
+    for root in record.type_roots() {
+        extract_type_relations(source, root, package, types, edges, work)?;
+    }
+    Ok(())
+}
+
+fn extract_expression(
+    source: ExactOwnerKey,
+    operation: &ExpressionOperation,
+    package: PackageId,
+    edges: &mut BTreeSet<RelationEdge>,
+) {
+    match operation {
+        ExpressionOperation::Local { value } => {
+            let target = match value {
+                LocalValueReference::FunctionParameter(id)
+                | LocalValueReference::OperationParameter(id) => OwnerKey::Parameter(*id),
+                LocalValueReference::LexicalBinding(id)
+                | LocalValueReference::MatchPayload(id)
+                | LocalValueReference::TransactionBinding(id) => OwnerKey::Binding(*id),
+            };
+            owner_edge(
+                edges,
+                source,
+                RelationKind::LocalValueReference,
+                package,
+                target,
+            );
+        }
+        ExpressionOperation::Constant { declaration } => exact_edge(
+            edges,
+            source,
+            RelationKind::ConstantReference,
+            declaration.package,
+            OwnerKey::Declaration(declaration.declaration),
+        ),
+        ExpressionOperation::Call { function, .. } => exact_edge(
+            edges,
+            source,
+            RelationKind::FunctionCall,
+            function.package,
+            OwnerKey::Declaration(function.declaration),
+        ),
+        ExpressionOperation::FunctionValue { function, .. } => exact_edge(
+            edges,
+            source,
+            RelationKind::FunctionValue,
+            function.package,
+            OwnerKey::Declaration(function.declaration),
+        ),
+        ExpressionOperation::Record {
+            nominal_type,
+            fields,
+        } => {
+            if let Some(declaration) = nominal_type {
+                exact_edge(
+                    edges,
+                    source,
+                    RelationKind::NamedTypeUse,
+                    declaration.package,
+                    OwnerKey::Declaration(declaration.declaration),
+                );
+            }
+            for field in fields {
+                if let FieldSelector::Nominal(field) = field.selector {
+                    exact_edge(
+                        edges,
+                        source,
+                        RelationKind::NominalFieldConstruction,
+                        field.package,
+                        OwnerKey::Field(field.field),
+                    );
+                }
+            }
+        }
+        ExpressionOperation::Variant { case, .. } => exact_edge(
+            edges,
+            source,
+            RelationKind::VariantConstruction,
+            case.package,
+            OwnerKey::Case(case.case),
+        ),
+        ExpressionOperation::Field {
+            selector: FieldSelector::Nominal(field),
+            ..
+        } => exact_edge(
+            edges,
+            source,
+            RelationKind::NominalFieldAccess,
+            field.package,
+            OwnerKey::Field(field.field),
+        ),
+        ExpressionOperation::Match { arms, .. } => {
+            for arm in arms {
+                exact_edge(
+                    edges,
+                    source,
+                    RelationKind::VariantMatch,
+                    arm.case.package,
+                    OwnerKey::Case(arm.case.case),
+                );
+            }
+        }
+        ExpressionOperation::CapabilityCall {
+            requirement,
+            operation,
+            ..
+        } => {
+            exact_edge(
+                edges,
+                source,
+                RelationKind::ComponentRequirement,
+                requirement.package,
+                OwnerKey::Requirement(requirement.requirement),
+            );
+            exact_edge(
+                edges,
+                source,
+                RelationKind::CapabilityOperation,
+                operation.package,
+                OwnerKey::Operation(operation.operation),
+            );
+        }
+        ExpressionOperation::Transaction { requirement, .. } => exact_edge(
+            edges,
+            source,
+            RelationKind::ComponentRequirement,
+            requirement.package,
+            OwnerKey::Requirement(requirement.requirement),
+        ),
+        ExpressionOperation::Unit
+        | ExpressionOperation::Bool { .. }
+        | ExpressionOperation::I64 { .. }
+        | ExpressionOperation::Text { .. }
+        | ExpressionOperation::StaticText { .. }
+        | ExpressionOperation::If { .. }
+        | ExpressionOperation::Let { .. }
+        | ExpressionOperation::Sequence { .. }
+        | ExpressionOperation::Invoke { .. }
+        | ExpressionOperation::Field {
+            selector: FieldSelector::Structural(_),
+            ..
+        }
+        | ExpressionOperation::List { .. }
+        | ExpressionOperation::Map { .. } => {}
+    }
+}
+
+fn extract_type_relations(
+    source: ExactOwnerKey,
+    root: TypeObjectDigest,
+    package: PackageId,
+    types: &BTreeMap<TypeObjectDigest, TypeObject>,
+    edges: &mut BTreeSet<RelationEdge>,
+    work: &mut usize,
+) -> Result<(), Diagnostic> {
+    let mut pending = vec![root];
+    let mut observed = BTreeSet::new();
+    while let Some(digest) = pending.pop() {
+        consume_work(work)?;
+        if !observed.insert(digest) {
+            continue;
+        }
+        let object = types.get(&digest).ok_or_else(|| {
+            relation_error(
+                "kernel_relation_missing_type",
+                format!("type object {digest} is missing"),
+            )
+        })?;
+        match &object.form {
+            TypeForm::TypeParameter { parameter } => owner_edge(
+                edges,
+                source,
+                RelationKind::TypeParameterUse,
+                package,
+                OwnerKey::TypeParameter(*parameter),
+            ),
+            TypeForm::Named { declaration } => exact_edge(
+                edges,
+                source,
+                RelationKind::NamedTypeUse,
+                declaration.package,
+                OwnerKey::Declaration(declaration.declaration),
+            ),
+            _ => pending.extend(object.child_types()),
+        }
+    }
+    Ok(())
+}
+
+fn exact(package: PackageId, owner: OwnerKey) -> ExactOwnerKey {
+    ExactOwnerKey { package, owner }
+}
+
+fn owner_edge(
+    edges: &mut BTreeSet<RelationEdge>,
+    source: ExactOwnerKey,
+    kind: RelationKind,
+    package: PackageId,
+    owner: OwnerKey,
+) {
+    exact_edge(edges, source, kind, package, owner);
+}
+
+fn exact_edge(
+    edges: &mut BTreeSet<RelationEdge>,
+    source: ExactOwnerKey,
+    kind: RelationKind,
+    package: PackageId,
+    owner: OwnerKey,
+) {
+    edges.insert(RelationEdge {
+        source: RelationEndpoint::Owner(source),
+        kind,
+        target: RelationEndpoint::Owner(exact(package, owner)),
+    });
+}
+
+fn consume_work(work: &mut usize) -> Result<(), Diagnostic> {
+    *work = work.saturating_add(1);
+    if *work > MAXIMUM_VALIDATION_WORK {
+        return Err(relation_error(
+            "kernel_relation_work",
+            "relation extraction exhausted its work budget",
+        ));
+    }
+    Ok(())
+}
+
+fn relation_error(code: &str, message: impl Into<String>) -> Diagnostic {
+    Diagnostic::new(DiagnosticClass::Semantic, code, message)
+}
