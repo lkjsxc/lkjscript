@@ -2,12 +2,13 @@
 
 use super::capability::NormalizedCapabilities;
 use super::codec::{decode_value, encode_typed};
-use super::prepare::NormalizedProgram;
+use super::prepare::{NormalizedProgram, NormalizedTarget};
 use super::reference::{
     NormalizedReferenceBinding, NormalizedReferenceInterpreter, NormalizedReferenceObservation,
     NormalizedReferenceOwnerRead, NormalizedReferenceRead, NormalizedReferenceReadWork,
     reference_equal,
 };
+use super::value::NormalizedValue;
 use super::vm::{NormalizedRunObservation, NormalizedRunPolicy, NormalizedVm, normalized_equal};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
@@ -28,6 +29,21 @@ pub struct NormalizedCommandReceipt {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NormalizedEffectfulCommandReceipt {
+    pub target: Name,
+    pub revision: Option<RevisionId>,
+    pub result_json: Vec<u8>,
+    pub production: NormalizedRunObservation,
+    pub verification: &'static str,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct NormalizedCommandPolicy {
+    pub execution: NormalizedRunPolicy,
+    pub json: JsonLimits,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NormalizedTestReceipt {
     pub revision: Option<RevisionId>,
     pub passed: u64,
@@ -35,6 +51,12 @@ pub struct NormalizedTestReceipt {
     pub production_instructions: u64,
     pub reference_expressions: u64,
     pub differential: &'static str,
+}
+
+struct PreparedCommandInvocation<'a> {
+    target: &'a NormalizedTarget,
+    arguments: Vec<NormalizedValue>,
+    result_type: TypeObjectDigest,
 }
 
 impl NormalizedReferenceRead for RepositoryView {
@@ -75,32 +97,15 @@ pub fn run_pure_command(
     program: &NormalizedProgram,
     target_name: &Name,
     arguments_json: &[u8],
-    policy: NormalizedRunPolicy,
-    json_limits: JsonLimits,
+    policy: NormalizedCommandPolicy,
     control: &ExecutionControl,
 ) -> Result<NormalizedCommandReceipt, Diagnostic> {
     let authority_binding = authority.binding().map_err(execution_diagnostic)?;
     validate_authority_binding(program, authority_binding)?;
-    let target = program.root_target(target_name).ok_or_else(|| {
-        runner_error(
-            DiagnosticClass::Source,
-            "normalized_runner_target_missing",
-            "root artifact package has no target with the exact selected name",
-        )
-    })?;
-    if !matches!(
-        target.runner,
-        RunnerKind::Command | RunnerKind::Batch | RunnerKind::Test
-    ) {
-        return Err(runner_error(
-            DiagnosticClass::Source,
-            "normalized_runner_kind",
-            "selected target is not a command, batch, or test runner",
-        ));
-    }
+    let invocation = prepare_command_invocation(program, target_name, arguments_json, policy.json)?;
     let component = program
         .components
-        .get(target.component.0 as usize)
+        .get(invocation.target.component.0 as usize)
         .ok_or_else(|| {
             runner_error(
                 DiagnosticClass::Corrupt,
@@ -115,52 +120,14 @@ pub fn run_pure_command(
             "effectful target requires one production execution with exact deployment grants",
         ));
     }
-    let port = program.ports.get(target.port.0 as usize).ok_or_else(|| {
-        runner_error(
-            DiagnosticClass::Corrupt,
-            "normalized_runner_port",
-            "selected target port escaped the prepared runtime table",
-        )
-    })?;
-    if port.component != target.component {
-        return Err(runner_error(
-            DiagnosticClass::Corrupt,
-            "normalized_runner_port_component",
-            "selected target and port disagree on their exact component",
-        ));
-    }
-    let (parameter_types, result_type) = function_type(program, port.function_type)?;
-    let arguments = decode_strict(arguments_json, json_limits)?;
-    let arguments = arguments.as_array().ok_or_else(|| {
-        runner_error(
-            DiagnosticClass::Source,
-            "normalized_runner_arguments_array",
-            "target arguments must be one JSON array",
-        )
-    })?;
-    if arguments.len() != parameter_types.len() {
-        return Err(runner_error(
-            DiagnosticClass::Source,
-            "normalized_runner_argument_count",
-            format!(
-                "target expects {} arguments; {} were supplied",
-                parameter_types.len(),
-                arguments.len()
-            ),
-        ));
-    }
-    let values = arguments
-        .iter()
-        .zip(parameter_types)
-        .map(|(value, ty)| decode_value(program, value, ty, json_limits))
-        .collect::<Result<Vec<_>, _>>()?;
 
-    let production = NormalizedVm::new(program, policy)
-        .invoke_root_target(target_name, values.clone(), None, control)
+    let production = NormalizedVm::new(program, policy.execution)
+        .invoke_root_target(target_name, invocation.arguments.clone(), None, control)
         .map_err(execution_diagnostic)?;
-    let reference = NormalizedReferenceInterpreter::from_reader(authority, program, policy)
-        .invoke_root_target(target_name, values, None, control)
-        .map_err(execution_diagnostic)?;
+    let reference =
+        NormalizedReferenceInterpreter::from_reader(authority, program, policy.execution)
+            .invoke_root_target(target_name, invocation.arguments, None, control)
+            .map_err(execution_diagnostic)?;
     if production.0 != reference.0 {
         return Err(runner_error(
             DiagnosticClass::Infrastructure,
@@ -168,7 +135,7 @@ pub fn run_pure_command(
             "production and reference execution disagree for the selected pure target",
         ));
     }
-    let result_json = encode_typed(program, &production.0, result_type, json_limits)?;
+    let result_json = encode_typed(program, &production.0, invocation.result_type, policy.json)?;
     Ok(NormalizedCommandReceipt {
         target: target_name.clone(),
         revision: authority_binding.revision,
@@ -176,6 +143,65 @@ pub fn run_pure_command(
         production: production.1,
         reference: reference.1,
         differential: "equal",
+    })
+}
+
+/// Runs one effectful command-like target exactly once through the production tier.
+///
+/// The authority/artifact binding and complete deployment grant set are checked before execution.
+/// The reference tier is intentionally not invoked against live effects.
+pub fn run_effectful_command(
+    authority: &dyn NormalizedReferenceRead,
+    program: &NormalizedProgram,
+    target_name: &Name,
+    arguments_json: &[u8],
+    capabilities: &NormalizedCapabilities,
+    policy: NormalizedCommandPolicy,
+    control: &ExecutionControl,
+) -> Result<NormalizedEffectfulCommandReceipt, Diagnostic> {
+    let authority_binding = authority.binding().map_err(execution_diagnostic)?;
+    validate_authority_binding(program, authority_binding)?;
+    let invocation = prepare_command_invocation(program, target_name, arguments_json, policy.json)?;
+    let component = program
+        .components
+        .get(invocation.target.component.0 as usize)
+        .ok_or_else(|| {
+            runner_error(
+                DiagnosticClass::Corrupt,
+                "normalized_runner_component",
+                "selected target component escaped the prepared runtime table",
+            )
+        })?;
+    if component.requirements.is_empty() {
+        return Err(runner_error(
+            DiagnosticClass::Source,
+            "normalized_runner_pure_target",
+            "pure target must use differential command execution",
+        ));
+    }
+    if capabilities.component() != invocation.target.component {
+        return Err(runner_error(
+            DiagnosticClass::Capability,
+            "normalized_runner_grant_component",
+            "deployment grants are bound to another exact component",
+        ));
+    }
+
+    let production = NormalizedVm::new(program, policy.execution)
+        .invoke_root_target(
+            target_name,
+            invocation.arguments,
+            Some(capabilities),
+            control,
+        )
+        .map_err(execution_diagnostic)?;
+    let result_json = encode_typed(program, &production.0, invocation.result_type, policy.json)?;
+    Ok(NormalizedEffectfulCommandReceipt {
+        target: target_name.clone(),
+        revision: authority_binding.revision,
+        result_json,
+        production: production.1,
+        verification: "production_only_live_effects",
     })
 }
 
@@ -255,6 +281,75 @@ pub fn run_graph_tests(
         receipt.passed = receipt.passed.saturating_add(1);
     }
     Ok(receipt)
+}
+
+fn prepare_command_invocation<'a>(
+    program: &'a NormalizedProgram,
+    target_name: &Name,
+    arguments_json: &[u8],
+    json_limits: JsonLimits,
+) -> Result<PreparedCommandInvocation<'a>, Diagnostic> {
+    let target = program.root_target(target_name).ok_or_else(|| {
+        runner_error(
+            DiagnosticClass::Source,
+            "normalized_runner_target_missing",
+            "root artifact package has no target with the exact selected name",
+        )
+    })?;
+    if !matches!(
+        target.runner,
+        RunnerKind::Command | RunnerKind::Batch | RunnerKind::Test
+    ) {
+        return Err(runner_error(
+            DiagnosticClass::Source,
+            "normalized_runner_kind",
+            "selected target is not a command, batch, or test runner",
+        ));
+    }
+    let port = program.ports.get(target.port.0 as usize).ok_or_else(|| {
+        runner_error(
+            DiagnosticClass::Corrupt,
+            "normalized_runner_port",
+            "selected target port escaped the prepared runtime table",
+        )
+    })?;
+    if port.component != target.component {
+        return Err(runner_error(
+            DiagnosticClass::Corrupt,
+            "normalized_runner_port_component",
+            "selected target and port disagree on their exact component",
+        ));
+    }
+    let (parameter_types, result_type) = function_type(program, port.function_type)?;
+    let arguments = decode_strict(arguments_json, json_limits)?;
+    let arguments = arguments.as_array().ok_or_else(|| {
+        runner_error(
+            DiagnosticClass::Source,
+            "normalized_runner_arguments_array",
+            "target arguments must be one JSON array",
+        )
+    })?;
+    if arguments.len() != parameter_types.len() {
+        return Err(runner_error(
+            DiagnosticClass::Source,
+            "normalized_runner_argument_count",
+            format!(
+                "target expects {} arguments; {} were supplied",
+                parameter_types.len(),
+                arguments.len()
+            ),
+        ));
+    }
+    let arguments = arguments
+        .iter()
+        .zip(parameter_types)
+        .map(|(value, ty)| decode_value(program, value, ty, json_limits))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(PreparedCommandInvocation {
+        target,
+        arguments,
+        result_type,
+    })
 }
 
 fn function_type(

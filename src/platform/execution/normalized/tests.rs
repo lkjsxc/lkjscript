@@ -10,7 +10,9 @@ use super::reference::{
     NormalizedReferenceBinding, NormalizedReferenceInterpreter, NormalizedReferenceOwnerRead,
     NormalizedReferenceRead,
 };
-use super::runner::{run_graph_tests, run_pure_command};
+use super::runner::{
+    NormalizedCommandPolicy, run_effectful_command, run_graph_tests, run_pure_command,
+};
 use super::value::NormalizedValue;
 use super::vm::{NormalizedRunPolicy, NormalizedVm};
 use crate::platform::compiler::{OptimizationPolicy, build_clean, link_artifact, load_artifact};
@@ -673,14 +675,17 @@ fn normalized_runners_execute_pure_commands_and_graph_owned_tests_differentially
     let control = ExecutionControl::uncancelled();
     let policy = NormalizedRunPolicy::default();
     let json_limits = JsonLimits::default();
+    let command_policy = NormalizedCommandPolicy {
+        execution: policy,
+        json: json_limits,
+    };
     assert_eq!(
         run_pure_command(
             &effectful_snapshot,
             &effectful_program,
             &Name::new("command").unwrap(),
             b"[]",
-            policy,
-            json_limits,
+            command_policy,
             &control,
         )
         .expect_err("effectful command must not run twice against live grants")
@@ -695,8 +700,7 @@ fn normalized_runners_execute_pure_commands_and_graph_owned_tests_differentially
         &program,
         &Name::new("pure").unwrap(),
         b"[]",
-        policy,
-        json_limits,
+        command_policy,
         &control,
     )
     .expect("pure command runs through both execution tiers");
@@ -713,8 +717,7 @@ fn normalized_runners_execute_pure_commands_and_graph_owned_tests_differentially
             &program,
             &Name::new("pure").unwrap(),
             b"[null]",
-            policy,
-            json_limits,
+            command_policy,
             &control,
         )
         .expect_err("command argument arity is exact")
@@ -745,8 +748,7 @@ fn normalized_reference_runner_uses_revision_pinned_owner_reads() {
         &program,
         &Name::new("pure").unwrap(),
         b"[]",
-        NormalizedRunPolicy::default(),
-        JsonLimits::default(),
+        NormalizedCommandPolicy::default(),
         &control,
     )
     .expect("revision-pinned pure command");
@@ -777,20 +779,74 @@ fn normalized_reference_runner_uses_revision_pinned_owner_reads() {
     assert_eq!(tests.revision, Some(view.revision()));
     assert_eq!(tests.passed, 1);
 
+    let (capabilities, calls) = bind_fixture_capability(&program, 1);
+    let effectful = run_effectful_command(
+        &view,
+        &program,
+        &Name::new("command").unwrap(),
+        b"[]",
+        &capabilities,
+        NormalizedCommandPolicy::default(),
+        &control,
+    )
+    .expect("effectful command runs once through production");
+    assert_eq!(effectful.revision, Some(view.revision()));
+    assert_eq!(effectful.result_json, b"null");
+    assert_eq!(effectful.production.capability_calls, 1);
+    assert_eq!(effectful.verification, "production_only_live_effects");
+    assert_eq!(calls.load(Ordering::Relaxed), 1);
+
+    let pure_target = program
+        .root_target(&Name::new("pure").unwrap())
+        .expect("pure fixture target");
+    let pure_capabilities =
+        NormalizedCapabilities::bind(&program, pure_target.component, Vec::new())
+            .expect("empty grants bind the pure component");
     assert_eq!(
-        run_pure_command(
-            &WrongRevisionReader(&view),
+        run_effectful_command(
+            &view,
+            &program,
+            &Name::new("command").unwrap(),
+            b"[]",
+            &pure_capabilities,
+            NormalizedCommandPolicy::default(),
+            &control,
+        )
+        .expect_err("grants for another component must reject")
+        .code,
+        "normalized_runner_grant_component"
+    );
+    assert_eq!(
+        run_effectful_command(
+            &view,
             &program,
             &Name::new("pure").unwrap(),
             b"[]",
-            NormalizedRunPolicy::default(),
-            JsonLimits::default(),
+            &pure_capabilities,
+            NormalizedCommandPolicy::default(),
             &control,
         )
-        .expect_err("foreign revision binding must reject before reference evaluation")
+        .expect_err("pure targets require differential execution")
+        .code,
+        "normalized_runner_pure_target"
+    );
+
+    let (stale_capabilities, stale_calls) = bind_fixture_capability(&program, 1);
+    assert_eq!(
+        run_effectful_command(
+            &WrongRevisionReader(&view),
+            &program,
+            &Name::new("command").unwrap(),
+            b"[]",
+            &stale_capabilities,
+            NormalizedCommandPolicy::default(),
+            &control,
+        )
+        .expect_err("foreign revision binding must reject before production effects")
         .code,
         "normalized_reference_authority_binding"
     );
+    assert_eq!(stale_calls.load(Ordering::Relaxed), 0);
 }
 
 #[test]

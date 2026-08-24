@@ -64,6 +64,7 @@ impl std::fmt::Debug for NormalizedCapabilityGrant {
 
 #[derive(Clone)]
 pub struct NormalizedCapabilities {
+    component: super::value::ComponentIndex,
     bindings: Arc<BTreeMap<RequirementIndex, BoundNormalizedCapability>>,
     exact_bindings: Arc<BTreeMap<RequirementReference, BoundNormalizedCapability>>,
 }
@@ -72,6 +73,7 @@ impl std::fmt::Debug for NormalizedCapabilities {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("NormalizedCapabilities")
+            .field("component", &self.component)
             .field("requirements", &self.bindings.keys().collect::<Vec<_>>())
             .finish_non_exhaustive()
     }
@@ -91,6 +93,7 @@ impl NormalizedCapabilities {
         component: super::value::ComponentIndex,
         grants: Vec<NormalizedCapabilityGrant>,
     ) -> Result<Self, ExecutionError> {
+        let component_index = component;
         let component = program
             .components
             .get(component.0 as usize)
@@ -176,9 +179,14 @@ impl NormalizedCapabilities {
             ));
         }
         Ok(Self {
+            component: component_index,
             bindings: Arc::new(bindings),
             exact_bindings: Arc::new(exact_bindings),
         })
+    }
+
+    pub(crate) const fn component(&self) -> super::value::ComponentIndex {
+        self.component
     }
 
     pub(crate) fn requires(&self, requirement: RequirementIndex) -> bool {
