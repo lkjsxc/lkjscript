@@ -7,15 +7,24 @@ use super::value::{NormalizedMapKey, NormalizedRecord, NormalizedValue};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::{ExecutionError, ExecutionFailureClass};
 use crate::platform::http::{
-    HttpDispatchObservation, HttpHeader, HttpLimits, HttpRequest, HttpResponse,
-    decode_query_parameters, validate_request,
+    HTTP_ADAPTER_CONTRACT_VERSION, HttpDispatchObservation, HttpHeader, HttpLimits, HttpRequest,
+    HttpResponse, HttpServerReceipt, decode_live_request, decode_query_parameters,
+    encode_live_response, execution_error_status, finish_request_body_pump, pump_request_body,
+    safe_error_response, static_response, validate_request,
 };
 use crate::platform::kernel::{
     Name, RequirementReference, StructuralTypeField, TypeForm, TypeObjectInterner,
 };
 use crate::platform::package::RunnerKind;
+use axum::Router;
+use axum::body::Body;
+use axum::extract::State;
+use axum::http::{Request, Response, StatusCode};
 use std::collections::BTreeMap;
+use std::future::Future;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::net::TcpListener;
 
 #[derive(Clone)]
 pub(crate) struct NormalizedHttpApplication {
@@ -122,8 +131,131 @@ impl NormalizedHttpApplication {
         ))
     }
 
+    pub(crate) fn router(self) -> Router {
+        Router::new()
+            .fallback(normalized_live_handler)
+            .with_state(Arc::new(self))
+    }
+
+    pub(crate) async fn serve(
+        self,
+        listener: TcpListener,
+        shutdown: impl Future<Output = ()> + Send + 'static,
+    ) -> Result<HttpServerReceipt, Diagnostic> {
+        let local_address = listener.local_addr().map_err(|error| {
+            http_io(
+                "normalized_http_listener_address",
+                format!("normalized HTTP listener address failed: {error}"),
+            )
+        })?;
+        let resident = self.resident.clone();
+        axum::serve(listener, self.router())
+            .with_graceful_shutdown(shutdown)
+            .await
+            .map_err(|error| {
+                http_io(
+                    "normalized_http_serve",
+                    format!("normalized HTTP server failed: {error}"),
+                )
+            })?;
+        let shutdown = resident.shutdown().await;
+        if shutdown.remaining_tasks != 0 || !shutdown.cleanup_failures.is_empty() {
+            return Err(http_io(
+                "normalized_http_shutdown_incomplete",
+                format!(
+                    "{} resident tasks and {} cleanup failures remained after normalized HTTP shutdown",
+                    shutdown.remaining_tasks,
+                    shutdown.cleanup_failures.len()
+                ),
+            ));
+        }
+        Ok(HttpServerReceipt {
+            contract_version: HTTP_ADAPTER_CONTRACT_VERSION,
+            local_address: local_address.to_string(),
+            accepted_at_transport: true,
+            shutdown,
+        })
+    }
+
     pub(crate) fn resident(&self) -> &NormalizedResidentDeployment {
         &self.resident
+    }
+}
+
+async fn normalized_live_handler(
+    State(application): State<Arc<NormalizedHttpApplication>>,
+    request: Request<Body>,
+) -> Response<Body> {
+    let method_is_head = request.method() == axum::http::Method::HEAD;
+    let (request, body) = match decode_live_request(request, &application.limits) {
+        Ok(request) => request,
+        Err(response) => return response,
+    };
+    let query_parameters = match decode_query_parameters(&request.query) {
+        Ok(parameters) => parameters,
+        Err(error) => return safe_error_response(&error, StatusCode::BAD_REQUEST),
+    };
+    let maximum_body_bytes = match u64::try_from(application.limits.maximum_request_body_bytes) {
+        Ok(value) => value,
+        Err(_) => {
+            return static_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "HTTP request body limit is not representable",
+            );
+        }
+    };
+    let resources = match NormalizedResourceScope::new() {
+        Ok(resources) => resources,
+        Err(error) => return safe_error_response(&error, StatusCode::SERVICE_UNAVAILABLE),
+    };
+    let (body_value, producer) = match application.resident.deployment().register_pipe_stream(
+        application.stream_requirement,
+        &resources,
+        maximum_body_bytes,
+    ) {
+        Ok(stream) => stream,
+        Err(error) => return safe_error_response(&error, StatusCode::SERVICE_UNAVAILABLE),
+    };
+    let request = match request_value(request, query_parameters, body_value) {
+        Ok(request) => request,
+        Err(error) => return safe_error_response(&error, StatusCode::INTERNAL_SERVER_ERROR),
+    };
+    let chunk_bytes = application
+        .resident
+        .deployment()
+        .observation()
+        .resources
+        .streams
+        .maximum_chunk_bytes;
+    let deadline = Instant::now()
+        .checked_add(Duration::from_millis(
+            application.resident.limits().request_deadline_milliseconds,
+        ))
+        .unwrap_or_else(Instant::now);
+    let pump = tokio::spawn(pump_request_body(
+        body,
+        producer,
+        maximum_body_bytes,
+        chunk_bytes,
+    ));
+    let outcome = application
+        .resident
+        .invoke_scoped(resources, vec![request])
+        .await
+        .and_then(|receipt| response_value(receipt.value, &application.limits));
+    if let Err(response) = finish_request_body_pump(pump, deadline).await {
+        return response;
+    }
+    match outcome {
+        Ok(mut response) => {
+            if method_is_head {
+                response.body.clear();
+            }
+            encode_live_response(response).unwrap_or_else(|error| {
+                safe_error_response(&error, StatusCode::INTERNAL_SERVER_ERROR)
+            })
+        }
+        Err(error) => safe_error_response(&error, execution_error_status(&error)),
     }
 }
 
@@ -384,4 +516,8 @@ fn http_diagnostic(code: &'static str, message: &'static str) -> Diagnostic {
 
 fn http_corrupt(code: &'static str, message: &'static str) -> Diagnostic {
     Diagnostic::new(DiagnosticClass::Corrupt, code, message)
+}
+
+fn http_io(code: &'static str, message: String) -> Diagnostic {
+    Diagnostic::new(DiagnosticClass::Infrastructure, code, message)
 }

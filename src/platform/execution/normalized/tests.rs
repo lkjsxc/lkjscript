@@ -44,9 +44,12 @@ use crate::platform::semantic_id::{
 };
 use crate::platform::stream::{StreamLimits, StreamRegistry};
 use crate::platform::{HttpHeader, HttpLimits, HttpRequest, ResidentLimits};
+use axum::body::{Body, to_bytes};
+use axum::http::Request;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use tower::ServiceExt;
 
 fn declaration_named(
     snapshot: &crate::platform::kernel::KernelSnapshot,
@@ -1666,7 +1669,41 @@ async fn normalized_http_dispatch_uses_exact_body_resources_and_resident_admissi
         "http_query_decode"
     );
     assert_eq!(application.resident().observe().admitted, 1);
-    assert_eq!(application.resident().shutdown().await.remaining_tasks, 0);
+
+    let live_response = application
+        .clone()
+        .router()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/live?tag=transport")
+                .header("content-type", "application/octet-stream")
+                .body(Body::from("live-body"))
+                .expect("live normalized HTTP request"),
+        )
+        .await
+        .expect("live normalized HTTP response");
+    assert_eq!(live_response.status(), axum::http::StatusCode::OK);
+    assert_eq!(
+        to_bytes(live_response.into_body(), 64)
+            .await
+            .expect("bounded live normalized HTTP body"),
+        "live-body"
+    );
+    assert_eq!(application.resident().observe().admitted, 2);
+    assert_eq!(application.resident().deployment().live_streams(), 0);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("normalized HTTP listener");
+    let server = application
+        .clone()
+        .serve(listener, async {})
+        .await
+        .expect("normalized HTTP graceful shutdown");
+    assert!(server.accepted_at_transport);
+    assert!(server.shutdown.admission_stopped);
+    assert!(server.shutdown.drained_before_cancellation);
+    assert_eq!(server.shutdown.remaining_tasks, 0);
 }
 
 #[test]

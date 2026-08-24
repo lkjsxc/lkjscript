@@ -5,7 +5,7 @@ use super::execution::{ExecutionError, ExecutionFailureClass};
 use super::package::RunnerKind;
 use super::runtime::{ResidentDeployment, ShutdownReceipt};
 use super::semantic::{ResolvedField, ResolvedType};
-use super::stream::{StreamLease, StreamRegistry};
+use super::stream::{ByteStreamProducer, StreamLease, StreamRegistry};
 use super::value::{MapKey, Value};
 use axum::Router;
 use axum::body::Body;
@@ -277,88 +277,16 @@ async fn live_handler(
                 .request_deadline_milliseconds,
         ))
         .unwrap_or_else(Instant::now);
-    let mut pump = tokio::spawn(async move {
-        let mut body = body.into_data_stream();
-        let mut total = 0u64;
-        let mut consumer_closed = false;
-        while let Some(chunk) = body.next().await {
-            let chunk = match chunk {
-                Ok(chunk) => chunk,
-                Err(_) => {
-                    let error = ExecutionError::new(
-                        ExecutionFailureClass::Capability,
-                        "http_request_body_transport",
-                        "HTTP request body transport failed",
-                    );
-                    producer.fail(error.clone());
-                    return Err(error);
-                }
-            };
-            let length = u64::try_from(chunk.len()).map_err(|_| {
-                ExecutionError::resource(
-                    "http_request_body_limit",
-                    "HTTP request body chunk length is not representable",
-                )
-            })?;
-            total = total.checked_add(length).ok_or_else(|| {
-                ExecutionError::resource(
-                    "http_request_body_limit",
-                    "HTTP request body byte accounting overflowed",
-                )
-            })?;
-            if total > maximum_body_bytes {
-                let error = ExecutionError::resource(
-                    "http_request_body_limit",
-                    "HTTP request body exceeds the configured bytes",
-                );
-                producer.fail(error.clone());
-                return Err(error);
-            }
-            if consumer_closed {
-                continue;
-            }
-            for part in chunk.chunks(chunk_bytes) {
-                if let Err(error) = producer.push(part.to_vec()).await {
-                    if error.code == "stream_consumer_closed" {
-                        consumer_closed = true;
-                        break;
-                    }
-                    producer.fail(error.clone());
-                    return Err(error);
-                }
-            }
-        }
-        if !consumer_closed {
-            producer.finish();
-        }
-        Ok(())
-    });
+    let pump = tokio::spawn(pump_request_body(
+        body,
+        producer,
+        maximum_body_bytes,
+        chunk_bytes,
+    ));
     let outcome = application.dispatch_stream(request, &lease).await;
     drop(lease);
-    let remaining = deadline.saturating_duration_since(Instant::now());
-    let pump_outcome = tokio::time::timeout(remaining, &mut pump).await;
-    match pump_outcome {
-        Ok(Ok(Ok(()))) => {}
-        Ok(Ok(Err(error))) if error.code == "http_request_body_limit" => {
-            return safe_error_response(&error, StatusCode::PAYLOAD_TOO_LARGE);
-        }
-        Ok(Ok(Err(error))) => {
-            return safe_error_response(&error, StatusCode::BAD_REQUEST);
-        }
-        Ok(Err(_)) => {
-            return static_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "request body task terminated unexpectedly",
-            );
-        }
-        Err(_) => {
-            pump.abort();
-            let _ = pump.await;
-            return static_response(
-                StatusCode::REQUEST_TIMEOUT,
-                "request body deadline exceeded",
-            );
-        }
+    if let Err(response) = finish_request_body_pump(pump, deadline).await {
+        return response;
     }
     match outcome {
         Ok((mut response, _)) => {
@@ -369,21 +297,106 @@ async fn live_handler(
                 safe_error_response(&error, StatusCode::INTERNAL_SERVER_ERROR)
             })
         }
-        Err(error) => {
-            let status = match error.code.as_str() {
-                "http_query_decode" => StatusCode::BAD_REQUEST,
-                "resident_overloaded" => StatusCode::SERVICE_UNAVAILABLE,
-                "execution_deadline" | "execution_cancelled" | "resident_shutting_down" => {
-                    StatusCode::SERVICE_UNAVAILABLE
+        Err(error) => safe_error_response(&error, execution_error_status(&error)),
+    }
+}
+
+pub(crate) async fn pump_request_body(
+    body: Body,
+    producer: ByteStreamProducer,
+    maximum_body_bytes: u64,
+    chunk_bytes: usize,
+) -> Result<(), ExecutionError> {
+    if chunk_bytes == 0 {
+        return Err(ExecutionError::new(
+            ExecutionFailureClass::Infrastructure,
+            "http_stream_chunk_limit",
+            "HTTP body pump received a zero stream chunk bound",
+        ));
+    }
+    let mut body = body.into_data_stream();
+    let mut total = 0u64;
+    let mut consumer_closed = false;
+    while let Some(chunk) = body.next().await {
+        let chunk = match chunk {
+            Ok(chunk) => chunk,
+            Err(_) => {
+                let error = ExecutionError::new(
+                    ExecutionFailureClass::Capability,
+                    "http_request_body_transport",
+                    "HTTP request body transport failed",
+                );
+                producer.fail(error.clone());
+                return Err(error);
+            }
+        };
+        let length = u64::try_from(chunk.len()).map_err(|_| {
+            ExecutionError::resource(
+                "http_request_body_limit",
+                "HTTP request body chunk length is not representable",
+            )
+        })?;
+        total = total.checked_add(length).ok_or_else(|| {
+            ExecutionError::resource(
+                "http_request_body_limit",
+                "HTTP request body byte accounting overflowed",
+            )
+        })?;
+        if total > maximum_body_bytes {
+            let error = ExecutionError::resource(
+                "http_request_body_limit",
+                "HTTP request body exceeds the configured bytes",
+            );
+            producer.fail(error.clone());
+            return Err(error);
+        }
+        if consumer_closed {
+            continue;
+        }
+        for part in chunk.chunks(chunk_bytes) {
+            if let Err(error) = producer.push(part.to_vec()).await {
+                if error.code == "stream_consumer_closed" {
+                    consumer_closed = true;
+                    break;
                 }
-                _ => StatusCode::INTERNAL_SERVER_ERROR,
-            };
-            safe_error_response(&error, status)
+                producer.fail(error.clone());
+                return Err(error);
+            }
+        }
+    }
+    if !consumer_closed {
+        producer.finish();
+    }
+    Ok(())
+}
+
+pub(crate) async fn finish_request_body_pump(
+    mut pump: tokio::task::JoinHandle<Result<(), ExecutionError>>,
+    deadline: Instant,
+) -> Result<(), Response<Body>> {
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    match tokio::time::timeout(remaining, &mut pump).await {
+        Ok(Ok(Ok(()))) => Ok(()),
+        Ok(Ok(Err(error))) if error.code == "http_request_body_limit" => {
+            Err(safe_error_response(&error, StatusCode::PAYLOAD_TOO_LARGE))
+        }
+        Ok(Ok(Err(error))) => Err(safe_error_response(&error, StatusCode::BAD_REQUEST)),
+        Ok(Err(_)) => Err(static_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "request body task terminated unexpectedly",
+        )),
+        Err(_) => {
+            pump.abort();
+            let _ = pump.await;
+            Err(static_response(
+                StatusCode::REQUEST_TIMEOUT,
+                "request body deadline exceeded",
+            ))
         }
     }
 }
 
-fn decode_live_request(
+pub(crate) fn decode_live_request(
     request: Request<Body>,
     limits: &HttpLimits,
 ) -> Result<(HttpRequest, Body), Response<Body>> {
@@ -446,7 +459,9 @@ fn decode_live_request(
     ))
 }
 
-fn encode_live_response(response: HttpResponse) -> Result<Response<Body>, ExecutionError> {
+pub(crate) fn encode_live_response(
+    response: HttpResponse,
+) -> Result<Response<Body>, ExecutionError> {
     let status = StatusCode::from_u16(response.status).map_err(|_| {
         protocol_error(
             "http_response_status",
@@ -846,7 +861,18 @@ fn is_transport_owned_header(name: &HeaderName) -> bool {
     )
 }
 
-fn safe_error_response(error: &ExecutionError, status: StatusCode) -> Response<Body> {
+pub(crate) fn execution_error_status(error: &ExecutionError) -> StatusCode {
+    match error.code.as_str() {
+        "http_query_decode" => StatusCode::BAD_REQUEST,
+        "resident_overloaded" => StatusCode::SERVICE_UNAVAILABLE,
+        "execution_deadline" | "execution_cancelled" | "resident_shutting_down" => {
+            StatusCode::SERVICE_UNAVAILABLE
+        }
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
+pub(crate) fn safe_error_response(error: &ExecutionError, status: StatusCode) -> Response<Body> {
     let message = match error.class {
         ExecutionFailureClass::Resource => "request resource limit reached",
         ExecutionFailureClass::Cancelled => "request cancelled",
@@ -877,7 +903,7 @@ fn safe_error_response(error: &ExecutionError, status: StatusCode) -> Response<B
     response
 }
 
-fn static_response(status: StatusCode, message: &'static str) -> Response<Body> {
+pub(crate) fn static_response(status: StatusCode, message: &'static str) -> Response<Body> {
     Response::builder()
         .status(status)
         .header(CONTENT_TYPE, "text/plain; charset=utf-8")
