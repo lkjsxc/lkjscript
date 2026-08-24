@@ -1,8 +1,8 @@
 //! Focused normalized artifact-preparation and dense-execution tests.
 
 use super::capability::{
-    NormalizedCapabilities, NormalizedCapabilityAdapter, NormalizedCapabilityGrant,
-    NormalizedCapabilityTransaction,
+    NormalizedCallPolicy, NormalizedCapabilities, NormalizedCapabilityAdapter,
+    NormalizedCapabilityGrant, NormalizedCapabilityTransaction, NormalizedTransactionPolicy,
 };
 use super::codec::{decode_typed, encode_typed};
 use super::prepare::{NormalizedFunctionBody, NormalizedInstruction, NormalizedProgram};
@@ -20,15 +20,15 @@ use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFail
 use crate::platform::json::JsonLimits;
 use crate::platform::kernel::{
     DeclarationPayload, DeclarationRecord, DeclarationReference, DeclarationVisibility,
-    ExpressionOperation, Name, OperationReference, OwnerHeader, OwnerKey, OwnerKind, OwnerRecord,
-    PortImplementation, PortRecord, PortReference, StructuralTypeField, TargetRecord, TypeForm,
-    TypeObject, TypeObjectDigest, encode_type_object,
+    ExpressionOperation, ExternalVisibility, Idempotency, Name, OwnerHeader, OwnerKey, OwnerKind,
+    OwnerRecord, PortImplementation, PortRecord, PortReference, ResourceLimit, ResourceUnit,
+    StructuralTypeField, TargetRecord, TypeForm, TypeObject, TypeObjectDigest, encode_type_object,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::publication::{GraphRepository, RepositoryView};
 use crate::platform::semantic_id::{DeclarationId, PortId, RevisionId, TargetId};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 
 fn declaration_named(
     snapshot: &crate::platform::kernel::KernelSnapshot,
@@ -196,7 +196,7 @@ impl NormalizedCapabilityAdapter for UnitAdapter {
 
     fn call(
         &self,
-        _operation: OperationReference,
+        _policy: &NormalizedCallPolicy,
         _arguments: Vec<NormalizedValue>,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
@@ -207,6 +207,7 @@ impl NormalizedCapabilityAdapter for UnitAdapter {
 
     fn begin_transaction(
         &self,
+        _policy: &NormalizedTransactionPolicy,
         control: &ExecutionControl,
     ) -> Result<Box<dyn NormalizedCapabilityTransaction>, ExecutionError> {
         control.check()?;
@@ -219,7 +220,7 @@ struct UnitTransaction;
 impl NormalizedCapabilityTransaction for UnitTransaction {
     fn call(
         &mut self,
-        _operation: OperationReference,
+        _policy: &NormalizedCallPolicy,
         _arguments: Vec<NormalizedValue>,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
@@ -242,6 +243,8 @@ struct TransactionStats {
     calls: AtomicU64,
     commits: AtomicU64,
     rollbacks: AtomicU64,
+    call_policies: Mutex<Vec<NormalizedCallPolicy>>,
+    transaction_policies: Mutex<Vec<NormalizedTransactionPolicy>>,
 }
 
 #[derive(Clone)]
@@ -258,20 +261,31 @@ impl NormalizedCapabilityAdapter for TrackingAdapter {
 
     fn call(
         &self,
-        _operation: OperationReference,
+        policy: &NormalizedCallPolicy,
         _arguments: Vec<NormalizedValue>,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
         control.check()?;
+        self.stats
+            .call_policies
+            .lock()
+            .expect("tracking call policy lock")
+            .push(policy.clone());
         Ok(NormalizedValue::Unit)
     }
 
     fn begin_transaction(
         &self,
+        policy: &NormalizedTransactionPolicy,
         control: &ExecutionControl,
     ) -> Result<Box<dyn NormalizedCapabilityTransaction>, ExecutionError> {
         control.check()?;
         self.stats.begins.fetch_add(1, Ordering::Relaxed);
+        self.stats
+            .transaction_policies
+            .lock()
+            .expect("tracking transaction policy lock")
+            .push(policy.clone());
         Ok(Box::new(TrackingTransaction {
             stats: Arc::clone(&self.stats),
             fail_call: self.fail_transaction_call,
@@ -287,12 +301,17 @@ struct TrackingTransaction {
 impl NormalizedCapabilityTransaction for TrackingTransaction {
     fn call(
         &mut self,
-        _operation: OperationReference,
+        policy: &NormalizedCallPolicy,
         _arguments: Vec<NormalizedValue>,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
         control.check()?;
         self.stats.calls.fetch_add(1, Ordering::Relaxed);
+        self.stats
+            .call_policies
+            .lock()
+            .expect("tracking transaction call policy lock")
+            .push(policy.clone());
         if self.fail_call {
             Err(ExecutionError::new(
                 ExecutionFailureClass::PossibleVisibility,
@@ -379,7 +398,9 @@ fn bind_tracking_capability(
     )
 }
 
-fn transaction_call_snapshot() -> crate::platform::kernel::KernelSnapshot {
+fn transaction_call_snapshot(
+    external_visibility: ExternalVisibility,
+) -> crate::platform::kernel::KernelSnapshot {
     let mut snapshot = crate::platform::compiler::tests::complete_expression_snapshot();
     let (body, requirement) = snapshot
         .owners
@@ -405,6 +426,26 @@ fn transaction_call_snapshot() -> crate::platform::kernel::KernelSnapshot {
             _ => None,
         })
         .expect("coverage capability operation");
+    let OwnerRecord::Operation(operation_record) = snapshot
+        .owners
+        .get_mut(&OwnerKey::Operation(operation.operation))
+        .expect("coverage operation owner")
+    else {
+        panic!("coverage operation owner kind")
+    };
+    operation_record.external_visibility = external_visibility;
+    let OwnerRecord::Requirement(requirement_record) = snapshot
+        .owners
+        .get_mut(&OwnerKey::Requirement(requirement.requirement))
+        .expect("coverage requirement owner")
+    else {
+        panic!("coverage requirement owner kind")
+    };
+    requirement_record.limits = vec![ResourceLimit {
+        name: Name::new("maximum_input_bytes").unwrap(),
+        maximum: 64,
+        unit: ResourceUnit::Bytes,
+    }];
     let OwnerRecord::Expression(body) = snapshot
         .owners
         .get_mut(&OwnerKey::Expression(body))
@@ -1085,7 +1126,7 @@ fn both_graph5_execution_tiers_commit_and_rollback_exact_transactions() {
     assert_eq!(stats.commits.load(Ordering::Relaxed), 2);
     assert_eq!(stats.rollbacks.load(Ordering::Relaxed), 0);
 
-    let failing_snapshot = transaction_call_snapshot();
+    let failing_snapshot = transaction_call_snapshot(ExternalVisibility::Possible);
     let failing_program = prepare_snapshot(&failing_snapshot);
     let failing_caller = declaration_named(&failing_snapshot, "caller");
     let (failing_capabilities, failing_stats) = bind_tracking_capability(&failing_program, 3, true);
@@ -1113,6 +1154,66 @@ fn both_graph5_execution_tiers_commit_and_rollback_exact_transactions() {
     assert_eq!(failing_stats.calls.load(Ordering::Relaxed), 2);
     assert_eq!(failing_stats.commits.load(Ordering::Relaxed), 0);
     assert_eq!(failing_stats.rollbacks.load(Ordering::Relaxed), 2);
+
+    let requirement = &failing_program.requirements[0];
+    let operation = &failing_program.operations[requirement.operations[0].0 as usize];
+    let expected_limits: Arc<[ResourceLimit]> = vec![ResourceLimit {
+        name: Name::new("maximum_input_bytes").unwrap(),
+        maximum: 64,
+        unit: ResourceUnit::Bytes,
+    }]
+    .into();
+    let expected_call_policy = NormalizedCallPolicy {
+        requirement: requirement.reference,
+        requirement_name: Name::new("store").unwrap(),
+        interface: requirement.interface,
+        operation: operation.reference,
+        operation_name: Name::new("read").unwrap(),
+        idempotency: Idempotency::Idempotent,
+        external_visibility: ExternalVisibility::Possible,
+        requirement_limits: Arc::clone(&expected_limits),
+    };
+    assert_eq!(
+        *failing_stats
+            .call_policies
+            .lock()
+            .expect("recorded call policies"),
+        vec![expected_call_policy; 2]
+    );
+    let expected_transaction_policy = NormalizedTransactionPolicy {
+        requirement: requirement.reference,
+        requirement_name: Name::new("store").unwrap(),
+        interface: requirement.interface,
+        requirement_limits: expected_limits,
+    };
+    assert_eq!(
+        *failing_stats
+            .transaction_policies
+            .lock()
+            .expect("recorded transaction policies"),
+        vec![expected_transaction_policy; 2]
+    );
+
+    let forbidden_snapshot = transaction_call_snapshot(ExternalVisibility::None);
+    let forbidden_program = prepare_snapshot(&forbidden_snapshot);
+    let forbidden_caller = declaration_named(&forbidden_snapshot, "caller");
+    let (forbidden_capabilities, forbidden_stats) =
+        bind_tracking_capability(&forbidden_program, 3, true);
+    let forbidden_error = NormalizedVm::new(&forbidden_program, policy)
+        .invoke(
+            forbidden_caller,
+            Vec::new(),
+            Some(&forbidden_capabilities),
+            &control,
+        )
+        .expect_err("forbidden possible visibility must become an adapter-contract failure");
+    assert_eq!(forbidden_error.class, ExecutionFailureClass::Infrastructure);
+    assert_eq!(
+        forbidden_error.code,
+        "normalized_capability_visibility_contract"
+    );
+    assert!(!forbidden_error.possibly_visible);
+    assert_eq!(forbidden_stats.rollbacks.load(Ordering::Relaxed), 1);
 }
 
 #[test]

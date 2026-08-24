@@ -1,6 +1,8 @@
 //! Bounded dense-index virtual machine for normalized Graph 5 compiler units.
 
-use super::capability::{NormalizedCapabilities, NormalizedCapabilityTransaction};
+use super::capability::{
+    NormalizedCapabilities, NormalizedCapabilityTransaction, validate_outcome,
+};
 use super::prepare::{
     NormalizedCode, NormalizedEntryPoint, NormalizedFieldSelector, NormalizedFunctionBody,
     NormalizedInstruction, NormalizedProgram,
@@ -467,20 +469,14 @@ impl Machine<'_> {
                     let arguments = self.pop_many(arguments as usize)?;
                     self.charge_capability_call(requirement)?;
                     let value = if let Some(transaction) = self.transactions.get_mut(&requirement) {
-                        let operation = self
-                            .program
-                            .operations
-                            .get(operation.0 as usize)
-                            .ok_or_else(|| {
-                                runtime_error(
-                                    "normalized_operation_index",
-                                    "normalized operation index escaped the prepared table",
-                                )
-                            })?
-                            .reference;
-                        transaction
+                        let policy = self
+                            .capabilities
+                            .ok_or_else(capabilities_unbound)?
+                            .call_policy(self.program, requirement, operation)?;
+                        let result = transaction
                             .transaction
-                            .call(operation, arguments, self.control)?
+                            .call(&policy, arguments, self.control);
+                        validate_outcome(&policy, result)?
                     } else {
                         self.capabilities.ok_or_else(capabilities_unbound)?.call(
                             self.program,
@@ -527,7 +523,7 @@ impl Machine<'_> {
                     let transaction = self
                         .capabilities
                         .ok_or_else(capabilities_unbound)?
-                        .begin_transaction(requirement, self.control)?;
+                        .begin_transaction(self.program, requirement, self.control)?;
                     self.next_transaction = next_generation;
                     self.set_local(binding, Some(NormalizedValue::Unit))?;
                     self.transactions.insert(

@@ -1,6 +1,8 @@
 //! Implementation-disjoint evaluator over canonical Graph 5 owner and expression records.
 
-use super::capability::{NormalizedCapabilities, NormalizedCapabilityTransaction};
+use super::capability::{
+    NormalizedCapabilities, NormalizedCapabilityTransaction, validate_outcome,
+};
 use super::prepare::NormalizedProgram;
 use super::value::{
     FunctionIndex, NormalizedMapKey, NormalizedRecord, NormalizedValue, RecordLayoutIndex,
@@ -1013,13 +1015,24 @@ impl ReferenceState<'_> {
     ) -> Result<NormalizedValue, ExecutionError> {
         self.charge_capability_call(requirement)?;
         let value = if let Some(transaction) = self.transactions.get_mut(&requirement) {
-            transaction
+            let policy = self
+                .capabilities
+                .ok_or_else(reference_capabilities_unbound)?
+                .call_policy_exact(self.program, requirement, operation)?;
+            let result = transaction
                 .transaction
-                .call(operation, arguments, self.control)?
+                .call(&policy, arguments, self.control);
+            validate_outcome(&policy, result)?
         } else {
             self.capabilities
                 .ok_or_else(reference_capabilities_unbound)?
-                .call_exact(requirement, operation, arguments, self.control)?
+                .call_exact(
+                    self.program,
+                    requirement,
+                    operation,
+                    arguments,
+                    self.control,
+                )?
         };
         self.charge_value(&value)?;
         Ok(value)
@@ -1057,7 +1070,7 @@ impl ReferenceState<'_> {
         let transaction = self
             .capabilities
             .ok_or_else(reference_capabilities_unbound)?
-            .begin_transaction_exact(requirement, self.control)?;
+            .begin_transaction_exact(self.program, requirement, self.control)?;
         self.next_transaction = next_generation;
         debug_assert!(locals.insert(local, NormalizedValue::Unit).is_none());
         self.transactions.insert(

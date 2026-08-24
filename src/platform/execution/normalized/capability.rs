@@ -3,22 +3,46 @@
 use super::prepare::NormalizedProgram;
 use super::value::{NormalizedValue, OperationIndex, RequirementIndex};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
-use crate::platform::kernel::{DeclarationReference, OperationReference, RequirementReference};
+use crate::platform::kernel::{
+    DeclarationReference, ExternalVisibility, Idempotency, Name, OperationReference,
+    RequirementReference, ResourceLimit,
+};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NormalizedCallPolicy {
+    pub requirement: RequirementReference,
+    pub requirement_name: Name,
+    pub interface: DeclarationReference,
+    pub operation: OperationReference,
+    pub operation_name: Name,
+    pub idempotency: Idempotency,
+    pub external_visibility: ExternalVisibility,
+    pub requirement_limits: Arc<[ResourceLimit]>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NormalizedTransactionPolicy {
+    pub requirement: RequirementReference,
+    pub requirement_name: Name,
+    pub interface: DeclarationReference,
+    pub requirement_limits: Arc<[ResourceLimit]>,
+}
 
 pub trait NormalizedCapabilityAdapter: Send + Sync {
     fn interface(&self) -> DeclarationReference;
 
     fn call(
         &self,
-        operation: OperationReference,
+        policy: &NormalizedCallPolicy,
         arguments: Vec<NormalizedValue>,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError>;
 
     fn begin_transaction(
         &self,
+        _policy: &NormalizedTransactionPolicy,
         _control: &ExecutionControl,
     ) -> Result<Box<dyn NormalizedCapabilityTransaction>, ExecutionError> {
         Err(ExecutionError::new(
@@ -32,7 +56,7 @@ pub trait NormalizedCapabilityAdapter: Send + Sync {
 pub trait NormalizedCapabilityTransaction: Send {
     fn call(
         &mut self,
-        operation: OperationReference,
+        policy: &NormalizedCallPolicy,
         arguments: Vec<NormalizedValue>,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError>;
@@ -209,34 +233,24 @@ impl NormalizedCapabilities {
         arguments: Vec<NormalizedValue>,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
-        let binding = self.binding(requirement)?;
-        if !binding.operations.contains(&operation) {
-            return Err(capability_error(
-                "normalized_capability_operation",
-                "execution requested an operation outside the exact deployment grant",
-            ));
-        }
-        let operation = program
-            .operations
-            .get(operation.0 as usize)
-            .ok_or_else(|| {
-                capability_error(
-                    "normalized_capability_operation_index",
-                    "prepared capability operation index is outside the artifact table",
-                )
-            })?
-            .reference;
-        binding.adapter.call(operation, arguments, control)
+        let policy = self.call_policy(program, requirement, operation)?;
+        let result = self
+            .binding(requirement)?
+            .adapter
+            .call(&policy, arguments, control);
+        validate_outcome(&policy, result)
     }
 
     pub(crate) fn begin_transaction(
         &self,
+        program: &NormalizedProgram,
         requirement: RequirementIndex,
         control: &ExecutionControl,
     ) -> Result<Box<dyn NormalizedCapabilityTransaction>, ExecutionError> {
+        let policy = self.transaction_policy(program, requirement)?;
         self.binding(requirement)?
             .adapter
-            .begin_transaction(control)
+            .begin_transaction(&policy, control)
     }
 
     pub(crate) fn requires_exact(&self, requirement: RequirementReference) -> bool {
@@ -253,11 +267,87 @@ impl NormalizedCapabilities {
 
     pub(crate) fn call_exact(
         &self,
+        program: &NormalizedProgram,
         requirement: RequirementReference,
         operation: OperationReference,
         arguments: Vec<NormalizedValue>,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
+        let policy = self.call_policy_exact(program, requirement, operation)?;
+        let result = self
+            .exact_binding(requirement)?
+            .adapter
+            .call(&policy, arguments, control);
+        validate_outcome(&policy, result)
+    }
+
+    pub(crate) fn begin_transaction_exact(
+        &self,
+        program: &NormalizedProgram,
+        requirement: RequirementReference,
+        control: &ExecutionControl,
+    ) -> Result<Box<dyn NormalizedCapabilityTransaction>, ExecutionError> {
+        let policy = self.transaction_policy_exact(program, requirement)?;
+        self.exact_binding(requirement)?
+            .adapter
+            .begin_transaction(&policy, control)
+    }
+
+    pub(crate) fn call_policy(
+        &self,
+        program: &NormalizedProgram,
+        requirement: RequirementIndex,
+        operation: OperationIndex,
+    ) -> Result<NormalizedCallPolicy, ExecutionError> {
+        let binding = self.binding(requirement)?;
+        if !binding.operations.contains(&operation) {
+            return Err(capability_error(
+                "normalized_capability_operation",
+                "execution requested an operation outside the exact deployment grant",
+            ));
+        }
+        let requirement = program
+            .requirements
+            .get(requirement.0 as usize)
+            .ok_or_else(|| {
+                capability_error(
+                    "normalized_capability_requirement_index",
+                    "prepared capability requirement index is outside the artifact table",
+                )
+            })?;
+        if !requirement.operations.contains(&operation) {
+            return Err(capability_error(
+                "normalized_capability_requirement_operation",
+                "prepared capability operation is outside its exact requirement",
+            ));
+        }
+        let operation = program
+            .operations
+            .get(operation.0 as usize)
+            .ok_or_else(|| {
+                capability_error(
+                    "normalized_capability_operation_index",
+                    "prepared capability operation index is outside the artifact table",
+                )
+            })?;
+        Ok(NormalizedCallPolicy {
+            requirement: requirement.reference,
+            requirement_name: requirement.name.clone(),
+            interface: requirement.interface,
+            operation: operation.reference,
+            operation_name: operation.name.clone(),
+            idempotency: operation.idempotency,
+            external_visibility: operation.external_visibility,
+            requirement_limits: Arc::clone(&requirement.limits),
+        })
+    }
+
+    pub(crate) fn call_policy_exact(
+        &self,
+        program: &NormalizedProgram,
+        requirement: RequirementReference,
+        operation: OperationReference,
+    ) -> Result<NormalizedCallPolicy, ExecutionError> {
         let binding = self.exact_binding(requirement)?;
         if !binding.exact_operations.contains(&operation) {
             return Err(capability_error(
@@ -265,17 +355,72 @@ impl NormalizedCapabilities {
                 "execution requested an operation outside the exact deployment grant",
             ));
         }
-        binding.adapter.call(operation, arguments, control)
+        let requirement_index = program
+            .requirements
+            .iter()
+            .position(|candidate| candidate.reference == requirement)
+            .map(|index| RequirementIndex(index as u32))
+            .ok_or_else(|| {
+                capability_error(
+                    "normalized_capability_requirement",
+                    "exact capability requirement is outside the artifact table",
+                )
+            })?;
+        let operation_index = program
+            .operations
+            .iter()
+            .position(|candidate| candidate.reference == operation)
+            .map(|index| OperationIndex(index as u32))
+            .ok_or_else(|| {
+                capability_error(
+                    "normalized_capability_operation",
+                    "exact capability operation is outside the artifact table",
+                )
+            })?;
+        self.call_policy(program, requirement_index, operation_index)
     }
 
-    pub(crate) fn begin_transaction_exact(
+    pub(crate) fn transaction_policy(
         &self,
+        program: &NormalizedProgram,
+        requirement: RequirementIndex,
+    ) -> Result<NormalizedTransactionPolicy, ExecutionError> {
+        self.binding(requirement)?;
+        let requirement = program
+            .requirements
+            .get(requirement.0 as usize)
+            .ok_or_else(|| {
+                capability_error(
+                    "normalized_capability_requirement_index",
+                    "prepared transaction requirement index is outside the artifact table",
+                )
+            })?;
+        Ok(NormalizedTransactionPolicy {
+            requirement: requirement.reference,
+            requirement_name: requirement.name.clone(),
+            interface: requirement.interface,
+            requirement_limits: Arc::clone(&requirement.limits),
+        })
+    }
+
+    pub(crate) fn transaction_policy_exact(
+        &self,
+        program: &NormalizedProgram,
         requirement: RequirementReference,
-        control: &ExecutionControl,
-    ) -> Result<Box<dyn NormalizedCapabilityTransaction>, ExecutionError> {
-        self.exact_binding(requirement)?
-            .adapter
-            .begin_transaction(control)
+    ) -> Result<NormalizedTransactionPolicy, ExecutionError> {
+        self.exact_binding(requirement)?;
+        let requirement_index = program
+            .requirements
+            .iter()
+            .position(|candidate| candidate.reference == requirement)
+            .map(|index| RequirementIndex(index as u32))
+            .ok_or_else(|| {
+                capability_error(
+                    "normalized_capability_requirement",
+                    "exact transaction requirement is outside the artifact table",
+                )
+            })?;
+        self.transaction_policy(program, requirement_index)
     }
 
     fn binding(
@@ -300,6 +445,25 @@ impl NormalizedCapabilities {
                 "effectful execution has no exact deployment grant for its requirement",
             )
         })
+    }
+}
+
+pub(crate) fn validate_outcome(
+    policy: &NormalizedCallPolicy,
+    result: Result<NormalizedValue, ExecutionError>,
+) -> Result<NormalizedValue, ExecutionError> {
+    match result {
+        Err(error)
+            if error.class == ExecutionFailureClass::PossibleVisibility
+                && policy.external_visibility != ExternalVisibility::Possible =>
+        {
+            Err(ExecutionError::new(
+                ExecutionFailureClass::Infrastructure,
+                "normalized_capability_visibility_contract",
+                "adapter reported possible visibility for an operation that forbids it",
+            ))
+        }
+        result => result,
     }
 }
 
