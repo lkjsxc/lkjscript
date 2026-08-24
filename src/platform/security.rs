@@ -251,26 +251,15 @@ impl PasswordHashPolicy {
     }
 }
 
-#[derive(Clone)]
-pub struct PasswordHashAdapter {
-    interface: OwnerId,
+#[derive(Clone, Debug)]
+pub(crate) struct PasswordHashEngine {
     policy: PasswordHashPolicy,
 }
 
-impl fmt::Debug for PasswordHashAdapter {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("PasswordHashAdapter")
-            .field("interface", &self.interface)
-            .field("policy", &self.policy)
-            .finish()
-    }
-}
-
-impl PasswordHashAdapter {
-    pub fn new(interface: OwnerId, policy: PasswordHashPolicy) -> Result<Self, ExecutionError> {
+impl PasswordHashEngine {
+    pub(crate) fn new(policy: PasswordHashPolicy) -> Result<Self, ExecutionError> {
         policy.params()?;
-        Ok(Self { interface, policy })
+        Ok(Self { policy })
     }
 
     fn argon2(&self) -> Result<Argon2<'static>, ExecutionError> {
@@ -279,6 +268,96 @@ impl PasswordHashAdapter {
             Version::V0x13,
             self.policy.params()?,
         ))
+    }
+
+    pub(crate) fn hash(&self, password: &[u8]) -> Result<String, ExecutionError> {
+        validate_password(password)?;
+        let mut salt_bytes = [0u8; 16];
+        getrandom::fill(&mut salt_bytes).map_err(|_| {
+            ExecutionError::new(
+                ExecutionFailureClass::Capability,
+                "password_salt_unavailable",
+                "secure randomness for password salt is unavailable",
+            )
+        })?;
+        let salt = SaltString::encode_b64(&salt_bytes).map_err(|_| {
+            ExecutionError::new(
+                ExecutionFailureClass::Infrastructure,
+                "password_salt_encode",
+                "password salt could not be encoded",
+            )
+        })?;
+        self.argon2()?
+            .hash_password(password, &salt)
+            .map_err(|_| {
+                ExecutionError::resource(
+                    "password_hash_resource",
+                    "password hashing could not complete within its policy",
+                )
+            })
+            .map(|hash| hash.to_string())
+    }
+
+    pub(crate) fn verify(&self, password: &[u8], encoded: &str) -> Result<bool, ExecutionError> {
+        validate_password(password)?;
+        if encoded.len() > 1024 {
+            return Err(adapter_argument("encoded password hash is excessive"));
+        }
+        let hash = parse_password_hash(encoded)?;
+        match self.argon2()?.verify_password(password, &hash) {
+            Ok(()) => Ok(true),
+            Err(argon2::password_hash::Error::Password) => Ok(false),
+            Err(_) => Err(ExecutionError::new(
+                ExecutionFailureClass::Capability,
+                "password_hash_unsupported",
+                "encoded password hash uses unsupported parameters or algorithm",
+            )),
+        }
+    }
+
+    pub(crate) fn needs_upgrade(&self, encoded: &str) -> Result<bool, ExecutionError> {
+        let hash = parse_password_hash(encoded)?;
+        let expected = self.policy.params()?;
+        Ok(hash.algorithm.as_str() != "argon2id"
+            || hash.version != Some(19)
+            || hash.params.get_decimal("m") != Some(expected.m_cost())
+            || hash.params.get_decimal("t") != Some(expected.t_cost())
+            || hash.params.get_decimal("p") != Some(expected.p_cost()))
+    }
+}
+
+fn parse_password_hash(encoded: &str) -> Result<PasswordHash<'_>, ExecutionError> {
+    PasswordHash::new(encoded).map_err(|_| {
+        ExecutionError::new(
+            ExecutionFailureClass::Capability,
+            "password_hash_malformed",
+            "encoded password hash is malformed",
+        )
+    })
+}
+
+#[derive(Clone)]
+pub struct PasswordHashAdapter {
+    interface: OwnerId,
+    engine: PasswordHashEngine,
+}
+
+impl fmt::Debug for PasswordHashAdapter {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("PasswordHashAdapter")
+            .field("interface", &self.interface)
+            .field("policy", &self.engine.policy)
+            .finish()
+    }
+}
+
+impl PasswordHashAdapter {
+    pub fn new(interface: OwnerId, policy: PasswordHashPolicy) -> Result<Self, ExecutionError> {
+        Ok(Self {
+            interface,
+            engine: PasswordHashEngine::new(policy)?,
+        })
     }
 }
 
@@ -294,33 +373,7 @@ impl CapabilityAdapter for PasswordHashAdapter {
                 let [Value::Bytes(password)] = arguments.as_slice() else {
                     return Err(adapter_argument("password hash expects password Bytes"));
                 };
-                validate_password(password)?;
-                let mut salt_bytes = [0u8; 16];
-                getrandom::fill(&mut salt_bytes).map_err(|_| {
-                    ExecutionError::new(
-                        ExecutionFailureClass::Capability,
-                        "password_salt_unavailable",
-                        "secure randomness for password salt is unavailable",
-                    )
-                })?;
-                let salt = SaltString::encode_b64(&salt_bytes).map_err(|_| {
-                    ExecutionError::new(
-                        ExecutionFailureClass::Infrastructure,
-                        "password_salt_encode",
-                        "password salt could not be encoded",
-                    )
-                })?;
-                let hash = self
-                    .argon2()?
-                    .hash_password(password, &salt)
-                    .map_err(|_| {
-                        ExecutionError::resource(
-                            "password_hash_resource",
-                            "password hashing could not complete within its policy",
-                        )
-                    })?
-                    .to_string();
-                Ok(Value::text(hash))
+                Ok(Value::text(self.engine.hash(password)?))
             }
             "verify" => {
                 let [Value::Bytes(password), Value::Text(encoded)] = arguments.as_slice() else {
@@ -328,26 +381,7 @@ impl CapabilityAdapter for PasswordHashAdapter {
                         "password verify expects password Bytes and encoded Text",
                     ));
                 };
-                validate_password(password)?;
-                if encoded.len() > 1024 {
-                    return Err(adapter_argument("encoded password hash is excessive"));
-                }
-                let hash = PasswordHash::new(encoded).map_err(|_| {
-                    ExecutionError::new(
-                        ExecutionFailureClass::Capability,
-                        "password_hash_malformed",
-                        "encoded password hash is malformed",
-                    )
-                })?;
-                match self.argon2()?.verify_password(password, &hash) {
-                    Ok(()) => Ok(Value::Bool(true)),
-                    Err(argon2::password_hash::Error::Password) => Ok(Value::Bool(false)),
-                    Err(_) => Err(ExecutionError::new(
-                        ExecutionFailureClass::Capability,
-                        "password_hash_unsupported",
-                        "encoded password hash uses unsupported parameters or algorithm",
-                    )),
-                }
+                Ok(Value::Bool(self.engine.verify(password, encoded)?))
             }
             "needs-upgrade" => {
                 let [Value::Text(encoded)] = arguments.as_slice() else {
@@ -355,20 +389,7 @@ impl CapabilityAdapter for PasswordHashAdapter {
                         "password needs-upgrade expects encoded Text",
                     ));
                 };
-                let hash = PasswordHash::new(encoded).map_err(|_| {
-                    ExecutionError::new(
-                        ExecutionFailureClass::Capability,
-                        "password_hash_malformed",
-                        "encoded password hash is malformed",
-                    )
-                })?;
-                let expected = self.policy.params()?;
-                let needs_upgrade = hash.algorithm.as_str() != "argon2id"
-                    || hash.version != Some(19)
-                    || hash.params.get_decimal("m") != Some(expected.m_cost())
-                    || hash.params.get_decimal("t") != Some(expected.t_cost())
-                    || hash.params.get_decimal("p") != Some(expected.p_cost());
-                Ok(Value::Bool(needs_upgrade))
+                Ok(Value::Bool(self.engine.needs_upgrade(encoded)?))
             }
             operation => Err(ExecutionError::new(
                 ExecutionFailureClass::Infrastructure,

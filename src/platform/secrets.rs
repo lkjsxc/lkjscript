@@ -28,6 +28,12 @@ impl SecretValue {
         std::str::from_utf8(&self.0)
             .map_err(|_| secret_error("secret_utf8", "secret required as text is not valid UTF-8"))
     }
+
+    #[cfg(test)]
+    pub(crate) fn for_test(bytes: &[u8]) -> Self {
+        assert!(!bytes.is_empty() && bytes.len() <= MAXIMUM_SECRET_BYTES);
+        Self(Arc::from(bytes))
+    }
 }
 
 impl fmt::Debug for SecretValue {
@@ -112,8 +118,7 @@ impl SecretCatalog {
 #[derive(Clone)]
 pub struct SecretVerifierAdapter {
     interface: OwnerId,
-    secret: SecretValue,
-    maximum_candidate_bytes: usize,
+    verifier: SecretVerifier,
 }
 
 impl fmt::Debug for SecretVerifierAdapter {
@@ -121,7 +126,10 @@ impl fmt::Debug for SecretVerifierAdapter {
         formatter
             .debug_struct("SecretVerifierAdapter")
             .field("interface", &self.interface)
-            .field("maximum_candidate_bytes", &self.maximum_candidate_bytes)
+            .field(
+                "maximum_candidate_bytes",
+                &self.verifier.maximum_candidate_bytes,
+            )
             .field("secret", &"<redacted>")
             .finish()
     }
@@ -133,16 +141,9 @@ impl SecretVerifierAdapter {
         secret: SecretValue,
         maximum_candidate_bytes: usize,
     ) -> Result<Self, Diagnostic> {
-        if maximum_candidate_bytes == 0 || maximum_candidate_bytes > MAXIMUM_SECRET_BYTES {
-            return Err(secret_error(
-                "secret_candidate_limit",
-                format!("secret candidate limit must be in 1..={MAXIMUM_SECRET_BYTES} bytes"),
-            ));
-        }
         Ok(Self {
             interface,
-            secret,
-            maximum_candidate_bytes,
+            verifier: SecretVerifier::new(secret, maximum_candidate_bytes)?,
         })
     }
 }
@@ -167,13 +168,51 @@ impl CapabilityAdapter for SecretVerifierAdapter {
                 "secret verifier expects one Bytes candidate",
             ));
         };
+        Ok(Value::Bool(self.verifier.matches(candidate)?))
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct SecretVerifier {
+    secret: SecretValue,
+    maximum_candidate_bytes: usize,
+}
+
+impl fmt::Debug for SecretVerifier {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("SecretVerifier")
+            .field("maximum_candidate_bytes", &self.maximum_candidate_bytes)
+            .field("secret", &"<redacted>")
+            .finish()
+    }
+}
+
+impl SecretVerifier {
+    pub(crate) fn new(
+        secret: SecretValue,
+        maximum_candidate_bytes: usize,
+    ) -> Result<Self, Diagnostic> {
+        if maximum_candidate_bytes == 0 || maximum_candidate_bytes > MAXIMUM_SECRET_BYTES {
+            return Err(secret_error(
+                "secret_candidate_limit",
+                format!("secret candidate limit must be in 1..={MAXIMUM_SECRET_BYTES} bytes"),
+            ));
+        }
+        Ok(Self {
+            secret,
+            maximum_candidate_bytes,
+        })
+    }
+
+    pub(crate) fn matches(&self, candidate: &[u8]) -> Result<bool, ExecutionError> {
         if candidate.len() > self.maximum_candidate_bytes {
             return Err(ExecutionError::resource(
                 "secret_candidate_limit",
                 "secret candidate exceeds its exact byte limit",
             ));
         }
-        Ok(Value::Bool(constant_time_equal(&self.secret.0, candidate)))
+        Ok(constant_time_equal(&self.secret.0, candidate))
     }
 }
 
