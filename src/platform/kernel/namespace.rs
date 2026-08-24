@@ -4,8 +4,13 @@
 //! namespace rule is deliberately separate from executable relation and dependency summaries.
 
 use super::{Name, OwnerKey, OwnerRecord, ParameterParent};
+use bincode::{Decode, Encode};
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(
+    Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, Ord, PartialEq, PartialOrd, Serialize,
+)]
+#[serde(rename_all = "snake_case")]
 pub enum NamespaceClass {
     Module,
     Declaration,

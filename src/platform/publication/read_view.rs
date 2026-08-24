@@ -5,10 +5,10 @@ use super::{
 };
 use crate::platform::change::{
     AuthoredChangeSet, AuthoredLoweringWork, BoundOwnerSummary, CanonicalBaseRead, CanonicalDelta,
-    CanonicalRead, CanonicalReadWork, DerivedDelta, PrimitiveEdit, SummaryDelta,
+    CanonicalRead, CanonicalReadWork, ChangeBudget, DerivedDelta, PrimitiveEdit, SummaryDelta,
     TestDependencyDelta, WitnessBaseRead, WitnessMapBase, WitnessMapUpdate, WitnessRead,
     WitnessReadWork, WitnessRelationRead, WitnessTestDependencyRead, lower_authored_changes,
-    prepare_change_analysis, update_witness_maps_from,
+    prepare_change_analysis_with_budget, update_witness_maps_from,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
@@ -118,7 +118,12 @@ impl RepositoryView {
         edits: Vec<PrimitiveEdit>,
         options: PublicationOptions,
     ) -> Result<PreparedPublication, Vec<Diagnostic>> {
-        self.prepare_change_with_prior_work(edits, options, AuthoredLoweringWork::default())
+        self.prepare_change_with_prior_work(
+            edits,
+            options,
+            AuthoredLoweringWork::default(),
+            ChangeBudget::default(),
+        )
     }
 
     /// Resolves one strict authored request at this view's exact revision and prepares its one
@@ -132,8 +137,12 @@ impl RepositoryView {
         let lowering =
             lower_authored_changes(self, self, request, options.idempotency_key.as_deref())
                 .map_err(|diagnostic| vec![diagnostic])?;
-        let publication =
-            self.prepare_change_with_prior_work(lowering.edits, options, lowering.work)?;
+        let publication = self.prepare_change_with_prior_work(
+            lowering.edits,
+            options,
+            lowering.work,
+            request.budget,
+        )?;
         Ok(PreparedAuthoredPublication {
             publication,
             allocated: lowering.allocated,
@@ -146,6 +155,7 @@ impl RepositoryView {
         edits: Vec<PrimitiveEdit>,
         options: PublicationOptions,
         prior_work: AuthoredLoweringWork,
+        budget: ChangeBudget,
     ) -> Result<PreparedPublication, Vec<Diagnostic>> {
         let normalization =
             CanonicalDelta::normalize_from(self, edits).map_err(|diagnostic| vec![diagnostic])?;
@@ -156,7 +166,16 @@ impl RepositoryView {
                 "canonical normalization did not retain the pinned repository revision",
             )]);
         }
-        let mut analysis = prepare_change_analysis(self, self, normalization.canonical)?;
+        let mut budget_reads = prior_work;
+        budget_reads.canonical.add(normalization.work);
+        let initial_budget_work = budget_reads.budget_work();
+        let mut analysis = prepare_change_analysis_with_budget(
+            self,
+            self,
+            normalization.canonical,
+            budget,
+            initial_budget_work,
+        )?;
         analysis.canonical_read_work.add(prior_work.canonical);
         analysis.canonical_read_work.add(normalization.work);
         analysis.witness_read_work.add(prior_work.witness);

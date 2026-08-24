@@ -7,6 +7,7 @@
 
 mod authority;
 mod base_read;
+mod budget;
 mod delta;
 mod derived;
 mod impact;
@@ -27,6 +28,10 @@ pub use base_read::{
     BoundOwnerSummary, CanonicalBaseRead, CanonicalRead, CanonicalReadWork, WitnessBaseRead,
     WitnessRead, WitnessReadWork, WitnessRelationRead, WitnessTestDependencyRead,
 };
+pub use budget::{
+    ChangeBudget, ChangeBudgetWork, MAXIMUM_CHANGE_AFFECTED_OWNERS, MAXIMUM_CHANGE_OPERATIONS,
+    MAXIMUM_CHANGE_RELATION_EDGES, MAXIMUM_CHANGE_WORK,
+};
 pub use delta::{CanonicalDelta, CanonicalNormalization, ExactEdit, PrimitiveEdit};
 pub use derived::{DerivedDelta, DerivedValueEdit, RelationDelta, derive_local_delta};
 pub use impact::{
@@ -34,7 +39,9 @@ pub use impact::{
     SummaryDimensionChange, plan_impact_and_summaries, summary_dimension_change,
 };
 pub use overlay::KernelOverlay;
-pub use prepare::{PreparedChangeAnalysis, prepare_change_analysis};
+pub use prepare::{
+    PreparedChangeAnalysis, prepare_change_analysis, prepare_change_analysis_with_budget,
+};
 pub use request::{
     AuthoredAnnotationValue, AuthoredBindingDefinition, AuthoredCase, AuthoredCaseReference,
     AuthoredChange, AuthoredChangeSet, AuthoredDeclarationReference, AuthoredExpression,
@@ -42,9 +49,9 @@ pub use request::{
     AuthoredFunctionEffect, AuthoredLetBinding, AuthoredLocalReference, AuthoredLowering,
     AuthoredLoweringWork, AuthoredMapExpressionEntry, AuthoredMatchExpressionArm,
     AuthoredOperation, AuthoredOperationReference, AuthoredParameter, AuthoredPort,
-    AuthoredPortImplementation, AuthoredPortReference, AuthoredRecordExpressionField,
-    AuthoredRequirement, AuthoredRequirementReference, AuthoredResourceLimit,
-    AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameter,
+    AuthoredPortImplementation, AuthoredPortReference, AuthoredPrecondition,
+    AuthoredRecordExpressionField, AuthoredRequirement, AuthoredRequirementReference,
+    AuthoredResourceLimit, AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameter,
     AuthoredTypeParameterReference, DeclarationSelector, MAXIMUM_AUTHORED_CHANGE_BYTES,
     MAXIMUM_AUTHORED_CHANGES, ModuleSelector, OwnerSelector, lower_authored_changes,
 };

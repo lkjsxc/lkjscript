@@ -9,6 +9,7 @@ use crate::platform::kernel::{
 };
 use crate::platform::packed;
 use bincode::{Decode, Encode};
+use serde::{Deserialize, Serialize};
 
 const OWNERSHIP_VALUE_MAGIC: [u8; 8] = *b"LKJOWNW1";
 const OWNERSHIP_VALUE_DOMAIN: &str = "lkjscript.witness.ownership-entry.v1";
@@ -39,7 +40,10 @@ impl NamespaceKey {
     }
 }
 
-#[derive(Clone, Copy, Debug, Decode, Encode, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(
+    Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, Ord, PartialEq, PartialOrd, Serialize,
+)]
+#[serde(tag = "parent", content = "owner", rename_all = "snake_case")]
 pub enum OwnershipParent {
     Package,
     Owner(OwnerKey),

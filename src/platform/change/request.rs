@@ -1,6 +1,7 @@
 //! High-level Graph 5 authored intent lowered to exact primitive owner edits.
 
 mod creation;
+mod precondition;
 
 pub use creation::{
     AuthoredAnnotationValue, AuthoredBindingDefinition, AuthoredCase, AuthoredCaseReference,
@@ -13,9 +14,11 @@ pub use creation::{
     AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameter,
     AuthoredTypeParameterReference,
 };
+pub use precondition::AuthoredPrecondition;
 
 use super::{
-    CanonicalBaseRead, CanonicalReadWork, PrimitiveEdit, WitnessBaseRead, WitnessReadWork,
+    CanonicalBaseRead, CanonicalReadWork, ChangeBudget, ChangeBudgetWork, PrimitiveEdit,
+    WitnessBaseRead, WitnessReadWork,
 };
 use crate::platform::contract::registry::CHANGE_ALLOCATION_SEED_DOMAIN;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
@@ -41,7 +44,11 @@ const MAXIMUM_REQUEST_SYMBOL_BYTES: usize = 128;
 #[serde(deny_unknown_fields)]
 pub struct AuthoredChangeSet {
     pub base: RevisionId,
+    #[serde(default)]
+    pub preconditions: Vec<AuthoredPrecondition>,
     pub changes: Vec<AuthoredChange>,
+    #[serde(default)]
+    pub budget: ChangeBudget,
 }
 
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
@@ -271,8 +278,21 @@ impl SymbolKind {
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct AuthoredLoweringWork {
+    pub operations_lowered: u64,
+    pub preconditions_checked: u64,
     pub canonical: CanonicalReadWork,
     pub witness: WitnessReadWork,
+}
+
+impl AuthoredLoweringWork {
+    pub(crate) fn budget_work(self) -> ChangeBudgetWork {
+        ChangeBudgetWork::authored(
+            usize::try_from(self.operations_lowered).unwrap_or(usize::MAX),
+            usize::try_from(self.preconditions_checked).unwrap_or(usize::MAX),
+            self.canonical,
+            self.witness,
+        )
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -314,11 +334,17 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
             format!("authored change requires 1 through {MAXIMUM_AUTHORED_CHANGES} operations"),
         ));
     }
+    let budget = request
+        .budget
+        .validate_request_counts(request.changes.len(), request.preconditions.len())?;
 
     let seed = allocation_seed(base, request, idempotency_key)?;
     let definitions = collect_symbol_definitions(request)?;
     let allocated = allocate_symbols(&seed, &definitions)?;
-    let mut lowerer = AuthoredLowerer::new(base, witness, seed, allocated, definitions)?;
+    let mut lowerer = AuthoredLowerer::new(base, witness, seed, allocated, definitions, budget)?;
+    lowerer.work.operations_lowered = u64::try_from(request.changes.len()).unwrap_or(u64::MAX);
+    precondition::evaluate(&mut lowerer, &request.preconditions)?;
+    lowerer.check_budget("authored preconditions")?;
     for change in &request.changes {
         if let AuthoredChange::CreateModule { symbol, name } = change {
             let module = lowerer.module_symbol(symbol)?;
@@ -327,6 +353,7 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
                 name: name.clone(),
             }))?;
         }
+        lowerer.check_budget("module creation lowering")?;
     }
     for change in &request.changes {
         match change {
@@ -470,6 +497,7 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
             } => creation::lower_annotation(&mut lowerer, symbol, owner, *class, key, value)?,
             _ => {}
         }
+        lowerer.check_budget("owner creation lowering")?;
     }
     for change in &request.changes {
         match change {
@@ -523,6 +551,7 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
                     OwnerRecord::Expression(ExpressionRecord::new(*expression, operation.clone())?);
             }
         }
+        lowerer.check_budget("authored mutation lowering")?;
     }
     lowerer.finish()
 }
@@ -717,6 +746,7 @@ struct AuthoredLowerer<'a, B: ?Sized, W: ?Sized> {
     types: TypeObjectInterner,
     next_anonymous_expression_ordinal: u64,
     work: AuthoredLoweringWork,
+    budget: ChangeBudget,
 }
 
 impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer<'a, B, W> {
@@ -726,6 +756,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         allocation_seed: [u8; 32],
         allocated: BTreeMap<String, OwnerKey>,
         definitions: BTreeMap<String, SymbolKind>,
+        budget: ChangeBudget,
     ) -> Result<Self, Diagnostic> {
         let expression_symbol_count = definitions
             .values()
@@ -752,7 +783,12 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             types: TypeObjectInterner::default(),
             next_anonymous_expression_ordinal,
             work: AuthoredLoweringWork::default(),
+            budget,
         })
+    }
+
+    fn check_budget(&self, phase: &str) -> Result<(), Diagnostic> {
+        self.budget.check_observed(self.work.budget_work(), phase)
     }
 
     fn insert_created(&mut self, record: OwnerRecord) -> Result<(), Diagnostic> {
@@ -1126,26 +1162,14 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
 }
 
 fn rename_owner(record: &mut OwnerRecord, name: Name) -> Result<(), Diagnostic> {
-    match record {
-        OwnerRecord::Module(value) => value.name = name,
-        OwnerRecord::Declaration(value) => value.name = name,
-        OwnerRecord::TypeParameter(value) => value.name = name,
-        OwnerRecord::Field(value) => value.name = name,
-        OwnerRecord::Case(value) => value.name = name,
-        OwnerRecord::Operation(value) => value.name = name,
-        OwnerRecord::Parameter(value) => value.name = name,
-        OwnerRecord::Binding(value) => value.name = name,
-        OwnerRecord::Requirement(value) => value.name = name,
-        OwnerRecord::Port(value) => value.name = name,
-        OwnerRecord::Target(value) => value.name = name,
-        OwnerRecord::Expression(_) | OwnerRecord::Documentation(_) | OwnerRecord::Annotation(_) => {
-            return Err(request_error(
-                DiagnosticClass::Semantic,
-                "change_authored_rename_kind",
-                "selected owner kind has no renameable semantic name",
-            ));
-        }
-    }
+    let target = record.name_mut().ok_or_else(|| {
+        request_error(
+            DiagnosticClass::Semantic,
+            "change_authored_rename_kind",
+            "selected owner kind has no renameable semantic name",
+        )
+    })?;
+    *target = name;
     Ok(())
 }
 

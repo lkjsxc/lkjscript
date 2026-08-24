@@ -5,24 +5,24 @@ use crate::platform::change::{
     AuthoredExpressionOperation, AuthoredField, AuthoredFieldReference, AuthoredFieldSelector,
     AuthoredFunctionEffect, AuthoredLetBinding, AuthoredLocalReference, AuthoredMapExpressionEntry,
     AuthoredMatchExpressionArm, AuthoredOperation, AuthoredOperationReference, AuthoredParameter,
-    AuthoredPort, AuthoredPortImplementation, AuthoredPortReference, AuthoredRecordExpressionField,
-    AuthoredRequirement, AuthoredRequirementReference, AuthoredResourceLimit,
-    AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameter,
-    AuthoredTypeParameterReference, CanonicalDelta, DeclarationSelector, KernelOverlay,
-    ModuleSelector, OwnerSelector, PrimitiveEdit, derive_local_delta, derive_summary_delta,
-    derive_test_dependency_delta, plan_impact_and_summaries, prepare_change_analysis,
-    validate_incremental_frontier, validate_structural_frontier,
+    AuthoredPort, AuthoredPortImplementation, AuthoredPortReference, AuthoredPrecondition,
+    AuthoredRecordExpressionField, AuthoredRequirement, AuthoredRequirementReference,
+    AuthoredResourceLimit, AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameter,
+    AuthoredTypeParameterReference, CanonicalDelta, ChangeBudget, DeclarationSelector,
+    KernelOverlay, ModuleSelector, OwnerSelector, PrimitiveEdit, derive_local_delta,
+    derive_summary_delta, derive_test_dependency_delta, plan_impact_and_summaries,
+    prepare_change_analysis, validate_incremental_frontier, validate_structural_frontier,
 };
 use crate::platform::kernel::{
-    AnnotationClass, DeclarationPayload, DeclarationVisibility, DocumentationClass, ExactOwnerKey,
-    ExpressionOperation, ExternalVisibility, Idempotency, LocalValueReference, Name,
-    NamespaceClass, OwnerKey, OwnerRecord, PackageId, RelationEndpoint, ResourceUnit, TypeForm,
-    encode_owner,
+    AnnotationClass, DeclarationPayload, DeclarationVisibility, DependencyObjectDigest,
+    DocumentationClass, ExactOwnerKey, ExpressionOperation, ExternalVisibility, Idempotency,
+    LocalValueReference, Name, NamespaceClass, OwnerKey, OwnerRecord, PackageId, RelationEndpoint,
+    ResourceUnit, RetirementObjectDigest, SemanticRootDigest, TypeForm, encode_owner,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::semantic_id::DeclarationId;
 use crate::platform::storage::object::{ObjectDomain, ObjectKey};
-use crate::platform::witness::NamespaceKey;
+use crate::platform::witness::{NamespaceKey, OwnershipParent};
 
 #[test]
 fn repository_create_reopen_and_exact_current_reads_bind_every_object() {
@@ -853,6 +853,8 @@ fn authored_request_allocates_forward_symbols_and_preserves_exact_uses() {
         .0;
     let request = AuthoredChangeSet {
         base: created.current.head.revision,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
         changes: vec![
             AuthoredChange::MoveDeclaration {
                 declaration: DeclarationSelector::Qualified {
@@ -998,6 +1000,8 @@ fn authored_request_rejects_invalid_symbols_kinds_and_empty_work() {
 
     let duplicate = AuthoredChangeSet {
         base,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
         changes: vec![
             AuthoredChange::CreateModule {
                 symbol: "$module".to_owned(),
@@ -1020,6 +1024,8 @@ fn authored_request_rejects_invalid_symbols_kinds_and_empty_work() {
 
     let missing = AuthoredChangeSet {
         base,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
         changes: vec![AuthoredChange::MoveDeclaration {
             declaration: match callee {
                 OwnerKey::Declaration(declaration) => DeclarationSelector::Id { declaration },
@@ -1041,6 +1047,8 @@ fn authored_request_rejects_invalid_symbols_kinds_and_empty_work() {
 
     let wrong_kind = AuthoredChangeSet {
         base,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
         changes: vec![AuthoredChange::RenameOwner {
             owner: OwnerSelector::Exact { owner: body },
             name: Name::new("not_an_expression_name").unwrap(),
@@ -1057,6 +1065,8 @@ fn authored_request_rejects_invalid_symbols_kinds_and_empty_work() {
 
     let empty = AuthoredChangeSet {
         base,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
         changes: Vec::new(),
     };
     assert_eq!(
@@ -1070,6 +1080,8 @@ fn authored_request_rejects_invalid_symbols_kinds_and_empty_work() {
 
     let duplicate_member_name = AuthoredChangeSet {
         base,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
         changes: vec![AuthoredChange::CreateRecord {
             symbol: "$record".to_owned(),
             module: ModuleSelector::Name {
@@ -1106,6 +1118,376 @@ fn authored_request_rejects_invalid_symbols_kinds_and_empty_work() {
 }
 
 #[test]
+fn authored_preconditions_are_exact_base_point_reads_and_publish_once() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let view = created.repository.view_current().expect("current view");
+    let callee = owner_named(&created.initial.snapshot, "callee");
+    let callee_record = created.initial.snapshot.owners[&callee].clone();
+    let callee_digest = encode_owner(&callee_record).expect("callee encoding").0;
+    let OwnerRecord::Declaration(callee_declaration) = &callee_record else {
+        panic!("callee must be a declaration")
+    };
+    let module = OwnerKey::Module(callee_declaration.module);
+    let summary = view
+        .bound_owner_summary(callee)
+        .expect("callee summary")
+        .value
+        .expect("bound callee summary")
+        .digest;
+    let absent = OwnerKey::Declaration(DeclarationId::migrate(b"precondition-absent", 1));
+    let base = created.current.head.revision;
+    let request = AuthoredChangeSet {
+        base,
+        preconditions: vec![
+            AuthoredPrecondition::SemanticRoot {
+                equals: created.current.accepted.semantic_root,
+            },
+            AuthoredPrecondition::OwnerExists { owner: callee },
+            AuthoredPrecondition::OwnerAbsent { owner: absent },
+            AuthoredPrecondition::OwnerDigest {
+                owner: callee,
+                equals: callee_digest,
+            },
+            AuthoredPrecondition::OwnerName {
+                owner: callee,
+                equals: Name::new("callee").unwrap(),
+            },
+            AuthoredPrecondition::OwnerParent {
+                owner: callee,
+                equals: OwnershipParent::Owner(module),
+            },
+            AuthoredPrecondition::NamespacePointsTo {
+                parent: Some(module),
+                class: NamespaceClass::Declaration,
+                name: Name::new("callee").unwrap(),
+                owner: callee,
+            },
+            AuthoredPrecondition::NamespaceAbsent {
+                parent: Some(module),
+                class: NamespaceClass::Declaration,
+                name: Name::new("guarded_callee").unwrap(),
+            },
+            AuthoredPrecondition::OwnerSummaryDigest {
+                owner: callee,
+                equals: summary,
+            },
+        ],
+        budget: ChangeBudget::default(),
+        changes: vec![AuthoredChange::RenameOwner {
+            owner: OwnerSelector::Exact { owner: callee },
+            name: Name::new("guarded_callee").unwrap(),
+        }],
+    };
+
+    let prepared = created
+        .repository
+        .prepare_authored_change(&request, PublicationOptions::default())
+        .expect("prepare guarded authored change");
+    assert_eq!(prepared.lowering_work.operations_lowered, 1);
+    assert_eq!(prepared.lowering_work.preconditions_checked, 9);
+    assert_eq!(prepared.publication.budget_work.preconditions_checked, 9);
+    assert!(
+        prepared.publication.budget_work.consumed <= request.budget.maximum_work,
+        "accepted preparation must retain work within its declared budget"
+    );
+    assert_eq!(
+        prepared.publication.expected_base,
+        Some(created.current.head)
+    );
+
+    let accepted = created
+        .repository
+        .publish(&prepared.publication)
+        .expect("publish guarded authored change");
+    let PublicationOutcome::Accepted { current, .. } = accepted else {
+        panic!("guarded authored change must publish once")
+    };
+    assert_ne!(current.head.revision, base);
+    let reopened = created
+        .repository
+        .view_current()
+        .expect("reopen new revision");
+    let renamed = reopened
+        .owner(callee)
+        .expect("renamed owner read")
+        .value
+        .expect("renamed owner");
+    assert!(matches!(
+        renamed,
+        OwnerRecord::Declaration(ref declaration)
+            if declaration.name.as_str() == "guarded_callee"
+    ));
+}
+
+#[test]
+fn failed_authored_preconditions_publish_nothing_with_stable_codes() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let view = created.repository.view_current().expect("current view");
+    let base = created.current.head.revision;
+    let callee = owner_named(&created.initial.snapshot, "callee");
+    let body = function_body(&created.initial.snapshot, "callee");
+    let callee_record = &created.initial.snapshot.owners[&callee];
+    let body_digest = encode_owner(&created.initial.snapshot.owners[&body])
+        .expect("body encoding")
+        .0;
+    let body_summary = view
+        .bound_owner_summary(body)
+        .expect("body summary")
+        .value
+        .expect("bound body summary")
+        .digest;
+    let OwnerRecord::Declaration(declaration) = callee_record else {
+        panic!("callee must be a declaration")
+    };
+    let module = OwnerKey::Module(declaration.module);
+    let absent = OwnerKey::Declaration(DeclarationId::migrate(b"failed-precondition", 1));
+    let foreign_package = PackageId::migrate(b"failed-precondition-package", 1);
+    let failures = vec![
+        (
+            "change_precondition_semantic_root",
+            AuthoredPrecondition::SemanticRoot {
+                equals: SemanticRootDigest::from_bytes([0x11; 32]),
+            },
+        ),
+        (
+            "change_precondition_owner_missing",
+            AuthoredPrecondition::OwnerExists { owner: absent },
+        ),
+        (
+            "change_precondition_owner_present",
+            AuthoredPrecondition::OwnerAbsent { owner: callee },
+        ),
+        (
+            "change_precondition_owner_digest",
+            AuthoredPrecondition::OwnerDigest {
+                owner: callee,
+                equals: body_digest,
+            },
+        ),
+        (
+            "change_precondition_owner_name",
+            AuthoredPrecondition::OwnerName {
+                owner: callee,
+                equals: Name::new("wrong").unwrap(),
+            },
+        ),
+        (
+            "change_precondition_owner_parent",
+            AuthoredPrecondition::OwnerParent {
+                owner: callee,
+                equals: OwnershipParent::Package,
+            },
+        ),
+        (
+            "change_precondition_namespace_present",
+            AuthoredPrecondition::NamespaceAbsent {
+                parent: Some(module),
+                class: NamespaceClass::Declaration,
+                name: Name::new("callee").unwrap(),
+            },
+        ),
+        (
+            "change_precondition_namespace_owner",
+            AuthoredPrecondition::NamespacePointsTo {
+                parent: Some(module),
+                class: NamespaceClass::Declaration,
+                name: Name::new("callee").unwrap(),
+                owner: body,
+            },
+        ),
+        (
+            "change_precondition_owner_summary",
+            AuthoredPrecondition::OwnerSummaryDigest {
+                owner: callee,
+                equals: body_summary,
+            },
+        ),
+        (
+            "change_precondition_dependency_digest",
+            AuthoredPrecondition::DependencyDigest {
+                package: foreign_package,
+                equals: DependencyObjectDigest::from_bytes([0x22; 32]),
+            },
+        ),
+        (
+            "change_precondition_retirement_digest",
+            AuthoredPrecondition::RetirementDigest {
+                owner: absent,
+                equals: RetirementObjectDigest::from_bytes([0x33; 32]),
+            },
+        ),
+    ];
+
+    for (expected_code, precondition) in failures {
+        let request = AuthoredChangeSet {
+            base,
+            preconditions: vec![precondition],
+            budget: ChangeBudget::default(),
+            changes: vec![AuthoredChange::RenameOwner {
+                owner: OwnerSelector::Exact { owner: callee },
+                name: Name::new("never_published").unwrap(),
+            }],
+        };
+        let diagnostics = created
+            .repository
+            .prepare_authored_change(&request, PublicationOptions::default())
+            .expect_err("failed precondition must reject preparation");
+        assert_eq!(diagnostics[0].code, expected_code);
+        assert_eq!(created.repository.current().unwrap().head.revision, base);
+    }
+}
+
+#[test]
+fn authored_budget_rejects_invalid_and_exhausted_work_before_publication() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let base = created.current.head.revision;
+    let callee = owner_named(&created.initial.snapshot, "callee");
+    let rename = || AuthoredChange::RenameOwner {
+        owner: OwnerSelector::Exact { owner: callee },
+        name: Name::new("budgeted_callee").unwrap(),
+    };
+
+    let invalid_budget = ChangeBudget {
+        maximum_work: 0,
+        ..ChangeBudget::default()
+    };
+    let invalid = AuthoredChangeSet {
+        base,
+        preconditions: Vec::new(),
+        budget: invalid_budget,
+        changes: vec![rename()],
+    };
+    assert_eq!(
+        created
+            .repository
+            .prepare_authored_change(&invalid, PublicationOptions::default())
+            .expect_err("zero work budget must reject")[0]
+            .code,
+        "change_budget_invalid"
+    );
+
+    let operation_budget = ChangeBudget {
+        maximum_operations: 1,
+        ..ChangeBudget::default()
+    };
+    let too_many_operations = AuthoredChangeSet {
+        base,
+        preconditions: Vec::new(),
+        budget: operation_budget,
+        changes: vec![rename(), rename()],
+    };
+    assert_eq!(
+        created
+            .repository
+            .prepare_authored_change(&too_many_operations, PublicationOptions::default())
+            .expect_err("operation budget must reject")[0]
+            .code,
+        "change_budget_operations"
+    );
+
+    let too_many_preconditions = AuthoredChangeSet {
+        base,
+        preconditions: vec![
+            AuthoredPrecondition::OwnerExists { owner: callee },
+            AuthoredPrecondition::OwnerExists { owner: callee },
+        ],
+        budget: operation_budget,
+        changes: vec![rename()],
+    };
+    assert_eq!(
+        created
+            .repository
+            .prepare_authored_change(&too_many_preconditions, PublicationOptions::default())
+            .expect_err("precondition budget must reject")[0]
+            .code,
+        "change_budget_preconditions"
+    );
+
+    let work_budget = ChangeBudget {
+        maximum_work: 1,
+        ..ChangeBudget::default()
+    };
+    let exhausted_work = AuthoredChangeSet {
+        base,
+        preconditions: Vec::new(),
+        budget: work_budget,
+        changes: vec![rename()],
+    };
+    assert_eq!(
+        created
+            .repository
+            .prepare_authored_change(&exhausted_work, PublicationOptions::default())
+            .expect_err("semantic work budget must reject")[0]
+            .code,
+        "change_budget_work"
+    );
+
+    let affected_budget = ChangeBudget {
+        maximum_operations: 2,
+        maximum_affected_owners: 1,
+        ..ChangeBudget::default()
+    };
+    let exhausted_owners = AuthoredChangeSet {
+        base,
+        preconditions: Vec::new(),
+        budget: affected_budget,
+        changes: vec![
+            AuthoredChange::CreateModule {
+                symbol: "$budget_one".to_owned(),
+                name: Name::new("budget_one").unwrap(),
+            },
+            AuthoredChange::CreateModule {
+                symbol: "$budget_two".to_owned(),
+                name: Name::new("budget_two").unwrap(),
+            },
+        ],
+    };
+    assert_eq!(
+        created
+            .repository
+            .prepare_authored_change(&exhausted_owners, PublicationOptions::default())
+            .expect_err("affected-owner budget must reject")[0]
+            .code,
+        "change_budget_affected_owners"
+    );
+
+    let relation_budget = ChangeBudget {
+        maximum_relation_edges: 1,
+        ..ChangeBudget::default()
+    };
+    let exhausted_relations = AuthoredChangeSet {
+        base,
+        preconditions: Vec::new(),
+        budget: relation_budget,
+        changes: vec![AuthoredChange::ReplaceExpression {
+            expression: match function_body(&created.initial.snapshot, "caller") {
+                OwnerKey::Expression(expression) => expression,
+                _ => panic!("caller body must be an expression"),
+            },
+            operation: ExpressionOperation::Unit,
+        }],
+    };
+    assert_eq!(
+        created
+            .repository
+            .prepare_authored_change(&exhausted_relations, PublicationOptions::default())
+            .expect_err("relation-edge budget must reject")[0]
+            .code,
+        "change_budget_relation_edges"
+    );
+    assert_eq!(created.repository.current().unwrap().head.revision, base);
+}
+
+#[test]
 fn authored_request_creates_a_typed_function_and_test_from_forward_references() {
     let temporary = tempfile::tempdir().expect("temporary repository parent");
     let destination = temporary.path().join("meaning");
@@ -1113,6 +1495,8 @@ fn authored_request_creates_a_typed_function_and_test_from_forward_references() 
     let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
     let request = AuthoredChangeSet {
         base: created.current.head.revision,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
         changes: vec![
             AuthoredChange::CreateTest {
                 symbol: "$identity_test".to_owned(),
@@ -1361,6 +1745,8 @@ fn authored_type_builder_interns_every_graph_five_type_form() {
     ];
     let request = AuthoredChangeSet {
         base: created.current.head.revision,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
         changes: vec![AuthoredChange::CreateFunction {
             symbol: "$type_builder".to_owned(),
             module: ModuleSelector::Name {
@@ -1456,6 +1842,8 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
     };
     let request = AuthoredChangeSet {
         base: created.current.head.revision,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
         changes: vec![
             AuthoredChange::CreateTarget {
                 symbol: "$target".to_owned(),
@@ -2020,6 +2408,8 @@ fn authored_expression_builder_covers_every_graph_five_operation() {
     };
     let request = AuthoredChangeSet {
         base: created.current.head.revision,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
         changes: vec![
             AuthoredChange::CreateFunction {
                 symbol: "$all_pure".to_owned(),

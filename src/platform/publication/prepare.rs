@@ -18,7 +18,7 @@ use crate::platform::change::{
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    KernelSnapshot, Name, OwnerKey, OwnerObjectDigest, OwnerRecord, encode_owner, encode_root,
+    KernelSnapshot, OwnerKey, OwnerObjectDigest, OwnerRecord, encode_owner, encode_root,
 };
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, ObjectStage, StoreError, StoreErrorClass,
@@ -54,6 +54,7 @@ pub struct PreparedPublication {
     pub accepted: AcceptedBinding,
     pub objects: BTreeMap<ObjectKey, Vec<u8>>,
     pub store_work: StoreWork,
+    pub budget_work: crate::platform::change::ChangeBudgetWork,
 }
 
 #[derive(Clone, Debug)]
@@ -182,7 +183,9 @@ pub fn prepare_change_publication<
         options,
         &mut stage,
     )?;
-    Ok(finish_prepared(bound, stage))
+    let mut prepared = finish_prepared(bound, stage);
+    prepared.budget_work = analysis.budget_work;
+    Ok(prepared)
 }
 
 struct BoundHistory {
@@ -452,6 +455,7 @@ fn finish_prepared<S: ImmutableObjectStore + ?Sized>(
         accepted: bound.accepted,
         objects: stage.into_objects(),
         store_work: bound.store_work,
+        budget_work: crate::platform::change::ChangeBudgetWork::default(),
     }
 }
 
@@ -588,7 +592,7 @@ fn diff_for_change<B: CanonicalBaseRead + ?Sized>(
         };
         let mut classes = entry.classes.iter().copied().collect::<BTreeSet<_>>();
         if let (Some(before_record), Some(after_record)) = (before_record.as_ref(), after_record) {
-            if record_name(Some(before_record)) != record_name(Some(after_record)) {
+            if before_record.name() != after_record.name() {
                 classes.insert(OwnerChangeClass::Renamed);
             }
             if declaration_visibility(Some(before_record))
@@ -724,25 +728,6 @@ fn dimensions(edit: &crate::platform::change::OwnerSummaryEdit) -> SummaryDimens
         presentation: change.presentation,
         test: change.test,
         validation_dependencies: change.validation_dependencies,
-    }
-}
-
-fn record_name(record: Option<&OwnerRecord>) -> Option<&Name> {
-    match record? {
-        OwnerRecord::Module(value) => Some(&value.name),
-        OwnerRecord::Declaration(value) => Some(&value.name),
-        OwnerRecord::TypeParameter(value) => Some(&value.name),
-        OwnerRecord::Field(value) => Some(&value.name),
-        OwnerRecord::Case(value) => Some(&value.name),
-        OwnerRecord::Operation(value) => Some(&value.name),
-        OwnerRecord::Parameter(value) => Some(&value.name),
-        OwnerRecord::Binding(value) => Some(&value.name),
-        OwnerRecord::Requirement(value) => Some(&value.name),
-        OwnerRecord::Port(value) => Some(&value.name),
-        OwnerRecord::Target(value) => Some(&value.name),
-        OwnerRecord::Expression(_) | OwnerRecord::Documentation(_) | OwnerRecord::Annotation(_) => {
-            None
-        }
     }
 }
 

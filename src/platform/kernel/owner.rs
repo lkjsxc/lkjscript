@@ -68,6 +68,40 @@ impl OwnerRecord {
         self.header().kind
     }
 
+    pub fn name(&self) -> Option<&Name> {
+        match self {
+            Self::Module(value) => Some(&value.name),
+            Self::Declaration(value) => Some(&value.name),
+            Self::TypeParameter(value) => Some(&value.name),
+            Self::Field(value) => Some(&value.name),
+            Self::Case(value) => Some(&value.name),
+            Self::Operation(value) => Some(&value.name),
+            Self::Parameter(value) => Some(&value.name),
+            Self::Binding(value) => Some(&value.name),
+            Self::Requirement(value) => Some(&value.name),
+            Self::Port(value) => Some(&value.name),
+            Self::Target(value) => Some(&value.name),
+            Self::Expression(_) | Self::Documentation(_) | Self::Annotation(_) => None,
+        }
+    }
+
+    pub fn name_mut(&mut self) -> Option<&mut Name> {
+        match self {
+            Self::Module(value) => Some(&mut value.name),
+            Self::Declaration(value) => Some(&mut value.name),
+            Self::TypeParameter(value) => Some(&mut value.name),
+            Self::Field(value) => Some(&mut value.name),
+            Self::Case(value) => Some(&mut value.name),
+            Self::Operation(value) => Some(&mut value.name),
+            Self::Parameter(value) => Some(&mut value.name),
+            Self::Binding(value) => Some(&mut value.name),
+            Self::Requirement(value) => Some(&mut value.name),
+            Self::Port(value) => Some(&mut value.name),
+            Self::Target(value) => Some(&mut value.name),
+            Self::Expression(_) | Self::Documentation(_) | Self::Annotation(_) => None,
+        }
+    }
+
     pub(crate) fn validate_local(&self) -> Result<(), Diagnostic> {
         match self {
             Self::Module(record) => {
