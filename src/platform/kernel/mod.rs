@@ -15,6 +15,7 @@ mod digest;
 mod expression;
 mod id;
 mod infer;
+mod interface;
 mod name;
 mod namespace;
 mod owner;
@@ -38,6 +39,7 @@ pub use digest::{
 pub use expression::*;
 pub use id::{EncodedOwnerKey, ExactOwnerKey, OwnerHeader, OwnerKey, OwnerKind, PackageId};
 pub(crate) use infer::{ExpressionRead, validate_expression_roots};
+pub use interface::*;
 pub use name::Name;
 pub use namespace::{NamespaceClass, NamespaceEntryRef, owner_namespace};
 pub use owner::*;

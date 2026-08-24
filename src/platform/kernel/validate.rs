@@ -12,7 +12,10 @@ use super::owner_namespace;
 use super::relation::{RelationEdge, extract_relations};
 use super::root::{DependencyRecord, RetirementRecord, SemanticRoot};
 use super::type_object::{TypeForm, TypeObject};
-use super::{BlobObjectDigest, TypeObjectDigest, encode_type_object};
+use super::{
+    BlobObjectDigest, PackageInterfaceRecord, PackageObjectDigest, TypeObjectDigest,
+    encode_type_object,
+};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::semantic_id::{BindingId, ExpressionId};
 use std::collections::{BTreeMap, BTreeSet};
@@ -25,6 +28,12 @@ pub struct KernelSnapshot {
     pub root: SemanticRoot,
     pub owners: BTreeMap<OwnerKey, OwnerRecord>,
     pub types: BTreeMap<TypeObjectDigest, TypeObject>,
+    /// Derived exact interfaces for bound dependency package objects. These are oracle inputs,
+    /// not fields of the local semantic root.
+    pub dependency_interfaces:
+        BTreeMap<PackageObjectDigest, BTreeMap<OwnerKey, PackageInterfaceRecord>>,
+    /// Structural types reachable from the bound dependency interfaces.
+    pub dependency_types: BTreeMap<TypeObjectDigest, TypeObject>,
     pub blobs: BTreeMap<BlobObjectDigest, u64>,
     pub dependencies: BTreeMap<PackageId, DependencyRecord>,
     pub retirements: BTreeMap<OwnerKey, RetirementRecord>,
@@ -878,10 +887,9 @@ impl FullValidator<'_> {
                                 "requirement interface and operations must belong to one package",
                             );
                         }
-                        if operation.package == self.snapshot.root.package_id
-                            && self
-                                .operation_parent(operation.operation)
-                                .is_some_and(|parent| parent != requirement.interface.declaration)
+                        if self
+                            .exact_operation_parent(operation.package, operation.operation)
+                            .is_some_and(|parent| parent != requirement.interface.declaration)
                         {
                             self.error(
                                 "kernel_full_requirement_operation_owner",
@@ -1048,18 +1056,15 @@ impl FullValidator<'_> {
                     &[OwnerKind::Operation],
                     "capability operation",
                 );
-                if requirement.package != operation.package {
+                if requirement.package != self.snapshot.root.package_id {
                     self.error(
-                        "kernel_full_capability_package",
-                        "capability requirement and operation belong to different packages",
+                        "kernel_full_capability_requirement_package",
+                        "capability calls must use a requirement owned by the current package",
                     );
-                }
-                if requirement.package == self.snapshot.root.package_id
-                    && !self.requirement_allows(requirement.requirement, operation.operation)
-                {
+                } else if !self.requirement_allows(requirement.requirement, *operation) {
                     self.error(
                         "kernel_full_capability_operation",
-                        "capability operation is not allowed by the requirement",
+                        "capability operation is outside the requirement's exact interface or allowed-operation set",
                     );
                 }
             }
@@ -1293,7 +1298,29 @@ impl FullValidator<'_> {
     ) {
         if package == self.snapshot.root.package_id {
             self.require_local_kind(owner, kinds, label);
-        } else if !self.snapshot.dependencies.contains_key(&package) {
+        } else if let Some(dependency) = self.snapshot.dependencies.get(&package) {
+            match self
+                .snapshot
+                .dependency_interfaces
+                .get(&dependency.package_object)
+                .and_then(|owners| owners.get(&owner))
+            {
+                Some(record) if kinds.contains(&record.header().kind) => {}
+                Some(record) => self.error(
+                    "kernel_full_foreign_reference_kind",
+                    format!(
+                        "{label} {owner:?} has dependency-interface kind {:?}",
+                        record.header().kind
+                    ),
+                ),
+                None => self.error(
+                    "kernel_full_foreign_reference_missing",
+                    format!(
+                        "{label} {owner:?} is absent from exact dependency interface {package}"
+                    ),
+                ),
+            }
+        } else {
             self.error(
                 "kernel_full_foreign_package_missing",
                 format!("{label} names unbound package {package}"),
@@ -1307,6 +1334,26 @@ impl FullValidator<'_> {
     ) -> Option<crate::platform::semantic_id::DeclarationId> {
         match self.snapshot.owners.get(&OwnerKey::Operation(operation)) {
             Some(OwnerRecord::Operation(record)) => Some(record.declaration),
+            _ => None,
+        }
+    }
+
+    fn exact_operation_parent(
+        &self,
+        package: PackageId,
+        operation: crate::platform::semantic_id::OperationId,
+    ) -> Option<crate::platform::semantic_id::DeclarationId> {
+        if package == self.snapshot.root.package_id {
+            return self.operation_parent(operation);
+        }
+        let dependency = self.snapshot.dependencies.get(&package)?;
+        match self
+            .snapshot
+            .dependency_interfaces
+            .get(&dependency.package_object)?
+            .get(&OwnerKey::Operation(operation))?
+        {
+            PackageInterfaceRecord::Operation(record) => Some(record.declaration),
             _ => None,
         }
     }
@@ -1334,17 +1381,17 @@ impl FullValidator<'_> {
     fn requirement_allows(
         &self,
         requirement: crate::platform::semantic_id::RequirementId,
-        operation: crate::platform::semantic_id::OperationId,
+        operation: crate::platform::kernel::OperationReference,
     ) -> bool {
         match self
             .snapshot
             .owners
             .get(&OwnerKey::Requirement(requirement))
         {
-            Some(OwnerRecord::Requirement(record)) => record
-                .operations
-                .iter()
-                .any(|reference| reference.operation == operation),
+            Some(OwnerRecord::Requirement(record)) => {
+                record.interface.package == operation.package
+                    && record.operations.contains(&operation)
+            }
             _ => false,
         }
     }

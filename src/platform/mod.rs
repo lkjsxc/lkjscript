@@ -33,6 +33,11 @@ pub mod object;
 pub mod package;
 #[allow(
     dead_code,
+    reason = "Graph 5 package interfaces remain private until repository publication cuts over"
+)]
+pub(crate) mod package_interface;
+#[allow(
+    dead_code,
     reason = "Graph 5 package objects remain private until repository publication cuts over"
 )]
 pub(crate) mod package_object;

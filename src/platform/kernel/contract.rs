@@ -22,7 +22,7 @@ pub const SEQUENCE_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.kernel.sequence-objec
 pub const SEMANTIC_ROOT_DIGEST_DOMAIN: &str = "lkjscript.kernel.semantic-root.v5";
 pub const DEPENDENCY_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.kernel.dependency-object.v5";
 pub const RETIREMENT_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.kernel.retirement-object.v5";
-pub const PACKAGE_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.kernel.package-object.v5";
+pub const PACKAGE_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.kernel.package-object.v6";
 pub const CHANGE_DIGEST_DOMAIN: &str = "lkjscript.kernel.change.v5";
 pub const PACKAGE_ID_MIGRATION_DOMAIN: &str = "lkjscript.kernel.package-identity-migration.v5";
 

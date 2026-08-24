@@ -3,7 +3,8 @@
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     DependencyRecord, ExactOwnerKey, KernelSnapshot, OwnerKey, OwnerRecord, PackageId,
-    RelationEdge, RelationEndpoint, RetirementRecord, SemanticRoot, TypeObject, TypeObjectDigest,
+    PackageInterfaceRecord, RelationEdge, RelationEndpoint, RetirementRecord, SemanticRoot,
+    TypeObject, TypeObjectDigest,
 };
 use crate::platform::semantic_id::{RepositoryId, RevisionId};
 use crate::platform::witness::{
@@ -149,6 +150,12 @@ pub trait CanonicalBaseRead {
         digest: TypeObjectDigest,
     ) -> Result<CanonicalRead<Option<TypeObject>>, Diagnostic>;
 
+    fn read_package_interface_owner(
+        &self,
+        dependency: &DependencyRecord,
+        owner: OwnerKey,
+    ) -> Result<CanonicalRead<Option<PackageInterfaceRecord>>, Diagnostic>;
+
     fn read_dependency(
         &self,
         package: PackageId,
@@ -257,7 +264,25 @@ impl CanonicalBaseRead for KernelSnapshot {
         &self,
         digest: TypeObjectDigest,
     ) -> Result<CanonicalRead<Option<TypeObject>>, Diagnostic> {
-        Ok(CanonicalRead::memory(self.types.get(&digest).cloned()))
+        Ok(CanonicalRead::memory(
+            self.types
+                .get(&digest)
+                .or_else(|| self.dependency_types.get(&digest))
+                .cloned(),
+        ))
+    }
+
+    fn read_package_interface_owner(
+        &self,
+        dependency: &DependencyRecord,
+        owner: OwnerKey,
+    ) -> Result<CanonicalRead<Option<PackageInterfaceRecord>>, Diagnostic> {
+        Ok(CanonicalRead::memory(
+            self.dependency_interfaces
+                .get(&dependency.package_object)
+                .and_then(|owners| owners.get(&owner))
+                .cloned(),
+        ))
     }
 
     fn read_dependency(

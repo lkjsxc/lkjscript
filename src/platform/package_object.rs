@@ -2,13 +2,17 @@
 //!
 //! A package object binds one accepted semantic revision and its committed validation witness.
 //! Direct dependency bindings are retained so staging can prove an exact, closed package graph
-//! without consulting ambient paths, mutable tags, or a network. Executable units and private
-//! implementation objects belong to the later artifact contract, not this descriptor.
+//! without consulting ambient paths, mutable tags, or a network. Its persistent interface-owner
+//! map exposes only validated public signatures and members; executable units and private
+//! implementation objects belong to the later artifact contract.
 
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    DependencyRecord, PackageId, PackageObjectDigest, SemanticRootDigest,
+    DependencyRecord, OwnerKey, OwnerKind, PackageId, PackageInterfaceDeclarationPayload,
+    PackageInterfaceRecord, PackageObjectDigest, SemanticRootDigest, TypeForm,
 };
+use crate::platform::package_interface::{PackageInterfaceValidation, validate_package_interface};
+use crate::platform::persistent_map::MapRoot;
 use crate::platform::semantic_id::{RepositoryId, RevisionId};
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, StoreError, StoreErrorClass, StoreWork,
@@ -19,10 +23,10 @@ use crate::platform::witness::{
 use bincode::{Decode, Encode};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-pub const PACKAGE_OBJECT_CONTRACT_IDENTITY: &str = "lkjscript-package-object-5";
-pub const PACKAGE_OBJECT_CONTRACT_VERSION: u16 = 5;
-pub const PACKAGE_OBJECT_MAGIC: [u8; 8] = *b"LKJPKG05";
-pub const PACKAGE_OBJECT_ENVELOPE_DOMAIN: &str = "lkjscript.package-object-envelope.v5";
+pub const PACKAGE_OBJECT_CONTRACT_IDENTITY: &str = "lkjscript-package-object-6";
+pub const PACKAGE_OBJECT_CONTRACT_VERSION: u16 = 6;
+pub const PACKAGE_OBJECT_MAGIC: [u8; 8] = *b"LKJPKG06";
+pub const PACKAGE_OBJECT_ENVELOPE_DOMAIN: &str = "lkjscript.package-object-envelope.v6";
 pub const MAXIMUM_PACKAGE_OBJECT_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_PACKAGE_OBJECT_DEPENDENCIES: usize = 10_000;
 pub const MAXIMUM_PACKAGE_OBJECT_CLOSURE: usize = 10_000;
@@ -37,6 +41,7 @@ pub struct PackageObject {
     pub semantic_root: SemanticRootDigest,
     pub validation_witness: ValidationWitnessDigest,
     pub witness: ValidationWitnessManifest,
+    pub interface_owners: MapRoot,
     pub dependencies: Vec<DependencyRecord>,
 }
 
@@ -164,8 +169,23 @@ pub fn validate_package_object_closure<S: ImmutableObjectStore + ?Sized>(
     expected: Option<&DependencyRecord>,
     work: &mut StoreWork,
 ) -> Result<PackageObject, Diagnostic> {
+    Ok(validate_package_object_closure_with_interface(store, root, expected, work)?.root)
+}
+
+pub(crate) struct PackageObjectClosureValidation {
+    pub root: PackageObject,
+    pub root_interface: PackageInterfaceValidation,
+}
+
+pub(crate) fn validate_package_object_closure_with_interface<S: ImmutableObjectStore + ?Sized>(
+    store: &S,
+    root: PackageObjectDigest,
+    expected: Option<&DependencyRecord>,
+    work: &mut StoreWork,
+) -> Result<PackageObjectClosureValidation, Diagnostic> {
     let mut pending = VecDeque::from([root]);
     let mut objects = BTreeMap::<PackageObjectDigest, PackageObject>::new();
+    let mut interfaces = BTreeMap::<PackageObjectDigest, PackageInterfaceValidation>::new();
     let mut packages = BTreeMap::<PackageId, (RevisionId, PackageObjectDigest)>::new();
     while let Some(digest) = pending.pop_front() {
         if objects.contains_key(&digest) {
@@ -190,6 +210,8 @@ pub fn validate_package_object_closure<S: ImmutableObjectStore + ?Sized>(
                 )
             })?;
         let object = PackageObject::decode(&bytes, digest)?;
+        let interface =
+            validate_package_interface(object.package, object.interface_owners, store, work)?;
         if digest == root
             && let Some(expected) = expected
         {
@@ -217,6 +239,7 @@ pub fn validate_package_object_closure<S: ImmutableObjectStore + ?Sized>(
             }
             pending.push_back(dependency.package_object);
         }
+        interfaces.insert(digest, interface);
         objects.insert(digest, object);
     }
 
@@ -233,13 +256,199 @@ pub fn validate_package_object_closure<S: ImmutableObjectStore + ?Sized>(
         }
     }
     reject_dependency_cycle(&objects)?;
-    objects.remove(&root).ok_or_else(|| {
+    validate_interface_dependencies(&objects, &interfaces)?;
+    let root_object = objects.remove(&root).ok_or_else(|| {
         package_error(
             DiagnosticClass::Corrupt,
             "package_object_closure_root",
             "validated package closure lost its root object",
         )
+    })?;
+    let root_interface = interfaces.remove(&root).ok_or_else(|| {
+        package_error(
+            DiagnosticClass::Corrupt,
+            "package_object_closure_root_interface",
+            "validated package closure lost its root package interface",
+        )
+    })?;
+    Ok(PackageObjectClosureValidation {
+        root: root_object,
+        root_interface,
     })
+}
+
+fn validate_interface_dependencies(
+    objects: &BTreeMap<PackageObjectDigest, PackageObject>,
+    interfaces: &BTreeMap<PackageObjectDigest, PackageInterfaceValidation>,
+) -> Result<(), Diagnostic> {
+    let closure = PackageInterfaceClosure {
+        packages: objects
+            .iter()
+            .map(|(digest, object)| (object.package, *digest))
+            .collect(),
+        interfaces,
+    };
+    for (digest, object) in objects {
+        let interface = interfaces.get(digest).ok_or_else(|| {
+            package_error(
+                DiagnosticClass::Corrupt,
+                "package_object_interface_validation_missing",
+                "validated package closure lost one package-interface result",
+            )
+        })?;
+        for ty in interface.type_objects.values() {
+            if let TypeForm::Named { declaration } = ty.form {
+                closure.require_owner(
+                    object,
+                    declaration.package,
+                    OwnerKey::Declaration(declaration.declaration),
+                    &[OwnerKind::Record, OwnerKind::Variant],
+                    "named type",
+                )?;
+            }
+        }
+        for owner in interface.owners.values() {
+            let PackageInterfaceRecord::Requirement(requirement) = &owner.record else {
+                continue;
+            };
+            let interface_owner = closure.require_owner(
+                object,
+                requirement.interface.package,
+                OwnerKey::Declaration(requirement.interface.declaration),
+                &[OwnerKind::Interface],
+                "requirement interface",
+            )?;
+            if !matches!(
+                interface_owner.record,
+                PackageInterfaceRecord::Declaration(ref declaration)
+                    if matches!(
+                        declaration.payload,
+                        PackageInterfaceDeclarationPayload::Interface { .. }
+                    )
+            ) {
+                return Err(package_error(
+                    DiagnosticClass::Semantic,
+                    "package_object_interface_requirement_kind",
+                    "requirement interface does not name an interface declaration payload",
+                ));
+            }
+            for operation in &requirement.operations {
+                if operation.package != requirement.interface.package {
+                    return Err(package_error(
+                        DiagnosticClass::Semantic,
+                        "package_object_interface_operation_package",
+                        "requirement interface and operation belong to different packages",
+                    ));
+                }
+                let operation_owner = closure.require_owner(
+                    object,
+                    operation.package,
+                    OwnerKey::Operation(operation.operation),
+                    &[OwnerKind::Operation],
+                    "requirement operation",
+                )?;
+                let PackageInterfaceRecord::Operation(operation_record) = &operation_owner.record
+                else {
+                    return Err(package_error(
+                        DiagnosticClass::Corrupt,
+                        "package_object_interface_operation_variant",
+                        "validated operation kind disagrees with its package-interface record variant",
+                    ));
+                };
+                if operation_record.declaration != requirement.interface.declaration {
+                    return Err(package_error(
+                        DiagnosticClass::Semantic,
+                        "package_object_interface_operation_owner",
+                        "requirement operation does not belong to its exact interface declaration",
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+struct PackageInterfaceClosure<'a> {
+    packages: BTreeMap<PackageId, PackageObjectDigest>,
+    interfaces: &'a BTreeMap<PackageObjectDigest, PackageInterfaceValidation>,
+}
+
+impl<'a> PackageInterfaceClosure<'a> {
+    fn require_owner(
+        &self,
+        source: &PackageObject,
+        package: PackageId,
+        owner: OwnerKey,
+        kinds: &[OwnerKind],
+        label: &str,
+    ) -> Result<&'a crate::platform::package_interface::PackageInterfaceOwner, Diagnostic> {
+        let digest = if package == source.package {
+            self.packages.get(&package).copied().ok_or_else(|| {
+                package_error(
+                    DiagnosticClass::Corrupt,
+                    "package_object_interface_source_lost",
+                    "validated package interface lost its source package object",
+                )
+            })?
+        } else {
+            let dependency = source
+                .dependencies
+                .binary_search_by_key(&package, |dependency| dependency.package)
+                .ok()
+                .map(|index| &source.dependencies[index])
+                .ok_or_else(|| {
+                    package_error(
+                        DiagnosticClass::Semantic,
+                        "package_object_interface_dependency_missing",
+                        format!(
+                            "{label} names package {package} outside the exact direct dependency set"
+                        ),
+                    )
+                })?;
+            let digest = self.packages.get(&package).ok_or_else(|| {
+                package_error(
+                    DiagnosticClass::Corrupt,
+                    "package_object_interface_dependency_lost",
+                    "validated package-interface dependency disappeared from the package closure",
+                )
+            })?;
+            if *digest != dependency.package_object {
+                return Err(package_error(
+                    DiagnosticClass::Corrupt,
+                    "package_object_interface_dependency_binding",
+                    "package-interface dependency resolves to a different exact package object",
+                ));
+            }
+            *digest
+        };
+        let target = self.interfaces.get(&digest).ok_or_else(|| {
+            package_error(
+                DiagnosticClass::Corrupt,
+                "package_object_interface_dependency_validation",
+                "validated package lost its package-interface result",
+            )
+        })?;
+        let value = target.owners.get(&owner).ok_or_else(|| {
+            package_error(
+                DiagnosticClass::Semantic,
+                "package_object_interface_owner_missing",
+                format!(
+                    "{label} names owner {owner:?} absent from exact package interface {package}"
+                ),
+            )
+        })?;
+        if !kinds.contains(&value.kind()) {
+            return Err(package_error(
+                DiagnosticClass::Semantic,
+                "package_object_interface_owner_kind",
+                format!(
+                    "{label} names package-interface owner kind {:?}",
+                    value.kind()
+                ),
+            ));
+        }
+        Ok(value)
+    }
 }
 
 fn reject_dependency_cycle(
@@ -326,17 +535,30 @@ fn package_error(
 mod tests {
     use super::*;
     use crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
-    use crate::platform::kernel::{KernelSnapshot, Name, SemanticRoot};
+    use crate::platform::kernel::{
+        DeclarationReference, FunctionEffect, KernelSnapshot, Name, OwnerHeader,
+        PackageFunctionSignature, PackageInterfaceDeclaration, SemanticRoot, TypeObject,
+        encode_type_object,
+    };
+    use crate::platform::package_interface::{
+        PACKAGE_INTERFACE_CONTRACT_VERSION, PackageInterfaceOwner, PackageInterfaceSummary,
+        build_package_interface,
+    };
     use crate::platform::persistent_map::{MapRoot, PageDigest};
-    use crate::platform::semantic_id::RepositoryId;
+    use crate::platform::semantic_id::{DeclarationId, RepositoryId};
     use crate::platform::storage::memory::MemoryPackedStore;
     use crate::platform::storage::object::{ImmutableObjectStore, StageOutcome};
-    use crate::platform::witness::rebuild_full_witness;
+    use crate::platform::witness::{SemanticDigest, rebuild_full_witness};
 
     fn object(
         seed: u8,
         dependencies: Vec<DependencyRecord>,
-    ) -> (PackageObjectDigest, Vec<u8>, PackageObject) {
+    ) -> (
+        PackageObjectDigest,
+        Vec<u8>,
+        PackageObject,
+        BTreeMap<ObjectKey, Vec<u8>>,
+    ) {
         let package = PackageId::migrate(b"package-object-test", u64::from(seed));
         let empty = MapRoot::from_parts(PageDigest::from_bytes([seed; 32]), 0);
         let snapshot = KernelSnapshot {
@@ -351,11 +573,15 @@ mod tests {
             },
             owners: BTreeMap::new(),
             types: BTreeMap::new(),
+            dependency_interfaces: BTreeMap::new(),
+            dependency_types: BTreeMap::new(),
             blobs: BTreeMap::new(),
             dependencies: BTreeMap::new(),
             retirements: BTreeMap::new(),
         };
         let witness = rebuild_full_witness(&snapshot).expect("fixture witness");
+        let interface = build_package_interface(&BTreeMap::new(), &BTreeMap::new())
+            .expect("empty package interface");
         let value = PackageObject {
             contract_version: PACKAGE_OBJECT_CONTRACT_VERSION,
             graph_contract_version: GRAPH_CONTRACT_VERSION,
@@ -365,15 +591,16 @@ mod tests {
             semantic_root: witness.manifest.semantic_root,
             validation_witness: witness.manifest_digest,
             witness: witness.manifest,
+            interface_owners: interface.root,
             dependencies,
         };
         let (digest, bytes) = value.encode().expect("package object encoding");
-        (digest, bytes, value)
+        (digest, bytes, value, interface.objects)
     }
 
     #[test]
     fn package_object_round_trips_and_rejects_foreign_bytes() {
-        let (digest, bytes, value) = object(1, Vec::new());
+        let (digest, bytes, value, _) = object(1, Vec::new());
         assert_eq!(PackageObject::decode(&bytes, digest).unwrap(), value);
         assert_eq!(
             PackageObject::decode(&bytes, PackageObjectDigest::from_bytes([9; 32]))
@@ -382,7 +609,7 @@ mod tests {
             "package_object_digest"
         );
         let mut predecessor = bytes;
-        predecessor[..8].copy_from_slice(b"LKJPKG03");
+        predecessor[..8].copy_from_slice(b"LKJPKG05");
         assert!(
             PackageObject::decode(&predecessor, PackageObjectDigest::of(&predecessor)).is_err()
         );
@@ -390,16 +617,19 @@ mod tests {
 
     #[test]
     fn closure_requires_exact_staged_children() {
-        let (child_digest, child_bytes, child) = object(2, Vec::new());
+        let (child_digest, child_bytes, child, child_interface) = object(2, Vec::new());
         let dependency = DependencyRecord {
             graph_contract_version: GRAPH_CONTRACT_VERSION,
             package: child.package,
             semantic_revision: child.semantic_revision,
             package_object: child_digest,
         };
-        let (root_digest, root_bytes, root) = object(1, vec![dependency.clone()]);
+        let (root_digest, root_bytes, root, root_interface) = object(1, vec![dependency.clone()]);
         let mut store = MemoryPackedStore::default();
         let mut work = StoreWork::default();
+        for (key, bytes) in root_interface {
+            store.stage(key, &bytes, &mut work).unwrap();
+        }
         assert_eq!(
             store
                 .stage(
@@ -423,6 +653,9 @@ mod tests {
                 &mut work,
             )
             .unwrap();
+        for (key, bytes) in child_interface {
+            store.stage(key, &bytes, &mut work).unwrap();
+        }
         assert_eq!(
             validate_package_object_closure(&store, root_digest, None, &mut work).unwrap(),
             root
@@ -437,6 +670,68 @@ mod tests {
                 .unwrap_err()
                 .code,
             "package_object_dependency_binding"
+        );
+    }
+
+    #[test]
+    fn closure_rejects_public_types_outside_the_exact_dependency_set() {
+        let (_, _, mut root, _) = object(3, Vec::new());
+        let foreign_package = PackageId::migrate(b"package-object-unbound-interface", 0);
+        let foreign_declaration = DeclarationId::migrate(b"package-object-unbound-interface", 0);
+        let named_type = TypeObject::new(TypeForm::Named {
+            declaration: DeclarationReference {
+                package: foreign_package,
+                declaration: foreign_declaration,
+            },
+        })
+        .unwrap();
+        let (named_digest, named_bytes) = encode_type_object(&named_type).unwrap();
+        let function = DeclarationId::migrate(b"package-object-interface-function", 0);
+        let semantic = SemanticDigest::of("lkjscript.package-object.test.summary.v1", b"summary");
+        let interface_owner = PackageInterfaceOwner {
+            contract_version: PACKAGE_INTERFACE_CONTRACT_VERSION,
+            summary: PackageInterfaceSummary {
+                semantic_interface: semantic,
+                type_digest: semantic,
+                effect: semantic,
+                capability: semantic,
+                presentation: semantic,
+            },
+            record: PackageInterfaceRecord::Declaration(PackageInterfaceDeclaration {
+                header: OwnerHeader::new(OwnerKey::Declaration(function), OwnerKind::PureFunction),
+                name: Name::new("foreign_type").unwrap(),
+                payload: PackageInterfaceDeclarationPayload::Function(PackageFunctionSignature {
+                    type_parameters: Vec::new(),
+                    parameters: Vec::new(),
+                    result: named_digest,
+                    effect: FunctionEffect::Pure,
+                }),
+            }),
+        };
+        let interface = build_package_interface(
+            &BTreeMap::from([(OwnerKey::Declaration(function), interface_owner)]),
+            &BTreeMap::from([(named_digest, named_bytes)]),
+        )
+        .unwrap();
+        root.interface_owners = interface.root;
+        let (root_digest, root_bytes) = root.encode().unwrap();
+        let mut store = MemoryPackedStore::default();
+        let mut work = StoreWork::default();
+        for (key, bytes) in interface.objects {
+            store.stage(key, &bytes, &mut work).unwrap();
+        }
+        store
+            .stage(
+                ObjectKey::from_digest(ObjectDomain::PackageObject, root_digest.bytes()),
+                &root_bytes,
+                &mut work,
+            )
+            .unwrap();
+        assert_eq!(
+            validate_package_object_closure(&store, root_digest, None, &mut work)
+                .unwrap_err()
+                .code,
+            "package_object_interface_dependency_missing"
         );
     }
 }

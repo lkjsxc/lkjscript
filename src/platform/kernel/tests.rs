@@ -541,6 +541,8 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             root,
             owners,
             types,
+            dependency_interfaces: BTreeMap::new(),
+            dependency_types: BTreeMap::new(),
             blobs: BTreeMap::new(),
             dependencies: BTreeMap::new(),
             retirements: BTreeMap::new(),
@@ -610,6 +612,8 @@ fn graph_five_permits_a_structurally_empty_package() {
         },
         owners: BTreeMap::new(),
         types: BTreeMap::new(),
+        dependency_interfaces: BTreeMap::new(),
+        dependency_types: BTreeMap::new(),
         blobs: BTreeMap::new(),
         dependencies: BTreeMap::new(),
         retirements: BTreeMap::new(),
@@ -1115,6 +1119,156 @@ fn package_dependency_relation_has_a_package_endpoint() {
             && edge.kind == RelationKind::PackageDependency
             && edge.target == RelationEndpoint::Package(dependency)
     }));
+}
+
+#[test]
+fn full_oracle_resolves_foreign_calls_only_through_the_exact_package_interface() {
+    let (mut snapshot, ids) = prototype_snapshot();
+    let foreign_package = PackageId::migrate(TEST_SEED, 45);
+    let package_object = PackageObjectDigest::from_bytes([45; 32]);
+    snapshot.dependencies.insert(
+        foreign_package,
+        DependencyRecord {
+            graph_contract_version: contract::GRAPH_CONTRACT_VERSION,
+            package: foreign_package,
+            semantic_revision: RevisionId::from_digest([46; 32]),
+            package_object,
+        },
+    );
+    snapshot.root.dependencies = map_root(1, 2);
+
+    let declaration_key = OwnerKey::Declaration(ids.callee);
+    let mut declaration = snapshot.owners[&declaration_key].clone();
+    let OwnerRecord::Declaration(record) = &mut declaration else {
+        unreachable!()
+    };
+    record.visibility = DeclarationVisibility::Public;
+    let declaration = PackageInterfaceRecord::project_public(&declaration)
+        .unwrap()
+        .expect("public function interface");
+    let parameter_key = OwnerKey::Parameter(ids.parameter);
+    let parameter = PackageInterfaceRecord::project_public(&snapshot.owners[&parameter_key])
+        .unwrap()
+        .expect("public signature parameter interface");
+    snapshot.dependency_interfaces.insert(
+        package_object,
+        BTreeMap::from([(declaration_key, declaration), (parameter_key, parameter)]),
+    );
+
+    let Some(OwnerRecord::Expression(call)) = snapshot
+        .owners
+        .get_mut(&OwnerKey::Expression(ids.call_expression))
+    else {
+        panic!("call expression fixture")
+    };
+    let ExpressionOperation::Call { function, .. } = &mut call.operation else {
+        panic!("call operation fixture")
+    };
+    function.package = foreign_package;
+    validate_full(&snapshot).expect("exact foreign function interface must validate");
+
+    snapshot
+        .dependency_interfaces
+        .get_mut(&package_object)
+        .unwrap()
+        .remove(&declaration_key);
+    let diagnostics = validate_full(&snapshot)
+        .expect_err("binding a package alone must not authorize an absent foreign owner");
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "kernel_full_foreign_reference_missing")
+    );
+}
+
+#[test]
+fn full_oracle_types_foreign_nominal_and_capability_uses_from_the_interface() {
+    let (mut snapshot, ids) = prototype_snapshot();
+    let foreign_package = PackageId::migrate(TEST_SEED, 47);
+    let package_object = PackageObjectDigest::from_bytes([47; 32]);
+    snapshot.dependencies.insert(
+        foreign_package,
+        DependencyRecord {
+            graph_contract_version: contract::GRAPH_CONTRACT_VERSION,
+            package: foreign_package,
+            semantic_revision: RevisionId::from_digest([48; 32]),
+            package_object,
+        },
+    );
+    snapshot.root.dependencies = map_root(1, 2);
+
+    let record = DeclarationId::migrate(TEST_SEED, 0);
+    let variant = DeclarationId::migrate(TEST_SEED, 1);
+    let interface = DeclarationId::migrate(TEST_SEED, 2);
+    let exported = [
+        OwnerKey::Declaration(record),
+        OwnerKey::Field(ids.field),
+        OwnerKey::Declaration(variant),
+        OwnerKey::Case(ids.case),
+        OwnerKey::Declaration(interface),
+        OwnerKey::Operation(ids.operation),
+    ]
+    .into_iter()
+    .map(|owner| {
+        let interface = PackageInterfaceRecord::project_public(&snapshot.owners[&owner])
+            .unwrap()
+            .expect("public nominal or capability interface owner");
+        (owner, interface)
+    })
+    .collect();
+    snapshot
+        .dependency_interfaces
+        .insert(package_object, exported);
+
+    for owner in snapshot.owners.values_mut() {
+        match owner {
+            OwnerRecord::Expression(expression) => match &mut expression.operation {
+                ExpressionOperation::Record {
+                    nominal_type,
+                    fields,
+                } if nominal_type.is_some_and(|reference| reference.declaration == record) => {
+                    nominal_type.as_mut().unwrap().package = foreign_package;
+                    for field in fields {
+                        if let FieldSelector::Nominal(reference) = &mut field.selector {
+                            reference.package = foreign_package;
+                        }
+                    }
+                }
+                ExpressionOperation::Field {
+                    selector: FieldSelector::Nominal(reference),
+                    ..
+                } if reference.field == ids.field => reference.package = foreign_package,
+                ExpressionOperation::Variant { case, .. } if case.case == ids.case => {
+                    case.package = foreign_package;
+                }
+                ExpressionOperation::Match { arms, .. } => {
+                    for arm in arms {
+                        if arm.case.case == ids.case {
+                            arm.case.package = foreign_package;
+                        }
+                    }
+                }
+                ExpressionOperation::CapabilityCall { operation, .. }
+                    if operation.operation == ids.operation =>
+                {
+                    operation.package = foreign_package;
+                }
+                _ => {}
+            },
+            OwnerRecord::Requirement(requirement)
+                if requirement.interface.declaration == interface =>
+            {
+                requirement.interface.package = foreign_package;
+                for operation in &mut requirement.operations {
+                    operation.package = foreign_package;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    validate_full(&snapshot)
+        .expect("foreign records, variants, fields, cases, and operations must type exactly");
 }
 
 #[test]

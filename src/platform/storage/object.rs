@@ -28,10 +28,11 @@ pub enum ObjectDomain {
     Change,
     Transaction,
     SemanticDiff,
+    PackageInterface,
 }
 
 impl ObjectDomain {
-    pub const ALL: [Self; 22] = [
+    pub const ALL: [Self; 23] = [
         Self::Owner,
         Self::Type,
         Self::Blob,
@@ -54,6 +55,7 @@ impl ObjectDomain {
         Self::Change,
         Self::Transaction,
         Self::SemanticDiff,
+        Self::PackageInterface,
     ];
 
     pub const fn tag(self) -> u8 {
@@ -80,6 +82,7 @@ impl ObjectDomain {
             Self::Change => 20,
             Self::Transaction => 21,
             Self::SemanticDiff => 22,
+            Self::PackageInterface => 23,
         }
     }
 
@@ -120,6 +123,7 @@ impl ObjectDomain {
             Self::Change => "change",
             Self::Transaction => "transaction",
             Self::SemanticDiff => "semantic_diff",
+            Self::PackageInterface => "package_interface",
         }
     }
 
@@ -147,6 +151,7 @@ impl ObjectDomain {
             Self::Change => contract::CHANGE_DIGEST_DOMAIN,
             Self::Transaction => contract::TRANSACTION_OBJECT_DIGEST_DOMAIN,
             Self::SemanticDiff => contract::SEMANTIC_DIFF_OBJECT_DIGEST_DOMAIN,
+            Self::PackageInterface => contract::PACKAGE_INTERFACE_OWNER_DIGEST_DOMAIN,
         }
     }
 
@@ -154,7 +159,9 @@ impl ObjectDomain {
         match self {
             Self::MapPage => crate::platform::persistent_map::MAXIMUM_PAGE_BYTES,
             Self::SemanticRoot | Self::Revision | Self::Receipt | Self::Retirement => 64 * 1024,
-            Self::Type | Self::OwnerSummary | Self::Dependency => 1024 * 1024,
+            Self::Type | Self::OwnerSummary | Self::Dependency | Self::PackageInterface => {
+                1024 * 1024
+            }
             Self::Owner
             | Self::Sequence
             | Self::ValidationWitness
@@ -256,6 +263,19 @@ pub struct StoreWork {
     pub bytes_read: u64,
     pub bytes_staged: u64,
     pub packs_sealed: u64,
+}
+
+impl StoreWork {
+    pub fn add(&mut self, other: Self) {
+        self.catalog_lookups = self.catalog_lookups.saturating_add(other.catalog_lookups);
+        self.packs_opened = self.packs_opened.saturating_add(other.packs_opened);
+        self.objects_read = self.objects_read.saturating_add(other.objects_read);
+        self.objects_staged = self.objects_staged.saturating_add(other.objects_staged);
+        self.objects_reused = self.objects_reused.saturating_add(other.objects_reused);
+        self.bytes_read = self.bytes_read.saturating_add(other.bytes_read);
+        self.bytes_staged = self.bytes_staged.saturating_add(other.bytes_staged);
+        self.packs_sealed = self.packs_sealed.saturating_add(other.packs_sealed);
+    }
 }
 
 pub trait ImmutableObjectStore {

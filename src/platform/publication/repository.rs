@@ -12,18 +12,22 @@ use super::{
 use crate::platform::change::{AuthoredChangeSet, PrimitiveEdit};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{KernelSnapshot, SemanticRoot, decode_root, encode_root};
-use crate::platform::package_object::{PackageObject, validate_package_object_closure};
+use crate::platform::package_object::{
+    PackageObject, validate_package_object_closure, validate_package_object_closure_with_interface,
+};
 use crate::platform::storage::contract::TARGET_PACK_BYTES;
 use crate::platform::storage::directory::{PackDirectoryStore, SealReceipt};
 use crate::platform::storage::object::{
-    ImmutableObjectStore, ObjectDomain, ObjectKey, StageOutcome, StoreError, StoreErrorClass,
-    StoreWork,
+    ImmutableObjectStore, ObjectDomain, ObjectKey, ObjectStage, StageOutcome, StoreError,
+    StoreErrorClass, StoreWork,
 };
+use crate::platform::storage::pack::PackMetadata;
 use crate::platform::witness::{
     ValidationWitnessManifest, decode_witness_manifest, encode_witness_manifest,
 };
 use fs2::FileExt;
 use rustix::fs::{AtFlags, Mode, OFlags};
+use std::collections::BTreeSet;
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -32,6 +36,7 @@ const HEAD_FILE: &str = "HEAD";
 const LOCK_FILE: &str = "LOCK";
 const HEAD_STAGE_PREFIX: &str = ".HEAD-stage-";
 const REPOSITORY_STAGE_PREFIX: &str = ".lkjscript-graph5-stage-";
+const MAXIMUM_PACKAGE_TRANSPORT_PACKS: usize = 10_000;
 
 #[derive(Clone, Debug)]
 pub struct GraphRepository {
@@ -232,15 +237,24 @@ impl GraphRepository {
         self.view_current()?.export_package_object()
     }
 
-    /// Stages one exact Graph 5 package object as unreachable operational data. The repository
-    /// lock serializes pack/catalog mutation, while the accepted HEAD is read before and after and
-    /// is never replaced by this operation.
+    /// Stages one self-contained interface transport as unreachable operational data. Every pack
+    /// is verified before its objects enter the private stage, and the transport must contain
+    /// exactly the root package descriptor, its interface-map pages, interface records, and
+    /// reachable structural types. Exact dependency package objects must already be staged.
     pub fn stage_package_object(
         &self,
-        bytes: &[u8],
+        digest: crate::platform::kernel::PackageObjectDigest,
+        packs: &[Vec<u8>],
     ) -> Result<PackageObjectStageReceipt, Diagnostic> {
-        let digest = crate::platform::kernel::PackageObjectDigest::of(bytes);
-        let object = PackageObject::decode(bytes, digest)?;
+        if packs.is_empty() || packs.len() > MAXIMUM_PACKAGE_TRANSPORT_PACKS {
+            return Err(repository_error(
+                DiagnosticClass::Resource,
+                "publication_package_transport_pack_count",
+                format!(
+                    "package transport must contain 1 through {MAXIMUM_PACKAGE_TRANSPORT_PACKS} immutable packs"
+                ),
+            ));
+        }
         let root_directory = open_directory(&self.root)?;
         let lock = open_lock(&root_directory)?;
         FileExt::lock_exclusive(&lock)
@@ -254,20 +268,80 @@ impl GraphRepository {
             )
         })?;
         let mut work = StoreWork::default();
-        let outcome = store
-            .stage(
-                ObjectKey::from_digest(ObjectDomain::PackageObject, digest.bytes()),
-                bytes,
+        let root_key = ObjectKey::from_digest(ObjectDomain::PackageObject, digest.bytes());
+        let outcome = if store
+            .contains(root_key, &mut work)
+            .map_err(store_diagnostic)?
+        {
+            StageOutcome::Reused
+        } else {
+            StageOutcome::Inserted
+        };
+        let mut input_keys = BTreeSet::new();
+        let mut stage = ObjectStage::new(&store);
+        for pack in packs {
+            let metadata = PackMetadata::decode(pack, true).map_err(store_diagnostic)?;
+            metadata.verify_all(pack).map_err(store_diagnostic)?;
+            for entry in &metadata.entries {
+                if !input_keys.insert(entry.key) {
+                    return Err(repository_error(
+                        DiagnosticClass::Corrupt,
+                        "publication_package_transport_duplicate",
+                        "package transport repeats one immutable object key",
+                    ));
+                }
+                let bytes = metadata
+                    .read(pack, entry.key, entry.key.domain.maximum_bytes())
+                    .map_err(store_diagnostic)?
+                    .ok_or_else(|| {
+                        repository_error(
+                            DiagnosticClass::Corrupt,
+                            "publication_package_transport_entry",
+                            "verified package pack lost one indexed object",
+                        )
+                    })?;
+                stage
+                    .stage(entry.key, &bytes, &mut work)
+                    .map_err(store_diagnostic)?;
+            }
+        }
+        let root_bytes = stage
+            .read(
+                root_key,
+                ObjectDomain::PackageObject.maximum_bytes(),
                 &mut work,
             )
-            .map_err(store_diagnostic)?;
-        let validated = validate_package_object_closure(&store, digest, None, &mut work)?;
-        if validated != object {
+            .map_err(store_diagnostic)?
+            .ok_or_else(|| {
+                repository_error(
+                    DiagnosticClass::Semantic,
+                    "publication_package_transport_root",
+                    "package transport omits its exact root package object",
+                )
+            })?;
+        let object = PackageObject::decode(&root_bytes, digest)?;
+        let validated =
+            validate_package_object_closure_with_interface(&stage, digest, None, &mut work)?;
+        if validated.root != object {
             return Err(repository_error(
                 DiagnosticClass::Corrupt,
                 "publication_package_stage_validation",
                 "staged package object changed during exact closure validation",
             ));
+        }
+        let mut expected_keys = validated.root_interface.reachable_objects;
+        expected_keys.insert(root_key);
+        if input_keys != expected_keys {
+            return Err(repository_error(
+                DiagnosticClass::Corrupt,
+                "publication_package_transport_reachability",
+                "package transport contains missing or unreachable immutable objects",
+            ));
+        }
+        for (key, bytes) in stage.into_objects() {
+            store
+                .stage(key, &bytes, &mut work)
+                .map_err(store_diagnostic)?;
         }
         let seal = store
             .seal_staged(TARGET_PACK_BYTES, &mut work)

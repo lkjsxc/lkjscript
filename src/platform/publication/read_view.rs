@@ -13,22 +13,28 @@ use crate::platform::change::{
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    DependencyRecord, EncodedOwnerKey, OwnerKey, OwnerRecord, PackageId, RelationEdge,
-    RelationEndpoint, RelationKind, RetirementRecord, TypeObject, TypeObjectDigest,
+    DependencyRecord, EncodedOwnerKey, OwnerKey, OwnerRecord, PackageId, PackageInterfaceRecord,
+    RelationEdge, RelationEndpoint, RelationKind, RetirementRecord, TypeObject, TypeObjectDigest,
     decode_dependency, decode_dependency_binding, decode_owner, decode_owner_binding,
     decode_retirement, decode_retirement_binding, decode_type_object, dependency_map_key,
     owner_map_key, retirement_map_key,
+};
+use crate::platform::package_interface::{
+    PackageInterfaceOwner, PackageInterfaceSelection, build_package_interface,
+    decode_package_interface_binding,
 };
 use crate::platform::package_object::{
     MAXIMUM_PACKAGE_OBJECT_DEPENDENCIES, PackageObject, validate_package_object_closure,
 };
 use crate::platform::persistent_map::{MapError, MapErrorClass, MapRoot, MapWork, PersistentMap};
 use crate::platform::semantic_id::RevisionId;
+use crate::platform::storage::contract::TARGET_PACK_BYTES;
 use crate::platform::storage::directory::PackDirectoryStore;
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, ObjectStage, StoreError, StoreErrorClass,
     StoreWork,
 };
+use crate::platform::storage::pack::PackBuilder;
 use crate::platform::storage::page_store::ObjectPageReader;
 use crate::platform::witness::{
     MAXIMUM_TEST_DEPENDENCY_PREFIX_ITEMS, NamespaceKey, OwnerSummary, OwnershipEntry,
@@ -52,6 +58,62 @@ pub struct RepositoryReadWork {
     pub canonical_records_decoded: u64,
     pub witness_records_decoded: u64,
     pub items_returned: u64,
+}
+
+impl RepositoryReadWork {
+    fn add(&mut self, other: Self) {
+        self.map.pages_read = self.map.pages_read.saturating_add(other.map.pages_read);
+        self.map.pages_decoded = self
+            .map
+            .pages_decoded
+            .saturating_add(other.map.pages_decoded);
+        self.map.pages_encoded = self
+            .map
+            .pages_encoded
+            .saturating_add(other.map.pages_encoded);
+        self.map.pages_written = self
+            .map
+            .pages_written
+            .saturating_add(other.map.pages_written);
+        self.map.pages_reused = self.map.pages_reused.saturating_add(other.map.pages_reused);
+        self.map.bytes_read = self.map.bytes_read.saturating_add(other.map.bytes_read);
+        self.map.bytes_encoded = self
+            .map
+            .bytes_encoded
+            .saturating_add(other.map.bytes_encoded);
+        self.map.bytes_written = self
+            .map
+            .bytes_written
+            .saturating_add(other.map.bytes_written);
+        self.map.key_comparisons = self
+            .map
+            .key_comparisons
+            .saturating_add(other.map.key_comparisons);
+        self.map.entries_visited = self
+            .map
+            .entries_visited
+            .saturating_add(other.map.entries_visited);
+        self.map.differences_emitted = self
+            .map
+            .differences_emitted
+            .saturating_add(other.map.differences_emitted);
+        self.map.subtrees_skipped = self
+            .map
+            .subtrees_skipped
+            .saturating_add(other.map.subtrees_skipped);
+        self.map.entries_skipped = self
+            .map
+            .entries_skipped
+            .saturating_add(other.map.entries_skipped);
+        self.store.add(other.store);
+        self.canonical_records_decoded = self
+            .canonical_records_decoded
+            .saturating_add(other.canonical_records_decoded);
+        self.witness_records_decoded = self
+            .witness_records_decoded
+            .saturating_add(other.witness_records_decoded);
+        self.items_returned = self.items_returned.saturating_add(other.items_returned);
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -84,7 +146,10 @@ pub struct RevisionWitnessMapUpdate {
 pub struct ExportedPackageObject {
     pub object: PackageObject,
     pub digest: crate::platform::kernel::PackageObjectDigest,
-    pub bytes: Vec<u8>,
+    pub packs: Vec<Vec<u8>>,
+    pub interface_owner_count: u64,
+    pub interface_type_count: u64,
+    pub interface_map_work: MapWork,
     pub read_work: RepositoryReadWork,
     pub closure_work: StoreWork,
 }
@@ -282,10 +347,132 @@ impl RepositoryView {
         Ok(self.read(Some(record), work))
     }
 
+    /// Resolves one implementation-free owner from the exact package object selected by the
+    /// pinned local dependency binding. Work follows one dependency-map path, one package object,
+    /// one interface-map path, and one interface owner object.
+    pub fn package_interface_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<RevisionRead<Option<PackageInterfaceRecord>>, Diagnostic> {
+        let dependency = self.dependency(package)?;
+        let mut work = dependency.work;
+        let Some(dependency) = dependency.value else {
+            return Ok(self.read(None, work));
+        };
+        let exact = self.package_interface_owner_from_dependency(&dependency, owner)?;
+        work.add(exact.work);
+        Ok(self.read(exact.value, work))
+    }
+
+    /// Resolves one implementation-free owner through an explicit exact dependency binding.
+    /// This path admits a dependency newly added by the current candidate overlay while retaining
+    /// the same package-object, revision, map, and owner integrity checks as accepted reads.
+    fn package_interface_owner_from_dependency(
+        &self,
+        dependency: &DependencyRecord,
+        owner: OwnerKey,
+    ) -> Result<RevisionRead<Option<PackageInterfaceRecord>>, Diagnostic> {
+        let mut work = RepositoryReadWork::default();
+        let package_bytes = self.read_required_object(
+            ObjectDomain::PackageObject,
+            dependency.package_object.bytes(),
+            "dependency binding references a missing package object",
+            &mut work,
+        )?;
+        let package_object = PackageObject::decode(&package_bytes, dependency.package_object)?;
+        package_object.matches_dependency(dependency)?;
+        let Some(binding_bytes) = self.lookup_map(
+            package_object.interface_owners,
+            &crate::platform::kernel::owner_map_key(owner),
+            &mut work,
+        )?
+        else {
+            return Ok(self.read(None, work));
+        };
+        let digest = decode_package_interface_binding(&binding_bytes)?;
+        let bytes = self.read_required_object(
+            ObjectDomain::PackageInterface,
+            digest.bytes(),
+            "package-interface map references a missing owner object",
+            &mut work,
+        )?;
+        let value = PackageInterfaceOwner::decode(&bytes, owner, digest)?;
+        work.canonical_records_decoded = work.canonical_records_decoded.saturating_add(1);
+        work.items_returned = 1;
+        Ok(self.read(Some(value.record), work))
+    }
+
     /// Builds one exact package descriptor from the pinned accepted revision. This explicit
     /// export may enumerate direct dependencies, but it does not reconstruct owner authority.
     pub fn export_package_object(&self) -> Result<ExportedPackageObject, Diagnostic> {
         let dependencies = self.package_dependencies()?;
+        let mut selection = PackageInterfaceSelection::default();
+        let mut read_work = dependencies.work;
+        read_work
+            .add(self.for_each_owner_record(|_, record| selection.observe_declaration(record))?);
+        read_work.add(self.for_each_owner_record(|_, record| selection.observe_operation(record))?);
+
+        let mut interface_owners = BTreeMap::new();
+        let mut type_roots = std::collections::BTreeSet::new();
+        for owner in selection.owners() {
+            let canonical = self.owner(owner)?;
+            read_work.add(canonical.work);
+            let canonical = canonical.value.ok_or_else(|| {
+                read_error(
+                    DiagnosticClass::Corrupt,
+                    "publication_package_interface_owner_missing",
+                    "public interface selection names a missing canonical owner",
+                )
+            })?;
+            let summary = self.bound_owner_summary(owner)?;
+            read_work.add(summary.work);
+            let summary = summary.value.ok_or_else(|| {
+                read_error(
+                    DiagnosticClass::Corrupt,
+                    "publication_package_interface_summary_missing",
+                    "public interface selection names an owner without a committed summary",
+                )
+            })?;
+            let interface =
+                PackageInterfaceOwner::project(&canonical, &summary.summary, &selection)?
+                    .ok_or_else(|| {
+                        read_error(
+                            DiagnosticClass::Corrupt,
+                            "publication_package_interface_projection",
+                            "selected public owner produced no package-interface record",
+                        )
+                    })?;
+            type_roots.extend(interface.type_roots());
+            interface_owners.insert(owner, interface);
+        }
+        let mut interface_types = BTreeMap::new();
+        let mut pending = type_roots.into_iter().collect::<Vec<_>>();
+        while let Some(digest) = pending.pop() {
+            if interface_types.contains_key(&digest) {
+                continue;
+            }
+            let read = self.type_object(digest)?;
+            read_work.add(read.work);
+            let object = read.value.ok_or_else(|| {
+                read_error(
+                    DiagnosticClass::Corrupt,
+                    "publication_package_interface_type_missing",
+                    "public interface references a missing canonical type object",
+                )
+            })?;
+            pending.extend(object.child_types());
+            let (encoded_digest, bytes) = crate::platform::kernel::encode_type_object(&object)?;
+            if encoded_digest != digest {
+                return Err(read_error(
+                    DiagnosticClass::Corrupt,
+                    "publication_package_interface_type_digest",
+                    "public interface type changed during canonical re-encoding",
+                ));
+            }
+            interface_types.insert(digest, bytes);
+        }
+        let interface = build_package_interface(&interface_owners, &interface_types)?;
         let object = PackageObject {
             contract_version: crate::platform::package_object::PACKAGE_OBJECT_CONTRACT_VERSION,
             graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
@@ -295,11 +482,17 @@ impl RepositoryView {
             semantic_root: self.current.accepted.semantic_root,
             validation_witness: self.current.accepted.validation_witness,
             witness: self.current.witness.clone(),
+            interface_owners: interface.root,
             dependencies: dependencies.value,
         };
         let (digest, bytes) = object.encode()?;
         let mut stage = ObjectStage::new(&self.store);
         let mut closure_work = StoreWork::default();
+        for (key, value) in &interface.objects {
+            stage
+                .stage(*key, value, &mut closure_work)
+                .map_err(store_diagnostic)?;
+        }
         stage
             .stage(
                 ObjectKey::from_digest(ObjectDomain::PackageObject, digest.bytes()),
@@ -315,13 +508,95 @@ impl RepositoryView {
                 "exported package object changed during exact closure validation",
             ));
         }
+        let mut builder = PackBuilder::default();
+        for (key, value) in &interface.objects {
+            builder.insert(*key, value).map_err(store_diagnostic)?;
+        }
+        builder
+            .insert(
+                ObjectKey::from_digest(ObjectDomain::PackageObject, digest.bytes()),
+                &bytes,
+            )
+            .map_err(store_diagnostic)?;
+        let packs = builder
+            .seal_targeted(TARGET_PACK_BYTES)
+            .map_err(store_diagnostic)?
+            .into_iter()
+            .map(|pack| pack.bytes)
+            .collect();
         Ok(ExportedPackageObject {
             object,
             digest,
-            bytes,
-            read_work: dependencies.work,
+            packs,
+            interface_owner_count: interface.owner_count,
+            interface_type_count: interface.type_count,
+            interface_map_work: interface.map_work,
+            read_work,
             closure_work,
         })
+    }
+
+    fn for_each_owner_record(
+        &self,
+        mut visitor: impl FnMut(OwnerKey, &OwnerRecord) -> Result<(), Diagnostic>,
+    ) -> Result<RepositoryReadWork, Diagnostic> {
+        let reader = ObjectPageReader::new(&self.store);
+        let mut map_work = MapWork::default();
+        let mut object_work = StoreWork::default();
+        let mut captured = None;
+        let result = PersistentMap::from_root(self.current.semantic_root.owners).for_each(
+            &reader,
+            &mut map_work,
+            |key, value| {
+                let operation = (|| {
+                    let owner = EncodedOwnerKey::decode(key)?;
+                    let binding = decode_owner_binding(value, owner)?;
+                    let object_key =
+                        ObjectKey::from_digest(ObjectDomain::Owner, binding.object.bytes());
+                    let bytes = self
+                        .store
+                        .read(
+                            object_key,
+                            ObjectDomain::Owner.maximum_bytes(),
+                            &mut object_work,
+                        )
+                        .map_err(store_diagnostic)?
+                        .ok_or_else(|| {
+                            read_error(
+                                DiagnosticClass::Corrupt,
+                                "publication_package_owner_missing",
+                                "package export found a missing canonical owner object",
+                            )
+                        })?;
+                    let record = decode_owner(&bytes, owner, binding.kind, binding.object)?;
+                    visitor(owner, &record)
+                })();
+                match operation {
+                    Ok(()) => Ok(()),
+                    Err(diagnostic) => {
+                        captured = Some(diagnostic);
+                        Err(MapError {
+                            class: MapErrorClass::Corrupt,
+                            code: "publication_package_owner_stop",
+                            message: "owner scan stopped after an exact diagnostic".to_owned(),
+                        })
+                    }
+                }
+            },
+        );
+        let mut work = RepositoryReadWork {
+            map: map_work,
+            store: reader.work(),
+            canonical_records_decoded: self.current.semantic_root.owners.entries(),
+            items_returned: self.current.semantic_root.owners.entries(),
+            ..RepositoryReadWork::default()
+        };
+        work.store.add(object_work);
+        if let Some(diagnostic) = captured {
+            return Err(diagnostic);
+        }
+        result.map_err(map_diagnostic)?;
+        Ok(work)
     }
 
     fn package_dependencies(&self) -> Result<RevisionRead<Vec<DependencyRecord>>, Diagnostic> {
@@ -895,6 +1170,15 @@ impl CanonicalBaseRead for RepositoryView {
         digest: TypeObjectDigest,
     ) -> Result<CanonicalRead<Option<TypeObject>>, Diagnostic> {
         RepositoryView::type_object(self, digest).map(canonical_read)
+    }
+
+    fn read_package_interface_owner(
+        &self,
+        dependency: &DependencyRecord,
+        owner: OwnerKey,
+    ) -> Result<CanonicalRead<Option<PackageInterfaceRecord>>, Diagnostic> {
+        self.package_interface_owner_from_dependency(dependency, owner)
+            .map(canonical_read)
     }
 
     fn read_dependency(

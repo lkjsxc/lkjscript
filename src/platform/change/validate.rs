@@ -391,6 +391,14 @@ impl<B: CanonicalBaseRead + ?Sized> ExpressionRead for KernelOverlay<'_, B> {
         KernelOverlay::type_object(self, digest)
     }
 
+    fn package_interface_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<Option<crate::platform::kernel::PackageInterfaceRecord>, Diagnostic> {
+        KernelOverlay::package_interface_owner(self, package, owner)
+    }
+
     fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
         Ok(self.dependency(package)?.is_some())
     }

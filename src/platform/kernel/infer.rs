@@ -5,14 +5,17 @@ use super::digest::TypeObjectDigest;
 use super::expression::{ExpressionOperation, FieldSelector, LocalValueReference};
 use super::id::{OwnerKey, OwnerKind, PackageId};
 use super::owner::{
-    BindingKind, DeclarationPayload, FunctionEffect, OwnerRecord, ParameterParent,
-    PortImplementation,
+    BindingKind, CaseRecord, DeclarationPayload, FieldRecord, FunctionEffect, OperationRecord,
+    OwnerRecord, ParameterParent, PortImplementation,
 };
 use super::reference::DeclarationReference;
 use super::type_object::{StructuralTypeField, TypeForm, TypeObject};
 use super::validate::KernelSnapshot;
+use super::{PackageInterfaceDeclarationPayload, PackageInterfaceRecord};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
-use crate::platform::semantic_id::{DeclarationId, ExpressionId, RequirementId, TypeParameterId};
+use crate::platform::semantic_id::{
+    CaseId, DeclarationId, ExpressionId, FieldId, OperationId, RequirementId, TypeParameterId,
+};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Debug)]
@@ -39,6 +42,12 @@ pub(crate) trait ExpressionRead {
 
     fn type_object(&self, digest: TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic>;
 
+    fn package_interface_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic>;
+
     fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic>;
 }
 
@@ -52,7 +61,26 @@ impl ExpressionRead for KernelSnapshot {
     }
 
     fn type_object(&self, digest: TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic> {
-        Ok(self.types.get(&digest).cloned())
+        Ok(self
+            .types
+            .get(&digest)
+            .or_else(|| self.dependency_types.get(&digest))
+            .cloned())
+    }
+
+    fn package_interface_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+        let Some(dependency) = self.dependencies.get(&package) else {
+            return Ok(None);
+        };
+        Ok(self
+            .dependency_interfaces
+            .get(&dependency.package_object)
+            .and_then(|owners| owners.get(&owner))
+            .cloned())
     }
 
     fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
@@ -357,18 +385,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 fields,
             } => self.infer_record(nominal_type, &fields, context, next),
             ExpressionOperation::Variant { case, payload } => {
-                if case.package != self.read.package_id() {
-                    return Err(self.foreign_interface("variant case", case.package));
-                }
-                let case_record = match self.read.owner(OwnerKey::Case(case.case))? {
-                    Some(OwnerRecord::Case(record)) => record,
-                    _ => {
-                        return Err(type_error(
-                            "kernel_type_case_missing",
-                            "variant case is missing",
-                        ));
-                    }
-                };
+                let case_record = self.case_record(case.package, case.case)?;
                 self.validate_optional_payload(
                     payload,
                     case_record.payload,
@@ -437,27 +454,43 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     ));
                 }
                 if requirement.package != self.read.package_id()
-                    || operation.package != self.read.package_id()
+                    || !context.requirements.contains(&requirement.requirement)
                 {
-                    return Err(self.foreign_interface("capability", requirement.package));
-                }
-                if !context.requirements.contains(&requirement.requirement) {
                     return Err(type_error(
                         "kernel_type_capability_missing",
                         "capability requirement is unavailable in this task context",
                     ));
                 }
+                let requirement_record = match self
+                    .read
+                    .owner(OwnerKey::Requirement(requirement.requirement))?
+                {
+                    Some(OwnerRecord::Requirement(record)) => record,
+                    _ => {
+                        return Err(type_error(
+                            "kernel_type_capability_missing",
+                            "capability requirement record is missing",
+                        ));
+                    }
+                };
+                if requirement_record.interface.package != operation.package
+                    || !requirement_record.operations.contains(&operation)
+                {
+                    return Err(type_error(
+                        "kernel_type_capability_operation",
+                        "capability operation is not admitted by the exact requirement",
+                    ));
+                }
                 let operation_record =
-                    match self.read.owner(OwnerKey::Operation(operation.operation))? {
-                        Some(OwnerRecord::Operation(record)) => record,
-                        _ => {
-                            return Err(type_error(
-                                "kernel_type_operation_missing",
-                                "capability operation is missing",
-                            ));
-                        }
-                    };
-                let parameters = self.parameter_types(&operation_record.parameters)?;
+                    self.operation_record(operation.package, operation.operation)?;
+                if operation_record.declaration != requirement_record.interface.declaration {
+                    return Err(type_error(
+                        "kernel_type_capability_operation_owner",
+                        "capability operation does not belong to the requirement's exact interface",
+                    ));
+                }
+                let parameters =
+                    self.parameter_types(operation.package, &operation_record.parameters)?;
                 self.validate_arguments(&arguments, &parameters, context, next)?;
                 Ok(operation_record.result)
             }
@@ -566,29 +599,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         depth: usize,
     ) -> Result<TypeObjectDigest, Diagnostic> {
         if let Some(declaration) = nominal_type {
-            if declaration.package != self.read.package_id() {
-                return Err(self.foreign_interface("record", declaration.package));
-            }
-            let expected = match self
-                .read
-                .owner(OwnerKey::Declaration(declaration.declaration))?
-            {
-                Some(OwnerRecord::Declaration(record)) => match &record.payload {
-                    DeclarationPayload::Record { fields } => fields.clone(),
-                    _ => {
-                        return Err(type_error(
-                            "kernel_type_record_kind",
-                            "nominal record expression names a non-record declaration",
-                        ));
-                    }
-                },
-                _ => {
-                    return Err(type_error(
-                        "kernel_type_record_missing",
-                        "nominal record declaration is missing",
-                    ));
-                }
-            };
+            let expected = self.record_fields(declaration)?;
             if expected.len() != fields.len() {
                 return Err(type_error(
                     "kernel_type_record_field_count",
@@ -596,19 +607,14 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 ));
             }
             for expected_field in expected {
-                let field_record = match self.read.owner(OwnerKey::Field(expected_field))? {
-                    Some(OwnerRecord::Field(record)) => record,
-                    _ => {
-                        return Err(type_error(
-                            "kernel_type_field_missing",
-                            "record field is missing",
-                        ));
-                    }
-                };
+                let field_record = self.field_record(declaration.package, expected_field)?;
                 let value = fields
                     .iter()
                     .find_map(|field| match field.selector {
-                        FieldSelector::Nominal(reference) if reference.field == expected_field => {
+                        FieldSelector::Nominal(reference)
+                            if reference.package == declaration.package
+                                && reference.field == expected_field =>
+                        {
                             Some(field.value)
                         }
                         _ => None,
@@ -653,18 +659,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
     ) -> Result<TypeObjectDigest, Diagnostic> {
         match selector {
             FieldSelector::Nominal(reference) => {
-                if reference.package != self.read.package_id() {
-                    return Err(self.foreign_interface("field", reference.package));
-                }
-                let field = match self.read.owner(OwnerKey::Field(reference.field))? {
-                    Some(OwnerRecord::Field(record)) => record,
-                    _ => {
-                        return Err(type_error(
-                            "kernel_type_field_missing",
-                            "nominal field is missing",
-                        ));
-                    }
-                };
+                let field = self.field_record(reference.package, reference.field)?;
                 let object = self.type_object(value_type)?;
                 if !matches!(
                     object.form,
@@ -716,30 +711,15 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 "match value is not a nominal variant",
             ));
         };
-        if declaration.package != self.read.package_id() {
-            return Err(self.foreign_interface("match", declaration.package));
-        }
-        let expected_cases = match self
-            .read
-            .owner(OwnerKey::Declaration(declaration.declaration))?
-        {
-            Some(OwnerRecord::Declaration(record)) => match &record.payload {
-                DeclarationPayload::Variant { cases } => cases.clone(),
-                _ => {
-                    return Err(type_error(
-                        "kernel_type_match_kind",
-                        "match value names a non-variant declaration",
-                    ));
-                }
-            },
-            _ => {
-                return Err(type_error(
-                    "kernel_type_match_variant_missing",
-                    "match variant declaration is missing",
-                ));
-            }
-        };
-        let actual_cases = arms.iter().map(|arm| arm.case.case).collect::<Vec<_>>();
+        let expected_cases = self.variant_cases(declaration)?;
+        let expected_cases = expected_cases
+            .iter()
+            .map(|case| (declaration.package, *case))
+            .collect::<Vec<_>>();
+        let actual_cases = arms
+            .iter()
+            .map(|arm| (arm.case.package, arm.case.case))
+            .collect::<Vec<_>>();
         if expected_cases != actual_cases {
             return Err(type_error(
                 "kernel_type_match_exhaustive",
@@ -748,15 +728,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         }
         let mut result = None;
         for arm in arms {
-            let case = match self.read.owner(OwnerKey::Case(arm.case.case))? {
-                Some(OwnerRecord::Case(record)) => record,
-                _ => {
-                    return Err(type_error(
-                        "kernel_type_case_missing",
-                        "match case is missing",
-                    ));
-                }
-            };
+            let case = self.case_record(arm.case.package, arm.case.case)?;
             if case.declaration != declaration.declaration {
                 return Err(type_error(
                     "kernel_type_match_case_owner",
@@ -822,12 +794,165 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         }
     }
 
+    fn record_fields(&self, reference: DeclarationReference) -> Result<Vec<FieldId>, Diagnostic> {
+        if reference.package == self.read.package_id() {
+            return match self
+                .read
+                .owner(OwnerKey::Declaration(reference.declaration))?
+            {
+                Some(OwnerRecord::Declaration(record)) => match record.payload {
+                    DeclarationPayload::Record { fields } => Ok(fields),
+                    _ => Err(type_error(
+                        "kernel_type_record_kind",
+                        "nominal record expression names a non-record declaration",
+                    )),
+                },
+                _ => Err(type_error(
+                    "kernel_type_record_missing",
+                    "nominal record declaration is missing",
+                )),
+            };
+        }
+        match self.dependency_owner(
+            reference.package,
+            OwnerKey::Declaration(reference.declaration),
+            "record",
+        )? {
+            PackageInterfaceRecord::Declaration(record) => match record.payload {
+                PackageInterfaceDeclarationPayload::Record { fields } => Ok(fields),
+                _ => Err(type_error(
+                    "kernel_type_record_kind",
+                    "nominal record expression names a non-record dependency declaration",
+                )),
+            },
+            _ => Err(type_error(
+                "kernel_type_record_kind",
+                "nominal record expression names a non-declaration dependency owner",
+            )),
+        }
+    }
+
+    fn variant_cases(&self, reference: DeclarationReference) -> Result<Vec<CaseId>, Diagnostic> {
+        if reference.package == self.read.package_id() {
+            return match self
+                .read
+                .owner(OwnerKey::Declaration(reference.declaration))?
+            {
+                Some(OwnerRecord::Declaration(record)) => match record.payload {
+                    DeclarationPayload::Variant { cases } => Ok(cases),
+                    _ => Err(type_error(
+                        "kernel_type_match_kind",
+                        "match value names a non-variant declaration",
+                    )),
+                },
+                _ => Err(type_error(
+                    "kernel_type_match_variant_missing",
+                    "match variant declaration is missing",
+                )),
+            };
+        }
+        match self.dependency_owner(
+            reference.package,
+            OwnerKey::Declaration(reference.declaration),
+            "match variant",
+        )? {
+            PackageInterfaceRecord::Declaration(record) => match record.payload {
+                PackageInterfaceDeclarationPayload::Variant { cases } => Ok(cases),
+                _ => Err(type_error(
+                    "kernel_type_match_kind",
+                    "match value names a non-variant dependency declaration",
+                )),
+            },
+            _ => Err(type_error(
+                "kernel_type_match_kind",
+                "match value names a non-declaration dependency owner",
+            )),
+        }
+    }
+
+    fn field_record(&self, package: PackageId, field: FieldId) -> Result<FieldRecord, Diagnostic> {
+        if package == self.read.package_id() {
+            return match self.read.owner(OwnerKey::Field(field))? {
+                Some(OwnerRecord::Field(record)) => Ok(record),
+                _ => Err(type_error(
+                    "kernel_type_field_missing",
+                    "nominal field is missing",
+                )),
+            };
+        }
+        match self.dependency_owner(package, OwnerKey::Field(field), "field")? {
+            PackageInterfaceRecord::Field(record) => Ok(record),
+            _ => Err(type_error(
+                "kernel_type_field_missing",
+                "dependency field identity has another owner kind",
+            )),
+        }
+    }
+
+    fn case_record(&self, package: PackageId, case: CaseId) -> Result<CaseRecord, Diagnostic> {
+        if package == self.read.package_id() {
+            return match self.read.owner(OwnerKey::Case(case))? {
+                Some(OwnerRecord::Case(record)) => Ok(record),
+                _ => Err(type_error(
+                    "kernel_type_case_missing",
+                    "variant case is missing",
+                )),
+            };
+        }
+        match self.dependency_owner(package, OwnerKey::Case(case), "variant case")? {
+            PackageInterfaceRecord::Case(record) => Ok(record),
+            _ => Err(type_error(
+                "kernel_type_case_missing",
+                "dependency case identity has another owner kind",
+            )),
+        }
+    }
+
+    fn operation_record(
+        &self,
+        package: PackageId,
+        operation: OperationId,
+    ) -> Result<OperationRecord, Diagnostic> {
+        if package == self.read.package_id() {
+            return match self.read.owner(OwnerKey::Operation(operation))? {
+                Some(OwnerRecord::Operation(record)) => Ok(record),
+                _ => Err(type_error(
+                    "kernel_type_operation_missing",
+                    "capability operation is missing",
+                )),
+            };
+        }
+        match self.dependency_owner(package, OwnerKey::Operation(operation), "operation")? {
+            PackageInterfaceRecord::Operation(record) => Ok(record),
+            _ => Err(type_error(
+                "kernel_type_operation_missing",
+                "dependency operation identity has another owner kind",
+            )),
+        }
+    }
+
     fn constant_type(
         &self,
         reference: DeclarationReference,
     ) -> Result<TypeObjectDigest, Diagnostic> {
         if reference.package != self.read.package_id() {
-            return Err(self.foreign_interface("constant", reference.package));
+            return match self.dependency_owner(
+                reference.package,
+                OwnerKey::Declaration(reference.declaration),
+                "constant",
+            )? {
+                PackageInterfaceRecord::Declaration(record) => match record.payload {
+                    PackageInterfaceDeclarationPayload::Constant { ty } => Ok(ty),
+                    _ => Err(type_error(
+                        "kernel_type_constant_kind",
+                        "constant reference names another declaration kind",
+                    )),
+                },
+                _ => Err(type_error(
+                    "kernel_type_constant_kind",
+                    "constant reference names another owner kind",
+                )),
+            };
         }
         match self
             .read
@@ -852,49 +977,96 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         reference: DeclarationReference,
         type_arguments: &[TypeObjectDigest],
     ) -> Result<FunctionSignature, Diagnostic> {
-        if reference.package != self.read.package_id() {
-            return Err(self.foreign_interface("function", reference.package));
-        }
-        let record = match self
-            .read
-            .owner(OwnerKey::Declaration(reference.declaration))?
-        {
-            Some(OwnerRecord::Declaration(record)) => record.clone(),
-            _ => {
-                return Err(type_error(
-                    "kernel_type_function_missing",
-                    "function declaration is missing",
-                ));
-            }
-        };
-        let (type_parameters, parameters, result, requirements, task) = match record.payload {
-            DeclarationPayload::External(function) => (
-                function.type_parameters,
-                function.parameters,
-                function.result,
-                BTreeSet::new(),
-                false,
-            ),
-            DeclarationPayload::Function(function) => {
-                let (requirements, task) = match function.effect {
-                    FunctionEffect::Pure => (BTreeSet::new(), false),
-                    FunctionEffect::Task { requirements } => {
-                        (requirements.into_iter().collect(), true)
+        let foreign = reference.package != self.read.package_id();
+        let (type_parameters, parameters, result, requirements, task) = if foreign {
+            let record = self.dependency_owner(
+                reference.package,
+                OwnerKey::Declaration(reference.declaration),
+                "function",
+            )?;
+            match record {
+                PackageInterfaceRecord::Declaration(record) => match record.payload {
+                    PackageInterfaceDeclarationPayload::External(function) => (
+                        function.type_parameters,
+                        function.parameters,
+                        function.result,
+                        BTreeSet::new(),
+                        false,
+                    ),
+                    PackageInterfaceDeclarationPayload::Function(function) => {
+                        let (requirements, task) = match function.effect {
+                            FunctionEffect::Pure => (BTreeSet::new(), false),
+                            FunctionEffect::Task { .. } => {
+                                return Err(type_error(
+                                    "kernel_type_foreign_task_unsupported",
+                                    "cross-package task calls require exact package-qualified capability requirements",
+                                ));
+                            }
+                        };
+                        (
+                            function.type_parameters,
+                            function.parameters,
+                            function.result,
+                            requirements,
+                            task,
+                        )
                     }
-                };
-                (
+                    _ => {
+                        return Err(type_error(
+                            "kernel_type_function_kind",
+                            "function reference names another declaration kind",
+                        ));
+                    }
+                },
+                _ => {
+                    return Err(type_error(
+                        "kernel_type_function_kind",
+                        "function reference names another owner kind",
+                    ));
+                }
+            }
+        } else {
+            let record = match self
+                .read
+                .owner(OwnerKey::Declaration(reference.declaration))?
+            {
+                Some(OwnerRecord::Declaration(record)) => record,
+                _ => {
+                    return Err(type_error(
+                        "kernel_type_function_missing",
+                        "function declaration is missing",
+                    ));
+                }
+            };
+            match record.payload {
+                DeclarationPayload::External(function) => (
                     function.type_parameters,
                     function.parameters,
                     function.result,
-                    requirements,
-                    task,
-                )
-            }
-            _ => {
-                return Err(type_error(
-                    "kernel_type_function_kind",
-                    "function reference names another declaration kind",
-                ));
+                    BTreeSet::new(),
+                    false,
+                ),
+                DeclarationPayload::Function(function) => {
+                    let (requirements, task) = match function.effect {
+                        FunctionEffect::Pure => (BTreeSet::new(), false),
+                        FunctionEffect::Task { requirements } => {
+                            (requirements.into_iter().collect(), true)
+                        }
+                    };
+                    (
+                        function.type_parameters,
+                        function.parameters,
+                        function.result,
+                        requirements,
+                        task,
+                    )
+                }
+                _ => {
+                    return Err(type_error(
+                        "kernel_type_function_kind",
+                        "function reference names another declaration kind",
+                    ));
+                }
             }
         };
         if type_parameters.len() != type_arguments.len() {
@@ -907,7 +1079,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             .into_iter()
             .zip(type_arguments.iter().copied())
             .collect::<BTreeMap<_, _>>();
-        let mut parameter_types = self.parameter_types(&parameters)?;
+        let mut parameter_types = self.parameter_types(reference.package, &parameters)?;
         for parameter in &mut parameter_types {
             *parameter = self.substitute(*parameter, &substitutions, 0)?;
         }
@@ -922,19 +1094,33 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
 
     fn parameter_types(
         &self,
+        package: PackageId,
         parameters: &[crate::platform::semantic_id::ParameterId],
     ) -> Result<Vec<TypeObjectDigest>, Diagnostic> {
         parameters
             .iter()
-            .map(
-                |parameter| match self.read.owner(OwnerKey::Parameter(*parameter))? {
-                    Some(OwnerRecord::Parameter(record)) => Ok(record.ty),
+            .map(|parameter| {
+                if package == self.read.package_id() {
+                    return match self.read.owner(OwnerKey::Parameter(*parameter))? {
+                        Some(OwnerRecord::Parameter(record)) => Ok(record.ty),
+                        _ => Err(type_error(
+                            "kernel_type_parameter_missing",
+                            "signature parameter record is missing",
+                        )),
+                    };
+                }
+                match self.dependency_owner(
+                    package,
+                    OwnerKey::Parameter(*parameter),
+                    "signature parameter",
+                )? {
+                    PackageInterfaceRecord::Parameter(record) => Ok(record.ty),
                     _ => Err(type_error(
                         "kernel_type_parameter_missing",
-                        "signature parameter record is missing",
+                        "dependency signature parameter has another owner kind",
                     )),
-                },
-            )
+                }
+            })
             .collect()
     }
 
@@ -1096,20 +1282,28 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         })
     }
 
-    fn foreign_interface(&self, label: &str, package: PackageId) -> Diagnostic {
-        match self.read.has_dependency(package) {
-            Ok(true) => type_error(
-                "kernel_type_dependency_interface",
-                format!(
-                    "{label} requires the exact dependency semantic interface for package {package}"
-                ),
-            ),
-            Ok(false) => type_error(
+    fn dependency_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+        label: &str,
+    ) -> Result<PackageInterfaceRecord, Diagnostic> {
+        if !self.read.has_dependency(package)? {
+            return Err(type_error(
                 "kernel_type_dependency_missing",
                 format!("{label} names unbound package {package}"),
-            ),
-            Err(diagnostic) => diagnostic,
+            ));
         }
+        self.read
+            .package_interface_owner(package, owner)?
+            .ok_or_else(|| {
+                type_error(
+                    "kernel_type_dependency_owner_missing",
+                    format!(
+                        "{label} names owner {owner:?} absent from exact dependency interface {package}"
+                    ),
+                )
+            })
     }
 
     fn consume_work(&mut self) -> Result<(), Diagnostic> {

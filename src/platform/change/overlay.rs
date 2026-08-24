@@ -3,8 +3,8 @@
 use super::{CanonicalBaseRead, CanonicalDelta, CanonicalReadWork};
 use crate::platform::diagnostic::Diagnostic;
 use crate::platform::kernel::{
-    DependencyRecord, KernelSnapshot, OwnerKey, OwnerRecord, PackageId, RetirementRecord,
-    TypeObject, TypeObjectDigest,
+    DependencyRecord, KernelSnapshot, OwnerKey, OwnerRecord, PackageId, PackageInterfaceRecord,
+    PackageObjectDigest, RetirementRecord, TypeObject, TypeObjectDigest,
 };
 use crate::platform::persistent_map::MapRoot;
 use crate::platform::semantic_id::{RepositoryId, RevisionId};
@@ -18,6 +18,8 @@ pub struct KernelOverlay<'a, B: ?Sized = KernelSnapshot> {
     delta: &'a CanonicalDelta,
     owners: RefCell<BTreeMap<OwnerKey, Option<OwnerRecord>>>,
     types: RefCell<BTreeMap<TypeObjectDigest, Option<TypeObject>>>,
+    package_interfaces:
+        RefCell<BTreeMap<(PackageObjectDigest, OwnerKey), Option<PackageInterfaceRecord>>>,
     dependencies: RefCell<BTreeMap<PackageId, Option<DependencyRecord>>>,
     retirements: RefCell<BTreeMap<OwnerKey, Option<RetirementRecord>>>,
     work: RefCell<CanonicalReadWork>,
@@ -30,6 +32,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized> KernelOverlay<'a, B> {
             delta,
             owners: RefCell::new(BTreeMap::new()),
             types: RefCell::new(BTreeMap::new()),
+            package_interfaces: RefCell::new(BTreeMap::new()),
             dependencies: RefCell::new(BTreeMap::new()),
             retirements: RefCell::new(BTreeMap::new()),
             work: RefCell::new(CanonicalReadWork::default()),
@@ -85,6 +88,28 @@ impl<'a, B: CanonicalBaseRead + ?Sized> KernelOverlay<'a, B> {
             self.types.borrow_mut().insert(digest, read.value);
         }
         Ok(self.types.borrow().get(&digest).cloned().flatten())
+    }
+
+    pub fn package_interface_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<Option<PackageInterfaceRecord>, Diagnostic> {
+        let Some(dependency) = self.dependency(package)? else {
+            return Ok(None);
+        };
+        let key = (dependency.package_object, owner);
+        if !self.package_interfaces.borrow().contains_key(&key) {
+            let read = self.base.read_package_interface_owner(&dependency, owner)?;
+            self.work.borrow_mut().add(read.work);
+            self.package_interfaces.borrow_mut().insert(key, read.value);
+        }
+        Ok(self
+            .package_interfaces
+            .borrow()
+            .get(&key)
+            .cloned()
+            .flatten())
     }
 
     pub fn dependency(&self, package: PackageId) -> Result<Option<DependencyRecord>, Diagnostic> {
@@ -203,6 +228,8 @@ impl<'a> KernelOverlay<'a, KernelSnapshot> {
             root,
             owners,
             types,
+            dependency_interfaces: self.base.dependency_interfaces.clone(),
+            dependency_types: self.base.dependency_types.clone(),
             blobs: self.base.blobs.clone(),
             dependencies,
             retirements,

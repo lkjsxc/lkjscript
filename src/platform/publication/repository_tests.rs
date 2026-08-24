@@ -18,12 +18,14 @@ use crate::platform::kernel::{
     AnnotationClass, DeclarationPayload, DeclarationVisibility, DependencyObjectDigest,
     DocumentationClass, ExactOwnerKey, ExpressionOperation, ExternalVisibility, Idempotency,
     LocalValueReference, Name, NamespaceClass, OwnerKey, OwnerRecord, PackageId, RelationEndpoint,
-    ResourceUnit, RetirementObjectDigest, SemanticRoot, SemanticRootDigest, TypeForm, encode_owner,
+    ResourceUnit, RetirementObjectDigest, SemanticRoot, SemanticRootDigest, TypeForm, TypeObject,
+    TypeObjectDigest, encode_owner, encode_type_object,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::persistent_map::{MapRoot, PageDigest};
 use crate::platform::semantic_id::{DeclarationId, RepositoryId};
 use crate::platform::storage::object::{ObjectDomain, ObjectKey, StageOutcome};
+use crate::platform::storage::pack::{PackBuilder, PackMetadata};
 use crate::platform::witness::{NamespaceKey, OwnershipParent};
 
 #[test]
@@ -156,10 +158,39 @@ fn staged_package_objects_bind_authored_dependency_lifecycle_without_advancing_h
         exported.object.semantic_revision,
         source.current.head.revision
     );
+    assert_eq!(exported.interface_owner_count, 0);
+    assert_eq!(exported.interface_type_count, 0);
+    assert!(!exported.packs.is_empty());
     let target_head = target.current.head;
+
+    let unrelated_type = TypeObject::new(TypeForm::Option {
+        item: TypeObjectDigest::from_bytes([99; 32]),
+    })
+    .expect("locally valid unrelated type");
+    let (unrelated_digest, unrelated_bytes) =
+        encode_type_object(&unrelated_type).expect("unrelated type encoding");
+    let mut unrelated_pack = PackBuilder::default();
+    unrelated_pack
+        .insert(
+            ObjectKey::from_digest(ObjectDomain::Type, unrelated_digest.bytes()),
+            &unrelated_bytes,
+        )
+        .unwrap();
+    let mut overcomplete = exported.packs.clone();
+    overcomplete.push(unrelated_pack.seal().unwrap().bytes);
+    assert_eq!(
+        target
+            .repository
+            .stage_package_object(exported.digest, &overcomplete)
+            .expect_err("unreachable transport object must reject")
+            .code,
+        "publication_package_transport_reachability"
+    );
+    assert_eq!(target.repository.current().unwrap().head, target_head);
+
     let staged = target
         .repository
-        .stage_package_object(&exported.bytes)
+        .stage_package_object(exported.digest, &exported.packs)
         .expect("stage exact package object");
     assert_eq!(staged.outcome, StageOutcome::Inserted);
     assert_eq!(staged.package_object, exported.digest);
@@ -167,7 +198,7 @@ fn staged_package_objects_bind_authored_dependency_lifecycle_without_advancing_h
     assert_eq!(target.repository.current().unwrap().head, target_head);
     let repeated = target
         .repository
-        .stage_package_object(&exported.bytes)
+        .stage_package_object(exported.digest, &exported.packs)
         .expect("idempotent package staging");
     assert_eq!(repeated.outcome, StageOutcome::Reused);
     assert!(repeated.seal.packs.is_empty());
@@ -342,7 +373,7 @@ fn staged_package_objects_bind_authored_dependency_lifecycle_without_advancing_h
     assert_ne!(replacement.digest, exported.digest);
     target
         .repository
-        .stage_package_object(&replacement.bytes)
+        .stage_package_object(replacement.digest, &replacement.packs)
         .expect("stage replacement package object");
 
     let replace = AuthoredChangeSet {
@@ -407,6 +438,178 @@ fn staged_package_objects_bind_authored_dependency_lifecycle_without_advancing_h
             .dependencies_changed,
         1
     );
+}
+
+#[test]
+fn staged_package_interface_validates_an_exact_cross_package_pure_call() {
+    let temporary = tempfile::tempdir().expect("temporary cross-package repositories");
+    let source = GraphRepository::create(
+        &temporary.path().join("source"),
+        &empty_snapshot(b"cross-package-source"),
+        None,
+    )
+    .expect("source repository");
+    let source_change = AuthoredChangeSet {
+        base: source.current.head.revision,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
+        changes: vec![
+            AuthoredChange::CreateModule {
+                symbol: "$source_module".to_owned(),
+                name: Name::new("library").unwrap(),
+            },
+            AuthoredChange::CreateFunction {
+                symbol: "$source_function".to_owned(),
+                module: ModuleSelector::Symbol {
+                    symbol: "$source_module".to_owned(),
+                },
+                name: Name::new("produce").unwrap(),
+                visibility: DeclarationVisibility::Public,
+                type_parameters: Vec::new(),
+                parameters: Vec::new(),
+                result: AuthoredType::Unit {},
+                effect: AuthoredFunctionEffect::Pure {},
+                body: AuthoredExpression {
+                    symbol: Some("$source_body".to_owned()),
+                    operation: AuthoredExpressionOperation::Unit {},
+                },
+            },
+        ],
+    };
+    let prepared_source = source
+        .repository
+        .prepare_authored_change(&source_change, PublicationOptions::default())
+        .expect("prepare source package");
+    let OwnerKey::Declaration(source_function) = prepared_source.allocated["$source_function"]
+    else {
+        panic!("source function allocation domain")
+    };
+    source
+        .repository
+        .publish(&prepared_source.publication)
+        .expect("publish source package");
+    let exported = source
+        .repository
+        .export_package_object()
+        .expect("export exact source interface");
+    assert_eq!(exported.interface_owner_count, 1);
+    assert_eq!(exported.interface_type_count, 1);
+    assert_eq!(exported.packs.len(), 1);
+    let transport = PackMetadata::decode(&exported.packs[0], true).unwrap();
+    assert_eq!(transport.entries.len(), 4);
+    assert_eq!(
+        transport
+            .entries
+            .iter()
+            .map(|entry| entry.key.domain)
+            .collect::<std::collections::BTreeSet<_>>(),
+        std::collections::BTreeSet::from([
+            ObjectDomain::MapPage,
+            ObjectDomain::PackageInterface,
+            ObjectDomain::PackageObject,
+            ObjectDomain::Type,
+        ])
+    );
+
+    let target = GraphRepository::create(
+        &temporary.path().join("target"),
+        &empty_snapshot(b"cross-package-target"),
+        None,
+    )
+    .expect("target repository");
+    target
+        .repository
+        .stage_package_object(exported.digest, &exported.packs)
+        .expect("stage source interface closure");
+    let target_change = |function| AuthoredChangeSet {
+        base: target.current.head.revision,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
+        changes: vec![
+            AuthoredChange::AddDependency {
+                package: exported.object.package,
+                semantic_revision: exported.object.semantic_revision,
+                package_object: exported.digest,
+            },
+            AuthoredChange::CreateModule {
+                symbol: "$target_module".to_owned(),
+                name: Name::new("application").unwrap(),
+            },
+            AuthoredChange::CreateFunction {
+                symbol: "$caller".to_owned(),
+                module: ModuleSelector::Symbol {
+                    symbol: "$target_module".to_owned(),
+                },
+                name: Name::new("call_library").unwrap(),
+                visibility: DeclarationVisibility::Private,
+                type_parameters: Vec::new(),
+                parameters: Vec::new(),
+                result: AuthoredType::Unit {},
+                effect: AuthoredFunctionEffect::Pure {},
+                body: AuthoredExpression {
+                    symbol: Some("$call".to_owned()),
+                    operation: AuthoredExpressionOperation::Call {
+                        function: AuthoredDeclarationReference::Exact {
+                            package: exported.object.package,
+                            declaration: function,
+                        },
+                        type_arguments: Vec::new(),
+                        arguments: Vec::new(),
+                    },
+                },
+            },
+        ],
+    };
+    let absent = DeclarationId::migrate(b"absent-package-interface-owner", 0);
+    let rejected = target
+        .repository
+        .prepare_authored_change(&target_change(absent), PublicationOptions::default())
+        .expect_err("a bound package cannot authorize an owner absent from its exact interface");
+    assert!(
+        rejected
+            .iter()
+            .any(|diagnostic| diagnostic.code == "kernel_type_dependency_owner_missing")
+    );
+    assert_eq!(
+        target.repository.current().unwrap().head,
+        target.current.head,
+        "failed candidate validation must not publish the dependency"
+    );
+    let target_change = target_change(source_function);
+    let prepared_target = target
+        .repository
+        .prepare_authored_change(&target_change, PublicationOptions::default())
+        .expect("exact dependency interface must validate the foreign call");
+    assert_eq!(
+        prepared_target.publication.receipt.validation.profile,
+        ValidationProfile::IncrementalOwnerFrontier
+    );
+    assert_eq!(
+        prepared_target
+            .publication
+            .receipt
+            .validation
+            .semantically_checked,
+        2
+    );
+    let PublicationOutcome::Accepted { current, .. } = target
+        .repository
+        .publish(&prepared_target.publication)
+        .expect("publish exact cross-package caller")
+    else {
+        panic!("cross-package caller must advance HEAD")
+    };
+    assert_eq!(current.semantic_root.dependencies.entries(), 1);
+    let OwnerKey::Expression(call) = prepared_target.allocated["$call"] else {
+        panic!("call allocation domain")
+    };
+    assert!(matches!(
+        target.repository.view_current().unwrap().owner(OwnerKey::Expression(call)).unwrap().value,
+        Some(OwnerRecord::Expression(record))
+            if matches!(record.operation, ExpressionOperation::Call { function, .. }
+                if function.package == exported.object.package
+                    && function.declaration == source_function)
+    ));
 }
 
 #[test]
@@ -4253,6 +4456,8 @@ fn empty_snapshot(seed: &[u8]) -> crate::platform::kernel::KernelSnapshot {
         },
         owners: std::collections::BTreeMap::new(),
         types: std::collections::BTreeMap::new(),
+        dependency_interfaces: std::collections::BTreeMap::new(),
+        dependency_types: std::collections::BTreeMap::new(),
         blobs: std::collections::BTreeMap::new(),
         dependencies: std::collections::BTreeMap::new(),
         retirements: std::collections::BTreeMap::new(),
