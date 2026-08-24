@@ -1080,14 +1080,16 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         definition: &AuthoredBindingDefinition,
         kind: SymbolKind,
     ) -> Result<BindingId, Diagnostic> {
-        let (id, binding_kind) = match kind {
+        let (id, binding_kind, declared_type) = match kind {
             SymbolKind::MatchPayloadBinding => (
                 self.match_payload_symbol(&definition.symbol)?,
                 crate::platform::kernel::BindingKind::MatchPayload,
+                None,
             ),
             SymbolKind::TransactionBinding => (
                 self.transaction_binding_symbol(&definition.symbol)?,
                 crate::platform::kernel::BindingKind::Transaction,
+                Some(self.lower_type(&AuthoredType::Unit {})?),
             ),
             _ => {
                 return Err(request_error(
@@ -1103,7 +1105,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 name: definition.name.clone(),
                 kind: binding_kind,
                 value: None,
-                declared_type: None,
+                declared_type,
             },
         ))?;
         Ok(id)

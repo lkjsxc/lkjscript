@@ -275,6 +275,49 @@ impl LoadedArtifact {
     }
 }
 
+impl ImmutableObjectStore for LoadedArtifact {
+    fn read(
+        &self,
+        key: ObjectKey,
+        maximum_bytes: usize,
+        work: &mut StoreWork,
+    ) -> Result<Option<Vec<u8>>, StoreError> {
+        work.catalog_lookups = work.catalog_lookups.saturating_add(1);
+        let Some(bytes) = self.objects.get(&key) else {
+            return Ok(None);
+        };
+        if bytes.len() > maximum_bytes {
+            return Err(StoreError::new(
+                StoreErrorClass::Resource,
+                "artifact_object_read_limit",
+                "artifact object exceeds the caller read bound",
+            ));
+        }
+        key.verify(bytes)?;
+        work.objects_read = work.objects_read.saturating_add(1);
+        work.bytes_read = work.bytes_read.saturating_add(bytes.len() as u64);
+        Ok(Some(bytes.clone()))
+    }
+
+    fn contains(&self, key: ObjectKey, work: &mut StoreWork) -> Result<bool, StoreError> {
+        work.catalog_lookups = work.catalog_lookups.saturating_add(1);
+        Ok(self.objects.contains_key(&key))
+    }
+
+    fn stage(
+        &mut self,
+        _key: ObjectKey,
+        _bytes: &[u8],
+        _work: &mut StoreWork,
+    ) -> Result<StageOutcome, StoreError> {
+        Err(StoreError::new(
+            StoreErrorClass::Input,
+            "artifact_object_read_only",
+            "loaded artifact object storage is immutable",
+        ))
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct EncodedArtifact {
     pub manifest: ArtifactManifest,

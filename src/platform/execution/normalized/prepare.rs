@@ -1,0 +1,1289 @@
+//! Exact artifact preparation from stable semantic references to dense runtime indexes.
+
+use super::value::{
+    ComponentIndex, FunctionIndex, OperationIndex, PortIndex, RecordLayoutIndex, RequirementIndex,
+    VariantLayoutIndex,
+};
+use crate::platform::compiler::LoadedArtifact;
+use crate::platform::compiler::manifest::{CompilationBinding, CompilationManifest};
+use crate::platform::compiler::unit::{
+    CompilationPayload, CompilationUnit, CompiledCode, CompiledFieldSelector, CompiledInstruction,
+    CompiledPortImplementation, CompiledText,
+};
+use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
+use crate::platform::kernel::{
+    BlobObjectDigest, CaseReference, ComparisonPolicy, DeclarationReference, EncodedOwnerKey,
+    FieldReference, Name, OperationReference, OwnerKey, OwnerKind, OwnerRecord, PackageId,
+    PortReference, RequirementReference, ResourceLimit, decode_owner,
+};
+use crate::platform::package::RunnerKind;
+use crate::platform::persistent_map::{MapError, MapErrorClass, MapWork, PersistentMap};
+use crate::platform::semantic_id::TargetId;
+use crate::platform::storage::object::{
+    ImmutableObjectStore, ObjectDomain, ObjectKey, StoreError, StoreErrorClass, StoreWork,
+};
+use crate::platform::storage::page_store::ObjectPageReader;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
+
+type TargetMap = BTreeMap<(PackageId, TargetId), NormalizedTarget>;
+type RootTargetNames = BTreeMap<Name, TargetId>;
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct NormalizedPreparationWork {
+    pub packages: u64,
+    pub compiler_units: u64,
+    pub instructions: u64,
+    pub functions: u64,
+    pub record_layouts: u64,
+    pub variant_layouts: u64,
+    pub requirements: u64,
+    pub operations: u64,
+    pub components: u64,
+    pub ports: u64,
+    pub targets: u64,
+    pub tests: u64,
+    pub map: MapWork,
+    pub store: StoreWork,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NormalizedCode {
+    pub parameter_count: u32,
+    pub local_count: u32,
+    pub instructions: Arc<[NormalizedInstruction]>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum NormalizedInstruction {
+    Unit,
+    Bool(bool),
+    I64(i64),
+    Text(Arc<str>),
+    StaticText(Arc<str>),
+    LoadLocal(u32),
+    StoreLocal(u32),
+    Drop,
+    JumpIfFalse(u32),
+    Jump(u32),
+    Call {
+        function: FunctionIndex,
+        arguments: u32,
+    },
+    FunctionValue {
+        function: FunctionIndex,
+    },
+    Invoke {
+        arguments: u32,
+    },
+    Record {
+        layout: Option<RecordLayoutIndex>,
+        fields: Arc<[NormalizedFieldSelector]>,
+    },
+    Variant {
+        layout: VariantLayoutIndex,
+        case: u32,
+        has_payload: bool,
+    },
+    Field(NormalizedFieldSelector),
+    List {
+        items: u32,
+    },
+    Map {
+        entries: u32,
+    },
+    SwitchVariant(Arc<[NormalizedVariantJump]>),
+    Perform {
+        requirement: RequirementIndex,
+        operation: OperationIndex,
+        arguments: u32,
+    },
+    BeginTransaction {
+        requirement: RequirementIndex,
+        binding: u32,
+    },
+    CommitTransaction {
+        requirement: RequirementIndex,
+        binding: u32,
+    },
+    Return,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum NormalizedFieldSelector {
+    Nominal {
+        layout: RecordLayoutIndex,
+        offset: u32,
+    },
+    Structural(Name),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NormalizedVariantJump {
+    pub layout: VariantLayoutIndex,
+    pub case: u32,
+    pub target: u32,
+    pub binding_local: Option<u32>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum NormalizedFunctionBody {
+    Code(NormalizedCode),
+    External(Name),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NormalizedFunction {
+    pub declaration: DeclarationReference,
+    pub parameter_count: u32,
+    pub task_requirements: Arc<[RequirementIndex]>,
+    pub body: NormalizedFunctionBody,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NormalizedRecordLayout {
+    pub declaration: DeclarationReference,
+    pub fields: Arc<[FieldReference]>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NormalizedVariantLayout {
+    pub declaration: DeclarationReference,
+    pub cases: Arc<[CaseReference]>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NormalizedRequirement {
+    pub reference: RequirementReference,
+    pub interface: DeclarationReference,
+    pub operations: Arc<[OperationIndex]>,
+    pub limits: Arc<[ResourceLimit]>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum NormalizedEntryPoint {
+    Function(FunctionIndex),
+    Code(NormalizedCode),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NormalizedPort {
+    pub reference: PortReference,
+    pub component: ComponentIndex,
+    pub entry: NormalizedEntryPoint,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NormalizedComponent {
+    pub declaration: DeclarationReference,
+    pub requirements: Arc<[RequirementIndex]>,
+    pub ports: Arc<[PortIndex]>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NormalizedTarget {
+    pub package: PackageId,
+    pub target: TargetId,
+    pub name: Name,
+    pub runner: RunnerKind,
+    pub component: ComponentIndex,
+    pub port: PortIndex,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NormalizedTest {
+    pub declaration: DeclarationReference,
+    pub actual: NormalizedCode,
+    pub expected: NormalizedCode,
+    pub comparison: ComparisonPolicy,
+}
+
+#[derive(Clone, Debug)]
+pub struct NormalizedProgram {
+    artifact: Arc<LoadedArtifact>,
+    pub root_package: PackageId,
+    pub work: NormalizedPreparationWork,
+    pub(crate) functions: Arc<[NormalizedFunction]>,
+    pub(crate) function_by_declaration: BTreeMap<DeclarationReference, FunctionIndex>,
+    pub(crate) records: Arc<[NormalizedRecordLayout]>,
+    pub(crate) variants: Arc<[NormalizedVariantLayout]>,
+    pub(crate) requirements: Arc<[NormalizedRequirement]>,
+    pub(crate) operations: Arc<[OperationReference]>,
+    pub(crate) components: Arc<[NormalizedComponent]>,
+    pub(crate) ports: Arc<[NormalizedPort]>,
+    pub(crate) targets: TargetMap,
+    pub(crate) root_target_names: RootTargetNames,
+    pub(crate) tests: BTreeMap<DeclarationReference, NormalizedTest>,
+}
+
+impl NormalizedProgram {
+    pub fn prepare(artifact: LoadedArtifact) -> Result<Self, Diagnostic> {
+        let artifact = Arc::new(artifact);
+        let mut work = NormalizedPreparationWork::default();
+        let units = load_units(&artifact, &mut work)?;
+        let indexes = RuntimeIndexes::build(&units)?;
+        let mut text_cache = BTreeMap::new();
+
+        let records = prepare_records(&units, &indexes)?;
+        let variants = prepare_variants(&units, &indexes)?;
+        let (requirements, operations) = prepare_requirements(&units, &indexes)?;
+        let functions = prepare_functions(&artifact, &units, &indexes, &mut text_cache, &mut work)?;
+        let (components, ports) =
+            prepare_components(&artifact, &units, &indexes, &mut text_cache, &mut work)?;
+        let tests = prepare_tests(&artifact, &units, &indexes, &mut text_cache, &mut work)?;
+        let (targets, root_target_names) = prepare_targets(&artifact, &units, &indexes, &mut work)?;
+
+        work.functions = functions.len() as u64;
+        work.record_layouts = records.len() as u64;
+        work.variant_layouts = variants.len() as u64;
+        work.requirements = requirements.len() as u64;
+        work.operations = operations.len() as u64;
+        work.components = components.len() as u64;
+        work.ports = ports.len() as u64;
+        work.targets = targets.len() as u64;
+        work.tests = tests.len() as u64;
+        Ok(Self {
+            root_package: artifact.manifest.root_package,
+            artifact,
+            work,
+            functions: functions.into(),
+            function_by_declaration: indexes.functions,
+            records: records.into(),
+            variants: variants.into(),
+            requirements: requirements.into(),
+            operations: operations.into(),
+            components: components.into(),
+            ports: ports.into(),
+            targets,
+            root_target_names,
+            tests,
+        })
+    }
+
+    pub fn artifact(&self) -> &LoadedArtifact {
+        &self.artifact
+    }
+
+    pub fn function(&self, declaration: DeclarationReference) -> Option<FunctionIndex> {
+        self.function_by_declaration.get(&declaration).copied()
+    }
+
+    pub fn target(&self, package: PackageId, target: TargetId) -> Option<&NormalizedTarget> {
+        self.targets.get(&(package, target))
+    }
+
+    pub fn root_target(&self, name: &Name) -> Option<&NormalizedTarget> {
+        self.root_target_names
+            .get(name)
+            .and_then(|target| self.target(self.root_package, *target))
+    }
+
+    pub fn tests(&self) -> impl Iterator<Item = &NormalizedTest> {
+        self.tests.values()
+    }
+}
+
+#[derive(Default)]
+struct RuntimeIndexes {
+    functions: BTreeMap<DeclarationReference, FunctionIndex>,
+    records: BTreeMap<DeclarationReference, RecordLayoutIndex>,
+    variants: BTreeMap<DeclarationReference, VariantLayoutIndex>,
+    fields: BTreeMap<FieldReference, (RecordLayoutIndex, u32)>,
+    cases: BTreeMap<CaseReference, (VariantLayoutIndex, u32)>,
+    requirements: BTreeMap<RequirementReference, RequirementIndex>,
+    operations: BTreeMap<OperationReference, OperationIndex>,
+    components: BTreeMap<DeclarationReference, ComponentIndex>,
+    ports: BTreeMap<PortReference, PortIndex>,
+}
+
+impl RuntimeIndexes {
+    fn build(units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>) -> Result<Self, Diagnostic> {
+        let mut function_refs = BTreeSet::new();
+        let mut record_refs = BTreeSet::new();
+        let mut variant_refs = BTreeSet::new();
+        let mut requirement_refs = BTreeSet::new();
+        let mut operation_refs = BTreeSet::new();
+        let mut component_refs = BTreeSet::new();
+        let mut port_refs = BTreeSet::new();
+        for ((package, owner), unit) in units {
+            let OwnerKey::Declaration(declaration) = owner else {
+                continue;
+            };
+            let reference = DeclarationReference {
+                package: *package,
+                declaration: *declaration,
+            };
+            match &unit.payload {
+                CompilationPayload::Record { .. } => {
+                    record_refs.insert(reference);
+                }
+                CompilationPayload::Variant { .. } => {
+                    variant_refs.insert(reference);
+                }
+                CompilationPayload::Interface { operations } => {
+                    for operation in operations {
+                        operation_refs.insert(index_copy(
+                            &unit.tables.operations,
+                            operation.operation,
+                            "normalized interface operation",
+                        )?);
+                    }
+                }
+                CompilationPayload::External { .. }
+                | CompilationPayload::Function { .. }
+                | CompilationPayload::Constant { .. } => {
+                    function_refs.insert(reference);
+                }
+                CompilationPayload::Component {
+                    requirements,
+                    ports,
+                } => {
+                    component_refs.insert(reference);
+                    for requirement in requirements {
+                        requirement_refs.insert(index_copy(
+                            &unit.tables.requirements,
+                            requirement.requirement,
+                            "normalized component requirement",
+                        )?);
+                    }
+                    for port in ports {
+                        port_refs.insert(index_copy(
+                            &unit.tables.ports,
+                            port.port,
+                            "normalized component port",
+                        )?);
+                    }
+                }
+                CompilationPayload::Test { .. } | CompilationPayload::Target { .. } => {}
+            }
+        }
+        let functions = dense_map(function_refs, FunctionIndex)?;
+        let records = dense_map(record_refs, RecordLayoutIndex)?;
+        let variants = dense_map(variant_refs, VariantLayoutIndex)?;
+        let requirements = dense_map(requirement_refs, RequirementIndex)?;
+        let operations = dense_map(operation_refs, OperationIndex)?;
+        let components = dense_map(component_refs, ComponentIndex)?;
+        let ports = dense_map(port_refs, PortIndex)?;
+        let mut fields = BTreeMap::new();
+        let mut cases = BTreeMap::new();
+        for ((package, owner), unit) in units {
+            let OwnerKey::Declaration(declaration) = owner else {
+                continue;
+            };
+            let declaration = DeclarationReference {
+                package: *package,
+                declaration: *declaration,
+            };
+            match &unit.payload {
+                CompilationPayload::Record { fields: layouts } => {
+                    let layout = required_index(&records, declaration, "record layout")?;
+                    for (offset, field) in layouts.iter().enumerate() {
+                        let field = index_copy(
+                            &unit.tables.fields,
+                            field.field,
+                            "normalized record field",
+                        )?;
+                        let offset = u32_index(offset, "record field offset")?;
+                        if fields.insert(field, (layout, offset)).is_some() {
+                            return Err(runtime_corrupt(
+                                "normalized_field_duplicate",
+                                "one exact field appears in multiple runtime record layouts",
+                            ));
+                        }
+                    }
+                }
+                CompilationPayload::Variant { cases: layouts } => {
+                    let layout = required_index(&variants, declaration, "variant layout")?;
+                    for (tag, case) in layouts.iter().enumerate() {
+                        let case =
+                            index_copy(&unit.tables.cases, case.case, "normalized variant case")?;
+                        let tag = u32_index(tag, "variant case tag")?;
+                        if cases.insert(case, (layout, tag)).is_some() {
+                            return Err(runtime_corrupt(
+                                "normalized_case_duplicate",
+                                "one exact case appears in multiple runtime variant layouts",
+                            ));
+                        }
+                    }
+                }
+                CompilationPayload::Interface { .. }
+                | CompilationPayload::External { .. }
+                | CompilationPayload::Function { .. }
+                | CompilationPayload::Constant { .. }
+                | CompilationPayload::Component { .. }
+                | CompilationPayload::Test { .. }
+                | CompilationPayload::Target { .. } => {}
+            }
+        }
+        Ok(Self {
+            functions,
+            records,
+            variants,
+            fields,
+            cases,
+            requirements,
+            operations,
+            components,
+            ports,
+        })
+    }
+}
+
+fn load_units(
+    artifact: &LoadedArtifact,
+    work: &mut NormalizedPreparationWork,
+) -> Result<BTreeMap<(PackageId, OwnerKey), CompilationUnit>, Diagnostic> {
+    let mut units = BTreeMap::new();
+    for package in &artifact.manifest.packages {
+        let bytes = required_object(
+            artifact,
+            package.compilation.object_key(),
+            "normalized runtime compilation manifest is missing",
+            &mut work.store,
+        )?;
+        let compilation = CompilationManifest::decode(&bytes, package.compilation)?;
+        let reader = ObjectPageReader::new(artifact);
+        let mut map_work = MapWork::default();
+        let mut captured = None;
+        let result = PersistentMap::from_root(compilation.units).for_each(
+            &reader,
+            &mut map_work,
+            |key, value| {
+                let operation = (|| {
+                    let owner = EncodedOwnerKey::decode(key)?;
+                    let binding = CompilationBinding::decode(value, owner)?;
+                    let bytes = required_object(
+                        artifact,
+                        binding.object.object_key(),
+                        "normalized runtime compiler unit is missing",
+                        &mut work.store,
+                    )?;
+                    let unit = CompilationUnit::decode(&bytes, binding.object.object_key())?;
+                    if unit.key != binding.key
+                        || unit.source.package != package.package
+                        || unit.source.owner != owner
+                        || unit.source.kind != binding.kind
+                    {
+                        return Err(runtime_corrupt(
+                            "normalized_unit_binding",
+                            "normalized runtime unit disagrees with its compilation manifest",
+                        ));
+                    }
+                    if units.insert((package.package, owner), unit).is_some() {
+                        return Err(runtime_corrupt(
+                            "normalized_unit_duplicate",
+                            "normalized runtime repeats one exact compiler-unit owner",
+                        ));
+                    }
+                    Ok::<(), Diagnostic>(())
+                })();
+                match operation {
+                    Ok(()) => Ok(()),
+                    Err(diagnostic) => {
+                        captured = Some(diagnostic);
+                        Err(MapError {
+                            class: MapErrorClass::Corrupt,
+                            code: "normalized_unit_iteration_stop",
+                            message: "normalized runtime unit iteration stopped after an exact diagnostic"
+                                .to_owned(),
+                        })
+                    }
+                }
+            },
+        );
+        add_map_work(&mut work.map, map_work);
+        work.store.add(reader.work());
+        if let Some(diagnostic) = captured {
+            return Err(diagnostic);
+        }
+        result.map_err(map_diagnostic)?;
+        work.packages = work.packages.saturating_add(1);
+    }
+    work.compiler_units = units.len() as u64;
+    Ok(units)
+}
+
+fn prepare_records(
+    units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
+    indexes: &RuntimeIndexes,
+) -> Result<Vec<NormalizedRecordLayout>, Diagnostic> {
+    let mut records = vec![None; indexes.records.len()];
+    for (declaration, index) in &indexes.records {
+        let unit = declaration_unit(units, *declaration)?;
+        let CompilationPayload::Record { fields } = &unit.payload else {
+            return Err(runtime_corrupt(
+                "normalized_record_payload",
+                "record layout index names another compiler payload",
+            ));
+        };
+        let fields = fields
+            .iter()
+            .map(|field| index_copy(&unit.tables.fields, field.field, "normalized record field"))
+            .collect::<Result<Vec<_>, _>>()?;
+        records[index.0 as usize] = Some(NormalizedRecordLayout {
+            declaration: *declaration,
+            fields: fields.into(),
+        });
+    }
+    finish_dense(records, "record layout")
+}
+
+fn prepare_variants(
+    units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
+    indexes: &RuntimeIndexes,
+) -> Result<Vec<NormalizedVariantLayout>, Diagnostic> {
+    let mut variants = vec![None; indexes.variants.len()];
+    for (declaration, index) in &indexes.variants {
+        let unit = declaration_unit(units, *declaration)?;
+        let CompilationPayload::Variant { cases } = &unit.payload else {
+            return Err(runtime_corrupt(
+                "normalized_variant_payload",
+                "variant layout index names another compiler payload",
+            ));
+        };
+        let cases = cases
+            .iter()
+            .map(|case| index_copy(&unit.tables.cases, case.case, "normalized variant case"))
+            .collect::<Result<Vec<_>, _>>()?;
+        variants[index.0 as usize] = Some(NormalizedVariantLayout {
+            declaration: *declaration,
+            cases: cases.into(),
+        });
+    }
+    finish_dense(variants, "variant layout")
+}
+
+fn prepare_requirements(
+    units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
+    indexes: &RuntimeIndexes,
+) -> Result<(Vec<NormalizedRequirement>, Vec<OperationReference>), Diagnostic> {
+    let mut requirements = vec![None; indexes.requirements.len()];
+    for unit in units.values() {
+        let CompilationPayload::Component {
+            requirements: compiled,
+            ..
+        } = &unit.payload
+        else {
+            continue;
+        };
+        for requirement in compiled {
+            let reference = index_copy(
+                &unit.tables.requirements,
+                requirement.requirement,
+                "normalized requirement",
+            )?;
+            let index = required_index(&indexes.requirements, reference, "requirement")?;
+            let interface = index_copy(
+                &unit.tables.declarations,
+                requirement.interface,
+                "normalized requirement interface",
+            )?;
+            let operations = requirement
+                .operations
+                .iter()
+                .map(|operation| {
+                    let reference = index_copy(
+                        &unit.tables.operations,
+                        *operation,
+                        "normalized requirement operation",
+                    )?;
+                    required_index(&indexes.operations, reference, "operation")
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let value = NormalizedRequirement {
+                reference,
+                interface,
+                operations: operations.into(),
+                limits: requirement.limits.clone().into(),
+            };
+            if requirements[index.0 as usize].replace(value).is_some() {
+                return Err(runtime_corrupt(
+                    "normalized_requirement_duplicate",
+                    "one exact requirement has multiple runtime definitions",
+                ));
+            }
+        }
+    }
+    let requirements = finish_dense(requirements, "requirement")?;
+    let mut operations = vec![None; indexes.operations.len()];
+    for (reference, index) in &indexes.operations {
+        operations[index.0 as usize] = Some(*reference);
+    }
+    Ok((requirements, finish_dense(operations, "operation")?))
+}
+
+fn prepare_functions(
+    artifact: &LoadedArtifact,
+    units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
+    indexes: &RuntimeIndexes,
+    text_cache: &mut BTreeMap<BlobObjectDigest, Arc<str>>,
+    work: &mut NormalizedPreparationWork,
+) -> Result<Vec<NormalizedFunction>, Diagnostic> {
+    let mut functions = vec![None; indexes.functions.len()];
+    for (declaration, index) in &indexes.functions {
+        let unit = declaration_unit(units, *declaration)?;
+        let (parameter_count, task_requirements, body) = match &unit.payload {
+            CompilationPayload::External {
+                signature,
+                implementation,
+            } => (
+                u32_index(signature.parameters.len(), "external parameter count")?,
+                translate_requirement_indexes(unit, &signature.task_requirements, indexes)?,
+                NormalizedFunctionBody::External(implementation.clone()),
+            ),
+            CompilationPayload::Function { signature, code } => (
+                u32_index(signature.parameters.len(), "function parameter count")?,
+                translate_requirement_indexes(unit, &signature.task_requirements, indexes)?,
+                NormalizedFunctionBody::Code(translate_code(
+                    artifact, unit, code, indexes, text_cache, work,
+                )?),
+            ),
+            CompilationPayload::Constant { code, .. } => (
+                0,
+                Vec::new(),
+                NormalizedFunctionBody::Code(translate_code(
+                    artifact, unit, code, indexes, text_cache, work,
+                )?),
+            ),
+            CompilationPayload::Record { .. }
+            | CompilationPayload::Variant { .. }
+            | CompilationPayload::Interface { .. }
+            | CompilationPayload::Component { .. }
+            | CompilationPayload::Test { .. }
+            | CompilationPayload::Target { .. } => {
+                return Err(runtime_corrupt(
+                    "normalized_function_payload",
+                    "function dense index names a non-callable compiler payload",
+                ));
+            }
+        };
+        functions[index.0 as usize] = Some(NormalizedFunction {
+            declaration: *declaration,
+            parameter_count,
+            task_requirements: task_requirements.into(),
+            body,
+        });
+    }
+    finish_dense(functions, "function")
+}
+
+fn prepare_components(
+    artifact: &LoadedArtifact,
+    units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
+    indexes: &RuntimeIndexes,
+    text_cache: &mut BTreeMap<BlobObjectDigest, Arc<str>>,
+    work: &mut NormalizedPreparationWork,
+) -> Result<(Vec<NormalizedComponent>, Vec<NormalizedPort>), Diagnostic> {
+    let mut components = vec![None; indexes.components.len()];
+    let mut ports = vec![None; indexes.ports.len()];
+    for (declaration, component_index) in &indexes.components {
+        let unit = declaration_unit(units, *declaration)?;
+        let CompilationPayload::Component {
+            requirements: compiled_requirements,
+            ports: compiled_ports,
+        } = &unit.payload
+        else {
+            return Err(runtime_corrupt(
+                "normalized_component_payload",
+                "component dense index names another compiler payload",
+            ));
+        };
+        let requirements = compiled_requirements
+            .iter()
+            .map(|requirement| {
+                let reference = index_copy(
+                    &unit.tables.requirements,
+                    requirement.requirement,
+                    "normalized component requirement",
+                )?;
+                required_index(&indexes.requirements, reference, "requirement")
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut component_ports = Vec::with_capacity(compiled_ports.len());
+        for port in compiled_ports {
+            let reference = index_copy(&unit.tables.ports, port.port, "normalized component port")?;
+            let port_index = required_index(&indexes.ports, reference, "port")?;
+            let entry = match &port.implementation {
+                CompiledPortImplementation::Function(function) => {
+                    let declaration = index_copy(
+                        &unit.tables.declarations,
+                        *function,
+                        "normalized port function",
+                    )?;
+                    NormalizedEntryPoint::Function(required_index(
+                        &indexes.functions,
+                        declaration,
+                        "function",
+                    )?)
+                }
+                CompiledPortImplementation::Expression(code) => NormalizedEntryPoint::Code(
+                    translate_code(artifact, unit, code, indexes, text_cache, work)?,
+                ),
+            };
+            if ports[port_index.0 as usize]
+                .replace(NormalizedPort {
+                    reference,
+                    component: *component_index,
+                    entry,
+                })
+                .is_some()
+            {
+                return Err(runtime_corrupt(
+                    "normalized_port_duplicate",
+                    "one exact port has multiple runtime definitions",
+                ));
+            }
+            component_ports.push(port_index);
+        }
+        components[component_index.0 as usize] = Some(NormalizedComponent {
+            declaration: *declaration,
+            requirements: requirements.into(),
+            ports: component_ports.into(),
+        });
+    }
+    Ok((
+        finish_dense(components, "component")?,
+        finish_dense(ports, "port")?,
+    ))
+}
+
+fn prepare_tests(
+    artifact: &LoadedArtifact,
+    units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
+    indexes: &RuntimeIndexes,
+    text_cache: &mut BTreeMap<BlobObjectDigest, Arc<str>>,
+    work: &mut NormalizedPreparationWork,
+) -> Result<BTreeMap<DeclarationReference, NormalizedTest>, Diagnostic> {
+    let mut tests = BTreeMap::new();
+    for ((package, owner), unit) in units {
+        let OwnerKey::Declaration(declaration) = owner else {
+            continue;
+        };
+        let CompilationPayload::Test {
+            actual,
+            expected,
+            comparison,
+        } = &unit.payload
+        else {
+            continue;
+        };
+        let declaration = DeclarationReference {
+            package: *package,
+            declaration: *declaration,
+        };
+        let test = NormalizedTest {
+            declaration,
+            actual: translate_code(artifact, unit, actual, indexes, text_cache, work)?,
+            expected: translate_code(artifact, unit, expected, indexes, text_cache, work)?,
+            comparison: *comparison,
+        };
+        if tests.insert(declaration, test).is_some() {
+            return Err(runtime_corrupt(
+                "normalized_test_duplicate",
+                "one exact test has multiple runtime definitions",
+            ));
+        }
+    }
+    Ok(tests)
+}
+
+fn prepare_targets(
+    artifact: &LoadedArtifact,
+    units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
+    indexes: &RuntimeIndexes,
+    work: &mut NormalizedPreparationWork,
+) -> Result<(TargetMap, RootTargetNames), Diagnostic> {
+    let mut targets = BTreeMap::new();
+    let mut root_names = BTreeMap::new();
+    for ((package, owner), unit) in units {
+        let OwnerKey::Target(target) = owner else {
+            continue;
+        };
+        let CompilationPayload::Target {
+            component,
+            port,
+            runner,
+        } = &unit.payload
+        else {
+            return Err(runtime_corrupt(
+                "normalized_target_payload",
+                "target unit has another compiler payload",
+            ));
+        };
+        let component = index_copy(
+            &unit.tables.declarations,
+            *component,
+            "normalized target component",
+        )?;
+        let component = required_index(&indexes.components, component, "component")?;
+        let port = index_copy(&unit.tables.ports, *port, "normalized target port")?;
+        let port = required_index(&indexes.ports, port, "port")?;
+        let package_manifest = artifact.package(*package).ok_or_else(|| {
+            runtime_corrupt(
+                "normalized_target_package",
+                "target compiler unit has no artifact package manifest",
+            )
+        })?;
+        let owner = package_manifest
+            .targets
+            .binary_search_by_key(target, |entry| entry.target)
+            .ok()
+            .map(|index| package_manifest.targets[index].owner)
+            .ok_or_else(|| {
+                runtime_corrupt(
+                    "normalized_target_owner",
+                    "target compiler unit has no exact target-owner binding",
+                )
+            })?;
+        let key = ObjectKey::from_digest(ObjectDomain::Owner, owner.bytes());
+        let bytes = required_object(
+            artifact,
+            key,
+            "normalized target owner object is missing",
+            &mut work.store,
+        )?;
+        let record = decode_owner(&bytes, OwnerKey::Target(*target), OwnerKind::Target, owner)?;
+        let OwnerRecord::Target(record) = record else {
+            return Err(runtime_corrupt(
+                "normalized_target_owner_kind",
+                "target owner binding decoded another owner kind",
+            ));
+        };
+        let target_value = NormalizedTarget {
+            package: *package,
+            target: *target,
+            name: record.name.clone(),
+            runner: *runner,
+            component,
+            port,
+        };
+        if targets.insert((*package, *target), target_value).is_some() {
+            return Err(runtime_corrupt(
+                "normalized_target_duplicate",
+                "one exact target has multiple runtime definitions",
+            ));
+        }
+        if *package == artifact.manifest.root_package
+            && root_names.insert(record.name, *target).is_some()
+        {
+            return Err(runtime_corrupt(
+                "normalized_target_name_duplicate",
+                "root artifact package repeats one target name",
+            ));
+        }
+    }
+    Ok((targets, root_names))
+}
+
+fn translate_code(
+    artifact: &LoadedArtifact,
+    unit: &CompilationUnit,
+    code: &CompiledCode,
+    indexes: &RuntimeIndexes,
+    text_cache: &mut BTreeMap<BlobObjectDigest, Arc<str>>,
+    work: &mut NormalizedPreparationWork,
+) -> Result<NormalizedCode, Diagnostic> {
+    let mut instructions = Vec::with_capacity(code.instructions.len());
+    for instruction in &code.instructions {
+        let translated = match instruction {
+            CompiledInstruction::Unit => NormalizedInstruction::Unit,
+            CompiledInstruction::Bool(value) => NormalizedInstruction::Bool(*value),
+            CompiledInstruction::I64(value) => NormalizedInstruction::I64(*value),
+            CompiledInstruction::Text(text) => NormalizedInstruction::Text(resolve_text(
+                artifact,
+                index_ref(&unit.tables.texts, *text, "normalized text")?,
+                text_cache,
+                &mut work.store,
+            )?),
+            CompiledInstruction::StaticText(text) => {
+                NormalizedInstruction::StaticText(resolve_text(
+                    artifact,
+                    index_ref(&unit.tables.texts, *text, "normalized static text")?,
+                    text_cache,
+                    &mut work.store,
+                )?)
+            }
+            CompiledInstruction::LoadLocal(local) => NormalizedInstruction::LoadLocal(*local),
+            CompiledInstruction::StoreLocal(local) => NormalizedInstruction::StoreLocal(*local),
+            CompiledInstruction::Drop => NormalizedInstruction::Drop,
+            CompiledInstruction::JumpIfFalse(target) => NormalizedInstruction::JumpIfFalse(*target),
+            CompiledInstruction::Jump(target) => NormalizedInstruction::Jump(*target),
+            CompiledInstruction::Call {
+                function,
+                arguments,
+                ..
+            } => {
+                let declaration = index_copy(
+                    &unit.tables.declarations,
+                    *function,
+                    "normalized call target",
+                )?;
+                NormalizedInstruction::Call {
+                    function: required_index(&indexes.functions, declaration, "function")?,
+                    arguments: *arguments,
+                }
+            }
+            CompiledInstruction::FunctionValue { function, .. } => {
+                let declaration = index_copy(
+                    &unit.tables.declarations,
+                    *function,
+                    "normalized function value",
+                )?;
+                NormalizedInstruction::FunctionValue {
+                    function: required_index(&indexes.functions, declaration, "function")?,
+                }
+            }
+            CompiledInstruction::Invoke { arguments } => NormalizedInstruction::Invoke {
+                arguments: *arguments,
+            },
+            CompiledInstruction::Record {
+                nominal_type,
+                fields,
+            } => {
+                let layout = nominal_type
+                    .map(|declaration| {
+                        let declaration = index_copy(
+                            &unit.tables.declarations,
+                            declaration,
+                            "normalized nominal record",
+                        )?;
+                        required_index(&indexes.records, declaration, "record layout")
+                    })
+                    .transpose()?;
+                let fields = fields
+                    .iter()
+                    .map(|field| translate_field(unit, field, indexes))
+                    .collect::<Result<Vec<_>, _>>()?;
+                if fields.iter().any(|field| match (layout, field) {
+                    (Some(expected), NormalizedFieldSelector::Nominal { layout, .. }) => {
+                        expected != *layout
+                    }
+                    (None, NormalizedFieldSelector::Structural(_)) => false,
+                    _ => true,
+                }) {
+                    return Err(runtime_corrupt(
+                        "normalized_record_selector",
+                        "record construction mixes a foreign nominal or structural field selector",
+                    ));
+                }
+                NormalizedInstruction::Record {
+                    layout,
+                    fields: fields.into(),
+                }
+            }
+            CompiledInstruction::Variant { case, has_payload } => {
+                let reference = index_copy(&unit.tables.cases, *case, "normalized variant case")?;
+                let (layout, case) = required_index(&indexes.cases, reference, "case")?;
+                NormalizedInstruction::Variant {
+                    layout,
+                    case,
+                    has_payload: *has_payload,
+                }
+            }
+            CompiledInstruction::Field(field) => {
+                NormalizedInstruction::Field(translate_field(unit, field, indexes)?)
+            }
+            CompiledInstruction::List { items, .. } => {
+                NormalizedInstruction::List { items: *items }
+            }
+            CompiledInstruction::Map { entries, .. } => {
+                NormalizedInstruction::Map { entries: *entries }
+            }
+            CompiledInstruction::SwitchVariant(jumps) => {
+                let jumps = jumps
+                    .iter()
+                    .map(|jump| {
+                        let reference =
+                            index_copy(&unit.tables.cases, jump.case, "normalized switch case")?;
+                        let (layout, case) = required_index(&indexes.cases, reference, "case")?;
+                        Ok(NormalizedVariantJump {
+                            layout,
+                            case,
+                            target: jump.target,
+                            binding_local: jump.binding_local,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, Diagnostic>>()?;
+                NormalizedInstruction::SwitchVariant(jumps.into())
+            }
+            CompiledInstruction::Perform {
+                requirement,
+                operation,
+                arguments,
+            } => {
+                let requirement = index_copy(
+                    &unit.tables.requirements,
+                    *requirement,
+                    "normalized capability requirement",
+                )?;
+                let operation = index_copy(
+                    &unit.tables.operations,
+                    *operation,
+                    "normalized capability operation",
+                )?;
+                NormalizedInstruction::Perform {
+                    requirement: required_index(&indexes.requirements, requirement, "requirement")?,
+                    operation: required_index(&indexes.operations, operation, "operation")?,
+                    arguments: *arguments,
+                }
+            }
+            CompiledInstruction::BeginTransaction {
+                requirement,
+                binding,
+            } => {
+                let requirement = index_copy(
+                    &unit.tables.requirements,
+                    *requirement,
+                    "normalized transaction requirement",
+                )?;
+                NormalizedInstruction::BeginTransaction {
+                    requirement: required_index(&indexes.requirements, requirement, "requirement")?,
+                    binding: *binding,
+                }
+            }
+            CompiledInstruction::CommitTransaction {
+                requirement,
+                binding,
+            } => {
+                let requirement = index_copy(
+                    &unit.tables.requirements,
+                    *requirement,
+                    "normalized transaction requirement",
+                )?;
+                NormalizedInstruction::CommitTransaction {
+                    requirement: required_index(&indexes.requirements, requirement, "requirement")?,
+                    binding: *binding,
+                }
+            }
+            CompiledInstruction::Return => NormalizedInstruction::Return,
+        };
+        instructions.push(translated);
+    }
+    work.instructions = work.instructions.saturating_add(instructions.len() as u64);
+    Ok(NormalizedCode {
+        parameter_count: code.parameter_count,
+        local_count: code.local_count,
+        instructions: instructions.into(),
+    })
+}
+
+fn translate_field(
+    unit: &CompilationUnit,
+    field: &CompiledFieldSelector,
+    indexes: &RuntimeIndexes,
+) -> Result<NormalizedFieldSelector, Diagnostic> {
+    match field {
+        CompiledFieldSelector::Nominal(field) => {
+            let reference = index_copy(&unit.tables.fields, *field, "normalized nominal field")?;
+            let (layout, offset) = required_index(&indexes.fields, reference, "field")?;
+            Ok(NormalizedFieldSelector::Nominal { layout, offset })
+        }
+        CompiledFieldSelector::Structural(name) => Ok(NormalizedFieldSelector::Structural(
+            index_ref(
+                &unit.tables.structural_names,
+                *name,
+                "normalized structural field",
+            )?
+            .clone(),
+        )),
+    }
+}
+
+fn translate_requirement_indexes(
+    unit: &CompilationUnit,
+    local: &[u32],
+    indexes: &RuntimeIndexes,
+) -> Result<Vec<RequirementIndex>, Diagnostic> {
+    local
+        .iter()
+        .map(|requirement| {
+            let reference = index_copy(
+                &unit.tables.requirements,
+                *requirement,
+                "normalized task requirement",
+            )?;
+            required_index(&indexes.requirements, reference, "requirement")
+        })
+        .collect()
+}
+
+fn resolve_text(
+    artifact: &LoadedArtifact,
+    text: &CompiledText,
+    cache: &mut BTreeMap<BlobObjectDigest, Arc<str>>,
+    work: &mut StoreWork,
+) -> Result<Arc<str>, Diagnostic> {
+    match text {
+        CompiledText::Inline(value) => Ok(Arc::from(value.as_str())),
+        CompiledText::Blob { digest, bytes } => {
+            if let Some(value) = cache.get(digest) {
+                return Ok(value.clone());
+            }
+            let key = ObjectKey::from_digest(ObjectDomain::Blob, digest.bytes());
+            let value = required_object(artifact, key, "normalized text blob is missing", work)?;
+            if value.len() as u64 != *bytes {
+                return Err(runtime_corrupt(
+                    "normalized_text_blob_length",
+                    "normalized text blob length disagrees with its compiler unit",
+                ));
+            }
+            let value = std::str::from_utf8(&value).map_err(|_| {
+                runtime_corrupt(
+                    "normalized_text_blob_utf8",
+                    "normalized text blob is not valid UTF-8",
+                )
+            })?;
+            let value: Arc<str> = Arc::from(value);
+            cache.insert(*digest, value.clone());
+            Ok(value)
+        }
+    }
+}
+
+fn declaration_unit(
+    units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
+    declaration: DeclarationReference,
+) -> Result<&CompilationUnit, Diagnostic> {
+    units
+        .get(&(
+            declaration.package,
+            OwnerKey::Declaration(declaration.declaration),
+        ))
+        .ok_or_else(|| {
+            runtime_corrupt(
+                "normalized_declaration_unit_missing",
+                "dense declaration reference has no compiler unit",
+            )
+        })
+}
+
+fn required_object(
+    artifact: &LoadedArtifact,
+    key: ObjectKey,
+    message: &'static str,
+    work: &mut StoreWork,
+) -> Result<Vec<u8>, Diagnostic> {
+    artifact
+        .read(key, key.domain.maximum_bytes(), work)
+        .map_err(store_diagnostic)?
+        .ok_or_else(|| runtime_corrupt("normalized_object_missing", message))
+}
+
+fn index_ref<'a, T>(values: &'a [T], index: u32, label: &'static str) -> Result<&'a T, Diagnostic> {
+    values.get(index as usize).ok_or_else(|| {
+        runtime_corrupt(
+            "normalized_dense_index",
+            format!("{label} dense index is outside its verified table"),
+        )
+    })
+}
+
+fn index_copy<T: Copy>(values: &[T], index: u32, label: &'static str) -> Result<T, Diagnostic> {
+    index_ref(values, index, label).copied()
+}
+
+fn required_index<K: Ord + std::fmt::Debug, V: Copy>(
+    values: &BTreeMap<K, V>,
+    key: K,
+    label: &'static str,
+) -> Result<V, Diagnostic> {
+    values.get(&key).copied().ok_or_else(|| {
+        runtime_corrupt(
+            "normalized_relocation_missing",
+            format!("exact {label} reference {key:?} has no dense runtime binding"),
+        )
+    })
+}
+
+fn dense_map<K: Ord, V: Copy>(
+    values: BTreeSet<K>,
+    wrap: impl Fn(u32) -> V,
+) -> Result<BTreeMap<K, V>, Diagnostic> {
+    values
+        .into_iter()
+        .enumerate()
+        .map(|(index, value)| Ok((value, wrap(u32_index(index, "dense runtime index")?))))
+        .collect()
+}
+
+fn finish_dense<T>(values: Vec<Option<T>>, label: &'static str) -> Result<Vec<T>, Diagnostic> {
+    values
+        .into_iter()
+        .map(|value| {
+            value.ok_or_else(|| {
+                runtime_corrupt(
+                    "normalized_dense_hole",
+                    format!("dense {label} table contains an uninitialized slot"),
+                )
+            })
+        })
+        .collect()
+}
+
+fn u32_index(value: usize, label: &'static str) -> Result<u32, Diagnostic> {
+    u32::try_from(value).map_err(|_| {
+        runtime_error(
+            DiagnosticClass::Resource,
+            "normalized_index_count",
+            format!("{label} exceeds the dense runtime index domain"),
+        )
+    })
+}
+
+fn add_map_work(total: &mut MapWork, other: MapWork) {
+    total.pages_read = total.pages_read.saturating_add(other.pages_read);
+    total.pages_decoded = total.pages_decoded.saturating_add(other.pages_decoded);
+    total.pages_encoded = total.pages_encoded.saturating_add(other.pages_encoded);
+    total.pages_written = total.pages_written.saturating_add(other.pages_written);
+    total.pages_reused = total.pages_reused.saturating_add(other.pages_reused);
+    total.bytes_read = total.bytes_read.saturating_add(other.bytes_read);
+    total.bytes_encoded = total.bytes_encoded.saturating_add(other.bytes_encoded);
+    total.bytes_written = total.bytes_written.saturating_add(other.bytes_written);
+    total.key_comparisons = total.key_comparisons.saturating_add(other.key_comparisons);
+    total.entries_visited = total.entries_visited.saturating_add(other.entries_visited);
+    total.differences_emitted = total
+        .differences_emitted
+        .saturating_add(other.differences_emitted);
+    total.subtrees_skipped = total
+        .subtrees_skipped
+        .saturating_add(other.subtrees_skipped);
+    total.entries_skipped = total.entries_skipped.saturating_add(other.entries_skipped);
+}
+
+fn map_diagnostic(error: MapError) -> Diagnostic {
+    runtime_error(
+        match error.class {
+            MapErrorClass::Input => DiagnosticClass::Source,
+            MapErrorClass::Resource => DiagnosticClass::Resource,
+            MapErrorClass::Corrupt => DiagnosticClass::Corrupt,
+            MapErrorClass::Store => DiagnosticClass::Infrastructure,
+        },
+        error.code,
+        error.message,
+    )
+}
+
+fn store_diagnostic(error: StoreError) -> Diagnostic {
+    runtime_error(
+        match error.class {
+            StoreErrorClass::Input => DiagnosticClass::Source,
+            StoreErrorClass::Resource => DiagnosticClass::Resource,
+            StoreErrorClass::Corrupt => DiagnosticClass::Corrupt,
+            StoreErrorClass::Io => DiagnosticClass::Infrastructure,
+        },
+        error.code,
+        error.message,
+    )
+}
+
+fn runtime_corrupt(code: &'static str, message: impl Into<String>) -> Diagnostic {
+    runtime_error(DiagnosticClass::Corrupt, code, message)
+}
+
+fn runtime_error(
+    class: DiagnosticClass,
+    code: &'static str,
+    message: impl Into<String>,
+) -> Diagnostic {
+    Diagnostic::new(class, code, message)
+}

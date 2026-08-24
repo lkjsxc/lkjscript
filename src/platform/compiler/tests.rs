@@ -111,7 +111,7 @@ fn structurally_empty_snapshot(seed: &[u8]) -> crate::platform::kernel::KernelSn
     }
 }
 
-fn complete_expression_snapshot() -> crate::platform::kernel::KernelSnapshot {
+pub(crate) fn complete_expression_snapshot() -> crate::platform::kernel::KernelSnapshot {
     let mut snapshot = crate::platform::kernel::tests::witness_snapshot();
     let package = snapshot.root.package_id;
     let caller = declaration_named(&snapshot, "caller");
@@ -594,6 +594,44 @@ fn every_graph5_expression_form_lowers_with_verified_control_flow() {
     assert_eq!(receipt.unit.tables.structural_names.len(), 1);
     CompilationUnit::decode(&receipt.bytes, receipt.object)
         .expect("all-form unit passes strict control-flow verification");
+}
+
+#[test]
+fn transaction_scope_binding_is_a_unit_marker_not_a_live_language_handle() {
+    let mut snapshot = complete_expression_snapshot();
+    let i64_type = snapshot
+        .types
+        .iter()
+        .find_map(|(digest, object)| matches!(object.form, TypeForm::I64).then_some(*digest))
+        .expect("coverage i64 type");
+    let transaction = snapshot
+        .owners
+        .iter()
+        .find_map(|(owner, record)| match (owner, record) {
+            (OwnerKey::Binding(binding), OwnerRecord::Binding(record))
+                if record.kind == BindingKind::Transaction =>
+            {
+                Some(*binding)
+            }
+            _ => None,
+        })
+        .expect("transaction binding");
+    let OwnerRecord::Binding(record) = snapshot
+        .owners
+        .get_mut(&OwnerKey::Binding(transaction))
+        .expect("transaction binding record")
+    else {
+        panic!("transaction binding owner kind")
+    };
+    record.declared_type = Some(i64_type);
+
+    let diagnostics = crate::platform::kernel::validate_full(&snapshot)
+        .expect_err("a transaction binding cannot impersonate an ordinary value type");
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "kernel_type_transaction_binding")
+    );
 }
 
 #[test]

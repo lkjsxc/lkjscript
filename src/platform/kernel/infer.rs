@@ -14,7 +14,7 @@ use super::validate::KernelSnapshot;
 use super::{PackageInterfaceDeclarationPayload, PackageInterfaceRecord};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::semantic_id::{
-    CaseId, DeclarationId, ExpressionId, FieldId, OperationId, TypeParameterId,
+    BindingId, CaseId, DeclarationId, ExpressionId, FieldId, OperationId, TypeParameterId,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -487,7 +487,9 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 Ok(operation_record.result)
             }
             ExpressionOperation::Transaction {
-                requirement, body, ..
+                requirement,
+                binding,
+                body,
             } => {
                 if context.pure {
                     return Err(type_error(
@@ -502,6 +504,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     ));
                 }
                 self.requirement_record(requirement)?;
+                self.transaction_binding_type(binding)?;
                 self.infer(body, context, next)
             }
         }
@@ -557,8 +560,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 Ok(record.ty)
             }
             LocalValueReference::LexicalBinding(binding)
-            | LocalValueReference::MatchPayload(binding)
-            | LocalValueReference::TransactionBinding(binding) => {
+            | LocalValueReference::MatchPayload(binding) => {
                 let record = match self.read.owner(OwnerKey::Binding(binding))? {
                     Some(OwnerRecord::Binding(record)) => record,
                     _ => {
@@ -579,7 +581,38 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     "non-value binding lacks an exact inferred type",
                 ))
             }
+            LocalValueReference::TransactionBinding(binding) => {
+                self.transaction_binding_type(binding)
+            }
         }
+    }
+
+    fn transaction_binding_type(
+        &mut self,
+        binding: BindingId,
+    ) -> Result<TypeObjectDigest, Diagnostic> {
+        let record = match self.read.owner(OwnerKey::Binding(binding))? {
+            Some(OwnerRecord::Binding(record)) if record.kind == BindingKind::Transaction => record,
+            _ => {
+                return Err(type_error(
+                    "kernel_type_transaction_binding",
+                    "transaction scope names no exact transaction binding",
+                ));
+            }
+        };
+        let Some(ty) = record.declared_type else {
+            return Err(type_error(
+                "kernel_type_transaction_binding",
+                "transaction binding must declare the unit marker type",
+            ));
+        };
+        if !matches!(self.type_object(ty)?.form, TypeForm::Unit) {
+            return Err(type_error(
+                "kernel_type_transaction_binding",
+                "transaction binding must use the unit marker type",
+            ));
+        }
+        Ok(ty)
     }
 
     fn infer_record(

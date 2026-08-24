@@ -3,6 +3,11 @@
 mod capability;
 mod compiler;
 mod intrinsic;
+#[allow(
+    dead_code,
+    reason = "the normalized runtime remains private until maintained runners migrate"
+)]
+mod normalized;
 mod reference;
 mod vm;
 
