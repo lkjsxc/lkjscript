@@ -124,6 +124,10 @@ impl RelationKind {
         }
     }
 
+    pub fn from_tag(tag: u8) -> Option<Self> {
+        Self::ALL.into_iter().find(|kind| kind.tag() == tag)
+    }
+
     pub const fn propagation(self) -> PropagationClass {
         match self {
             Self::DeclarationModule

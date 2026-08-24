@@ -128,6 +128,19 @@ macro_rules! semantic_id {
                 self.0.0
             }
 
+            /// Constructs one typed identity from its exact binary domain payload.
+            ///
+            /// Stored map keys carry their domain tag separately, so strict key decoders use
+            /// this constructor only after checking that tag. The all-zero value remains
+            /// reserved in every semantic identity domain.
+            pub fn from_bytes(bytes: [u8; IDENTITY_BYTES]) -> Option<Self> {
+                if bytes == [0; IDENTITY_BYTES] {
+                    None
+                } else {
+                    Some(Self(IdentityBytes(bytes)))
+                }
+            }
+
             pub fn parse(value: &str) -> Result<Self, Diagnostic> {
                 value.parse()
             }

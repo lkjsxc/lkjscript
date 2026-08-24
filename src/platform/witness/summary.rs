@@ -6,6 +6,7 @@ use super::contract::{
 use super::{
     OwnerSummaryDigest, SemanticDigest, ValidationCertificateDigest, ValidatorContractDigest,
 };
+use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     OwnerKey, OwnerKind, OwnerObjectDigest, PackageId, SemanticRootDigest,
 };
@@ -96,6 +97,44 @@ impl SummaryBinding {
         bytes.push(self.kind.tag());
         bytes.extend_from_slice(&self.summary.bytes());
         bytes
+    }
+
+    pub fn decode(bytes: &[u8], expected_owner: OwnerKey) -> Result<Self, Diagnostic> {
+        if bytes.len() != 33 {
+            return Err(Diagnostic::new(
+                DiagnosticClass::Corrupt,
+                "witness_summary_binding_length",
+                "owner-summary binding has a noncanonical byte length",
+            ));
+        }
+        let kind = OwnerKind::ALL
+            .into_iter()
+            .find(|kind| kind.tag() == bytes[0])
+            .ok_or_else(|| {
+                Diagnostic::new(
+                    DiagnosticClass::Corrupt,
+                    "witness_summary_binding_kind",
+                    "owner-summary binding contains an unknown owner-kind tag",
+                )
+            })?;
+        if !kind.accepts_owner(expected_owner) {
+            return Err(Diagnostic::new(
+                DiagnosticClass::Corrupt,
+                "witness_summary_binding_domain",
+                "owner-summary binding kind disagrees with its map-key identity domain",
+            ));
+        }
+        let digest = bytes[1..].try_into().map_err(|_| {
+            Diagnostic::new(
+                DiagnosticClass::Corrupt,
+                "witness_summary_binding_length",
+                "owner-summary binding has a noncanonical digest length",
+            )
+        })?;
+        Ok(Self {
+            kind,
+            summary: OwnerSummaryDigest::from_bytes(digest),
+        })
     }
 }
 

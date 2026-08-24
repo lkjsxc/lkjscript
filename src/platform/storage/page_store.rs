@@ -12,6 +12,48 @@ pub struct ObjectPageStore<S> {
     work: RefCell<StoreWork>,
 }
 
+/// Read-only persistent-map adapter. It permits revision-pinned repository views to perform
+/// concurrent semantic reads without acquiring a mutable object-store reference or exposing page
+/// placement outside the storage layer.
+pub struct ObjectPageReader<'a, S: ?Sized> {
+    objects: &'a S,
+    work: RefCell<StoreWork>,
+}
+
+impl<'a, S: ?Sized> ObjectPageReader<'a, S> {
+    pub fn new(objects: &'a S) -> Self {
+        Self {
+            objects,
+            work: RefCell::new(StoreWork::default()),
+        }
+    }
+
+    pub fn work(&self) -> StoreWork {
+        *self.work.borrow()
+    }
+}
+
+impl<S: ImmutableObjectStore + ?Sized> PageStore for ObjectPageReader<'_, S> {
+    fn read_page(&self, digest: PageDigest) -> Result<Option<Vec<u8>>, MapError> {
+        let key = ObjectKey::from_digest(ObjectDomain::MapPage, digest.bytes());
+        self.objects
+            .read(
+                key,
+                crate::platform::persistent_map::MAXIMUM_PAGE_BYTES,
+                &mut self.work.borrow_mut(),
+            )
+            .map_err(map_error)
+    }
+
+    fn write_page(&mut self, _digest: PageDigest, _bytes: &[u8]) -> Result<PageWrite, MapError> {
+        Err(MapError {
+            class: MapErrorClass::Input,
+            code: "object_page_reader_write",
+            message: "read-only object-page adapter cannot stage a persistent-map page".to_owned(),
+        })
+    }
+}
+
 impl<S> ObjectPageStore<S> {
     pub fn new(objects: S) -> Self {
         Self {

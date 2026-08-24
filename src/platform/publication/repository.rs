@@ -2,6 +2,7 @@
 
 use super::contract::{HEAD_MAGIC, MAXIMUM_HEAD_BYTES, REVISION_CONTRACT_VERSION};
 use super::prepare::validate_history_base;
+use super::read_view::RepositoryView;
 use super::{
     AcceptedBinding, HeadRecord, NormalizedTransaction, PreparedInitialPublication,
     PreparedPublication, PublicationReceipt, RevisionRecord, SemanticDiff,
@@ -224,6 +225,26 @@ impl GraphRepository {
                 "Graph 5 repository has no accepted HEAD",
             )
         })
+    }
+
+    /// Opens one exact revision-pinned read view. The shared lock protects the HEAD/catalog
+    /// observation; immutable append-only packs keep that observed revision readable after the
+    /// lock is released and later publications advance HEAD.
+    pub fn view_current(&self) -> Result<RepositoryView, Diagnostic> {
+        let root_directory = open_directory(&self.root)?;
+        let lock = open_lock(&root_directory)?;
+        FileExt::lock_shared(&lock).map_err(|error| {
+            io_diagnostic("publication_repository_view_lock", &self.root, error)
+        })?;
+        let store = PackDirectoryStore::open(&self.root).map_err(store_diagnostic)?;
+        let current = read_current_optional(&root_directory, &store)?.ok_or_else(|| {
+            repository_error(
+                DiagnosticClass::Source,
+                "publication_repository_unpublished",
+                "Graph 5 repository has no accepted HEAD",
+            )
+        })?;
+        Ok(RepositoryView::new(current, store))
     }
 
     pub fn publish(

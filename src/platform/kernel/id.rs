@@ -264,6 +264,50 @@ impl EncodedOwnerKey {
     pub const fn bytes(self) -> [u8; 17] {
         self.0
     }
+
+    /// Strictly decodes the canonical tagged owner-key representation used by Graph 5 maps and
+    /// witness entries.
+    pub fn decode(bytes: &[u8]) -> Result<OwnerKey, Diagnostic> {
+        let encoded: [u8; 17] = bytes.try_into().map_err(|_| {
+            id_error(
+                DiagnosticClass::Corrupt,
+                "kernel_owner_key_length",
+                "encoded owner key must contain one domain tag and 16 identity bytes",
+            )
+        })?;
+        let mut identity = [0_u8; 16];
+        identity.copy_from_slice(&encoded[1..]);
+        let owner = match encoded[0] {
+            1 => ModuleId::from_bytes(identity).map(OwnerKey::Module),
+            2 => DeclarationId::from_bytes(identity).map(OwnerKey::Declaration),
+            3 => TypeParameterId::from_bytes(identity).map(OwnerKey::TypeParameter),
+            4 => FieldId::from_bytes(identity).map(OwnerKey::Field),
+            5 => CaseId::from_bytes(identity).map(OwnerKey::Case),
+            6 => OperationId::from_bytes(identity).map(OwnerKey::Operation),
+            7 => ParameterId::from_bytes(identity).map(OwnerKey::Parameter),
+            8 => BindingId::from_bytes(identity).map(OwnerKey::Binding),
+            9 => ExpressionId::from_bytes(identity).map(OwnerKey::Expression),
+            10 => RequirementId::from_bytes(identity).map(OwnerKey::Requirement),
+            11 => PortId::from_bytes(identity).map(OwnerKey::Port),
+            12 => TargetId::from_bytes(identity).map(OwnerKey::Target),
+            13 => DocumentationId::from_bytes(identity).map(OwnerKey::Documentation),
+            14 => AnnotationId::from_bytes(identity).map(OwnerKey::Annotation),
+            tag => {
+                return Err(id_error(
+                    DiagnosticClass::Corrupt,
+                    "kernel_owner_key_domain",
+                    format!("encoded owner key contains unknown identity-domain tag {tag}"),
+                ));
+            }
+        };
+        owner.ok_or_else(|| {
+            id_error(
+                DiagnosticClass::Corrupt,
+                "kernel_owner_key_zero",
+                "encoded owner key contains the reserved all-zero identity",
+            )
+        })
+    }
 }
 
 #[derive(

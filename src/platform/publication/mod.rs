@@ -9,6 +9,7 @@ pub(crate) mod contract;
 mod diff;
 mod digest;
 mod prepare;
+mod read_view;
 mod receipt;
 mod repository;
 mod revision;
@@ -24,6 +25,9 @@ pub use digest::{
 pub use prepare::{
     PreparedInitialPublication, PreparedPublication, PublicationOptions,
     prepare_change_publication, prepare_initial_publication,
+};
+pub use read_view::{
+    MAXIMUM_RELATION_READ_ITEMS, RelationRead, RepositoryReadWork, RepositoryView, RevisionRead,
 };
 pub use receipt::{
     ChangeCounts, FullOracleStatus, PublicationReceipt, PublicationStatus, ValidationEvidence,

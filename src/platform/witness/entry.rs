@@ -188,6 +188,22 @@ pub fn reverse_relation_key(edge: RelationEdge) -> Vec<u8> {
     relation_key(edge.target, edge.kind, edge.source)
 }
 
+pub fn forward_relation_prefix(source: RelationEndpoint, kind: Option<RelationKind>) -> Vec<u8> {
+    relation_prefix(source, kind)
+}
+
+pub fn reverse_relation_prefix(target: RelationEndpoint, kind: Option<RelationKind>) -> Vec<u8> {
+    relation_prefix(target, kind)
+}
+
+pub fn decode_forward_relation_key(bytes: &[u8]) -> Result<RelationEdge, Diagnostic> {
+    decode_relation_key(bytes, false)
+}
+
+pub fn decode_reverse_relation_key(bytes: &[u8]) -> Result<RelationEdge, Diagnostic> {
+    decode_relation_key(bytes, true)
+}
+
 pub fn test_dependency_keys(dependency: TestDependency) -> [Vec<u8>; 2] {
     let mut forward = vec![1];
     forward.extend_from_slice(&EncodedOwnerKey::new(dependency.test).bytes());
@@ -207,6 +223,109 @@ fn relation_key(first: RelationEndpoint, kind: RelationKind, second: RelationEnd
     bytes.push(kind.tag());
     encode_endpoint(&mut bytes, second);
     bytes
+}
+
+fn relation_prefix(endpoint: RelationEndpoint, kind: Option<RelationKind>) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(35);
+    encode_endpoint(&mut bytes, endpoint);
+    if let Some(kind) = kind {
+        bytes.push(kind.tag());
+    }
+    bytes
+}
+
+fn decode_relation_key(bytes: &[u8], reverse: bool) -> Result<RelationEdge, Diagnostic> {
+    let mut cursor = 0;
+    let first = decode_endpoint(bytes, &mut cursor)?;
+    let kind = bytes
+        .get(cursor)
+        .and_then(|tag| RelationKind::from_tag(*tag))
+        .ok_or_else(|| {
+            entry_error(
+                "witness_relation_kind",
+                "relation key contains a missing or unknown relation-kind tag",
+            )
+        })?;
+    cursor += 1;
+    let second = decode_endpoint(bytes, &mut cursor)?;
+    if cursor != bytes.len() {
+        return Err(entry_error(
+            "witness_relation_trailing",
+            "relation key contains trailing bytes",
+        ));
+    }
+    let (source, target) = if reverse {
+        (second, first)
+    } else {
+        (first, second)
+    };
+    Ok(RelationEdge {
+        source,
+        kind,
+        target,
+    })
+}
+
+fn decode_endpoint(bytes: &[u8], cursor: &mut usize) -> Result<RelationEndpoint, Diagnostic> {
+    let tag = *bytes.get(*cursor).ok_or_else(|| {
+        entry_error(
+            "witness_relation_endpoint",
+            "relation key ends before an endpoint domain tag",
+        )
+    })?;
+    *cursor += 1;
+    let package_end = cursor.checked_add(16).ok_or_else(|| {
+        entry_error(
+            "witness_relation_endpoint",
+            "relation endpoint length overflows",
+        )
+    })?;
+    let package_bytes: [u8; 16] = bytes
+        .get(*cursor..package_end)
+        .ok_or_else(|| {
+            entry_error(
+                "witness_relation_endpoint",
+                "relation key ends inside a package identity",
+            )
+        })?
+        .try_into()
+        .map_err(|_| {
+            entry_error(
+                "witness_relation_endpoint",
+                "relation package identity has a noncanonical length",
+            )
+        })?;
+    let package = PackageId::from_bytes(package_bytes).ok_or_else(|| {
+        entry_error(
+            "witness_relation_package",
+            "relation endpoint contains the reserved all-zero package identity",
+        )
+    })?;
+    *cursor = package_end;
+    match tag {
+        1 => Ok(RelationEndpoint::Package(package)),
+        2 => {
+            let owner_end = cursor.checked_add(17).ok_or_else(|| {
+                entry_error(
+                    "witness_relation_endpoint",
+                    "relation owner endpoint length overflows",
+                )
+            })?;
+            let owner =
+                EncodedOwnerKey::decode(bytes.get(*cursor..owner_end).ok_or_else(|| {
+                    entry_error(
+                        "witness_relation_endpoint",
+                        "relation key ends inside an owner identity",
+                    )
+                })?)?;
+            *cursor = owner_end;
+            Ok(RelationEndpoint::Owner(ExactOwnerKey { package, owner }))
+        }
+        other => Err(entry_error(
+            "witness_relation_endpoint_domain",
+            format!("relation endpoint contains unknown domain tag {other}"),
+        )),
+    }
 }
 
 pub fn encode_endpoint(bytes: &mut Vec<u8>, endpoint: RelationEndpoint) {

@@ -366,6 +366,42 @@ fn codecs_reject_corrupt_certificates_and_foreign_summary_domains() {
             .code,
         "witness_summary_digest"
     );
+
+    let (&owner, &summary_digest) = witness
+        .entries
+        .summaries
+        .first_key_value()
+        .expect("summary binding");
+    let binding = SummaryBinding {
+        kind: witness.summaries[&owner].kind,
+        summary: summary_digest,
+    };
+    let binding_bytes = binding.encode();
+    assert_eq!(
+        SummaryBinding::decode(&binding_bytes, owner).expect("summary binding must decode"),
+        binding
+    );
+    assert!(SummaryBinding::decode(&binding_bytes[..32], owner).is_err());
+
+    let edge = witness.entries.relations[0];
+    let forward = forward_relation_key(edge);
+    let reverse = reverse_relation_key(edge);
+    assert_eq!(
+        decode_forward_relation_key(&forward).expect("forward relation key must decode"),
+        edge
+    );
+    assert_eq!(
+        decode_reverse_relation_key(&reverse).expect("reverse relation key must decode"),
+        edge
+    );
+    let mut trailing = forward;
+    trailing.push(0);
+    assert_eq!(
+        decode_forward_relation_key(&trailing)
+            .expect_err("trailing relation-key bytes must reject")
+            .code,
+        "witness_relation_trailing"
+    );
 }
 
 fn witness_roots(witness: &FullWitness) -> [crate::platform::persistent_map::MapRoot; 6] {

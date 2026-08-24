@@ -815,6 +815,30 @@ fn owner_kind_and_owner_key_tags_are_unique_and_frozen() {
     assert_eq!(module[0], 1);
     assert_eq!(declaration[0], 2);
     assert_ne!(module, declaration);
+    assert_eq!(
+        EncodedOwnerKey::decode(&module).expect("module key must decode"),
+        OwnerKey::Module(ModuleId::migrate(TEST_SEED, same_ordinal))
+    );
+    assert_eq!(
+        EncodedOwnerKey::decode(&declaration).expect("declaration key must decode"),
+        OwnerKey::Declaration(DeclarationId::migrate(TEST_SEED, same_ordinal))
+    );
+    let mut foreign = module;
+    foreign[0] = 255;
+    assert_eq!(
+        EncodedOwnerKey::decode(&foreign)
+            .expect_err("foreign owner domain must reject")
+            .code,
+        "kernel_owner_key_domain"
+    );
+    let mut zero = module;
+    zero[1..].fill(0);
+    assert_eq!(
+        EncodedOwnerKey::decode(&zero)
+            .expect_err("zero owner identity must reject")
+            .code,
+        "kernel_owner_key_zero"
+    );
 }
 
 #[test]
