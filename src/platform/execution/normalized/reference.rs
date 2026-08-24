@@ -1259,7 +1259,7 @@ fn reference_intrinsic(
     }
 }
 
-fn reference_equal(
+pub(crate) fn reference_equal(
     left: &NormalizedValue,
     right: &NormalizedValue,
 ) -> Result<bool, ExecutionError> {

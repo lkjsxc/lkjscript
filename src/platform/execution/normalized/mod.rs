@@ -4,6 +4,7 @@ mod capability;
 mod codec;
 mod prepare;
 mod reference;
+mod runner;
 mod value;
 mod vm;
 

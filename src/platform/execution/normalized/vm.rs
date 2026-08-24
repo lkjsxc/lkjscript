@@ -1201,7 +1201,7 @@ fn call_core_intrinsic(
     }
 }
 
-fn normalized_equal(
+pub(crate) fn normalized_equal(
     left: &NormalizedValue,
     right: &NormalizedValue,
 ) -> Result<bool, ExecutionError> {

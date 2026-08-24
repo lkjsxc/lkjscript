@@ -7,16 +7,21 @@ use super::capability::{
 use super::codec::{decode_typed, encode_typed};
 use super::prepare::{NormalizedFunctionBody, NormalizedInstruction, NormalizedProgram};
 use super::reference::NormalizedReferenceInterpreter;
+use super::runner::{run_graph_tests, run_pure_command};
 use super::value::NormalizedValue;
 use super::vm::{NormalizedRunPolicy, NormalizedVm};
 use crate::platform::compiler::{OptimizationPolicy, build_clean, link_artifact, load_artifact};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::json::JsonLimits;
 use crate::platform::kernel::{
-    DeclarationReference, ExpressionOperation, Name, OperationReference, OwnerKey, OwnerRecord,
-    StructuralTypeField, TypeForm, TypeObject, TypeObjectDigest, encode_type_object,
+    DeclarationPayload, DeclarationRecord, DeclarationReference, DeclarationVisibility,
+    ExpressionOperation, Name, OperationReference, OwnerHeader, OwnerKey, OwnerKind, OwnerRecord,
+    PortImplementation, PortRecord, PortReference, StructuralTypeField, TargetRecord, TypeForm,
+    TypeObject, TypeObjectDigest, encode_type_object,
 };
+use crate::platform::package::RunnerKind;
 use crate::platform::publication::GraphRepository;
+use crate::platform::semantic_id::{DeclarationId, PortId, TargetId};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -55,6 +60,101 @@ fn prepare_snapshot(snapshot: &crate::platform::kernel::KernelSnapshot) -> Norma
         .expect("Graph 5 artifact");
     let loaded = load_artifact(&linked.artifact.bytes).expect("strict Graph 5 artifact");
     NormalizedProgram::prepare(loaded).expect("dense runtime preparation")
+}
+
+fn pure_command_snapshot() -> crate::platform::kernel::KernelSnapshot {
+    const SEED: &[u8] = b"normalized-pure-command-runner";
+
+    let mut snapshot = crate::platform::kernel::tests::witness_snapshot();
+    let implementation = declaration_named(&snapshot, "with_binding");
+    let module = match snapshot
+        .owners
+        .get(&OwnerKey::Declaration(implementation.declaration))
+        .expect("pure command implementation")
+    {
+        OwnerRecord::Declaration(record) => record.module,
+        _ => panic!("pure command implementation owner kind"),
+    };
+    let function_type = snapshot
+        .types
+        .iter()
+        .find_map(|(digest, object)| match &object.form {
+            TypeForm::Function { parameters, result }
+                if parameters.is_empty()
+                    && snapshot
+                        .types
+                        .get(result)
+                        .is_some_and(|object| matches!(object.form, TypeForm::Unit)) =>
+            {
+                Some(*digest)
+            }
+            _ => None,
+        })
+        .expect("fixture unit command function type");
+    let component = DeclarationId::migrate(SEED, 0);
+    let port = PortId::migrate(SEED, 0);
+    let target = TargetId::migrate(SEED, 0);
+    let package = snapshot.root.package_id;
+
+    assert!(
+        snapshot
+            .owners
+            .insert(
+                OwnerKey::Port(port),
+                OwnerRecord::Port(PortRecord {
+                    header: OwnerHeader::new(OwnerKey::Port(port), OwnerKind::Port),
+                    declaration: component,
+                    name: Name::new("run").unwrap(),
+                    function_type,
+                    implementation: PortImplementation::Function(implementation),
+                }),
+            )
+            .is_none()
+    );
+    assert!(
+        snapshot
+            .owners
+            .insert(
+                OwnerKey::Declaration(component),
+                OwnerRecord::Declaration(DeclarationRecord {
+                    header: OwnerHeader::new(
+                        OwnerKey::Declaration(component),
+                        OwnerKind::Component,
+                    ),
+                    module,
+                    name: Name::new("PureApplication").unwrap(),
+                    visibility: DeclarationVisibility::Public,
+                    payload: DeclarationPayload::Component {
+                        requirements: Vec::new(),
+                        ports: vec![port],
+                    },
+                }),
+            )
+            .is_none()
+    );
+    assert!(
+        snapshot
+            .owners
+            .insert(
+                OwnerKey::Target(target),
+                OwnerRecord::Target(TargetRecord {
+                    header: OwnerHeader::new(OwnerKey::Target(target), OwnerKind::Target),
+                    name: Name::new("pure").unwrap(),
+                    component: DeclarationReference {
+                        package,
+                        declaration: component,
+                    },
+                    port: PortReference { package, port },
+                    runner: RunnerKind::Command,
+                }),
+            )
+            .is_none()
+    );
+    snapshot.root.owners = crate::platform::persistent_map::MapRoot::from_parts(
+        snapshot.root.owners.page(),
+        snapshot.owners.len() as u64,
+    );
+    snapshot
 }
 
 #[derive(Clone)]
@@ -540,6 +640,70 @@ fn normalized_json_codec_uses_exact_runtime_layouts_and_bounds() {
         .code,
         "normalized_json_output_bytes"
     );
+}
+
+#[test]
+fn normalized_runners_execute_pure_commands_and_graph_owned_tests_differentially() {
+    let effectful_snapshot = crate::platform::kernel::tests::witness_snapshot();
+    let effectful_program = prepare_snapshot(&effectful_snapshot);
+    let control = ExecutionControl::uncancelled();
+    let policy = NormalizedRunPolicy::default();
+    let json_limits = JsonLimits::default();
+    assert_eq!(
+        run_pure_command(
+            &effectful_snapshot,
+            &effectful_program,
+            &Name::new("command").unwrap(),
+            b"[]",
+            policy,
+            json_limits,
+            &control,
+        )
+        .expect_err("effectful command must not run twice against live grants")
+        .code,
+        "normalized_runner_grants_required"
+    );
+
+    let snapshot = pure_command_snapshot();
+    let program = prepare_snapshot(&snapshot);
+    let receipt = run_pure_command(
+        &snapshot,
+        &program,
+        &Name::new("pure").unwrap(),
+        b"[]",
+        policy,
+        json_limits,
+        &control,
+    )
+    .expect("pure command runs through both execution tiers");
+    assert_eq!(receipt.target.as_str(), "pure");
+    assert_eq!(receipt.result_json, b"null");
+    assert_eq!(receipt.differential, "equal");
+    assert!(receipt.production.instructions > 0);
+    assert!(receipt.reference.expressions > 0);
+
+    assert_eq!(
+        run_pure_command(
+            &snapshot,
+            &program,
+            &Name::new("pure").unwrap(),
+            b"[null]",
+            policy,
+            json_limits,
+            &control,
+        )
+        .expect_err("command argument arity is exact")
+        .code,
+        "normalized_runner_argument_count"
+    );
+
+    let tests = run_graph_tests(&snapshot, &program, None, policy, &control)
+        .expect("graph-owned tests agree in both execution tiers");
+    assert_eq!(tests.passed, 1);
+    assert_eq!(tests.failed, 0);
+    assert!(tests.production_instructions > 0);
+    assert!(tests.reference_expressions > 0);
+    assert_eq!(tests.differential, "equal");
 }
 
 #[test]
