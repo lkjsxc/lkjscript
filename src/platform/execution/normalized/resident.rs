@@ -81,6 +81,10 @@ impl NormalizedResidentDeployment {
         &self.deployment
     }
 
+    pub(crate) fn program(&self) -> &NormalizedProgram {
+        &self.program
+    }
+
     pub(crate) fn limits(&self) -> &ResidentLimits {
         self.kernel.limits()
     }

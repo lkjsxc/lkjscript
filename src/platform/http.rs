@@ -508,10 +508,24 @@ fn request_value(request: HttpRequest, body: Value) -> Result<Value, ExecutionEr
 }
 
 fn decode_query(query: &str) -> Result<Value, ExecutionError> {
+    let decoded = decode_query_parameters(query)?;
     let mut parameters: std::collections::BTreeMap<MapKey, Value> =
         std::collections::BTreeMap::new();
+    for (name, values) in decoded {
+        parameters.insert(
+            MapKey::Text(name),
+            Value::List(Arc::new(values.into_iter().map(Value::text).collect())),
+        );
+    }
+    Ok(Value::Map(Arc::new(parameters)))
+}
+
+pub(crate) fn decode_query_parameters(
+    query: &str,
+) -> Result<std::collections::BTreeMap<String, Vec<String>>, ExecutionError> {
+    let mut parameters = std::collections::BTreeMap::new();
     if query.is_empty() {
-        return Ok(Value::Map(Arc::new(parameters)));
+        return Ok(parameters);
     }
     for pair in query.split('&') {
         if pair.is_empty() {
@@ -529,21 +543,9 @@ fn decode_query(query: &str) -> Result<Value, ExecutionError> {
                 "query field name is empty",
             ));
         }
-        let key = MapKey::Text(name);
-        let entry = parameters
-            .entry(key)
-            .or_insert_with(|| Value::List(Arc::new(Vec::new())));
-        let Value::List(values) = entry else {
-            return Err(protocol_error(
-                "http_query_decode",
-                "query decoder produced an invalid parameter list",
-            ));
-        };
-        let mut next = values.as_ref().clone();
-        next.push(Value::text(value));
-        *entry = Value::List(Arc::new(next));
+        parameters.entry(name).or_insert_with(Vec::new).push(value);
     }
-    Ok(Value::Map(Arc::new(parameters)))
+    Ok(parameters)
 }
 
 fn decode_form_component(value: &str) -> Result<String, ExecutionError> {
@@ -742,7 +744,10 @@ fn decode_headers(
         .collect()
 }
 
-fn validate_request(request: &HttpRequest, limits: &HttpLimits) -> Result<(), ExecutionError> {
+pub(crate) fn validate_request(
+    request: &HttpRequest,
+    limits: &HttpLimits,
+) -> Result<(), ExecutionError> {
     if request.method.is_empty() || request.method.len() > 32 {
         return Err(protocol_error(
             "http_request_method",

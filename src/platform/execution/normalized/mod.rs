@@ -5,6 +5,7 @@ mod capability;
 mod codec;
 mod configuration;
 mod deployment;
+mod http;
 mod password;
 mod prepare;
 mod reference;

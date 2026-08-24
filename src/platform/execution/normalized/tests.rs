@@ -12,6 +12,7 @@ use super::deployment::{
     NormalizedAdapterDescriptor, NormalizedDeploymentGrant, NormalizedDeploymentResourcePolicy,
     NormalizedPreparedDeployment,
 };
+use super::http::NormalizedHttpApplication;
 use super::prepare::{NormalizedFunctionBody, NormalizedInstruction, NormalizedProgram};
 use super::reference::{
     NormalizedReferenceBinding, NormalizedReferenceInterpreter, NormalizedReferenceOwnerRead,
@@ -24,16 +25,16 @@ use super::runner::{
 };
 use super::value::{NormalizedMapKey, NormalizedValue};
 use super::vm::{NormalizedRunPolicy, NormalizedVm};
-use crate::platform::ResidentLimits;
 use crate::platform::compiler::{OptimizationPolicy, build_clean, link_artifact, load_artifact};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::json::JsonLimits;
 use crate::platform::kernel::{
     DeclarationPayload, DeclarationRecord, DeclarationReference, DeclarationVisibility,
-    ExpressionOperation, ExpressionRecord, ExternalVisibility, Idempotency, LocalValueReference,
-    Name, OperationRecord, OwnerHeader, OwnerKey, OwnerKind, OwnerRecord, ParameterParent,
-    ParameterRecord, PortImplementation, PortRecord, PortReference, ResourceLimit, ResourceUnit,
-    StructuralTypeField, TargetRecord, TypeForm, TypeObject, TypeObjectDigest, encode_type_object,
+    ExpressionOperation, ExpressionRecord, ExternalVisibility, FieldSelector, Idempotency,
+    LocalValueReference, Name, OperationRecord, OwnerHeader, OwnerKey, OwnerKind, OwnerRecord,
+    ParameterParent, ParameterRecord, PortImplementation, PortRecord, PortReference,
+    RecordExpressionField, ResourceLimit, ResourceUnit, StructuralTypeField, TargetRecord,
+    TypeForm, TypeObject, TypeObjectDigest, encode_type_object,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::publication::{GraphRepository, RepositoryView};
@@ -42,6 +43,7 @@ use crate::platform::semantic_id::{
     DeclarationId, ExpressionId, OperationId, ParameterId, PortId, RevisionId, TargetId,
 };
 use crate::platform::stream::{StreamLimits, StreamRegistry};
+use crate::platform::{HttpHeader, HttpLimits, HttpRequest, ResidentLimits};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -504,6 +506,306 @@ fn byte_stream_command_snapshot() -> crate::platform::kernel::KernelSnapshot {
     for record in snapshot.owners.values_mut() {
         if let OwnerRecord::Port(port) = record {
             port.function_type = port_type;
+        }
+    }
+    snapshot.root.owners = crate::platform::persistent_map::MapRoot::from_parts(
+        snapshot.root.owners.page(),
+        snapshot.owners.len() as u64,
+    );
+    snapshot
+}
+
+fn normalized_http_snapshot() -> crate::platform::kernel::KernelSnapshot {
+    const SEED: &[u8] = b"normalized-http-runner";
+
+    let mut snapshot = byte_stream_command_snapshot();
+    let text_type = admit_snapshot_type(&mut snapshot, TypeForm::Text);
+    let bytes_type = admit_snapshot_type(&mut snapshot, TypeForm::Bytes);
+    let i64_type = admit_snapshot_type(&mut snapshot, TypeForm::I64);
+    let stream_type = admit_snapshot_type(&mut snapshot, TypeForm::Stream { item: bytes_type });
+    let header_type = admit_snapshot_type(
+        &mut snapshot,
+        TypeForm::StructuralRecord {
+            fields: vec![
+                StructuralTypeField {
+                    name: Name::new("name").unwrap(),
+                    ty: text_type,
+                },
+                StructuralTypeField {
+                    name: Name::new("value").unwrap(),
+                    ty: bytes_type,
+                },
+            ],
+        },
+    );
+    let header_list = admit_snapshot_type(&mut snapshot, TypeForm::List { item: header_type });
+    let text_list = admit_snapshot_type(&mut snapshot, TypeForm::List { item: text_type });
+    let query_map = admit_snapshot_type(
+        &mut snapshot,
+        TypeForm::Map {
+            key: text_type,
+            value: text_list,
+        },
+    );
+    let request_type = admit_snapshot_type(
+        &mut snapshot,
+        TypeForm::StructuralRecord {
+            fields: vec![
+                StructuralTypeField {
+                    name: Name::new("body").unwrap(),
+                    ty: stream_type,
+                },
+                StructuralTypeField {
+                    name: Name::new("headers").unwrap(),
+                    ty: header_list,
+                },
+                StructuralTypeField {
+                    name: Name::new("method").unwrap(),
+                    ty: text_type,
+                },
+                StructuralTypeField {
+                    name: Name::new("path").unwrap(),
+                    ty: text_type,
+                },
+                StructuralTypeField {
+                    name: Name::new("query").unwrap(),
+                    ty: text_type,
+                },
+                StructuralTypeField {
+                    name: Name::new("query_parameters").unwrap(),
+                    ty: query_map,
+                },
+            ],
+        },
+    );
+    let response_type = admit_snapshot_type(
+        &mut snapshot,
+        TypeForm::StructuralRecord {
+            fields: vec![
+                StructuralTypeField {
+                    name: Name::new("body").unwrap(),
+                    ty: bytes_type,
+                },
+                StructuralTypeField {
+                    name: Name::new("headers").unwrap(),
+                    ty: header_list,
+                },
+                StructuralTypeField {
+                    name: Name::new("status").unwrap(),
+                    ty: i64_type,
+                },
+            ],
+        },
+    );
+    let port_type = admit_snapshot_type(
+        &mut snapshot,
+        TypeForm::Function {
+            parameters: vec![request_type],
+            result: response_type,
+        },
+    );
+    snapshot.types.retain(|digest, object| {
+        !matches!(object.form, TypeForm::Function { .. }) || *digest == port_type
+    });
+
+    let caller = declaration_named(&snapshot, "caller").declaration;
+    let (request_parameter, body_expression) = match snapshot
+        .owners
+        .get_mut(&OwnerKey::Declaration(caller))
+        .expect("HTTP handler declaration")
+    {
+        OwnerRecord::Declaration(record) => match &mut record.payload {
+            DeclarationPayload::Function(function) => {
+                function.result = response_type;
+                (function.parameters[0], function.body)
+            }
+            _ => panic!("HTTP handler declaration kind"),
+        },
+        _ => panic!("HTTP handler owner kind"),
+    };
+    let OwnerRecord::Parameter(parameter) = snapshot
+        .owners
+        .get_mut(&OwnerKey::Parameter(request_parameter))
+        .expect("HTTP request parameter")
+    else {
+        panic!("HTTP request parameter owner kind")
+    };
+    parameter.name = Name::new("request").unwrap();
+    parameter.ty = request_type;
+
+    let root_operation = match snapshot
+        .owners
+        .get(&OwnerKey::Expression(body_expression))
+        .expect("HTTP prior body expression")
+    {
+        OwnerRecord::Expression(record) => record.operation.clone(),
+        _ => panic!("HTTP prior body owner kind"),
+    };
+    let ExpressionOperation::Sequence { items } = root_operation else {
+        panic!("HTTP prior body must be the fixture sequence")
+    };
+    let capability = *items.last().expect("HTTP prior body sequence item");
+    let arguments = match snapshot
+        .owners
+        .get(&OwnerKey::Expression(capability))
+        .expect("HTTP stream read expression")
+    {
+        OwnerRecord::Expression(ExpressionRecord {
+            operation: ExpressionOperation::CapabilityCall { arguments, .. },
+            ..
+        }) => arguments.clone(),
+        _ => panic!("HTTP prior body must end by reading the stream"),
+    };
+    assert_eq!(arguments.len(), 2);
+    let body_field = arguments[0];
+    let maximum = arguments[1];
+
+    let mut prior_descendants = BTreeSet::new();
+    let mut pending = items;
+    while let Some(expression) = pending.pop() {
+        if !prior_descendants.insert(expression) {
+            continue;
+        }
+        let OwnerRecord::Expression(record) = snapshot
+            .owners
+            .get(&OwnerKey::Expression(expression))
+            .expect("HTTP prior expression closure")
+        else {
+            panic!("HTTP prior expression owner kind")
+        };
+        pending.extend(record.children().into_iter().map(|child| child.expression));
+    }
+    let mut retained = BTreeSet::new();
+    let mut pending = vec![capability];
+    while let Some(expression) = pending.pop() {
+        if !retained.insert(expression) {
+            continue;
+        }
+        let OwnerRecord::Expression(record) = snapshot
+            .owners
+            .get(&OwnerKey::Expression(expression))
+            .expect("HTTP retained expression closure")
+        else {
+            panic!("HTTP retained expression owner kind")
+        };
+        pending.extend(record.children().into_iter().map(|child| child.expression));
+    }
+    for expression in prior_descendants.difference(&retained) {
+        assert!(
+            snapshot
+                .owners
+                .remove(&OwnerKey::Expression(*expression))
+                .is_some()
+        );
+    }
+
+    let request_value = ExpressionId::migrate(SEED, 0);
+    let headers = ExpressionId::migrate(SEED, 1);
+    let status = ExpressionId::migrate(SEED, 2);
+
+    assert!(
+        snapshot
+            .owners
+            .insert(
+                OwnerKey::Expression(request_value),
+                OwnerRecord::Expression(
+                    ExpressionRecord::new(
+                        request_value,
+                        ExpressionOperation::Local {
+                            value: LocalValueReference::FunctionParameter(request_parameter),
+                        },
+                    )
+                    .expect("HTTP request local expression"),
+                ),
+            )
+            .is_none()
+    );
+    let OwnerRecord::Expression(field) = snapshot
+        .owners
+        .get_mut(&OwnerKey::Expression(body_field))
+        .expect("HTTP body-field expression")
+    else {
+        panic!("HTTP body-field owner kind")
+    };
+    field.operation = ExpressionOperation::Field {
+        value: request_value,
+        selector: FieldSelector::Structural(Name::new("body").unwrap()),
+    };
+    let OwnerRecord::Expression(capability_record) = snapshot
+        .owners
+        .get_mut(&OwnerKey::Expression(capability))
+        .expect("HTTP retained stream read")
+    else {
+        panic!("HTTP retained stream read owner kind")
+    };
+    let ExpressionOperation::CapabilityCall { arguments, .. } = &mut capability_record.operation
+    else {
+        panic!("HTTP retained stream read operation")
+    };
+    *arguments = vec![body_field, maximum];
+    assert!(
+        snapshot
+            .owners
+            .insert(
+                OwnerKey::Expression(headers),
+                OwnerRecord::Expression(
+                    ExpressionRecord::new(
+                        headers,
+                        ExpressionOperation::List {
+                            item_type: header_type,
+                            items: Vec::new(),
+                        },
+                    )
+                    .expect("HTTP response headers expression"),
+                ),
+            )
+            .is_none()
+    );
+    assert!(
+        snapshot
+            .owners
+            .insert(
+                OwnerKey::Expression(status),
+                OwnerRecord::Expression(
+                    ExpressionRecord::new(status, ExpressionOperation::I64 { value: 200 })
+                        .expect("HTTP response status expression"),
+                ),
+            )
+            .is_none()
+    );
+    let OwnerRecord::Expression(body) = snapshot
+        .owners
+        .get_mut(&OwnerKey::Expression(body_expression))
+        .expect("HTTP response expression")
+    else {
+        panic!("HTTP response owner kind")
+    };
+    body.operation = ExpressionOperation::Record {
+        nominal_type: None,
+        fields: vec![
+            RecordExpressionField {
+                selector: FieldSelector::Structural(Name::new("body").unwrap()),
+                value: capability,
+            },
+            RecordExpressionField {
+                selector: FieldSelector::Structural(Name::new("headers").unwrap()),
+                value: headers,
+            },
+            RecordExpressionField {
+                selector: FieldSelector::Structural(Name::new("status").unwrap()),
+                value: status,
+            },
+        ],
+    };
+
+    for record in snapshot.owners.values_mut() {
+        match record {
+            OwnerRecord::Port(port) => port.function_type = port_type,
+            OwnerRecord::Target(target) => {
+                target.name = Name::new("serve").unwrap();
+                target.runner = RunnerKind::Http;
+            }
+            _ => {}
         }
     }
     snapshot.root.owners = crate::platform::persistent_map::MapRoot::from_parts(
@@ -1277,6 +1579,94 @@ async fn normalized_resident_reuses_the_bounded_execution_kernel() {
             .code,
         "resident_shutting_down"
     );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn normalized_http_dispatch_uses_exact_body_resources_and_resident_admission() {
+    let snapshot = normalized_http_snapshot();
+    let (_temporary, _repository, program) = prepare_repository(&snapshot);
+    let program = Arc::new(program);
+    let target_name = Name::new("serve").unwrap();
+    let target = program
+        .root_target(&target_name)
+        .expect("normalized HTTP target");
+    let requirement_index = program.components[target.component.0 as usize].requirements[0];
+    let requirement = &program.requirements[requirement_index.0 as usize];
+    let grant = NormalizedDeploymentGrant {
+        requirement: requirement.reference,
+        sharing_domain: NormalizedSharingDomain::new("http-test").unwrap(),
+        authority_revision: NormalizedGrantAuthorityRevision::of(b"http stream revision one"),
+        limits: exact_grant_limits(requirement, 4),
+        adapter: NormalizedAdapterDescriptor::ByteStream,
+    };
+    let deployment = NormalizedPreparedDeployment::prepare(
+        &program,
+        target_name,
+        vec![grant],
+        NormalizedDeploymentResourcePolicy {
+            streams: StreamLimits {
+                maximum_chunk_bytes: 4,
+                maximum_buffered_chunks: 2,
+                maximum_total_bytes: 64,
+                maximum_live_streams: 4,
+            },
+        },
+        &SecretCatalog::from_environment(&[]).expect("empty exact secret catalog"),
+    )
+    .expect("normalized HTTP deployment");
+    let resident = NormalizedResidentDeployment::prepare(
+        Arc::clone(&program),
+        deployment,
+        ResidentLimits::default(),
+        NormalizedRunPolicy::default(),
+    )
+    .expect("normalized HTTP resident");
+    let application = NormalizedHttpApplication::new(
+        resident,
+        HttpLimits {
+            maximum_request_body_bytes: 64,
+            maximum_response_body_bytes: 64,
+            ..HttpLimits::default()
+        },
+    )
+    .expect("normalized HTTP application");
+
+    let (response, observation) = application
+        .dispatch(HttpRequest {
+            method: "POST".to_owned(),
+            path: "/echo".to_owned(),
+            query: "tag=one&tag=two".to_owned(),
+            headers: vec![HttpHeader {
+                name: "content-type".to_owned(),
+                value: b"application/octet-stream".to_vec(),
+            }],
+            body: b"payload".to_vec(),
+        })
+        .await
+        .expect("normalized HTTP dispatch");
+    assert_eq!(response.status, 200);
+    assert!(response.headers.is_empty());
+    assert_eq!(response.body, b"payload");
+    assert_eq!(observation.task_id, 1);
+    assert!(observation.instructions > 0);
+    assert_eq!(application.resident().deployment().live_streams(), 0);
+
+    assert_eq!(
+        application
+            .dispatch(HttpRequest {
+                method: "GET".to_owned(),
+                path: "/invalid".to_owned(),
+                query: "broken=%zz".to_owned(),
+                headers: Vec::new(),
+                body: Vec::new(),
+            })
+            .await
+            .expect_err("malformed query rejects before resident admission")
+            .code,
+        "http_query_decode"
+    );
+    assert_eq!(application.resident().observe().admitted, 1);
+    assert_eq!(application.resident().shutdown().await.remaining_tasks, 0);
 }
 
 #[test]
