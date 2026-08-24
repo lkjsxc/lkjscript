@@ -1,6 +1,6 @@
 //! Exact Graph 5 binding for deployment configuration reads.
 
-use super::capability::{NormalizedCallPolicy, NormalizedCapabilityAdapter};
+use super::capability::{NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter};
 use super::value::NormalizedValue;
 use crate::platform::configuration::{
     ConfigurationOperation, ConfigurationOutput, ConfigurationStore, ConfigurationValue,
@@ -80,6 +80,10 @@ impl NormalizedConfigurationAdapter {
 }
 
 impl NormalizedCapabilityAdapter for NormalizedConfigurationAdapter {
+    fn kind(&self) -> NormalizedAdapterKind {
+        NormalizedAdapterKind::Configuration
+    }
+
     fn interface(&self) -> DeclarationReference {
         self.interface
     }
@@ -95,7 +99,7 @@ impl NormalizedCapabilityAdapter for NormalizedConfigurationAdapter {
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
         control.check()?;
-        if policy.interface != self.interface {
+        if policy.grant.interface != self.interface {
             return Err(configuration_runtime(
                 "normalized_configuration_interface",
                 "configuration call policy has a foreign exact interface",
@@ -132,6 +136,7 @@ fn configuration_diagnostic(code: &'static str, message: &'static str) -> Diagno
 
 #[cfg(test)]
 mod tests {
+    use super::super::capability::NormalizedCapabilityGrantDescriptor;
     use super::*;
     use crate::platform::kernel::{
         ExternalVisibility, Idempotency, Name, PackageId, RequirementReference,
@@ -180,13 +185,17 @@ mod tests {
         NormalizedCallPolicy {
             requirement,
             requirement_name: Name::new("config").unwrap(),
-            interface,
             operation,
             operation_name: Name::new(name).unwrap(),
             idempotency: Idempotency::Idempotent,
             external_visibility: ExternalVisibility::None,
             requirement_limits: Arc::from([]),
-            grant_limits: Arc::new(BTreeMap::new()),
+            grant: Arc::new(NormalizedCapabilityGrantDescriptor::for_test(
+                interface,
+                NormalizedAdapterKind::Configuration,
+                BTreeSet::from([operation]),
+                BTreeMap::new(),
+            )),
         }
     }
 

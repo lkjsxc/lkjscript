@@ -1,6 +1,6 @@
 //! Exact Graph 5 binding for password hashing and verification.
 
-use super::capability::{NormalizedCallPolicy, NormalizedCapabilityAdapter};
+use super::capability::{NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter};
 use super::value::NormalizedValue;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
@@ -68,7 +68,8 @@ impl NormalizedPasswordHashAdapter {
     }
 
     fn validate_policy(&self, policy: &NormalizedCallPolicy) -> Result<(), ExecutionError> {
-        if policy.interface != self.interface || !self.exact_operations.contains(&policy.operation)
+        if policy.grant.interface != self.interface
+            || !self.exact_operations.contains(&policy.operation)
         {
             return Err(password_runtime(
                 "normalized_password_binding",
@@ -80,6 +81,10 @@ impl NormalizedPasswordHashAdapter {
 }
 
 impl NormalizedCapabilityAdapter for NormalizedPasswordHashAdapter {
+    fn kind(&self) -> NormalizedAdapterKind {
+        NormalizedAdapterKind::PasswordHash
+    }
+
     fn interface(&self) -> DeclarationReference {
         self.interface
     }
@@ -145,6 +150,7 @@ fn password_diagnostic(code: &'static str, message: impl Into<String>) -> Diagno
 
 #[cfg(test)]
 mod tests {
+    use super::super::capability::NormalizedCapabilityGrantDescriptor;
     use super::*;
     use crate::platform::kernel::{
         ExternalVisibility, Idempotency, Name, PackageId, RequirementReference,
@@ -191,13 +197,17 @@ mod tests {
         NormalizedCallPolicy {
             requirement,
             requirement_name: Name::new("password").unwrap(),
-            interface,
             operation,
             operation_name: Name::new(display_name).unwrap(),
             idempotency: Idempotency::Idempotent,
             external_visibility: ExternalVisibility::None,
             requirement_limits: Arc::from([]),
-            grant_limits: Arc::new(BTreeMap::new()),
+            grant: Arc::new(NormalizedCapabilityGrantDescriptor::for_test(
+                interface,
+                NormalizedAdapterKind::PasswordHash,
+                BTreeSet::from([operation]),
+                BTreeMap::new(),
+            )),
         }
     }
 

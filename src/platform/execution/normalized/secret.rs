@@ -1,6 +1,6 @@
 //! Exact Graph 5 binding for least-authority secret verification.
 
-use super::capability::{NormalizedCallPolicy, NormalizedCapabilityAdapter};
+use super::capability::{NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter};
 use super::value::NormalizedValue;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
@@ -39,6 +39,10 @@ impl NormalizedSecretVerifierAdapter {
 }
 
 impl NormalizedCapabilityAdapter for NormalizedSecretVerifierAdapter {
+    fn kind(&self) -> NormalizedAdapterKind {
+        NormalizedAdapterKind::SecretVerifier
+    }
+
     fn interface(&self) -> DeclarationReference {
         self.interface
     }
@@ -54,7 +58,7 @@ impl NormalizedCapabilityAdapter for NormalizedSecretVerifierAdapter {
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
         control.check()?;
-        if policy.interface != self.interface || policy.operation != self.operation {
+        if policy.grant.interface != self.interface || policy.operation != self.operation {
             return Err(ExecutionError::new(
                 ExecutionFailureClass::Infrastructure,
                 "normalized_secret_binding",
@@ -78,6 +82,7 @@ fn secret_diagnostic(code: &'static str, message: &'static str) -> Diagnostic {
 
 #[cfg(test)]
 mod tests {
+    use super::super::capability::NormalizedCapabilityGrantDescriptor;
     use super::*;
     use crate::platform::kernel::{
         ExternalVisibility, Idempotency, Name, PackageId, RequirementReference,
@@ -118,13 +123,17 @@ mod tests {
         NormalizedCallPolicy {
             requirement,
             requirement_name: Name::new("secret").unwrap(),
-            interface,
             operation,
             operation_name: Name::new("matches").unwrap(),
             idempotency: Idempotency::Idempotent,
             external_visibility: ExternalVisibility::None,
             requirement_limits: Arc::from([]),
-            grant_limits: Arc::new(BTreeMap::new()),
+            grant: Arc::new(NormalizedCapabilityGrantDescriptor::for_test(
+                interface,
+                NormalizedAdapterKind::SecretVerifier,
+                BTreeSet::from([operation]),
+                BTreeMap::new(),
+            )),
         }
     }
 

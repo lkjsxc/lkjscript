@@ -1,10 +1,10 @@
 //! Exact Graph 5 bindings for time, randomness, and identifier capabilities.
 
-use super::capability::{NormalizedCallPolicy, NormalizedCapabilityAdapter, NormalizedGrantLimit};
+use super::capability::{NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter};
 use super::value::NormalizedValue;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
-use crate::platform::kernel::{DeclarationReference, Name, OperationReference, ResourceUnit};
+use crate::platform::kernel::{DeclarationReference, OperationReference, ResourceUnit};
 use crate::platform::security::{
     DeterministicClockSource, DeterministicIdentifierSource, DeterministicRandomSource,
     MAXIMUM_RANDOM_BYTES, secure_identifier, secure_random_bytes, wall_clock_milliseconds,
@@ -125,7 +125,7 @@ impl NormalizedSecurityAdapter {
     }
 
     fn validate_policy(&self, policy: &NormalizedCallPolicy) -> Result<(), ExecutionError> {
-        if policy.interface != self.interface || policy.operation != self.operation {
+        if policy.grant.interface != self.interface || policy.operation != self.operation {
             return Err(security_runtime(
                 "normalized_security_binding",
                 "security call policy has a foreign exact interface or operation",
@@ -136,6 +136,23 @@ impl NormalizedSecurityAdapter {
 }
 
 impl NormalizedCapabilityAdapter for NormalizedSecurityAdapter {
+    fn kind(&self) -> NormalizedAdapterKind {
+        match &self.implementation {
+            NormalizedSecurityImplementation::WallClock
+            | NormalizedSecurityImplementation::DeterministicClock(_) => {
+                NormalizedAdapterKind::WallClock
+            }
+            NormalizedSecurityImplementation::SecureRandom
+            | NormalizedSecurityImplementation::DeterministicRandom(_) => {
+                NormalizedAdapterKind::SecureRandom
+            }
+            NormalizedSecurityImplementation::Identifier
+            | NormalizedSecurityImplementation::DeterministicIdentifier(_) => {
+                NormalizedAdapterKind::Identifier
+            }
+        }
+    }
+
     fn interface(&self) -> DeclarationReference {
         self.interface
     }
@@ -204,7 +221,8 @@ fn grant_limit(
     default: u64,
 ) -> Result<u64, ExecutionError> {
     let Some(limit) = policy
-        .grant_limits
+        .grant
+        .limits
         .iter()
         .find_map(|(candidate, limit)| (candidate.as_str() == name).then_some(*limit))
     else {
@@ -253,9 +271,10 @@ fn security_diagnostic(code: &'static str, message: &'static str) -> Diagnostic 
 
 #[cfg(test)]
 mod tests {
+    use super::super::capability::{NormalizedCapabilityGrantDescriptor, NormalizedGrantLimit};
     use super::*;
     use crate::platform::kernel::{
-        ExternalVisibility, Idempotency, PackageId, RequirementReference,
+        ExternalVisibility, Idempotency, Name, PackageId, RequirementReference,
     };
     use crate::platform::security::parse_uuid;
     use crate::platform::semantic_id::{DeclarationId, OperationId, RequirementId};
@@ -298,13 +317,22 @@ mod tests {
         NormalizedCallPolicy {
             requirement,
             requirement_name: Name::new("security").unwrap(),
-            interface,
             operation,
             operation_name: Name::new(display_name).unwrap(),
             idempotency: Idempotency::Idempotent,
             external_visibility: ExternalVisibility::None,
             requirement_limits: Arc::from([]),
-            grant_limits: Arc::new(limits),
+            grant: Arc::new(NormalizedCapabilityGrantDescriptor::for_test(
+                interface,
+                match display_name {
+                    "utc-milliseconds" => NormalizedAdapterKind::WallClock,
+                    "bytes" => NormalizedAdapterKind::SecureRandom,
+                    "uuid-v4" => NormalizedAdapterKind::Identifier,
+                    _ => NormalizedAdapterKind::SecureRandom,
+                },
+                BTreeSet::from([operation]),
+                limits,
+            )),
         }
     }
 

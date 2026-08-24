@@ -10,26 +10,90 @@ use crate::platform::kernel::{
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
+const GRANT_AUTHORITY_REVISION_DOMAIN: &str = "lkjscript.normalized-grant-authority-revision.v1";
+const GRANT_DESCRIPTOR_DIGEST_DOMAIN: &str = "lkjscript.normalized-grant-descriptor.v1";
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum NormalizedAdapterKind {
+    Configuration,
+    WallClock,
+    SecureRandom,
+    Identifier,
+    PasswordHash,
+    SecretVerifier,
+    ByteStream,
+    Postgres,
+    ObjectMemory,
+    ObjectLocal,
+    ObjectS3,
+    DurableQueueMemory,
+    DurableQueuePostgres,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct NormalizedSharingDomain(Name);
+
+impl NormalizedSharingDomain {
+    pub fn new(value: impl Into<String>) -> Result<Self, crate::platform::diagnostic::Diagnostic> {
+        Name::new(value).map(Self)
+    }
+
+    pub fn as_name(&self) -> &Name {
+        &self.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct NormalizedGrantAuthorityRevision([u8; 32]);
+
+impl NormalizedGrantAuthorityRevision {
+    pub fn of(bytes: &[u8]) -> Self {
+        Self(grant_digest(GRANT_AUTHORITY_REVISION_DOMAIN, bytes))
+    }
+
+    pub const fn bytes(self) -> [u8; 32] {
+        self.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct NormalizedGrantDescriptorDigest([u8; 32]);
+
+impl NormalizedGrantDescriptorDigest {
+    pub fn of(bytes: &[u8]) -> Self {
+        Self(grant_digest(GRANT_DESCRIPTOR_DIGEST_DOMAIN, bytes))
+    }
+
+    pub const fn bytes(self) -> [u8; 32] {
+        self.0
+    }
+}
+
+fn grant_digest(domain: &str, bytes: &[u8]) -> [u8; 32] {
+    let mut hasher = blake3::Hasher::new_derive_key(domain);
+    hasher.update(&(bytes.len() as u64).to_be_bytes());
+    hasher.update(bytes);
+    *hasher.finalize().as_bytes()
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NormalizedCallPolicy {
     pub requirement: RequirementReference,
     pub requirement_name: Name,
-    pub interface: DeclarationReference,
     pub operation: OperationReference,
     pub operation_name: Name,
     pub idempotency: Idempotency,
     pub external_visibility: ExternalVisibility,
     pub requirement_limits: Arc<[ResourceLimit]>,
-    pub grant_limits: Arc<BTreeMap<Name, NormalizedGrantLimit>>,
+    pub grant: Arc<NormalizedCapabilityGrantDescriptor>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NormalizedTransactionPolicy {
     pub requirement: RequirementReference,
     pub requirement_name: Name,
-    pub interface: DeclarationReference,
     pub requirement_limits: Arc<[ResourceLimit]>,
-    pub grant_limits: Arc<BTreeMap<Name, NormalizedGrantLimit>>,
+    pub grant: Arc<NormalizedCapabilityGrantDescriptor>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -39,6 +103,8 @@ pub struct NormalizedGrantLimit {
 }
 
 pub trait NormalizedCapabilityAdapter: Send + Sync {
+    fn kind(&self) -> NormalizedAdapterKind;
+
     fn interface(&self) -> DeclarationReference;
 
     fn operations(&self) -> &BTreeSet<OperationReference>;
@@ -76,11 +142,41 @@ pub trait NormalizedCapabilityTransaction: Send {
     fn rollback(&mut self) -> Result<(), ExecutionError>;
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NormalizedCapabilityGrantDescriptor {
+    pub interface: DeclarationReference,
+    pub adapter_kind: NormalizedAdapterKind,
+    pub sharing_domain: NormalizedSharingDomain,
+    pub authority_revision: NormalizedGrantAuthorityRevision,
+    pub descriptor_digest: NormalizedGrantDescriptorDigest,
+    pub operations: BTreeSet<OperationReference>,
+    pub limits: BTreeMap<Name, NormalizedGrantLimit>,
+}
+
+#[cfg(test)]
+impl NormalizedCapabilityGrantDescriptor {
+    pub(crate) fn for_test(
+        interface: DeclarationReference,
+        adapter_kind: NormalizedAdapterKind,
+        operations: BTreeSet<OperationReference>,
+        limits: BTreeMap<Name, NormalizedGrantLimit>,
+    ) -> Self {
+        Self {
+            interface,
+            adapter_kind,
+            sharing_domain: NormalizedSharingDomain::new("test").expect("test sharing domain"),
+            authority_revision: NormalizedGrantAuthorityRevision::of(b"test authority"),
+            descriptor_digest: NormalizedGrantDescriptorDigest::of(b"test descriptor"),
+            operations,
+            limits,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct NormalizedCapabilityGrant {
     pub requirement: RequirementReference,
-    pub operations: BTreeSet<OperationReference>,
-    pub limits: BTreeMap<Name, NormalizedGrantLimit>,
+    pub descriptor: NormalizedCapabilityGrantDescriptor,
     pub adapter: Arc<dyn NormalizedCapabilityAdapter>,
 }
 
@@ -89,8 +185,7 @@ impl std::fmt::Debug for NormalizedCapabilityGrant {
         formatter
             .debug_struct("NormalizedCapabilityGrant")
             .field("requirement", &self.requirement)
-            .field("operations", &self.operations)
-            .field("limits", &self.limits)
+            .field("descriptor", &self.descriptor)
             .field("adapter", &"<opaque>")
             .finish()
     }
@@ -116,8 +211,7 @@ impl std::fmt::Debug for NormalizedCapabilities {
 #[derive(Clone)]
 struct BoundNormalizedCapability {
     operations: BTreeSet<OperationIndex>,
-    exact_operations: BTreeSet<OperationReference>,
-    limits: Arc<BTreeMap<Name, NormalizedGrantLimit>>,
+    descriptor: Arc<NormalizedCapabilityGrantDescriptor>,
     adapter: Arc<dyn NormalizedCapabilityAdapter>,
 }
 
@@ -163,20 +257,28 @@ impl NormalizedCapabilities {
                 ));
             }
             let declaration = &program.requirements[requirement.0 as usize];
-            if grant.adapter.interface() != declaration.interface {
+            if grant.descriptor.interface != declaration.interface
+                || grant.adapter.interface() != declaration.interface
+            {
                 return Err(capability_error(
                     "normalized_grant_interface",
-                    "deployment grant interface disagrees with the exact requirement",
+                    "deployment grant descriptor or adapter interface disagrees with the exact requirement",
                 ));
             }
-            if grant.adapter.operations() != &grant.operations {
+            if grant.adapter.kind() != grant.descriptor.adapter_kind {
+                return Err(capability_error(
+                    "normalized_grant_adapter_kind",
+                    "capability adapter kind disagrees with the exact deployment descriptor",
+                ));
+            }
+            if grant.adapter.operations() != &grant.descriptor.operations {
                 return Err(capability_error(
                     "normalized_grant_adapter_operations",
                     "capability adapter operation bindings disagree with the exact deployment grant",
                 ));
             }
             let mut operations = BTreeSet::new();
-            for operation in &grant.operations {
+            for operation in &grant.descriptor.operations {
                 let index = program
                     .operations
                     .iter()
@@ -196,12 +298,11 @@ impl NormalizedCapabilities {
                     "deployment grant must bind the exact required operation set",
                 ));
             }
-            validate_limits(declaration, &grant.limits)?;
+            validate_limits(declaration, &grant.descriptor.limits)?;
             let exact_requirement = declaration.reference;
             let binding = BoundNormalizedCapability {
                 operations,
-                exact_operations: grant.operations,
-                limits: Arc::new(grant.limits),
+                descriptor: Arc::new(grant.descriptor),
                 adapter: grant.adapter,
             };
             if bindings.insert(requirement, binding.clone()).is_some()
@@ -348,13 +449,12 @@ impl NormalizedCapabilities {
         Ok(NormalizedCallPolicy {
             requirement: requirement.reference,
             requirement_name: requirement.name.clone(),
-            interface: requirement.interface,
             operation: operation.reference,
             operation_name: operation.name.clone(),
             idempotency: operation.idempotency,
             external_visibility: operation.external_visibility,
             requirement_limits: Arc::clone(&requirement.limits),
-            grant_limits: Arc::clone(&binding.limits),
+            grant: Arc::clone(&binding.descriptor),
         })
     }
 
@@ -365,7 +465,7 @@ impl NormalizedCapabilities {
         operation: OperationReference,
     ) -> Result<NormalizedCallPolicy, ExecutionError> {
         let binding = self.exact_binding(requirement)?;
-        if !binding.exact_operations.contains(&operation) {
+        if !binding.descriptor.operations.contains(&operation) {
             return Err(capability_error(
                 "normalized_capability_operation",
                 "execution requested an operation outside the exact deployment grant",
@@ -414,9 +514,8 @@ impl NormalizedCapabilities {
         Ok(NormalizedTransactionPolicy {
             requirement: requirement.reference,
             requirement_name: requirement.name.clone(),
-            interface: requirement.interface,
             requirement_limits: Arc::clone(&requirement.limits),
-            grant_limits: Arc::clone(&binding.limits),
+            grant: Arc::clone(&binding.descriptor),
         })
     }
 
@@ -515,6 +614,7 @@ fn validate_limits(
 
 fn maximum_calls(binding: &BoundNormalizedCapability) -> Result<u64, ExecutionError> {
     binding
+        .descriptor
         .limits
         .iter()
         .find_map(|(name, limit)| (name.as_str() == "maximum_calls").then_some(limit.maximum))

@@ -1,8 +1,10 @@
 //! Focused normalized artifact-preparation and dense-execution tests.
 
 use super::capability::{
-    NormalizedCallPolicy, NormalizedCapabilities, NormalizedCapabilityAdapter,
-    NormalizedCapabilityGrant, NormalizedCapabilityTransaction, NormalizedGrantLimit,
+    NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilities,
+    NormalizedCapabilityAdapter, NormalizedCapabilityGrant, NormalizedCapabilityGrantDescriptor,
+    NormalizedCapabilityTransaction, NormalizedGrantAuthorityRevision,
+    NormalizedGrantDescriptorDigest, NormalizedGrantLimit, NormalizedSharingDomain,
     NormalizedTransactionPolicy,
 };
 use super::codec::{decode_typed, encode_typed};
@@ -193,6 +195,10 @@ impl NormalizedReferenceRead for WrongRevisionReader<'_> {
 }
 
 impl NormalizedCapabilityAdapter for UnitAdapter {
+    fn kind(&self) -> NormalizedAdapterKind {
+        NormalizedAdapterKind::Configuration
+    }
+
     fn interface(&self) -> DeclarationReference {
         self.interface
     }
@@ -263,6 +269,10 @@ struct TrackingAdapter {
 }
 
 impl NormalizedCapabilityAdapter for TrackingAdapter {
+    fn kind(&self) -> NormalizedAdapterKind {
+        NormalizedAdapterKind::Configuration
+    }
+
     fn interface(&self) -> DeclarationReference {
         self.interface
     }
@@ -365,8 +375,11 @@ fn bind_fixture_capability(
         .collect::<BTreeSet<_>>();
     let grant = NormalizedCapabilityGrant {
         requirement: requirement_record.reference,
-        operations: operations.clone(),
-        limits: exact_grant_limits(requirement_record, maximum_calls),
+        descriptor: exact_grant_descriptor(
+            requirement_record,
+            operations.clone(),
+            exact_grant_limits(requirement_record, maximum_calls),
+        ),
         adapter: Arc::new(UnitAdapter {
             interface: requirement_record.interface,
             operations,
@@ -398,8 +411,11 @@ fn bind_tracking_capability(
         .collect::<BTreeSet<_>>();
     let grant = NormalizedCapabilityGrant {
         requirement: requirement.reference,
-        operations: operations.clone(),
-        limits: exact_grant_limits(requirement, maximum_calls),
+        descriptor: exact_grant_descriptor(
+            requirement,
+            operations.clone(),
+            exact_grant_limits(requirement, maximum_calls),
+        ),
         adapter: Arc::new(TrackingAdapter {
             interface: requirement.interface,
             operations,
@@ -411,6 +427,19 @@ fn bind_tracking_capability(
         NormalizedCapabilities::bind(program, target.component, vec![grant])
             .expect("exact tracked fixture grant"),
         stats,
+    )
+}
+
+fn exact_grant_descriptor(
+    requirement: &super::prepare::NormalizedRequirement,
+    operations: BTreeSet<crate::platform::kernel::OperationReference>,
+    limits: BTreeMap<Name, NormalizedGrantLimit>,
+) -> NormalizedCapabilityGrantDescriptor {
+    NormalizedCapabilityGrantDescriptor::for_test(
+        requirement.interface,
+        NormalizedAdapterKind::Configuration,
+        operations,
+        limits,
     )
 }
 
@@ -439,6 +468,23 @@ fn exact_grant_limits(
         },
     );
     limits
+}
+
+#[test]
+fn normalized_grant_metadata_uses_distinct_typed_domains() {
+    let bytes = b"same external identity bytes";
+    assert_ne!(
+        NormalizedGrantAuthorityRevision::of(bytes).bytes(),
+        NormalizedGrantDescriptorDigest::of(bytes).bytes(),
+    );
+    assert_eq!(
+        NormalizedSharingDomain::new("service-test")
+            .expect("bounded sharing domain")
+            .as_name()
+            .as_str(),
+        "service-test"
+    );
+    assert!(NormalizedSharingDomain::new("service tenant").is_err());
 }
 
 fn transaction_call_snapshot(
@@ -1008,8 +1054,11 @@ fn dense_vm_enforces_exact_grants_cancellation_and_separate_budgets() {
         target.component,
         vec![NormalizedCapabilityGrant {
             requirement: requirement.reference,
-            operations: Default::default(),
-            limits: exact_grant_limits(requirement, 1),
+            descriptor: exact_grant_descriptor(
+                requirement,
+                Default::default(),
+                exact_grant_limits(requirement, 1),
+            ),
             adapter: Arc::new(UnitAdapter {
                 interface: requirement.interface,
                 operations: Default::default(),
@@ -1031,8 +1080,11 @@ fn dense_vm_enforces_exact_grants_cancellation_and_separate_budgets() {
         target.component,
         vec![NormalizedCapabilityGrant {
             requirement: requirement.reference,
-            operations: required_operations.clone(),
-            limits: exact_grant_limits(requirement, 1),
+            descriptor: exact_grant_descriptor(
+                requirement,
+                required_operations.clone(),
+                exact_grant_limits(requirement, 1),
+            ),
             adapter: Arc::new(UnitAdapter {
                 interface: requirement.interface,
                 operations: Default::default(),
@@ -1043,6 +1095,28 @@ fn dense_vm_enforces_exact_grants_cancellation_and_separate_budgets() {
     .expect_err("adapter operation bindings must equal the exact grant");
     assert_eq!(invalid.class, ExecutionFailureClass::Capability);
     assert_eq!(invalid.code, "normalized_grant_adapter_operations");
+
+    let mut wrong_kind = exact_grant_descriptor(
+        requirement,
+        required_operations.clone(),
+        exact_grant_limits(requirement, 1),
+    );
+    wrong_kind.adapter_kind = NormalizedAdapterKind::PasswordHash;
+    let invalid = NormalizedCapabilities::bind(
+        &program,
+        target.component,
+        vec![NormalizedCapabilityGrant {
+            requirement: requirement.reference,
+            descriptor: wrong_kind,
+            adapter: Arc::new(UnitAdapter {
+                interface: requirement.interface,
+                operations: required_operations.clone(),
+                calls: Arc::new(AtomicU64::new(0)),
+            }),
+        }],
+    )
+    .expect_err("adapter kind must equal the exact descriptor");
+    assert_eq!(invalid.code, "normalized_grant_adapter_kind");
 
     for (limits, expected) in [
         (BTreeMap::new(), "normalized_grant_call_limit"),
@@ -1072,8 +1146,11 @@ fn dense_vm_enforces_exact_grants_cancellation_and_separate_budgets() {
             target.component,
             vec![NormalizedCapabilityGrant {
                 requirement: requirement.reference,
-                operations: required_operations.clone(),
-                limits,
+                descriptor: exact_grant_descriptor(
+                    requirement,
+                    required_operations.clone(),
+                    limits,
+                ),
                 adapter: Arc::new(UnitAdapter {
                     interface: requirement.interface,
                     operations: required_operations.clone(),
@@ -1280,8 +1357,11 @@ fn both_graph5_execution_tiers_commit_and_rollback_exact_transactions() {
             failing_target.component,
             vec![NormalizedCapabilityGrant {
                 requirement: failing_requirement.reference,
-                operations: failing_operations.clone(),
-                limits,
+                descriptor: exact_grant_descriptor(
+                    failing_requirement,
+                    failing_operations.clone(),
+                    limits,
+                ),
                 adapter: Arc::new(UnitAdapter {
                     interface: failing_requirement.interface,
                     operations: failing_operations.clone(),
@@ -1326,16 +1406,10 @@ fn both_graph5_execution_tiers_commit_and_rollback_exact_transactions() {
         unit: ResourceUnit::Bytes,
     }]
     .into();
-    let expected_call_policy = NormalizedCallPolicy {
-        requirement: requirement.reference,
-        requirement_name: Name::new("store").unwrap(),
-        interface: requirement.interface,
-        operation: operation.reference,
-        operation_name: Name::new("read").unwrap(),
-        idempotency: Idempotency::Idempotent,
-        external_visibility: ExternalVisibility::Possible,
-        requirement_limits: Arc::clone(&expected_limits),
-        grant_limits: Arc::new(BTreeMap::from([
+    let expected_grant = Arc::new(exact_grant_descriptor(
+        requirement,
+        failing_operations,
+        BTreeMap::from([
             (
                 Name::new("maximum_calls").unwrap(),
                 NormalizedGrantLimit {
@@ -1350,7 +1424,17 @@ fn both_graph5_execution_tiers_commit_and_rollback_exact_transactions() {
                     unit: ResourceUnit::Bytes,
                 },
             ),
-        ])),
+        ]),
+    ));
+    let expected_call_policy = NormalizedCallPolicy {
+        requirement: requirement.reference,
+        requirement_name: Name::new("store").unwrap(),
+        operation: operation.reference,
+        operation_name: Name::new("read").unwrap(),
+        idempotency: Idempotency::Idempotent,
+        external_visibility: ExternalVisibility::Possible,
+        requirement_limits: Arc::clone(&expected_limits),
+        grant: Arc::clone(&expected_grant),
     };
     assert_eq!(
         *failing_stats
@@ -1362,24 +1446,8 @@ fn both_graph5_execution_tiers_commit_and_rollback_exact_transactions() {
     let expected_transaction_policy = NormalizedTransactionPolicy {
         requirement: requirement.reference,
         requirement_name: Name::new("store").unwrap(),
-        interface: requirement.interface,
         requirement_limits: expected_limits,
-        grant_limits: Arc::new(BTreeMap::from([
-            (
-                Name::new("maximum_calls").unwrap(),
-                NormalizedGrantLimit {
-                    maximum: 3,
-                    unit: ResourceUnit::Calls,
-                },
-            ),
-            (
-                Name::new("maximum_input_bytes").unwrap(),
-                NormalizedGrantLimit {
-                    maximum: 64,
-                    unit: ResourceUnit::Bytes,
-                },
-            ),
-        ])),
+        grant: expected_grant,
     };
     assert_eq!(
         *failing_stats
