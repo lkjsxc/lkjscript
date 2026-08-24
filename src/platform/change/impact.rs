@@ -2,14 +2,14 @@
 
 use super::relation_view::CandidateRelations;
 use super::{
-    CanonicalDelta, DerivedDelta, KernelOverlay, OwnerSummaryEdit, SummaryDelta,
-    derive_summary_delta, derive_summary_delta_for,
+    CanonicalDelta, DerivedDelta, KernelOverlay, OwnerSummaryEdit, SummaryDelta, WitnessBaseRead,
+    WitnessReadWork, derive_summary_delta, derive_summary_delta_for,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     ExactOwnerKey, OwnerKey, OwnerKind, PropagationClass, RelationEndpoint, RelationKind,
 };
-use crate::platform::witness::{FullWitness, OwnerSummary, OwnershipEntry, OwnershipParent};
+use crate::platform::witness::{OwnerSummary, OwnershipEntry, OwnershipParent};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -85,6 +85,7 @@ pub struct ImpactWork {
     pub reverse_edges_visited: u64,
     pub ownership_steps: u64,
     pub behavior_owners_visited: u64,
+    pub witness_reads: WitnessReadWork,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -105,11 +106,11 @@ pub struct PlannedSummaries {
     pub plan: ImpactPlan,
 }
 
-pub fn plan_impact_and_summaries(
+pub fn plan_impact_and_summaries<W: WitnessBaseRead + ?Sized>(
     overlay: &KernelOverlay<'_>,
     canonical: &CanonicalDelta,
     derived: &DerivedDelta,
-    base_witness: &FullWitness,
+    base_witness: &W,
 ) -> Result<PlannedSummaries, Diagnostic> {
     let initial = derive_summary_delta(overlay, derived, base_witness)?;
     let mut plan = ImpactPlan {
@@ -119,7 +120,7 @@ pub fn plan_impact_and_summaries(
     };
     let mut relations =
         CandidateRelations::new(overlay.base().root.package_id, derived, base_witness);
-    let ownership = CandidateOwnership::new(derived, base_witness);
+    let mut ownership = CandidateOwnership::new(derived, base_witness);
     let mut behavior = VecDeque::new();
     let mut behavior_seen = BTreeSet::new();
     let mut behavior_enqueued = BTreeSet::new();
@@ -137,14 +138,14 @@ pub fn plan_impact_and_summaries(
             add_owning_units(
                 edit.owner,
                 overlay,
-                &ownership,
+                &mut ownership,
                 &mut plan.compiler_units,
                 &mut plan.work,
             )?;
             add_owning_units(
                 edit.owner,
                 overlay,
-                &ownership,
+                &mut ownership,
                 &mut plan.semantically_checked,
                 &mut plan.work,
             )?;
@@ -166,18 +167,23 @@ pub fn plan_impact_and_summaries(
             let Some(source) = local_owner(edge.source, overlay.base().root.package_id) else {
                 continue;
             };
-            add_summary_paths(source, &ownership, &mut plan.summary_owners, &mut plan.work)?;
+            add_summary_paths(
+                source,
+                &mut ownership,
+                &mut plan.summary_owners,
+                &mut plan.work,
+            )?;
             add_owning_units(
                 source,
                 overlay,
-                &ownership,
+                &mut ownership,
                 &mut plan.semantically_checked,
                 &mut plan.work,
             )?;
             add_owning_units(
                 source,
                 overlay,
-                &ownership,
+                &mut ownership,
                 &mut plan.compiler_units,
                 &mut plan.work,
             )?;
@@ -206,9 +212,9 @@ pub fn plan_impact_and_summaries(
             let Some(source) = local_owner(edge.source, overlay.base().root.package_id) else {
                 continue;
             };
-            let declarations = owning_units(source, overlay, &ownership, &mut plan.work)?;
+            let declarations = owning_units(source, overlay, &mut ownership, &mut plan.work)?;
             for declaration in declarations {
-                if owner_kind(declaration, overlay, base_witness) == Some(OwnerKind::Test) {
+                if ownership.owner_kind(declaration, overlay)? == Some(OwnerKind::Test) {
                     plan.tests.insert(declaration);
                     plan.reasons.push(ImpactReason {
                         kind: ImpactReasonKind::TestBehavior,
@@ -224,10 +230,12 @@ pub fn plan_impact_and_summaries(
     }
 
     for owner in &plan.semantically_checked {
-        if owner_kind(*owner, overlay, base_witness) == Some(OwnerKind::Test) {
+        if ownership.owner_kind(*owner, overlay)? == Some(OwnerKind::Test) {
             plan.tests.insert(*owner);
         }
     }
+    plan.work.witness_reads = ownership.work();
+    plan.work.witness_reads.add(relations.work());
     plan.reasons.sort_unstable();
     plan.reasons.dedup();
     let final_delta =
@@ -269,13 +277,16 @@ fn compare_summaries(before: &OwnerSummary, after: &OwnerSummary) -> SummaryDime
     }
 }
 
-struct CandidateOwnership<'a> {
+struct CandidateOwnership<'a, W: ?Sized> {
     edits: BTreeMap<OwnerKey, Option<OwnershipEntry>>,
-    base: &'a FullWitness,
+    base: &'a W,
+    ownership: BTreeMap<OwnerKey, Option<OwnershipEntry>>,
+    owner_kinds: BTreeMap<OwnerKey, Option<OwnerKind>>,
+    work: WitnessReadWork,
 }
 
-impl<'a> CandidateOwnership<'a> {
-    fn new(derived: &DerivedDelta, base: &'a FullWitness) -> Self {
+impl<'a, W: WitnessBaseRead + ?Sized> CandidateOwnership<'a, W> {
+    fn new(derived: &DerivedDelta, base: &'a W) -> Self {
         Self {
             edits: derived
                 .ownership
@@ -283,24 +294,53 @@ impl<'a> CandidateOwnership<'a> {
                 .map(|edit| (edit.key, edit.after))
                 .collect(),
             base,
+            ownership: BTreeMap::new(),
+            owner_kinds: BTreeMap::new(),
+            work: WitnessReadWork::default(),
         }
     }
 
-    fn candidate(&self, owner: OwnerKey) -> Option<OwnershipEntry> {
+    const fn work(&self) -> WitnessReadWork {
+        self.work
+    }
+
+    fn candidate(&mut self, owner: OwnerKey) -> Result<Option<OwnershipEntry>, Diagnostic> {
         match self.edits.get(&owner) {
-            Some(entry) => *entry,
-            None => self.base.entries.ownership.get(&owner).copied(),
+            Some(entry) => Ok(*entry),
+            None => self.before(owner),
         }
     }
 
-    fn before(&self, owner: OwnerKey) -> Option<OwnershipEntry> {
-        self.base.entries.ownership.get(&owner).copied()
+    fn before(&mut self, owner: OwnerKey) -> Result<Option<OwnershipEntry>, Diagnostic> {
+        if !self.ownership.contains_key(&owner) {
+            let read = self.base.read_ownership(owner)?;
+            self.work.add(read.work);
+            self.ownership.insert(owner, read.value);
+        }
+        Ok(self.ownership.get(&owner).copied().flatten())
+    }
+
+    fn owner_kind(
+        &mut self,
+        owner: OwnerKey,
+        overlay: &KernelOverlay<'_>,
+    ) -> Result<Option<OwnerKind>, Diagnostic> {
+        if let Some(record) = overlay.owner(owner) {
+            return Ok(Some(record.kind()));
+        }
+        if !self.owner_kinds.contains_key(&owner) {
+            let read = self.base.read_owner_summary(owner)?;
+            self.work.add(read.work);
+            self.owner_kinds
+                .insert(owner, read.value.map(|bound| bound.summary.kind));
+        }
+        Ok(self.owner_kinds.get(&owner).copied().flatten())
     }
 }
 
-fn add_summary_paths(
+fn add_summary_paths<W: WitnessBaseRead + ?Sized>(
     owner: OwnerKey,
-    ownership: &CandidateOwnership<'_>,
+    ownership: &mut CandidateOwnership<'_, W>,
     selected: &mut BTreeSet<OwnerKey>,
     work: &mut ImpactWork,
 ) -> Result<(), Diagnostic> {
@@ -310,7 +350,7 @@ fn add_summary_paths(
 
 fn walk_aggregating_path(
     owner: OwnerKey,
-    mut lookup: impl FnMut(OwnerKey) -> Option<OwnershipEntry>,
+    mut lookup: impl FnMut(OwnerKey) -> Result<Option<OwnershipEntry>, Diagnostic>,
     selected: &mut BTreeSet<OwnerKey>,
     work: &mut ImpactWork,
 ) -> Result<(), Diagnostic> {
@@ -325,7 +365,7 @@ fn walk_aggregating_path(
             ));
         }
         selected.insert(current);
-        let Some(entry) = lookup(current) else {
+        let Some(entry) = lookup(current)? else {
             break;
         };
         if !entry.role.aggregates_into_parent() {
@@ -339,10 +379,10 @@ fn walk_aggregating_path(
     Ok(())
 }
 
-fn add_owning_units(
+fn add_owning_units<W: WitnessBaseRead + ?Sized>(
     owner: OwnerKey,
     overlay: &KernelOverlay<'_>,
-    ownership: &CandidateOwnership<'_>,
+    ownership: &mut CandidateOwnership<'_, W>,
     units: &mut BTreeSet<OwnerKey>,
     work: &mut ImpactWork,
 ) -> Result<(), Diagnostic> {
@@ -350,10 +390,10 @@ fn add_owning_units(
     Ok(())
 }
 
-fn owning_units(
+fn owning_units<W: WitnessBaseRead + ?Sized>(
     owner: OwnerKey,
     overlay: &KernelOverlay<'_>,
-    ownership: &CandidateOwnership<'_>,
+    ownership: &mut CandidateOwnership<'_, W>,
     work: &mut ImpactWork,
 ) -> Result<BTreeSet<OwnerKey>, Diagnostic> {
     let mut units = BTreeSet::new();
@@ -373,9 +413,9 @@ fn owning_units(
                 break;
             }
             let entry = if candidate {
-                ownership.candidate(current)
+                ownership.candidate(current)?
             } else {
-                ownership.before(current)
+                ownership.before(current)?
             };
             let Some(entry) = entry else {
                 if overlay.owner(current).is_some_and(|record| {
@@ -392,17 +432,6 @@ fn owning_units(
         }
     }
     Ok(units)
-}
-
-fn owner_kind(
-    owner: OwnerKey,
-    overlay: &KernelOverlay<'_>,
-    base: &FullWitness,
-) -> Option<OwnerKind> {
-    overlay
-        .owner(owner)
-        .map(crate::platform::kernel::OwnerRecord::kind)
-        .or_else(|| base.summaries.get(&owner).map(|summary| summary.kind))
 }
 
 const fn has_executable_meaning(kind: OwnerKind) -> bool {

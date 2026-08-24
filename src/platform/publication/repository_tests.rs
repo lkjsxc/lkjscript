@@ -1,7 +1,7 @@
 use super::*;
 use crate::platform::change::{
     CanonicalDelta, KernelOverlay, PrimitiveEdit, derive_local_delta, derive_summary_delta,
-    prepare_change_analysis,
+    plan_impact_and_summaries, prepare_change_analysis,
 };
 use crate::platform::kernel::{
     DeclarationPayload, ExactOwnerKey, ExpressionOperation, Name, NamespaceClass, OwnerKey,
@@ -376,6 +376,85 @@ fn repository_summary_rebuild_reads_only_selected_witness_closure() {
     assert!(repository.read_work.map_pages_read < 256);
     assert!(repository.read_work.objects_read >= repository.read_work.map_pages_read);
     assert!(repository.read_work.objects_read < 256);
+}
+
+#[test]
+fn repository_impact_plan_matches_full_witness_oracle() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let view = created.repository.view_current().expect("pinned view");
+    let binding = binding_named(&created.initial.snapshot, "local");
+    let mut replacement = created.initial.snapshot.owners[&binding].clone();
+    let OwnerRecord::Binding(record) = &mut replacement else {
+        panic!("local must be a binding")
+    };
+    record.declared_type = None;
+    let canonical = CanonicalDelta::normalize(
+        &created.initial.snapshot,
+        vec![PrimitiveEdit::ReplaceOwner {
+            expected: encode_owner(&created.initial.snapshot.owners[&binding])
+                .expect("base owner encoding")
+                .0,
+            record: replacement,
+        }],
+    )
+    .expect("canonical binding edit");
+    let overlay = KernelOverlay::new(&created.initial.snapshot, &canonical);
+    let derived = derive_local_delta(&created.initial.snapshot, &overlay, &canonical, &view)
+        .expect("repository-backed derived delta");
+
+    let repository = plan_impact_and_summaries(&overlay, &canonical, &derived, &view)
+        .expect("repository-backed impact plan");
+    let oracle =
+        plan_impact_and_summaries(&overlay, &canonical, &derived, &created.initial.witness)
+            .expect("full-witness impact oracle");
+    assert_eq!(repository.initial.selected, oracle.initial.selected);
+    assert_eq!(repository.initial.edits, oracle.initial.edits);
+    assert_eq!(repository.initial.new_objects, oracle.initial.new_objects);
+    assert_eq!(repository.final_delta.selected, oracle.final_delta.selected);
+    assert_eq!(repository.final_delta.edits, oracle.final_delta.edits);
+    assert_eq!(
+        repository.final_delta.new_objects,
+        oracle.final_delta.new_objects
+    );
+    assert_eq!(
+        repository.plan.structurally_checked,
+        oracle.plan.structurally_checked
+    );
+    assert_eq!(
+        repository.plan.semantically_checked,
+        oracle.plan.semantically_checked
+    );
+    assert_eq!(repository.plan.summary_owners, oracle.plan.summary_owners);
+    assert_eq!(repository.plan.compiler_units, oracle.plan.compiler_units);
+    assert_eq!(repository.plan.tests, oracle.plan.tests);
+    assert_eq!(repository.plan.reasons, oracle.plan.reasons);
+    assert_eq!(
+        repository.plan.tests,
+        std::collections::BTreeSet::from([owner_named(&created.initial.snapshot, "caller_test")])
+    );
+    assert_eq!(
+        repository.plan.work.summary_edits_examined,
+        oracle.plan.work.summary_edits_examined
+    );
+    assert_eq!(
+        repository.plan.work.reverse_edges_visited,
+        oracle.plan.work.reverse_edges_visited
+    );
+    assert_eq!(
+        repository.plan.work.ownership_steps,
+        oracle.plan.work.ownership_steps
+    );
+    assert_eq!(
+        repository.plan.work.behavior_owners_visited,
+        oracle.plan.work.behavior_owners_visited
+    );
+    assert!(repository.plan.work.witness_reads.point_reads > 0);
+    assert!(repository.plan.work.witness_reads.point_reads < 64);
+    assert!(repository.plan.work.witness_reads.map_pages_read < 256);
+    assert!(repository.plan.work.witness_reads.objects_read < 256);
 }
 
 #[test]
@@ -889,4 +968,15 @@ fn function_body(snapshot: &crate::platform::kernel::KernelSnapshot, name: &str)
         panic!("named declaration must be a function")
     };
     OwnerKey::Expression(function.body)
+}
+
+fn binding_named(snapshot: &crate::platform::kernel::KernelSnapshot, name: &str) -> OwnerKey {
+    snapshot
+        .owners
+        .iter()
+        .find_map(|(owner, record)| match record {
+            OwnerRecord::Binding(binding) if binding.name.as_str() == name => Some(*owner),
+            _ => None,
+        })
+        .expect("named binding")
 }
