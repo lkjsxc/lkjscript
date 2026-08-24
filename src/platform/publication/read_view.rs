@@ -624,6 +624,10 @@ impl WitnessBaseRead for RepositoryView {
         self.current.witness.contract_is_current()
     }
 
+    fn owner_summary_count(&self) -> u64 {
+        self.current.witness.roots.owner_summaries.entries()
+    }
+
     fn read_namespace(
         &self,
         key: &NamespaceKey,

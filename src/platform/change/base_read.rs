@@ -160,6 +160,8 @@ pub trait WitnessBaseRead {
 
     fn witness_contract_is_current(&self) -> bool;
 
+    fn owner_summary_count(&self) -> u64;
+
     fn read_namespace(
         &self,
         key: &NamespaceKey,
@@ -254,6 +256,10 @@ impl WitnessBaseRead for FullWitness {
 
     fn witness_contract_is_current(&self) -> bool {
         self.manifest.contract_is_current()
+    }
+
+    fn owner_summary_count(&self) -> u64 {
+        self.manifest.roots.owner_summaries.entries()
     }
 
     fn read_namespace(

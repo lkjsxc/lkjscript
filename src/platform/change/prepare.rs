@@ -35,6 +35,7 @@ pub fn prepare_change_analysis(
         &overlay,
         &canonical,
         &summaries.plan,
+        &summaries.final_delta,
         base_witness,
         structural,
     )?;

@@ -783,13 +783,20 @@ fn change_work(
         .saturating_add(analysis.validation.work.ownership_entries_checked)
         .saturating_add(analysis.validation.work.type_objects_checked)
         .saturating_add(analysis.validation.work.expression_work);
+    let mut witness_reads = analysis.derived.read_work;
+    witness_reads.add(analysis.summaries.initial.read_work);
+    witness_reads.add(analysis.summaries.final_delta.read_work);
+    witness_reads.add(analysis.summaries.plan.work.witness_reads);
+    witness_reads.add(analysis.tests.work.witness_reads);
+    witness_reads.add(analysis.validation.work.witness_reads);
     WorkObservation {
         validation_work,
         map_pages_read: authority
             .semantic
             .map_work
             .pages_read
-            .saturating_add(analysis.witness.work.pages_read),
+            .saturating_add(analysis.witness.work.pages_read)
+            .saturating_add(witness_reads.map_pages_read),
         map_pages_written: authority
             .semantic
             .map_work
@@ -799,8 +806,22 @@ fn change_work(
         ownership_entries_checked: analysis.validation.work.ownership_entries_checked,
         type_objects_checked: analysis.validation.work.type_objects_checked,
         expression_work: analysis.validation.work.expression_work,
-        relation_edges_visited: analysis.summaries.plan.work.reverse_edges_visited,
-        ..WorkObservation::default()
+        relation_edges_visited: analysis
+            .summaries
+            .plan
+            .work
+            .reverse_edges_visited
+            .saturating_add(analysis.tests.work.relation_edges_visited),
+        objects_read: authority
+            .store_work
+            .objects_read
+            .saturating_add(witness_reads.objects_read),
+        objects_staged: authority.store_work.objects_staged,
+        bytes_read: authority
+            .store_work
+            .bytes_read
+            .saturating_add(witness_reads.bytes_read),
+        bytes_staged: authority.store_work.bytes_staged,
     }
 }
 

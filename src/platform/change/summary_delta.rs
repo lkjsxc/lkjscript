@@ -22,6 +22,7 @@ pub struct OwnerSummaryEdit {
 #[derive(Clone, Debug, Default)]
 pub struct SummaryDelta {
     pub selected: BTreeSet<OwnerKey>,
+    pub base_summaries_selected: u64,
     pub edits: Vec<OwnerSummaryEdit>,
     pub new_objects: BTreeMap<OwnerSummaryDigest, Vec<u8>>,
     pub read_work: WitnessReadWork,
@@ -50,8 +51,11 @@ pub fn derive_summary_delta_for<W: WitnessBaseRead + ?Sized>(
     let rebuilt = rebuild_selected_owner_summaries(&view, &selected)?;
     let mut edits = Vec::new();
     let mut new_objects = BTreeMap::new();
+    let mut base_summaries_selected = 0_u64;
     for owner in &selected {
         let before_bound = view.base_bound_summary(*owner)?;
+        base_summaries_selected =
+            base_summaries_selected.saturating_add(u64::from(before_bound.is_some()));
         let before = before_bound.as_ref().map(|bound| bound.summary.clone());
         let before_digest = before_bound.map(|bound| bound.digest);
         let after = rebuilt.get(owner).cloned();
@@ -92,6 +96,7 @@ pub fn derive_summary_delta_for<W: WitnessBaseRead + ?Sized>(
     }
     Ok(SummaryDelta {
         selected,
+        base_summaries_selected,
         edits,
         new_objects,
         read_work: view.work(),

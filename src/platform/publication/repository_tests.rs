@@ -2,6 +2,7 @@ use super::*;
 use crate::platform::change::{
     CanonicalDelta, KernelOverlay, PrimitiveEdit, derive_local_delta, derive_summary_delta,
     derive_test_dependency_delta, plan_impact_and_summaries, prepare_change_analysis,
+    validate_incremental_frontier, validate_structural_frontier,
 };
 use crate::platform::kernel::{
     DeclarationPayload, ExactOwnerKey, ExpressionOperation, Name, NamespaceClass, OwnerKey,
@@ -477,6 +478,108 @@ fn repository_impact_plan_matches_full_witness_oracle() {
     assert!(repository.plan.work.witness_reads.point_reads < 64);
     assert!(repository.plan.work.witness_reads.map_pages_read < 256);
     assert!(repository.plan.work.witness_reads.objects_read < 256);
+}
+
+#[test]
+fn repository_incremental_validation_reads_only_frontier_ownership() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let view = created.repository.view_current().expect("pinned view");
+    let binding = binding_named(&created.initial.snapshot, "local");
+    let mut replacement = created.initial.snapshot.owners[&binding].clone();
+    let OwnerRecord::Binding(record) = &mut replacement else {
+        panic!("local must be a binding")
+    };
+    record.declared_type = None;
+    let canonical = CanonicalDelta::normalize(
+        &created.initial.snapshot,
+        vec![PrimitiveEdit::ReplaceOwner {
+            expected: encode_owner(&created.initial.snapshot.owners[&binding])
+                .expect("base binding encoding")
+                .0,
+            record: replacement,
+        }],
+    )
+    .expect("canonical binding edit");
+    let overlay = KernelOverlay::new(&created.initial.snapshot, &canonical);
+    let derived = derive_local_delta(&created.initial.snapshot, &overlay, &canonical, &view)
+        .expect("repository-backed derived delta");
+    let repository_plan = plan_impact_and_summaries(&overlay, &canonical, &derived, &view)
+        .expect("repository-backed impact plan");
+    let oracle_plan =
+        plan_impact_and_summaries(&overlay, &canonical, &derived, &created.initial.witness)
+            .expect("full-witness impact oracle");
+    let repository_structural = validate_structural_frontier(&overlay, &canonical, &derived, &view)
+        .expect("repository-backed structural validation");
+    let oracle_structural =
+        validate_structural_frontier(&overlay, &canonical, &derived, &created.initial.witness)
+            .expect("full-witness structural validation oracle");
+    assert_eq!(
+        repository_structural.structurally_checked,
+        oracle_structural.structurally_checked
+    );
+    assert_eq!(
+        repository_structural.work.owner_records_checked,
+        oracle_structural.work.owner_records_checked
+    );
+    assert_eq!(
+        repository_structural.work.ownership_entries_checked,
+        oracle_structural.work.ownership_entries_checked
+    );
+    assert_eq!(
+        repository_structural.work.type_objects_checked,
+        oracle_structural.work.type_objects_checked
+    );
+    assert_eq!(repository_structural.work.witness_reads.point_reads, 1);
+    assert!(repository_structural.work.witness_reads.map_pages_read > 0);
+    assert!(repository_structural.work.witness_reads.map_pages_read < 32);
+    assert_eq!(
+        repository_structural.work.witness_reads.objects_read,
+        repository_structural.work.witness_reads.map_pages_read
+    );
+
+    let repository = validate_incremental_frontier(
+        &overlay,
+        &canonical,
+        &repository_plan.plan,
+        &repository_plan.final_delta,
+        &view,
+        repository_structural,
+    )
+    .expect("repository-backed incremental validation");
+    let oracle = validate_incremental_frontier(
+        &overlay,
+        &canonical,
+        &oracle_plan.plan,
+        &oracle_plan.final_delta,
+        &created.initial.witness,
+        oracle_structural,
+    )
+    .expect("full-witness incremental validation oracle");
+    assert_eq!(repository.profile, oracle.profile);
+    assert_eq!(
+        repository.canonical_owners_changed,
+        oracle.canonical_owners_changed
+    );
+    assert_eq!(repository.structurally_checked, oracle.structurally_checked);
+    assert_eq!(repository.semantically_checked, oracle.semantically_checked);
+    assert_eq!(repository.summaries_reused, oracle.summaries_reused);
+    assert_eq!(repository.tests_selected, oracle.tests_selected);
+    assert_eq!(
+        repository.work.owner_records_checked,
+        oracle.work.owner_records_checked
+    );
+    assert_eq!(
+        repository.work.ownership_entries_checked,
+        oracle.work.ownership_entries_checked
+    );
+    assert_eq!(
+        repository.work.type_objects_checked,
+        oracle.work.type_objects_checked
+    );
+    assert_eq!(repository.work.expression_work, oracle.work.expression_work);
 }
 
 #[test]

@@ -1,14 +1,15 @@
 //! Owner-frontier structural and semantic validation over an isolated candidate overlay.
 
-use super::{CanonicalDelta, DerivedDelta, ImpactPlan, KernelOverlay};
+use super::{
+    CanonicalDelta, DerivedDelta, ImpactPlan, KernelOverlay, SummaryDelta, WitnessBaseRead,
+    WitnessReadWork,
+};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     ExpressionRead, OwnerKey, OwnerRecord, PackageId, TypeObject, TypeObjectDigest,
     validate_expression_roots,
 };
-use crate::platform::witness::{
-    FullWitness, OwnershipEntry, OwnershipParent, aggregation_children,
-};
+use crate::platform::witness::{OwnershipEntry, OwnershipParent, aggregation_children};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub const INCREMENTAL_VALIDATION_PROFILE: &str = "incremental_owner_frontier";
@@ -19,6 +20,7 @@ pub struct IncrementalValidationWork {
     pub ownership_entries_checked: u64,
     pub type_objects_checked: u64,
     pub expression_work: u64,
+    pub witness_reads: WitnessReadWork,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -38,11 +40,11 @@ pub struct StructuralValidationReport {
     pub work: IncrementalValidationWork,
 }
 
-pub fn validate_structural_frontier(
+pub fn validate_structural_frontier<W: WitnessBaseRead + ?Sized>(
     overlay: &KernelOverlay<'_>,
     canonical: &CanonicalDelta,
     derived: &DerivedDelta,
-    base_witness: &FullWitness,
+    base_witness: &W,
 ) -> Result<StructuralValidationReport, Vec<Diagnostic>> {
     let mut validator = IncrementalValidator {
         overlay,
@@ -56,6 +58,7 @@ pub fn validate_structural_frontier(
             .iter()
             .map(|edit| (edit.key, edit.after))
             .collect(),
+        ownership_cache: BTreeMap::new(),
     };
     validator.validate_structural();
     if validator.diagnostics.is_empty() {
@@ -68,11 +71,12 @@ pub fn validate_structural_frontier(
     }
 }
 
-pub fn validate_incremental_frontier(
+pub fn validate_incremental_frontier<W: WitnessBaseRead + ?Sized>(
     overlay: &KernelOverlay<'_>,
     canonical: &CanonicalDelta,
     impact: &ImpactPlan,
-    base_witness: &FullWitness,
+    summaries: &SummaryDelta,
+    base_witness: &W,
     mut structural: StructuralValidationReport,
 ) -> Result<IncrementalValidationReport, Vec<Diagnostic>> {
     let mut diagnostics = Vec::new();
@@ -84,17 +88,30 @@ pub fn validate_incremental_frontier(
         &mut work,
     );
     structural.work.expression_work = work as u64;
+    if summaries.selected != impact.summary_owners {
+        diagnostics.push(validation_error(
+            DiagnosticClass::Corrupt,
+            "change_validate_summary_selection",
+            "validation summary selection disagrees with the exact impact plan",
+        ));
+    }
+    let summaries_reused = base_witness
+        .owner_summary_count()
+        .checked_sub(summaries.base_summaries_selected)
+        .ok_or_else(|| {
+            vec![validation_error(
+                DiagnosticClass::Corrupt,
+                "change_validate_summary_count",
+                "selected base summaries exceed the committed witness summary count",
+            )]
+        })?;
     if diagnostics.is_empty() {
         Ok(IncrementalValidationReport {
             profile: INCREMENTAL_VALIDATION_PROFILE,
             canonical_owners_changed: canonical.owners.len() as u64,
             structurally_checked: structural.structurally_checked,
             semantically_checked: impact.semantically_checked.clone(),
-            summaries_reused: base_witness
-                .summaries
-                .keys()
-                .filter(|owner| !impact.summary_owners.contains(owner))
-                .count() as u64,
+            summaries_reused,
             tests_selected: impact.tests.len() as u64,
             work: structural.work,
         })
@@ -103,17 +120,18 @@ pub fn validate_incremental_frontier(
     }
 }
 
-struct IncrementalValidator<'a> {
+struct IncrementalValidator<'a, W: ?Sized> {
     overlay: &'a KernelOverlay<'a>,
     canonical: &'a CanonicalDelta,
     derived: &'a DerivedDelta,
-    base_witness: &'a FullWitness,
+    base_witness: &'a W,
     diagnostics: Vec<Diagnostic>,
     work: IncrementalValidationWork,
     ownership_edits: BTreeMap<OwnerKey, Option<OwnershipEntry>>,
+    ownership_cache: BTreeMap<OwnerKey, Option<OwnershipEntry>>,
 }
 
-impl IncrementalValidator<'_> {
+impl<W: WitnessBaseRead + ?Sized> IncrementalValidator<'_, W> {
     fn validate_structural(&mut self) {
         self.validate_changed_records();
         self.validate_ownership_frontier();
@@ -169,15 +187,23 @@ impl IncrementalValidator<'_> {
                 }
             }
         }
-        for owner in self.canonical.owners.keys() {
+        let changed_owners = self.canonical.owners.keys().copied().collect::<Vec<_>>();
+        for owner in &changed_owners {
             self.work.ownership_entries_checked =
                 self.work.ownership_entries_checked.saturating_add(1);
+            let candidate_ownership = match self.ownership(*owner) {
+                Ok(entry) => entry,
+                Err(diagnostic) => {
+                    self.diagnostics.push(diagnostic);
+                    continue;
+                }
+            };
             match self.overlay.owner(*owner) {
-                Some(_) if self.ownership(*owner).is_none() => self.error(
+                Some(_) if candidate_ownership.is_none() => self.error(
                     "change_validate_ownership_missing",
                     format!("live candidate owner {owner:?} has no ownership witness"),
                 ),
-                None if self.ownership(*owner).is_some() => self.error(
+                None if candidate_ownership.is_some() => self.error(
                     "change_validate_ownership_stale",
                     format!("deleted candidate owner {owner:?} retains ownership witness"),
                 ),
@@ -188,32 +214,38 @@ impl IncrementalValidator<'_> {
             let Some(record) = self.overlay.owner(parent) else {
                 continue;
             };
-            match aggregation_children(record) {
-                Ok(children) => {
-                    for (role, child) in children {
-                        if !role.aggregates_into_parent() {
-                            continue;
-                        }
-                        self.work.ownership_entries_checked =
-                            self.work.ownership_entries_checked.saturating_add(1);
-                        let expected = OwnershipEntry::new(OwnershipParent::Owner(parent), role);
-                        if self.ownership(child) != Some(expected) {
-                            self.error(
-                                "change_validate_ownership_child",
-                                format!("candidate parent {parent:?} and child {child:?} disagree"),
-                            );
-                        }
-                    }
+            let children = match aggregation_children(record) {
+                Ok(children) => children,
+                Err(diagnostic) => {
+                    self.diagnostics.push(diagnostic);
+                    continue;
                 }
+            };
+            for (role, child) in children {
+                if !role.aggregates_into_parent() {
+                    continue;
+                }
+                self.work.ownership_entries_checked =
+                    self.work.ownership_entries_checked.saturating_add(1);
+                let expected = OwnershipEntry::new(OwnershipParent::Owner(parent), role);
+                match self.ownership(child) {
+                    Ok(Some(actual)) if actual == expected => {}
+                    Ok(_) => self.error(
+                        "change_validate_ownership_child",
+                        format!("candidate parent {parent:?} and child {child:?} disagree"),
+                    ),
+                    Err(diagnostic) => self.diagnostics.push(diagnostic),
+                }
+            }
+        }
+        let mut parent_entries = Vec::new();
+        for owner in changed_owners {
+            match self.ownership(owner) {
+                Ok(Some(entry)) => parent_entries.push((owner, entry)),
+                Ok(None) => {}
                 Err(diagnostic) => self.diagnostics.push(diagnostic),
             }
         }
-        let parent_entries = self
-            .canonical
-            .owners
-            .keys()
-            .filter_map(|owner| self.ownership(*owner).map(|entry| (*owner, entry)))
-            .collect::<Vec<_>>();
         for (owner, entry) in parent_entries {
             if let OwnershipParent::Owner(parent) = entry.parent
                 && self.overlay.owner(parent).is_none()
@@ -281,10 +313,18 @@ impl IncrementalValidator<'_> {
         }
     }
 
-    fn ownership(&self, owner: OwnerKey) -> Option<OwnershipEntry> {
+    fn ownership(&mut self, owner: OwnerKey) -> Result<Option<OwnershipEntry>, Diagnostic> {
         match self.ownership_edits.get(&owner) {
-            Some(entry) => *entry,
-            None => self.base_witness.entries.ownership.get(&owner).copied(),
+            Some(entry) => Ok(*entry),
+            None => {
+                if let Some(cached) = self.ownership_cache.get(&owner) {
+                    return Ok(*cached);
+                }
+                let read = self.base_witness.read_ownership(owner)?;
+                self.work.witness_reads.add(read.work);
+                self.ownership_cache.insert(owner, read.value);
+                Ok(read.value)
+            }
         }
     }
 
@@ -298,6 +338,14 @@ impl IncrementalValidator<'_> {
         self.diagnostics
             .push(Diagnostic::new(DiagnosticClass::Semantic, code, message));
     }
+}
+
+fn validation_error(
+    class: DiagnosticClass,
+    code: &'static str,
+    message: impl Into<String>,
+) -> Diagnostic {
+    Diagnostic::new(class, code, message)
 }
 
 impl ExpressionRead for KernelOverlay<'_> {
