@@ -11,9 +11,10 @@ use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFail
 use crate::platform::kernel::{
     BindingKind, CaseReference, DeclarationPayload, DeclarationReference, ExpressionOperation,
     FieldReference, FieldSelector, FunctionEffect, KernelSnapshot, LocalValueReference, Name,
-    OperationReference, OwnerKey, OwnerRecord, PortImplementation, RequirementReference, TextValue,
+    OperationReference, OwnerKey, OwnerRecord, PackageId, PortImplementation, RequirementReference,
+    SemanticRootDigest, TextValue,
 };
-use crate::platform::semantic_id::{BindingId, ExpressionId};
+use crate::platform::semantic_id::{BindingId, ExpressionId, RepositoryId, RevisionId};
 use crate::platform::storage::object::{ImmutableObjectStore, ObjectDomain, ObjectKey, StoreWork};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -27,12 +28,82 @@ pub struct NormalizedReferenceObservation {
     pub allocated_bytes: u64,
     pub collection_items: u64,
     pub maximum_call_depth: usize,
+    pub canonical_owner_reads: u64,
+    pub canonical_map_pages_read: u64,
+    pub canonical_objects_read: u64,
+    pub canonical_bytes_read: u64,
     pub production_tier: &'static str,
 }
 
 pub type NormalizedReferenceInvocation = (NormalizedValue, NormalizedReferenceObservation);
 pub type NormalizedReferenceTestInvocation =
     (NormalizedReferenceInvocation, NormalizedReferenceInvocation);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NormalizedReferenceBinding {
+    pub repository: RepositoryId,
+    pub package: PackageId,
+    pub revision: Option<RevisionId>,
+    pub semantic_root: Option<SemanticRootDigest>,
+}
+
+impl NormalizedReferenceBinding {
+    pub fn matches(self, program: &NormalizedProgram) -> bool {
+        self.repository == program.root_repository
+            && self.package == program.root_package
+            && self
+                .semantic_root
+                .is_none_or(|root| root == program.root_semantic_root)
+            && self
+                .revision
+                .is_none_or(|revision| revision == program.root_revision)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct NormalizedReferenceReadWork {
+    pub owner_reads: u64,
+    pub map_pages_read: u64,
+    pub objects_read: u64,
+    pub bytes_read: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NormalizedReferenceOwnerRead {
+    pub record: Option<OwnerRecord>,
+    pub work: NormalizedReferenceReadWork,
+}
+
+/// Exact canonical owner reads used by the implementation-disjoint reference tier.
+///
+/// An accepted repository implements this with revision-pinned persistent-map point reads. The
+/// in-memory snapshot implementation remains the independent full-oracle fixture path.
+pub trait NormalizedReferenceRead {
+    fn binding(&self) -> Result<NormalizedReferenceBinding, ExecutionError>;
+
+    fn owner(&self, owner: OwnerKey) -> Result<NormalizedReferenceOwnerRead, ExecutionError>;
+}
+
+impl NormalizedReferenceRead for KernelSnapshot {
+    fn binding(&self) -> Result<NormalizedReferenceBinding, ExecutionError> {
+        Ok(NormalizedReferenceBinding {
+            repository: self.root.repository_id,
+            package: self.root.package_id,
+            revision: None,
+            semantic_root: None,
+        })
+    }
+
+    fn owner(&self, owner: OwnerKey) -> Result<NormalizedReferenceOwnerRead, ExecutionError> {
+        Ok(NormalizedReferenceOwnerRead {
+            record: self.owners.get(&owner).cloned(),
+            work: NormalizedReferenceReadWork {
+                owner_reads: 1,
+                ..NormalizedReferenceReadWork::default()
+            },
+        })
+    }
+}
 
 pub trait NormalizedReferenceHost: Send + Sync {
     fn call(
@@ -61,7 +132,7 @@ impl NormalizedReferenceHost for CoreNormalizedReferenceHost {
 static CORE_REFERENCE_HOST: CoreNormalizedReferenceHost = CoreNormalizedReferenceHost;
 
 pub struct NormalizedReferenceInterpreter<'a> {
-    snapshot: &'a KernelSnapshot,
+    authority: &'a dyn NormalizedReferenceRead,
     program: &'a NormalizedProgram,
     policy: NormalizedRunPolicy,
     host: &'a dyn NormalizedReferenceHost,
@@ -73,12 +144,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         program: &'a NormalizedProgram,
         policy: NormalizedRunPolicy,
     ) -> Self {
-        Self {
-            snapshot,
-            program,
-            policy,
-            host: &CORE_REFERENCE_HOST,
-        }
+        Self::from_reader(snapshot, program, policy)
     }
 
     pub fn with_host(
@@ -87,8 +153,30 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         policy: NormalizedRunPolicy,
         host: &'a dyn NormalizedReferenceHost,
     ) -> Self {
+        Self::with_reader_and_host(snapshot, program, policy, host)
+    }
+
+    pub fn from_reader(
+        authority: &'a dyn NormalizedReferenceRead,
+        program: &'a NormalizedProgram,
+        policy: NormalizedRunPolicy,
+    ) -> Self {
         Self {
-            snapshot,
+            authority,
+            program,
+            policy,
+            host: &CORE_REFERENCE_HOST,
+        }
+    }
+
+    pub fn with_reader_and_host(
+        authority: &'a dyn NormalizedReferenceRead,
+        program: &'a NormalizedProgram,
+        policy: NormalizedRunPolicy,
+        host: &'a dyn NormalizedReferenceHost,
+    ) -> Self {
+        Self {
+            authority,
             program,
             policy,
             host,
@@ -120,63 +208,66 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 "root artifact package has no target with the exact selected name",
             )
         })?;
-        let OwnerRecord::Target(record) = self
-            .snapshot
-            .owners
-            .get(&OwnerKey::Target(target.target))
-            .ok_or_else(|| {
-                reference_error(
-                    "normalized_reference_target_owner",
-                    "selected target is absent from canonical Graph 5 authority",
-                )
-            })?
-        else {
-            return Err(reference_error(
-                "normalized_reference_target_kind",
-                "selected target identity names another canonical owner kind",
-            ));
-        };
-        if record.name != *name
-            || record.component.package != self.snapshot.root.package_id
-            || record.port.package != self.snapshot.root.package_id
-        {
-            return Err(reference_error(
-                "normalized_reference_target_binding",
-                "selected target disagrees with its exact prepared artifact binding",
-            ));
-        }
-        let OwnerRecord::Port(port) = self
-            .snapshot
-            .owners
-            .get(&OwnerKey::Port(record.port.port))
-            .ok_or_else(|| {
-                reference_error(
-                    "normalized_reference_port_missing",
-                    "selected target port is absent from canonical Graph 5 authority",
-                )
-            })?
-        else {
-            return Err(reference_error(
-                "normalized_reference_port_kind",
-                "selected target port identity names another canonical owner kind",
-            ));
-        };
-        if port.declaration != record.component.declaration {
-            return Err(reference_error(
-                "normalized_reference_port_component",
-                "selected target port belongs to another exact component",
-            ));
-        }
-        let implementation = port.implementation.clone();
-        self.execute(capabilities, control, move |state| match implementation {
-            PortImplementation::Function(function) => state.call_declaration(function, arguments),
-            PortImplementation::Expression(expression) => {
-                if !arguments.is_empty() {
-                    return Err(reference_type_error(
-                        "expression-backed target port received arguments",
+        let target_id = target.target;
+        let expected_name = name.clone();
+        self.execute(capabilities, control, move |state| {
+            let record = match state.owner(OwnerKey::Target(target_id))? {
+                Some(OwnerRecord::Target(record)) => record,
+                Some(_) => {
+                    return Err(reference_error(
+                        "normalized_reference_target_kind",
+                        "selected target identity names another canonical owner kind",
                     ));
                 }
-                state.evaluate(expression, &mut BTreeMap::new())
+                None => {
+                    return Err(reference_error(
+                        "normalized_reference_target_owner",
+                        "selected target is absent from canonical Graph 5 authority",
+                    ));
+                }
+            };
+            if record.name != expected_name
+                || record.component.package != state.binding.package
+                || record.port.package != state.binding.package
+            {
+                return Err(reference_error(
+                    "normalized_reference_target_binding",
+                    "selected target disagrees with its exact prepared artifact binding",
+                ));
+            }
+            let port = match state.owner(OwnerKey::Port(record.port.port))? {
+                Some(OwnerRecord::Port(port)) => port,
+                Some(_) => {
+                    return Err(reference_error(
+                        "normalized_reference_port_kind",
+                        "selected target port identity names another canonical owner kind",
+                    ));
+                }
+                None => {
+                    return Err(reference_error(
+                        "normalized_reference_port_missing",
+                        "selected target port is absent from canonical Graph 5 authority",
+                    ));
+                }
+            };
+            if port.declaration != record.component.declaration {
+                return Err(reference_error(
+                    "normalized_reference_port_component",
+                    "selected target port belongs to another exact component",
+                ));
+            }
+            match port.implementation {
+                PortImplementation::Function(function) => {
+                    state.call_declaration(function, arguments)
+                }
+                PortImplementation::Expression(expression) => {
+                    if !arguments.is_empty() {
+                        return Err(reference_type_error(
+                            "expression-backed target port received arguments",
+                        ));
+                    }
+                    state.evaluate(expression, &mut BTreeMap::new())
+                }
             }
         })
     }
@@ -187,20 +278,24 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         capabilities: Option<&NormalizedCapabilities>,
         control: &ExecutionControl,
     ) -> Result<NormalizedReferenceTestInvocation, ExecutionError> {
-        let record = self.declaration(declaration)?.clone();
-        let DeclarationPayload::Test {
-            actual, expected, ..
-        } = record.payload
-        else {
-            return Err(reference_error(
-                "normalized_reference_test_kind",
-                "exact test selection names another declaration kind",
-            ));
-        };
         let actual = self.execute(capabilities, control, |state| {
+            let record = state.declaration(declaration)?;
+            let DeclarationPayload::Test { actual, .. } = record.payload else {
+                return Err(reference_error(
+                    "normalized_reference_test_kind",
+                    "exact test selection names another declaration kind",
+                ));
+            };
             state.evaluate(actual, &mut BTreeMap::new())
         })?;
         let expected = self.execute(capabilities, control, |state| {
+            let record = state.declaration(declaration)?;
+            let DeclarationPayload::Test { expected, .. } = record.payload else {
+                return Err(reference_error(
+                    "normalized_reference_test_kind",
+                    "exact test selection names another declaration kind",
+                ));
+            };
             state.evaluate(expected, &mut BTreeMap::new())
         })?;
         Ok((actual, expected))
@@ -214,14 +309,16 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
     ) -> Result<NormalizedReferenceInvocation, ExecutionError> {
         validate_reference_policy(self.policy)?;
         control.check()?;
-        if self.snapshot.root.package_id != self.program.root_package {
+        let binding = self.authority.binding()?;
+        if !binding.matches(self.program) {
             return Err(reference_error(
-                "normalized_reference_package",
-                "reference authority and executable artifact name different root packages",
+                "normalized_reference_authority_binding",
+                "reference authority and executable artifact do not bind one exact accepted root",
             ));
         }
         let mut state = ReferenceState {
-            snapshot: self.snapshot,
+            authority: self.authority,
+            binding,
             program: self.program,
             policy: self.policy,
             host: self.host,
@@ -240,6 +337,10 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 allocated_bytes: 0,
                 collection_items: 0,
                 maximum_call_depth: 0,
+                canonical_owner_reads: 0,
+                canonical_map_pages_read: 0,
+                canonical_objects_read: 0,
+                canonical_bytes_read: 0,
                 production_tier: "graph5_reference_records_1",
             },
         };
@@ -258,33 +359,6 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
             }
         }
     }
-
-    fn declaration(
-        &self,
-        reference: DeclarationReference,
-    ) -> Result<&crate::platform::kernel::DeclarationRecord, ExecutionError> {
-        if reference.package != self.snapshot.root.package_id {
-            return Err(reference_error(
-                "normalized_reference_dependency",
-                "the canonical reference oracle currently requires local package authority",
-            ));
-        }
-        match self
-            .snapshot
-            .owners
-            .get(&OwnerKey::Declaration(reference.declaration))
-        {
-            Some(OwnerRecord::Declaration(record)) => Ok(record),
-            Some(_) => Err(reference_error(
-                "normalized_reference_declaration_kind",
-                "exact declaration reference names another owner kind",
-            )),
-            None => Err(reference_error(
-                "normalized_reference_declaration_missing",
-                "exact declaration reference is missing from canonical authority",
-            )),
-        }
-    }
 }
 
 struct ReferenceTransaction {
@@ -294,7 +368,8 @@ struct ReferenceTransaction {
 }
 
 struct ReferenceState<'a> {
-    snapshot: &'a KernelSnapshot,
+    authority: &'a dyn NormalizedReferenceRead,
+    binding: NormalizedReferenceBinding,
     program: &'a NormalizedProgram,
     policy: NormalizedRunPolicy,
     host: &'a dyn NormalizedReferenceHost,
@@ -315,32 +390,13 @@ impl ReferenceState<'_> {
         arguments: Vec<NormalizedValue>,
     ) -> Result<NormalizedValue, ExecutionError> {
         self.control.check()?;
-        if reference.package != self.snapshot.root.package_id {
+        if reference.package != self.binding.package {
             return Err(reference_error(
                 "normalized_reference_dependency",
                 "the canonical reference oracle currently requires local package authority",
             ));
         }
-        let declaration = match self
-            .snapshot
-            .owners
-            .get(&OwnerKey::Declaration(reference.declaration))
-            .cloned()
-        {
-            Some(OwnerRecord::Declaration(record)) => record,
-            Some(_) => {
-                return Err(reference_error(
-                    "normalized_reference_declaration_kind",
-                    "exact callable reference names another owner kind",
-                ));
-            }
-            None => {
-                return Err(reference_error(
-                    "normalized_reference_declaration_missing",
-                    "exact callable reference is missing from canonical authority",
-                ));
-            }
-        };
+        let declaration = self.declaration(reference)?;
         if self.call_depth >= self.policy.maximum_call_depth {
             return Err(reference_resource(
                 "normalized_reference_call_depth",
@@ -424,12 +480,7 @@ impl ReferenceState<'_> {
         }
         self.remaining_expressions -= 1;
         self.observation.expressions = self.observation.expressions.saturating_add(1);
-        let operation = match self
-            .snapshot
-            .owners
-            .get(&OwnerKey::Expression(expression))
-            .cloned()
-        {
+        let operation = match self.owner(OwnerKey::Expression(expression))? {
             Some(OwnerRecord::Expression(record)) => record.operation,
             Some(_) => {
                 return Err(reference_error(
@@ -675,12 +726,12 @@ impl ReferenceState<'_> {
     }
 
     fn binding(
-        &self,
+        &mut self,
         binding: BindingId,
         expected: BindingKind,
     ) -> Result<crate::platform::kernel::BindingRecord, ExecutionError> {
-        match self.snapshot.owners.get(&OwnerKey::Binding(binding)) {
-            Some(OwnerRecord::Binding(record)) if record.kind == expected => Ok(record.clone()),
+        match self.owner(OwnerKey::Binding(binding))? {
+            Some(OwnerRecord::Binding(record)) if record.kind == expected => Ok(record),
             Some(OwnerRecord::Binding(_)) => Err(reference_error(
                 "normalized_reference_binding_kind",
                 "canonical binding has the wrong exact lexical kind",
@@ -694,6 +745,50 @@ impl ReferenceState<'_> {
                 "exact binding is missing from canonical authority",
             )),
         }
+    }
+
+    fn declaration(
+        &mut self,
+        reference: DeclarationReference,
+    ) -> Result<crate::platform::kernel::DeclarationRecord, ExecutionError> {
+        if reference.package != self.binding.package {
+            return Err(reference_error(
+                "normalized_reference_dependency",
+                "the canonical reference oracle currently requires local package authority",
+            ));
+        }
+        match self.owner(OwnerKey::Declaration(reference.declaration))? {
+            Some(OwnerRecord::Declaration(record)) => Ok(record),
+            Some(_) => Err(reference_error(
+                "normalized_reference_declaration_kind",
+                "exact declaration reference names another owner kind",
+            )),
+            None => Err(reference_error(
+                "normalized_reference_declaration_missing",
+                "exact declaration reference is missing from canonical authority",
+            )),
+        }
+    }
+
+    fn owner(&mut self, owner: OwnerKey) -> Result<Option<OwnerRecord>, ExecutionError> {
+        let read = self.authority.owner(owner)?;
+        self.observation.canonical_owner_reads = self
+            .observation
+            .canonical_owner_reads
+            .saturating_add(read.work.owner_reads);
+        self.observation.canonical_map_pages_read = self
+            .observation
+            .canonical_map_pages_read
+            .saturating_add(read.work.map_pages_read);
+        self.observation.canonical_objects_read = self
+            .observation
+            .canonical_objects_read
+            .saturating_add(read.work.objects_read);
+        self.observation.canonical_bytes_read = self
+            .observation
+            .canonical_bytes_read
+            .saturating_add(read.work.bytes_read);
+        Ok(read.record)
     }
 
     fn function_reference(

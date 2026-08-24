@@ -14,12 +14,12 @@ use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     BlobObjectDigest, CaseReference, ComparisonPolicy, DeclarationReference, EncodedOwnerKey,
     ExternalVisibility, FieldReference, Idempotency, Name, OperationReference, OwnerKey,
-    OwnerRecord, PackageId, PortReference, RequirementReference, ResourceLimit, TypeObject,
-    TypeObjectDigest, decode_type_object,
+    OwnerRecord, PackageId, PortReference, RequirementReference, ResourceLimit, SemanticRootDigest,
+    TypeObject, TypeObjectDigest, decode_type_object,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::persistent_map::{MapError, MapErrorClass, MapWork, PersistentMap};
-use crate::platform::semantic_id::{ParameterId, TargetId};
+use crate::platform::semantic_id::{ParameterId, RepositoryId, RevisionId, TargetId};
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, StoreError, StoreErrorClass, StoreWork,
 };
@@ -30,6 +30,11 @@ use std::sync::Arc;
 type TargetMap = BTreeMap<(PackageId, TargetId), NormalizedTarget>;
 type RootTargetNames = BTreeMap<Name, TargetId>;
 type RuntimeOwnerMap = BTreeMap<(PackageId, OwnerKey), OwnerRecord>;
+
+struct LoadedCompilationInputs {
+    units: BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
+    manifests: BTreeMap<PackageId, CompilationManifest>,
+}
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct NormalizedPreparationWork {
@@ -241,7 +246,10 @@ pub struct NormalizedTest {
 #[derive(Clone, Debug)]
 pub struct NormalizedProgram {
     artifact: Arc<LoadedArtifact>,
+    pub root_repository: RepositoryId,
     pub root_package: PackageId,
+    pub root_revision: RevisionId,
+    pub root_semantic_root: SemanticRootDigest,
     pub work: NormalizedPreparationWork,
     pub(crate) functions: Arc<[NormalizedFunction]>,
     pub(crate) function_by_declaration: BTreeMap<DeclarationReference, FunctionIndex>,
@@ -261,7 +269,15 @@ impl NormalizedProgram {
     pub fn prepare(artifact: LoadedArtifact) -> Result<Self, Diagnostic> {
         let artifact = Arc::new(artifact);
         let mut work = NormalizedPreparationWork::default();
-        let units = load_units(&artifact, &mut work)?;
+        let LoadedCompilationInputs { units, manifests } = load_units(&artifact, &mut work)?;
+        let root_compilation = manifests
+            .get(&artifact.manifest.root_package)
+            .ok_or_else(|| {
+                runtime_corrupt(
+                    "normalized_root_compilation_missing",
+                    "normalized artifact has no exact root-package compilation manifest",
+                )
+            })?;
         let indexes = RuntimeIndexes::build(&units)?;
         let runtime_owners = load_runtime_owners(&artifact, &mut work)?;
         let types = load_type_objects(&artifact, &mut work)?;
@@ -301,7 +317,10 @@ impl NormalizedProgram {
         work.targets = targets.len() as u64;
         work.tests = tests.len() as u64;
         Ok(Self {
+            root_repository: root_compilation.repository_id,
             root_package: artifact.manifest.root_package,
+            root_revision: root_compilation.revision,
+            root_semantic_root: root_compilation.semantic_root,
             artifact,
             work,
             functions: functions.into(),
@@ -491,8 +510,9 @@ impl RuntimeIndexes {
 fn load_units(
     artifact: &LoadedArtifact,
     work: &mut NormalizedPreparationWork,
-) -> Result<BTreeMap<(PackageId, OwnerKey), CompilationUnit>, Diagnostic> {
+) -> Result<LoadedCompilationInputs, Diagnostic> {
     let mut units = BTreeMap::new();
+    let mut compilations = BTreeMap::new();
     for package in &artifact.manifest.packages {
         let bytes = required_object(
             artifact,
@@ -501,6 +521,15 @@ fn load_units(
             &mut work.store,
         )?;
         let compilation = CompilationManifest::decode(&bytes, package.compilation)?;
+        if compilations
+            .insert(package.package, compilation.clone())
+            .is_some()
+        {
+            return Err(runtime_corrupt(
+                "normalized_compilation_duplicate",
+                "normalized artifact repeats one exact package compilation manifest",
+            ));
+        }
         let reader = ObjectPageReader::new(artifact);
         let mut map_work = MapWork::default();
         let mut captured = None;
@@ -559,7 +588,10 @@ fn load_units(
         work.packages = work.packages.saturating_add(1);
     }
     work.compiler_units = units.len() as u64;
-    Ok(units)
+    Ok(LoadedCompilationInputs {
+        units,
+        manifests: compilations,
+    })
 }
 
 fn load_runtime_owners(

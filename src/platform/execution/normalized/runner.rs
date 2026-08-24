@@ -4,18 +4,23 @@ use super::capability::NormalizedCapabilities;
 use super::codec::{decode_value, encode_typed};
 use super::prepare::NormalizedProgram;
 use super::reference::{
-    NormalizedReferenceInterpreter, NormalizedReferenceObservation, reference_equal,
+    NormalizedReferenceBinding, NormalizedReferenceInterpreter, NormalizedReferenceObservation,
+    NormalizedReferenceOwnerRead, NormalizedReferenceRead, NormalizedReferenceReadWork,
+    reference_equal,
 };
 use super::vm::{NormalizedRunObservation, NormalizedRunPolicy, NormalizedVm, normalized_equal};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::json::{JsonLimits, decode_strict};
-use crate::platform::kernel::{ComparisonPolicy, KernelSnapshot, Name, TypeForm, TypeObjectDigest};
+use crate::platform::kernel::{ComparisonPolicy, Name, OwnerKey, TypeForm, TypeObjectDigest};
 use crate::platform::package::RunnerKind;
+use crate::platform::publication::RepositoryView;
+use crate::platform::semantic_id::RevisionId;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NormalizedCommandReceipt {
     pub target: Name,
+    pub revision: Option<RevisionId>,
     pub result_json: Vec<u8>,
     pub production: NormalizedRunObservation,
     pub reference: NormalizedReferenceObservation,
@@ -24,11 +29,40 @@ pub struct NormalizedCommandReceipt {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NormalizedTestReceipt {
+    pub revision: Option<RevisionId>,
     pub passed: u64,
     pub failed: u64,
     pub production_instructions: u64,
     pub reference_expressions: u64,
     pub differential: &'static str,
+}
+
+impl NormalizedReferenceRead for RepositoryView {
+    fn binding(&self) -> Result<NormalizedReferenceBinding, ExecutionError> {
+        Ok(NormalizedReferenceBinding {
+            repository: self.current().head.repository_id,
+            package: self.package(),
+            revision: Some(self.revision()),
+            semantic_root: Some(self.current().accepted.semantic_root),
+        })
+    }
+
+    fn owner(&self, owner: OwnerKey) -> Result<NormalizedReferenceOwnerRead, ExecutionError> {
+        let read = RepositoryView::owner(self, owner).map_err(repository_execution_error)?;
+        Ok(NormalizedReferenceOwnerRead {
+            record: read.value,
+            work: NormalizedReferenceReadWork {
+                owner_reads: 1,
+                map_pages_read: read.work.map.pages_read,
+                objects_read: read.work.store.objects_read,
+                bytes_read: read
+                    .work
+                    .map
+                    .bytes_read
+                    .saturating_add(read.work.store.bytes_read),
+            },
+        })
+    }
 }
 
 /// Runs a pure command-like target through both implementation-disjoint execution tiers.
@@ -37,7 +71,7 @@ pub struct NormalizedTestReceipt {
 /// live adapter would duplicate externally visible work. Deployment runners must instead use one
 /// production tier and separately retained deterministic adapter evidence.
 pub fn run_pure_command(
-    snapshot: &KernelSnapshot,
+    authority: &dyn NormalizedReferenceRead,
     program: &NormalizedProgram,
     target_name: &Name,
     arguments_json: &[u8],
@@ -45,6 +79,8 @@ pub fn run_pure_command(
     json_limits: JsonLimits,
     control: &ExecutionControl,
 ) -> Result<NormalizedCommandReceipt, Diagnostic> {
+    let authority_binding = authority.binding().map_err(execution_diagnostic)?;
+    validate_authority_binding(program, authority_binding)?;
     let target = program.root_target(target_name).ok_or_else(|| {
         runner_error(
             DiagnosticClass::Source,
@@ -122,7 +158,7 @@ pub fn run_pure_command(
     let production = NormalizedVm::new(program, policy)
         .invoke_root_target(target_name, values.clone(), None, control)
         .map_err(execution_diagnostic)?;
-    let reference = NormalizedReferenceInterpreter::new(snapshot, program, policy)
+    let reference = NormalizedReferenceInterpreter::from_reader(authority, program, policy)
         .invoke_root_target(target_name, values, None, control)
         .map_err(execution_diagnostic)?;
     if production.0 != reference.0 {
@@ -135,6 +171,7 @@ pub fn run_pure_command(
     let result_json = encode_typed(program, &production.0, result_type, json_limits)?;
     Ok(NormalizedCommandReceipt {
         target: target_name.clone(),
+        revision: authority_binding.revision,
         result_json,
         production: production.1,
         reference: reference.1,
@@ -147,15 +184,18 @@ pub fn run_pure_command(
 /// A supplied capability set must be deterministic and replayable because each test executes once
 /// per tier. Production deployment adapters are not appropriate here.
 pub fn run_graph_tests(
-    snapshot: &KernelSnapshot,
+    authority: &dyn NormalizedReferenceRead,
     program: &NormalizedProgram,
     capabilities: Option<&NormalizedCapabilities>,
     policy: NormalizedRunPolicy,
     control: &ExecutionControl,
 ) -> Result<NormalizedTestReceipt, Diagnostic> {
+    let authority_binding = authority.binding().map_err(execution_diagnostic)?;
+    validate_authority_binding(program, authority_binding)?;
     let vm = NormalizedVm::new(program, policy);
-    let reference = NormalizedReferenceInterpreter::new(snapshot, program, policy);
+    let reference = NormalizedReferenceInterpreter::from_reader(authority, program, policy);
     let mut receipt = NormalizedTestReceipt {
+        revision: authority_binding.revision,
         passed: 0,
         failed: 0,
         production_instructions: 0,
@@ -238,6 +278,20 @@ fn function_type(
     Ok((parameters.clone(), *result))
 }
 
+fn validate_authority_binding(
+    program: &NormalizedProgram,
+    binding: NormalizedReferenceBinding,
+) -> Result<(), Diagnostic> {
+    if !binding.matches(program) {
+        return Err(runner_error(
+            DiagnosticClass::Infrastructure,
+            "normalized_reference_authority_binding",
+            "reference authority and executable artifact do not bind one exact accepted root",
+        ));
+    }
+    Ok(())
+}
+
 fn execution_diagnostic(error: ExecutionError) -> Diagnostic {
     let class = match error.class {
         ExecutionFailureClass::Trap => DiagnosticClass::Semantic,
@@ -255,6 +309,19 @@ fn execution_diagnostic(error: ExecutionError) -> Diagnostic {
             .push("external effects may already be visible".to_owned());
     }
     diagnostic
+}
+
+fn repository_execution_error(diagnostic: Diagnostic) -> ExecutionError {
+    let class = match diagnostic.class {
+        DiagnosticClass::Resource => ExecutionFailureClass::Resource,
+        DiagnosticClass::Cancelled => ExecutionFailureClass::Cancelled,
+        DiagnosticClass::Capability => ExecutionFailureClass::Capability,
+        DiagnosticClass::Source
+        | DiagnosticClass::Semantic
+        | DiagnosticClass::Corrupt
+        | DiagnosticClass::Infrastructure => ExecutionFailureClass::Infrastructure,
+    };
+    ExecutionError::new(class, diagnostic.code, diagnostic.message)
 }
 
 fn runner_error(

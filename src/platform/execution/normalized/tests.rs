@@ -6,7 +6,10 @@ use super::capability::{
 };
 use super::codec::{decode_typed, encode_typed};
 use super::prepare::{NormalizedFunctionBody, NormalizedInstruction, NormalizedProgram};
-use super::reference::NormalizedReferenceInterpreter;
+use super::reference::{
+    NormalizedReferenceBinding, NormalizedReferenceInterpreter, NormalizedReferenceOwnerRead,
+    NormalizedReferenceRead,
+};
 use super::runner::{run_graph_tests, run_pure_command};
 use super::value::NormalizedValue;
 use super::vm::{NormalizedRunPolicy, NormalizedVm};
@@ -20,8 +23,8 @@ use crate::platform::kernel::{
     TypeObject, TypeObjectDigest, encode_type_object,
 };
 use crate::platform::package::RunnerKind;
-use crate::platform::publication::GraphRepository;
-use crate::platform::semantic_id::{DeclarationId, PortId, TargetId};
+use crate::platform::publication::{GraphRepository, RepositoryView};
+use crate::platform::semantic_id::{DeclarationId, PortId, RevisionId, TargetId};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -48,6 +51,12 @@ fn declaration_named(
 }
 
 fn prepare_snapshot(snapshot: &crate::platform::kernel::KernelSnapshot) -> NormalizedProgram {
+    prepare_repository(snapshot).2
+}
+
+fn prepare_repository(
+    snapshot: &crate::platform::kernel::KernelSnapshot,
+) -> (tempfile::TempDir, GraphRepository, NormalizedProgram) {
     let temporary = tempfile::tempdir().expect("normalized runtime parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), snapshot, None)
         .expect("Graph 5 repository");
@@ -59,7 +68,8 @@ fn prepare_snapshot(snapshot: &crate::platform::kernel::KernelSnapshot) -> Norma
     let linked = link_artifact(&created.repository, compilation.manifest_digest, &[])
         .expect("Graph 5 artifact");
     let loaded = load_artifact(&linked.artifact.bytes).expect("strict Graph 5 artifact");
-    NormalizedProgram::prepare(loaded).expect("dense runtime preparation")
+    let program = NormalizedProgram::prepare(loaded).expect("dense runtime preparation");
+    (temporary, created.repository, program)
 }
 
 fn pure_command_snapshot() -> crate::platform::kernel::KernelSnapshot {
@@ -161,6 +171,20 @@ fn pure_command_snapshot() -> crate::platform::kernel::KernelSnapshot {
 struct UnitAdapter {
     interface: DeclarationReference,
     calls: Arc<AtomicU64>,
+}
+
+struct WrongRevisionReader<'a>(&'a RepositoryView);
+
+impl NormalizedReferenceRead for WrongRevisionReader<'_> {
+    fn binding(&self) -> Result<NormalizedReferenceBinding, ExecutionError> {
+        let mut binding = NormalizedReferenceRead::binding(self.0)?;
+        binding.revision = Some(RevisionId::from_digest([0x55; 32]));
+        Ok(binding)
+    }
+
+    fn owner(&self, owner: OwnerKey) -> Result<NormalizedReferenceOwnerRead, ExecutionError> {
+        NormalizedReferenceRead::owner(self.0, owner)
+    }
 }
 
 impl NormalizedCapabilityAdapter for UnitAdapter {
@@ -677,6 +701,7 @@ fn normalized_runners_execute_pure_commands_and_graph_owned_tests_differentially
     )
     .expect("pure command runs through both execution tiers");
     assert_eq!(receipt.target.as_str(), "pure");
+    assert_eq!(receipt.revision, None);
     assert_eq!(receipt.result_json, b"null");
     assert_eq!(receipt.differential, "equal");
     assert!(receipt.production.instructions > 0);
@@ -699,11 +724,73 @@ fn normalized_runners_execute_pure_commands_and_graph_owned_tests_differentially
 
     let tests = run_graph_tests(&snapshot, &program, None, policy, &control)
         .expect("graph-owned tests agree in both execution tiers");
+    assert_eq!(tests.revision, None);
     assert_eq!(tests.passed, 1);
     assert_eq!(tests.failed, 0);
     assert!(tests.production_instructions > 0);
     assert!(tests.reference_expressions > 0);
     assert_eq!(tests.differential, "equal");
+}
+
+#[test]
+fn normalized_reference_runner_uses_revision_pinned_owner_reads() {
+    let snapshot = pure_command_snapshot();
+    let (_temporary, repository, program) = prepare_repository(&snapshot);
+    let view = repository
+        .view_current()
+        .expect("exact normalized runner repository view");
+    let control = ExecutionControl::uncancelled();
+    let receipt = run_pure_command(
+        &view,
+        &program,
+        &Name::new("pure").unwrap(),
+        b"[]",
+        NormalizedRunPolicy::default(),
+        JsonLimits::default(),
+        &control,
+    )
+    .expect("revision-pinned pure command");
+
+    assert_eq!(receipt.revision, Some(view.revision()));
+    assert_eq!(receipt.result_json, b"null");
+    assert_eq!(receipt.reference.canonical_owner_reads, 7);
+    assert!(receipt.reference.canonical_owner_reads < snapshot.owners.len() as u64);
+    assert!(receipt.reference.canonical_map_pages_read > 0);
+    assert_eq!(
+        receipt.reference.canonical_objects_read,
+        receipt
+            .reference
+            .canonical_map_pages_read
+            .saturating_add(receipt.reference.canonical_owner_reads),
+        "each exact semantic read touches one bounded map path and one owner object"
+    );
+    assert!(receipt.reference.canonical_bytes_read > 0);
+
+    let tests = run_graph_tests(
+        &view,
+        &program,
+        None,
+        NormalizedRunPolicy::default(),
+        &control,
+    )
+    .expect("revision-pinned graph-owned tests");
+    assert_eq!(tests.revision, Some(view.revision()));
+    assert_eq!(tests.passed, 1);
+
+    assert_eq!(
+        run_pure_command(
+            &WrongRevisionReader(&view),
+            &program,
+            &Name::new("pure").unwrap(),
+            b"[]",
+            NormalizedRunPolicy::default(),
+            JsonLimits::default(),
+            &control,
+        )
+        .expect_err("foreign revision binding must reject before reference evaluation")
+        .code,
+        "normalized_reference_authority_binding"
+    );
 }
 
 #[test]
