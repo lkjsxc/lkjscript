@@ -3,6 +3,7 @@
 mod capability;
 mod codec;
 mod configuration;
+mod deployment;
 mod password;
 mod prepare;
 mod reference;

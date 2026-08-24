@@ -30,6 +30,26 @@ pub enum NormalizedAdapterKind {
     DurableQueuePostgres,
 }
 
+impl NormalizedAdapterKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Configuration => "configuration",
+            Self::WallClock => "wall-clock",
+            Self::SecureRandom => "secure-random",
+            Self::Identifier => "identifier",
+            Self::PasswordHash => "password-hash",
+            Self::SecretVerifier => "secret-verifier",
+            Self::ByteStream => "byte-stream",
+            Self::Postgres => "postgres",
+            Self::ObjectMemory => "object-memory",
+            Self::ObjectLocal => "object-local",
+            Self::ObjectS3 => "object-s3",
+            Self::DurableQueueMemory => "durable-queue-memory",
+            Self::DurableQueuePostgres => "durable-queue-postgres",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct NormalizedSharingDomain(Name);
 

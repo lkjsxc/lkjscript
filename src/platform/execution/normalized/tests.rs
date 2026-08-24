@@ -8,6 +8,9 @@ use super::capability::{
     NormalizedTransactionPolicy,
 };
 use super::codec::{decode_typed, encode_typed};
+use super::deployment::{
+    NormalizedAdapterDescriptor, NormalizedDeploymentGrant, NormalizedPreparedDeployment,
+};
 use super::prepare::{NormalizedFunctionBody, NormalizedInstruction, NormalizedProgram};
 use super::reference::{
     NormalizedReferenceBinding, NormalizedReferenceInterpreter, NormalizedReferenceOwnerRead,
@@ -29,6 +32,7 @@ use crate::platform::kernel::{
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::publication::{GraphRepository, RepositoryView};
+use crate::platform::secrets::SecretCatalog;
 use crate::platform::semantic_id::{DeclarationId, PortId, RevisionId, TargetId};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -170,6 +174,44 @@ fn pure_command_snapshot() -> crate::platform::kernel::KernelSnapshot {
         snapshot.root.owners.page(),
         snapshot.owners.len() as u64,
     );
+    snapshot
+}
+
+fn wall_clock_command_snapshot() -> crate::platform::kernel::KernelSnapshot {
+    let mut snapshot = crate::platform::kernel::tests::witness_snapshot();
+    let i64_object = TypeObject::new(TypeForm::I64).expect("I64 type object");
+    let (i64_type, _) = encode_type_object(&i64_object).expect("I64 type encoding");
+    snapshot.types.insert(i64_type, i64_object);
+    let function_object = TypeObject::new(TypeForm::Function {
+        parameters: Vec::new(),
+        result: i64_type,
+    })
+    .expect("wall-clock port type");
+    let (function_type, _) =
+        encode_type_object(&function_object).expect("wall-clock port type encoding");
+    snapshot.types.retain(|digest, object| {
+        !matches!(object.form, TypeForm::Function { .. }) || *digest == function_type
+    });
+    snapshot.types.insert(function_type, function_object);
+
+    for record in snapshot.owners.values_mut() {
+        match record {
+            OwnerRecord::Operation(operation) if operation.name.as_str() == "read" => {
+                operation.name = Name::new("utc-milliseconds").unwrap();
+                operation.result = i64_type;
+            }
+            OwnerRecord::Declaration(declaration) if declaration.name.as_str() == "caller" => {
+                let DeclarationPayload::Function(function) = &mut declaration.payload else {
+                    panic!("caller must remain a function")
+                };
+                function.result = i64_type;
+            }
+            OwnerRecord::Port(port) => {
+                port.function_type = function_type;
+            }
+            _ => {}
+        }
+    }
     snapshot
 }
 
@@ -863,6 +905,103 @@ fn normalized_runners_execute_pure_commands_and_graph_owned_tests_differentially
     assert!(tests.production_instructions > 0);
     assert!(tests.reference_expressions > 0);
     assert_eq!(tests.differential, "equal");
+}
+
+#[test]
+fn normalized_deployment_resolves_and_runs_one_exact_effect_adapter() {
+    let snapshot = wall_clock_command_snapshot();
+    let (_temporary, repository, program) = prepare_repository(&snapshot);
+    let target_name = Name::new("command").unwrap();
+    let target = program
+        .root_target(&target_name)
+        .expect("wall-clock command target");
+    let requirement_index = program.components[target.component.0 as usize].requirements[0];
+    let requirement = &program.requirements[requirement_index.0 as usize];
+    let grant = NormalizedDeploymentGrant {
+        requirement: requirement.reference,
+        sharing_domain: NormalizedSharingDomain::new("command-test").unwrap(),
+        authority_revision: NormalizedGrantAuthorityRevision::of(b"deployment revision one"),
+        limits: exact_grant_limits(requirement, 1),
+        adapter: NormalizedAdapterDescriptor::WallClock,
+    };
+    let secrets = SecretCatalog::from_environment(&[]).expect("empty exact secret catalog");
+    let deployment = NormalizedPreparedDeployment::prepare(
+        &program,
+        target_name.clone(),
+        vec![grant.clone()],
+        &secrets,
+    )
+    .expect("exact normalized deployment");
+    let repeated = NormalizedPreparedDeployment::prepare(
+        &program,
+        target_name.clone(),
+        vec![grant.clone()],
+        &secrets,
+    )
+    .expect("deterministic normalized deployment descriptor");
+    let mut changed_grant = grant.clone();
+    changed_grant.sharing_domain = NormalizedSharingDomain::new("other-domain").unwrap();
+    let changed =
+        NormalizedPreparedDeployment::prepare(&program, target_name, vec![changed_grant], &secrets)
+            .expect("changed normalized deployment descriptor");
+    let mut incompatible_grant = grant;
+    incompatible_grant.adapter = NormalizedAdapterDescriptor::Identifier;
+    assert_eq!(
+        NormalizedPreparedDeployment::prepare(
+            &program,
+            Name::new("command").unwrap(),
+            vec![incompatible_grant],
+            &secrets,
+        )
+        .expect_err("adapter must match exact graph operation names and signatures")
+        .code,
+        "normalized_deployment_adapter_operation"
+    );
+
+    assert_eq!(deployment.target().as_str(), "command");
+    assert_eq!(deployment.observation(), repeated.observation());
+    let observation = deployment
+        .observation()
+        .grants
+        .get(&requirement.reference)
+        .expect("exact observed requirement grant");
+    assert_eq!(observation.adapter_kind, NormalizedAdapterKind::WallClock);
+    assert_eq!(observation.adapter_kind.as_str(), "wall-clock");
+    assert_ne!(
+        observation.descriptor_digest,
+        changed
+            .observation()
+            .grants
+            .get(&requirement.reference)
+            .expect("changed exact requirement grant")
+            .descriptor_digest
+    );
+
+    let view = repository
+        .view_current()
+        .expect("wall-clock revision-pinned view");
+    assert_eq!(deployment.observation().revision, view.revision());
+    assert_eq!(
+        deployment.observation().semantic_root,
+        program.root_semantic_root
+    );
+    let receipt = run_effectful_command(
+        &view,
+        &program,
+        deployment.target(),
+        b"[]",
+        deployment.capabilities(),
+        NormalizedCommandPolicy::default(),
+        &ExecutionControl::uncancelled(),
+    )
+    .expect("one exact normalized wall-clock execution");
+    let milliseconds = std::str::from_utf8(&receipt.result_json)
+        .expect("wall-clock JSON UTF-8")
+        .parse::<i64>()
+        .expect("wall-clock JSON integer");
+    assert!(milliseconds > 0);
+    assert_eq!(receipt.production.capability_calls, 1);
+    assert_eq!(receipt.verification, "production_only_live_effects");
 }
 
 #[test]
