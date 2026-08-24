@@ -1,13 +1,13 @@
 //! Locally derived witness deltas from changed canonical owner records.
 
-use super::{CanonicalDelta, KernelOverlay};
+use super::{CanonicalDelta, KernelOverlay, WitnessBaseRead, WitnessReadWork};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     ExactOwnerKey, OwnerKey, OwnerRecord, RelationEdge, RelationEndpoint, RelationKind,
     extract_owner_relations, owner_namespace,
 };
 use crate::platform::witness::{
-    FullWitness, NamespaceKey, OwnershipEntry, OwnershipParent, ownership_contributions,
+    NamespaceKey, OwnershipEntry, OwnershipParent, ownership_contributions,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Debug;
@@ -31,16 +31,18 @@ pub struct DerivedDelta {
     pub ownership: Vec<DerivedValueEdit<OwnerKey, OwnershipEntry>>,
     pub relations: RelationDelta,
     pub summary_candidates: BTreeSet<OwnerKey>,
+    pub read_work: WitnessReadWork,
 }
 
-pub fn derive_local_delta(
+pub fn derive_local_delta<W: WitnessBaseRead + ?Sized>(
     base: &crate::platform::kernel::KernelSnapshot,
     overlay: &KernelOverlay<'_>,
     delta: &CanonicalDelta,
-    base_witness: &FullWitness,
+    base_witness: &W,
 ) -> Result<DerivedDelta, Diagnostic> {
-    if base_witness.manifest.repository_id != base.root.repository_id
-        || base_witness.manifest.package_id != base.root.package_id
+    if !base_witness.witness_contract_is_current()
+        || base_witness.witness_repository_id() != base.root.repository_id
+        || base_witness.witness_package_id() != base.root.package_id
     {
         return Err(derived_error(
             DiagnosticClass::Corrupt,
@@ -55,6 +57,7 @@ pub fn derive_local_delta(
     let mut after_ownership = BTreeMap::new();
     let mut before_relations = BTreeSet::new();
     let mut after_relations = BTreeSet::new();
+    let mut witness = CachedWitness::new(base_witness);
 
     for (owner, edit) in &delta.owners {
         if edit.before.is_some() {
@@ -95,18 +98,14 @@ pub fn derive_local_delta(
         }
     }
 
-    let namespaces = contribution_edits(
-        &base_witness.entries.namespaces,
-        &before_namespaces,
-        &after_namespaces,
-        "namespace",
-    )?;
-    let ownership = contribution_edits(
-        &base_witness.entries.ownership,
-        &before_ownership,
-        &after_ownership,
-        "ownership",
-    )?;
+    let namespaces =
+        contribution_edits(&before_namespaces, &after_namespaces, "namespace", |key| {
+            witness.namespace(key)
+        })?;
+    let ownership =
+        contribution_edits(&before_ownership, &after_ownership, "ownership", |owner| {
+            witness.ownership(*owner)
+        })?;
     let removed = before_relations
         .difference(&after_relations)
         .copied()
@@ -116,7 +115,7 @@ pub fn derive_local_delta(
         .copied()
         .collect::<BTreeSet<_>>();
     for edge in &removed {
-        if base_witness.entries.relations.binary_search(edge).is_err() {
+        if !witness.contains_relation(*edge)? {
             return Err(derived_error(
                 DiagnosticClass::Corrupt,
                 "change_relation_before",
@@ -131,13 +130,14 @@ pub fn derive_local_delta(
         &ownership,
         &removed,
         &added,
-        base_witness,
-    );
+        &mut witness,
+    )?;
     Ok(DerivedDelta {
         namespaces,
         ownership,
         relations: RelationDelta { removed, added },
         summary_candidates,
+        read_work: witness.work,
     })
 }
 
@@ -183,10 +183,10 @@ fn insert_ownership_contributions(
 }
 
 fn contribution_edits<K, V>(
-    base: &BTreeMap<K, V>,
     before: &BTreeMap<K, V>,
     after: &BTreeMap<K, V>,
     label: &str,
+    mut read: impl FnMut(&K) -> Result<Option<V>, Diagnostic>,
 ) -> Result<Vec<DerivedValueEdit<K, V>>, Diagnostic>
 where
     K: Clone + Debug + Ord,
@@ -199,7 +199,7 @@ where
         .collect::<BTreeSet<_>>();
     let mut edits = Vec::new();
     for key in keys {
-        let observed = base.get(&key).cloned();
+        let observed = read(&key)?;
         let mut candidate = observed.clone();
         if let Some(expected) = before.get(&key) {
             if candidate.as_ref() != Some(expected) {
@@ -243,14 +243,14 @@ fn package_dependency(
     }
 }
 
-fn summary_candidates(
+fn summary_candidates<W: WitnessBaseRead + ?Sized>(
     package: crate::platform::kernel::PackageId,
     delta: &CanonicalDelta,
     ownership: &[DerivedValueEdit<OwnerKey, OwnershipEntry>],
     removed_relations: &BTreeSet<RelationEdge>,
     added_relations: &BTreeSet<RelationEdge>,
-    witness: &FullWitness,
-) -> BTreeSet<OwnerKey> {
+    witness: &mut CachedWitness<'_, W>,
+) -> Result<BTreeSet<OwnerKey>, Diagnostic> {
     let candidate_edits = ownership
         .iter()
         .map(|edit| (edit.key, edit.after))
@@ -272,32 +272,28 @@ fn summary_candidates(
     ));
     let mut affected = BTreeSet::new();
     for seed in seeds {
-        walk_summary_ancestors(
-            seed,
-            |owner| witness.entries.ownership.get(&owner).copied(),
-            &mut affected,
-        );
+        walk_summary_ancestors(seed, |owner| witness.ownership(owner), &mut affected)?;
         walk_summary_ancestors(
             seed,
             |owner| match candidate_edits.get(&owner) {
-                Some(candidate) => *candidate,
-                None => witness.entries.ownership.get(&owner).copied(),
+                Some(candidate) => Ok(*candidate),
+                None => witness.ownership(owner),
             },
             &mut affected,
-        );
+        )?;
     }
-    affected
+    Ok(affected)
 }
 
 fn walk_summary_ancestors(
     seed: OwnerKey,
-    mut ownership: impl FnMut(OwnerKey) -> Option<OwnershipEntry>,
+    mut ownership: impl FnMut(OwnerKey) -> Result<Option<OwnershipEntry>, Diagnostic>,
     affected: &mut BTreeSet<OwnerKey>,
-) {
+) -> Result<(), Diagnostic> {
     let mut current = seed;
     loop {
         affected.insert(current);
-        let Some(entry) = ownership(current) else {
+        let Some(entry) = ownership(current)? else {
             break;
         };
         if !entry.role.aggregates_into_parent() {
@@ -307,6 +303,54 @@ fn walk_summary_ancestors(
             break;
         };
         current = parent;
+    }
+    Ok(())
+}
+
+struct CachedWitness<'a, W: ?Sized> {
+    base: &'a W,
+    namespaces: BTreeMap<NamespaceKey, Option<OwnerKey>>,
+    ownership: BTreeMap<OwnerKey, Option<OwnershipEntry>>,
+    relations: BTreeMap<RelationEdge, bool>,
+    work: WitnessReadWork,
+}
+
+impl<'a, W: WitnessBaseRead + ?Sized> CachedWitness<'a, W> {
+    fn new(base: &'a W) -> Self {
+        Self {
+            base,
+            namespaces: BTreeMap::new(),
+            ownership: BTreeMap::new(),
+            relations: BTreeMap::new(),
+            work: WitnessReadWork::default(),
+        }
+    }
+
+    fn namespace(&mut self, key: &NamespaceKey) -> Result<Option<OwnerKey>, Diagnostic> {
+        if !self.namespaces.contains_key(key) {
+            let read = self.base.read_namespace(key)?;
+            self.work.add(read.work);
+            self.namespaces.insert(key.clone(), read.value);
+        }
+        Ok(self.namespaces.get(key).copied().flatten())
+    }
+
+    fn ownership(&mut self, owner: OwnerKey) -> Result<Option<OwnershipEntry>, Diagnostic> {
+        if !self.ownership.contains_key(&owner) {
+            let read = self.base.read_ownership(owner)?;
+            self.work.add(read.work);
+            self.ownership.insert(owner, read.value);
+        }
+        Ok(self.ownership.get(&owner).copied().flatten())
+    }
+
+    fn contains_relation(&mut self, edge: RelationEdge) -> Result<bool, Diagnostic> {
+        if !self.relations.contains_key(&edge) {
+            let read = self.base.contains_forward_relation(edge)?;
+            self.work.add(read.work);
+            self.relations.insert(edge, read.value);
+        }
+        Ok(self.relations.get(&edge).copied().unwrap_or(false))
     }
 }
 

@@ -1,7 +1,10 @@
 //! Revision-pinned, bounded reads over accepted Graph 5 authority and its committed witness.
 
 use super::CurrentPublication;
-use crate::platform::change::{CanonicalBaseRead, CanonicalRead, CanonicalReadWork};
+use crate::platform::change::{
+    CanonicalBaseRead, CanonicalRead, CanonicalReadWork, WitnessBaseRead, WitnessRead,
+    WitnessReadWork,
+};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     DependencyRecord, EncodedOwnerKey, OwnerKey, OwnerRecord, PackageId, RelationEdge,
@@ -232,6 +235,28 @@ impl RepositoryView {
         Ok(self.read(Some(summary), work))
     }
 
+    pub fn contains_forward_relation(
+        &self,
+        edge: RelationEdge,
+    ) -> Result<RevisionRead<bool>, Diagnostic> {
+        let mut work = RepositoryReadWork::default();
+        let value = self.lookup_map(
+            self.current.witness.roots.forward_relations,
+            &crate::platform::witness::forward_relation_key(edge),
+            &mut work,
+        )?;
+        if value.as_ref().is_some_and(|bytes| !bytes.is_empty()) {
+            return Err(read_error(
+                DiagnosticClass::Corrupt,
+                "publication_relation_value",
+                "relation witness entry has a nonempty value",
+            ));
+        }
+        work.witness_records_decoded = u64::from(value.is_some());
+        work.items_returned = u64::from(value.is_some());
+        Ok(self.read(value.is_some(), work))
+    }
+
     pub fn outgoing_relations(
         &self,
         source: RelationEndpoint,
@@ -455,6 +480,41 @@ impl CanonicalBaseRead for RepositoryView {
     }
 }
 
+impl WitnessBaseRead for RepositoryView {
+    fn witness_repository_id(&self) -> crate::platform::semantic_id::RepositoryId {
+        self.current.witness.repository_id
+    }
+
+    fn witness_package_id(&self) -> PackageId {
+        self.current.witness.package_id
+    }
+
+    fn witness_contract_is_current(&self) -> bool {
+        self.current.witness.contract_is_current()
+    }
+
+    fn read_namespace(
+        &self,
+        key: &NamespaceKey,
+    ) -> Result<WitnessRead<Option<OwnerKey>>, Diagnostic> {
+        RepositoryView::namespace(self, key).map(witness_read)
+    }
+
+    fn read_ownership(
+        &self,
+        owner: OwnerKey,
+    ) -> Result<WitnessRead<Option<OwnershipEntry>>, Diagnostic> {
+        RepositoryView::ownership(self, owner).map(witness_read)
+    }
+
+    fn contains_forward_relation(
+        &self,
+        edge: RelationEdge,
+    ) -> Result<WitnessRead<bool>, Diagnostic> {
+        RepositoryView::contains_forward_relation(self, edge).map(witness_read)
+    }
+}
+
 fn canonical_read<T>(read: RevisionRead<T>) -> CanonicalRead<T> {
     CanonicalRead {
         value: read.value,
@@ -466,6 +526,21 @@ fn canonical_read<T>(read: RevisionRead<T>) -> CanonicalRead<T> {
             objects_read: read.work.store.objects_read,
             bytes_read: read.work.store.bytes_read,
             canonical_records_decoded: read.work.canonical_records_decoded,
+        },
+    }
+}
+
+fn witness_read<T>(read: RevisionRead<T>) -> WitnessRead<T> {
+    WitnessRead {
+        value: read.value,
+        work: WitnessReadWork {
+            point_reads: 1,
+            map_pages_read: read.work.map.pages_read,
+            map_entries_visited: read.work.map.entries_visited,
+            catalog_lookups: read.work.store.catalog_lookups,
+            objects_read: read.work.store.objects_read,
+            bytes_read: read.work.store.bytes_read,
+            witness_records_decoded: read.work.witness_records_decoded,
         },
     }
 }

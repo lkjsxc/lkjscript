@@ -1,5 +1,7 @@
 use super::*;
-use crate::platform::change::{CanonicalDelta, PrimitiveEdit, prepare_change_analysis};
+use crate::platform::change::{
+    CanonicalDelta, KernelOverlay, PrimitiveEdit, derive_local_delta, prepare_change_analysis,
+};
 use crate::platform::kernel::{
     DeclarationPayload, ExactOwnerKey, ExpressionOperation, Name, NamespaceClass, OwnerKey,
     OwnerRecord, PackageId, RelationEndpoint, encode_owner,
@@ -268,6 +270,56 @@ fn canonical_normalization_reads_only_touched_repository_keys() {
         repository.work.objects_read,
         repository.work.map_pages_read + 1,
         "normalization must read owner and retirement map paths plus only the selected owner"
+    );
+}
+
+#[test]
+fn local_derived_delta_reads_only_affected_witness_keys() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let view = created.repository.view_current().expect("pinned view");
+    let callee = owner_named(&created.initial.snapshot, "callee");
+    let mut replacement = created.initial.snapshot.owners[&callee].clone();
+    let OwnerRecord::Declaration(declaration) = &mut replacement else {
+        panic!("callee must be a declaration")
+    };
+    declaration.name = Name::new("repository_derived").unwrap();
+    let expected = encode_owner(&created.initial.snapshot.owners[&callee])
+        .expect("base owner encoding")
+        .0;
+    let canonical = CanonicalDelta::normalize_from(
+        &view,
+        vec![PrimitiveEdit::ReplaceOwner {
+            expected,
+            record: replacement,
+        }],
+    )
+    .expect("repository-backed normalization")
+    .canonical;
+    let overlay = KernelOverlay::new(&created.initial.snapshot, &canonical);
+
+    let repository = derive_local_delta(&created.initial.snapshot, &overlay, &canonical, &view)
+        .expect("repository-backed derived delta");
+    let oracle = derive_local_delta(
+        &created.initial.snapshot,
+        &overlay,
+        &canonical,
+        &created.initial.witness,
+    )
+    .expect("in-memory derived oracle");
+    assert_eq!(repository.namespaces, oracle.namespaces);
+    assert_eq!(repository.ownership, oracle.ownership);
+    assert_eq!(repository.relations, oracle.relations);
+    assert_eq!(repository.summary_candidates, oracle.summary_candidates);
+    assert_eq!(repository.read_work.point_reads, 4);
+    assert_eq!(repository.read_work.witness_records_decoded, 3);
+    assert!(repository.read_work.map_pages_read > 0);
+    assert!(repository.read_work.map_pages_read < 48);
+    assert_eq!(
+        repository.read_work.objects_read, repository.read_work.map_pages_read,
+        "derived rename analysis must read only witness map paths, not unrelated objects"
     );
 }
 

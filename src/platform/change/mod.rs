@@ -22,7 +22,10 @@ pub use authority::{
     CanonicalMapEditCounts, FullStagedAuthority, PreparedAuthority, SemanticAuthority,
     WitnessAuthority, stage_full_authority, stage_prepared_authority,
 };
-pub use base_read::{CanonicalBaseRead, CanonicalRead, CanonicalReadWork};
+pub use base_read::{
+    CanonicalBaseRead, CanonicalRead, CanonicalReadWork, WitnessBaseRead, WitnessRead,
+    WitnessReadWork,
+};
 pub use delta::{CanonicalDelta, CanonicalNormalization, ExactEdit, PrimitiveEdit};
 pub use derived::{DerivedDelta, DerivedValueEdit, RelationDelta, derive_local_delta};
 pub use impact::{
