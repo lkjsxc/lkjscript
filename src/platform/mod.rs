@@ -31,6 +31,11 @@ pub mod language;
 pub mod meaning;
 pub mod object;
 pub mod package;
+#[allow(
+    dead_code,
+    reason = "Graph 5 package objects remain private until repository publication cuts over"
+)]
+pub(crate) mod package_object;
 pub(crate) mod packed;
 pub mod persistent_map;
 #[allow(

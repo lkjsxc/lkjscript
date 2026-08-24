@@ -27,17 +27,17 @@ pub use prepare::{
     prepare_change_publication, prepare_initial_publication,
 };
 pub use read_view::{
-    MAXIMUM_RELATION_READ_ITEMS, MAXIMUM_TEST_DEPENDENCY_READ_ITEMS, PreparedAuthoredPublication,
-    RelationRead, RepositoryReadWork, RepositoryView, RevisionRead, RevisionWitnessMapUpdate,
-    TestDependencyRead,
+    ExportedPackageObject, MAXIMUM_RELATION_READ_ITEMS, MAXIMUM_TEST_DEPENDENCY_READ_ITEMS,
+    PreparedAuthoredPublication, RelationRead, RepositoryReadWork, RepositoryView, RevisionRead,
+    RevisionWitnessMapUpdate, TestDependencyRead,
 };
 pub use receipt::{
     ChangeCounts, FullOracleStatus, PublicationReceipt, PublicationStatus, ValidationEvidence,
     ValidationProfile, WorkObservation,
 };
 pub use repository::{
-    CreatedRepository, CurrentPublication, GraphRepository, PublicationOutcome, PublicationPoint,
-    ReconciliationStatus,
+    CreatedRepository, CurrentPublication, GraphRepository, PackageObjectStageReceipt,
+    PublicationOutcome, PublicationPoint, ReconciliationStatus,
 };
 pub use revision::{AcceptedBinding, HeadRecord, ParentRevision, RevisionCore, RevisionRecord};
 pub use transaction::{

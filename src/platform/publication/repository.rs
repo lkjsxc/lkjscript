@@ -11,10 +11,12 @@ use super::{
 use crate::platform::change::{AuthoredChangeSet, PrimitiveEdit};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{KernelSnapshot, SemanticRoot, decode_root, encode_root};
+use crate::platform::package_object::{PackageObject, validate_package_object_closure};
 use crate::platform::storage::contract::TARGET_PACK_BYTES;
 use crate::platform::storage::directory::{PackDirectoryStore, SealReceipt};
 use crate::platform::storage::object::{
-    ImmutableObjectStore, ObjectDomain, ObjectKey, StoreError, StoreErrorClass, StoreWork,
+    ImmutableObjectStore, ObjectDomain, ObjectKey, StageOutcome, StoreError, StoreErrorClass,
+    StoreWork,
 };
 use crate::platform::witness::{
     ValidationWitnessManifest, decode_witness_manifest, encode_witness_manifest,
@@ -53,6 +55,17 @@ pub struct CreatedRepository {
     pub repository: GraphRepository,
     pub initial: PreparedInitialPublication,
     pub current: CurrentPublication,
+}
+
+#[derive(Clone, Debug)]
+pub struct PackageObjectStageReceipt {
+    pub package: crate::platform::kernel::PackageId,
+    pub semantic_revision: crate::platform::semantic_id::RevisionId,
+    pub package_object: crate::platform::kernel::PackageObjectDigest,
+    pub outcome: StageOutcome,
+    pub seal: SealReceipt,
+    pub current_revision: crate::platform::semantic_id::RevisionId,
+    pub work: StoreWork,
 }
 
 #[derive(Clone, Debug)]
@@ -210,6 +223,85 @@ impl GraphRepository {
 
     pub fn object_store(&self) -> Result<PackDirectoryStore, Diagnostic> {
         PackDirectoryStore::open(&self.root).map_err(store_diagnostic)
+    }
+
+    pub fn export_package_object(
+        &self,
+    ) -> Result<super::read_view::ExportedPackageObject, Diagnostic> {
+        self.view_current()?.export_package_object()
+    }
+
+    /// Stages one exact Graph 5 package object as unreachable operational data. The repository
+    /// lock serializes pack/catalog mutation, while the accepted HEAD is read before and after and
+    /// is never replaced by this operation.
+    pub fn stage_package_object(
+        &self,
+        bytes: &[u8],
+    ) -> Result<PackageObjectStageReceipt, Diagnostic> {
+        let digest = crate::platform::kernel::PackageObjectDigest::of(bytes);
+        let object = PackageObject::decode(bytes, digest)?;
+        let root_directory = open_directory(&self.root)?;
+        let lock = open_lock(&root_directory)?;
+        FileExt::lock_exclusive(&lock)
+            .map_err(|error| io_diagnostic("publication_package_stage_lock", &self.root, error))?;
+        let mut store = PackDirectoryStore::open(&self.root).map_err(store_diagnostic)?;
+        let before = read_current_optional(&root_directory, &store)?.ok_or_else(|| {
+            repository_error(
+                DiagnosticClass::Source,
+                "publication_repository_unpublished",
+                "Graph 5 repository has no accepted HEAD",
+            )
+        })?;
+        let mut work = StoreWork::default();
+        let outcome = store
+            .stage(
+                ObjectKey::from_digest(ObjectDomain::PackageObject, digest.bytes()),
+                bytes,
+                &mut work,
+            )
+            .map_err(store_diagnostic)?;
+        let validated = validate_package_object_closure(&store, digest, None, &mut work)?;
+        if validated != object {
+            return Err(repository_error(
+                DiagnosticClass::Corrupt,
+                "publication_package_stage_validation",
+                "staged package object changed during exact closure validation",
+            ));
+        }
+        let seal = store
+            .seal_staged(TARGET_PACK_BYTES, &mut work)
+            .map_err(store_diagnostic)?;
+        let verified = validate_package_object_closure(&store, digest, None, &mut work)?;
+        if verified != object {
+            return Err(repository_error(
+                DiagnosticClass::Corrupt,
+                "publication_package_stage_verify",
+                "sealed package object disagrees with its validated staging bytes",
+            ));
+        }
+        let after = read_current_optional(&root_directory, &store)?.ok_or_else(|| {
+            repository_error(
+                DiagnosticClass::Corrupt,
+                "publication_package_stage_head_missing",
+                "package staging made the accepted HEAD unreadable",
+            )
+        })?;
+        if after.head != before.head {
+            return Err(repository_error(
+                DiagnosticClass::Corrupt,
+                "publication_package_stage_head_changed",
+                "operational package staging changed accepted authority",
+            ));
+        }
+        Ok(PackageObjectStageReceipt {
+            package: object.package,
+            semantic_revision: object.semantic_revision,
+            package_object: digest,
+            outcome,
+            seal,
+            current_revision: after.head.revision,
+            work,
+        })
     }
 
     pub fn current(&self) -> Result<CurrentPublication, Diagnostic> {

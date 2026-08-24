@@ -18,19 +18,23 @@ use crate::platform::kernel::{
     decode_retirement, decode_retirement_binding, decode_type_object, dependency_map_key,
     owner_map_key, retirement_map_key,
 };
+use crate::platform::package_object::{
+    MAXIMUM_PACKAGE_OBJECT_DEPENDENCIES, PackageObject, validate_package_object_closure,
+};
 use crate::platform::persistent_map::{MapError, MapErrorClass, MapRoot, MapWork, PersistentMap};
 use crate::platform::semantic_id::RevisionId;
 use crate::platform::storage::directory::PackDirectoryStore;
 use crate::platform::storage::object::{
-    ImmutableObjectStore, ObjectDomain, ObjectKey, StoreError, StoreErrorClass, StoreWork,
+    ImmutableObjectStore, ObjectDomain, ObjectKey, ObjectStage, StoreError, StoreErrorClass,
+    StoreWork,
 };
 use crate::platform::storage::page_store::ObjectPageReader;
 use crate::platform::witness::{
     MAXIMUM_TEST_DEPENDENCY_PREFIX_ITEMS, NamespaceKey, OwnerSummary, OwnershipEntry,
     SummaryBinding, TestDependency, decode_forward_relation_key, decode_owner_summary,
     decode_ownership, decode_reverse_relation_key, decode_test_dependency_forward_key,
-    forward_relation_prefix, owner_key_bytes, reverse_relation_prefix,
-    test_dependency_forward_prefix,
+    forward_relation_prefix, owner_key_bytes, reverse_relation_package_owner_prefix,
+    reverse_relation_prefix, test_dependency_forward_prefix,
 };
 use std::collections::BTreeMap;
 
@@ -73,6 +77,15 @@ pub struct RevisionWitnessMapUpdate {
     pub revision: RevisionId,
     pub update: WitnessMapUpdate,
     pub store_work: StoreWork,
+}
+
+#[derive(Clone, Debug)]
+pub struct ExportedPackageObject {
+    pub object: PackageObject,
+    pub digest: crate::platform::kernel::PackageObjectDigest,
+    pub bytes: Vec<u8>,
+    pub read_work: RepositoryReadWork,
+    pub closure_work: StoreWork,
 }
 
 /// One fully validated authored request plus its exact request-local identity allocation.
@@ -254,6 +267,103 @@ impl RepositoryView {
         Ok(self.read(Some(record), work))
     }
 
+    /// Builds one exact package descriptor from the pinned accepted revision. This explicit
+    /// export may enumerate direct dependencies, but it does not reconstruct owner authority.
+    pub fn export_package_object(&self) -> Result<ExportedPackageObject, Diagnostic> {
+        let dependencies = self.package_dependencies()?;
+        let object = PackageObject {
+            contract_version: crate::platform::package_object::PACKAGE_OBJECT_CONTRACT_VERSION,
+            graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+            repository_id: self.current.semantic_root.repository_id,
+            package: self.current.semantic_root.package_id,
+            semantic_revision: self.current.head.revision,
+            semantic_root: self.current.accepted.semantic_root,
+            validation_witness: self.current.accepted.validation_witness,
+            witness: self.current.witness.clone(),
+            dependencies: dependencies.value,
+        };
+        let (digest, bytes) = object.encode()?;
+        let mut stage = ObjectStage::new(&self.store);
+        let mut closure_work = StoreWork::default();
+        stage
+            .stage(
+                ObjectKey::from_digest(ObjectDomain::PackageObject, digest.bytes()),
+                &bytes,
+                &mut closure_work,
+            )
+            .map_err(store_diagnostic)?;
+        let validated = validate_package_object_closure(&stage, digest, None, &mut closure_work)?;
+        if validated != object {
+            return Err(read_error(
+                DiagnosticClass::Corrupt,
+                "publication_package_object_export",
+                "exported package object changed during exact closure validation",
+            ));
+        }
+        Ok(ExportedPackageObject {
+            object,
+            digest,
+            bytes,
+            read_work: dependencies.work,
+            closure_work,
+        })
+    }
+
+    fn package_dependencies(&self) -> Result<RevisionRead<Vec<DependencyRecord>>, Diagnostic> {
+        let count = self.current.semantic_root.dependencies.entries();
+        if count > MAXIMUM_PACKAGE_OBJECT_DEPENDENCIES as u64 {
+            return Err(read_error(
+                DiagnosticClass::Resource,
+                "publication_package_dependency_count",
+                format!(
+                    "package has {count} dependencies; current package-object export supports at most {MAXIMUM_PACKAGE_OBJECT_DEPENDENCIES}"
+                ),
+            ));
+        }
+        let reader = ObjectPageReader::new(&self.store);
+        let mut map_work = MapWork::default();
+        let mut bindings = Vec::with_capacity(count as usize);
+        PersistentMap::from_root(self.current.semantic_root.dependencies)
+            .for_each(&reader, &mut map_work, |key, value| {
+                bindings.push((key.to_vec(), value.to_vec()));
+                Ok(())
+            })
+            .map_err(map_diagnostic)?;
+        let mut work = RepositoryReadWork {
+            map: map_work,
+            store: reader.work(),
+            ..RepositoryReadWork::default()
+        };
+        let mut dependencies = Vec::with_capacity(bindings.len());
+        for (key, binding_bytes) in bindings {
+            let package_bytes: [u8; 16] = key.try_into().map_err(|_| {
+                read_error(
+                    DiagnosticClass::Corrupt,
+                    "publication_package_dependency_key",
+                    "dependency map contains a noncanonical package key",
+                )
+            })?;
+            let package = PackageId::from_bytes(package_bytes).ok_or_else(|| {
+                read_error(
+                    DiagnosticClass::Corrupt,
+                    "publication_package_dependency_key",
+                    "dependency map contains the reserved all-zero package identity",
+                )
+            })?;
+            let binding = decode_dependency_binding(&binding_bytes)?;
+            let bytes = self.read_required_object(
+                ObjectDomain::Dependency,
+                binding.object.bytes(),
+                "package export found a missing dependency object",
+                &mut work,
+            )?;
+            dependencies.push(decode_dependency(&bytes, &package, binding.object)?);
+        }
+        work.canonical_records_decoded = dependencies.len() as u64;
+        work.items_returned = dependencies.len() as u64;
+        Ok(self.read(dependencies, work))
+    }
+
     pub fn retirement(
         &self,
         owner: OwnerKey,
@@ -417,6 +527,75 @@ impl RepositoryView {
         maximum_items: usize,
     ) -> Result<RevisionRead<RelationRead>, Diagnostic> {
         self.relations(target, kind, maximum_items, true)
+    }
+
+    pub fn incoming_package_relations(
+        &self,
+        package: PackageId,
+        maximum_items: usize,
+    ) -> Result<RevisionRead<RelationRead>, Diagnostic> {
+        if maximum_items == 0 || maximum_items > MAXIMUM_RELATION_READ_ITEMS {
+            return Err(read_error(
+                DiagnosticClass::Resource,
+                "publication_relation_item_budget",
+                format!("relation item budget must be 1 through {MAXIMUM_RELATION_READ_ITEMS}"),
+            ));
+        }
+        let prefix = reverse_relation_package_owner_prefix(package);
+        let mut work = RepositoryReadWork::default();
+        let mut keys = Vec::with_capacity(maximum_items.min(64));
+        let mut truncated = false;
+        let reader = ObjectPageReader::new(&self.store);
+        let mut map_work = MapWork::default();
+        let result = PersistentMap::from_root(self.current.witness.roots.reverse_relations)
+            .for_each_prefix(&reader, &prefix, &mut map_work, |key, value| {
+                if !value.is_empty() {
+                    return Err(MapError {
+                        class: MapErrorClass::Corrupt,
+                        code: "publication_relation_value",
+                        message: "relation witness entry has a nonempty value".to_owned(),
+                    });
+                }
+                if keys.len() == maximum_items {
+                    truncated = true;
+                    return Err(MapError {
+                        class: MapErrorClass::Resource,
+                        code: RELATION_LIMIT_STOP,
+                        message: "bounded package-relation prefix has more matching entries"
+                            .to_owned(),
+                    });
+                }
+                keys.push(key.to_vec());
+                Ok(())
+            });
+        work.map = map_work;
+        work.store = reader.work();
+        if let Err(error) = result
+            && error.code != RELATION_LIMIT_STOP
+        {
+            return Err(map_diagnostic(error));
+        }
+        let mut edges = Vec::with_capacity(keys.len());
+        for key in keys {
+            let edge = decode_reverse_relation_key(&key)?;
+            if !matches!(
+                edge.target,
+                RelationEndpoint::Owner(crate::platform::kernel::ExactOwnerKey {
+                    package: target_package,
+                    ..
+                }) if target_package == package
+            ) {
+                return Err(read_error(
+                    DiagnosticClass::Corrupt,
+                    "publication_relation_package_prefix",
+                    "decoded relation does not agree with its selected package prefix",
+                ));
+            }
+            edges.push(edge);
+        }
+        work.items_returned = edges.len() as u64;
+        work.witness_records_decoded = edges.len() as u64;
+        Ok(self.read(RelationRead { edges, truncated }, work))
     }
 
     pub fn test_dependencies(
@@ -790,6 +969,15 @@ impl WitnessBaseRead for RepositoryView {
             owner,
         });
         RepositoryView::incoming_relations(self, endpoint, None, maximum_items)
+            .map(witness_relation_read)
+    }
+
+    fn read_incoming_package_relations(
+        &self,
+        package: PackageId,
+        maximum_items: usize,
+    ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
+        RepositoryView::incoming_package_relations(self, package, maximum_items)
             .map(witness_relation_read)
     }
 

@@ -421,6 +421,25 @@ fn codecs_reject_corrupt_certificates_and_foreign_summary_domains() {
         decode_reverse_relation_key(&reverse).expect("reverse relation key must decode"),
         edge
     );
+    let owner_edge = witness
+        .entries
+        .relations
+        .iter()
+        .copied()
+        .find(|candidate| matches!(candidate.target, RelationEndpoint::Owner(_)))
+        .expect("owner-target relation");
+    let RelationEndpoint::Owner(exact_target) = owner_edge.target else {
+        unreachable!("owner-target relation was selected")
+    };
+    let reverse_owner = reverse_relation_key(owner_edge);
+    assert!(
+        reverse_owner.starts_with(&reverse_relation_package_owner_prefix(exact_target.package))
+    );
+    assert!(
+        !reverse_owner.starts_with(&reverse_relation_package_owner_prefix(
+            crate::platform::kernel::PackageId::migrate(b"foreign-relation-package", 0)
+        ))
+    );
     let mut trailing = forward;
     trailing.push(0);
     assert_eq!(

@@ -18,11 +18,12 @@ use crate::platform::kernel::{
     AnnotationClass, DeclarationPayload, DeclarationVisibility, DependencyObjectDigest,
     DocumentationClass, ExactOwnerKey, ExpressionOperation, ExternalVisibility, Idempotency,
     LocalValueReference, Name, NamespaceClass, OwnerKey, OwnerRecord, PackageId, RelationEndpoint,
-    ResourceUnit, RetirementObjectDigest, SemanticRootDigest, TypeForm, encode_owner,
+    ResourceUnit, RetirementObjectDigest, SemanticRoot, SemanticRootDigest, TypeForm, encode_owner,
 };
 use crate::platform::package::RunnerKind;
-use crate::platform::semantic_id::DeclarationId;
-use crate::platform::storage::object::{ObjectDomain, ObjectKey};
+use crate::platform::persistent_map::{MapRoot, PageDigest};
+use crate::platform::semantic_id::{DeclarationId, RepositoryId};
+use crate::platform::storage::object::{ObjectDomain, ObjectKey, StageOutcome};
 use crate::platform::witness::{NamespaceKey, OwnershipParent};
 
 #[test]
@@ -68,6 +69,282 @@ fn repository_create_reopen_and_exact_current_reads_bind_every_object() {
     assert_eq!(current.transaction, created.current.transaction);
     assert_eq!(current.semantic_diff, created.current.semantic_diff);
     assert_eq!(current.accepted, created.current.accepted);
+}
+
+#[test]
+fn staged_package_objects_bind_authored_dependency_lifecycle_without_advancing_head() {
+    let temporary = tempfile::tempdir().expect("temporary package staging repositories");
+    let source_path = temporary.path().join("source");
+    let target_path = temporary.path().join("target");
+    let source = GraphRepository::create(&source_path, &empty_snapshot(b"dependency-source"), None)
+        .expect("source repository");
+    let target = GraphRepository::create(
+        &target_path,
+        &crate::platform::kernel::tests::witness_snapshot(),
+        None,
+    )
+    .expect("target repository");
+
+    let exported = source
+        .repository
+        .export_package_object()
+        .expect("exact source package object");
+    assert!(exported.object.dependencies.is_empty());
+    assert_eq!(
+        exported.object.semantic_revision,
+        source.current.head.revision
+    );
+    let target_head = target.current.head;
+    let staged = target
+        .repository
+        .stage_package_object(&exported.bytes)
+        .expect("stage exact package object");
+    assert_eq!(staged.outcome, StageOutcome::Inserted);
+    assert_eq!(staged.package_object, exported.digest);
+    assert_eq!(staged.current_revision, target_head.revision);
+    assert_eq!(target.repository.current().unwrap().head, target_head);
+    let repeated = target
+        .repository
+        .stage_package_object(&exported.bytes)
+        .expect("idempotent package staging");
+    assert_eq!(repeated.outcome, StageOutcome::Reused);
+    assert!(repeated.seal.packs.is_empty());
+    assert_eq!(target.repository.current().unwrap().head, target_head);
+
+    let missing_object = crate::platform::kernel::PackageObjectDigest::from_bytes([77; 32]);
+    let missing = AuthoredChangeSet {
+        base: target_head.revision,
+        preconditions: Vec::new(),
+        changes: vec![AuthoredChange::AddDependency {
+            package: PackageId::migrate(b"missing-package-object", 0),
+            semantic_revision: crate::platform::semantic_id::RevisionId::from_digest([78; 32]),
+            package_object: missing_object,
+        }],
+        budget: ChangeBudget::default(),
+    };
+    assert_eq!(
+        target
+            .repository
+            .prepare_authored_change(&missing, PublicationOptions::default())
+            .expect_err("unstaged package object must reject")[0]
+            .code,
+        "package_object_missing"
+    );
+    assert_eq!(target.repository.current().unwrap().head, target_head);
+
+    let wrong_revision = AuthoredChangeSet {
+        base: target_head.revision,
+        preconditions: Vec::new(),
+        changes: vec![AuthoredChange::AddDependency {
+            package: exported.object.package,
+            semantic_revision: crate::platform::semantic_id::RevisionId::from_digest([79; 32]),
+            package_object: exported.digest,
+        }],
+        budget: ChangeBudget::default(),
+    };
+    assert_eq!(
+        target
+            .repository
+            .prepare_authored_change(&wrong_revision, PublicationOptions::default())
+            .expect_err("wrong package revision must reject")[0]
+            .code,
+        "package_object_dependency_binding"
+    );
+
+    let self_dependency = AuthoredChangeSet {
+        base: target_head.revision,
+        preconditions: Vec::new(),
+        changes: vec![AuthoredChange::AddDependency {
+            package: target.current.semantic_root.package_id,
+            semantic_revision: target_head.revision,
+            package_object: exported.digest,
+        }],
+        budget: ChangeBudget::default(),
+    };
+    assert_eq!(
+        target
+            .repository
+            .prepare_authored_change(&self_dependency, PublicationOptions::default())
+            .expect_err("self dependency must reject")[0]
+            .code,
+        "change_authored_dependency_self"
+    );
+
+    let absent_package = PackageId::migrate(b"absent-dependency", 0);
+    for change in [
+        AuthoredChange::ReplaceDependency {
+            package: absent_package,
+            semantic_revision: exported.object.semantic_revision,
+            package_object: exported.digest,
+        },
+        AuthoredChange::DeleteDependency {
+            package: absent_package,
+        },
+    ] {
+        let request = AuthoredChangeSet {
+            base: target_head.revision,
+            preconditions: Vec::new(),
+            changes: vec![change],
+            budget: ChangeBudget::default(),
+        };
+        assert_eq!(
+            target
+                .repository
+                .prepare_authored_change(&request, PublicationOptions::default())
+                .expect_err("missing dependency lifecycle transition must reject")[0]
+                .code,
+            "change_authored_dependency_missing"
+        );
+    }
+
+    let add = AuthoredChangeSet {
+        base: target_head.revision,
+        preconditions: Vec::new(),
+        changes: vec![AuthoredChange::AddDependency {
+            package: exported.object.package,
+            semantic_revision: exported.object.semantic_revision,
+            package_object: exported.digest,
+        }],
+        budget: ChangeBudget::default(),
+    };
+    let prepared_add = target
+        .repository
+        .prepare_authored_change(&add, PublicationOptions::default())
+        .expect("prepare dependency insertion");
+    assert_eq!(
+        prepared_add.publication.receipt.counts.dependencies_changed,
+        1
+    );
+    let PublicationOutcome::Accepted { current: added, .. } = target
+        .repository
+        .publish(&prepared_add.publication)
+        .expect("publish dependency insertion")
+    else {
+        panic!("dependency insertion must advance HEAD")
+    };
+    let duplicate_add = AuthoredChangeSet {
+        base: added.head.revision,
+        preconditions: Vec::new(),
+        changes: vec![AuthoredChange::AddDependency {
+            package: exported.object.package,
+            semantic_revision: exported.object.semantic_revision,
+            package_object: exported.digest,
+        }],
+        budget: ChangeBudget::default(),
+    };
+    assert_eq!(
+        target
+            .repository
+            .prepare_authored_change(&duplicate_add, PublicationOptions::default())
+            .expect_err("duplicate dependency insertion must reject")[0]
+            .code,
+        "change_authored_dependency_present"
+    );
+    assert_eq!(
+        target
+            .repository
+            .view_current()
+            .unwrap()
+            .dependency(exported.object.package)
+            .unwrap()
+            .value
+            .unwrap()
+            .package_object,
+        exported.digest
+    );
+
+    let source_change = AuthoredChangeSet {
+        base: source.current.head.revision,
+        preconditions: Vec::new(),
+        changes: vec![AuthoredChange::CreateModule {
+            symbol: "$module".to_owned(),
+            name: Name::new("later").unwrap(),
+        }],
+        budget: ChangeBudget::default(),
+    };
+    let source_prepared = source
+        .repository
+        .prepare_authored_change(&source_change, PublicationOptions::default())
+        .expect("prepare source revision advancement");
+    assert!(matches!(
+        source
+            .repository
+            .publish(&source_prepared.publication)
+            .expect("advance source revision"),
+        PublicationOutcome::Accepted { .. }
+    ));
+    let replacement = source
+        .repository
+        .export_package_object()
+        .expect("replacement source package object");
+    assert_ne!(replacement.digest, exported.digest);
+    target
+        .repository
+        .stage_package_object(&replacement.bytes)
+        .expect("stage replacement package object");
+
+    let replace = AuthoredChangeSet {
+        base: added.head.revision,
+        preconditions: Vec::new(),
+        changes: vec![AuthoredChange::ReplaceDependency {
+            package: replacement.object.package,
+            semantic_revision: replacement.object.semantic_revision,
+            package_object: replacement.digest,
+        }],
+        budget: ChangeBudget::default(),
+    };
+    let prepared_replace = target
+        .repository
+        .prepare_authored_change(&replace, PublicationOptions::default())
+        .expect("prepare exact dependency replacement");
+    let PublicationOutcome::Accepted {
+        current: replaced, ..
+    } = target
+        .repository
+        .publish(&prepared_replace.publication)
+        .expect("publish dependency replacement")
+    else {
+        panic!("dependency replacement must advance HEAD")
+    };
+    assert_eq!(
+        prepared_replace
+            .publication
+            .receipt
+            .counts
+            .dependencies_changed,
+        1
+    );
+
+    let delete = AuthoredChangeSet {
+        base: replaced.head.revision,
+        preconditions: Vec::new(),
+        changes: vec![AuthoredChange::DeleteDependency {
+            package: replacement.object.package,
+        }],
+        budget: ChangeBudget::default(),
+    };
+    let prepared_delete = target
+        .repository
+        .prepare_authored_change(&delete, PublicationOptions::default())
+        .expect("prepare exact dependency deletion");
+    let PublicationOutcome::Accepted {
+        current: deleted, ..
+    } = target
+        .repository
+        .publish(&prepared_delete.publication)
+        .expect("publish dependency deletion")
+    else {
+        panic!("dependency deletion must advance HEAD")
+    };
+    assert_eq!(deleted.semantic_root.dependencies.entries(), 0);
+    assert_eq!(
+        prepared_delete
+            .publication
+            .receipt
+            .counts
+            .dependencies_changed,
+        1
+    );
 }
 
 #[test]
@@ -3892,6 +4169,26 @@ fn prepare_publication(
     );
     view.prepare_change(edits, options)
         .expect("prepared repository publication")
+}
+
+fn empty_snapshot(seed: &[u8]) -> crate::platform::kernel::KernelSnapshot {
+    let empty = MapRoot::from_parts(PageDigest::from_bytes([0; 32]), 0);
+    crate::platform::kernel::KernelSnapshot {
+        root: SemanticRoot {
+            graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+            repository_id: RepositoryId::migrate(seed, 0),
+            package_id: PackageId::migrate(seed, 0),
+            package_name: Name::new("empty").expect("empty fixture package name"),
+            owners: empty,
+            dependencies: empty,
+            retirements: empty,
+        },
+        owners: std::collections::BTreeMap::new(),
+        types: std::collections::BTreeMap::new(),
+        blobs: std::collections::BTreeMap::new(),
+        dependencies: std::collections::BTreeMap::new(),
+        retirements: std::collections::BTreeMap::new(),
+    }
 }
 
 fn owner_named(snapshot: &crate::platform::kernel::KernelSnapshot, name: &str) -> OwnerKey {

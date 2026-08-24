@@ -200,6 +200,17 @@ pub fn reverse_relation_prefix(target: RelationEndpoint, kind: Option<RelationKi
     relation_prefix(target, kind)
 }
 
+/// Prefix for every reverse relation whose target is an exact owner in `package`.
+///
+/// The owner identity and relation kind follow this prefix, so dependency replacement and removal
+/// can reach only local users of one foreign package without scanning unrelated relation keys.
+pub fn reverse_relation_package_owner_prefix(package: PackageId) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(17);
+    bytes.push(2);
+    bytes.extend_from_slice(&package.bytes());
+    bytes
+}
+
 pub fn decode_forward_relation_key(bytes: &[u8]) -> Result<RelationEdge, Diagnostic> {
     decode_relation_key(bytes, false)
 }

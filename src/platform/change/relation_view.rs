@@ -12,6 +12,7 @@ pub(crate) struct CandidateRelations<'a, W: ?Sized> {
     base: &'a W,
     outgoing: BTreeMap<OwnerKey, Vec<RelationEdge>>,
     incoming: BTreeMap<OwnerKey, Vec<RelationEdge>>,
+    incoming_packages: BTreeMap<PackageId, Vec<RelationEdge>>,
     work: WitnessReadWork,
 }
 
@@ -23,6 +24,7 @@ impl<'a, W: WitnessBaseRead + ?Sized> CandidateRelations<'a, W> {
             base,
             outgoing: BTreeMap::new(),
             incoming: BTreeMap::new(),
+            incoming_packages: BTreeMap::new(),
             work: WitnessReadWork::default(),
         }
     }
@@ -86,6 +88,43 @@ impl<'a, W: WitnessBaseRead + ?Sized> CandidateRelations<'a, W> {
             base,
             |edge| edge.target == target,
             "change_relation_reverse_remove",
+        )
+    }
+
+    pub fn incoming_package(
+        &mut self,
+        package: PackageId,
+    ) -> Result<Vec<RelationEdge>, Diagnostic> {
+        let base = if let Some(cached) = self.incoming_packages.get(&package) {
+            cached.clone()
+        } else {
+            let read = self
+                .base
+                .read_incoming_package_relations(package, MAXIMUM_RELATION_PREFIX_ITEMS)?;
+            self.work.add(read.work);
+            if read.value.truncated {
+                return Err(relation_error(
+                    DiagnosticClass::Resource,
+                    "change_relation_package_budget",
+                    "foreign-package relation prefix exceeds the current work budget",
+                ));
+            }
+            self.incoming_packages
+                .insert(package, read.value.edges.clone());
+            read.value.edges
+        };
+        self.apply_delta(
+            base,
+            |edge| {
+                matches!(
+                    edge.target,
+                    RelationEndpoint::Owner(ExactOwnerKey {
+                        package: target_package,
+                        ..
+                    }) if target_package == package
+                )
+            },
+            "change_relation_package_remove",
         )
     }
 

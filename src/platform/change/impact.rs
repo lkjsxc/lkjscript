@@ -67,6 +67,7 @@ impl SummaryDimensionChange {
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum ImpactReasonKind {
     DirectSemanticChange,
+    DependencyBinding,
     ValidationDependency,
     TestBehavior,
 }
@@ -191,6 +192,37 @@ pub fn plan_impact_and_summaries<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRe
                 kind: ImpactReasonKind::ValidationDependency,
                 source,
                 target: edit.owner,
+                relation: Some(edge.kind),
+            });
+        }
+    }
+
+    for (dependency, edit) in &canonical.dependencies {
+        if edit.before.is_none() {
+            continue;
+        }
+        for edge in relations.incoming_package(*dependency)? {
+            plan.work.reverse_edges_visited = plan.work.reverse_edges_visited.saturating_add(1);
+            let Some(source) = local_owner(edge.source, package) else {
+                continue;
+            };
+            add_summary_paths(
+                source,
+                &mut ownership,
+                &mut plan.summary_owners,
+                &mut plan.work,
+            )?;
+            for declaration in owning_units(source, overlay, &mut ownership, &mut plan.work)? {
+                plan.semantically_checked.insert(declaration);
+                plan.compiler_units.insert(declaration);
+                if behavior_enqueued.insert(declaration) {
+                    behavior.push_back(declaration);
+                }
+            }
+            plan.reasons.push(ImpactReason {
+                kind: ImpactReasonKind::DependencyBinding,
+                source,
+                target: source,
                 relation: Some(edge.kind),
             });
         }

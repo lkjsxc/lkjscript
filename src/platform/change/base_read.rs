@@ -204,6 +204,12 @@ pub trait WitnessBaseRead {
         maximum_items: usize,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic>;
 
+    fn read_incoming_package_relations(
+        &self,
+        package: PackageId,
+        maximum_items: usize,
+    ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic>;
+
     fn read_test_dependencies(
         &self,
         test: OwnerKey,
@@ -366,6 +372,43 @@ impl WitnessBaseRead for FullWitness {
         maximum_items: usize,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         read_memory_relations(self, owner, maximum_items, true)
+    }
+
+    fn read_incoming_package_relations(
+        &self,
+        package: PackageId,
+        maximum_items: usize,
+    ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
+        if maximum_items == 0 || maximum_items > MAXIMUM_RELATION_PREFIX_ITEMS {
+            return Err(base_read_error(
+                DiagnosticClass::Resource,
+                "change_relation_item_budget",
+                "relation item budget is outside the current supported range",
+            ));
+        }
+        let available = self
+            .entries
+            .reverse_relations
+            .iter()
+            .filter(|edge| {
+                matches!(
+                    edge.target,
+                    RelationEndpoint::Owner(ExactOwnerKey {
+                        package: target_package,
+                        ..
+                    }) if target_package == package
+                )
+            })
+            .copied()
+            .collect::<Vec<_>>();
+        let returned = available.len().min(maximum_items);
+        Ok(WitnessRead::memory_records(
+            WitnessRelationRead {
+                edges: available[..returned].to_vec(),
+                truncated: available.len() > maximum_items,
+            },
+            returned as u64,
+        ))
     }
 
     fn read_test_dependencies(

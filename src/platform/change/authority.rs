@@ -10,6 +10,7 @@ use crate::platform::kernel::{
     encode_owner, encode_owner_binding, encode_retirement, encode_retirement_binding, encode_root,
     encode_type_object, owner_map_key, retirement_map_key,
 };
+use crate::platform::package_object::validate_package_object_closure;
 use crate::platform::persistent_map::{
     BatchOutcome, MapEdit, MapError, MapErrorClass, MapWork, PageStore, PersistentMap,
 };
@@ -268,6 +269,7 @@ fn stage_full_semantic<S: ImmutableObjectStore + ?Sized>(
 
     let mut dependency_entries = Vec::with_capacity(logical.dependencies.len());
     for (package, record) in &logical.dependencies {
+        validate_package_object_closure(store, record.package_object, Some(record), store_work)?;
         let (digest, bytes) = encode_dependency(record)?;
         stage_typed(
             store,
@@ -367,6 +369,7 @@ fn stage_delta_objects<S: ImmutableObjectStore + ?Sized>(
     }
     for edit in delta.dependencies.values() {
         if let Some((expected, record)) = &edit.after {
+            validate_package_object_closure(store, record.package_object, Some(record), work)?;
             let (digest, bytes) = encode_dependency(record)?;
             require_digest("dependency", digest.bytes(), expected.bytes())?;
             stage_typed(

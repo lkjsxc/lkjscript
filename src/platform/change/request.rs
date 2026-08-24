@@ -24,9 +24,10 @@ use super::{
 use crate::platform::contract::registry::CHANGE_ALLOCATION_SEED_DOMAIN;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    ChangeDigest, ExpressionOperation, ExpressionRecord, ModuleRecord, Name, NamespaceClass,
-    OwnerHeader, OwnerKey, OwnerKind, OwnerRecord, RetirementRecord, TypeObject, TypeObjectDigest,
-    TypeObjectInterner, encode_owner,
+    ChangeDigest, DependencyObjectDigest, DependencyRecord, ExpressionOperation, ExpressionRecord,
+    ModuleRecord, Name, NamespaceClass, OwnerHeader, OwnerKey, OwnerKind, OwnerRecord, PackageId,
+    PackageObjectDigest, RetirementRecord, TypeObject, TypeObjectDigest, TypeObjectInterner,
+    encode_dependency, encode_owner,
 };
 use crate::platform::semantic_id::{
     AnnotationId, BindingId, CaseId, DeclarationId, DocumentationId, ExpressionId, FieldId,
@@ -237,6 +238,19 @@ pub enum AuthoredChange {
         component: AuthoredDeclarationReference,
         port: AuthoredPortReference,
         runner: crate::platform::package::RunnerKind,
+    },
+    AddDependency {
+        package: PackageId,
+        semantic_revision: RevisionId,
+        package_object: PackageObjectDigest,
+    },
+    ReplaceDependency {
+        package: PackageId,
+        semantic_revision: RevisionId,
+        package_object: PackageObjectDigest,
+    },
+    DeleteDependency {
+        package: PackageId,
     },
     DeleteOwner {
         owner: OwnerSelector,
@@ -621,6 +635,35 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
     }
     for change in &request.changes {
         match change {
+            AuthoredChange::AddDependency {
+                package,
+                semantic_revision,
+                package_object,
+            } => lowerer.add_dependency(DependencyRecord {
+                graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+                package: *package,
+                semantic_revision: *semantic_revision,
+                package_object: *package_object,
+            })?,
+            AuthoredChange::ReplaceDependency {
+                package,
+                semantic_revision,
+                package_object,
+            } => lowerer.replace_dependency(DependencyRecord {
+                graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+                package: *package,
+                semantic_revision: *semantic_revision,
+                package_object: *package_object,
+            })?,
+            AuthoredChange::DeleteDependency { package } => {
+                lowerer.delete_dependency(*package)?;
+            }
+            _ => {}
+        }
+        lowerer.check_budget("dependency lowering")?;
+    }
+    for change in &request.changes {
+        match change {
             AuthoredChange::CreateModule { .. }
             | AuthoredChange::CreateRecord { .. }
             | AuthoredChange::CreateVariant { .. }
@@ -639,7 +682,10 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
             | AuthoredChange::AddTypeParameter { .. }
             | AuthoredChange::AddParameter { .. }
             | AuthoredChange::AddRequirement { .. }
-            | AuthoredChange::AddPort { .. } => {}
+            | AuthoredChange::AddPort { .. }
+            | AuthoredChange::AddDependency { .. }
+            | AuthoredChange::ReplaceDependency { .. }
+            | AuthoredChange::DeleteDependency { .. } => {}
             AuthoredChange::SetDeclarationVisibility { .. }
             | AuthoredChange::SetFunctionContract { .. }
             | AuthoredChange::SetExternalContract { .. }
@@ -789,6 +835,9 @@ fn collect_symbol_definitions(
             | AuthoredChange::SetTarget { .. } => {
                 creation::collect_mutation_symbols(change, &mut definitions)?
             }
+            AuthoredChange::AddDependency { .. }
+            | AuthoredChange::ReplaceDependency { .. }
+            | AuthoredChange::DeleteDependency { .. } => {}
             AuthoredChange::DeleteOwner { .. }
             | AuthoredChange::RenameOwner { .. }
             | AuthoredChange::MoveDeclaration { .. }
@@ -908,6 +957,11 @@ struct WorkingOwner {
     deleted: bool,
 }
 
+struct WorkingDependency {
+    before: Option<DependencyObjectDigest>,
+    record: Option<DependencyRecord>,
+}
+
 struct AuthoredLowerer<'a, B: ?Sized, W: ?Sized> {
     base: &'a B,
     witness: &'a W,
@@ -916,6 +970,7 @@ struct AuthoredLowerer<'a, B: ?Sized, W: ?Sized> {
     allocated: BTreeMap<String, OwnerKey>,
     definitions: BTreeMap<String, SymbolKind>,
     owners: BTreeMap<OwnerKey, WorkingOwner>,
+    dependencies: BTreeMap<PackageId, WorkingDependency>,
     retirements: BTreeMap<OwnerKey, RetirementRecord>,
     namespace: BTreeMap<NamespaceKey, Option<OwnerKey>>,
     ownership: BTreeMap<OwnerKey, Option<crate::platform::witness::OwnershipEntry>>,
@@ -959,6 +1014,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             allocated,
             definitions,
             owners: BTreeMap::new(),
+            dependencies: BTreeMap::new(),
             retirements: BTreeMap::new(),
             namespace: BTreeMap::new(),
             ownership: BTreeMap::new(),
@@ -1346,6 +1402,98 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         Ok(self.base_types.get(&digest).cloned().flatten())
     }
 
+    fn load_dependency(&mut self, package: PackageId) -> Result<(), Diagnostic> {
+        if self.dependencies.contains_key(&package) {
+            return Ok(());
+        }
+        let read = self.base.read_dependency(package)?;
+        self.work.canonical.add(read.work);
+        let before = read
+            .value
+            .as_ref()
+            .map(encode_dependency)
+            .transpose()?
+            .map(|(digest, _)| digest);
+        self.dependencies.insert(
+            package,
+            WorkingDependency {
+                before,
+                record: read.value,
+            },
+        );
+        Ok(())
+    }
+
+    fn add_dependency(&mut self, record: DependencyRecord) -> Result<(), Diagnostic> {
+        self.validate_dependency_candidate(&record)?;
+        self.load_dependency(record.package)?;
+        let working = self
+            .dependencies
+            .get_mut(&record.package)
+            .ok_or_else(dependency_cache_corrupt)?;
+        if working.record.is_some() {
+            return Err(request_error(
+                DiagnosticClass::Semantic,
+                "change_authored_dependency_present",
+                format!(
+                    "dependency package {} is already bound in the candidate change",
+                    record.package
+                ),
+            ));
+        }
+        working.record = Some(record);
+        Ok(())
+    }
+
+    fn replace_dependency(&mut self, record: DependencyRecord) -> Result<(), Diagnostic> {
+        self.validate_dependency_candidate(&record)?;
+        self.load_dependency(record.package)?;
+        let working = self
+            .dependencies
+            .get_mut(&record.package)
+            .ok_or_else(dependency_cache_corrupt)?;
+        if working.record.is_none() {
+            return Err(request_error(
+                DiagnosticClass::Semantic,
+                "change_authored_dependency_missing",
+                format!(
+                    "dependency package {} is absent from the candidate change",
+                    record.package
+                ),
+            ));
+        }
+        working.record = Some(record);
+        Ok(())
+    }
+
+    fn delete_dependency(&mut self, package: PackageId) -> Result<(), Diagnostic> {
+        self.load_dependency(package)?;
+        let working = self
+            .dependencies
+            .get_mut(&package)
+            .ok_or_else(dependency_cache_corrupt)?;
+        if working.record.take().is_none() {
+            return Err(request_error(
+                DiagnosticClass::Semantic,
+                "change_authored_dependency_missing",
+                format!("dependency package {package} is absent from the candidate change"),
+            ));
+        }
+        Ok(())
+    }
+
+    fn validate_dependency_candidate(&self, record: &DependencyRecord) -> Result<(), Diagnostic> {
+        record.validate_local()?;
+        if record.package == self.base.package_id() {
+            return Err(request_error(
+                DiagnosticClass::Semantic,
+                "change_authored_dependency_self",
+                "a package cannot bind itself as an exact dependency",
+            ));
+        }
+        Ok(())
+    }
+
     fn finish(self) -> Result<AuthoredLowering, Diagnostic> {
         let mut edits = Vec::new();
         for (digest, object) in self.types.into_objects() {
@@ -1378,6 +1526,24 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 Some(_) => {}
             }
         }
+        for (package, working) in self.dependencies {
+            match (working.before, working.record) {
+                (None, Some(record)) => edits.push(PrimitiveEdit::InsertDependency { record }),
+                (Some(before), Some(record)) => {
+                    let (after, _) = encode_dependency(&record)?;
+                    if before != after {
+                        edits.push(PrimitiveEdit::ReplaceDependency {
+                            expected: before,
+                            record,
+                        });
+                    }
+                }
+                (Some(expected), None) => {
+                    edits.push(PrimitiveEdit::DeleteDependency { package, expected })
+                }
+                (None, None) => {}
+            }
+        }
         for (_, record) in self.retirements {
             edits.push(PrimitiveEdit::InsertRetirement { record });
         }
@@ -1387,6 +1553,14 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             work: self.work,
         })
     }
+}
+
+fn dependency_cache_corrupt() -> Diagnostic {
+    request_error(
+        DiagnosticClass::Corrupt,
+        "change_authored_dependency_cache",
+        "resolved dependency was not retained in the authored candidate overlay",
+    )
 }
 
 fn rename_owner(record: &mut OwnerRecord, name: Name) -> Result<(), Diagnostic> {
