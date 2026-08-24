@@ -1,6 +1,7 @@
 //! High-level Graph 5 authored intent lowered to exact primitive owner edits.
 
 mod creation;
+mod deletion;
 mod precondition;
 
 pub use creation::{
@@ -23,8 +24,9 @@ use super::{
 use crate::platform::contract::registry::CHANGE_ALLOCATION_SEED_DOMAIN;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    ExpressionOperation, ExpressionRecord, ModuleRecord, Name, NamespaceClass, OwnerHeader,
-    OwnerKey, OwnerKind, OwnerRecord, TypeObjectInterner, encode_owner,
+    ChangeDigest, ExpressionOperation, ExpressionRecord, ModuleRecord, Name, NamespaceClass,
+    OwnerHeader, OwnerKey, OwnerKind, OwnerRecord, RetirementRecord, TypeObject, TypeObjectDigest,
+    TypeObjectInterner, encode_owner,
 };
 use crate::platform::semantic_id::{
     AnnotationId, BindingId, CaseId, DeclarationId, DocumentationId, ExpressionId, FieldId,
@@ -161,6 +163,10 @@ pub enum AuthoredChange {
         key: Name,
         value: AuthoredAnnotationValue,
     },
+    DeleteOwner {
+        owner: OwnerSelector,
+        cascade: bool,
+    },
     RenameOwner {
         owner: OwnerSelector,
         name: Name,
@@ -280,6 +286,7 @@ impl SymbolKind {
 pub struct AuthoredLoweringWork {
     pub operations_lowered: u64,
     pub preconditions_checked: u64,
+    pub relation_edges_read: u64,
     pub canonical: CanonicalReadWork,
     pub witness: WitnessReadWork,
 }
@@ -291,6 +298,7 @@ impl AuthoredLoweringWork {
             usize::try_from(self.preconditions_checked).unwrap_or(usize::MAX),
             self.canonical,
             self.witness,
+            self.relation_edges_read,
         )
     }
 }
@@ -338,10 +346,20 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
         .budget
         .validate_request_counts(request.changes.len(), request.preconditions.len())?;
 
-    let seed = allocation_seed(base, request, idempotency_key)?;
+    let request_bytes = canonical_authored_request_bytes(request)?;
+    let seed = allocation_seed(base, request.base, &request_bytes, idempotency_key)?;
+    let deletion_change = ChangeDigest::of(&request_bytes);
     let definitions = collect_symbol_definitions(request)?;
     let allocated = allocate_symbols(&seed, &definitions)?;
-    let mut lowerer = AuthoredLowerer::new(base, witness, seed, allocated, definitions, budget)?;
+    let mut lowerer = AuthoredLowerer::new(
+        base,
+        witness,
+        seed,
+        deletion_change,
+        allocated,
+        definitions,
+        budget,
+    )?;
     lowerer.work.operations_lowered = u64::try_from(request.changes.len()).unwrap_or(u64::MAX);
     precondition::evaluate(&mut lowerer, &request.preconditions)?;
     lowerer.check_budget("authored preconditions")?;
@@ -513,6 +531,7 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
             | AuthoredChange::CreateTarget { .. }
             | AuthoredChange::CreateDocumentation { .. }
             | AuthoredChange::CreateAnnotation { .. } => {}
+            AuthoredChange::DeleteOwner { .. } => {}
             AuthoredChange::RenameOwner { owner, name } => {
                 let owner = lowerer.resolve_owner(owner)?;
                 rename_owner(lowerer.candidate_mut(owner)?, name.clone())?;
@@ -553,6 +572,14 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
         }
         lowerer.check_budget("authored mutation lowering")?;
     }
+    deletion::lower_deletions(
+        &mut lowerer,
+        request.changes.iter().filter_map(|change| match change {
+            AuthoredChange::DeleteOwner { owner, cascade } => Some((owner, *cascade)),
+            _ => None,
+        }),
+    )?;
+    lowerer.check_budget("authored deletion lowering")?;
     lowerer.finish()
 }
 
@@ -624,7 +651,8 @@ fn collect_symbol_definitions(
             AuthoredChange::CreateAnnotation { symbol, .. } => {
                 creation::collect_annotation_symbols(symbol, &mut definitions)?
             }
-            AuthoredChange::RenameOwner { .. }
+            AuthoredChange::DeleteOwner { .. }
+            | AuthoredChange::RenameOwner { .. }
             | AuthoredChange::MoveDeclaration { .. }
             | AuthoredChange::ReplaceExpression { .. } => {}
         }
@@ -668,11 +696,7 @@ fn allocate_symbols(
     Ok(allocated)
 }
 
-fn allocation_seed<B: CanonicalBaseRead + ?Sized>(
-    base: &B,
-    request: &AuthoredChangeSet,
-    idempotency_key: Option<&str>,
-) -> Result<[u8; 32], Diagnostic> {
+fn canonical_authored_request_bytes(request: &AuthoredChangeSet) -> Result<Vec<u8>, Diagnostic> {
     let configuration = bincode::config::standard()
         .with_little_endian()
         .with_variable_int_encoding();
@@ -705,8 +729,17 @@ fn allocation_seed<B: CanonicalBaseRead + ?Sized>(
             )
         })?;
     debug_assert_eq!(written, encoded_bytes);
+    Ok(bytes)
+}
+
+fn allocation_seed<B: CanonicalBaseRead + ?Sized>(
+    base: &B,
+    request_base: RevisionId,
+    request_bytes: &[u8],
+    idempotency_key: Option<&str>,
+) -> Result<[u8; 32], Diagnostic> {
     let idempotency = idempotency_key.unwrap_or_default().as_bytes();
-    let request_length = u64::try_from(bytes.len()).map_err(|_| {
+    let request_length = u64::try_from(request_bytes.len()).map_err(|_| {
         request_error(
             DiagnosticClass::Resource,
             "change_authored_length",
@@ -722,9 +755,9 @@ fn allocation_seed<B: CanonicalBaseRead + ?Sized>(
     })?;
     let mut hasher = blake3::Hasher::new_derive_key(CHANGE_ALLOCATION_SEED_DOMAIN);
     hasher.update(&base.repository_id().bytes());
-    hasher.update(&request.base.bytes());
+    hasher.update(&request_base.bytes());
     hasher.update(&request_length.to_be_bytes());
-    hasher.update(&bytes);
+    hasher.update(request_bytes);
     hasher.update(&idempotency_length.to_be_bytes());
     hasher.update(idempotency);
     Ok(*hasher.finalize().as_bytes())
@@ -732,17 +765,24 @@ fn allocation_seed<B: CanonicalBaseRead + ?Sized>(
 
 struct WorkingOwner {
     before: Option<crate::platform::kernel::OwnerObjectDigest>,
+    original: Option<OwnerRecord>,
     record: OwnerRecord,
+    deleted: bool,
 }
 
 struct AuthoredLowerer<'a, B: ?Sized, W: ?Sized> {
     base: &'a B,
     witness: &'a W,
     allocation_seed: [u8; 32],
+    deletion_change: ChangeDigest,
     allocated: BTreeMap<String, OwnerKey>,
     definitions: BTreeMap<String, SymbolKind>,
     owners: BTreeMap<OwnerKey, WorkingOwner>,
+    retirements: BTreeMap<OwnerKey, RetirementRecord>,
     namespace: BTreeMap<NamespaceKey, Option<OwnerKey>>,
+    ownership: BTreeMap<OwnerKey, Option<crate::platform::witness::OwnershipEntry>>,
+    incoming_relations: BTreeMap<OwnerKey, Vec<crate::platform::kernel::RelationEdge>>,
+    base_types: BTreeMap<TypeObjectDigest, Option<TypeObject>>,
     types: TypeObjectInterner,
     next_anonymous_expression_ordinal: u64,
     work: AuthoredLoweringWork,
@@ -754,6 +794,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         base: &'a B,
         witness: &'a W,
         allocation_seed: [u8; 32],
+        deletion_change: ChangeDigest,
         allocated: BTreeMap<String, OwnerKey>,
         definitions: BTreeMap<String, SymbolKind>,
         budget: ChangeBudget,
@@ -776,10 +817,15 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             base,
             witness,
             allocation_seed,
+            deletion_change,
             allocated,
             definitions,
             owners: BTreeMap::new(),
+            retirements: BTreeMap::new(),
             namespace: BTreeMap::new(),
+            ownership: BTreeMap::new(),
+            incoming_relations: BTreeMap::new(),
+            base_types: BTreeMap::new(),
             types: TypeObjectInterner::default(),
             next_anonymous_expression_ordinal,
             work: AuthoredLoweringWork::default(),
@@ -804,7 +850,9 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             owner,
             WorkingOwner {
                 before: None,
+                original: None,
                 record,
+                deleted: false,
             },
         );
         Ok(())
@@ -1098,8 +1146,16 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
     }
 
     fn require_owner(&mut self, owner: OwnerKey) -> Result<(), Diagnostic> {
-        if self.owners.contains_key(&owner) {
-            return Ok(());
+        if let Some(working) = self.owners.get(&owner) {
+            return if working.deleted {
+                Err(request_error(
+                    DiagnosticClass::Semantic,
+                    "change_authored_owner_deleted",
+                    format!("owner {owner:?} was already selected for deletion in this request"),
+                ))
+            } else {
+                Ok(())
+            };
         }
         let read = self.base.read_owner(owner)?;
         self.work.canonical.add(read.work);
@@ -1115,7 +1171,9 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             owner,
             WorkingOwner {
                 before: Some(before),
+                original: Some(record.clone()),
                 record,
+                deleted: false,
             },
         );
         Ok(())
@@ -1135,12 +1193,41 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             })
     }
 
+    fn candidate_type_object(
+        &mut self,
+        digest: TypeObjectDigest,
+    ) -> Result<Option<TypeObject>, Diagnostic> {
+        if let Some(object) = self.types.get(digest) {
+            return Ok(Some(object.clone()));
+        }
+        if !self.base_types.contains_key(&digest) {
+            let read = self.base.read_type_object(digest)?;
+            self.work.canonical.add(read.work);
+            self.base_types.insert(digest, read.value);
+        }
+        Ok(self.base_types.get(&digest).cloned().flatten())
+    }
+
     fn finish(self) -> Result<AuthoredLowering, Diagnostic> {
         let mut edits = Vec::new();
         for (digest, object) in self.types.into_objects() {
             edits.push(PrimitiveEdit::AddTypeObject { digest, object });
         }
         for (_, working) in self.owners {
+            if working.deleted {
+                let expected = working.before.ok_or_else(|| {
+                    request_error(
+                        DiagnosticClass::Corrupt,
+                        "change_authored_delete_created",
+                        "a request-local creation cannot be emitted as an accepted owner deletion",
+                    )
+                })?;
+                edits.push(PrimitiveEdit::DeleteOwner {
+                    owner: working.record.owner(),
+                    expected,
+                });
+                continue;
+            }
             let (after, _) = encode_owner(&working.record)?;
             match working.before {
                 None => edits.push(PrimitiveEdit::InsertOwner {
@@ -1152,6 +1239,9 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 }),
                 Some(_) => {}
             }
+        }
+        for (_, record) in self.retirements {
+            edits.push(PrimitiveEdit::InsertRetirement { record });
         }
         Ok(AuthoredLowering {
             edits,

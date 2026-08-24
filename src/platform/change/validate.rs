@@ -81,12 +81,15 @@ pub fn validate_incremental_frontier<B: CanonicalBaseRead + ?Sized, W: WitnessBa
 ) -> Result<IncrementalValidationReport, Vec<Diagnostic>> {
     let mut diagnostics = Vec::new();
     let mut work = 0_usize;
-    validate_expression_roots(
-        overlay,
-        impact.semantically_checked.iter().copied(),
-        &mut diagnostics,
-        &mut work,
-    );
+    let mut live_semantic_roots = Vec::new();
+    for owner in &impact.semantically_checked {
+        match overlay.owner(*owner) {
+            Ok(Some(_)) => live_semantic_roots.push(*owner),
+            Ok(None) => {}
+            Err(diagnostic) => diagnostics.push(diagnostic),
+        }
+    }
+    validate_expression_roots(overlay, live_semantic_roots, &mut diagnostics, &mut work);
     structural.work.expression_work = work as u64;
     if summaries.selected != impact.summary_owners {
         diagnostics.push(validation_error(

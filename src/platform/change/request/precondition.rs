@@ -234,7 +234,9 @@ fn read_owner<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
             owner,
             WorkingOwner {
                 before: Some(before),
+                original: Some(record.clone()),
                 record: record.clone(),
+                deleted: false,
             },
         );
         Ok(Some(record))

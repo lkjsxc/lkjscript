@@ -125,6 +125,7 @@ impl ChangeBudgetWork {
         preconditions: usize,
         canonical: CanonicalReadWork,
         witness: WitnessReadWork,
+        relation_edges: u64,
     ) -> Self {
         let authored_operations = u64::try_from(operations).unwrap_or(u64::MAX);
         let preconditions_checked = u64::try_from(preconditions).unwrap_or(u64::MAX);
@@ -135,12 +136,14 @@ impl ChangeBudgetWork {
             .saturating_add(canonical_point_reads)
             .saturating_add(canonical.map_entries_visited)
             .saturating_add(witness_point_reads)
-            .saturating_add(witness.map_entries_visited);
+            .saturating_add(witness.map_entries_visited)
+            .saturating_add(relation_edges);
         Self {
             authored_operations,
             preconditions_checked,
             canonical_point_reads,
             witness_point_reads,
+            relation_edges,
             consumed,
             ..Self::default()
         }
