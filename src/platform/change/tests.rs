@@ -33,10 +33,12 @@ fn rename_overlay_and_local_delta_match_the_full_witness_oracle() {
     )
     .expect("normalized rename");
     let overlay = KernelOverlay::new(&base, &delta);
-    assert_eq!(overlay.owner_count(), base.owners.len());
-    assert_eq!(overlay.owner(caller), base.owners.get(&caller));
-    let derived =
-        derive_local_delta(&base, &overlay, &delta, &base_witness).expect("derived rename");
+    assert_eq!(overlay.owner_count(), base.owners.len() as u64);
+    assert_eq!(
+        overlay.owner(caller).expect("candidate caller read"),
+        base.owners.get(&caller).cloned()
+    );
+    let derived = derive_local_delta(&overlay, &delta, &base_witness).expect("derived rename");
     assert_eq!(derived.namespaces.len(), 2);
     assert!(derived.ownership.is_empty());
     assert!(derived.relations.removed.is_empty());
@@ -66,7 +68,7 @@ fn move_derives_one_ownership_and_relation_rebind() {
     record.module = destination;
     let delta = replace_owner_delta(&base, callee, replacement);
     let overlay = KernelOverlay::new(&base, &delta);
-    let derived = derive_local_delta(&base, &overlay, &delta, &base_witness).expect("derived move");
+    let derived = derive_local_delta(&overlay, &delta, &base_witness).expect("derived move");
     assert_eq!(derived.namespaces.len(), 2);
     assert_eq!(derived.ownership.len(), 1);
     assert_eq!(derived.relations.removed.len(), 1);
@@ -92,8 +94,7 @@ fn body_edit_derives_local_relation_removal_and_enclosing_summary_candidates() {
     record.operation = ExpressionOperation::Unit;
     let delta = replace_owner_delta(&base, body, replacement);
     let overlay = KernelOverlay::new(&base, &delta);
-    let derived =
-        derive_local_delta(&base, &overlay, &delta, &base_witness).expect("derived body edit");
+    let derived = derive_local_delta(&overlay, &delta, &base_witness).expect("derived body edit");
     assert!(derived.namespaces.is_empty());
     assert!(derived.ownership.is_empty());
     assert_eq!(derived.relations.removed.len(), 1);
@@ -125,7 +126,7 @@ fn interface_change_uses_reverse_relations_for_validation_and_compiler_impact() 
     let delta = replace_owner_delta(&base, callee, replacement);
     let overlay = KernelOverlay::new(&base, &delta);
     let derived =
-        derive_local_delta(&base, &overlay, &delta, &base_witness).expect("derived interface edit");
+        derive_local_delta(&overlay, &delta, &base_witness).expect("derived interface edit");
     let planned = plan_impact_and_summaries(&overlay, &delta, &derived, &base_witness)
         .expect("interface impact");
     assert!(planned.plan.semantically_checked.contains(&callee));
@@ -138,7 +139,10 @@ fn interface_change_uses_reverse_relations_for_validation_and_compiler_impact() 
             && reason.target == callee
             && reason.relation == Some(crate::platform::kernel::RelationKind::FunctionCall)
     }));
-    assert_eq!(overlay.owner(caller), base.owners.get(&caller));
+    assert_eq!(
+        overlay.owner(caller).expect("candidate caller read"),
+        base.owners.get(&caller).cloned()
+    );
     assert_matches_full_oracle(&base_witness, &overlay, &derived);
 }
 
@@ -156,8 +160,8 @@ fn private_implementation_change_walks_behavior_edges_to_dependent_tests() {
     record.declared_type = None;
     let delta = replace_owner_delta(&base, binding, replacement);
     let overlay = KernelOverlay::new(&base, &delta);
-    let derived = derive_local_delta(&base, &overlay, &delta, &base_witness)
-        .expect("derived implementation edit");
+    let derived =
+        derive_local_delta(&overlay, &delta, &base_witness).expect("derived implementation edit");
     let planned = plan_impact_and_summaries(&overlay, &delta, &derived, &base_witness)
         .expect("implementation impact");
     assert!(planned.plan.semantically_checked.contains(&function));
@@ -240,8 +244,8 @@ fn test_relation_rebind_updates_only_the_affected_test_dependency_entries() {
     )
     .expect("test rebind delta");
     let overlay = KernelOverlay::new(&base, &delta);
-    let derived = derive_local_delta(&base, &overlay, &delta, &base_witness)
-        .expect("derived test relation rebind");
+    let derived =
+        derive_local_delta(&overlay, &delta, &base_witness).expect("derived test relation rebind");
     let test_delta = derive_test_dependency_delta(&overlay, &delta, &derived, &base_witness)
         .expect("test dependency delta");
     assert_eq!(test_delta.affected_tests, BTreeSet::from([test]));
@@ -312,13 +316,12 @@ fn mixed_owner_edits_share_one_sorted_overlay_and_one_derived_delta() {
     .expect("mixed canonical delta");
     assert_eq!(delta.changed_owner_count(), 3);
     let overlay = KernelOverlay::new(&base, &delta);
-    assert_eq!(overlay.owner_count(), base.owners.len());
+    assert_eq!(overlay.owner_count(), base.owners.len() as u64);
     let mut observed = Vec::new();
     overlay.for_each_owner(|owner, _| observed.push(owner));
     assert!(observed.windows(2).all(|pair| pair[0] < pair[1]));
-    assert_eq!(observed.len(), overlay.owner_count());
-    let derived =
-        derive_local_delta(&base, &overlay, &delta, &base_witness).expect("mixed derived delta");
+    assert_eq!(observed.len() as u64, overlay.owner_count());
+    let derived = derive_local_delta(&overlay, &delta, &base_witness).expect("mixed derived delta");
     assert_matches_full_oracle(&base_witness, &overlay, &derived);
 }
 
@@ -341,11 +344,13 @@ fn dependency_edit_uses_the_same_package_relation_contract_as_full_rebuild() {
     let overlay = KernelOverlay::new(&base, &delta);
     assert_eq!(overlay.dependency_count(), 1);
     assert_eq!(
-        overlay.dependency(package).map(|record| record.package),
+        overlay
+            .dependency(package)
+            .expect("candidate dependency read")
+            .map(|record| record.package),
         Some(package)
     );
-    let derived =
-        derive_local_delta(&base, &overlay, &delta, &base_witness).expect("dependency relation");
+    let derived = derive_local_delta(&overlay, &delta, &base_witness).expect("dependency relation");
     assert!(derived.relations.removed.is_empty());
     assert_eq!(derived.relations.added.len(), 1);
     assert_matches_full_oracle(&base_witness, &overlay, &derived);
@@ -369,7 +374,7 @@ fn candidate_ownership_collision_rejects_before_full_validation() {
     let delta = replace_owner_delta(&base, caller_root, replacement);
     let overlay = KernelOverlay::new(&base, &delta);
     assert_eq!(
-        derive_local_delta(&base, &overlay, &delta, &base_witness)
+        derive_local_delta(&overlay, &delta, &base_witness)
             .expect_err("one expression cannot acquire two semantic parents")
             .code,
         "change_derived_collision"
@@ -516,9 +521,14 @@ fn prepared_authority_path_copies_semantic_and_witness_roots_through_one_object_
     assert_eq!(authority.witness.manifest.roots, analysis.witness.roots);
     assert!(authority.semantic.map_work.pages_read <= 2);
 
-    let expected_body = encode_owner(overlay.owner(body).expect("candidate body"))
-        .expect("candidate body encoding")
-        .0;
+    let expected_body = encode_owner(
+        &overlay
+            .owner(body)
+            .expect("candidate body read")
+            .expect("candidate body"),
+    )
+    .expect("candidate body encoding")
+    .0;
     let binding_bytes = {
         let page_store = ObjectPageStore::new(&mut stage);
         PersistentMap::from_root(authority.semantic.root.owners)

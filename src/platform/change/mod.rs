@@ -43,7 +43,8 @@ pub use validate::{
     StructuralValidationReport, validate_incremental_frontier, validate_structural_frontier,
 };
 pub use witness_update::{
-    WitnessEditCounts, WitnessMapUpdate, update_witness_maps, update_witness_maps_from,
+    WitnessEditCounts, WitnessMapBase, WitnessMapUpdate, update_witness_maps,
+    update_witness_maps_from,
 };
 
 #[cfg(test)]

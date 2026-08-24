@@ -3,8 +3,9 @@
 use super::CurrentPublication;
 use crate::platform::change::{
     BoundOwnerSummary, CanonicalBaseRead, CanonicalRead, CanonicalReadWork, DerivedDelta,
-    SummaryDelta, TestDependencyDelta, WitnessBaseRead, WitnessMapUpdate, WitnessRead,
-    WitnessReadWork, WitnessRelationRead, WitnessTestDependencyRead, update_witness_maps_from,
+    SummaryDelta, TestDependencyDelta, WitnessBaseRead, WitnessMapBase, WitnessMapUpdate,
+    WitnessRead, WitnessReadWork, WitnessRelationRead, WitnessTestDependencyRead,
+    update_witness_maps_from,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
@@ -582,6 +583,18 @@ impl CanonicalBaseRead for RepositoryView {
         Some(self.revision())
     }
 
+    fn owner_count(&self) -> u64 {
+        self.current.semantic_root.owners.entries()
+    }
+
+    fn dependency_count(&self) -> u64 {
+        self.current.semantic_root.dependencies.entries()
+    }
+
+    fn retirement_count(&self) -> u64 {
+        self.current.semantic_root.retirements.entries()
+    }
+
     fn read_owner(
         &self,
         owner: OwnerKey,
@@ -689,6 +702,18 @@ impl WitnessBaseRead for RepositoryView {
     ) -> Result<WitnessRead<WitnessTestDependencyRead>, Diagnostic> {
         RepositoryView::test_dependencies(self, test, maximum_items)
             .map(witness_test_dependency_read)
+    }
+}
+
+impl WitnessMapBase for RepositoryView {
+    fn update_witness_maps(
+        &self,
+        derived: &DerivedDelta,
+        summaries: &SummaryDelta,
+        tests: &TestDependencyDelta,
+    ) -> Result<WitnessMapUpdate, Diagnostic> {
+        RepositoryView::update_witness_maps(self, derived, summaries, tests)
+            .map(|updated| updated.update)
     }
 }
 

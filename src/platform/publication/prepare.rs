@@ -796,7 +796,8 @@ fn change_work(
             .map_work
             .pages_read
             .saturating_add(analysis.witness.work.pages_read)
-            .saturating_add(witness_reads.map_pages_read),
+            .saturating_add(witness_reads.map_pages_read)
+            .saturating_add(analysis.canonical_read_work.map_pages_read),
         map_pages_written: authority
             .semantic
             .map_work
@@ -815,12 +816,14 @@ fn change_work(
         objects_read: authority
             .store_work
             .objects_read
-            .saturating_add(witness_reads.objects_read),
+            .saturating_add(witness_reads.objects_read)
+            .saturating_add(analysis.canonical_read_work.objects_read),
         objects_staged: authority.store_work.objects_staged,
         bytes_read: authority
             .store_work
             .bytes_read
-            .saturating_add(witness_reads.bytes_read),
+            .saturating_add(witness_reads.bytes_read)
+            .saturating_add(analysis.canonical_read_work.bytes_read),
         bytes_staged: authority.store_work.bytes_staged,
     }
 }

@@ -1,7 +1,10 @@
 //! Declaration-local maintenance of graph-owned test dependency facts.
 
 use super::relation_view::CandidateRelations;
-use super::{CanonicalDelta, DerivedDelta, KernelOverlay, WitnessBaseRead, WitnessReadWork};
+use super::{
+    CanonicalBaseRead, CanonicalDelta, DerivedDelta, KernelOverlay, WitnessBaseRead,
+    WitnessReadWork,
+};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     ExactOwnerKey, OwnerKey, OwnerKind, PropagationClass, RelationEndpoint,
@@ -28,8 +31,8 @@ pub struct TestDependencyDelta {
     pub work: TestDeltaWork,
 }
 
-pub fn derive_test_dependency_delta<W: WitnessBaseRead + ?Sized>(
-    overlay: &KernelOverlay<'_>,
+pub fn derive_test_dependency_delta<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+    overlay: &KernelOverlay<'_, B>,
     canonical: &CanonicalDelta,
     derived: &DerivedDelta,
     base_witness: &W,
@@ -44,7 +47,7 @@ pub fn derive_test_dependency_delta<W: WitnessBaseRead + ?Sized>(
             .removed
             .iter()
             .chain(&derived.relations.added)
-            .filter_map(|edge| local_owner(edge.source, overlay.base().root.package_id)),
+            .filter_map(|edge| local_owner(edge.source, overlay.package_id())),
     );
     let mut affected_tests = BTreeSet::new();
     for seed in seeds {
@@ -60,14 +63,13 @@ pub fn derive_test_dependency_delta<W: WitnessBaseRead + ?Sized>(
         }
     }
 
-    let mut relations =
-        CandidateRelations::new(overlay.base().root.package_id, derived, base_witness);
+    let mut relations = CandidateRelations::new(overlay.package_id(), derived, base_witness);
     let mut removed = BTreeSet::new();
     let mut added = BTreeSet::new();
     for test in &affected_tests {
         let before = witness.test_dependencies(*test)?;
         let after = if overlay
-            .owner(*test)
+            .owner(*test)?
             .is_some_and(|record| record.kind() == OwnerKind::Test)
         {
             candidate_test_dependencies(*test, overlay, &mut witness, &mut relations, &mut work)?
@@ -87,9 +89,9 @@ pub fn derive_test_dependency_delta<W: WitnessBaseRead + ?Sized>(
     })
 }
 
-fn candidate_test_dependencies<W: WitnessBaseRead + ?Sized>(
+fn candidate_test_dependencies<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     test: OwnerKey,
-    overlay: &KernelOverlay<'_>,
+    overlay: &KernelOverlay<'_, B>,
     witness: &mut CandidateTestWitness<'_, W>,
     relations: &mut CandidateRelations<'_, W>,
     work: &mut TestDeltaWork,
@@ -102,14 +104,14 @@ fn candidate_test_dependencies<W: WitnessBaseRead + ?Sized>(
             continue;
         }
         work.owners_visited = work.owners_visited.saturating_add(1);
-        let record = overlay.owner(owner).ok_or_else(|| {
+        let record = overlay.owner(owner)?.ok_or_else(|| {
             test_error(
                 "change_test_owner_missing",
                 format!("test semantic closure references missing owner {owner:?}"),
             )
         })?;
         pending.extend(
-            aggregation_children(record)?
+            aggregation_children(&record)?
                 .into_iter()
                 .filter(|(role, _)| role.aggregates_into_parent())
                 .map(|(_, child)| child),
@@ -124,7 +126,7 @@ fn candidate_test_dependencies<W: WitnessBaseRead + ?Sized>(
             ) {
                 continue;
             }
-            if let Some(target) = local_owner(edge.target, overlay.base().root.package_id)
+            if let Some(target) = local_owner(edge.target, overlay.package_id())
                 && owning_declaration(target, true, witness, work)? == Some(test)
             {
                 continue;
@@ -185,12 +187,12 @@ impl<'a, W: WitnessBaseRead + ?Sized> CandidateTestWitness<'a, W> {
         Ok(read.value)
     }
 
-    fn test_kind(
+    fn test_kind<B: CanonicalBaseRead + ?Sized>(
         &mut self,
         owner: OwnerKey,
-        overlay: &KernelOverlay<'_>,
+        overlay: &KernelOverlay<'_, B>,
     ) -> Result<bool, Diagnostic> {
-        if let Some(record) = overlay.owner(owner) {
+        if let Some(record) = overlay.owner(owner)? {
             return Ok(record.kind() == OwnerKind::Test);
         }
         let kind = if let Some(cached) = self.kinds.get(&owner) {

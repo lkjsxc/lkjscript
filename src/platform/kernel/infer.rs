@@ -35,11 +35,11 @@ struct FunctionSignature {
 pub(crate) trait ExpressionRead {
     fn package_id(&self) -> PackageId;
 
-    fn owner(&self, owner: OwnerKey) -> Option<&OwnerRecord>;
+    fn owner(&self, owner: OwnerKey) -> Result<Option<OwnerRecord>, Diagnostic>;
 
-    fn type_object(&self, digest: TypeObjectDigest) -> Option<&TypeObject>;
+    fn type_object(&self, digest: TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic>;
 
-    fn has_dependency(&self, package: PackageId) -> bool;
+    fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic>;
 }
 
 impl ExpressionRead for KernelSnapshot {
@@ -47,16 +47,16 @@ impl ExpressionRead for KernelSnapshot {
         self.root.package_id
     }
 
-    fn owner(&self, owner: OwnerKey) -> Option<&OwnerRecord> {
-        self.owners.get(&owner)
+    fn owner(&self, owner: OwnerKey) -> Result<Option<OwnerRecord>, Diagnostic> {
+        Ok(self.owners.get(&owner).cloned())
     }
 
-    fn type_object(&self, digest: TypeObjectDigest) -> Option<&TypeObject> {
-        self.types.get(&digest)
+    fn type_object(&self, digest: TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic> {
+        Ok(self.types.get(&digest).cloned())
     }
 
-    fn has_dependency(&self, package: PackageId) -> bool {
-        self.dependencies.contains_key(&package)
+    fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
+        Ok(self.dependencies.contains_key(&package))
     }
 }
 
@@ -97,12 +97,19 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             if self.exhausted() {
                 return;
             }
-            let Some(owner) = self.read.owner(owner).cloned() else {
-                self.error(
-                    "kernel_type_frontier_owner_missing",
-                    "expression-validation frontier names a missing owner",
-                );
-                continue;
+            let owner = match self.read.owner(owner) {
+                Ok(Some(owner)) => owner,
+                Ok(None) => {
+                    self.error(
+                        "kernel_type_frontier_owner_missing",
+                        "expression-validation frontier names a missing owner",
+                    );
+                    continue;
+                }
+                Err(diagnostic) => {
+                    self.diagnostics.push(diagnostic);
+                    continue;
+                }
             };
             match owner {
                 OwnerRecord::Declaration(declaration) => match declaration.payload {
@@ -160,7 +167,13 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     _ => {}
                 },
                 OwnerRecord::Port(port) => {
-                    let requirements = self.component_requirements(port.declaration);
+                    let requirements = match self.component_requirements(port.declaration) {
+                        Ok(requirements) => requirements,
+                        Err(diagnostic) => {
+                            self.diagnostics.push(diagnostic);
+                            continue;
+                        }
+                    };
                     let context = ExecutionContext {
                         declaration: None,
                         pure: false,
@@ -224,8 +237,8 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 "expression inference exceeded its structural depth bound",
             ));
         }
-        let record = match self.read.owner(OwnerKey::Expression(expression)) {
-            Some(OwnerRecord::Expression(record)) => record.clone(),
+        let record = match self.read.owner(OwnerKey::Expression(expression))? {
+            Some(OwnerRecord::Expression(record)) => record,
             _ => {
                 return Err(type_error(
                     "kernel_type_expression_missing",
@@ -267,8 +280,8 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             }
             ExpressionOperation::Let { bindings, body } => {
                 for binding in bindings {
-                    let binding_record = match self.read.owner(OwnerKey::Binding(binding)) {
-                        Some(OwnerRecord::Binding(record)) => record.clone(),
+                    let binding_record = match self.read.owner(OwnerKey::Binding(binding))? {
+                        Some(OwnerRecord::Binding(record)) => record,
                         _ => {
                             return Err(type_error(
                                 "kernel_type_binding_missing",
@@ -347,8 +360,8 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 if case.package != self.read.package_id() {
                     return Err(self.foreign_interface("variant case", case.package));
                 }
-                let case_record = match self.read.owner(OwnerKey::Case(case.case)) {
-                    Some(OwnerRecord::Case(record)) => record.clone(),
+                let case_record = match self.read.owner(OwnerKey::Case(case.case))? {
+                    Some(OwnerRecord::Case(record)) => record,
                     _ => {
                         return Err(type_error(
                             "kernel_type_case_missing",
@@ -435,8 +448,8 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     ));
                 }
                 let operation_record =
-                    match self.read.owner(OwnerKey::Operation(operation.operation)) {
-                        Some(OwnerRecord::Operation(record)) => record.clone(),
+                    match self.read.owner(OwnerKey::Operation(operation.operation))? {
+                        Some(OwnerRecord::Operation(record)) => record,
                         _ => {
                             return Err(type_error(
                                 "kernel_type_operation_missing",
@@ -478,7 +491,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
     ) -> Result<TypeObjectDigest, Diagnostic> {
         match reference {
             LocalValueReference::FunctionParameter(parameter) => {
-                let record = match self.read.owner(OwnerKey::Parameter(parameter)) {
+                let record = match self.read.owner(OwnerKey::Parameter(parameter))? {
                     Some(OwnerRecord::Parameter(record)) => record,
                     _ => {
                         return Err(type_error(
@@ -502,7 +515,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 Ok(record.ty)
             }
             LocalValueReference::OperationParameter(parameter) => {
-                let record = match self.read.owner(OwnerKey::Parameter(parameter)) {
+                let record = match self.read.owner(OwnerKey::Parameter(parameter))? {
                     Some(OwnerRecord::Parameter(record)) => record,
                     _ => {
                         return Err(type_error(
@@ -522,8 +535,8 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             LocalValueReference::LexicalBinding(binding)
             | LocalValueReference::MatchPayload(binding)
             | LocalValueReference::TransactionBinding(binding) => {
-                let record = match self.read.owner(OwnerKey::Binding(binding)) {
-                    Some(OwnerRecord::Binding(record)) => record.clone(),
+                let record = match self.read.owner(OwnerKey::Binding(binding))? {
+                    Some(OwnerRecord::Binding(record)) => record,
                     _ => {
                         return Err(type_error(
                             "kernel_type_binding_missing",
@@ -558,7 +571,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             }
             let expected = match self
                 .read
-                .owner(OwnerKey::Declaration(declaration.declaration))
+                .owner(OwnerKey::Declaration(declaration.declaration))?
             {
                 Some(OwnerRecord::Declaration(record)) => match &record.payload {
                     DeclarationPayload::Record { fields } => fields.clone(),
@@ -583,8 +596,8 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 ));
             }
             for expected_field in expected {
-                let field_record = match self.read.owner(OwnerKey::Field(expected_field)) {
-                    Some(OwnerRecord::Field(record)) => record.clone(),
+                let field_record = match self.read.owner(OwnerKey::Field(expected_field))? {
+                    Some(OwnerRecord::Field(record)) => record,
                     _ => {
                         return Err(type_error(
                             "kernel_type_field_missing",
@@ -643,7 +656,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 if reference.package != self.read.package_id() {
                     return Err(self.foreign_interface("field", reference.package));
                 }
-                let field = match self.read.owner(OwnerKey::Field(reference.field)) {
+                let field = match self.read.owner(OwnerKey::Field(reference.field))? {
                     Some(OwnerRecord::Field(record)) => record,
                     _ => {
                         return Err(type_error(
@@ -708,7 +721,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         }
         let expected_cases = match self
             .read
-            .owner(OwnerKey::Declaration(declaration.declaration))
+            .owner(OwnerKey::Declaration(declaration.declaration))?
         {
             Some(OwnerRecord::Declaration(record)) => match &record.payload {
                 DeclarationPayload::Variant { cases } => cases.clone(),
@@ -735,7 +748,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         }
         let mut result = None;
         for arm in arms {
-            let case = match self.read.owner(OwnerKey::Case(arm.case.case)) {
+            let case = match self.read.owner(OwnerKey::Case(arm.case.case))? {
                 Some(OwnerRecord::Case(record)) => record,
                 _ => {
                     return Err(type_error(
@@ -752,7 +765,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             }
             match (case.payload, arm.payload_binding) {
                 (Some(expected), Some(binding)) => {
-                    let declared = match self.read.owner(OwnerKey::Binding(binding)) {
+                    let declared = match self.read.owner(OwnerKey::Binding(binding))? {
                         Some(OwnerRecord::Binding(record))
                             if record.kind == BindingKind::MatchPayload =>
                         {
@@ -818,7 +831,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         }
         match self
             .read
-            .owner(OwnerKey::Declaration(reference.declaration))
+            .owner(OwnerKey::Declaration(reference.declaration))?
         {
             Some(OwnerRecord::Declaration(record)) => match record.payload {
                 DeclarationPayload::Constant { ty, .. } => Ok(ty),
@@ -844,7 +857,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         }
         let record = match self
             .read
-            .owner(OwnerKey::Declaration(reference.declaration))
+            .owner(OwnerKey::Declaration(reference.declaration))?
         {
             Some(OwnerRecord::Declaration(record)) => record.clone(),
             _ => {
@@ -914,7 +927,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         parameters
             .iter()
             .map(
-                |parameter| match self.read.owner(OwnerKey::Parameter(*parameter)) {
+                |parameter| match self.read.owner(OwnerKey::Parameter(*parameter))? {
                     Some(OwnerRecord::Parameter(record)) => Ok(record.ty),
                     _ => Err(type_error(
                         "kernel_type_parameter_missing",
@@ -1057,20 +1070,22 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
     }
 
     fn type_object(&self, digest: TypeObjectDigest) -> Result<TypeObject, Diagnostic> {
-        self.read
-            .type_object(digest)
-            .or_else(|| self.ephemeral_types.get(&digest))
-            .cloned()
-            .ok_or_else(|| {
-                type_error(
-                    "kernel_type_object_missing",
-                    format!("type object {digest} is unavailable for semantic inference"),
-                )
-            })
+        if let Some(object) = self.read.type_object(digest)? {
+            return Ok(object);
+        }
+        self.ephemeral_types.get(&digest).cloned().ok_or_else(|| {
+            type_error(
+                "kernel_type_object_missing",
+                format!("type object {digest} is unavailable for semantic inference"),
+            )
+        })
     }
 
-    fn component_requirements(&self, declaration: DeclarationId) -> BTreeSet<RequirementId> {
-        match self.read.owner(OwnerKey::Declaration(declaration)) {
+    fn component_requirements(
+        &self,
+        declaration: DeclarationId,
+    ) -> Result<BTreeSet<RequirementId>, Diagnostic> {
+        Ok(match self.read.owner(OwnerKey::Declaration(declaration))? {
             Some(OwnerRecord::Declaration(record)) => match &record.payload {
                 DeclarationPayload::Component { requirements, .. } => {
                     requirements.iter().copied().collect()
@@ -1078,22 +1093,22 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 _ => BTreeSet::new(),
             },
             _ => BTreeSet::new(),
-        }
+        })
     }
 
     fn foreign_interface(&self, label: &str, package: PackageId) -> Diagnostic {
-        if self.read.has_dependency(package) {
-            type_error(
+        match self.read.has_dependency(package) {
+            Ok(true) => type_error(
                 "kernel_type_dependency_interface",
                 format!(
                     "{label} requires the exact dependency semantic interface for package {package}"
                 ),
-            )
-        } else {
-            type_error(
+            ),
+            Ok(false) => type_error(
                 "kernel_type_dependency_missing",
                 format!("{label} names unbound package {package}"),
-            )
+            ),
+            Err(diagnostic) => diagnostic,
         }
     }
 

@@ -1,8 +1,8 @@
 //! Owner-frontier structural and semantic validation over an isolated candidate overlay.
 
 use super::{
-    CanonicalDelta, DerivedDelta, ImpactPlan, KernelOverlay, SummaryDelta, WitnessBaseRead,
-    WitnessReadWork,
+    CanonicalBaseRead, CanonicalDelta, DerivedDelta, ImpactPlan, KernelOverlay, SummaryDelta,
+    WitnessBaseRead, WitnessReadWork,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
@@ -40,8 +40,8 @@ pub struct StructuralValidationReport {
     pub work: IncrementalValidationWork,
 }
 
-pub fn validate_structural_frontier<W: WitnessBaseRead + ?Sized>(
-    overlay: &KernelOverlay<'_>,
+pub fn validate_structural_frontier<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+    overlay: &KernelOverlay<'_, B>,
     canonical: &CanonicalDelta,
     derived: &DerivedDelta,
     base_witness: &W,
@@ -71,8 +71,8 @@ pub fn validate_structural_frontier<W: WitnessBaseRead + ?Sized>(
     }
 }
 
-pub fn validate_incremental_frontier<W: WitnessBaseRead + ?Sized>(
-    overlay: &KernelOverlay<'_>,
+pub fn validate_incremental_frontier<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+    overlay: &KernelOverlay<'_, B>,
     canonical: &CanonicalDelta,
     impact: &ImpactPlan,
     summaries: &SummaryDelta,
@@ -120,8 +120,8 @@ pub fn validate_incremental_frontier<W: WitnessBaseRead + ?Sized>(
     }
 }
 
-struct IncrementalValidator<'a, W: ?Sized> {
-    overlay: &'a KernelOverlay<'a>,
+struct IncrementalValidator<'a, B: ?Sized, W: ?Sized> {
+    overlay: &'a KernelOverlay<'a, B>,
     canonical: &'a CanonicalDelta,
     derived: &'a DerivedDelta,
     base_witness: &'a W,
@@ -131,7 +131,7 @@ struct IncrementalValidator<'a, W: ?Sized> {
     ownership_cache: BTreeMap<OwnerKey, Option<OwnershipEntry>>,
 }
 
-impl<W: WitnessBaseRead + ?Sized> IncrementalValidator<'_, W> {
+impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> IncrementalValidator<'_, B, W> {
     fn validate_structural(&mut self) {
         self.validate_changed_records();
         self.validate_ownership_frontier();
@@ -155,8 +155,7 @@ impl<W: WitnessBaseRead + ?Sized> IncrementalValidator<'_, W> {
         for (package, edit) in &self.canonical.dependencies {
             if let Some((_, dependency)) = &edit.after {
                 self.capture(dependency.validate_local());
-                if dependency.package != *package
-                    || dependency.package == self.overlay.base().root.package_id
+                if dependency.package != *package || dependency.package == self.overlay.package_id()
                 {
                     self.error(
                         "change_validate_dependency_key",
@@ -168,7 +167,14 @@ impl<W: WitnessBaseRead + ?Sized> IncrementalValidator<'_, W> {
         for (owner, edit) in &self.canonical.retirements {
             if let Some((_, retirement)) = &edit.after {
                 self.capture(retirement.validate_local());
-                if retirement.owner != *owner || self.overlay.owner(*owner).is_some() {
+                let remains_live = match self.overlay.owner(*owner) {
+                    Ok(record) => record.is_some(),
+                    Err(diagnostic) => {
+                        self.diagnostics.push(diagnostic);
+                        continue;
+                    }
+                };
+                if retirement.owner != *owner || remains_live {
                     self.error(
                         "change_validate_retirement_key",
                         "candidate retirement key is foreign or remains live",
@@ -198,7 +204,14 @@ impl<W: WitnessBaseRead + ?Sized> IncrementalValidator<'_, W> {
                     continue;
                 }
             };
-            match self.overlay.owner(*owner) {
+            let candidate_record = match self.overlay.owner(*owner) {
+                Ok(record) => record,
+                Err(diagnostic) => {
+                    self.diagnostics.push(diagnostic);
+                    continue;
+                }
+            };
+            match candidate_record {
                 Some(_) if candidate_ownership.is_none() => self.error(
                     "change_validate_ownership_missing",
                     format!("live candidate owner {owner:?} has no ownership witness"),
@@ -211,10 +224,15 @@ impl<W: WitnessBaseRead + ?Sized> IncrementalValidator<'_, W> {
             }
         }
         for parent in parents {
-            let Some(record) = self.overlay.owner(parent) else {
-                continue;
+            let record = match self.overlay.owner(parent) {
+                Ok(Some(record)) => record,
+                Ok(None) => continue,
+                Err(diagnostic) => {
+                    self.diagnostics.push(diagnostic);
+                    continue;
+                }
             };
-            let children = match aggregation_children(record) {
+            let children = match aggregation_children(&record) {
                 Ok(children) => children,
                 Err(diagnostic) => {
                     self.diagnostics.push(diagnostic);
@@ -247,13 +265,15 @@ impl<W: WitnessBaseRead + ?Sized> IncrementalValidator<'_, W> {
             }
         }
         for (owner, entry) in parent_entries {
-            if let OwnershipParent::Owner(parent) = entry.parent
-                && self.overlay.owner(parent).is_none()
-            {
-                self.error(
-                    "change_validate_parent_missing",
-                    format!("candidate owner {owner:?} has missing parent {parent:?}"),
-                );
+            if let OwnershipParent::Owner(parent) = entry.parent {
+                match self.overlay.owner(parent) {
+                    Ok(Some(_)) => {}
+                    Ok(None) => self.error(
+                        "change_validate_parent_missing",
+                        format!("candidate owner {owner:?} has missing parent {parent:?}"),
+                    ),
+                    Err(diagnostic) => self.diagnostics.push(diagnostic),
+                }
             }
         }
     }
@@ -280,15 +300,22 @@ impl<W: WitnessBaseRead + ?Sized> IncrementalValidator<'_, W> {
                 );
                 continue;
             }
-            let Some(object) = self.overlay.type_object(digest) else {
-                self.error(
-                    "change_validate_type_missing",
-                    format!("candidate type object {digest} is missing"),
-                );
-                continue;
+            let object = match self.overlay.type_object(digest) {
+                Ok(Some(object)) => object,
+                Ok(None) => {
+                    self.error(
+                        "change_validate_type_missing",
+                        format!("candidate type object {digest} is missing"),
+                    );
+                    continue;
+                }
+                Err(diagnostic) => {
+                    self.diagnostics.push(diagnostic);
+                    continue;
+                }
             };
             self.capture(object.validate_local());
-            match crate::platform::kernel::encode_type_object(object) {
+            match crate::platform::kernel::encode_type_object(&object) {
                 Ok((actual, _)) if actual == digest => {}
                 Ok(_) => self.error(
                     "change_validate_type_digest",
@@ -348,20 +375,20 @@ fn validation_error(
     Diagnostic::new(class, code, message)
 }
 
-impl ExpressionRead for KernelOverlay<'_> {
+impl<B: CanonicalBaseRead + ?Sized> ExpressionRead for KernelOverlay<'_, B> {
     fn package_id(&self) -> PackageId {
-        self.base().root.package_id
+        KernelOverlay::package_id(self)
     }
 
-    fn owner(&self, owner: OwnerKey) -> Option<&OwnerRecord> {
+    fn owner(&self, owner: OwnerKey) -> Result<Option<OwnerRecord>, Diagnostic> {
         KernelOverlay::owner(self, owner)
     }
 
-    fn type_object(&self, digest: TypeObjectDigest) -> Option<&TypeObject> {
+    fn type_object(&self, digest: TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic> {
         KernelOverlay::type_object(self, digest)
     }
 
-    fn has_dependency(&self, package: PackageId) -> bool {
-        self.dependency(package).is_some()
+    fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic> {
+        Ok(self.dependency(package)?.is_some())
     }
 }

@@ -133,6 +133,12 @@ pub trait CanonicalBaseRead {
 
     fn exact_revision(&self) -> Option<RevisionId>;
 
+    fn owner_count(&self) -> u64;
+
+    fn dependency_count(&self) -> u64;
+
+    fn retirement_count(&self) -> u64;
+
     fn read_owner(&self, owner: OwnerKey)
     -> Result<CanonicalRead<Option<OwnerRecord>>, Diagnostic>;
 
@@ -212,6 +218,18 @@ impl CanonicalBaseRead for KernelSnapshot {
 
     fn exact_revision(&self) -> Option<RevisionId> {
         None
+    }
+
+    fn owner_count(&self) -> u64 {
+        self.root.owners.entries()
+    }
+
+    fn dependency_count(&self) -> u64 {
+        self.root.dependencies.entries()
+    }
+
+    fn retirement_count(&self) -> u64 {
+        self.root.retirements.entries()
     }
 
     fn read_owner(

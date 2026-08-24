@@ -25,9 +25,12 @@ use std::collections::{BTreeMap, BTreeSet};
 pub(crate) trait SummaryRead {
     fn package_id(&self) -> PackageId;
 
-    fn owner(&self, owner: OwnerKey) -> Option<&OwnerRecord>;
+    fn owner(&self, owner: OwnerKey) -> Result<Option<OwnerRecord>, Diagnostic>;
 
-    fn dependency(&self, package: PackageId) -> Option<&crate::platform::kernel::DependencyRecord>;
+    fn dependency(
+        &self,
+        package: PackageId,
+    ) -> Result<Option<crate::platform::kernel::DependencyRecord>, Diagnostic>;
 
     fn ownership(&self, owner: OwnerKey) -> Result<Option<OwnershipEntry>, Diagnostic>;
 
@@ -161,15 +164,16 @@ pub(crate) fn rebuild_selected_owner_summaries<R: SummaryRead>(
     view: &R,
     selected: &BTreeSet<OwnerKey>,
 ) -> Result<BTreeMap<OwnerKey, OwnerSummary>, Diagnostic> {
-    let live = selected
-        .iter()
-        .copied()
-        .filter(|owner| view.owner(*owner).is_some())
-        .collect::<BTreeSet<_>>();
+    let mut live = BTreeSet::new();
+    for owner in selected {
+        if view.owner(*owner)?.is_some() {
+            live.insert(*owner);
+        }
+    }
     let depths = selected_ownership_depths(view, &live)?;
     let mut working = BTreeMap::new();
     for owner in &live {
-        let record = view.owner(*owner).ok_or_else(|| {
+        let record = view.owner(*owner)?.ok_or_else(|| {
             witness_error(
                 DiagnosticClass::Corrupt,
                 "witness_selected_owner_missing",
@@ -177,7 +181,7 @@ pub(crate) fn rebuild_selected_owner_summaries<R: SummaryRead>(
             )
         })?;
         let outgoing = view.outgoing_relations(*owner)?;
-        working.insert(*owner, local_summary(*owner, record, Some(&outgoing))?);
+        working.insert(*owner, local_summary(*owner, &record, Some(&outgoing))?);
     }
 
     let mut deepest_first = depths
@@ -186,14 +190,14 @@ pub(crate) fn rebuild_selected_owner_summaries<R: SummaryRead>(
         .collect::<Vec<_>>();
     deepest_first.sort_by(|left, right| right.cmp(left));
     for (_, owner) in &deepest_first {
-        let record = view.owner(*owner).ok_or_else(|| {
+        let record = view.owner(*owner)?.ok_or_else(|| {
             witness_error(
                 DiagnosticClass::Corrupt,
                 "witness_selected_owner_missing",
                 "selected owner has no candidate record",
             )
         })?;
-        let children = aggregation_children(record)?;
+        let children = aggregation_children(&record)?;
         let child_summaries = children
             .into_iter()
             .filter(|(role, _)| aggregation_mode(*role) != AggregationMode::None)
@@ -247,8 +251,8 @@ pub(crate) fn rebuild_selected_owner_summaries<R: SummaryRead>(
                 }
             },
             |package| {
-                view.dependency(package)
-                    .map(crate::platform::kernel::encode_dependency)
+                view.dependency(package)?
+                    .map(|dependency| crate::platform::kernel::encode_dependency(&dependency))
                     .transpose()
                     .map(|encoded| encoded.map(|(digest, _)| digest))
             },
@@ -256,14 +260,14 @@ pub(crate) fn rebuild_selected_owner_summaries<R: SummaryRead>(
     }
 
     for (_, owner) in deepest_first {
-        let record = view.owner(owner).ok_or_else(|| {
+        let record = view.owner(owner)?.ok_or_else(|| {
             witness_error(
                 DiagnosticClass::Corrupt,
                 "witness_selected_owner_missing",
                 "selected owner has no candidate record",
             )
         })?;
-        let children = aggregation_children(record)?;
+        let children = aggregation_children(&record)?;
         let child_validations = children
             .into_iter()
             .filter(|(role, _)| aggregation_mode(*role) != AggregationMode::None)

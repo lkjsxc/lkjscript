@@ -2,8 +2,8 @@
 
 use super::relation_view::CandidateRelations;
 use super::{
-    CanonicalDelta, DerivedDelta, KernelOverlay, OwnerSummaryEdit, SummaryDelta, WitnessBaseRead,
-    WitnessReadWork, derive_summary_delta, derive_summary_delta_for,
+    CanonicalBaseRead, CanonicalDelta, DerivedDelta, KernelOverlay, OwnerSummaryEdit, SummaryDelta,
+    WitnessBaseRead, WitnessReadWork, derive_summary_delta, derive_summary_delta_for,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
@@ -106,8 +106,8 @@ pub struct PlannedSummaries {
     pub plan: ImpactPlan,
 }
 
-pub fn plan_impact_and_summaries<W: WitnessBaseRead + ?Sized>(
-    overlay: &KernelOverlay<'_>,
+pub fn plan_impact_and_summaries<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+    overlay: &KernelOverlay<'_, B>,
     canonical: &CanonicalDelta,
     derived: &DerivedDelta,
     base_witness: &W,
@@ -118,8 +118,8 @@ pub fn plan_impact_and_summaries<W: WitnessBaseRead + ?Sized>(
         summary_owners: initial.selected.clone(),
         ..ImpactPlan::default()
     };
-    let mut relations =
-        CandidateRelations::new(overlay.base().root.package_id, derived, base_witness);
+    let package = overlay.package_id();
+    let mut relations = CandidateRelations::new(package, derived, base_witness);
     let mut ownership = CandidateOwnership::new(derived, base_witness);
     let mut behavior = VecDeque::new();
     let mut behavior_seen = BTreeSet::new();
@@ -164,7 +164,7 @@ pub fn plan_impact_and_summaries<W: WitnessBaseRead + ?Sized>(
             if !change.affects_validation(edge.kind.propagation()) {
                 continue;
             }
-            let Some(source) = local_owner(edge.source, overlay.base().root.package_id) else {
+            let Some(source) = local_owner(edge.source, package) else {
                 continue;
             };
             add_summary_paths(
@@ -209,7 +209,7 @@ pub fn plan_impact_and_summaries<W: WitnessBaseRead + ?Sized>(
             ) {
                 continue;
             }
-            let Some(source) = local_owner(edge.source, overlay.base().root.package_id) else {
+            let Some(source) = local_owner(edge.source, package) else {
                 continue;
             };
             let declarations = owning_units(source, overlay, &mut ownership, &mut plan.work)?;
@@ -320,12 +320,12 @@ impl<'a, W: WitnessBaseRead + ?Sized> CandidateOwnership<'a, W> {
         Ok(self.ownership.get(&owner).copied().flatten())
     }
 
-    fn owner_kind(
+    fn owner_kind<B: CanonicalBaseRead + ?Sized>(
         &mut self,
         owner: OwnerKey,
-        overlay: &KernelOverlay<'_>,
+        overlay: &KernelOverlay<'_, B>,
     ) -> Result<Option<OwnerKind>, Diagnostic> {
-        if let Some(record) = overlay.owner(owner) {
+        if let Some(record) = overlay.owner(owner)? {
             return Ok(Some(record.kind()));
         }
         if !self.owner_kinds.contains_key(&owner) {
@@ -379,9 +379,9 @@ fn walk_aggregating_path(
     Ok(())
 }
 
-fn add_owning_units<W: WitnessBaseRead + ?Sized>(
+fn add_owning_units<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     owner: OwnerKey,
-    overlay: &KernelOverlay<'_>,
+    overlay: &KernelOverlay<'_, B>,
     ownership: &mut CandidateOwnership<'_, W>,
     units: &mut BTreeSet<OwnerKey>,
     work: &mut ImpactWork,
@@ -390,9 +390,9 @@ fn add_owning_units<W: WitnessBaseRead + ?Sized>(
     Ok(())
 }
 
-fn owning_units<W: WitnessBaseRead + ?Sized>(
+fn owning_units<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     owner: OwnerKey,
-    overlay: &KernelOverlay<'_>,
+    overlay: &KernelOverlay<'_, B>,
     ownership: &mut CandidateOwnership<'_, W>,
     work: &mut ImpactWork,
 ) -> Result<BTreeSet<OwnerKey>, Diagnostic> {
@@ -418,7 +418,7 @@ fn owning_units<W: WitnessBaseRead + ?Sized>(
                 ownership.before(current)?
             };
             let Some(entry) = entry else {
-                if overlay.owner(current).is_some_and(|record| {
+                if overlay.owner(current)?.is_some_and(|record| {
                     matches!(record.kind(), OwnerKind::Port | OwnerKind::Target)
                 }) {
                     units.insert(current);

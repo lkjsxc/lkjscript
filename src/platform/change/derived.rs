@@ -1,6 +1,6 @@
 //! Locally derived witness deltas from changed canonical owner records.
 
-use super::{CanonicalDelta, KernelOverlay, WitnessBaseRead, WitnessReadWork};
+use super::{CanonicalBaseRead, CanonicalDelta, KernelOverlay, WitnessBaseRead, WitnessReadWork};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     ExactOwnerKey, OwnerKey, OwnerRecord, RelationEdge, RelationEndpoint, RelationKind,
@@ -34,15 +34,14 @@ pub struct DerivedDelta {
     pub read_work: WitnessReadWork,
 }
 
-pub fn derive_local_delta<W: WitnessBaseRead + ?Sized>(
-    base: &crate::platform::kernel::KernelSnapshot,
-    overlay: &KernelOverlay<'_>,
+pub fn derive_local_delta<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+    overlay: &KernelOverlay<'_, B>,
     delta: &CanonicalDelta,
     base_witness: &W,
 ) -> Result<DerivedDelta, Diagnostic> {
     if !base_witness.witness_contract_is_current()
-        || base_witness.witness_repository_id() != base.root.repository_id
-        || base_witness.witness_package_id() != base.root.package_id
+        || base_witness.witness_repository_id() != overlay.repository_id()
+        || base_witness.witness_package_id() != overlay.package_id()
     {
         return Err(derived_error(
             DiagnosticClass::Corrupt,
@@ -61,40 +60,40 @@ pub fn derive_local_delta<W: WitnessBaseRead + ?Sized>(
 
     for (owner, edit) in &delta.owners {
         if edit.before.is_some() {
-            let record = base.owners.get(owner).ok_or_else(|| {
+            let record = overlay.base_owner(*owner)?.ok_or_else(|| {
                 derived_error(
                     DiagnosticClass::Corrupt,
                     "change_delta_before_owner",
                     "canonical owner delta names a missing before record",
                 )
             })?;
-            insert_namespace_contribution(&mut before_namespaces, record)?;
-            insert_ownership_contributions(&mut before_ownership, record)?;
+            insert_namespace_contribution(&mut before_namespaces, &record)?;
+            insert_ownership_contributions(&mut before_ownership, &record)?;
             before_relations.extend(extract_owner_relations(
-                base.root.package_id,
+                overlay.package_id(),
                 *owner,
-                record,
-                |digest| base.types.get(&digest).cloned(),
+                &record,
+                |digest| overlay.base_type_object(digest),
             )?);
         }
         if let Some((_, record)) = &edit.after {
             insert_namespace_contribution(&mut after_namespaces, record)?;
             insert_ownership_contributions(&mut after_ownership, record)?;
             after_relations.extend(extract_owner_relations(
-                base.root.package_id,
+                overlay.package_id(),
                 *owner,
                 record,
-                |digest| overlay.type_object(digest).cloned(),
+                |digest| overlay.type_object(digest),
             )?);
         }
     }
 
     for (package, edit) in &delta.dependencies {
         if edit.before.is_some() {
-            before_relations.insert(package_dependency(base.root.package_id, *package));
+            before_relations.insert(package_dependency(overlay.package_id(), *package));
         }
         if edit.after.is_some() {
-            after_relations.insert(package_dependency(base.root.package_id, *package));
+            after_relations.insert(package_dependency(overlay.package_id(), *package));
         }
     }
 
@@ -125,7 +124,7 @@ pub fn derive_local_delta<W: WitnessBaseRead + ?Sized>(
     }
 
     let summary_candidates = summary_candidates(
-        base.root.package_id,
+        overlay.package_id(),
         delta,
         &ownership,
         &removed,

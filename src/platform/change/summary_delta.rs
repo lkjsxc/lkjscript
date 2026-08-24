@@ -1,7 +1,10 @@
 //! Bounded owner-summary rebuilding over one exact candidate overlay.
 
 use super::relation_view::CandidateRelations;
-use super::{BoundOwnerSummary, DerivedDelta, KernelOverlay, WitnessBaseRead, WitnessReadWork};
+use super::{
+    BoundOwnerSummary, CanonicalBaseRead, DerivedDelta, KernelOverlay, WitnessBaseRead,
+    WitnessReadWork,
+};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{OwnerKey, PackageId, RelationEdge};
 use crate::platform::witness::{
@@ -28,8 +31,8 @@ pub struct SummaryDelta {
     pub read_work: WitnessReadWork,
 }
 
-pub fn derive_summary_delta<W: WitnessBaseRead + ?Sized>(
-    overlay: &KernelOverlay<'_>,
+pub fn derive_summary_delta<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+    overlay: &KernelOverlay<'_, B>,
     derived: &DerivedDelta,
     base_witness: &W,
 ) -> Result<SummaryDelta, Diagnostic> {
@@ -41,8 +44,8 @@ pub fn derive_summary_delta<W: WitnessBaseRead + ?Sized>(
     )
 }
 
-pub fn derive_summary_delta_for<W: WitnessBaseRead + ?Sized>(
-    overlay: &KernelOverlay<'_>,
+pub fn derive_summary_delta_for<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+    overlay: &KernelOverlay<'_, B>,
     derived: &DerivedDelta,
     base_witness: &W,
     selected: BTreeSet<OwnerKey>,
@@ -103,8 +106,8 @@ pub fn derive_summary_delta_for<W: WitnessBaseRead + ?Sized>(
     })
 }
 
-struct CandidateSummaryView<'a, W: ?Sized> {
-    overlay: &'a KernelOverlay<'a>,
+struct CandidateSummaryView<'a, B: ?Sized, W: ?Sized> {
+    overlay: &'a KernelOverlay<'a, B>,
     base_witness: &'a W,
     ownership_edits: BTreeMap<OwnerKey, Option<OwnershipEntry>>,
     ownership_cache: RefCell<BTreeMap<OwnerKey, Option<OwnershipEntry>>>,
@@ -113,8 +116,14 @@ struct CandidateSummaryView<'a, W: ?Sized> {
     read_work: RefCell<WitnessReadWork>,
 }
 
-impl<'a, W: WitnessBaseRead + ?Sized> CandidateSummaryView<'a, W> {
-    fn new(overlay: &'a KernelOverlay<'a>, derived: &'a DerivedDelta, base_witness: &'a W) -> Self {
+impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>
+    CandidateSummaryView<'a, B, W>
+{
+    fn new(
+        overlay: &'a KernelOverlay<'a, B>,
+        derived: &'a DerivedDelta,
+        base_witness: &'a W,
+    ) -> Self {
         Self {
             overlay,
             base_witness,
@@ -126,7 +135,7 @@ impl<'a, W: WitnessBaseRead + ?Sized> CandidateSummaryView<'a, W> {
             ownership_cache: RefCell::new(BTreeMap::new()),
             summary_cache: RefCell::new(BTreeMap::new()),
             relations: RefCell::new(CandidateRelations::new(
-                overlay.base().root.package_id,
+                overlay.package_id(),
                 derived,
                 base_witness,
             )),
@@ -159,16 +168,24 @@ impl<'a, W: WitnessBaseRead + ?Sized> CandidateSummaryView<'a, W> {
     }
 }
 
-impl<W: WitnessBaseRead + ?Sized> SummaryRead for CandidateSummaryView<'_, W> {
+impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> SummaryRead
+    for CandidateSummaryView<'_, B, W>
+{
     fn package_id(&self) -> PackageId {
-        self.overlay.base().root.package_id
+        self.overlay.package_id()
     }
 
-    fn owner(&self, owner: OwnerKey) -> Option<&crate::platform::kernel::OwnerRecord> {
+    fn owner(
+        &self,
+        owner: OwnerKey,
+    ) -> Result<Option<crate::platform::kernel::OwnerRecord>, Diagnostic> {
         self.overlay.owner(owner)
     }
 
-    fn dependency(&self, package: PackageId) -> Option<&crate::platform::kernel::DependencyRecord> {
+    fn dependency(
+        &self,
+        package: PackageId,
+    ) -> Result<Option<crate::platform::kernel::DependencyRecord>, Diagnostic> {
         self.overlay.dependency(package)
     }
 

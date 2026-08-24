@@ -188,7 +188,7 @@ pub fn extract_relations(
             source,
             record,
             package,
-            &mut |digest| types.get(&digest).cloned(),
+            &mut |digest| Ok(types.get(&digest).cloned()),
             &mut edges,
             &mut work,
         )?;
@@ -213,7 +213,7 @@ pub fn extract_owner_relations<F>(
     mut type_object: F,
 ) -> Result<Vec<RelationEdge>, Diagnostic>
 where
-    F: FnMut(TypeObjectDigest) -> Option<TypeObject>,
+    F: FnMut(TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic>,
 {
     if record.owner() != owner {
         return Err(relation_error(
@@ -243,7 +243,7 @@ fn extract_owner<F>(
     work: &mut usize,
 ) -> Result<(), Diagnostic>
 where
-    F: FnMut(TypeObjectDigest) -> Option<TypeObject>,
+    F: FnMut(TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic>,
 {
     match record {
         OwnerRecord::Module(_) => {}
@@ -631,7 +631,7 @@ fn extract_type_relations<F>(
     work: &mut usize,
 ) -> Result<(), Diagnostic>
 where
-    F: FnMut(TypeObjectDigest) -> Option<TypeObject>,
+    F: FnMut(TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic>,
 {
     let mut pending = vec![root];
     let mut observed = BTreeSet::new();
@@ -640,7 +640,7 @@ where
         if !observed.insert(digest) {
             continue;
         }
-        let object = type_object(digest).ok_or_else(|| {
+        let object = type_object(digest)?.ok_or_else(|| {
             relation_error(
                 "kernel_relation_missing_type",
                 format!("type object {digest} is missing"),

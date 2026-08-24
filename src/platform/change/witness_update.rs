@@ -1,6 +1,6 @@
 //! Exact path-copy updates for all six committed validation-witness maps.
 
-use super::{DerivedDelta, SummaryDelta, TestDependencyDelta};
+use super::{DerivedDelta, SummaryDelta, TestDependencyDelta, WitnessBaseRead};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::persistent_map::{
     BatchOutcome, MapEdit, MapError, MapErrorClass, MapWork, MemoryPageStore, OverlayPageStore,
@@ -27,6 +27,28 @@ pub struct WitnessMapUpdate {
     pub new_pages: MemoryPageStore,
     pub work: MapWork,
     pub edits: WitnessEditCounts,
+}
+
+/// Exact base witness capable of path-copying its committed maps into an isolated candidate
+/// stage. Implementations may read pages from memory or immutable packed repository authority.
+pub trait WitnessMapBase: WitnessBaseRead {
+    fn update_witness_maps(
+        &self,
+        derived: &DerivedDelta,
+        summaries: &SummaryDelta,
+        tests: &TestDependencyDelta,
+    ) -> Result<WitnessMapUpdate, Diagnostic>;
+}
+
+impl WitnessMapBase for FullWitness {
+    fn update_witness_maps(
+        &self,
+        derived: &DerivedDelta,
+        summaries: &SummaryDelta,
+        tests: &TestDependencyDelta,
+    ) -> Result<WitnessMapUpdate, Diagnostic> {
+        update_witness_maps(self, derived, summaries, tests)
+    }
 }
 
 pub fn update_witness_maps(

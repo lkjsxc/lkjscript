@@ -336,15 +336,10 @@ fn local_derived_delta_reads_only_affected_witness_keys() {
     .canonical;
     let overlay = KernelOverlay::new(&created.initial.snapshot, &canonical);
 
-    let repository = derive_local_delta(&created.initial.snapshot, &overlay, &canonical, &view)
-        .expect("repository-backed derived delta");
-    let oracle = derive_local_delta(
-        &created.initial.snapshot,
-        &overlay,
-        &canonical,
-        &created.initial.witness,
-    )
-    .expect("in-memory derived oracle");
+    let repository =
+        derive_local_delta(&overlay, &canonical, &view).expect("repository-backed derived delta");
+    let oracle = derive_local_delta(&overlay, &canonical, &created.initial.witness)
+        .expect("in-memory derived oracle");
     assert_eq!(repository.namespaces, oracle.namespaces);
     assert_eq!(repository.ownership, oracle.ownership);
     assert_eq!(repository.relations, oracle.relations);
@@ -383,8 +378,8 @@ fn repository_summary_rebuild_reads_only_selected_witness_closure() {
     )
     .expect("canonical rename");
     let overlay = KernelOverlay::new(&created.initial.snapshot, &canonical);
-    let derived = derive_local_delta(&created.initial.snapshot, &overlay, &canonical, &view)
-        .expect("repository-backed derived delta");
+    let derived =
+        derive_local_delta(&overlay, &canonical, &view).expect("repository-backed derived delta");
 
     let repository =
         derive_summary_delta(&overlay, &derived, &view).expect("repository-backed summary delta");
@@ -425,8 +420,8 @@ fn repository_impact_plan_matches_full_witness_oracle() {
     )
     .expect("canonical binding edit");
     let overlay = KernelOverlay::new(&created.initial.snapshot, &canonical);
-    let derived = derive_local_delta(&created.initial.snapshot, &overlay, &canonical, &view)
-        .expect("repository-backed derived delta");
+    let derived =
+        derive_local_delta(&overlay, &canonical, &view).expect("repository-backed derived delta");
 
     let repository = plan_impact_and_summaries(&overlay, &canonical, &derived, &view)
         .expect("repository-backed impact plan");
@@ -504,8 +499,8 @@ fn repository_incremental_validation_reads_only_frontier_ownership() {
     )
     .expect("canonical binding edit");
     let overlay = KernelOverlay::new(&created.initial.snapshot, &canonical);
-    let derived = derive_local_delta(&created.initial.snapshot, &overlay, &canonical, &view)
-        .expect("repository-backed derived delta");
+    let derived =
+        derive_local_delta(&overlay, &canonical, &view).expect("repository-backed derived delta");
     let repository_plan = plan_impact_and_summaries(&overlay, &canonical, &derived, &view)
         .expect("repository-backed impact plan");
     let oracle_plan =
@@ -607,8 +602,8 @@ fn repository_test_delta_reads_only_the_affected_test_witness_closure() {
     )
     .expect("canonical test edit");
     let overlay = KernelOverlay::new(&created.initial.snapshot, &canonical);
-    let derived = derive_local_delta(&created.initial.snapshot, &overlay, &canonical, &view)
-        .expect("repository-backed derived delta");
+    let derived =
+        derive_local_delta(&overlay, &canonical, &view).expect("repository-backed derived delta");
 
     let repository = derive_test_dependency_delta(&overlay, &canonical, &derived, &view)
         .expect("repository-backed test delta");
@@ -659,12 +654,48 @@ fn repository_path_copies_witness_maps_from_packed_base_pages() {
         }],
     )
     .expect("canonical rename");
-    let analysis = prepare_change_analysis(
+    let oracle = prepare_change_analysis(
         &created.initial.snapshot,
         &created.initial.witness,
-        canonical,
+        canonical.clone(),
     )
-    .expect("generic preparation");
+    .expect("in-memory preparation oracle");
+    let analysis = prepare_change_analysis(&view, &view, canonical)
+        .expect("repository-backed generic preparation");
+
+    assert_eq!(analysis.derived.namespaces, oracle.derived.namespaces);
+    assert_eq!(analysis.derived.ownership, oracle.derived.ownership);
+    assert_eq!(analysis.derived.relations, oracle.derived.relations);
+    assert_eq!(
+        analysis.derived.summary_candidates,
+        oracle.derived.summary_candidates
+    );
+    assert_eq!(
+        analysis.summaries.initial.edits,
+        oracle.summaries.initial.edits
+    );
+    assert_eq!(
+        analysis.summaries.final_delta.edits,
+        oracle.summaries.final_delta.edits
+    );
+    assert_eq!(
+        analysis.summaries.plan.reasons,
+        oracle.summaries.plan.reasons
+    );
+    assert_eq!(analysis.tests.removed, oracle.tests.removed);
+    assert_eq!(analysis.tests.added, oracle.tests.added);
+    assert_eq!(analysis.witness.roots, oracle.witness.roots);
+    assert_eq!(analysis.witness.edits, oracle.witness.edits);
+    assert_eq!(
+        analysis.validation.semantically_checked,
+        oracle.validation.semantically_checked
+    );
+    assert!(analysis.canonical_read_work.point_reads > 0);
+    assert!(analysis.canonical_read_work.point_reads < 64);
+    assert!(analysis.canonical_read_work.map_pages_read > 0);
+    assert!(analysis.canonical_read_work.map_pages_read < 256);
+    assert!(analysis.canonical_read_work.canonical_records_decoded > 0);
+    assert!(analysis.canonical_read_work.canonical_records_decoded < 64);
 
     let repository = view
         .update_witness_maps(
