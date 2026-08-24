@@ -12,8 +12,9 @@ use super::{
     SummaryDimensions, TransactionBody, ValidationEvidence, ValidationProfile, WorkObservation,
 };
 use crate::platform::change::{
-    CanonicalDelta, PreparedAuthority, PreparedChangeAnalysis, stage_full_authority,
-    stage_prepared_authority, summary_dimension_change,
+    CanonicalBaseRead, CanonicalDelta, CanonicalReadWork, PreparedAuthority,
+    PreparedChangeAnalysis, WitnessBaseRead, stage_full_authority, stage_prepared_authority,
+    summary_dimension_change,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
@@ -23,7 +24,7 @@ use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, ObjectStage, StoreError, StoreErrorClass,
     StoreWork,
 };
-use crate::platform::witness::FullWitness;
+use crate::platform::witness::{FullWitness, encode_witness_manifest};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -132,10 +133,14 @@ pub fn prepare_initial_publication<S: ImmutableObjectStore + ?Sized>(
     })
 }
 
-pub fn prepare_change_publication<S: ImmutableObjectStore + ?Sized>(
+pub fn prepare_change_publication<
+    B: CanonicalBaseRead + ?Sized,
+    W: WitnessBaseRead + ?Sized,
+    S: ImmutableObjectStore + ?Sized,
+>(
     base: AcceptedBinding,
-    base_snapshot: &KernelSnapshot,
-    base_witness: &FullWitness,
+    base_snapshot: &B,
+    base_witness: &W,
     analysis: &PreparedChangeAnalysis,
     store: &S,
     options: PublicationOptions,
@@ -149,7 +154,8 @@ pub fn prepare_change_publication<S: ImmutableObjectStore + ?Sized>(
         )]);
     }
     let mut stage = ObjectStage::new(store);
-    let authority = stage_prepared_authority(base_snapshot, base_witness, analysis, &mut stage)?;
+    let mut authority =
+        stage_prepared_authority(base_snapshot, base_witness, analysis, &mut stage)?;
     if authority.semantic.digest == base.semantic_root {
         return Err(vec![publication_error(
             DiagnosticClass::Semantic,
@@ -158,7 +164,9 @@ pub fn prepare_change_publication<S: ImmutableObjectStore + ?Sized>(
         )]);
     }
     let transaction = transaction_for_change(base, &authority, &analysis.canonical);
-    let semantic_diff = diff_for_change(base, base_snapshot, &authority, analysis)?;
+    let (semantic_diff, diff_read_work) =
+        diff_for_change(base, base_snapshot, &authority, analysis)?;
+    authority.semantic.canonical_read_work.add(diff_read_work);
     let counts = change_counts(analysis);
     let validation = change_validation(analysis);
     let work = change_work(&authority, analysis);
@@ -229,7 +237,8 @@ fn bind_history<S: ImmutableObjectStore + ?Sized>(
     validate_history_base(base, status, &transaction, &semantic_diff).map_err(single)?;
     let (transaction_digest, transaction_bytes) = transaction.encode().map_err(single)?;
     let (semantic_diff_digest, semantic_diff_bytes) = semantic_diff.encode().map_err(single)?;
-    let mut store_work = authority.store_work;
+    let authority_store_work = authority.store_work;
+    let mut store_work = authority_store_work;
     stage_object(
         stage,
         ObjectDomain::Transaction,
@@ -261,9 +270,17 @@ fn bind_history<S: ImmutableObjectStore + ?Sized>(
     };
     let revision_id = core.revision_id().map_err(single)?;
     work.objects_staged = store_work.objects_staged;
-    work.objects_read = store_work.objects_read;
+    work.objects_read = work.objects_read.saturating_add(
+        store_work
+            .objects_read
+            .saturating_sub(authority_store_work.objects_read),
+    );
     work.bytes_staged = store_work.bytes_staged;
-    work.bytes_read = store_work.bytes_read;
+    work.bytes_read = work.bytes_read.saturating_add(
+        store_work
+            .bytes_read
+            .saturating_sub(authority_store_work.bytes_read),
+    );
     let bases = base
         .into_iter()
         .map(|binding| binding.head.revision)
@@ -438,17 +455,23 @@ fn finish_prepared<S: ImmutableObjectStore + ?Sized>(
     }
 }
 
-fn validate_base(
+fn validate_base<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     accepted: AcceptedBinding,
-    snapshot: &KernelSnapshot,
-    witness: &FullWitness,
+    snapshot: &B,
+    witness: &W,
 ) -> Result<(), Vec<Diagnostic>> {
-    let (semantic_root, _) = encode_root(&snapshot.root).map_err(single)?;
-    if accepted.head.repository_id != snapshot.root.repository_id
+    let root = snapshot.semantic_root();
+    let manifest = witness.witness_manifest();
+    let (semantic_root, _) = encode_root(root).map_err(single)?;
+    let (witness_digest, _) = encode_witness_manifest(manifest).map_err(single)?;
+    if accepted.head.repository_id != root.repository_id
         || accepted.semantic_root != semantic_root
-        || accepted.validation_witness != witness.manifest_digest
-        || accepted.validation_certificate != witness.manifest.certificate
-        || accepted.validator_contract != witness.manifest.validator_contract
+        || snapshot
+            .exact_revision()
+            .is_some_and(|revision| revision != accepted.head.revision)
+        || accepted.validation_witness != witness_digest
+        || accepted.validation_certificate != manifest.certificate
+        || accepted.validator_contract != manifest.validator_contract
     {
         return Err(vec![publication_error(
             DiagnosticClass::Corrupt,
@@ -510,13 +533,14 @@ fn transaction_for_change(
     }
 }
 
-fn diff_for_change(
+fn diff_for_change<B: CanonicalBaseRead + ?Sized>(
     base: AcceptedBinding,
-    base_snapshot: &KernelSnapshot,
+    base_snapshot: &B,
     authority: &PreparedAuthority,
     analysis: &PreparedChangeAnalysis,
-) -> Result<SemanticDiff, Vec<Diagnostic>> {
+) -> Result<(SemanticDiff, CanonicalReadWork), Vec<Diagnostic>> {
     let mut owners = BTreeMap::<OwnerKey, OwnerDiffEntry>::new();
+    let mut read_work = CanonicalReadWork::default();
     for summary in &analysis.summaries.final_delta.edits {
         let dimensions = dimensions(summary);
         let objects = DigestEdit {
@@ -535,7 +559,13 @@ fn diff_for_change(
         );
     }
     for (owner, edit) in &analysis.canonical.owners {
-        let before_record = base_snapshot.owners.get(owner);
+        let before_record = if edit.before.is_some() && edit.after.is_some() {
+            let read = base_snapshot.read_owner(*owner).map_err(single)?;
+            read_work.add(read.work);
+            read.value
+        } else {
+            None
+        };
         let after_record = edit.after.as_ref().map(|(_, record)| record);
         let entry = owners.entry(*owner).or_insert_with(|| OwnerDiffEntry {
             owner: *owner,
@@ -557,7 +587,7 @@ fn diff_for_change(
             after: edit.after.as_ref().map(|(digest, _)| *digest),
         };
         let mut classes = entry.classes.iter().copied().collect::<BTreeSet<_>>();
-        if let (Some(before_record), Some(after_record)) = (before_record, after_record) {
+        if let (Some(before_record), Some(after_record)) = (before_record.as_ref(), after_record) {
             if record_name(Some(before_record)) != record_name(Some(after_record)) {
                 classes.insert(OwnerChangeClass::Renamed);
             }
@@ -576,7 +606,8 @@ fn diff_for_change(
         let entry = match owners.entry(edit.key) {
             std::collections::btree_map::Entry::Occupied(entry) => entry.into_mut(),
             std::collections::btree_map::Entry::Vacant(entry) => {
-                let object = base_object_digest(edit.key, base_snapshot).map_err(single)?;
+                let object =
+                    base_object_digest(edit.key, base_snapshot, &mut read_work).map_err(single)?;
                 entry.insert(OwnerDiffEntry {
                     owner: edit.key,
                     objects: DigestEdit {
@@ -599,42 +630,45 @@ fn diff_for_change(
         entry.classes.sort_unstable();
         entry.classes.dedup();
     }
-    Ok(SemanticDiff {
-        contract_version: SEMANTIC_DIFF_CONTRACT_VERSION,
-        graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-        repository_id: authority.semantic.root.repository_id,
-        body: SemanticDiffBody::Change {
-            base: base.head.revision,
-            base_root: base.semantic_root,
-            result_root: authority.semantic.digest,
-            owners: owners.into_values().collect(),
-            type_additions: analysis.canonical.type_additions.keys().copied().collect(),
-            dependencies: analysis
-                .canonical
-                .dependencies
-                .iter()
-                .map(|(package, edit)| DependencyDiffEntry {
-                    package: *package,
-                    objects: DigestEdit {
-                        before: edit.before,
-                        after: edit.after.as_ref().map(|(digest, _)| *digest),
-                    },
-                })
-                .collect(),
-            retirements: analysis
-                .canonical
-                .retirements
-                .iter()
-                .map(|(owner, edit)| RetirementDiffEntry {
-                    owner: *owner,
-                    objects: DigestEdit {
-                        before: edit.before,
-                        after: edit.after.as_ref().map(|(digest, _)| *digest),
-                    },
-                })
-                .collect(),
+    Ok((
+        SemanticDiff {
+            contract_version: SEMANTIC_DIFF_CONTRACT_VERSION,
+            graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+            repository_id: authority.semantic.root.repository_id,
+            body: SemanticDiffBody::Change {
+                base: base.head.revision,
+                base_root: base.semantic_root,
+                result_root: authority.semantic.digest,
+                owners: owners.into_values().collect(),
+                type_additions: analysis.canonical.type_additions.keys().copied().collect(),
+                dependencies: analysis
+                    .canonical
+                    .dependencies
+                    .iter()
+                    .map(|(package, edit)| DependencyDiffEntry {
+                        package: *package,
+                        objects: DigestEdit {
+                            before: edit.before,
+                            after: edit.after.as_ref().map(|(digest, _)| *digest),
+                        },
+                    })
+                    .collect(),
+                retirements: analysis
+                    .canonical
+                    .retirements
+                    .iter()
+                    .map(|(owner, edit)| RetirementDiffEntry {
+                        owner: *owner,
+                        objects: DigestEdit {
+                            before: edit.before,
+                            after: edit.after.as_ref().map(|(digest, _)| *digest),
+                        },
+                    })
+                    .collect(),
+            },
         },
-    })
+        read_work,
+    ))
 }
 
 fn lifecycle_and_dimension_classes(
@@ -721,18 +755,21 @@ fn declaration_visibility(
     }
 }
 
-fn base_object_digest(
+fn base_object_digest<B: CanonicalBaseRead + ?Sized>(
     owner: OwnerKey,
-    snapshot: &KernelSnapshot,
+    snapshot: &B,
+    work: &mut CanonicalReadWork,
 ) -> Result<OwnerObjectDigest, Diagnostic> {
-    let record = snapshot.owners.get(&owner).ok_or_else(|| {
+    let read = snapshot.read_owner(owner)?;
+    work.add(read.work);
+    let record = read.value.ok_or_else(|| {
         publication_error(
             DiagnosticClass::Corrupt,
             "publication_diff_owner_digest",
             "ownership-only diff names an owner absent from the exact base",
         )
     })?;
-    encode_owner(record).map(|(digest, _)| digest)
+    encode_owner(&record).map(|(digest, _)| digest)
 }
 
 fn change_counts(analysis: &PreparedChangeAnalysis) -> ChangeCounts {
@@ -797,7 +834,8 @@ fn change_work(
             .pages_read
             .saturating_add(analysis.witness.work.pages_read)
             .saturating_add(witness_reads.map_pages_read)
-            .saturating_add(analysis.canonical_read_work.map_pages_read),
+            .saturating_add(analysis.canonical_read_work.map_pages_read)
+            .saturating_add(authority.semantic.canonical_read_work.map_pages_read),
         map_pages_written: authority
             .semantic
             .map_work
@@ -817,13 +855,15 @@ fn change_work(
             .store_work
             .objects_read
             .saturating_add(witness_reads.objects_read)
-            .saturating_add(analysis.canonical_read_work.objects_read),
+            .saturating_add(analysis.canonical_read_work.objects_read)
+            .saturating_add(authority.semantic.canonical_read_work.objects_read),
         objects_staged: authority.store_work.objects_staged,
         bytes_read: authority
             .store_work
             .bytes_read
             .saturating_add(witness_reads.bytes_read)
-            .saturating_add(analysis.canonical_read_work.bytes_read),
+            .saturating_add(analysis.canonical_read_work.bytes_read)
+            .saturating_add(authority.semantic.canonical_read_work.bytes_read),
         bytes_staged: authority.store_work.bytes_staged,
     }
 }

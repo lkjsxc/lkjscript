@@ -1,11 +1,13 @@
 //! Revision-pinned, bounded reads over accepted Graph 5 authority and its committed witness.
 
-use super::CurrentPublication;
+use super::{
+    CurrentPublication, PreparedPublication, PublicationOptions, prepare_change_publication,
+};
 use crate::platform::change::{
-    BoundOwnerSummary, CanonicalBaseRead, CanonicalRead, CanonicalReadWork, DerivedDelta,
-    SummaryDelta, TestDependencyDelta, WitnessBaseRead, WitnessMapBase, WitnessMapUpdate,
-    WitnessRead, WitnessReadWork, WitnessRelationRead, WitnessTestDependencyRead,
-    update_witness_maps_from,
+    BoundOwnerSummary, CanonicalBaseRead, CanonicalDelta, CanonicalRead, CanonicalReadWork,
+    DerivedDelta, PrimitiveEdit, SummaryDelta, TestDependencyDelta, WitnessBaseRead,
+    WitnessMapBase, WitnessMapUpdate, WitnessRead, WitnessReadWork, WitnessRelationRead,
+    WitnessTestDependencyRead, prepare_change_analysis, update_witness_maps_from,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
@@ -97,6 +99,34 @@ impl RepositoryView {
 
     pub const fn current(&self) -> &CurrentPublication {
         &self.current
+    }
+
+    /// Normalizes, validates, and stages one change against this view's exact immutable revision.
+    /// Publication still rechecks the expected HEAD under the repository lock.
+    pub fn prepare_change(
+        &self,
+        edits: Vec<PrimitiveEdit>,
+        options: PublicationOptions,
+    ) -> Result<PreparedPublication, Vec<Diagnostic>> {
+        let normalization =
+            CanonicalDelta::normalize_from(self, edits).map_err(|diagnostic| vec![diagnostic])?;
+        if normalization.base_revision != Some(self.revision()) {
+            return Err(vec![read_error(
+                DiagnosticClass::Corrupt,
+                "publication_prepare_revision_binding",
+                "canonical normalization did not retain the pinned repository revision",
+            )]);
+        }
+        let mut analysis = prepare_change_analysis(self, self, normalization.canonical)?;
+        analysis.canonical_read_work.add(normalization.work);
+        prepare_change_publication(
+            self.current.accepted,
+            self,
+            self,
+            &analysis,
+            &self.store,
+            options,
+        )
     }
 
     pub fn owner(&self, owner: OwnerKey) -> Result<RevisionRead<Option<OwnerRecord>>, Diagnostic> {
@@ -571,6 +601,10 @@ fn read_error(
 }
 
 impl CanonicalBaseRead for RepositoryView {
+    fn semantic_root(&self) -> &crate::platform::kernel::SemanticRoot {
+        &self.current.semantic_root
+    }
+
     fn repository_id(&self) -> crate::platform::semantic_id::RepositoryId {
         self.current.semantic_root.repository_id
     }
@@ -625,6 +659,10 @@ impl CanonicalBaseRead for RepositoryView {
 }
 
 impl WitnessBaseRead for RepositoryView {
+    fn witness_manifest(&self) -> &crate::platform::witness::ValidationWitnessManifest {
+        &self.current.witness
+    }
+
     fn witness_repository_id(&self) -> crate::platform::semantic_id::RepositoryId {
         self.current.witness.repository_id
     }

@@ -1,6 +1,8 @@
 //! Exact Graph 5 semantic-root and validation-certificate staging over generic immutable storage.
 
-use super::{CanonicalDelta, PreparedChangeAnalysis};
+use super::{
+    CanonicalBaseRead, CanonicalDelta, CanonicalReadWork, PreparedChangeAnalysis, WitnessBaseRead,
+};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     DependencyBinding, KernelSnapshot, OwnerBinding, RetirementBinding, SemanticRoot,
@@ -36,6 +38,7 @@ pub struct SemanticAuthority {
     pub bytes: Vec<u8>,
     pub map_work: MapWork,
     pub map_edits: CanonicalMapEditCounts,
+    pub canonical_read_work: CanonicalReadWork,
 }
 
 #[derive(Clone, Debug)]
@@ -62,16 +65,22 @@ pub struct FullStagedAuthority {
 /// Stages one already validated normalized delta without changing accepted storage visibility.
 /// The supplied store is normally an [`crate::platform::storage::object::ObjectStage`] over the
 /// exact accepted pack set.
-pub fn stage_prepared_authority<S: ImmutableObjectStore + ?Sized>(
-    base: &KernelSnapshot,
-    base_witness: &FullWitness,
+pub fn stage_prepared_authority<
+    B: CanonicalBaseRead + ?Sized,
+    W: WitnessBaseRead + ?Sized,
+    S: ImmutableObjectStore + ?Sized,
+>(
+    base: &B,
+    base_witness: &W,
     prepared: &PreparedChangeAnalysis,
     store: &mut ObjectStage<'_, S>,
 ) -> Result<PreparedAuthority, Vec<Diagnostic>> {
-    let (base_digest, _) = encode_root(&base.root).map_err(|error| vec![error])?;
-    if base_witness.manifest.semantic_root != base_digest
-        || base_witness.manifest.repository_id != base.root.repository_id
-        || base_witness.manifest.package_id != base.root.package_id
+    let base_root = base.semantic_root();
+    let base_manifest = base_witness.witness_manifest();
+    let (base_digest, _) = encode_root(base_root).map_err(|error| vec![error])?;
+    if base_manifest.semantic_root != base_digest
+        || base_manifest.repository_id != base_root.repository_id
+        || base_manifest.package_id != base_root.package_id
     {
         return Err(vec![authority_error(
             DiagnosticClass::Corrupt,
@@ -141,8 +150,8 @@ pub fn stage_full_authority<S: ImmutableObjectStore + ?Sized>(
     })
 }
 
-fn stage_semantic_delta<S: ImmutableObjectStore + ?Sized>(
-    base: &KernelSnapshot,
+fn stage_semantic_delta<B: CanonicalBaseRead + ?Sized, S: ImmutableObjectStore + ?Sized>(
+    base: &B,
     delta: &CanonicalDelta,
     store: &mut S,
     store_work: &mut StoreWork,
@@ -150,24 +159,26 @@ fn stage_semantic_delta<S: ImmutableObjectStore + ?Sized>(
     stage_delta_objects(delta, store, store_work)?;
     let mut map_work = MapWork::default();
     let mut counts = CanonicalMapEditCounts::default();
+    let mut canonical_read_work = CanonicalReadWork::default();
+    let root = base.semantic_root();
     let (owners, dependencies, retirements, page_store_work) = {
         let mut page_store = ObjectPageStore::new(&mut *store);
         let owners = apply_map(
-            base.root.owners,
-            owner_edits(base, delta)?,
+            root.owners,
+            owner_edits(base, delta, &mut canonical_read_work)?,
             &mut page_store,
             &mut map_work,
             &mut counts,
         )?;
         let dependencies = apply_map(
-            base.root.dependencies,
+            root.dependencies,
             dependency_edits(delta),
             &mut page_store,
             &mut map_work,
             &mut counts,
         )?;
         let retirements = apply_map(
-            base.root.retirements,
+            root.retirements,
             retirement_edits(delta),
             &mut page_store,
             &mut map_work,
@@ -178,10 +189,10 @@ fn stage_semantic_delta<S: ImmutableObjectStore + ?Sized>(
     merge_store_work(store_work, page_store_work);
 
     let root = SemanticRoot {
-        graph_contract_version: base.root.graph_contract_version,
-        repository_id: base.root.repository_id,
-        package_id: base.root.package_id,
-        package_name: base.root.package_name.clone(),
+        graph_contract_version: root.graph_contract_version,
+        repository_id: root.repository_id,
+        package_id: root.package_id,
+        package_name: root.package_name.clone(),
         owners,
         dependencies,
         retirements,
@@ -200,6 +211,7 @@ fn stage_semantic_delta<S: ImmutableObjectStore + ?Sized>(
         bytes,
         map_work,
         map_edits: counts,
+        canonical_read_work,
     })
 }
 
@@ -332,6 +344,7 @@ fn stage_full_semantic<S: ImmutableObjectStore + ?Sized>(
                 .saturating_add(retirements.entries()),
             ..CanonicalMapEditCounts::default()
         },
+        canonical_read_work: CanonicalReadWork::default(),
     })
 }
 
@@ -381,20 +394,34 @@ fn stage_delta_objects<S: ImmutableObjectStore + ?Sized>(
     Ok(())
 }
 
-fn owner_edits(base: &KernelSnapshot, delta: &CanonicalDelta) -> Result<Vec<MapEdit>, Diagnostic> {
+fn owner_edits<B: CanonicalBaseRead + ?Sized>(
+    base: &B,
+    delta: &CanonicalDelta,
+    work: &mut CanonicalReadWork,
+) -> Result<Vec<MapEdit>, Diagnostic> {
     delta
         .owners
         .iter()
         .map(|(owner, edit)| {
             let before = match edit.before {
                 Some(object) => {
-                    let record = base.owners.get(owner).ok_or_else(|| {
+                    let read = base.read_owner(*owner)?;
+                    work.add(read.work);
+                    let record = read.value.ok_or_else(|| {
                         authority_error(
                             DiagnosticClass::Corrupt,
                             "change_authority_owner_before",
                             "owner delta names a missing exact base record",
                         )
                     })?;
+                    let (actual, _) = encode_owner(&record)?;
+                    if actual != object {
+                        return Err(authority_error(
+                            DiagnosticClass::Corrupt,
+                            "change_authority_owner_before_digest",
+                            "owner delta before digest disagrees with exact base authority",
+                        ));
+                    }
                     Some(encode_owner_binding(&OwnerBinding {
                         kind: record.kind(),
                         object,

@@ -5,9 +5,10 @@ use super::prepare::validate_history_base;
 use super::read_view::RepositoryView;
 use super::{
     AcceptedBinding, HeadRecord, NormalizedTransaction, PreparedInitialPublication,
-    PreparedPublication, PublicationReceipt, RevisionRecord, SemanticDiff,
+    PreparedPublication, PublicationOptions, PublicationReceipt, RevisionRecord, SemanticDiff,
     prepare_initial_publication,
 };
+use crate::platform::change::PrimitiveEdit;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{KernelSnapshot, SemanticRoot, decode_root, encode_root};
 use crate::platform::storage::contract::TARGET_PACK_BYTES;
@@ -245,6 +246,17 @@ impl GraphRepository {
             )
         })?;
         Ok(RepositoryView::new(current, store))
+    }
+
+    /// Prepares one exact change against the currently observed revision without publishing it.
+    pub fn prepare_change(
+        &self,
+        edits: Vec<PrimitiveEdit>,
+        options: PublicationOptions,
+    ) -> Result<PreparedPublication, Vec<Diagnostic>> {
+        self.view_current()
+            .map_err(|diagnostic| vec![diagnostic])?
+            .prepare_change(edits, options)
     }
 
     pub fn publish(

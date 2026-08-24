@@ -822,6 +822,26 @@ fn locked_publication_accepts_once_reconciles_exact_retry_and_rejects_stale() {
     let logical = crate::platform::kernel::tests::witness_snapshot();
     let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
     let prepared = prepare_body_publication(&created, PublicationOptions::default());
+    assert!(prepared.authority.semantic.canonical_read_work.point_reads > 0);
+    assert!(prepared.authority.semantic.canonical_read_work.point_reads < 16);
+    assert!(
+        prepared
+            .authority
+            .semantic
+            .canonical_read_work
+            .canonical_records_decoded
+            > 0
+    );
+    assert!(
+        prepared
+            .authority
+            .semantic
+            .canonical_read_work
+            .canonical_records_decoded
+            < 16
+    );
+    assert!(prepared.authority.semantic.map_work.pages_read > 0);
+    assert!(prepared.authority.semantic.map_work.pages_read < 64);
 
     let mut tampered = prepared.clone();
     tampered.receipt.intent = Some("changed after preparation".to_owned());
@@ -1094,14 +1114,16 @@ fn prepare_body_publication(
     let expected = encode_owner(&created.initial.snapshot.owners[&body])
         .expect("base body encoding")
         .0;
-    prepare_publication(
-        created,
-        vec![PrimitiveEdit::ReplaceOwner {
-            expected,
-            record: replacement,
-        }],
-        options,
-    )
+    created
+        .repository
+        .prepare_change(
+            vec![PrimitiveEdit::ReplaceOwner {
+                expected,
+                record: replacement,
+            }],
+            options,
+        )
+        .expect("prepare current repository change")
 }
 
 fn prepare_rename_publication(
@@ -1136,24 +1158,15 @@ fn prepare_publication(
     edits: Vec<PrimitiveEdit>,
     options: PublicationOptions,
 ) -> PreparedPublication {
-    let delta = CanonicalDelta::normalize(&created.initial.snapshot, edits)
-        .expect("canonical repository change");
-    let analysis =
-        prepare_change_analysis(&created.initial.snapshot, &created.initial.witness, delta)
-            .expect("repository change analysis");
-    let store = created
-        .repository
-        .object_store()
-        .expect("packed object store");
-    prepare_change_publication(
-        created.current.accepted,
-        &created.initial.snapshot,
-        &created.initial.witness,
-        &analysis,
-        &store,
-        options,
-    )
-    .expect("prepared repository publication")
+    let view = super::RepositoryView::new(
+        created.current.clone(),
+        created
+            .repository
+            .object_store()
+            .expect("pinned repository store"),
+    );
+    view.prepare_change(edits, options)
+        .expect("prepared repository publication")
 }
 
 fn owner_named(snapshot: &crate::platform::kernel::KernelSnapshot, name: &str) -> OwnerKey {

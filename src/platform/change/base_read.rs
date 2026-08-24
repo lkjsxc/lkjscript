@@ -3,12 +3,12 @@
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     DependencyRecord, ExactOwnerKey, KernelSnapshot, OwnerKey, OwnerRecord, PackageId,
-    RelationEdge, RelationEndpoint, RetirementRecord, TypeObject, TypeObjectDigest,
+    RelationEdge, RelationEndpoint, RetirementRecord, SemanticRoot, TypeObject, TypeObjectDigest,
 };
 use crate::platform::semantic_id::{RepositoryId, RevisionId};
 use crate::platform::witness::{
     FullWitness, MAXIMUM_RELATION_PREFIX_ITEMS, MAXIMUM_TEST_DEPENDENCY_PREFIX_ITEMS, NamespaceKey,
-    OwnerSummary, OwnerSummaryDigest, OwnershipEntry, TestDependency,
+    OwnerSummary, OwnerSummaryDigest, OwnershipEntry, TestDependency, ValidationWitnessManifest,
 };
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -127,6 +127,8 @@ pub struct WitnessTestDependencyRead {
 /// Narrow accepted-authority surface required before high-level edits become an exact canonical
 /// delta. Implementations must pin one immutable base for the lifetime of a normalization.
 pub trait CanonicalBaseRead {
+    fn semantic_root(&self) -> &SemanticRoot;
+
     fn repository_id(&self) -> RepositoryId;
 
     fn package_id(&self) -> PackageId;
@@ -160,6 +162,8 @@ pub trait CanonicalBaseRead {
 
 /// Exact derived-witness reads required to classify the local effects of canonical owner edits.
 pub trait WitnessBaseRead {
+    fn witness_manifest(&self) -> &ValidationWitnessManifest;
+
     fn witness_repository_id(&self) -> RepositoryId;
 
     fn witness_package_id(&self) -> PackageId;
@@ -208,6 +212,10 @@ pub trait WitnessBaseRead {
 }
 
 impl CanonicalBaseRead for KernelSnapshot {
+    fn semantic_root(&self) -> &SemanticRoot {
+        &self.root
+    }
+
     fn repository_id(&self) -> RepositoryId {
         self.root.repository_id
     }
@@ -264,6 +272,10 @@ impl CanonicalBaseRead for KernelSnapshot {
 }
 
 impl WitnessBaseRead for FullWitness {
+    fn witness_manifest(&self) -> &ValidationWitnessManifest {
+        &self.manifest
+    }
+
     fn witness_repository_id(&self) -> RepositoryId {
         self.manifest.repository_id
     }
