@@ -9,7 +9,8 @@ use super::capability::{
 };
 use super::codec::{decode_typed, encode_typed};
 use super::deployment::{
-    NormalizedAdapterDescriptor, NormalizedDeploymentGrant, NormalizedPreparedDeployment,
+    NormalizedAdapterDescriptor, NormalizedDeploymentGrant, NormalizedDeploymentResourcePolicy,
+    NormalizedPreparedDeployment,
 };
 use super::prepare::{NormalizedFunctionBody, NormalizedInstruction, NormalizedProgram};
 use super::reference::{
@@ -27,14 +28,17 @@ use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFail
 use crate::platform::json::JsonLimits;
 use crate::platform::kernel::{
     DeclarationPayload, DeclarationRecord, DeclarationReference, DeclarationVisibility,
-    ExpressionOperation, ExternalVisibility, Idempotency, Name, OwnerHeader, OwnerKey, OwnerKind,
-    OwnerRecord, PortImplementation, PortRecord, PortReference, ResourceLimit, ResourceUnit,
+    ExpressionOperation, ExpressionRecord, ExternalVisibility, Idempotency, LocalValueReference,
+    Name, OperationRecord, OwnerHeader, OwnerKey, OwnerKind, OwnerRecord, ParameterParent,
+    ParameterRecord, PortImplementation, PortRecord, PortReference, ResourceLimit, ResourceUnit,
     StructuralTypeField, TargetRecord, TypeForm, TypeObject, TypeObjectDigest, encode_type_object,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::publication::{GraphRepository, RepositoryView};
 use crate::platform::secrets::SecretCatalog;
-use crate::platform::semantic_id::{DeclarationId, PortId, RevisionId, TargetId};
+use crate::platform::semantic_id::{
+    DeclarationId, ExpressionId, OperationId, ParameterId, PortId, RevisionId, TargetId,
+};
 use crate::platform::stream::{StreamLimits, StreamRegistry};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -214,6 +218,296 @@ fn wall_clock_command_snapshot() -> crate::platform::kernel::KernelSnapshot {
             _ => {}
         }
     }
+    snapshot
+}
+
+fn admit_snapshot_type(
+    snapshot: &mut crate::platform::kernel::KernelSnapshot,
+    form: TypeForm,
+) -> TypeObjectDigest {
+    let object = TypeObject::new(form).expect("valid fixture type");
+    let (digest, _) = encode_type_object(&object).expect("canonical fixture type");
+    if let Some(existing) = snapshot.types.insert(digest, object.clone()) {
+        assert_eq!(existing, object);
+    }
+    digest
+}
+
+fn byte_stream_command_snapshot() -> crate::platform::kernel::KernelSnapshot {
+    const SEED: &[u8] = b"normalized-byte-stream-command";
+
+    let mut snapshot = crate::platform::kernel::tests::witness_snapshot();
+    let package = snapshot.root.package_id;
+    let unit = snapshot
+        .types
+        .iter()
+        .find_map(|(digest, object)| matches!(object.form, TypeForm::Unit).then_some(*digest))
+        .expect("fixture unit type");
+    let bool_type = admit_snapshot_type(&mut snapshot, TypeForm::Bool);
+    let i64_type = admit_snapshot_type(&mut snapshot, TypeForm::I64);
+    let bytes_type = admit_snapshot_type(&mut snapshot, TypeForm::Bytes);
+    let stream_type = admit_snapshot_type(&mut snapshot, TypeForm::Stream { item: bytes_type });
+    let read_result = admit_snapshot_type(
+        &mut snapshot,
+        TypeForm::StructuralRecord {
+            fields: vec![
+                StructuralTypeField {
+                    name: Name::new("chunk").unwrap(),
+                    ty: bytes_type,
+                },
+                StructuralTypeField {
+                    name: Name::new("done").unwrap(),
+                    ty: bool_type,
+                },
+            ],
+        },
+    );
+    let port_type = admit_snapshot_type(
+        &mut snapshot,
+        TypeForm::Function {
+            parameters: vec![stream_type],
+            result: bytes_type,
+        },
+    );
+    snapshot.types.retain(|digest, object| {
+        !matches!(object.form, TypeForm::Function { .. }) || *digest == port_type
+    });
+
+    let read_all = snapshot
+        .owners
+        .iter()
+        .find_map(|(owner, record)| match (owner, record) {
+            (OwnerKey::Operation(operation), OwnerRecord::Operation(record))
+                if record.name.as_str() == "read" =>
+            {
+                Some(*operation)
+            }
+            _ => None,
+        })
+        .expect("fixture capability operation");
+    let interface = match &snapshot.owners[&OwnerKey::Operation(read_all)] {
+        OwnerRecord::Operation(record) => record.declaration,
+        _ => panic!("fixture operation owner kind"),
+    };
+    let requirement = snapshot
+        .owners
+        .iter()
+        .find_map(|(owner, record)| {
+            matches!(record, OwnerRecord::Requirement(_)).then(|| match owner {
+                OwnerKey::Requirement(requirement) => *requirement,
+                _ => unreachable!(),
+            })
+        })
+        .expect("fixture requirement");
+    let caller = declaration_named(&snapshot, "caller").declaration;
+    let read = OperationId::migrate(SEED, 0);
+    let close = OperationId::migrate(SEED, 1);
+    let read_stream = ParameterId::migrate(SEED, 0);
+    let close_stream = ParameterId::migrate(SEED, 1);
+    let read_all_stream = ParameterId::migrate(SEED, 2);
+    let read_all_maximum = ParameterId::migrate(SEED, 3);
+    let caller_stream = ParameterId::migrate(SEED, 4);
+    let stream_expression = ExpressionId::migrate(SEED, 0);
+    let maximum_expression = ExpressionId::migrate(SEED, 1);
+
+    for (parameter, parent, name, ty) in [
+        (
+            read_stream,
+            ParameterParent::Operation(read),
+            "stream",
+            stream_type,
+        ),
+        (
+            close_stream,
+            ParameterParent::Operation(close),
+            "stream",
+            stream_type,
+        ),
+        (
+            read_all_stream,
+            ParameterParent::Operation(read_all),
+            "stream",
+            stream_type,
+        ),
+        (
+            read_all_maximum,
+            ParameterParent::Operation(read_all),
+            "maximum_bytes",
+            i64_type,
+        ),
+        (
+            caller_stream,
+            ParameterParent::Function(caller),
+            "body",
+            stream_type,
+        ),
+    ] {
+        assert!(
+            snapshot
+                .owners
+                .insert(
+                    OwnerKey::Parameter(parameter),
+                    OwnerRecord::Parameter(ParameterRecord {
+                        header: OwnerHeader::new(
+                            OwnerKey::Parameter(parameter),
+                            OwnerKind::Parameter,
+                        ),
+                        parent,
+                        name: Name::new(name).unwrap(),
+                        ty,
+                    }),
+                )
+                .is_none()
+        );
+    }
+    for (operation, name, parameters, result) in [
+        (read, "read", vec![read_stream], read_result),
+        (close, "close", vec![close_stream], unit),
+    ] {
+        assert!(
+            snapshot
+                .owners
+                .insert(
+                    OwnerKey::Operation(operation),
+                    OwnerRecord::Operation(OperationRecord {
+                        header: OwnerHeader::new(
+                            OwnerKey::Operation(operation),
+                            OwnerKind::Operation,
+                        ),
+                        declaration: interface,
+                        name: Name::new(name).unwrap(),
+                        parameters,
+                        result,
+                        idempotency: Idempotency::Idempotent,
+                        external_visibility: ExternalVisibility::None,
+                    }),
+                )
+                .is_none()
+        );
+    }
+    let OwnerRecord::Operation(operation) = snapshot
+        .owners
+        .get_mut(&OwnerKey::Operation(read_all))
+        .expect("read-all operation")
+    else {
+        panic!("read-all operation owner kind")
+    };
+    operation.name = Name::new("read-all").unwrap();
+    operation.parameters = vec![read_all_stream, read_all_maximum];
+    operation.result = bytes_type;
+
+    let OwnerRecord::Declaration(interface_record) = snapshot
+        .owners
+        .get_mut(&OwnerKey::Declaration(interface))
+        .expect("stream interface")
+    else {
+        panic!("stream interface owner kind")
+    };
+    let DeclarationPayload::Interface { operations } = &mut interface_record.payload else {
+        panic!("stream interface declaration kind")
+    };
+    *operations = vec![read, close, read_all];
+    operations.sort();
+
+    let OwnerRecord::Requirement(requirement_record) = snapshot
+        .owners
+        .get_mut(&OwnerKey::Requirement(requirement))
+        .expect("stream requirement")
+    else {
+        panic!("stream requirement owner kind")
+    };
+    requirement_record.name = Name::new("streams").unwrap();
+    requirement_record.operations = vec![
+        crate::platform::kernel::OperationReference {
+            package,
+            operation: read,
+        },
+        crate::platform::kernel::OperationReference {
+            package,
+            operation: close,
+        },
+        crate::platform::kernel::OperationReference {
+            package,
+            operation: read_all,
+        },
+    ];
+    requirement_record.operations.sort();
+
+    let OwnerRecord::Declaration(caller_record) = snapshot
+        .owners
+        .get_mut(&OwnerKey::Declaration(caller))
+        .expect("stream caller")
+    else {
+        panic!("stream caller owner kind")
+    };
+    let DeclarationPayload::Function(function) = &mut caller_record.payload else {
+        panic!("stream caller declaration kind")
+    };
+    function.parameters = vec![caller_stream];
+    function.result = bytes_type;
+
+    assert!(
+        snapshot
+            .owners
+            .insert(
+                OwnerKey::Expression(stream_expression),
+                OwnerRecord::Expression(
+                    ExpressionRecord::new(
+                        stream_expression,
+                        ExpressionOperation::Local {
+                            value: LocalValueReference::FunctionParameter(caller_stream),
+                        },
+                    )
+                    .expect("stream parameter expression"),
+                ),
+            )
+            .is_none()
+    );
+    assert!(
+        snapshot
+            .owners
+            .insert(
+                OwnerKey::Expression(maximum_expression),
+                OwnerRecord::Expression(
+                    ExpressionRecord::new(
+                        maximum_expression,
+                        ExpressionOperation::I64 { value: 64 },
+                    )
+                    .expect("stream limit expression"),
+                ),
+            )
+            .is_none()
+    );
+    let OwnerRecord::Expression(capability) = snapshot
+        .owners
+        .values_mut()
+        .find(|record| {
+            matches!(
+                record,
+                OwnerRecord::Expression(ExpressionRecord {
+                    operation: ExpressionOperation::CapabilityCall { operation, .. },
+                    ..
+                }) if operation.operation == read_all
+            )
+        })
+        .expect("stream capability expression")
+    else {
+        panic!("stream capability expression owner kind")
+    };
+    let ExpressionOperation::CapabilityCall { arguments, .. } = &mut capability.operation else {
+        unreachable!()
+    };
+    *arguments = vec![stream_expression, maximum_expression];
+
+    for record in snapshot.owners.values_mut() {
+        if let OwnerRecord::Port(port) = record {
+            port.function_type = port_type;
+        }
+    }
+    snapshot.root.owners = crate::platform::persistent_map::MapRoot::from_parts(
+        snapshot.root.owners.page(),
+        snapshot.owners.len() as u64,
+    );
     snapshot
 }
 
@@ -849,8 +1143,10 @@ fn normalized_json_codec_uses_exact_runtime_layouts_and_bounds() {
 
     let registry = StreamRegistry::new(StreamLimits::default()).expect("stream registry");
     let resources = NormalizedResourceScope::new().expect("resource scope");
+    let authority = program.requirements[0].reference;
     let handle = resources
         .register_byte_stream(
+            authority,
             registry
                 .register_memory(b"runtime-only".to_vec())
                 .expect("memory stream"),
@@ -956,6 +1252,7 @@ fn normalized_deployment_resolves_and_runs_one_exact_effect_adapter() {
         &program,
         target_name.clone(),
         vec![grant.clone()],
+        NormalizedDeploymentResourcePolicy::default(),
         &secrets,
     )
     .expect("exact normalized deployment");
@@ -963,14 +1260,20 @@ fn normalized_deployment_resolves_and_runs_one_exact_effect_adapter() {
         &program,
         target_name.clone(),
         vec![grant.clone()],
+        NormalizedDeploymentResourcePolicy::default(),
         &secrets,
     )
     .expect("deterministic normalized deployment descriptor");
     let mut changed_grant = grant.clone();
     changed_grant.sharing_domain = NormalizedSharingDomain::new("other-domain").unwrap();
-    let changed =
-        NormalizedPreparedDeployment::prepare(&program, target_name, vec![changed_grant], &secrets)
-            .expect("changed normalized deployment descriptor");
+    let changed = NormalizedPreparedDeployment::prepare(
+        &program,
+        target_name,
+        vec![changed_grant],
+        NormalizedDeploymentResourcePolicy::default(),
+        &secrets,
+    )
+    .expect("changed normalized deployment descriptor");
     let mut incompatible_grant = grant;
     incompatible_grant.adapter = NormalizedAdapterDescriptor::Identifier;
     assert_eq!(
@@ -978,6 +1281,7 @@ fn normalized_deployment_resolves_and_runs_one_exact_effect_adapter() {
             &program,
             Name::new("command").unwrap(),
             vec![incompatible_grant],
+            NormalizedDeploymentResourcePolicy::default(),
             &secrets,
         )
         .expect_err("adapter must match exact graph operation names and signatures")
@@ -1029,6 +1333,142 @@ fn normalized_deployment_resolves_and_runs_one_exact_effect_adapter() {
     assert!(milliseconds > 0);
     assert_eq!(receipt.production.capability_calls, 1);
     assert_eq!(receipt.verification, "production_only_live_effects");
+}
+
+#[test]
+fn exact_byte_stream_grant_executes_in_task_scopes_in_both_tiers() {
+    let snapshot = byte_stream_command_snapshot();
+    let (_temporary, repository, program) = prepare_repository(&snapshot);
+    let target_name = Name::new("command").unwrap();
+    let target = program
+        .root_target(&target_name)
+        .expect("byte-stream command target");
+    let requirement_index = program.components[target.component.0 as usize].requirements[0];
+    let requirement = &program.requirements[requirement_index.0 as usize];
+    let grant = NormalizedDeploymentGrant {
+        requirement: requirement.reference,
+        sharing_domain: NormalizedSharingDomain::new("stream-test").unwrap(),
+        authority_revision: NormalizedGrantAuthorityRevision::of(b"stream revision one"),
+        limits: exact_grant_limits(requirement, 4),
+        adapter: NormalizedAdapterDescriptor::ByteStream,
+    };
+    let resource_policy = NormalizedDeploymentResourcePolicy {
+        streams: StreamLimits {
+            maximum_chunk_bytes: 4,
+            maximum_buffered_chunks: 2,
+            maximum_total_bytes: 64,
+            maximum_live_streams: 4,
+        },
+    };
+    let secrets = SecretCatalog::from_environment(&[]).expect("empty exact secret catalog");
+    let deployment = NormalizedPreparedDeployment::prepare(
+        &program,
+        target_name.clone(),
+        vec![grant.clone()],
+        resource_policy.clone(),
+        &secrets,
+    )
+    .expect("exact byte-stream deployment");
+    let mut changed_policy = resource_policy.clone();
+    changed_policy.streams.maximum_chunk_bytes = 8;
+    let changed = NormalizedPreparedDeployment::prepare(
+        &program,
+        target_name.clone(),
+        vec![grant],
+        changed_policy,
+        &secrets,
+    )
+    .expect("changed byte-stream deployment");
+    let digest = deployment
+        .observation()
+        .grants
+        .get(&requirement.reference)
+        .expect("stream grant observation")
+        .descriptor_digest;
+    assert_eq!(
+        deployment.observation().resources,
+        resource_policy,
+        "deployment observation binds task resource policy"
+    );
+    assert_ne!(
+        digest,
+        changed
+            .observation()
+            .grants
+            .get(&requirement.reference)
+            .expect("changed stream grant observation")
+            .descriptor_digest,
+        "stream registry limits participate in exact grant identity"
+    );
+
+    let control = ExecutionControl::uncancelled();
+    let production_scope = NormalizedResourceScope::new().expect("production resource scope");
+    let production_stream = deployment
+        .register_memory_stream(
+            requirement.reference,
+            &production_scope,
+            b"streamed bytes".to_vec(),
+        )
+        .expect("production memory stream");
+    let production = NormalizedVm::new(&program, NormalizedRunPolicy::default())
+        .invoke_root_target_scoped(
+            &target_name,
+            vec![production_stream],
+            Some(deployment.capabilities()),
+            &production_scope,
+            &control,
+        )
+        .expect("dense stream read-all");
+    assert_eq!(
+        production.0,
+        NormalizedValue::bytes(b"streamed bytes".to_vec())
+    );
+    assert_eq!(production_scope.live_resources(), 0);
+    assert_eq!(deployment.live_streams(), 0);
+
+    let view = repository.view_current().expect("stream repository view");
+    let reference_scope = NormalizedResourceScope::new().expect("reference resource scope");
+    let reference_stream = deployment
+        .register_memory_stream(
+            requirement.reference,
+            &reference_scope,
+            b"streamed bytes".to_vec(),
+        )
+        .expect("reference memory stream");
+    let reference = NormalizedReferenceInterpreter::from_reader(
+        &view,
+        &program,
+        NormalizedRunPolicy::default(),
+    )
+    .invoke_root_target_scoped(
+        &target_name,
+        vec![reference_stream],
+        Some(deployment.capabilities()),
+        &reference_scope,
+        &control,
+    )
+    .expect("reference stream read-all");
+    assert_eq!(reference.0, production.0);
+    assert_eq!(reference_scope.live_resources(), 0);
+    assert_eq!(deployment.live_streams(), 0);
+
+    let owning_scope = NormalizedResourceScope::new().expect("owning resource scope");
+    let foreign_scope = NormalizedResourceScope::new().expect("foreign resource scope");
+    let foreign_stream = deployment
+        .register_memory_stream(requirement.reference, &owning_scope, b"foreign".to_vec())
+        .expect("foreign-scope stream");
+    let error = NormalizedVm::new(&program, NormalizedRunPolicy::default())
+        .invoke_root_target_scoped(
+            &target_name,
+            vec![foreign_stream],
+            Some(deployment.capabilities()),
+            &foreign_scope,
+            &control,
+        )
+        .expect_err("stream handle must reject another task scope");
+    assert_eq!(error.code, "normalized_resource_foreign_scope");
+    drop(owning_scope);
+    assert_eq!(deployment.live_streams(), 0);
 }
 
 #[test]

@@ -1,5 +1,6 @@
 //! Prepared execution over strict Graph 5 artifacts.
 
+mod byte_stream;
 mod capability;
 mod codec;
 mod configuration;

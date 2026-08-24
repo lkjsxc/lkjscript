@@ -1,5 +1,6 @@
 //! Exact deployment preparation for normalized Graph 5 capability adapters.
 
+use super::byte_stream::{NormalizedByteStreamAdapter, NormalizedByteStreamOperations};
 use super::capability::{
     NormalizedAdapterKind, NormalizedCapabilities, NormalizedCapabilityAdapter,
     NormalizedCapabilityGrant, NormalizedCapabilityGrantDescriptor,
@@ -9,8 +10,10 @@ use super::capability::{
 use super::configuration::{NormalizedConfigurationAdapter, NormalizedConfigurationOperations};
 use super::password::{NormalizedPasswordHashAdapter, NormalizedPasswordHashOperations};
 use super::prepare::{NormalizedOperation, NormalizedProgram, NormalizedRequirement};
+use super::resource::NormalizedResourceScope;
 use super::secret::NormalizedSecretVerifierAdapter;
 use super::security::NormalizedSecurityAdapter;
+use super::value::NormalizedValue;
 use crate::platform::configuration::ConfigurationValue;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::{ExecutionError, ExecutionFailureClass};
@@ -21,6 +24,7 @@ use crate::platform::kernel::{
 use crate::platform::secrets::SecretCatalog;
 use crate::platform::security::PasswordHashPolicy;
 use crate::platform::semantic_id::{RepositoryId, RevisionId};
+use crate::platform::stream::{ByteStreamProducer, StreamLimits, StreamRegistry};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -41,6 +45,7 @@ pub(crate) enum NormalizedAdapterDescriptor {
         secret: String,
         maximum_candidate_bytes: usize,
     },
+    ByteStream,
 }
 
 impl NormalizedAdapterDescriptor {
@@ -52,8 +57,14 @@ impl NormalizedAdapterDescriptor {
             Self::Identifier => NormalizedAdapterKind::Identifier,
             Self::PasswordHash { .. } => NormalizedAdapterKind::PasswordHash,
             Self::SecretVerifier { .. } => NormalizedAdapterKind::SecretVerifier,
+            Self::ByteStream => NormalizedAdapterKind::ByteStream,
         }
     }
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(crate) struct NormalizedDeploymentResourcePolicy {
+    pub streams: StreamLimits,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -81,6 +92,7 @@ pub(crate) struct NormalizedDeploymentObservation {
     pub semantic_root: SemanticRootDigest,
     pub target: Name,
     pub component: DeclarationReference,
+    pub resources: NormalizedDeploymentResourcePolicy,
     pub grants: BTreeMap<RequirementReference, NormalizedDeploymentGrantObservation>,
 }
 
@@ -88,6 +100,7 @@ pub(crate) struct NormalizedDeploymentObservation {
 pub(crate) struct NormalizedPreparedDeployment {
     target: Name,
     capabilities: NormalizedCapabilities,
+    streams: StreamRegistry,
     observation: NormalizedDeploymentObservation,
 }
 
@@ -96,6 +109,7 @@ impl NormalizedPreparedDeployment {
         program: &NormalizedProgram,
         target: Name,
         grants: Vec<NormalizedDeploymentGrant>,
+        resources: NormalizedDeploymentResourcePolicy,
         secrets: &SecretCatalog,
     ) -> Result<Self, Diagnostic> {
         if grants.len() > MAXIMUM_NORMALIZED_DEPLOYMENT_GRANTS {
@@ -125,6 +139,7 @@ impl NormalizedPreparedDeployment {
                     "selected target component escaped the exact artifact table",
                 )
             })?;
+        let streams = StreamRegistry::new(resources.streams.clone())?;
         let mut supplied = BTreeMap::new();
         for grant in grants {
             if supplied.insert(grant.requirement, grant).is_some() {
@@ -169,8 +184,12 @@ impl NormalizedPreparedDeployment {
                     "adapter shape does not cover the exact graph requirement operation set",
                 ));
             }
-            let descriptor_digest =
-                descriptor_digest(&grant, requirement.interface, &required_operations);
+            let descriptor_digest = descriptor_digest(
+                &grant,
+                requirement.interface,
+                &required_operations,
+                &resources,
+            );
             let descriptor = NormalizedCapabilityGrantDescriptor {
                 interface: requirement.interface,
                 adapter_kind,
@@ -209,6 +228,7 @@ impl NormalizedPreparedDeployment {
         Ok(Self {
             target: target.clone(),
             capabilities,
+            streams,
             observation: NormalizedDeploymentObservation {
                 repository: program.root_repository,
                 package: program.root_package,
@@ -216,6 +236,7 @@ impl NormalizedPreparedDeployment {
                 semantic_root: program.root_semantic_root,
                 target,
                 component: component.declaration,
+                resources,
                 grants: observed,
             },
         })
@@ -231,6 +252,56 @@ impl NormalizedPreparedDeployment {
 
     pub(crate) fn observation(&self) -> &NormalizedDeploymentObservation {
         &self.observation
+    }
+
+    pub(crate) fn register_memory_stream(
+        &self,
+        requirement: RequirementReference,
+        resources: &NormalizedResourceScope,
+        bytes: Vec<u8>,
+    ) -> Result<NormalizedValue, ExecutionError> {
+        self.require_stream_grant(requirement)?;
+        let lease = self.streams.register_memory(bytes)?;
+        resources
+            .register_byte_stream(requirement, lease)
+            .map(NormalizedValue::Resource)
+    }
+
+    pub(crate) fn register_pipe_stream(
+        &self,
+        requirement: RequirementReference,
+        resources: &NormalizedResourceScope,
+        maximum_total_bytes: u64,
+    ) -> Result<(NormalizedValue, ByteStreamProducer), ExecutionError> {
+        self.require_stream_grant(requirement)?;
+        let (lease, producer) = self.streams.register_pipe_with_limit(maximum_total_bytes)?;
+        let handle = resources.register_byte_stream(requirement, lease)?;
+        Ok((NormalizedValue::Resource(handle), producer))
+    }
+
+    fn require_stream_grant(
+        &self,
+        requirement: RequirementReference,
+    ) -> Result<(), ExecutionError> {
+        if self
+            .observation
+            .grants
+            .get(&requirement)
+            .is_some_and(|grant| grant.adapter_kind == NormalizedAdapterKind::ByteStream)
+        {
+            Ok(())
+        } else {
+            Err(ExecutionError::new(
+                ExecutionFailureClass::Capability,
+                "normalized_stream_grant",
+                "deployment has no byte-stream adapter for the exact requirement",
+            ))
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn live_streams(&self) -> usize {
+        self.streams.live_streams()
     }
 }
 
@@ -250,26 +321,21 @@ fn prepare_adapter(
             validate_signature(
                 program,
                 exists,
-                &[PrimitiveType::StaticText],
-                PrimitiveType::Bool,
+                &[ExpectedType::StaticText],
+                ExpectedType::Bool,
             )?;
             validate_signature(
                 program,
                 text,
-                &[PrimitiveType::StaticText],
-                PrimitiveType::Text,
+                &[ExpectedType::StaticText],
+                ExpectedType::Text,
             )?;
-            validate_signature(
-                program,
-                i64,
-                &[PrimitiveType::StaticText],
-                PrimitiveType::I64,
-            )?;
+            validate_signature(program, i64, &[ExpectedType::StaticText], ExpectedType::I64)?;
             validate_signature(
                 program,
                 bool_operation,
-                &[PrimitiveType::StaticText],
-                PrimitiveType::Bool,
+                &[ExpectedType::StaticText],
+                ExpectedType::Bool,
             )?;
             Ok(Arc::new(NormalizedConfigurationAdapter::new(
                 interface,
@@ -284,7 +350,7 @@ fn prepare_adapter(
         }
         NormalizedAdapterDescriptor::WallClock => {
             let operation = require_operation(program, requirement, "utc-milliseconds")?;
-            validate_signature(program, operation, &[], PrimitiveType::I64)?;
+            validate_signature(program, operation, &[], ExpectedType::I64)?;
             Ok(Arc::new(NormalizedSecurityAdapter::wall_clock(
                 interface,
                 operation.reference,
@@ -295,8 +361,8 @@ fn prepare_adapter(
             validate_signature(
                 program,
                 operation,
-                &[PrimitiveType::I64],
-                PrimitiveType::Bytes,
+                &[ExpectedType::I64],
+                ExpectedType::Bytes,
             )?;
             Ok(Arc::new(NormalizedSecurityAdapter::secure_random(
                 interface,
@@ -305,7 +371,7 @@ fn prepare_adapter(
         }
         NormalizedAdapterDescriptor::Identifier => {
             let operation = require_operation(program, requirement, "uuid-v4")?;
-            validate_signature(program, operation, &[], PrimitiveType::Text)?;
+            validate_signature(program, operation, &[], ExpectedType::Text)?;
             Ok(Arc::new(NormalizedSecurityAdapter::identifier(
                 interface,
                 operation.reference,
@@ -315,18 +381,18 @@ fn prepare_adapter(
             let hash = require_operation(program, requirement, "hash")?;
             let verify = require_operation(program, requirement, "verify")?;
             let needs_upgrade = require_operation(program, requirement, "needs-upgrade")?;
-            validate_signature(program, hash, &[PrimitiveType::Bytes], PrimitiveType::Text)?;
+            validate_signature(program, hash, &[ExpectedType::Bytes], ExpectedType::Text)?;
             validate_signature(
                 program,
                 verify,
-                &[PrimitiveType::Bytes, PrimitiveType::Text],
-                PrimitiveType::Bool,
+                &[ExpectedType::Bytes, ExpectedType::Text],
+                ExpectedType::Bool,
             )?;
             validate_signature(
                 program,
                 needs_upgrade,
-                &[PrimitiveType::Text],
-                PrimitiveType::Bool,
+                &[ExpectedType::Text],
+                ExpectedType::Bool,
             )?;
             Ok(Arc::new(NormalizedPasswordHashAdapter::new(
                 interface,
@@ -346,14 +412,46 @@ fn prepare_adapter(
             validate_signature(
                 program,
                 operation,
-                &[PrimitiveType::Bytes],
-                PrimitiveType::Bool,
+                &[ExpectedType::Bytes],
+                ExpectedType::Bool,
             )?;
             Ok(Arc::new(NormalizedSecretVerifierAdapter::new(
                 interface,
                 operation.reference,
                 secrets.require(secret)?.clone(),
                 *maximum_candidate_bytes,
+            )?))
+        }
+        NormalizedAdapterDescriptor::ByteStream => {
+            let read = require_operation(program, requirement, "read")?;
+            let close = require_operation(program, requirement, "close")?;
+            let read_all = require_operation(program, requirement, "read-all")?;
+            validate_signature(
+                program,
+                read,
+                &[ExpectedType::ByteStream],
+                ExpectedType::ByteStreamRead,
+            )?;
+            validate_signature(
+                program,
+                close,
+                &[ExpectedType::ByteStream],
+                ExpectedType::Unit,
+            )?;
+            validate_signature(
+                program,
+                read_all,
+                &[ExpectedType::ByteStream, ExpectedType::I64],
+                ExpectedType::Bytes,
+            )?;
+            Ok(Arc::new(NormalizedByteStreamAdapter::new(
+                requirement.reference,
+                interface,
+                NormalizedByteStreamOperations {
+                    read: read.reference,
+                    close: close.reference,
+                    read_all: read_all.reference,
+                },
             )?))
         }
     }
@@ -411,27 +509,30 @@ fn require_operation<'a>(
 }
 
 #[derive(Clone, Copy)]
-enum PrimitiveType {
+enum ExpectedType {
+    Unit,
     Bool,
     I64,
     Bytes,
     Text,
     StaticText,
+    ByteStream,
+    ByteStreamRead,
 }
 
 fn validate_signature(
     program: &NormalizedProgram,
     operation: &NormalizedOperation,
-    parameters: &[PrimitiveType],
-    result: PrimitiveType,
+    parameters: &[ExpectedType],
+    result: ExpectedType,
 ) -> Result<(), Diagnostic> {
     if operation.parameters.len() != parameters.len()
         || operation
             .parameters
             .iter()
             .zip(parameters)
-            .any(|(actual, expected)| !primitive_matches(program, actual.ty, *expected))
-        || !primitive_matches(program, operation.result, result)
+            .any(|(actual, expected)| !type_matches(program, actual.ty, *expected))
+        || !type_matches(program, operation.result, result)
     {
         return Err(deployment_error(
             DiagnosticClass::Capability,
@@ -445,28 +546,40 @@ fn validate_signature(
     Ok(())
 }
 
-fn primitive_matches(
+fn type_matches(
     program: &NormalizedProgram,
     digest: TypeObjectDigest,
-    expected: PrimitiveType,
+    expected: ExpectedType,
 ) -> bool {
     let Some(object) = program.types.get(&digest) else {
         return false;
     };
-    matches!(
-        (&object.form, expected),
-        (TypeForm::Bool, PrimitiveType::Bool)
-            | (TypeForm::I64, PrimitiveType::I64)
-            | (TypeForm::Bytes, PrimitiveType::Bytes)
-            | (TypeForm::Text, PrimitiveType::Text)
-            | (TypeForm::StaticText, PrimitiveType::StaticText)
-    )
+    match (&object.form, expected) {
+        (TypeForm::Unit, ExpectedType::Unit)
+        | (TypeForm::Bool, ExpectedType::Bool)
+        | (TypeForm::I64, ExpectedType::I64)
+        | (TypeForm::Bytes, ExpectedType::Bytes)
+        | (TypeForm::Text, ExpectedType::Text)
+        | (TypeForm::StaticText, ExpectedType::StaticText) => true,
+        (TypeForm::Stream { item }, ExpectedType::ByteStream) => {
+            type_matches(program, *item, ExpectedType::Bytes)
+        }
+        (TypeForm::StructuralRecord { fields }, ExpectedType::ByteStreamRead) => {
+            fields.len() == 2
+                && fields[0].name.as_str() == "chunk"
+                && type_matches(program, fields[0].ty, ExpectedType::Bytes)
+                && fields[1].name.as_str() == "done"
+                && type_matches(program, fields[1].ty, ExpectedType::Bool)
+        }
+        _ => false,
+    }
 }
 
 fn descriptor_digest(
     grant: &NormalizedDeploymentGrant,
     interface: DeclarationReference,
     operations: &BTreeSet<OperationReference>,
+    resources: &NormalizedDeploymentResourcePolicy,
 ) -> NormalizedGrantDescriptorDigest {
     let mut bytes = Vec::new();
     bytes.push(1);
@@ -488,11 +601,15 @@ fn descriptor_digest(
         encode_u64(&mut bytes, limit.maximum);
         bytes.push(resource_unit_tag(limit.unit));
     }
-    encode_adapter(&mut bytes, &grant.adapter);
+    encode_adapter(&mut bytes, &grant.adapter, resources);
     NormalizedGrantDescriptorDigest::of(&bytes)
 }
 
-fn encode_adapter(bytes: &mut Vec<u8>, adapter: &NormalizedAdapterDescriptor) {
+fn encode_adapter(
+    bytes: &mut Vec<u8>,
+    adapter: &NormalizedAdapterDescriptor,
+    resources: &NormalizedDeploymentResourcePolicy,
+) {
     match adapter {
         NormalizedAdapterDescriptor::Configuration { values } => {
             bytes.push(1);
@@ -532,6 +649,13 @@ fn encode_adapter(bytes: &mut Vec<u8>, adapter: &NormalizedAdapterDescriptor) {
             bytes.push(6);
             encode_bytes(bytes, secret.as_bytes());
             encode_u64(bytes, *maximum_candidate_bytes as u64);
+        }
+        NormalizedAdapterDescriptor::ByteStream => {
+            bytes.push(7);
+            encode_u64(bytes, resources.streams.maximum_chunk_bytes as u64);
+            encode_u64(bytes, resources.streams.maximum_buffered_chunks as u64);
+            encode_u64(bytes, resources.streams.maximum_total_bytes);
+            encode_u64(bytes, resources.streams.maximum_live_streams as u64);
         }
     }
 }
