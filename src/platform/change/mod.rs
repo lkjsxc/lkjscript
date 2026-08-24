@@ -42,7 +42,9 @@ pub use validate::{
     INCREMENTAL_VALIDATION_PROFILE, IncrementalValidationReport, IncrementalValidationWork,
     StructuralValidationReport, validate_incremental_frontier, validate_structural_frontier,
 };
-pub use witness_update::{WitnessEditCounts, WitnessMapUpdate, update_witness_maps};
+pub use witness_update::{
+    WitnessEditCounts, WitnessMapUpdate, update_witness_maps, update_witness_maps_from,
+};
 
 #[cfg(test)]
 mod tests;

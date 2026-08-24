@@ -4,11 +4,12 @@ use super::{DerivedDelta, SummaryDelta, TestDependencyDelta};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::persistent_map::{
     BatchOutcome, MapEdit, MapError, MapErrorClass, MapWork, MemoryPageStore, OverlayPageStore,
-    PersistentMap,
+    PageStore, PersistentMap,
 };
 use crate::platform::witness::{
-    FullWitness, SummaryBinding, WitnessRoots, encode_ownership, forward_relation_key,
-    owner_key_bytes, owner_value_bytes, reverse_relation_key, test_dependency_keys,
+    FullWitness, SummaryBinding, ValidationWitnessManifest, WitnessRoots, encode_ownership,
+    forward_relation_key, owner_key_bytes, owner_value_bytes, reverse_relation_key,
+    test_dependency_keys,
 };
 use std::collections::BTreeMap;
 
@@ -34,26 +35,38 @@ pub fn update_witness_maps(
     summaries: &SummaryDelta,
     tests: &TestDependencyDelta,
 ) -> Result<WitnessMapUpdate, Diagnostic> {
-    if !base.manifest.contract_is_current() {
+    update_witness_maps_from(&base.manifest, &base.pages, derived, summaries, tests)
+}
+
+/// Applies one exact derived delta to committed witness roots through a read-only base page
+/// source. All produced pages remain isolated in the returned memory stage.
+pub fn update_witness_maps_from<P: PageStore + ?Sized>(
+    base: &ValidationWitnessManifest,
+    pages: &P,
+    derived: &DerivedDelta,
+    summaries: &SummaryDelta,
+    tests: &TestDependencyDelta,
+) -> Result<WitnessMapUpdate, Diagnostic> {
+    if !base.contract_is_current() {
         return Err(update_error(
             DiagnosticClass::Corrupt,
             "change_witness_contract",
             "base witness manifest is not current",
         ));
     }
-    let mut store = OverlayPageStore::new(&base.pages);
+    let mut store = OverlayPageStore::new(pages);
     let mut work = MapWork::default();
     let mut counts = WitnessEditCounts::default();
 
     let owner_summaries = apply_map(
-        base.manifest.roots.owner_summaries,
+        base.roots.owner_summaries,
         summary_edits(summaries),
         &mut store,
         &mut work,
         &mut counts,
     )?;
     let namespaces = apply_map(
-        base.manifest.roots.namespaces,
+        base.roots.namespaces,
         derived
             .namespaces
             .iter()
@@ -68,7 +81,7 @@ pub fn update_witness_maps(
         &mut counts,
     )?;
     let ownership = apply_map(
-        base.manifest.roots.ownership,
+        base.roots.ownership,
         derived
             .ownership
             .iter()
@@ -85,21 +98,21 @@ pub fn update_witness_maps(
         &mut counts,
     )?;
     let forward_relations = apply_map(
-        base.manifest.roots.forward_relations,
+        base.roots.forward_relations,
         relation_edits(derived, forward_relation_key),
         &mut store,
         &mut work,
         &mut counts,
     )?;
     let reverse_relations = apply_map(
-        base.manifest.roots.reverse_relations,
+        base.roots.reverse_relations,
         relation_edits(derived, reverse_relation_key),
         &mut store,
         &mut work,
         &mut counts,
     )?;
     let test_dependencies = apply_map(
-        base.manifest.roots.test_dependencies,
+        base.roots.test_dependencies,
         test_edits(tests)?,
         &mut store,
         &mut work,
@@ -223,10 +236,10 @@ fn test_edits(tests: &TestDependencyDelta) -> Result<Vec<MapEdit>, Diagnostic> {
     Ok(edits.into_values().collect())
 }
 
-fn apply_map(
+fn apply_map<P: PageStore + ?Sized>(
     root: crate::platform::persistent_map::MapRoot,
     edits: Vec<MapEdit>,
-    store: &mut OverlayPageStore<'_, MemoryPageStore>,
+    store: &mut OverlayPageStore<'_, P>,
     work: &mut MapWork,
     counts: &mut WitnessEditCounts,
 ) -> Result<crate::platform::persistent_map::MapRoot, Diagnostic> {

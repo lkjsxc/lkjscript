@@ -324,6 +324,67 @@ fn local_derived_delta_reads_only_affected_witness_keys() {
 }
 
 #[test]
+fn repository_path_copies_witness_maps_from_packed_base_pages() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let view = created.repository.view_current().expect("pinned view");
+    let callee = owner_named(&created.initial.snapshot, "callee");
+    let mut replacement = created.initial.snapshot.owners[&callee].clone();
+    let OwnerRecord::Declaration(declaration) = &mut replacement else {
+        panic!("callee must be a declaration")
+    };
+    declaration.name = Name::new("repository_path_copy").unwrap();
+    let canonical = CanonicalDelta::normalize(
+        &created.initial.snapshot,
+        vec![PrimitiveEdit::ReplaceOwner {
+            expected: encode_owner(&created.initial.snapshot.owners[&callee])
+                .expect("base owner encoding")
+                .0,
+            record: replacement,
+        }],
+    )
+    .expect("canonical rename");
+    let analysis = prepare_change_analysis(
+        &created.initial.snapshot,
+        &created.initial.witness,
+        canonical,
+    )
+    .expect("generic preparation");
+
+    let repository = view
+        .update_witness_maps(
+            &analysis.derived,
+            &analysis.summaries.final_delta,
+            &analysis.tests,
+        )
+        .expect("repository-backed witness update");
+    assert_eq!(repository.revision, created.current.head.revision);
+    assert_eq!(repository.update.roots, analysis.witness.roots);
+    assert_eq!(repository.update.edits, analysis.witness.edits);
+    let repository_pages = repository
+        .update
+        .new_pages
+        .objects()
+        .map(|(digest, bytes)| (digest, bytes.to_vec()))
+        .collect::<Vec<_>>();
+    let oracle_pages = analysis
+        .witness
+        .new_pages
+        .objects()
+        .map(|(digest, bytes)| (digest, bytes.to_vec()))
+        .collect::<Vec<_>>();
+    assert_eq!(repository_pages, oracle_pages);
+    assert!(repository.store_work.objects_read > 0);
+    assert!(repository.store_work.objects_read < 128);
+    assert!(repository.store_work.catalog_lookups >= repository.store_work.objects_read);
+    assert!(repository.store_work.catalog_lookups < 128);
+    assert_eq!(repository.store_work.objects_staged, 0);
+    assert!(repository.store_work.objects_read <= repository.update.work.pages_read);
+}
+
+#[test]
 fn pinned_view_keeps_old_revision_and_namespace_after_head_advances() {
     let temporary = tempfile::tempdir().expect("temporary repository parent");
     let destination = temporary.path().join("meaning");

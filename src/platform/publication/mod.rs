@@ -28,6 +28,7 @@ pub use prepare::{
 };
 pub use read_view::{
     MAXIMUM_RELATION_READ_ITEMS, RelationRead, RepositoryReadWork, RepositoryView, RevisionRead,
+    RevisionWitnessMapUpdate,
 };
 pub use receipt::{
     ChangeCounts, FullOracleStatus, PublicationReceipt, PublicationStatus, ValidationEvidence,

@@ -2,8 +2,9 @@
 
 use super::CurrentPublication;
 use crate::platform::change::{
-    CanonicalBaseRead, CanonicalRead, CanonicalReadWork, WitnessBaseRead, WitnessRead,
-    WitnessReadWork,
+    CanonicalBaseRead, CanonicalRead, CanonicalReadWork, DerivedDelta, SummaryDelta,
+    TestDependencyDelta, WitnessBaseRead, WitnessMapUpdate, WitnessRead, WitnessReadWork,
+    update_witness_maps_from,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
@@ -49,6 +50,13 @@ pub struct RevisionRead<T> {
 pub struct RelationRead {
     pub edges: Vec<RelationEdge>,
     pub truncated: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct RevisionWitnessMapUpdate {
+    pub revision: RevisionId,
+    pub update: WitnessMapUpdate,
+    pub store_work: StoreWork,
 }
 
 /// One immutable catalog snapshot plus the exact accepted revision it was opened against.
@@ -255,6 +263,22 @@ impl RepositoryView {
         work.witness_records_decoded = u64::from(value.is_some());
         work.items_returned = u64::from(value.is_some());
         Ok(self.read(value.is_some(), work))
+    }
+
+    pub fn update_witness_maps(
+        &self,
+        derived: &DerivedDelta,
+        summaries: &SummaryDelta,
+        tests: &TestDependencyDelta,
+    ) -> Result<RevisionWitnessMapUpdate, Diagnostic> {
+        let reader = ObjectPageReader::new(&self.store);
+        let update =
+            update_witness_maps_from(&self.current.witness, &reader, derived, summaries, tests)?;
+        Ok(RevisionWitnessMapUpdate {
+            revision: self.revision(),
+            update,
+            store_work: reader.work(),
+        })
     }
 
     pub fn outgoing_relations(
