@@ -10,6 +10,7 @@ mod diff;
 mod digest;
 mod prepare;
 mod receipt;
+mod repository;
 mod revision;
 mod transaction;
 
@@ -28,11 +29,17 @@ pub use receipt::{
     ChangeCounts, FullOracleStatus, PublicationReceipt, PublicationStatus, ValidationEvidence,
     ValidationProfile, WorkObservation,
 };
+pub use repository::{
+    CreatedRepository, CurrentPublication, GraphRepository, PublicationOutcome, PublicationPoint,
+    ReconciliationStatus,
+};
 pub use revision::{AcceptedBinding, HeadRecord, ParentRevision, RevisionCore, RevisionRecord};
 pub use transaction::{
     DependencyTransactionEdit, DigestEdit, NormalizedTransaction, OwnerTransactionEdit,
     RetirementTransactionEdit, TransactionBody,
 };
 
+#[cfg(test)]
+mod repository_tests;
 #[cfg(test)]
 mod tests;

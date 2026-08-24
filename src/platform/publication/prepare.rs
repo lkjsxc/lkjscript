@@ -226,7 +226,7 @@ fn bind_history<S: ImmutableObjectStore + ?Sized>(
             "transaction or semantic diff does not bind the candidate semantic authority",
         )]);
     }
-    validate_history_base(base, status, &transaction, &semantic_diff)?;
+    validate_history_base(base, status, &transaction, &semantic_diff).map_err(single)?;
     let (transaction_digest, transaction_bytes) = transaction.encode().map_err(single)?;
     let (semantic_diff_digest, semantic_diff_bytes) = semantic_diff.encode().map_err(single)?;
     let mut store_work = authority.store_work;
@@ -337,12 +337,12 @@ fn bind_history<S: ImmutableObjectStore + ?Sized>(
     })
 }
 
-fn validate_history_base(
+pub(super) fn validate_history_base(
     base: Option<AcceptedBinding>,
     status: PublicationStatus,
     transaction: &NormalizedTransaction,
     semantic_diff: &SemanticDiff,
-) -> Result<(), Vec<Diagnostic>> {
+) -> Result<(), Diagnostic> {
     match (base, status, &transaction.body, &semantic_diff.body) {
         (
             None,
@@ -403,11 +403,11 @@ fn validate_history_base(
         {
             Ok(())
         }
-        _ => Err(vec![publication_error(
+        _ => Err(publication_error(
             DiagnosticClass::Corrupt,
             "publication_history_base",
             "transaction, semantic diff, status, and expected base do not form one normalized publication",
-        )]),
+        )),
     }
 }
 
