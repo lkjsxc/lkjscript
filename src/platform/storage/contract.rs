@@ -30,7 +30,9 @@ pub use crate::platform::witness::contract::{
     OWNER_SUMMARY_DIGEST_DOMAIN, VALIDATION_WITNESS_DIGEST_DOMAIN,
 };
 pub const REVISION_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.revision-object.v5";
-pub const RECEIPT_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.receipt-object.v5";
+pub const RECEIPT_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.receipt-object.v4";
+pub const TRANSACTION_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.transaction-object.v5";
+pub const SEMANTIC_DIFF_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.semantic-diff-object.v3";
 pub const DRAFT_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.draft-object.v5";
 pub const CONFLICT_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.conflict-object.v5";
 pub const COMPILER_UNIT_DIGEST_DOMAIN: &str = "lkjscript.compiler-unit.v1";

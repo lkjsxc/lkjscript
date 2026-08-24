@@ -125,7 +125,7 @@ pub fn plan_impact_and_summaries(
 
     for edit in &initial.edits {
         plan.work.summary_edits_examined = plan.work.summary_edits_examined.saturating_add(1);
-        let change = dimension_change(edit);
+        let change = summary_dimension_change(edit);
         let kind = edit
             .after
             .as_ref()
@@ -238,7 +238,7 @@ pub fn plan_impact_and_summaries(
     })
 }
 
-fn dimension_change(edit: &OwnerSummaryEdit) -> SummaryDimensionChange {
+pub fn summary_dimension_change(edit: &OwnerSummaryEdit) -> SummaryDimensionChange {
     match (&edit.before, &edit.after) {
         (None, Some(_)) => SummaryDimensionChange {
             created: true,

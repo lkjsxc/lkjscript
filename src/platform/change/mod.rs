@@ -25,7 +25,7 @@ pub use delta::{CanonicalDelta, ExactEdit, PrimitiveEdit};
 pub use derived::{DerivedDelta, DerivedValueEdit, RelationDelta, derive_local_delta};
 pub use impact::{
     ImpactPlan, ImpactReason, ImpactReasonKind, ImpactWork, PlannedSummaries,
-    SummaryDimensionChange, plan_impact_and_summaries,
+    SummaryDimensionChange, plan_impact_and_summaries, summary_dimension_change,
 };
 pub use overlay::KernelOverlay;
 pub use prepare::{PreparedChangeAnalysis, prepare_change_analysis};

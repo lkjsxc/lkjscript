@@ -26,10 +26,12 @@ pub enum ObjectDomain {
     Dependency,
     Retirement,
     Change,
+    Transaction,
+    SemanticDiff,
 }
 
 impl ObjectDomain {
-    pub const ALL: [Self; 20] = [
+    pub const ALL: [Self; 22] = [
         Self::Owner,
         Self::Type,
         Self::Blob,
@@ -50,6 +52,8 @@ impl ObjectDomain {
         Self::Dependency,
         Self::Retirement,
         Self::Change,
+        Self::Transaction,
+        Self::SemanticDiff,
     ];
 
     pub const fn tag(self) -> u8 {
@@ -74,6 +78,8 @@ impl ObjectDomain {
             Self::Dependency => 18,
             Self::Retirement => 19,
             Self::Change => 20,
+            Self::Transaction => 21,
+            Self::SemanticDiff => 22,
         }
     }
 
@@ -112,6 +118,8 @@ impl ObjectDomain {
             Self::Dependency => "dependency",
             Self::Retirement => "retirement",
             Self::Change => "change",
+            Self::Transaction => "transaction",
+            Self::SemanticDiff => "semantic_diff",
         }
     }
 
@@ -137,6 +145,8 @@ impl ObjectDomain {
             Self::Dependency => contract::DEPENDENCY_OBJECT_DIGEST_DOMAIN,
             Self::Retirement => contract::RETIREMENT_OBJECT_DIGEST_DOMAIN,
             Self::Change => contract::CHANGE_DIGEST_DOMAIN,
+            Self::Transaction => contract::TRANSACTION_OBJECT_DIGEST_DOMAIN,
+            Self::SemanticDiff => contract::SEMANTIC_DIFF_OBJECT_DIGEST_DOMAIN,
         }
     }
 
@@ -154,7 +164,9 @@ impl ObjectDomain {
             | Self::ArtifactManifest
             | Self::PackageObject
             | Self::BackupManifest
-            | Self::Change => 4 * 1024 * 1024,
+            | Self::Change
+            | Self::Transaction
+            | Self::SemanticDiff => 4 * 1024 * 1024,
             Self::Blob | Self::BackupSegment => contract::MAXIMUM_PACK_ENTRY_BYTES,
         }
     }

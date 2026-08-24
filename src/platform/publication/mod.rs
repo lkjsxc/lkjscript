@@ -1,0 +1,38 @@
+//! Private Graph 5 accepted-history binding and publication protocol.
+
+#![allow(
+    unused_imports,
+    reason = "private publication exports become repository consumers at the Graph 5 cutover"
+)]
+
+pub(crate) mod contract;
+mod diff;
+mod digest;
+mod prepare;
+mod receipt;
+mod revision;
+mod transaction;
+
+pub use diff::{
+    DependencyDiffEntry, OwnerChangeClass, OwnerDiffEntry, RetirementDiffEntry, SemanticDiff,
+    SemanticDiffBody, SummaryDimensions,
+};
+pub use digest::{
+    ReceiptObjectDigest, RevisionObjectDigest, SemanticDiffDigest, TransactionDigest,
+};
+pub use prepare::{
+    PreparedInitialPublication, PreparedPublication, PublicationOptions,
+    prepare_change_publication, prepare_initial_publication,
+};
+pub use receipt::{
+    ChangeCounts, FullOracleStatus, PublicationReceipt, PublicationStatus, ValidationEvidence,
+    ValidationProfile, WorkObservation,
+};
+pub use revision::{AcceptedBinding, HeadRecord, ParentRevision, RevisionCore, RevisionRecord};
+pub use transaction::{
+    DependencyTransactionEdit, DigestEdit, NormalizedTransaction, OwnerTransactionEdit,
+    RetirementTransactionEdit, TransactionBody,
+};
+
+#[cfg(test)]
+mod tests;

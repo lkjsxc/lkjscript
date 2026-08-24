@@ -33,6 +33,11 @@ pub mod object;
 pub mod package;
 pub(crate) mod packed;
 pub mod persistent_map;
+#[allow(
+    dead_code,
+    reason = "Graph 5 publication remains private until repository cutover"
+)]
+pub(crate) mod publication;
 pub mod queue;
 pub mod repository;
 pub mod revision;
