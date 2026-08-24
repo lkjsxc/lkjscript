@@ -6,7 +6,8 @@ use crate::platform::kernel::{
     BindingKind, BindingRecord, CaseRecord, CaseReference, DeclarationVisibility,
     ExpressionOperation, ExpressionRecord, FieldSelector, LocalValueReference, MapExpressionEntry,
     MatchExpressionArm, Name, OwnerHeader, OwnerKey, OwnerKind, OwnerRecord, RequirementReference,
-    TextValue, TypeForm, TypeObject, TypeObjectDigest, encode_type_object,
+    TextValue, TypeForm, TypeObject, TypeObjectDigest, decode_owner, encode_owner,
+    encode_type_object,
 };
 use crate::platform::persistent_map::MapRoot;
 use crate::platform::publication::{GraphRepository, PublicationOptions, PublicationOutcome};
@@ -873,7 +874,7 @@ fn structurally_empty_package_builds_one_valid_empty_manifest() {
         loaded
             .root_package()
             .expect("root package")
-            .targets
+            .runtime_owners
             .is_empty()
     );
 }
@@ -1340,7 +1341,7 @@ fn graph5_artifact_links_deterministically_and_reopens_without_graph4_modules() 
     assert_eq!(first.artifact.bytes, second.artifact.bytes);
     assert_eq!(first.artifact.bundle_digest, second.artifact.bundle_digest);
     assert_eq!(first.work.compiler_units, 11);
-    assert_eq!(first.work.target_owners, 1);
+    assert_eq!(first.work.runtime_owners, 8);
     assert_eq!(first.work.packages, 1);
     assert!(
         !first
@@ -1358,8 +1359,12 @@ fn graph5_artifact_links_deterministically_and_reopens_without_graph4_modules() 
         snapshot.root.package_id
     );
     assert_eq!(
-        loaded.root_package().expect("root package").targets.len(),
-        1
+        loaded
+            .root_package()
+            .expect("root package")
+            .runtime_owners
+            .len(),
+        8
     );
 
     drop(created);
@@ -1493,7 +1498,7 @@ fn graph5_artifact_rejects_predecessor_corruption_and_inexact_closures() {
     let loaded = load_artifact(&linked.artifact.bytes).expect("load current artifact");
 
     let mut predecessor = linked.artifact.bytes.clone();
-    predecessor[..8].copy_from_slice(b"LKJART04");
+    predecessor[..8].copy_from_slice(b"LKJART05");
     assert_eq!(
         load_artifact(&predecessor)
             .expect_err("predecessor bundle must reject")
@@ -1537,6 +1542,59 @@ fn graph5_artifact_rejects_predecessor_corruption_and_inexact_closures() {
             .expect_err("missing reachable unit must reject")
             .code,
         "artifact_object_missing"
+    );
+
+    let mut missing_metadata = loaded.manifest.clone();
+    missing_metadata.packages[0].runtime_owners.pop();
+    assert_eq!(
+        super::artifact::encode_artifact(missing_metadata, &loaded.objects)
+            .expect_err("missing runtime metadata must reject")
+            .code,
+        "artifact_runtime_owner_count"
+    );
+
+    let mut wrong_runtime_objects = loaded.objects.clone();
+    let mut wrong_runtime_manifest = loaded.manifest.clone();
+    let field_binding = wrong_runtime_manifest.packages[0]
+        .runtime_owners
+        .iter_mut()
+        .find(|binding| matches!(binding.owner, OwnerKey::Field(_)))
+        .expect("runtime field binding");
+    let old_key = ObjectKey::from_digest(ObjectDomain::Owner, field_binding.object.bytes());
+    let bytes = wrong_runtime_objects
+        .remove(&old_key)
+        .expect("runtime field owner object");
+    let mut field_owner = decode_owner(
+        &bytes,
+        field_binding.owner,
+        field_binding.kind,
+        field_binding.object,
+    )
+    .expect("decode runtime field owner");
+    let OwnerRecord::Field(field) = &mut field_owner else {
+        panic!("runtime field owner kind")
+    };
+    field.declaration = declaration_named(&snapshot, "State");
+    let (wrong_digest, wrong_bytes) =
+        encode_owner(&field_owner).expect("encode wrong runtime field");
+    field_binding.object = wrong_digest;
+    assert!(
+        wrong_runtime_objects
+            .insert(
+                ObjectKey::from_digest(ObjectDomain::Owner, wrong_digest.bytes()),
+                wrong_bytes,
+            )
+            .is_none()
+    );
+    let (closure, count, bytes) = super::artifact::closure_facts(&wrong_runtime_objects).unwrap();
+    wrong_runtime_manifest.closure = closure;
+    wrong_runtime_manifest.object_count = count;
+    wrong_runtime_manifest.object_bytes = bytes;
+    assert_eq!(
+        super::artifact::encode_artifact(wrong_runtime_manifest, &wrong_runtime_objects)
+            .expect_err("runtime metadata disagreeing with compiled semantics must reject")
+            .code,
+        "artifact_runtime_owner_semantics"
     );
 
     let mut extra_objects = loaded.objects.clone();

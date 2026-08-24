@@ -467,7 +467,7 @@ impl Machine<'_> {
                     let arguments = self.pop_many(arguments as usize)?;
                     self.charge_capability_call(requirement)?;
                     let value = if let Some(transaction) = self.transactions.get_mut(&requirement) {
-                        let operation = *self
+                        let operation = self
                             .program
                             .operations
                             .get(operation.0 as usize)
@@ -476,7 +476,8 @@ impl Machine<'_> {
                                     "normalized_operation_index",
                                     "normalized operation index escaped the prepared table",
                                 )
-                            })?;
+                            })?
+                            .reference;
                         transaction
                             .transaction
                             .call(operation, arguments, self.control)?

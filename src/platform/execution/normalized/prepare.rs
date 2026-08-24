@@ -8,17 +8,18 @@ use crate::platform::compiler::LoadedArtifact;
 use crate::platform::compiler::manifest::{CompilationBinding, CompilationManifest};
 use crate::platform::compiler::unit::{
     CompilationPayload, CompilationUnit, CompiledCode, CompiledFieldSelector, CompiledInstruction,
-    CompiledPortImplementation, CompiledText,
+    CompiledParameter, CompiledPortImplementation, CompiledText,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     BlobObjectDigest, CaseReference, ComparisonPolicy, DeclarationReference, EncodedOwnerKey,
-    FieldReference, Name, OperationReference, OwnerKey, OwnerKind, OwnerRecord, PackageId,
-    PortReference, RequirementReference, ResourceLimit, decode_owner,
+    ExternalVisibility, FieldReference, Idempotency, Name, OperationReference, OwnerKey,
+    OwnerRecord, PackageId, PortReference, RequirementReference, ResourceLimit, TypeObject,
+    TypeObjectDigest, decode_type_object,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::persistent_map::{MapError, MapErrorClass, MapWork, PersistentMap};
-use crate::platform::semantic_id::TargetId;
+use crate::platform::semantic_id::{ParameterId, TargetId};
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, StoreError, StoreErrorClass, StoreWork,
 };
@@ -28,11 +29,14 @@ use std::sync::Arc;
 
 type TargetMap = BTreeMap<(PackageId, TargetId), NormalizedTarget>;
 type RootTargetNames = BTreeMap<Name, TargetId>;
+type RuntimeOwnerMap = BTreeMap<(PackageId, OwnerKey), OwnerRecord>;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct NormalizedPreparationWork {
     pub packages: u64,
     pub compiler_units: u64,
+    pub runtime_owners: u64,
+    pub type_objects: u64,
     pub instructions: u64,
     pub functions: u64,
     pub record_layouts: u64,
@@ -136,28 +140,62 @@ pub enum NormalizedFunctionBody {
 pub struct NormalizedFunction {
     pub declaration: DeclarationReference,
     pub parameter_count: u32,
+    pub parameters: Arc<[NormalizedParameter]>,
+    pub result: TypeObjectDigest,
     pub task_requirements: Arc<[RequirementIndex]>,
     pub body: NormalizedFunctionBody,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NormalizedParameter {
+    pub parameter: ParameterId,
+    pub name: Name,
+    pub ty: TypeObjectDigest,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NormalizedRecordField {
+    pub reference: FieldReference,
+    pub name: Name,
+    pub ty: TypeObjectDigest,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NormalizedRecordLayout {
     pub declaration: DeclarationReference,
-    pub fields: Arc<[FieldReference]>,
+    pub fields: Arc<[NormalizedRecordField]>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NormalizedVariantCase {
+    pub reference: CaseReference,
+    pub name: Name,
+    pub payload: Option<TypeObjectDigest>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NormalizedVariantLayout {
     pub declaration: DeclarationReference,
-    pub cases: Arc<[CaseReference]>,
+    pub cases: Arc<[NormalizedVariantCase]>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NormalizedRequirement {
     pub reference: RequirementReference,
+    pub name: Name,
     pub interface: DeclarationReference,
     pub operations: Arc<[OperationIndex]>,
     pub limits: Arc<[ResourceLimit]>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NormalizedOperation {
+    pub reference: OperationReference,
+    pub name: Name,
+    pub parameters: Arc<[NormalizedParameter]>,
+    pub result: TypeObjectDigest,
+    pub idempotency: Idempotency,
+    pub external_visibility: ExternalVisibility,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -169,6 +207,8 @@ pub enum NormalizedEntryPoint {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NormalizedPort {
     pub reference: PortReference,
+    pub name: Name,
+    pub function_type: TypeObjectDigest,
     pub component: ComponentIndex,
     pub entry: NormalizedEntryPoint,
 }
@@ -208,12 +248,13 @@ pub struct NormalizedProgram {
     pub(crate) records: Arc<[NormalizedRecordLayout]>,
     pub(crate) variants: Arc<[NormalizedVariantLayout]>,
     pub(crate) requirements: Arc<[NormalizedRequirement]>,
-    pub(crate) operations: Arc<[OperationReference]>,
+    pub(crate) operations: Arc<[NormalizedOperation]>,
     pub(crate) components: Arc<[NormalizedComponent]>,
     pub(crate) ports: Arc<[NormalizedPort]>,
     pub(crate) targets: TargetMap,
     pub(crate) root_target_names: RootTargetNames,
     pub(crate) tests: BTreeMap<DeclarationReference, NormalizedTest>,
+    pub(crate) types: BTreeMap<TypeObjectDigest, TypeObject>,
 }
 
 impl NormalizedProgram {
@@ -222,16 +263,33 @@ impl NormalizedProgram {
         let mut work = NormalizedPreparationWork::default();
         let units = load_units(&artifact, &mut work)?;
         let indexes = RuntimeIndexes::build(&units)?;
+        let runtime_owners = load_runtime_owners(&artifact, &mut work)?;
+        let types = load_type_objects(&artifact, &mut work)?;
         let mut text_cache = BTreeMap::new();
 
-        let records = prepare_records(&units, &indexes)?;
-        let variants = prepare_variants(&units, &indexes)?;
-        let (requirements, operations) = prepare_requirements(&units, &indexes)?;
-        let functions = prepare_functions(&artifact, &units, &indexes, &mut text_cache, &mut work)?;
-        let (components, ports) =
-            prepare_components(&artifact, &units, &indexes, &mut text_cache, &mut work)?;
+        let records = prepare_records(&units, &indexes, &runtime_owners)?;
+        let variants = prepare_variants(&units, &indexes, &runtime_owners)?;
+        let requirements = prepare_requirements(&units, &indexes, &runtime_owners)?;
+        let operations = prepare_operations(&indexes, &runtime_owners)?;
+        let functions = prepare_functions(
+            &artifact,
+            &units,
+            &indexes,
+            &runtime_owners,
+            &mut text_cache,
+            &mut work,
+        )?;
+        let (components, ports) = prepare_components(
+            &artifact,
+            &units,
+            &indexes,
+            &runtime_owners,
+            &mut text_cache,
+            &mut work,
+        )?;
         let tests = prepare_tests(&artifact, &units, &indexes, &mut text_cache, &mut work)?;
-        let (targets, root_target_names) = prepare_targets(&artifact, &units, &indexes, &mut work)?;
+        let (targets, root_target_names) =
+            prepare_targets(&artifact, &units, &indexes, &runtime_owners)?;
 
         work.functions = functions.len() as u64;
         work.record_layouts = records.len() as u64;
@@ -257,6 +315,7 @@ impl NormalizedProgram {
             targets,
             root_target_names,
             tests,
+            types,
         })
     }
 
@@ -503,9 +562,69 @@ fn load_units(
     Ok(units)
 }
 
+fn load_runtime_owners(
+    artifact: &LoadedArtifact,
+    work: &mut NormalizedPreparationWork,
+) -> Result<RuntimeOwnerMap, Diagnostic> {
+    let mut owners = BTreeMap::new();
+    for package in &artifact.manifest.packages {
+        for binding in &package.runtime_owners {
+            let record = artifact.runtime_owner(
+                package.package,
+                binding.owner,
+                binding.kind,
+                &mut work.store,
+            )?;
+            if owners
+                .insert((package.package, binding.owner), record)
+                .is_some()
+            {
+                return Err(runtime_corrupt(
+                    "normalized_runtime_owner_duplicate",
+                    "normalized preparation repeats one exact runtime owner",
+                ));
+            }
+        }
+    }
+    work.runtime_owners = owners.len() as u64;
+    Ok(owners)
+}
+
+fn load_type_objects(
+    artifact: &LoadedArtifact,
+    work: &mut NormalizedPreparationWork,
+) -> Result<BTreeMap<TypeObjectDigest, TypeObject>, Diagnostic> {
+    let keys = artifact
+        .objects
+        .keys()
+        .filter(|key| key.domain == ObjectDomain::Type)
+        .copied()
+        .collect::<Vec<_>>();
+    let mut types = BTreeMap::new();
+    for key in keys {
+        let digest = TypeObjectDigest::from_bytes(key.digest.bytes());
+        let bytes = required_object(
+            artifact,
+            key,
+            "normalized runtime type object is missing",
+            &mut work.store,
+        )?;
+        let object = decode_type_object(&bytes, digest)?;
+        if types.insert(digest, object).is_some() {
+            return Err(runtime_corrupt(
+                "normalized_type_duplicate",
+                "normalized preparation repeats one exact type object",
+            ));
+        }
+    }
+    work.type_objects = types.len() as u64;
+    Ok(types)
+}
+
 fn prepare_records(
     units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
     indexes: &RuntimeIndexes,
+    runtime_owners: &RuntimeOwnerMap,
 ) -> Result<Vec<NormalizedRecordLayout>, Diagnostic> {
     let mut records = vec![None; indexes.records.len()];
     for (declaration, index) in &indexes.records {
@@ -518,8 +637,28 @@ fn prepare_records(
         };
         let fields = fields
             .iter()
-            .map(|field| index_copy(&unit.tables.fields, field.field, "normalized record field"))
-            .collect::<Result<Vec<_>, _>>()?;
+            .map(|field| {
+                let reference =
+                    index_copy(&unit.tables.fields, field.field, "normalized record field")?;
+                let OwnerRecord::Field(record) = exact_runtime_owner(
+                    runtime_owners,
+                    reference.package,
+                    OwnerKey::Field(reference.field),
+                    "record field",
+                )?
+                else {
+                    return Err(runtime_corrupt(
+                        "normalized_record_field_kind",
+                        "record field runtime metadata has another owner kind",
+                    ));
+                };
+                Ok(NormalizedRecordField {
+                    reference,
+                    name: record.name.clone(),
+                    ty: record.ty,
+                })
+            })
+            .collect::<Result<Vec<_>, Diagnostic>>()?;
         records[index.0 as usize] = Some(NormalizedRecordLayout {
             declaration: *declaration,
             fields: fields.into(),
@@ -531,6 +670,7 @@ fn prepare_records(
 fn prepare_variants(
     units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
     indexes: &RuntimeIndexes,
+    runtime_owners: &RuntimeOwnerMap,
 ) -> Result<Vec<NormalizedVariantLayout>, Diagnostic> {
     let mut variants = vec![None; indexes.variants.len()];
     for (declaration, index) in &indexes.variants {
@@ -543,8 +683,28 @@ fn prepare_variants(
         };
         let cases = cases
             .iter()
-            .map(|case| index_copy(&unit.tables.cases, case.case, "normalized variant case"))
-            .collect::<Result<Vec<_>, _>>()?;
+            .map(|case| {
+                let reference =
+                    index_copy(&unit.tables.cases, case.case, "normalized variant case")?;
+                let OwnerRecord::Case(record) = exact_runtime_owner(
+                    runtime_owners,
+                    reference.package,
+                    OwnerKey::Case(reference.case),
+                    "variant case",
+                )?
+                else {
+                    return Err(runtime_corrupt(
+                        "normalized_variant_case_kind",
+                        "variant case runtime metadata has another owner kind",
+                    ));
+                };
+                Ok(NormalizedVariantCase {
+                    reference,
+                    name: record.name.clone(),
+                    payload: record.payload,
+                })
+            })
+            .collect::<Result<Vec<_>, Diagnostic>>()?;
         variants[index.0 as usize] = Some(NormalizedVariantLayout {
             declaration: *declaration,
             cases: cases.into(),
@@ -556,7 +716,8 @@ fn prepare_variants(
 fn prepare_requirements(
     units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
     indexes: &RuntimeIndexes,
-) -> Result<(Vec<NormalizedRequirement>, Vec<OperationReference>), Diagnostic> {
+    runtime_owners: &RuntimeOwnerMap,
+) -> Result<Vec<NormalizedRequirement>, Diagnostic> {
     let mut requirements = vec![None; indexes.requirements.len()];
     for unit in units.values() {
         let CompilationPayload::Component {
@@ -590,8 +751,21 @@ fn prepare_requirements(
                     required_index(&indexes.operations, reference, "operation")
                 })
                 .collect::<Result<Vec<_>, _>>()?;
+            let OwnerRecord::Requirement(record) = exact_runtime_owner(
+                runtime_owners,
+                reference.package,
+                OwnerKey::Requirement(reference.requirement),
+                "component requirement",
+            )?
+            else {
+                return Err(runtime_corrupt(
+                    "normalized_requirement_owner_kind",
+                    "component requirement runtime metadata has another owner kind",
+                ));
+            };
             let value = NormalizedRequirement {
                 reference,
+                name: record.name.clone(),
                 interface,
                 operations: operations.into(),
                 limits: requirement.limits.clone().into(),
@@ -604,42 +778,76 @@ fn prepare_requirements(
             }
         }
     }
-    let requirements = finish_dense(requirements, "requirement")?;
+    finish_dense(requirements, "requirement")
+}
+
+fn prepare_operations(
+    indexes: &RuntimeIndexes,
+    runtime_owners: &RuntimeOwnerMap,
+) -> Result<Vec<NormalizedOperation>, Diagnostic> {
     let mut operations = vec![None; indexes.operations.len()];
     for (reference, index) in &indexes.operations {
-        operations[index.0 as usize] = Some(*reference);
+        let OwnerRecord::Operation(record) = exact_runtime_owner(
+            runtime_owners,
+            reference.package,
+            OwnerKey::Operation(reference.operation),
+            "interface operation",
+        )?
+        else {
+            return Err(runtime_corrupt(
+                "normalized_operation_owner_kind",
+                "interface operation runtime metadata has another owner kind",
+            ));
+        };
+        let parameters = record
+            .parameters
+            .iter()
+            .map(|parameter| normalized_parameter(runtime_owners, reference.package, *parameter))
+            .collect::<Result<Vec<_>, _>>()?;
+        operations[index.0 as usize] = Some(NormalizedOperation {
+            reference: *reference,
+            name: record.name.clone(),
+            parameters: parameters.into(),
+            result: record.result,
+            idempotency: record.idempotency,
+            external_visibility: record.external_visibility,
+        });
     }
-    Ok((requirements, finish_dense(operations, "operation")?))
+    finish_dense(operations, "operation")
 }
 
 fn prepare_functions(
     artifact: &LoadedArtifact,
     units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
     indexes: &RuntimeIndexes,
+    runtime_owners: &RuntimeOwnerMap,
     text_cache: &mut BTreeMap<BlobObjectDigest, Arc<str>>,
     work: &mut NormalizedPreparationWork,
 ) -> Result<Vec<NormalizedFunction>, Diagnostic> {
     let mut functions = vec![None; indexes.functions.len()];
     for (declaration, index) in &indexes.functions {
         let unit = declaration_unit(units, *declaration)?;
-        let (parameter_count, task_requirements, body) = match &unit.payload {
+        let (parameters, result, task_requirements, body) = match &unit.payload {
             CompilationPayload::External {
                 signature,
                 implementation,
             } => (
-                u32_index(signature.parameters.len(), "external parameter count")?,
+                normalized_parameters(runtime_owners, declaration.package, &signature.parameters)?,
+                index_copy(&unit.tables.types, signature.result, "external result type")?,
                 translate_requirement_indexes(unit, &signature.task_requirements, indexes)?,
                 NormalizedFunctionBody::External(implementation.clone()),
             ),
             CompilationPayload::Function { signature, code } => (
-                u32_index(signature.parameters.len(), "function parameter count")?,
+                normalized_parameters(runtime_owners, declaration.package, &signature.parameters)?,
+                index_copy(&unit.tables.types, signature.result, "function result type")?,
                 translate_requirement_indexes(unit, &signature.task_requirements, indexes)?,
                 NormalizedFunctionBody::Code(translate_code(
                     artifact, unit, code, indexes, text_cache, work,
                 )?),
             ),
-            CompilationPayload::Constant { code, .. } => (
-                0,
+            CompilationPayload::Constant { ty, code } => (
+                Vec::new(),
+                index_copy(&unit.tables.types, *ty, "constant type")?,
                 Vec::new(),
                 NormalizedFunctionBody::Code(translate_code(
                     artifact, unit, code, indexes, text_cache, work,
@@ -657,9 +865,12 @@ fn prepare_functions(
                 ));
             }
         };
+        let parameter_count = u32_index(parameters.len(), "function parameter count")?;
         functions[index.0 as usize] = Some(NormalizedFunction {
             declaration: *declaration,
             parameter_count,
+            parameters: parameters.into(),
+            result,
             task_requirements: task_requirements.into(),
             body,
         });
@@ -671,6 +882,7 @@ fn prepare_components(
     artifact: &LoadedArtifact,
     units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
     indexes: &RuntimeIndexes,
+    runtime_owners: &RuntimeOwnerMap,
     text_cache: &mut BTreeMap<BlobObjectDigest, Arc<str>>,
     work: &mut NormalizedPreparationWork,
 ) -> Result<(Vec<NormalizedComponent>, Vec<NormalizedPort>), Diagnostic> {
@@ -703,6 +915,18 @@ fn prepare_components(
         for port in compiled_ports {
             let reference = index_copy(&unit.tables.ports, port.port, "normalized component port")?;
             let port_index = required_index(&indexes.ports, reference, "port")?;
+            let OwnerRecord::Port(record) = exact_runtime_owner(
+                runtime_owners,
+                reference.package,
+                OwnerKey::Port(reference.port),
+                "component port",
+            )?
+            else {
+                return Err(runtime_corrupt(
+                    "normalized_port_owner_kind",
+                    "component port runtime metadata has another owner kind",
+                ));
+            };
             let entry = match &port.implementation {
                 CompiledPortImplementation::Function(function) => {
                     let declaration = index_copy(
@@ -723,6 +947,8 @@ fn prepare_components(
             if ports[port_index.0 as usize]
                 .replace(NormalizedPort {
                     reference,
+                    name: record.name.clone(),
+                    function_type: record.function_type,
                     component: *component_index,
                     entry,
                 })
@@ -791,7 +1017,7 @@ fn prepare_targets(
     artifact: &LoadedArtifact,
     units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
     indexes: &RuntimeIndexes,
-    work: &mut NormalizedPreparationWork,
+    runtime_owners: &RuntimeOwnerMap,
 ) -> Result<(TargetMap, RootTargetNames), Diagnostic> {
     let mut targets = BTreeMap::new();
     let mut root_names = BTreeMap::new();
@@ -818,32 +1044,13 @@ fn prepare_targets(
         let component = required_index(&indexes.components, component, "component")?;
         let port = index_copy(&unit.tables.ports, *port, "normalized target port")?;
         let port = required_index(&indexes.ports, port, "port")?;
-        let package_manifest = artifact.package(*package).ok_or_else(|| {
-            runtime_corrupt(
-                "normalized_target_package",
-                "target compiler unit has no artifact package manifest",
-            )
-        })?;
-        let owner = package_manifest
-            .targets
-            .binary_search_by_key(target, |entry| entry.target)
-            .ok()
-            .map(|index| package_manifest.targets[index].owner)
-            .ok_or_else(|| {
-                runtime_corrupt(
-                    "normalized_target_owner",
-                    "target compiler unit has no exact target-owner binding",
-                )
-            })?;
-        let key = ObjectKey::from_digest(ObjectDomain::Owner, owner.bytes());
-        let bytes = required_object(
-            artifact,
-            key,
-            "normalized target owner object is missing",
-            &mut work.store,
-        )?;
-        let record = decode_owner(&bytes, OwnerKey::Target(*target), OwnerKind::Target, owner)?;
-        let OwnerRecord::Target(record) = record else {
+        let OwnerRecord::Target(record) = exact_runtime_owner(
+            runtime_owners,
+            *package,
+            OwnerKey::Target(*target),
+            "target",
+        )?
+        else {
             return Err(runtime_corrupt(
                 "normalized_target_owner_kind",
                 "target owner binding decoded another owner kind",
@@ -864,7 +1071,7 @@ fn prepare_targets(
             ));
         }
         if *package == artifact.manifest.root_package
-            && root_names.insert(record.name, *target).is_some()
+            && root_names.insert(record.name.clone(), *target).is_some()
         {
             return Err(runtime_corrupt(
                 "normalized_target_name_duplicate",
@@ -873,6 +1080,51 @@ fn prepare_targets(
         }
     }
     Ok((targets, root_names))
+}
+
+fn exact_runtime_owner<'a>(
+    owners: &'a RuntimeOwnerMap,
+    package: PackageId,
+    owner: OwnerKey,
+    label: &'static str,
+) -> Result<&'a OwnerRecord, Diagnostic> {
+    owners.get(&(package, owner)).ok_or_else(|| {
+        runtime_corrupt(
+            "normalized_runtime_owner_missing",
+            format!("{label} has no exact runtime-owner metadata"),
+        )
+    })
+}
+
+fn normalized_parameters(
+    owners: &RuntimeOwnerMap,
+    package: PackageId,
+    parameters: &[CompiledParameter],
+) -> Result<Vec<NormalizedParameter>, Diagnostic> {
+    parameters
+        .iter()
+        .map(|parameter| normalized_parameter(owners, package, parameter.parameter))
+        .collect()
+}
+
+fn normalized_parameter(
+    owners: &RuntimeOwnerMap,
+    package: PackageId,
+    parameter: ParameterId,
+) -> Result<NormalizedParameter, Diagnostic> {
+    let OwnerRecord::Parameter(record) =
+        exact_runtime_owner(owners, package, OwnerKey::Parameter(parameter), "parameter")?
+    else {
+        return Err(runtime_corrupt(
+            "normalized_parameter_owner_kind",
+            "parameter runtime metadata has another owner kind",
+        ));
+    };
+    Ok(NormalizedParameter {
+        parameter,
+        name: record.name.clone(),
+        ty: record.ty,
+    })
 }
 
 fn translate_code(

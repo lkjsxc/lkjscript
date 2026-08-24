@@ -4,14 +4,17 @@ use super::capability::{
     NormalizedCapabilities, NormalizedCapabilityAdapter, NormalizedCapabilityGrant,
     NormalizedCapabilityTransaction,
 };
+use super::codec::{decode_typed, encode_typed};
 use super::prepare::{NormalizedFunctionBody, NormalizedInstruction, NormalizedProgram};
 use super::reference::NormalizedReferenceInterpreter;
 use super::value::NormalizedValue;
 use super::vm::{NormalizedRunPolicy, NormalizedVm};
 use crate::platform::compiler::{OptimizationPolicy, build_clean, link_artifact, load_artifact};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
+use crate::platform::json::JsonLimits;
 use crate::platform::kernel::{
     DeclarationReference, ExpressionOperation, Name, OperationReference, OwnerKey, OwnerRecord,
+    StructuralTypeField, TypeForm, TypeObject, TypeObjectDigest, encode_type_object,
 };
 use crate::platform::publication::GraphRepository;
 use std::sync::Arc;
@@ -203,7 +206,7 @@ fn bind_fixture_capability(
         operations: requirement_record
             .operations
             .iter()
-            .map(|operation| program.operations[operation.0 as usize])
+            .map(|operation| program.operations[operation.0 as usize].reference)
             .collect(),
         maximum_calls,
         adapter: Arc::new(UnitAdapter {
@@ -234,7 +237,7 @@ fn bind_tracking_capability(
         operations: requirement
             .operations
             .iter()
-            .map(|operation| program.operations[operation.0 as usize])
+            .map(|operation| program.operations[operation.0 as usize].reference)
             .collect(),
         maximum_calls,
         adapter: Arc::new(TrackingAdapter {
@@ -351,6 +354,8 @@ fn strict_graph5_artifact_prepares_only_dense_runtime_bindings() {
 
     assert_eq!(program.work.packages, 1);
     assert_eq!(program.work.compiler_units, 11);
+    assert_eq!(program.work.runtime_owners, 8);
+    assert_eq!(program.work.type_objects, 2);
     assert_eq!(program.work.functions, 5);
     assert_eq!(program.work.record_layouts, 1);
     assert_eq!(program.work.variant_layouts, 1);
@@ -360,6 +365,11 @@ fn strict_graph5_artifact_prepares_only_dense_runtime_bindings() {
     assert_eq!(program.work.ports, 1);
     assert_eq!(program.work.targets, 1);
     assert_eq!(program.work.tests, 1);
+    assert_eq!(program.records[0].fields[0].name.as_str(), "value");
+    assert_eq!(program.variants[0].cases[0].name.as_str(), "Ready");
+    assert_eq!(program.operations[0].name.as_str(), "read");
+    assert_eq!(program.requirements[0].name.as_str(), "store");
+    assert_eq!(program.ports[0].name.as_str(), "run");
     assert_eq!(
         program
             .root_target(&crate::platform::kernel::Name::new("command").unwrap())
@@ -398,6 +408,137 @@ fn strict_graph5_artifact_prepares_only_dense_runtime_bindings() {
         code.instructions
             .iter()
             .any(|instruction| matches!(instruction, NormalizedInstruction::Perform { .. }))
+    );
+}
+
+fn admit_runtime_type(program: &mut NormalizedProgram, form: TypeForm) -> TypeObjectDigest {
+    let object = TypeObject::new(form).expect("valid runtime boundary type");
+    let (digest, _) = encode_type_object(&object).expect("canonical runtime boundary type");
+    assert!(program.types.insert(digest, object).is_none());
+    digest
+}
+
+#[test]
+fn normalized_json_codec_uses_exact_runtime_layouts_and_bounds() {
+    let snapshot = crate::platform::kernel::tests::witness_snapshot();
+    let mut program = prepare_snapshot(&snapshot);
+    let unit = program
+        .types
+        .iter()
+        .find_map(|(digest, object)| matches!(object.form, TypeForm::Unit).then_some(*digest))
+        .expect("unit type");
+    assert_eq!(
+        decode_typed(&program, b"null", unit, JsonLimits::default()).unwrap(),
+        NormalizedValue::Unit
+    );
+    assert_eq!(
+        encode_typed(
+            &program,
+            &NormalizedValue::Unit,
+            unit,
+            JsonLimits::default(),
+        )
+        .unwrap(),
+        b"null"
+    );
+
+    let record_declaration = program.records[0].declaration;
+    let record = admit_runtime_type(
+        &mut program,
+        TypeForm::Named {
+            declaration: record_declaration,
+        },
+    );
+    let record_value = decode_typed(
+        &program,
+        br#"{"value":null}"#,
+        record,
+        JsonLimits::default(),
+    )
+    .expect("decode exact nominal record");
+    assert_eq!(
+        encode_typed(&program, &record_value, record, JsonLimits::default()).unwrap(),
+        br#"{"value":null}"#
+    );
+    assert_eq!(
+        decode_typed(
+            &program,
+            br#"{"other":null}"#,
+            record,
+            JsonLimits::default(),
+        )
+        .expect_err("wrong nominal field must reject")
+        .code,
+        "normalized_json_type"
+    );
+
+    let variant_declaration = program.variants[0].declaration;
+    let variant = admit_runtime_type(
+        &mut program,
+        TypeForm::Named {
+            declaration: variant_declaration,
+        },
+    );
+    let variant_value = decode_typed(
+        &program,
+        br#"{"case":"Ready"}"#,
+        variant,
+        JsonLimits::default(),
+    )
+    .expect("decode exact nominal variant");
+    assert_eq!(
+        encode_typed(&program, &variant_value, variant, JsonLimits::default(),).unwrap(),
+        br#"{"case":"Ready"}"#
+    );
+
+    let boolean = admit_runtime_type(&mut program, TypeForm::Bool);
+    let structural = admit_runtime_type(
+        &mut program,
+        TypeForm::StructuralRecord {
+            fields: vec![StructuralTypeField {
+                name: Name::new("flag").unwrap(),
+                ty: boolean,
+            }],
+        },
+    );
+    let structural_value = decode_typed(
+        &program,
+        br#"{"flag":true}"#,
+        structural,
+        JsonLimits::default(),
+    )
+    .expect("decode structural record");
+    assert_eq!(
+        encode_typed(
+            &program,
+            &structural_value,
+            structural,
+            JsonLimits::default(),
+        )
+        .unwrap(),
+        br#"{"flag":true}"#
+    );
+
+    let option = admit_runtime_type(&mut program, TypeForm::Option { item: unit });
+    assert_eq!(
+        decode_typed(&program, b"null", option, JsonLimits::default())
+            .expect_err("unrepresented Option boundary must reject exactly")
+            .code,
+        "normalized_json_type"
+    );
+    assert_eq!(
+        encode_typed(
+            &program,
+            &NormalizedValue::Unit,
+            unit,
+            JsonLimits {
+                maximum_bytes: 3,
+                ..JsonLimits::default()
+            },
+        )
+        .expect_err("output byte bound must reject")
+        .code,
+        "normalized_json_output_bytes"
     );
 }
 

@@ -137,7 +137,7 @@ impl NormalizedCapabilities {
                 let index = program
                     .operations
                     .iter()
-                    .position(|candidate| candidate == operation)
+                    .position(|candidate| candidate.reference == *operation)
                     .map(|index| OperationIndex(index as u32))
                     .ok_or_else(|| {
                         capability_error(
@@ -208,7 +208,7 @@ impl NormalizedCapabilities {
                 "execution requested an operation outside the exact deployment grant",
             ));
         }
-        let operation = *program
+        let operation = program
             .operations
             .get(operation.0 as usize)
             .ok_or_else(|| {
@@ -216,7 +216,8 @@ impl NormalizedCapabilities {
                     "normalized_capability_operation_index",
                     "prepared capability operation index is outside the artifact table",
                 )
-            })?;
+            })?
+            .reference;
         binding.adapter.call(operation, arguments, control)
     }
 

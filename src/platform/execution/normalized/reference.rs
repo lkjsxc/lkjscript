@@ -856,7 +856,7 @@ impl ReferenceState<'_> {
             if let Some(offset) = layout
                 .fields
                 .iter()
-                .position(|candidate| *candidate == field)
+                .position(|candidate| candidate.reference == field)
             {
                 let layout_index = u32::try_from(layout_index).map_err(|_| {
                     reference_resource(
@@ -884,7 +884,11 @@ impl ReferenceState<'_> {
         case: CaseReference,
     ) -> Result<(VariantLayoutIndex, u32), ExecutionError> {
         for (layout_index, layout) in self.program.variants.iter().enumerate() {
-            if let Some(tag) = layout.cases.iter().position(|candidate| *candidate == case) {
+            if let Some(tag) = layout
+                .cases
+                .iter()
+                .position(|candidate| candidate.reference == case)
+            {
                 let layout_index = u32::try_from(layout_index).map_err(|_| {
                     reference_resource(
                         "normalized_reference_variant_count",

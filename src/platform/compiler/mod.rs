@@ -20,8 +20,8 @@ pub(crate) mod unit;
 pub use artifact::{
     ARTIFACT_BUNDLE_CONTRACT_IDENTITY, ARTIFACT_CONTRACT_VERSION,
     ARTIFACT_MANIFEST_CONTRACT_IDENTITY, ArtifactBundleDigest, ArtifactClosureDigest,
-    ArtifactLoadWork, ArtifactManifest, ArtifactManifestDigest, ArtifactPackage, ArtifactTarget,
-    EncodedArtifact, LoadedArtifact, load_artifact,
+    ArtifactLoadWork, ArtifactManifest, ArtifactManifestDigest, ArtifactPackage,
+    ArtifactRuntimeOwner, EncodedArtifact, LoadedArtifact, load_artifact,
 };
 pub use cache::{
     CachedCompilation, CompilationBuildProfile, CompilationBuildReceipt, CompilationBuildWork,

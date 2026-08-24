@@ -6,15 +6,20 @@ use super::manifest::{
 };
 use super::unit::{
     BYTECODE_CONTRACT_VERSION, COMPILER_UNIT_CONTRACT_VERSION, CompilationPayload, CompilationUnit,
+    CompiledParameter, CompiledPortImplementation, CompiledSignature,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    OwnerKey, OwnerKind, OwnerObjectDigest, OwnerRecord, PackageId, PackageObjectDigest, TypeForm,
-    decode_owner, decode_type_object,
+    CaseReference, DeclarationReference, ExternalVisibility, FieldReference, Idempotency,
+    OperationReference, OwnerKey, OwnerKind, OwnerObjectDigest, OwnerRecord, PackageId,
+    PackageObjectDigest, ParameterParent, PortImplementation, PortReference, RequirementReference,
+    ResourceLimit, TypeForm, TypeObjectDigest, decode_owner, decode_type_object,
 };
 use crate::platform::package_object::{PackageObject, validate_package_object_closure};
 use crate::platform::persistent_map::{MapError, MapErrorClass, MapWork, PersistentMap};
-use crate::platform::semantic_id::{RepositoryId, TargetId, TypeParameterId};
+use crate::platform::semantic_id::{
+    DeclarationId, ParameterId, RepositoryId, TargetId, TypeParameterId,
+};
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, StageOutcome, StoreError, StoreErrorClass,
     StoreWork,
@@ -26,20 +31,20 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-5";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-5";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 5;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF05";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART05";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEND5";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-6";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-6";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 6;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF06";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART06";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEND6";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v5";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v5";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v5";
-pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v5";
+    "lkjscript.artifact-manifest-envelope.v6";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v6";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v6";
+pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v6";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
-pub(crate) const MAXIMUM_ARTIFACT_TARGETS: usize = 1_000_000;
+pub(crate) const MAXIMUM_ARTIFACT_RUNTIME_OWNERS: usize = 1_000_000;
 pub(crate) const MAXIMUM_ARTIFACT_SEGMENTS: usize = 1_000_000;
 pub(crate) const MAXIMUM_ARTIFACT_BUNDLE_BYTES: u64 = 16 * 1024 * 1024 * 1024;
 pub(crate) const TARGET_ARTIFACT_SEGMENT_BYTES: usize = 4 * 1024 * 1024;
@@ -106,9 +111,10 @@ impl ArtifactClosureDigest {
 }
 
 #[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
-pub struct ArtifactTarget {
-    pub target: TargetId,
-    pub owner: OwnerObjectDigest,
+pub struct ArtifactRuntimeOwner {
+    pub owner: OwnerKey,
+    pub kind: OwnerKind,
+    pub object: OwnerObjectDigest,
 }
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
@@ -117,7 +123,7 @@ pub struct ArtifactPackage {
     pub package: PackageId,
     pub package_object: PackageObjectDigest,
     pub compilation: CompilationManifestDigest,
-    pub targets: Vec<ArtifactTarget>,
+    pub runtime_owners: Vec<ArtifactRuntimeOwner>,
 }
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
@@ -132,6 +138,20 @@ pub struct ArtifactManifest {
     pub closure: ArtifactClosureDigest,
     pub object_count: u64,
     pub object_bytes: u64,
+}
+
+const fn runtime_owner_kind(kind: OwnerKind) -> bool {
+    matches!(
+        kind,
+        OwnerKind::TypeParameter
+            | OwnerKind::Field
+            | OwnerKind::Case
+            | OwnerKind::Operation
+            | OwnerKind::Parameter
+            | OwnerKind::Requirement
+            | OwnerKind::Port
+            | OwnerKind::Target
+    )
 }
 
 impl ArtifactManifest {
@@ -210,24 +230,27 @@ impl ArtifactManifest {
             ));
         }
         for package in &self.packages {
-            if package.targets.len() > MAXIMUM_ARTIFACT_TARGETS {
+            if package.runtime_owners.len() > MAXIMUM_ARTIFACT_RUNTIME_OWNERS {
                 return Err(artifact_error(
                     DiagnosticClass::Resource,
-                    "artifact_manifest_target_count",
-                    "artifact package target count exceeds the current implementation bound",
+                    "artifact_manifest_runtime_owner_count",
+                    "artifact package runtime-owner count exceeds the current implementation bound",
                 ));
             }
             if package.repository_id.bytes() == [0; 16]
                 || package.package.bytes() == [0; 16]
                 || package
-                    .targets
+                    .runtime_owners
                     .windows(2)
-                    .any(|pair| pair[0].target >= pair[1].target)
+                    .any(|pair| pair[0].owner >= pair[1].owner)
+                || package.runtime_owners.iter().any(|binding| {
+                    !binding.kind.accepts_owner(binding.owner) || !runtime_owner_kind(binding.kind)
+                })
             {
                 return Err(artifact_error(
                     DiagnosticClass::Corrupt,
                     "artifact_manifest_package",
-                    "artifact package identity or target ordering is invalid",
+                    "artifact package identity or runtime-owner binding is invalid",
                 ));
             }
         }
@@ -272,6 +295,53 @@ impl LoadedArtifact {
 
     pub fn root_package(&self) -> Option<&ArtifactPackage> {
         self.package(self.manifest.root_package)
+    }
+
+    pub(crate) fn runtime_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+        expected_kind: OwnerKind,
+        work: &mut StoreWork,
+    ) -> Result<OwnerRecord, Diagnostic> {
+        let package = self.package(package).ok_or_else(|| {
+            artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_runtime_owner_package_missing",
+                "runtime-owner lookup names a package outside the artifact closure",
+            )
+        })?;
+        let binding = package
+            .runtime_owners
+            .binary_search_by_key(&owner, |entry| entry.owner)
+            .ok()
+            .map(|index| &package.runtime_owners[index])
+            .ok_or_else(|| {
+                artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_runtime_owner_missing",
+                    "runtime-owner lookup names no exact artifact metadata binding",
+                )
+            })?;
+        if binding.kind != expected_kind {
+            return Err(artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_runtime_owner_kind",
+                "runtime-owner metadata has another exact owner kind",
+            ));
+        }
+        let key = ObjectKey::from_digest(ObjectDomain::Owner, binding.object.bytes());
+        let bytes = self
+            .read(key, ObjectDomain::Owner.maximum_bytes(), work)
+            .map_err(store_diagnostic)?
+            .ok_or_else(|| {
+                artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_runtime_owner_object_missing",
+                    "runtime-owner metadata references a missing exact owner object",
+                )
+            })?;
+        decode_owner(&bytes, owner, expected_kind, binding.object)
     }
 }
 
@@ -683,6 +753,467 @@ fn validate_declared_closure(
     Ok(())
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum RuntimeOwnerExpectation {
+    TypeParameter {
+        declaration: DeclarationId,
+    },
+    Field {
+        declaration: DeclarationId,
+        ty: TypeObjectDigest,
+    },
+    Case {
+        declaration: DeclarationId,
+        payload: Option<TypeObjectDigest>,
+    },
+    Operation {
+        declaration: DeclarationId,
+        parameters: Vec<ParameterId>,
+        result: TypeObjectDigest,
+        idempotency: Idempotency,
+        external_visibility: ExternalVisibility,
+    },
+    Parameter {
+        parent: ParameterParent,
+        ty: TypeObjectDigest,
+    },
+    Requirement {
+        declaration: DeclarationId,
+        interface: DeclarationReference,
+        operations: Vec<OperationReference>,
+        limits: Vec<ResourceLimit>,
+    },
+    Port {
+        declaration: DeclarationId,
+        function_type: TypeObjectDigest,
+        implementation: RuntimePortImplementation,
+    },
+    Target {
+        component: DeclarationReference,
+        port: PortReference,
+        runner: crate::platform::package::RunnerKind,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum RuntimePortImplementation {
+    Function(DeclarationReference),
+    Expression,
+}
+
+impl RuntimeOwnerExpectation {
+    pub(crate) const fn kind(&self) -> OwnerKind {
+        match self {
+            Self::TypeParameter { .. } => OwnerKind::TypeParameter,
+            Self::Field { .. } => OwnerKind::Field,
+            Self::Case { .. } => OwnerKind::Case,
+            Self::Operation { .. } => OwnerKind::Operation,
+            Self::Parameter { .. } => OwnerKind::Parameter,
+            Self::Requirement { .. } => OwnerKind::Requirement,
+            Self::Port { .. } => OwnerKind::Port,
+            Self::Target { .. } => OwnerKind::Target,
+        }
+    }
+
+    fn matches(&self, record: &OwnerRecord) -> bool {
+        match (self, record) {
+            (Self::TypeParameter { declaration }, OwnerRecord::TypeParameter(record)) => {
+                record.declaration == *declaration
+            }
+            (Self::Field { declaration, ty }, OwnerRecord::Field(record)) => {
+                record.declaration == *declaration && record.ty == *ty
+            }
+            (
+                Self::Case {
+                    declaration,
+                    payload,
+                },
+                OwnerRecord::Case(record),
+            ) => record.declaration == *declaration && record.payload == *payload,
+            (
+                Self::Operation {
+                    declaration,
+                    parameters,
+                    result,
+                    idempotency,
+                    external_visibility,
+                },
+                OwnerRecord::Operation(record),
+            ) => {
+                record.declaration == *declaration
+                    && record.parameters == *parameters
+                    && record.result == *result
+                    && record.idempotency == *idempotency
+                    && record.external_visibility == *external_visibility
+            }
+            (Self::Parameter { parent, ty }, OwnerRecord::Parameter(record)) => {
+                record.parent == *parent && record.ty == *ty
+            }
+            (
+                Self::Requirement {
+                    declaration,
+                    interface,
+                    operations,
+                    limits,
+                },
+                OwnerRecord::Requirement(record),
+            ) => {
+                record.declaration == *declaration
+                    && record.interface == *interface
+                    && record.operations == *operations
+                    && record.limits == *limits
+            }
+            (
+                Self::Port {
+                    declaration,
+                    function_type,
+                    implementation,
+                },
+                OwnerRecord::Port(record),
+            ) => {
+                let implementation_matches = match (implementation, &record.implementation) {
+                    (
+                        RuntimePortImplementation::Function(expected),
+                        PortImplementation::Function(actual),
+                    ) => expected == actual,
+                    (RuntimePortImplementation::Expression, PortImplementation::Expression(_)) => {
+                        true
+                    }
+                    _ => false,
+                };
+                record.declaration == *declaration
+                    && record.function_type == *function_type
+                    && implementation_matches
+            }
+            (
+                Self::Target {
+                    component,
+                    port,
+                    runner,
+                },
+                OwnerRecord::Target(record),
+            ) => record.component == *component && record.port == *port && record.runner == *runner,
+            _ => false,
+        }
+    }
+}
+
+pub(crate) fn runtime_owner_expectations(
+    units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
+) -> Result<BTreeMap<(PackageId, OwnerKey), RuntimeOwnerExpectation>, Diagnostic> {
+    let mut expected = BTreeMap::new();
+    let mut current_package = None;
+    let mut current_package_count = 0_usize;
+    for ((package, owner), unit) in units {
+        if current_package != Some(*package) {
+            current_package = Some(*package);
+            current_package_count = 0;
+        }
+        let before = expected.len();
+        match &unit.payload {
+            CompilationPayload::Record { fields } => {
+                let declaration = declaration_owner(*owner, "record")?;
+                for field in fields {
+                    let reference =
+                        table_value(&unit.tables.fields, field.field, "record field reference")?;
+                    require_local_reference(*package, reference.package, "record field")?;
+                    insert_runtime_expectation(
+                        &mut expected,
+                        (*package, OwnerKey::Field(reference.field)),
+                        RuntimeOwnerExpectation::Field {
+                            declaration,
+                            ty: table_value(&unit.tables.types, field.ty, "record field type")?,
+                        },
+                    )?;
+                }
+            }
+            CompilationPayload::Variant { cases } => {
+                let declaration = declaration_owner(*owner, "variant")?;
+                for case in cases {
+                    let reference =
+                        table_value(&unit.tables.cases, case.case, "variant case reference")?;
+                    require_local_reference(*package, reference.package, "variant case")?;
+                    insert_runtime_expectation(
+                        &mut expected,
+                        (*package, OwnerKey::Case(reference.case)),
+                        RuntimeOwnerExpectation::Case {
+                            declaration,
+                            payload: case
+                                .payload
+                                .map(|index| {
+                                    table_value(
+                                        &unit.tables.types,
+                                        index,
+                                        "variant case payload type",
+                                    )
+                                })
+                                .transpose()?,
+                        },
+                    )?;
+                }
+            }
+            CompilationPayload::Interface { operations } => {
+                let declaration = declaration_owner(*owner, "interface")?;
+                for operation in operations {
+                    let reference = table_value(
+                        &unit.tables.operations,
+                        operation.operation,
+                        "interface operation reference",
+                    )?;
+                    require_local_reference(*package, reference.package, "interface operation")?;
+                    let parameters = operation
+                        .parameters
+                        .iter()
+                        .map(|parameter| parameter.parameter)
+                        .collect::<Vec<_>>();
+                    insert_runtime_expectation(
+                        &mut expected,
+                        (*package, OwnerKey::Operation(reference.operation)),
+                        RuntimeOwnerExpectation::Operation {
+                            declaration,
+                            parameters: parameters.clone(),
+                            result: table_value(
+                                &unit.tables.types,
+                                operation.result,
+                                "interface operation result type",
+                            )?,
+                            idempotency: operation.idempotency,
+                            external_visibility: operation.external_visibility,
+                        },
+                    )?;
+                    for parameter in &operation.parameters {
+                        insert_parameter_expectation(
+                            &mut expected,
+                            *package,
+                            ParameterParent::Operation(reference.operation),
+                            parameter,
+                            unit,
+                        )?;
+                    }
+                }
+            }
+            CompilationPayload::External { signature, .. }
+            | CompilationPayload::Function { signature, .. } => {
+                let declaration = declaration_owner(*owner, "function")?;
+                insert_signature_expectations(
+                    &mut expected,
+                    *package,
+                    declaration,
+                    signature,
+                    unit,
+                )?;
+            }
+            CompilationPayload::Component {
+                requirements,
+                ports,
+            } => {
+                let declaration = declaration_owner(*owner, "component")?;
+                for requirement in requirements {
+                    let reference = table_value(
+                        &unit.tables.requirements,
+                        requirement.requirement,
+                        "component requirement reference",
+                    )?;
+                    require_local_reference(*package, reference.package, "component requirement")?;
+                    let operations = requirement
+                        .operations
+                        .iter()
+                        .map(|index| {
+                            table_value(
+                                &unit.tables.operations,
+                                *index,
+                                "component requirement operation",
+                            )
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    insert_runtime_expectation(
+                        &mut expected,
+                        (*package, OwnerKey::Requirement(reference.requirement)),
+                        RuntimeOwnerExpectation::Requirement {
+                            declaration,
+                            interface: table_value(
+                                &unit.tables.declarations,
+                                requirement.interface,
+                                "component requirement interface",
+                            )?,
+                            operations,
+                            limits: requirement.limits.clone(),
+                        },
+                    )?;
+                }
+                for port in ports {
+                    let reference =
+                        table_value(&unit.tables.ports, port.port, "component port reference")?;
+                    require_local_reference(*package, reference.package, "component port")?;
+                    let implementation = match &port.implementation {
+                        CompiledPortImplementation::Function(index) => {
+                            RuntimePortImplementation::Function(table_value(
+                                &unit.tables.declarations,
+                                *index,
+                                "component port function",
+                            )?)
+                        }
+                        CompiledPortImplementation::Expression(_) => {
+                            RuntimePortImplementation::Expression
+                        }
+                    };
+                    insert_runtime_expectation(
+                        &mut expected,
+                        (*package, OwnerKey::Port(reference.port)),
+                        RuntimeOwnerExpectation::Port {
+                            declaration,
+                            function_type: table_value(
+                                &unit.tables.types,
+                                port.function_type,
+                                "component port function type",
+                            )?,
+                            implementation,
+                        },
+                    )?;
+                }
+            }
+            CompilationPayload::Target {
+                component,
+                port,
+                runner,
+            } => {
+                let OwnerKey::Target(target) = owner else {
+                    return Err(artifact_error(
+                        DiagnosticClass::Corrupt,
+                        "artifact_target_owner",
+                        "target compiler payload is not bound to a target owner",
+                    ));
+                };
+                insert_runtime_expectation(
+                    &mut expected,
+                    (*package, OwnerKey::Target(*target)),
+                    RuntimeOwnerExpectation::Target {
+                        component: table_value(
+                            &unit.tables.declarations,
+                            *component,
+                            "target component",
+                        )?,
+                        port: table_value(&unit.tables.ports, *port, "target port")?,
+                        runner: *runner,
+                    },
+                )?;
+            }
+            CompilationPayload::Constant { .. } | CompilationPayload::Test { .. } => {}
+        }
+        current_package_count = current_package_count
+            .checked_add(expected.len().saturating_sub(before))
+            .ok_or_else(|| {
+                artifact_error(
+                    DiagnosticClass::Resource,
+                    "artifact_runtime_owner_count",
+                    "runtime-owner expectation count overflowed its platform domain",
+                )
+            })?;
+        if current_package_count > MAXIMUM_ARTIFACT_RUNTIME_OWNERS {
+            return Err(artifact_error(
+                DiagnosticClass::Resource,
+                "artifact_runtime_owner_count",
+                "compiler units require more runtime owners than the artifact contract permits",
+            ));
+        }
+    }
+    Ok(expected)
+}
+
+fn insert_signature_expectations(
+    expected: &mut BTreeMap<(PackageId, OwnerKey), RuntimeOwnerExpectation>,
+    package: PackageId,
+    declaration: DeclarationId,
+    signature: &CompiledSignature,
+    unit: &CompilationUnit,
+) -> Result<(), Diagnostic> {
+    for parameter in &signature.type_parameters {
+        insert_runtime_expectation(
+            expected,
+            (package, OwnerKey::TypeParameter(*parameter)),
+            RuntimeOwnerExpectation::TypeParameter { declaration },
+        )?;
+    }
+    for parameter in &signature.parameters {
+        insert_parameter_expectation(
+            expected,
+            package,
+            ParameterParent::Function(declaration),
+            parameter,
+            unit,
+        )?;
+    }
+    Ok(())
+}
+
+fn insert_parameter_expectation(
+    expected: &mut BTreeMap<(PackageId, OwnerKey), RuntimeOwnerExpectation>,
+    package: PackageId,
+    parent: ParameterParent,
+    parameter: &CompiledParameter,
+    unit: &CompilationUnit,
+) -> Result<(), Diagnostic> {
+    insert_runtime_expectation(
+        expected,
+        (package, OwnerKey::Parameter(parameter.parameter)),
+        RuntimeOwnerExpectation::Parameter {
+            parent,
+            ty: table_value(&unit.tables.types, parameter.ty, "runtime parameter type")?,
+        },
+    )
+}
+
+fn insert_runtime_expectation(
+    expected: &mut BTreeMap<(PackageId, OwnerKey), RuntimeOwnerExpectation>,
+    key: (PackageId, OwnerKey),
+    value: RuntimeOwnerExpectation,
+) -> Result<(), Diagnostic> {
+    if expected.insert(key, value).is_some() {
+        return Err(artifact_error(
+            DiagnosticClass::Corrupt,
+            "artifact_runtime_owner_duplicate",
+            "one stable runtime owner is defined by multiple compiler-unit records",
+        ));
+    }
+    Ok(())
+}
+
+fn declaration_owner(owner: OwnerKey, label: &'static str) -> Result<DeclarationId, Diagnostic> {
+    let OwnerKey::Declaration(declaration) = owner else {
+        return Err(artifact_error(
+            DiagnosticClass::Corrupt,
+            "artifact_runtime_declaration_owner",
+            format!("{label} compiler payload is not bound to a declaration owner"),
+        ));
+    };
+    Ok(declaration)
+}
+
+fn require_local_reference(
+    package: PackageId,
+    referenced_package: PackageId,
+    label: &'static str,
+) -> Result<(), Diagnostic> {
+    if package != referenced_package {
+        return Err(artifact_error(
+            DiagnosticClass::Corrupt,
+            "artifact_runtime_owner_package",
+            format!("{label} definition uses a foreign package identity"),
+        ));
+    }
+    Ok(())
+}
+
+fn table_value<T: Copy>(values: &[T], index: u32, label: &'static str) -> Result<T, Diagnostic> {
+    values.get(index as usize).copied().ok_or_else(|| {
+        artifact_error(
+            DiagnosticClass::Corrupt,
+            "artifact_runtime_table_index",
+            format!("{label} index is outside its compiler-unit table"),
+        )
+    })
+}
+
 fn validate_object_closure(
     manifest: &ArtifactManifest,
     objects: &BTreeMap<ObjectKey, Vec<u8>>,
@@ -832,8 +1363,8 @@ fn validate_object_closure(
             return Err(diagnostic);
         }
         result.map_err(map_diagnostic)?;
-        validate_targets(package, &units, &store, &mut store_work)?;
     }
+    validate_runtime_owners(manifest, &units, &store, &mut store_work)?;
     let relocations = validate_unit_relocations(&units)?;
 
     let mut types = BTreeSet::new();
@@ -903,72 +1434,81 @@ fn validate_object_closure(
     Ok(())
 }
 
-fn validate_targets(
-    package: &ArtifactPackage,
+fn validate_runtime_owners(
+    manifest: &ArtifactManifest,
     units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
     store: &TrackingObjectStore<'_>,
     work: &mut StoreWork,
 ) -> Result<(), Diagnostic> {
-    let unit_targets = units
+    let expected = runtime_owner_expectations(units)?;
+    let package_ids = manifest
+        .packages
         .iter()
-        .filter_map(|((unit_package, owner), unit)| {
-            (*unit_package == package.package && matches!(owner, OwnerKey::Target(_)))
-                .then_some((*owner, unit))
-        })
-        .collect::<BTreeMap<_, _>>();
-    if unit_targets.len() != package.targets.len() {
+        .map(|package| package.package)
+        .collect::<BTreeSet<_>>();
+    if expected
+        .keys()
+        .any(|(package, _)| !package_ids.contains(package))
+    {
         return Err(artifact_error(
             DiagnosticClass::Corrupt,
-            "artifact_target_count",
-            "artifact target metadata does not cover every target compiler unit exactly",
+            "artifact_runtime_owner_package_missing",
+            "compiler units define runtime metadata for a package outside the artifact closure",
         ));
     }
-    for target in &package.targets {
-        let owner = OwnerKey::Target(target.target);
-        let unit = unit_targets.get(&owner).ok_or_else(|| {
-            artifact_error(
-                DiagnosticClass::Corrupt,
-                "artifact_target_unit_missing",
-                "artifact target metadata names no exact target compiler unit",
-            )
-        })?;
-        let owner_key = ObjectKey::from_digest(ObjectDomain::Owner, target.owner.bytes());
-        let bytes = required_object(
-            store,
-            owner_key,
-            "artifact target metadata references a missing owner object",
-            work,
-        )?;
-        let record = decode_owner(&bytes, owner, OwnerKind::Target, target.owner)?;
-        let OwnerRecord::Target(record) = record else {
+    let mut expected_counts = BTreeMap::<PackageId, usize>::new();
+    for package in expected.keys().map(|(package, _)| *package) {
+        *expected_counts.entry(package).or_default() += 1;
+    }
+    let mut visited = BTreeSet::new();
+    for package in &manifest.packages {
+        let expected_count = expected_counts.get(&package.package).copied().unwrap_or(0);
+        if expected_count != package.runtime_owners.len() {
             return Err(artifact_error(
                 DiagnosticClass::Corrupt,
-                "artifact_target_owner_kind",
-                "artifact target metadata decoded another owner kind",
-            ));
-        };
-        let CompilationPayload::Target {
-            component,
-            port,
-            runner,
-        } = unit.payload
-        else {
-            return Err(artifact_error(
-                DiagnosticClass::Corrupt,
-                "artifact_target_payload",
-                "target compiler unit has another payload class",
-            ));
-        };
-        if unit.tables.declarations.get(component as usize) != Some(&record.component)
-            || unit.tables.ports.get(port as usize) != Some(&record.port)
-            || runner != record.runner
-        {
-            return Err(artifact_error(
-                DiagnosticClass::Corrupt,
-                "artifact_target_binding",
-                "target owner metadata disagrees with its exact compiler unit",
+                "artifact_runtime_owner_count",
+                "artifact runtime metadata does not cover the exact compiler-unit boundary owner set",
             ));
         }
+        for binding in &package.runtime_owners {
+            let key = (package.package, binding.owner);
+            let expectation = expected.get(&key).ok_or_else(|| {
+                artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_runtime_owner_unexpected",
+                    "artifact package names runtime metadata not required by its compiler units",
+                )
+            })?;
+            if binding.kind != expectation.kind() || !visited.insert(key) {
+                return Err(artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_runtime_owner_binding",
+                    "artifact runtime-owner kind or uniqueness disagrees with compiler units",
+                ));
+            }
+            let owner_key = ObjectKey::from_digest(ObjectDomain::Owner, binding.object.bytes());
+            let bytes = required_object(
+                store,
+                owner_key,
+                "artifact runtime metadata references a missing owner object",
+                work,
+            )?;
+            let record = decode_owner(&bytes, binding.owner, binding.kind, binding.object)?;
+            if !expectation.matches(&record) {
+                return Err(artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_runtime_owner_semantics",
+                    "artifact runtime-owner metadata disagrees with its exact compiler-unit semantics",
+                ));
+            }
+        }
+    }
+    if visited.len() != expected.len() {
+        return Err(artifact_error(
+            DiagnosticClass::Corrupt,
+            "artifact_runtime_owner_incomplete",
+            "artifact runtime metadata omitted one exact compiler-unit boundary owner",
+        ));
     }
     Ok(())
 }

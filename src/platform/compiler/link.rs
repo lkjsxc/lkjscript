@@ -1,8 +1,9 @@
 //! Deterministic linker from revision-bound normalized compiler units to a standalone artifact.
 
 use super::artifact::{
-    ARTIFACT_CONTRACT_VERSION, ArtifactManifest, ArtifactPackage, ArtifactTarget, EncodedArtifact,
-    LoadedArtifact, artifact_error, closure_facts, encode_artifact,
+    ARTIFACT_CONTRACT_VERSION, ArtifactManifest, ArtifactPackage, ArtifactRuntimeOwner,
+    EncodedArtifact, LoadedArtifact, artifact_error, closure_facts, encode_artifact,
+    runtime_owner_expectations,
 };
 use super::cache::load_exact_current_compilation;
 use super::manifest::{COMPILATION_MANIFEST_CONTRACT_VERSION, CompilationBinding};
@@ -12,8 +13,7 @@ use super::unit::{
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    EncodedOwnerKey, OwnerKey, OwnerRecord, PackageId, TypeObjectDigest, decode_type_object,
-    encode_owner,
+    EncodedOwnerKey, OwnerKey, PackageId, TypeObjectDigest, decode_type_object, encode_owner,
 };
 use crate::platform::persistent_map::{
     MapError, MapErrorClass, MapWork, MemoryPageStore, PersistentMap,
@@ -36,7 +36,7 @@ pub struct ArtifactLinkWork {
     pub compiler_units: u64,
     pub type_objects: u64,
     pub blob_objects: u64,
-    pub target_owners: u64,
+    pub runtime_owners: u64,
     pub closure_objects: u64,
     pub closure_bytes: u64,
     pub output_bytes: u64,
@@ -170,7 +170,7 @@ pub fn link_artifact(
 
     let mut types = BTreeSet::new();
     let mut blobs = BTreeMap::new();
-    let mut targets = Vec::new();
+    let mut local_units = BTreeMap::new();
     for (owner, binding) in bindings {
         let unit_bytes = store
             .read(
@@ -211,46 +211,48 @@ pub fn link_artifact(
                 ));
             }
         }
-        if let OwnerKey::Target(target) = owner {
-            if !matches!(unit.payload, CompilationPayload::Target { .. }) {
-                return Err(link_error(
-                    DiagnosticClass::Corrupt,
-                    "artifact_link_target_payload",
-                    "target owner is bound to another compiler-unit payload",
-                ));
-            }
-            let read = view.owner(owner)?;
-            add_repository_work(&mut work.repository, read.work);
-            let record = read.value.ok_or_else(|| {
-                link_error(
-                    DiagnosticClass::Corrupt,
-                    "artifact_link_target_missing",
-                    "compilation manifest target has no canonical owner record",
-                )
-            })?;
-            let OwnerRecord::Target(_) = record else {
-                return Err(link_error(
-                    DiagnosticClass::Corrupt,
-                    "artifact_link_target_kind",
-                    "compilation manifest target decoded another owner kind",
-                ));
-            };
-            let (digest, bytes) = encode_owner(&record)?;
-            insert_object(
-                &mut objects,
-                ObjectKey::from_digest(ObjectDomain::Owner, digest.bytes()),
-                bytes,
-            )?;
-            targets.push(ArtifactTarget {
-                target,
-                owner: digest,
-            });
-            work.target_owners = work.target_owners.saturating_add(1);
-        }
         insert_object(&mut objects, binding.object.object_key(), unit_bytes)?;
+        if local_units.insert((view.package(), owner), unit).is_some() {
+            return Err(link_error(
+                DiagnosticClass::Corrupt,
+                "artifact_link_unit_duplicate",
+                "compilation manifest repeats one exact compiler-unit owner",
+            ));
+        }
         work.compiler_units = work.compiler_units.saturating_add(1);
     }
-    targets.sort_by_key(|target| target.target);
+
+    let mut runtime_owners = Vec::new();
+    for ((package, owner), expectation) in runtime_owner_expectations(&local_units)? {
+        if package != view.package() {
+            return Err(link_error(
+                DiagnosticClass::Corrupt,
+                "artifact_link_runtime_owner_package",
+                "local compiler units produced runtime metadata for another package",
+            ));
+        }
+        let read = view.owner(owner)?;
+        add_repository_work(&mut work.repository, read.work);
+        let record = read.value.ok_or_else(|| {
+            link_error(
+                DiagnosticClass::Corrupt,
+                "artifact_link_runtime_owner_missing",
+                "compiler units require a missing canonical runtime owner record",
+            )
+        })?;
+        let (digest, bytes) = encode_owner(&record)?;
+        insert_object(
+            &mut objects,
+            ObjectKey::from_digest(ObjectDomain::Owner, digest.bytes()),
+            bytes,
+        )?;
+        runtime_owners.push(ArtifactRuntimeOwner {
+            owner,
+            kind: expectation.kind(),
+            object: digest,
+        });
+        work.runtime_owners = work.runtime_owners.saturating_add(1);
+    }
 
     let mut resolved_types = BTreeSet::new();
     while let Some(digest) = types.pop_first() {
@@ -303,7 +305,7 @@ pub fn link_artifact(
             package: view.package(),
             package_object: exported.digest,
             compilation,
-            targets,
+            runtime_owners,
         },
     )?;
     let packages = packages.into_values().collect::<Vec<_>>();
