@@ -29,11 +29,11 @@ pub(crate) trait SummaryRead {
 
     fn dependency(&self, package: PackageId) -> Option<&crate::platform::kernel::DependencyRecord>;
 
-    fn ownership(&self, owner: OwnerKey) -> Option<OwnershipEntry>;
+    fn ownership(&self, owner: OwnerKey) -> Result<Option<OwnershipEntry>, Diagnostic>;
 
     fn outgoing_relations(&self, owner: OwnerKey) -> Result<Vec<RelationEdge>, Diagnostic>;
 
-    fn base_summary(&self, owner: OwnerKey) -> Option<&OwnerSummary>;
+    fn base_summary(&self, owner: OwnerKey) -> Result<Option<OwnerSummary>, Diagnostic>;
 }
 
 #[derive(Clone)]
@@ -198,21 +198,22 @@ pub(crate) fn rebuild_selected_owner_summaries<R: SummaryRead>(
             .into_iter()
             .filter(|(role, _)| aggregation_mode(*role) != AggregationMode::None)
             .map(|(role, child)| {
-                let dimensions = working
-                    .get(&child)
-                    .map(SummaryDimensions::from)
-                    .or_else(|| {
-                        (!selected.contains(&child))
-                            .then(|| view.base_summary(child).map(SummaryDimensions::from))
-                            .flatten()
-                    })
-                    .ok_or_else(|| {
-                        witness_error(
-                            DiagnosticClass::Corrupt,
-                            "witness_selected_child_summary",
-                            format!("aggregating child {child:?} has no candidate summary"),
-                        )
-                    })?;
+                let dimensions = if let Some(summary) = working.get(&child) {
+                    Some(SummaryDimensions::from(summary))
+                } else if !selected.contains(&child) {
+                    view.base_summary(child)?
+                        .as_ref()
+                        .map(SummaryDimensions::from)
+                } else {
+                    None
+                }
+                .ok_or_else(|| {
+                    witness_error(
+                        DiagnosticClass::Corrupt,
+                        "witness_selected_child_summary",
+                        format!("aggregating child {child:?} has no candidate summary"),
+                    )
+                })?;
                 Ok((role, child, aggregation_mode(role), dimensions))
             })
             .collect::<Result<Vec<_>, Diagnostic>>()?;
@@ -236,10 +237,14 @@ pub(crate) fn rebuild_selected_owner_summaries<R: SummaryRead>(
             summary.kind,
             &outgoing,
             |target| {
-                semantic
-                    .get(&target)
-                    .map(SummaryDimensions::from)
-                    .or_else(|| view.base_summary(target).map(SummaryDimensions::from))
+                if let Some(summary) = semantic.get(&target) {
+                    Ok(Some(SummaryDimensions::from(summary)))
+                } else {
+                    Ok(view
+                        .base_summary(target)?
+                        .as_ref()
+                        .map(SummaryDimensions::from))
+                }
             },
             |package| {
                 view.dependency(package)
@@ -263,24 +268,21 @@ pub(crate) fn rebuild_selected_owner_summaries<R: SummaryRead>(
             .into_iter()
             .filter(|(role, _)| aggregation_mode(*role) != AggregationMode::None)
             .map(|(role, child)| {
-                let digest = working
-                    .get(&child)
-                    .map(|summary| summary.validation_dependencies)
-                    .or_else(|| {
-                        (!selected.contains(&child))
-                            .then(|| {
-                                view.base_summary(child)
-                                    .map(|summary| summary.validation_dependencies)
-                            })
-                            .flatten()
-                    })
-                    .ok_or_else(|| {
-                        witness_error(
-                            DiagnosticClass::Corrupt,
-                            "witness_selected_child_validation",
-                            format!("aggregating child {child:?} has no validation summary"),
-                        )
-                    })?;
+                let digest = if let Some(summary) = working.get(&child) {
+                    Some(summary.validation_dependencies)
+                } else if !selected.contains(&child) {
+                    view.base_summary(child)?
+                        .map(|summary| summary.validation_dependencies)
+                } else {
+                    None
+                }
+                .ok_or_else(|| {
+                    witness_error(
+                        DiagnosticClass::Corrupt,
+                        "witness_selected_child_validation",
+                        format!("aggregating child {child:?} has no validation summary"),
+                    )
+                })?;
                 Ok((role, child, digest))
             })
             .collect::<Result<Vec<_>, Diagnostic>>()?;
@@ -319,7 +321,7 @@ fn selected_ownership_depths<R: SummaryRead>(
                     "selected summary ownership path is cyclic",
                 ));
             }
-            let entry = view.ownership(current).ok_or_else(|| {
+            let entry = view.ownership(current)?.ok_or_else(|| {
                 witness_error(
                     DiagnosticClass::Corrupt,
                     "witness_selected_ownership_missing",
@@ -564,7 +566,7 @@ fn derive_validation_dependencies(
             package,
             summary.kind,
             outgoing.get(owner).map_or(&[], Vec::as_slice),
-            |target| frozen.get(&target).map(SummaryDimensions::from),
+            |target| Ok(frozen.get(&target).map(SummaryDimensions::from)),
             |target_package| {
                 snapshot
                     .dependencies
@@ -586,7 +588,7 @@ fn validation_dependency_digest<T, D>(
     mut dependency_digest: D,
 ) -> Result<SemanticDigest, Diagnostic>
 where
-    T: FnMut(OwnerKey) -> Option<SummaryDimensions>,
+    T: FnMut(OwnerKey) -> Result<Option<SummaryDimensions>, Diagnostic>,
     D: FnMut(
         PackageId,
     ) -> Result<Option<crate::platform::kernel::DependencyObjectDigest>, Diagnostic>,
@@ -609,7 +611,7 @@ where
                 package: target_package,
                 owner: target_owner,
             }) if target_package == package => {
-                let target = target_summary(target_owner).ok_or_else(|| {
+                let target = target_summary(target_owner)?.ok_or_else(|| {
                     witness_error(
                         DiagnosticClass::Corrupt,
                         "witness_validation_target",

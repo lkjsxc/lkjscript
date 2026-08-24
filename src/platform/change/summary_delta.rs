@@ -1,13 +1,13 @@
 //! Bounded owner-summary rebuilding over one exact candidate overlay.
 
 use super::relation_view::CandidateRelations;
-use super::{DerivedDelta, KernelOverlay};
+use super::{BoundOwnerSummary, DerivedDelta, KernelOverlay, WitnessBaseRead, WitnessReadWork};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{OwnerKey, PackageId, RelationEdge};
 use crate::platform::witness::{
-    FullWitness, OwnerSummary, OwnerSummaryDigest, OwnershipEntry, SummaryRead,
-    rebuild_selected_owner_summaries,
+    OwnerSummary, OwnerSummaryDigest, OwnershipEntry, SummaryRead, rebuild_selected_owner_summaries,
 };
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -24,12 +24,13 @@ pub struct SummaryDelta {
     pub selected: BTreeSet<OwnerKey>,
     pub edits: Vec<OwnerSummaryEdit>,
     pub new_objects: BTreeMap<OwnerSummaryDigest, Vec<u8>>,
+    pub read_work: WitnessReadWork,
 }
 
-pub fn derive_summary_delta(
+pub fn derive_summary_delta<W: WitnessBaseRead + ?Sized>(
     overlay: &KernelOverlay<'_>,
     derived: &DerivedDelta,
-    base_witness: &FullWitness,
+    base_witness: &W,
 ) -> Result<SummaryDelta, Diagnostic> {
     derive_summary_delta_for(
         overlay,
@@ -39,10 +40,10 @@ pub fn derive_summary_delta(
     )
 }
 
-pub fn derive_summary_delta_for(
+pub fn derive_summary_delta_for<W: WitnessBaseRead + ?Sized>(
     overlay: &KernelOverlay<'_>,
     derived: &DerivedDelta,
-    base_witness: &FullWitness,
+    base_witness: &W,
     selected: BTreeSet<OwnerKey>,
 ) -> Result<SummaryDelta, Diagnostic> {
     let view = CandidateSummaryView::new(overlay, derived, base_witness);
@@ -50,28 +51,9 @@ pub fn derive_summary_delta_for(
     let mut edits = Vec::new();
     let mut new_objects = BTreeMap::new();
     for owner in &selected {
-        let before = base_witness.summaries.get(owner).cloned();
-        let before_digest = base_witness.entries.summaries.get(owner).copied();
-        match (&before, before_digest) {
-            (Some(summary), Some(binding)) => {
-                let (actual, _) = crate::platform::witness::encode_owner_summary(summary)?;
-                if actual != binding {
-                    return Err(summary_error(
-                        DiagnosticClass::Corrupt,
-                        "change_summary_base_binding",
-                        "base summary object disagrees with its witness binding",
-                    ));
-                }
-            }
-            (None, None) => {}
-            _ => {
-                return Err(summary_error(
-                    DiagnosticClass::Corrupt,
-                    "change_summary_base_missing",
-                    "base summary object and witness binding have different domains",
-                ));
-            }
-        }
+        let before_bound = view.base_bound_summary(*owner)?;
+        let before = before_bound.as_ref().map(|bound| bound.summary.clone());
+        let before_digest = before_bound.map(|bound| bound.digest);
         let after = rebuilt.get(owner).cloned();
         let (after_digest, after_bytes) = match &after {
             Some(summary) => {
@@ -112,36 +94,67 @@ pub fn derive_summary_delta_for(
         selected,
         edits,
         new_objects,
+        read_work: view.work(),
     })
 }
 
-struct CandidateSummaryView<'a> {
+struct CandidateSummaryView<'a, W: ?Sized> {
     overlay: &'a KernelOverlay<'a>,
-    derived: &'a DerivedDelta,
-    base_witness: &'a FullWitness,
-    ownership: BTreeMap<OwnerKey, Option<OwnershipEntry>>,
+    base_witness: &'a W,
+    ownership_edits: BTreeMap<OwnerKey, Option<OwnershipEntry>>,
+    ownership_cache: RefCell<BTreeMap<OwnerKey, Option<OwnershipEntry>>>,
+    summary_cache: RefCell<BTreeMap<OwnerKey, Option<BoundOwnerSummary>>>,
+    relations: RefCell<CandidateRelations<'a, W>>,
+    read_work: RefCell<WitnessReadWork>,
 }
 
-impl<'a> CandidateSummaryView<'a> {
-    fn new(
-        overlay: &'a KernelOverlay<'a>,
-        derived: &'a DerivedDelta,
-        base_witness: &'a FullWitness,
-    ) -> Self {
+impl<'a, W: WitnessBaseRead + ?Sized> CandidateSummaryView<'a, W> {
+    fn new(overlay: &'a KernelOverlay<'a>, derived: &'a DerivedDelta, base_witness: &'a W) -> Self {
         Self {
             overlay,
-            derived,
             base_witness,
-            ownership: derived
+            ownership_edits: derived
                 .ownership
                 .iter()
                 .map(|edit| (edit.key, edit.after))
                 .collect(),
+            ownership_cache: RefCell::new(BTreeMap::new()),
+            summary_cache: RefCell::new(BTreeMap::new()),
+            relations: RefCell::new(CandidateRelations::new(
+                overlay.base().root.package_id,
+                derived,
+                base_witness,
+            )),
+            read_work: RefCell::new(WitnessReadWork::default()),
         }
+    }
+
+    fn base_ownership(&self, owner: OwnerKey) -> Result<Option<OwnershipEntry>, Diagnostic> {
+        if !self.ownership_cache.borrow().contains_key(&owner) {
+            let read = self.base_witness.read_ownership(owner)?;
+            self.read_work.borrow_mut().add(read.work);
+            self.ownership_cache.borrow_mut().insert(owner, read.value);
+        }
+        Ok(self.ownership_cache.borrow().get(&owner).copied().flatten())
+    }
+
+    fn base_bound_summary(&self, owner: OwnerKey) -> Result<Option<BoundOwnerSummary>, Diagnostic> {
+        if !self.summary_cache.borrow().contains_key(&owner) {
+            let read = self.base_witness.read_owner_summary(owner)?;
+            self.read_work.borrow_mut().add(read.work);
+            self.summary_cache.borrow_mut().insert(owner, read.value);
+        }
+        Ok(self.summary_cache.borrow().get(&owner).cloned().flatten())
+    }
+
+    fn work(&self) -> WitnessReadWork {
+        let mut work = *self.read_work.borrow();
+        work.add(self.relations.borrow().work());
+        work
     }
 }
 
-impl SummaryRead for CandidateSummaryView<'_> {
+impl<W: WitnessBaseRead + ?Sized> SummaryRead for CandidateSummaryView<'_, W> {
     fn package_id(&self) -> PackageId {
         self.overlay.base().root.package_id
     }
@@ -154,19 +167,19 @@ impl SummaryRead for CandidateSummaryView<'_> {
         self.overlay.dependency(package)
     }
 
-    fn ownership(&self, owner: OwnerKey) -> Option<OwnershipEntry> {
-        match self.ownership.get(&owner) {
-            Some(candidate) => *candidate,
-            None => self.base_witness.entries.ownership.get(&owner).copied(),
+    fn ownership(&self, owner: OwnerKey) -> Result<Option<OwnershipEntry>, Diagnostic> {
+        match self.ownership_edits.get(&owner) {
+            Some(candidate) => Ok(*candidate),
+            None => self.base_ownership(owner),
         }
     }
 
     fn outgoing_relations(&self, owner: OwnerKey) -> Result<Vec<RelationEdge>, Diagnostic> {
-        CandidateRelations::new(self.package_id(), self.derived, self.base_witness).outgoing(owner)
+        self.relations.borrow_mut().outgoing(owner)
     }
 
-    fn base_summary(&self, owner: OwnerKey) -> Option<&OwnerSummary> {
-        self.base_witness.summaries.get(&owner)
+    fn base_summary(&self, owner: OwnerKey) -> Result<Option<OwnerSummary>, Diagnostic> {
+        Ok(self.base_bound_summary(owner)?.map(|bound| bound.summary))
     }
 }
 

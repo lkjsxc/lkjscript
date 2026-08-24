@@ -1,12 +1,15 @@
 //! Exact canonical point reads used by change normalization.
 
-use crate::platform::diagnostic::Diagnostic;
+use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    DependencyRecord, KernelSnapshot, OwnerKey, OwnerRecord, PackageId, RelationEdge,
-    RetirementRecord, TypeObject, TypeObjectDigest,
+    DependencyRecord, ExactOwnerKey, KernelSnapshot, OwnerKey, OwnerRecord, PackageId,
+    RelationEdge, RelationEndpoint, RetirementRecord, TypeObject, TypeObjectDigest,
 };
 use crate::platform::semantic_id::{RepositoryId, RevisionId};
-use crate::platform::witness::{FullWitness, NamespaceKey, OwnershipEntry};
+use crate::platform::witness::{
+    FullWitness, MAXIMUM_RELATION_PREFIX_ITEMS, NamespaceKey, OwnerSummary, OwnerSummaryDigest,
+    OwnershipEntry,
+};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct CanonicalReadWork {
@@ -88,14 +91,31 @@ pub struct WitnessRead<T> {
 
 impl<T> WitnessRead<T> {
     fn memory(value: T) -> Self {
+        Self::memory_records(value, 0)
+    }
+
+    fn memory_records(value: T, witness_records_decoded: u64) -> Self {
         Self {
             value,
             work: WitnessReadWork {
                 point_reads: 1,
+                witness_records_decoded,
                 ..WitnessReadWork::default()
             },
         }
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BoundOwnerSummary {
+    pub digest: OwnerSummaryDigest,
+    pub summary: OwnerSummary,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WitnessRelationRead {
+    pub edges: Vec<RelationEdge>,
+    pub truncated: bool,
 }
 
 /// Narrow accepted-authority surface required before high-level edits become an exact canonical
@@ -148,6 +168,23 @@ pub trait WitnessBaseRead {
         &self,
         edge: RelationEdge,
     ) -> Result<WitnessRead<bool>, Diagnostic>;
+
+    fn read_owner_summary(
+        &self,
+        owner: OwnerKey,
+    ) -> Result<WitnessRead<Option<BoundOwnerSummary>>, Diagnostic>;
+
+    fn read_outgoing_relations(
+        &self,
+        owner: OwnerKey,
+        maximum_items: usize,
+    ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic>;
+
+    fn read_incoming_relations(
+        &self,
+        owner: OwnerKey,
+        maximum_items: usize,
+    ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic>;
 }
 
 impl CanonicalBaseRead for KernelSnapshot {
@@ -233,4 +270,108 @@ impl WitnessBaseRead for FullWitness {
             self.entries.relations.binary_search(&edge).is_ok(),
         ))
     }
+
+    fn read_owner_summary(
+        &self,
+        owner: OwnerKey,
+    ) -> Result<WitnessRead<Option<BoundOwnerSummary>>, Diagnostic> {
+        let summary = self.summaries.get(&owner);
+        let digest = self.entries.summaries.get(&owner).copied();
+        match (summary, digest) {
+            (Some(summary), Some(digest)) => {
+                let (actual, _) = crate::platform::witness::encode_owner_summary(summary)?;
+                if actual != digest {
+                    return Err(base_read_error(
+                        DiagnosticClass::Corrupt,
+                        "change_summary_base_binding",
+                        "base summary object disagrees with its witness binding",
+                    ));
+                }
+                Ok(WitnessRead::memory_records(
+                    Some(BoundOwnerSummary {
+                        digest,
+                        summary: summary.clone(),
+                    }),
+                    1,
+                ))
+            }
+            (None, None) => Ok(WitnessRead::memory(None)),
+            _ => Err(base_read_error(
+                DiagnosticClass::Corrupt,
+                "change_summary_base_missing",
+                "base summary object and witness binding have different domains",
+            )),
+        }
+    }
+
+    fn read_outgoing_relations(
+        &self,
+        owner: OwnerKey,
+        maximum_items: usize,
+    ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
+        read_memory_relations(self, owner, maximum_items, false)
+    }
+
+    fn read_incoming_relations(
+        &self,
+        owner: OwnerKey,
+        maximum_items: usize,
+    ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
+        read_memory_relations(self, owner, maximum_items, true)
+    }
+}
+
+fn read_memory_relations(
+    witness: &FullWitness,
+    owner: OwnerKey,
+    maximum_items: usize,
+    reverse: bool,
+) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
+    if maximum_items == 0 || maximum_items > MAXIMUM_RELATION_PREFIX_ITEMS {
+        return Err(base_read_error(
+            DiagnosticClass::Resource,
+            "change_relation_item_budget",
+            "relation item budget is outside the current supported range",
+        ));
+    }
+    let endpoint = RelationEndpoint::Owner(ExactOwnerKey {
+        package: witness.manifest.package_id,
+        owner,
+    });
+    let relations = if reverse {
+        &witness.entries.reverse_relations
+    } else {
+        &witness.entries.relations
+    };
+    let start = relations.partition_point(|edge| {
+        if reverse {
+            edge.target < endpoint
+        } else {
+            edge.source < endpoint
+        }
+    });
+    let end = relations.partition_point(|edge| {
+        if reverse {
+            edge.target <= endpoint
+        } else {
+            edge.source <= endpoint
+        }
+    });
+    let available = &relations[start..end];
+    let returned = available.len().min(maximum_items);
+    Ok(WitnessRead::memory_records(
+        WitnessRelationRead {
+            edges: available[..returned].to_vec(),
+            truncated: available.len() > maximum_items,
+        },
+        returned as u64,
+    ))
+}
+
+fn base_read_error(
+    class: DiagnosticClass,
+    code: &'static str,
+    message: &'static str,
+) -> Diagnostic {
+    Diagnostic::new(class, code, message)
 }

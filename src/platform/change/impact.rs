@@ -117,7 +117,8 @@ pub fn plan_impact_and_summaries(
         summary_owners: initial.selected.clone(),
         ..ImpactPlan::default()
     };
-    let relations = CandidateRelations::new(overlay.base().root.package_id, derived, base_witness);
+    let mut relations =
+        CandidateRelations::new(overlay.base().root.package_id, derived, base_witness);
     let ownership = CandidateOwnership::new(derived, base_witness);
     let mut behavior = VecDeque::new();
     let mut behavior_seen = BTreeSet::new();

@@ -2,9 +2,9 @@
 
 use super::CurrentPublication;
 use crate::platform::change::{
-    CanonicalBaseRead, CanonicalRead, CanonicalReadWork, DerivedDelta, SummaryDelta,
-    TestDependencyDelta, WitnessBaseRead, WitnessMapUpdate, WitnessRead, WitnessReadWork,
-    update_witness_maps_from,
+    BoundOwnerSummary, CanonicalBaseRead, CanonicalRead, CanonicalReadWork, DerivedDelta,
+    SummaryDelta, TestDependencyDelta, WitnessBaseRead, WitnessMapUpdate, WitnessRead,
+    WitnessReadWork, WitnessRelationRead, update_witness_maps_from,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
@@ -27,7 +27,8 @@ use crate::platform::witness::{
     owner_key_bytes, reverse_relation_prefix,
 };
 
-pub const MAXIMUM_RELATION_READ_ITEMS: usize = 10_000;
+pub const MAXIMUM_RELATION_READ_ITEMS: usize =
+    crate::platform::witness::MAXIMUM_RELATION_PREFIX_ITEMS;
 const RELATION_LIMIT_STOP: &str = "publication_relation_limit_stop";
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -214,6 +215,18 @@ impl RepositoryView {
         &self,
         owner: OwnerKey,
     ) -> Result<RevisionRead<Option<OwnerSummary>>, Diagnostic> {
+        let read = self.bound_owner_summary(owner)?;
+        Ok(RevisionRead {
+            revision: read.revision,
+            value: read.value.map(|bound| bound.summary),
+            work: read.work,
+        })
+    }
+
+    pub fn bound_owner_summary(
+        &self,
+        owner: OwnerKey,
+    ) -> Result<RevisionRead<Option<BoundOwnerSummary>>, Diagnostic> {
         let mut work = RepositoryReadWork::default();
         let Some(binding_bytes) = self.lookup_map(
             self.current.witness.roots.owner_summaries,
@@ -240,7 +253,13 @@ impl RepositoryView {
         }
         work.witness_records_decoded = 1;
         work.items_returned = 1;
-        Ok(self.read(Some(summary), work))
+        Ok(self.read(
+            Some(BoundOwnerSummary {
+                digest: binding.summary,
+                summary,
+            }),
+            work,
+        ))
     }
 
     pub fn contains_forward_relation(
@@ -537,6 +556,39 @@ impl WitnessBaseRead for RepositoryView {
     ) -> Result<WitnessRead<bool>, Diagnostic> {
         RepositoryView::contains_forward_relation(self, edge).map(witness_read)
     }
+
+    fn read_owner_summary(
+        &self,
+        owner: OwnerKey,
+    ) -> Result<WitnessRead<Option<BoundOwnerSummary>>, Diagnostic> {
+        RepositoryView::bound_owner_summary(self, owner).map(witness_read)
+    }
+
+    fn read_outgoing_relations(
+        &self,
+        owner: OwnerKey,
+        maximum_items: usize,
+    ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
+        let endpoint = RelationEndpoint::Owner(crate::platform::kernel::ExactOwnerKey {
+            package: self.package(),
+            owner,
+        });
+        RepositoryView::outgoing_relations(self, endpoint, None, maximum_items)
+            .map(witness_relation_read)
+    }
+
+    fn read_incoming_relations(
+        &self,
+        owner: OwnerKey,
+        maximum_items: usize,
+    ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
+        let endpoint = RelationEndpoint::Owner(crate::platform::kernel::ExactOwnerKey {
+            package: self.package(),
+            owner,
+        });
+        RepositoryView::incoming_relations(self, endpoint, None, maximum_items)
+            .map(witness_relation_read)
+    }
 }
 
 fn canonical_read<T>(read: RevisionRead<T>) -> CanonicalRead<T> {
@@ -557,6 +609,24 @@ fn canonical_read<T>(read: RevisionRead<T>) -> CanonicalRead<T> {
 fn witness_read<T>(read: RevisionRead<T>) -> WitnessRead<T> {
     WitnessRead {
         value: read.value,
+        work: WitnessReadWork {
+            point_reads: 1,
+            map_pages_read: read.work.map.pages_read,
+            map_entries_visited: read.work.map.entries_visited,
+            catalog_lookups: read.work.store.catalog_lookups,
+            objects_read: read.work.store.objects_read,
+            bytes_read: read.work.store.bytes_read,
+            witness_records_decoded: read.work.witness_records_decoded,
+        },
+    }
+}
+
+fn witness_relation_read(read: RevisionRead<RelationRead>) -> WitnessRead<WitnessRelationRead> {
+    WitnessRead {
+        value: WitnessRelationRead {
+            edges: read.value.edges,
+            truncated: read.value.truncated,
+        },
         work: WitnessReadWork {
             point_reads: 1,
             map_pages_read: read.work.map.pages_read,

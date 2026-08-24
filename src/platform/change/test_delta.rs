@@ -58,7 +58,8 @@ pub fn derive_test_dependency_delta(
         }
     }
 
-    let relations = CandidateRelations::new(overlay.base().root.package_id, derived, base_witness);
+    let mut relations =
+        CandidateRelations::new(overlay.base().root.package_id, derived, base_witness);
     let mut removed = BTreeSet::new();
     let mut added = BTreeSet::new();
     for test in &affected_tests {
@@ -72,7 +73,7 @@ pub fn derive_test_dependency_delta(
             .owner(*test)
             .is_some_and(|record| record.kind() == OwnerKind::Test)
         {
-            candidate_test_dependencies(*test, overlay, &ownership, &relations, &mut work)?
+            candidate_test_dependencies(*test, overlay, &ownership, &mut relations, &mut work)?
         } else {
             BTreeSet::new()
         };
@@ -91,7 +92,7 @@ fn candidate_test_dependencies(
     test: OwnerKey,
     overlay: &KernelOverlay<'_>,
     ownership: &CandidateTestOwnership<'_>,
-    relations: &CandidateRelations<'_>,
+    relations: &mut CandidateRelations<'_, FullWitness>,
     work: &mut TestDeltaWork,
 ) -> Result<BTreeSet<TestDependency>, Diagnostic> {
     let mut dependencies = BTreeSet::new();
