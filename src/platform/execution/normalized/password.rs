@@ -1,6 +1,7 @@
 //! Exact Graph 5 binding for password hashing and verification.
 
 use super::capability::{NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter};
+use super::resource::NormalizedResourceScope;
 use super::value::NormalizedValue;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
@@ -97,6 +98,7 @@ impl NormalizedCapabilityAdapter for NormalizedPasswordHashAdapter {
         &self,
         policy: &NormalizedCallPolicy,
         arguments: Vec<NormalizedValue>,
+        _resources: &NormalizedResourceScope,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
         control.check()?;
@@ -227,10 +229,12 @@ mod tests {
             NormalizedPasswordHashAdapter::new(interface, operations.clone(), fast_policy())
                 .expect("exact normalized password adapter");
         let control = ExecutionControl::uncancelled();
+        let resources = NormalizedResourceScope::new().expect("resource scope");
         let NormalizedValue::Text(encoded) = adapter
             .call(
                 &policy(interface, requirement, operations.hash, "hash"),
                 vec![NormalizedValue::bytes(b"correct horse".to_vec())],
+                &resources,
                 &control,
             )
             .expect("password hash")
@@ -245,6 +249,7 @@ mod tests {
                         NormalizedValue::bytes(b"correct horse".to_vec()),
                         NormalizedValue::Text(Arc::clone(&encoded)),
                     ],
+                    &resources,
                     &control,
                 )
                 .expect("password verification"),
@@ -258,6 +263,7 @@ mod tests {
                         NormalizedValue::bytes(b"wrong".to_vec()),
                         NormalizedValue::Text(Arc::clone(&encoded)),
                     ],
+                    &resources,
                     &control,
                 )
                 .expect("password mismatch"),
@@ -273,6 +279,7 @@ mod tests {
                         "needs-upgrade",
                     ),
                     vec![NormalizedValue::Text(encoded)],
+                    &resources,
                     &control,
                 )
                 .expect("current password parameters"),
@@ -286,6 +293,7 @@ mod tests {
         let adapter =
             NormalizedPasswordHashAdapter::new(interface, operations.clone(), fast_policy())
                 .expect("exact normalized password adapter");
+        let resources = NormalizedResourceScope::new().expect("resource scope");
         let foreign = OperationReference {
             package: interface.package,
             operation: OperationId::migrate(SEED, 99),
@@ -295,6 +303,7 @@ mod tests {
                 .call(
                     &policy(interface, requirement, foreign, "hash"),
                     vec![NormalizedValue::bytes(b"password".to_vec())],
+                    &resources,
                     &ExecutionControl::uncancelled(),
                 )
                 .expect_err("foreign operation with matching name")

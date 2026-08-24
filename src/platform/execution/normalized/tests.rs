@@ -16,10 +16,11 @@ use super::reference::{
     NormalizedReferenceBinding, NormalizedReferenceInterpreter, NormalizedReferenceOwnerRead,
     NormalizedReferenceRead,
 };
+use super::resource::NormalizedResourceScope;
 use super::runner::{
     NormalizedCommandPolicy, run_effectful_command, run_graph_tests, run_pure_command,
 };
-use super::value::NormalizedValue;
+use super::value::{NormalizedMapKey, NormalizedValue};
 use super::vm::{NormalizedRunPolicy, NormalizedVm};
 use crate::platform::compiler::{OptimizationPolicy, build_clean, link_artifact, load_artifact};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
@@ -34,6 +35,7 @@ use crate::platform::package::RunnerKind;
 use crate::platform::publication::{GraphRepository, RepositoryView};
 use crate::platform::secrets::SecretCatalog;
 use crate::platform::semantic_id::{DeclarationId, PortId, RevisionId, TargetId};
+use crate::platform::stream::{StreamLimits, StreamRegistry};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -253,6 +255,7 @@ impl NormalizedCapabilityAdapter for UnitAdapter {
         &self,
         _policy: &NormalizedCallPolicy,
         _arguments: Vec<NormalizedValue>,
+        _resources: &NormalizedResourceScope,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
         control.check()?;
@@ -263,6 +266,7 @@ impl NormalizedCapabilityAdapter for UnitAdapter {
     fn begin_transaction(
         &self,
         _policy: &NormalizedTransactionPolicy,
+        _resources: &NormalizedResourceScope,
         control: &ExecutionControl,
     ) -> Result<Box<dyn NormalizedCapabilityTransaction>, ExecutionError> {
         control.check()?;
@@ -277,6 +281,7 @@ impl NormalizedCapabilityTransaction for UnitTransaction {
         &mut self,
         _policy: &NormalizedCallPolicy,
         _arguments: Vec<NormalizedValue>,
+        _resources: &NormalizedResourceScope,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
         control.check()?;
@@ -327,6 +332,7 @@ impl NormalizedCapabilityAdapter for TrackingAdapter {
         &self,
         policy: &NormalizedCallPolicy,
         _arguments: Vec<NormalizedValue>,
+        _resources: &NormalizedResourceScope,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
         control.check()?;
@@ -341,6 +347,7 @@ impl NormalizedCapabilityAdapter for TrackingAdapter {
     fn begin_transaction(
         &self,
         policy: &NormalizedTransactionPolicy,
+        _resources: &NormalizedResourceScope,
         control: &ExecutionControl,
     ) -> Result<Box<dyn NormalizedCapabilityTransaction>, ExecutionError> {
         control.check()?;
@@ -367,6 +374,7 @@ impl NormalizedCapabilityTransaction for TrackingTransaction {
         &mut self,
         policy: &NormalizedCallPolicy,
         _arguments: Vec<NormalizedValue>,
+        _resources: &NormalizedResourceScope,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
         control.check()?;
@@ -837,6 +845,25 @@ fn normalized_json_codec_uses_exact_runtime_layouts_and_bounds() {
         .expect_err("output byte bound must reject")
         .code,
         "normalized_json_output_bytes"
+    );
+
+    let registry = StreamRegistry::new(StreamLimits::default()).expect("stream registry");
+    let resources = NormalizedResourceScope::new().expect("resource scope");
+    let handle = resources
+        .register_byte_stream(
+            registry
+                .register_memory(b"runtime-only".to_vec())
+                .expect("memory stream"),
+        )
+        .expect("resource handle");
+    let resource = NormalizedValue::Resource(handle);
+    assert!(!resource.is_durable());
+    assert!(NormalizedMapKey::from_value(resource.clone()).is_none());
+    assert_eq!(
+        encode_typed(&program, &resource, unit, JsonLimits::default())
+            .expect_err("live resource must not cross JSON boundary")
+            .code,
+        "normalized_json_type"
     );
 }
 

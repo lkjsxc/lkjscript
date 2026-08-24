@@ -1,6 +1,7 @@
 //! Exact Graph 5 binding for deployment configuration reads.
 
 use super::capability::{NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter};
+use super::resource::NormalizedResourceScope;
 use super::value::NormalizedValue;
 use crate::platform::configuration::{
     ConfigurationOperation, ConfigurationOutput, ConfigurationStore, ConfigurationValue,
@@ -96,6 +97,7 @@ impl NormalizedCapabilityAdapter for NormalizedConfigurationAdapter {
         &self,
         policy: &NormalizedCallPolicy,
         arguments: Vec<NormalizedValue>,
+        _resources: &NormalizedResourceScope,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
         control.check()?;
@@ -214,12 +216,14 @@ mod tests {
             ]),
         )
         .expect("exact normalized configuration adapter");
+        let resources = NormalizedResourceScope::new().expect("resource scope");
         assert_eq!(adapter.operations(), &operations.exact_set());
 
         let result = adapter
             .call(
                 &policy(interface, requirement, operations.text, "text"),
                 vec![NormalizedValue::static_text("service-title")],
+                &resources,
                 &ExecutionControl::uncancelled(),
             )
             .expect("exact configuration text read");
@@ -229,6 +233,7 @@ mod tests {
             .call(
                 &policy(interface, requirement, operations.text, "text"),
                 vec![NormalizedValue::text("service-title")],
+                &resources,
                 &ExecutionControl::uncancelled(),
             )
             .expect_err("dynamic configuration key must reject");
@@ -242,6 +247,7 @@ mod tests {
             .call(
                 &policy(interface, requirement, foreign, "text"),
                 vec![NormalizedValue::static_text("service-title")],
+                &resources,
                 &ExecutionControl::uncancelled(),
             )
             .expect_err("display name cannot authorize a foreign exact operation");

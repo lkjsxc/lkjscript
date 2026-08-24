@@ -158,7 +158,14 @@ impl StreamRegistry {
         value: &Value,
         control: &ExecutionControl,
     ) -> Result<Option<Vec<u8>>, ExecutionError> {
-        let id = stream_id(value)?;
+        self.read_id(stream_id(value)?, control)
+    }
+
+    fn read_id(
+        &self,
+        id: ResourceId,
+        control: &ExecutionControl,
+    ) -> Result<Option<Vec<u8>>, ExecutionError> {
         let source = lock_unpoisoned(&self.inner.sources)
             .get(&id)
             .cloned()
@@ -183,7 +190,15 @@ impl StreamRegistry {
         maximum_bytes: usize,
         control: &ExecutionControl,
     ) -> Result<Vec<u8>, ExecutionError> {
-        let id = stream_id(value)?;
+        self.read_all_id(stream_id(value)?, maximum_bytes, control)
+    }
+
+    fn read_all_id(
+        &self,
+        id: ResourceId,
+        maximum_bytes: usize,
+        control: &ExecutionControl,
+    ) -> Result<Vec<u8>, ExecutionError> {
         let maximum = u64::try_from(maximum_bytes).map_err(|_| {
             ExecutionError::resource(
                 "stream_read_all_limit",
@@ -198,7 +213,7 @@ impl StreamRegistry {
         }
         let outcome = (|| {
             let mut output = Vec::new();
-            while let Some(chunk) = self.read(value, control)? {
+            while let Some(chunk) = self.read_id(id, control)? {
                 let next = output.len().checked_add(chunk.len()).ok_or_else(|| {
                     ExecutionError::resource(
                         "stream_read_all_limit",
@@ -272,6 +287,38 @@ impl StreamLease {
         if let Some(id) = self.id.take() {
             self.registry.close_id(id);
         }
+    }
+
+    pub(crate) fn read(
+        &self,
+        control: &ExecutionControl,
+    ) -> Result<Option<Vec<u8>>, ExecutionError> {
+        self.registry.read_id(self.live_id()?, control)
+    }
+
+    pub(crate) fn read_all(
+        &self,
+        maximum_bytes: usize,
+        control: &ExecutionControl,
+    ) -> Result<Vec<u8>, ExecutionError> {
+        self.registry
+            .read_all_id(self.live_id()?, maximum_bytes, control)
+    }
+
+    pub(crate) fn close_registered(&self) {
+        if let Some(id) = self.id {
+            self.registry.close_id(id);
+        }
+    }
+
+    fn live_id(&self) -> Result<ResourceId, ExecutionError> {
+        self.id.ok_or_else(|| {
+            ExecutionError::new(
+                ExecutionFailureClass::Infrastructure,
+                "stream_closed",
+                "byte stream lease is already closed",
+            )
+        })
     }
 }
 

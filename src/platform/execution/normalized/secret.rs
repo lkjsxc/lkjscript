@@ -1,6 +1,7 @@
 //! Exact Graph 5 binding for least-authority secret verification.
 
 use super::capability::{NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter};
+use super::resource::NormalizedResourceScope;
 use super::value::NormalizedValue;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
@@ -55,6 +56,7 @@ impl NormalizedCapabilityAdapter for NormalizedSecretVerifierAdapter {
         &self,
         policy: &NormalizedCallPolicy,
         arguments: Vec<NormalizedValue>,
+        _resources: &NormalizedResourceScope,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
         control.check()?;
@@ -148,11 +150,13 @@ mod tests {
         )
         .expect("exact secret verifier");
         let control = ExecutionControl::uncancelled();
+        let resources = NormalizedResourceScope::new().expect("resource scope");
         assert_eq!(
             adapter
                 .call(
                     &policy(interface, requirement, operation),
                     vec![NormalizedValue::bytes(b"private-value".to_vec())],
+                    &resources,
                     &control,
                 )
                 .expect("matching secret candidate"),
@@ -163,6 +167,7 @@ mod tests {
                 .call(
                     &policy(interface, requirement, operation),
                     vec![NormalizedValue::bytes(b"other".to_vec())],
+                    &resources,
                     &control,
                 )
                 .expect("different secret candidate"),
@@ -173,6 +178,7 @@ mod tests {
                 .call(
                     &policy(interface, requirement, operation),
                     vec![NormalizedValue::bytes(vec![0; 17])],
+                    &resources,
                     &control,
                 )
                 .expect_err("candidate byte bound")
@@ -189,6 +195,7 @@ mod tests {
                 .call(
                     &policy(interface, requirement, foreign),
                     vec![NormalizedValue::bytes(b"private-value".to_vec())],
+                    &resources,
                     &control,
                 )
                 .expect_err("display name cannot authorize a foreign operation")

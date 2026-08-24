@@ -4,6 +4,7 @@ use super::capability::{
     NormalizedCapabilities, NormalizedCapabilityTransaction, validate_outcome,
 };
 use super::prepare::NormalizedProgram;
+use super::resource::NormalizedResourceScope;
 use super::value::{
     FunctionIndex, NormalizedMapKey, NormalizedRecord, NormalizedValue, RecordLayoutIndex,
     VariantLayoutIndex,
@@ -204,6 +205,18 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         capabilities: Option<&NormalizedCapabilities>,
         control: &ExecutionControl,
     ) -> Result<NormalizedReferenceInvocation, ExecutionError> {
+        let resources = NormalizedResourceScope::new()?;
+        self.invoke_root_target_scoped(name, arguments, capabilities, &resources, control)
+    }
+
+    pub(crate) fn invoke_root_target_scoped(
+        &self,
+        name: &Name,
+        arguments: Vec<NormalizedValue>,
+        capabilities: Option<&NormalizedCapabilities>,
+        resources: &NormalizedResourceScope,
+        control: &ExecutionControl,
+    ) -> Result<NormalizedReferenceInvocation, ExecutionError> {
         let target = self.program.root_target(name).ok_or_else(|| {
             reference_error(
                 "normalized_reference_target_missing",
@@ -212,7 +225,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         })?;
         let target_id = target.target;
         let expected_name = name.clone();
-        self.execute(capabilities, control, move |state| {
+        self.execute_scoped(capabilities, resources, control, move |state| {
             let record = match state.owner(OwnerKey::Target(target_id))? {
                 Some(OwnerRecord::Target(record)) => record,
                 Some(_) => {
@@ -309,6 +322,17 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         control: &ExecutionControl,
         operation: impl FnOnce(&mut ReferenceState<'_>) -> Result<NormalizedValue, ExecutionError>,
     ) -> Result<NormalizedReferenceInvocation, ExecutionError> {
+        let resources = NormalizedResourceScope::new()?;
+        self.execute_scoped(capabilities, &resources, control, operation)
+    }
+
+    fn execute_scoped(
+        &self,
+        capabilities: Option<&NormalizedCapabilities>,
+        resources: &NormalizedResourceScope,
+        control: &ExecutionControl,
+        operation: impl FnOnce(&mut ReferenceState<'_>) -> Result<NormalizedValue, ExecutionError>,
+    ) -> Result<NormalizedReferenceInvocation, ExecutionError> {
         validate_reference_policy(self.policy)?;
         control.check()?;
         let binding = self.authority.binding()?;
@@ -325,6 +349,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
             policy: self.policy,
             host: self.host,
             capabilities,
+            resources,
             control,
             remaining_expressions: self.policy.instruction_steps,
             call_depth: 0,
@@ -376,6 +401,7 @@ struct ReferenceState<'a> {
     policy: NormalizedRunPolicy,
     host: &'a dyn NormalizedReferenceHost,
     capabilities: Option<&'a NormalizedCapabilities>,
+    resources: &'a NormalizedResourceScope,
     control: &'a ExecutionControl,
     remaining_expressions: u64,
     call_depth: usize,
@@ -1019,9 +1045,10 @@ impl ReferenceState<'_> {
                 .capabilities
                 .ok_or_else(reference_capabilities_unbound)?
                 .call_policy_exact(self.program, requirement, operation)?;
-            let result = transaction
-                .transaction
-                .call(&policy, arguments, self.control);
+            let result =
+                transaction
+                    .transaction
+                    .call(&policy, arguments, self.resources, self.control);
             validate_outcome(&policy, result)?
         } else {
             self.capabilities
@@ -1031,6 +1058,7 @@ impl ReferenceState<'_> {
                     requirement,
                     operation,
                     arguments,
+                    self.resources,
                     self.control,
                 )?
         };
@@ -1070,7 +1098,7 @@ impl ReferenceState<'_> {
         let transaction = self
             .capabilities
             .ok_or_else(reference_capabilities_unbound)?
-            .begin_transaction_exact(self.program, requirement, self.control)?;
+            .begin_transaction_exact(self.program, requirement, self.resources, self.control)?;
         self.next_transaction = next_generation;
         debug_assert!(locals.insert(local, NormalizedValue::Unit).is_none());
         self.transactions.insert(
@@ -1441,6 +1469,12 @@ pub(crate) fn reference_equal(
                 "functions do not support semantic equality",
             ))
         }
+        (NormalizedValue::Resource(_), _) | (_, NormalizedValue::Resource(_)) => {
+            Err(reference_trap(
+                "normalized_reference_value_not_comparable",
+                "live resources do not support semantic equality",
+            ))
+        }
         _ => Ok(false),
     }
 }
@@ -1570,7 +1604,8 @@ fn reference_value_cost(value: &NormalizedValue) -> Result<(u64, u64), Execution
             NormalizedValue::Unit
             | NormalizedValue::Bool(_)
             | NormalizedValue::I64(_)
-            | NormalizedValue::Function(_) => {}
+            | NormalizedValue::Function(_)
+            | NormalizedValue::Resource(_) => {}
         }
     }
     Ok((bytes, items))

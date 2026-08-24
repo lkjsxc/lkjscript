@@ -1,6 +1,7 @@
 //! Exact Graph 5 bindings for time, randomness, and identifier capabilities.
 
 use super::capability::{NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter};
+use super::resource::NormalizedResourceScope;
 use super::value::NormalizedValue;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
@@ -165,6 +166,7 @@ impl NormalizedCapabilityAdapter for NormalizedSecurityAdapter {
         &self,
         policy: &NormalizedCallPolicy,
         arguments: Vec<NormalizedValue>,
+        _resources: &NormalizedResourceScope,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
         control.check()?;
@@ -339,6 +341,7 @@ mod tests {
     #[test]
     fn deterministic_security_sources_use_exact_operations_and_grant_limits() {
         let control = ExecutionControl::uncancelled();
+        let resources = NormalizedResourceScope::new().expect("resource scope");
         let (clock_interface, clock_requirement, clock_operation) = bindings(0);
         let clock = NormalizedSecurityAdapter::deterministic_clock(
             clock_interface,
@@ -357,6 +360,7 @@ mod tests {
                         BTreeMap::new(),
                     ),
                     Vec::new(),
+                    &resources,
                     &control,
                 )
                 .expect("deterministic clock value"),
@@ -385,7 +389,12 @@ mod tests {
         );
         assert_eq!(
             random
-                .call(&random_policy, vec![NormalizedValue::I64(4)], &control,)
+                .call(
+                    &random_policy,
+                    vec![NormalizedValue::I64(4)],
+                    &resources,
+                    &control,
+                )
                 .expect("bounded deterministic bytes"),
             NormalizedValue::bytes(vec![7; 4])
         );
@@ -407,6 +416,7 @@ mod tests {
                     BTreeMap::new(),
                 ),
                 Vec::new(),
+                &resources,
                 &control,
             )
             .expect("deterministic identifier value")
@@ -419,6 +429,7 @@ mod tests {
 
     #[test]
     fn display_names_cannot_authorize_foreign_security_operations() {
+        let resources = NormalizedResourceScope::new().expect("resource scope");
         let (interface, requirement, operation) = bindings(3);
         let adapter =
             NormalizedSecurityAdapter::deterministic_clock(interface, operation, vec![42])
@@ -438,6 +449,7 @@ mod tests {
                         BTreeMap::new(),
                     ),
                     Vec::new(),
+                    &resources,
                     &ExecutionControl::uncancelled(),
                 )
                 .expect_err("foreign exact operation")
@@ -462,6 +474,7 @@ mod tests {
     #[test]
     fn production_security_sources_preserve_exact_shapes_and_units() {
         let control = ExecutionControl::uncancelled();
+        let resources = NormalizedResourceScope::new().expect("resource scope");
         let (clock_interface, clock_requirement, clock_operation) = bindings(10);
         let clock = NormalizedSecurityAdapter::wall_clock(clock_interface, clock_operation)
             .expect("exact wall clock");
@@ -475,6 +488,7 @@ mod tests {
                     BTreeMap::new(),
                 ),
                 Vec::new(),
+                &resources,
                 &control,
             )
             .expect("wall clock value")
@@ -500,7 +514,12 @@ mod tests {
             )]),
         );
         let NormalizedValue::Bytes(bytes) = random
-            .call(&random_policy, vec![NormalizedValue::I64(8)], &control)
+            .call(
+                &random_policy,
+                vec![NormalizedValue::I64(8)],
+                &resources,
+                &control,
+            )
             .expect("secure random bytes")
         else {
             panic!("secure random result type")
@@ -522,7 +541,12 @@ mod tests {
         );
         assert_eq!(
             random
-                .call(&wrong_unit, vec![NormalizedValue::I64(8)], &control,)
+                .call(
+                    &wrong_unit,
+                    vec![NormalizedValue::I64(8)],
+                    &resources,
+                    &control,
+                )
                 .expect_err("foreign random limit unit")
                 .code,
             "normalized_security_limit_unit"
@@ -542,6 +566,7 @@ mod tests {
                     BTreeMap::new(),
                 ),
                 Vec::new(),
+                &resources,
                 &control,
             )
             .expect("secure identifier value")

@@ -1,6 +1,7 @@
 //! Exact deployment-grant binding for normalized Graph 5 requirements.
 
 use super::prepare::NormalizedProgram;
+use super::resource::NormalizedResourceScope;
 use super::value::{NormalizedValue, OperationIndex, RequirementIndex};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::kernel::{
@@ -133,12 +134,14 @@ pub trait NormalizedCapabilityAdapter: Send + Sync {
         &self,
         policy: &NormalizedCallPolicy,
         arguments: Vec<NormalizedValue>,
+        resources: &NormalizedResourceScope,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError>;
 
     fn begin_transaction(
         &self,
         _policy: &NormalizedTransactionPolicy,
+        _resources: &NormalizedResourceScope,
         _control: &ExecutionControl,
     ) -> Result<Box<dyn NormalizedCapabilityTransaction>, ExecutionError> {
         Err(ExecutionError::new(
@@ -154,6 +157,7 @@ pub trait NormalizedCapabilityTransaction: Send {
         &mut self,
         policy: &NormalizedCallPolicy,
         arguments: Vec<NormalizedValue>,
+        resources: &NormalizedResourceScope,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError>;
 
@@ -368,13 +372,14 @@ impl NormalizedCapabilities {
         requirement: RequirementIndex,
         operation: OperationIndex,
         arguments: Vec<NormalizedValue>,
+        resources: &NormalizedResourceScope,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
         let policy = self.call_policy(program, requirement, operation)?;
         let result = self
             .binding(requirement)?
             .adapter
-            .call(&policy, arguments, control);
+            .call(&policy, arguments, resources, control);
         validate_outcome(&policy, result)
     }
 
@@ -382,12 +387,13 @@ impl NormalizedCapabilities {
         &self,
         program: &NormalizedProgram,
         requirement: RequirementIndex,
+        resources: &NormalizedResourceScope,
         control: &ExecutionControl,
     ) -> Result<Box<dyn NormalizedCapabilityTransaction>, ExecutionError> {
         let policy = self.transaction_policy(program, requirement)?;
         self.binding(requirement)?
             .adapter
-            .begin_transaction(&policy, control)
+            .begin_transaction(&policy, resources, control)
     }
 
     pub(crate) fn requires_exact(&self, requirement: RequirementReference) -> bool {
@@ -407,13 +413,14 @@ impl NormalizedCapabilities {
         requirement: RequirementReference,
         operation: OperationReference,
         arguments: Vec<NormalizedValue>,
+        resources: &NormalizedResourceScope,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
         let policy = self.call_policy_exact(program, requirement, operation)?;
         let result = self
             .exact_binding(requirement)?
             .adapter
-            .call(&policy, arguments, control);
+            .call(&policy, arguments, resources, control);
         validate_outcome(&policy, result)
     }
 
@@ -421,12 +428,13 @@ impl NormalizedCapabilities {
         &self,
         program: &NormalizedProgram,
         requirement: RequirementReference,
+        resources: &NormalizedResourceScope,
         control: &ExecutionControl,
     ) -> Result<Box<dyn NormalizedCapabilityTransaction>, ExecutionError> {
         let policy = self.transaction_policy_exact(program, requirement)?;
         self.exact_binding(requirement)?
             .adapter
-            .begin_transaction(&policy, control)
+            .begin_transaction(&policy, resources, control)
     }
 
     pub(crate) fn call_policy(

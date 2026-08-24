@@ -7,6 +7,7 @@ mod deployment;
 mod password;
 mod prepare;
 mod reference;
+mod resource;
 mod runner;
 mod secret;
 mod security;

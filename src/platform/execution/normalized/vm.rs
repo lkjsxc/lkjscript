@@ -7,6 +7,7 @@ use super::prepare::{
     NormalizedCode, NormalizedEntryPoint, NormalizedFieldSelector, NormalizedFunctionBody,
     NormalizedInstruction, NormalizedProgram,
 };
+use super::resource::NormalizedResourceScope;
 use super::value::{
     FunctionIndex, NormalizedMapKey, NormalizedRecord, NormalizedValue, RequirementIndex,
 };
@@ -135,6 +136,18 @@ impl<'a> NormalizedVm<'a> {
         capabilities: Option<&NormalizedCapabilities>,
         control: &ExecutionControl,
     ) -> Result<NormalizedInvocation, ExecutionError> {
+        let resources = NormalizedResourceScope::new()?;
+        self.invoke_root_target_scoped(name, arguments, capabilities, &resources, control)
+    }
+
+    pub(crate) fn invoke_root_target_scoped(
+        &self,
+        name: &Name,
+        arguments: Vec<NormalizedValue>,
+        capabilities: Option<&NormalizedCapabilities>,
+        resources: &NormalizedResourceScope,
+        control: &ExecutionControl,
+    ) -> Result<NormalizedInvocation, ExecutionError> {
         let target = self.program.root_target(name).ok_or_else(|| {
             runtime_error(
                 "normalized_target_missing",
@@ -157,7 +170,13 @@ impl<'a> NormalizedVm<'a> {
                 "prepared target and port disagree on their exact component",
             ));
         }
-        self.invoke_entry(port.entry.clone(), arguments, capabilities, control)
+        self.invoke_entry_scoped(
+            port.entry.clone(),
+            arguments,
+            capabilities,
+            resources,
+            control,
+        )
     }
 
     pub fn invoke_test(
@@ -194,6 +213,18 @@ impl<'a> NormalizedVm<'a> {
         capabilities: Option<&NormalizedCapabilities>,
         control: &ExecutionControl,
     ) -> Result<NormalizedInvocation, ExecutionError> {
+        let resources = NormalizedResourceScope::new()?;
+        self.invoke_entry_scoped(entry, arguments, capabilities, &resources, control)
+    }
+
+    fn invoke_entry_scoped(
+        &self,
+        entry: NormalizedEntryPoint,
+        arguments: Vec<NormalizedValue>,
+        capabilities: Option<&NormalizedCapabilities>,
+        resources: &NormalizedResourceScope,
+        control: &ExecutionControl,
+    ) -> Result<NormalizedInvocation, ExecutionError> {
         validate_policy(self.policy)?;
         control.check()?;
         let mut machine = Machine {
@@ -201,6 +232,7 @@ impl<'a> NormalizedVm<'a> {
             policy: self.policy,
             host: self.host,
             capabilities,
+            resources,
             control,
             remaining_steps: self.policy.instruction_steps,
             stack: Vec::new(),
@@ -269,6 +301,7 @@ struct Machine<'a> {
     policy: NormalizedRunPolicy,
     host: &'a dyn NormalizedHost,
     capabilities: Option<&'a NormalizedCapabilities>,
+    resources: &'a NormalizedResourceScope,
     control: &'a ExecutionControl,
     remaining_steps: u64,
     stack: Vec<NormalizedValue>,
@@ -473,9 +506,12 @@ impl Machine<'_> {
                             .capabilities
                             .ok_or_else(capabilities_unbound)?
                             .call_policy(self.program, requirement, operation)?;
-                        let result = transaction
-                            .transaction
-                            .call(&policy, arguments, self.control);
+                        let result = transaction.transaction.call(
+                            &policy,
+                            arguments,
+                            self.resources,
+                            self.control,
+                        );
                         validate_outcome(&policy, result)?
                     } else {
                         self.capabilities.ok_or_else(capabilities_unbound)?.call(
@@ -483,6 +519,7 @@ impl Machine<'_> {
                             requirement,
                             operation,
                             arguments,
+                            self.resources,
                             self.control,
                         )?
                     };
@@ -523,7 +560,12 @@ impl Machine<'_> {
                     let transaction = self
                         .capabilities
                         .ok_or_else(capabilities_unbound)?
-                        .begin_transaction(self.program, requirement, self.control)?;
+                        .begin_transaction(
+                            self.program,
+                            requirement,
+                            self.resources,
+                            self.control,
+                        )?;
                     self.next_transaction = next_generation;
                     self.set_local(binding, Some(NormalizedValue::Unit))?;
                     self.transactions.insert(
@@ -1098,7 +1140,8 @@ fn value_cost(value: &NormalizedValue) -> Result<(u64, u64), ExecutionError> {
             NormalizedValue::Unit
             | NormalizedValue::Bool(_)
             | NormalizedValue::I64(_)
-            | NormalizedValue::Function(_) => {}
+            | NormalizedValue::Function(_)
+            | NormalizedValue::Resource(_) => {}
         }
     }
     Ok((bytes, items))
@@ -1268,6 +1311,10 @@ pub(crate) fn normalized_equal(
         (NormalizedValue::Function(_), _) | (_, NormalizedValue::Function(_)) => Err(trap_error(
             "normalized_value_not_comparable",
             "functions do not support semantic equality",
+        )),
+        (NormalizedValue::Resource(_), _) | (_, NormalizedValue::Resource(_)) => Err(trap_error(
+            "normalized_value_not_comparable",
+            "live resources do not support semantic equality",
         )),
         _ => Ok(false),
     }
