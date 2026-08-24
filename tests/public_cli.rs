@@ -5,6 +5,8 @@
 )]
 
 use serde_json::Value;
+use std::fs::{File, OpenOptions};
+use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -13,6 +15,28 @@ const CLI_CONTRACT_VERSION: u64 = 4;
 
 fn binary() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_lkjscript"))
+}
+
+fn copy_executable(source: &Path, destination: &Path) {
+    let stage = destination.with_extension("stage");
+    let mut input = File::open(source).expect("open executable for isolated copy");
+    let permissions = input
+        .metadata()
+        .expect("inspect executable permissions")
+        .permissions();
+    let mut output = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(&stage)
+        .expect("create private executable stage");
+    io::copy(&mut input, &mut output).expect("copy executable into private stage");
+    output
+        .set_permissions(permissions)
+        .expect("preserve executable permissions");
+    output.sync_all().expect("synchronize executable stage");
+    drop(output);
+    drop(input);
+    std::fs::rename(stage, destination).expect("publish closed executable copy");
 }
 
 fn command(arguments: &[&str]) -> Output {
@@ -241,7 +265,7 @@ fn direct_cli_discovery_query_check_build_and_inspection_are_compact() {
 fn copied_binary_creates_runs_backs_up_and_restores_a_command_project() {
     let temporary = tempfile::TempDir::new().expect("isolated binary workspace");
     let copied_binary = temporary.path().join("lkjscript");
-    std::fs::copy(binary(), &copied_binary).expect("copy binary");
+    copy_executable(&binary(), &copied_binary);
     let project = temporary.path().join("app");
     let created = success_at(
         &copied_binary,
