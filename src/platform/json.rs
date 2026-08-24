@@ -14,6 +14,12 @@ use std::sync::Arc;
 pub const JSON_CONTRACT_VERSION: u16 = 1;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum JsonIntegerPolicy {
+    SignedI64,
+    SignedOrUnsigned64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct JsonLimits {
     pub maximum_bytes: usize,
     pub maximum_depth: usize,
@@ -33,6 +39,14 @@ impl Default for JsonLimits {
 }
 
 pub fn decode_strict(bytes: &[u8], limits: JsonLimits) -> Result<serde_json::Value, Diagnostic> {
+    decode_strict_with_integer_policy(bytes, limits, JsonIntegerPolicy::SignedI64)
+}
+
+pub fn decode_strict_with_integer_policy(
+    bytes: &[u8],
+    limits: JsonLimits,
+    integer_policy: JsonIntegerPolicy,
+) -> Result<serde_json::Value, Diagnostic> {
     if bytes.len() > limits.maximum_bytes {
         return Err(json_error(
             "json_too_large",
@@ -44,7 +58,11 @@ pub fn decode_strict(bytes: &[u8], limits: JsonLimits) -> Result<serde_json::Val
         ));
     }
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    let mut state = DecodeState { limits, items: 0 };
+    let mut state = DecodeState {
+        limits,
+        integer_policy,
+        items: 0,
+    };
     let value = StrictSeed {
         state: &mut state,
         depth: 0,
@@ -91,6 +109,7 @@ pub fn encode_typed(
 
 struct DecodeState {
     limits: JsonLimits,
+    integer_policy: JsonIntegerPolicy,
     items: usize,
 }
 
@@ -148,9 +167,16 @@ impl<'de> Visitor<'de> for StrictVisitor<'_> {
     where
         E: serde::de::Error,
     {
-        let value = i64::try_from(value)
-            .map_err(|_| E::custom("JSON integer exceeds signed 64-bit range"))?;
-        self.visit_i64(value)
+        match self.state.integer_policy {
+            JsonIntegerPolicy::SignedI64 => {
+                let value = i64::try_from(value)
+                    .map_err(|_| E::custom("JSON integer exceeds signed 64-bit range"))?;
+                self.visit_i64(value)
+            }
+            JsonIntegerPolicy::SignedOrUnsigned64 => {
+                Ok(serde_json::Value::Number(Number::from(value)))
+            }
+        }
     }
 
     fn visit_f64<E>(self, _value: f64) -> Result<Self::Value, E>
@@ -613,6 +639,21 @@ mod tests {
         )
         .expect_err("depth rejects");
         assert_eq!(error.code, "json_decode");
+    }
+
+    #[test]
+    fn protocol_integer_policy_accepts_the_complete_unsigned_64_bit_domain() {
+        let value = decode_strict_with_integer_policy(
+            br#"18446744073709551615"#,
+            JsonLimits::default(),
+            JsonIntegerPolicy::SignedOrUnsigned64,
+        )
+        .expect("unsigned protocol integer");
+        assert_eq!(value.as_u64(), Some(u64::MAX));
+        assert!(
+            decode_strict(br#"18446744073709551615"#, JsonLimits::default()).is_err(),
+            "the existing signed application boundary must remain unchanged"
+        );
     }
 
     #[test]

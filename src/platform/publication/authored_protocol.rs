@@ -10,6 +10,7 @@ use super::{
 };
 use crate::platform::change::{AuthoredChangeSet, ChangeBudgetWork};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
+use crate::platform::json::{JsonIntegerPolicy, JsonLimits, decode_strict_with_integer_policy};
 use crate::platform::kernel::OwnerKey;
 use crate::platform::semantic_id::RevisionId;
 use schemars::{JsonSchema, schema_for};
@@ -24,6 +25,9 @@ pub const AUTHORED_PROTOCOL_SCHEMA_ID: &str =
 pub const AUTHORED_PROTOCOL_SCHEMA_DIGEST_DOMAIN: &str =
     "lkjscript.graph5-authored-protocol-schema.v5";
 pub const MAXIMUM_AUTHORED_RESPONSE_BYTES: usize = 4 * 1_048_576;
+pub const MAXIMUM_AUTHORED_JSON_DEPTH: usize = 128;
+pub const MAXIMUM_AUTHORED_JSON_ITEMS: usize =
+    crate::platform::change::MAXIMUM_AUTHORED_CHANGE_BYTES / 2;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize)]
 #[schemars(rename = "lkjscript.Graph5ChangeContractV1")]
@@ -60,19 +64,35 @@ impl AuthoredChangeRequest {
                 ),
             ));
         }
-        let mut decoder = serde_json::Deserializer::from_slice(bytes);
-        let request = Self::deserialize(&mut decoder).map_err(|_| {
+        let value = decode_strict_with_integer_policy(
+            bytes,
+            JsonLimits {
+                maximum_bytes: crate::platform::change::MAXIMUM_AUTHORED_CHANGE_BYTES,
+                maximum_depth: MAXIMUM_AUTHORED_JSON_DEPTH,
+                maximum_items: MAXIMUM_AUTHORED_JSON_ITEMS,
+                maximum_string_bytes: crate::platform::change::MAXIMUM_AUTHORED_CHANGE_BYTES,
+            },
+            JsonIntegerPolicy::SignedOrUnsigned64,
+        )
+        .map_err(|diagnostic| {
+            let (code, message) = if diagnostic.code == "json_trailing" {
+                (
+                    "change_protocol_request_trailing",
+                    "Graph 5 authored request contains trailing input",
+                )
+            } else {
+                (
+                    "change_protocol_request_json",
+                    "Graph 5 authored request violates its bounded strict JSON contract",
+                )
+            };
+            protocol_error(DiagnosticClass::Source, code, message)
+        })?;
+        let request: Self = serde_json::from_value(value).map_err(|_| {
             protocol_error(
                 DiagnosticClass::Source,
                 "change_protocol_request_json",
                 "Graph 5 authored request is not one strict current JSON object",
-            )
-        })?;
-        decoder.end().map_err(|_| {
-            protocol_error(
-                DiagnosticClass::Source,
-                "change_protocol_request_trailing",
-                "Graph 5 authored request contains trailing input",
             )
         })?;
         request.validate()?;
@@ -331,11 +351,14 @@ fn protocol_error(
 mod tests {
     use super::*;
     use crate::platform::change::{
-        AuthoredChange, AuthoredExpression, AuthoredExpressionOperation, AuthoredFunctionEffect,
-        AuthoredType, ChangeBudget, ModuleSelector,
+        AuthoredChange, AuthoredDeclarationReference, AuthoredExpression,
+        AuthoredExpressionOperation, AuthoredFunctionEffect, AuthoredRequirement,
+        AuthoredResourceLimit, AuthoredType, ChangeBudget, ModuleSelector,
     };
-    use crate::platform::kernel::{DeclarationVisibility, ExpressionOperation, Name};
-    use crate::platform::semantic_id::ExpressionId;
+    use crate::platform::kernel::{
+        DeclarationVisibility, ExpressionOperation, Name, PackageId, ResourceUnit,
+    };
+    use crate::platform::semantic_id::{DeclarationId, ExpressionId};
 
     fn request() -> AuthoredChangeRequest {
         AuthoredChangeRequest {
@@ -464,6 +487,63 @@ mod tests {
         assert_eq!(
             AuthoredChangeRequest::decode_json(&serde_json::to_vec(&replacement_value).unwrap())
                 .expect_err("unknown exact-expression field must reject")
+                .code,
+            "change_protocol_request_json"
+        );
+    }
+
+    #[test]
+    fn authored_request_decoder_has_explicit_depth_and_unsigned_integer_policy() {
+        let unsigned_request = AuthoredChangeRequest {
+            contract: AuthoredChangeContract::Current,
+            idempotency_key: None,
+            semantic: AuthoredChangeSet {
+                base: RevisionId::from_digest([4; 32]),
+                preconditions: Vec::new(),
+                changes: vec![AuthoredChange::CreateComponent {
+                    symbol: "$component".to_owned(),
+                    module: ModuleSelector::Symbol {
+                        symbol: "$module".to_owned(),
+                    },
+                    name: Name::new("component").expect("fixture name"),
+                    visibility: DeclarationVisibility::Private,
+                    requirements: vec![AuthoredRequirement {
+                        symbol: "$requirement".to_owned(),
+                        name: Name::new("storage").expect("fixture name"),
+                        interface: AuthoredDeclarationReference::Exact {
+                            package: PackageId::migrate(b"protocol-package", 1),
+                            declaration: DeclarationId::allocate(b"protocol-interface", 1),
+                        },
+                        operations: Vec::new(),
+                        limits: vec![AuthoredResourceLimit {
+                            name: Name::new("bytes").expect("fixture name"),
+                            maximum: u64::MAX,
+                            unit: ResourceUnit::Bytes,
+                        }],
+                    }],
+                    ports: Vec::new(),
+                }],
+                budget: ChangeBudget::default(),
+            },
+            intent: None,
+        };
+        let unsigned_bytes = unsigned_request.encode_json().expect("request JSON");
+        assert_eq!(
+            AuthoredChangeRequest::decode_json(&unsigned_bytes).unwrap(),
+            unsigned_request
+        );
+
+        let mut nested_type = r#"{"kind":"unit"}"#.to_owned();
+        for _ in 0..=MAXIMUM_AUTHORED_JSON_DEPTH {
+            nested_type = format!(r#"{{"kind":"list","item":{nested_type}}}"#);
+        }
+        let deep_request = format!(
+            r#"{{"contract":"lkjscript-change-5","base":"{}","changes":[{{"op":"create_function","as":"$function","module":{{"by":"symbol","symbol":"$module"}},"name":"function","visibility":"private","result":{nested_type},"effect":{{"kind":"pure"}},"body":{{"operation":{{"kind":"unit"}}}}}}]}}"#,
+            RevisionId::from_digest([5; 32])
+        );
+        assert_eq!(
+            AuthoredChangeRequest::decode_json(deep_request.as_bytes())
+                .expect_err("excessive request nesting must reject")
                 .code,
             "change_protocol_request_json"
         );
