@@ -1,5 +1,16 @@
 //! High-level Graph 5 authored intent lowered to exact primitive owner edits.
 
+mod creation;
+
+pub use creation::{
+    AuthoredBindingDefinition, AuthoredCaseReference, AuthoredDeclarationReference,
+    AuthoredExpression, AuthoredExpressionOperation, AuthoredFieldReference, AuthoredFieldSelector,
+    AuthoredFunctionEffect, AuthoredLetBinding, AuthoredLocalReference, AuthoredMapExpressionEntry,
+    AuthoredMatchExpressionArm, AuthoredOperationReference, AuthoredParameter,
+    AuthoredRecordExpressionField, AuthoredRequirementReference, AuthoredStructuralTypeField,
+    AuthoredType, AuthoredTypeParameter, AuthoredTypeParameterReference,
+};
+
 use super::{
     CanonicalBaseRead, CanonicalReadWork, PrimitiveEdit, WitnessBaseRead, WitnessReadWork,
 };
@@ -7,9 +18,12 @@ use crate::platform::contract::registry::CHANGE_ALLOCATION_SEED_DOMAIN;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     ExpressionOperation, ExpressionRecord, ModuleRecord, Name, NamespaceClass, OwnerHeader,
-    OwnerKey, OwnerKind, OwnerRecord, encode_owner,
+    OwnerKey, OwnerKind, OwnerRecord, TypeObjectInterner, encode_owner,
 };
-use crate::platform::semantic_id::{ExpressionId, ModuleId, RevisionId};
+use crate::platform::semantic_id::{
+    BindingId, CaseId, DeclarationId, ExpressionId, FieldId, ModuleId, OperationId, ParameterId,
+    RequirementId, RevisionId, TypeParameterId,
+};
 use crate::platform::witness::NamespaceKey;
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
@@ -33,6 +47,29 @@ pub enum AuthoredChange {
         #[serde(rename = "as")]
         symbol: String,
         name: Name,
+    },
+    CreateFunction {
+        #[serde(rename = "as")]
+        symbol: String,
+        module: ModuleSelector,
+        name: Name,
+        visibility: crate::platform::kernel::DeclarationVisibility,
+        #[serde(default)]
+        type_parameters: Vec<AuthoredTypeParameter>,
+        #[serde(default)]
+        parameters: Vec<AuthoredParameter>,
+        result: AuthoredType,
+        effect: AuthoredFunctionEffect,
+        body: AuthoredExpression,
+    },
+    CreateTest {
+        #[serde(rename = "as")]
+        symbol: String,
+        module: ModuleSelector,
+        name: Name,
+        visibility: crate::platform::kernel::DeclarationVisibility,
+        actual: AuthoredExpression,
+        expected: AuthoredExpression,
     },
     RenameOwner {
         owner: OwnerSelector,
@@ -75,6 +112,64 @@ pub enum DeclarationSelector {
         module: ModuleSelector,
         name: Name,
     },
+    Symbol {
+        symbol: String,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(super) enum SymbolKind {
+    Module,
+    Declaration,
+    TypeParameter,
+    Field,
+    Case,
+    Operation,
+    FunctionParameter,
+    OperationParameter,
+    LexicalBinding,
+    MatchPayloadBinding,
+    TransactionBinding,
+    Expression,
+    Requirement,
+}
+
+impl SymbolKind {
+    const fn allocation_domain(self) -> u8 {
+        match self {
+            Self::Module => 1,
+            Self::Declaration => 2,
+            Self::TypeParameter => 3,
+            Self::Field => 4,
+            Self::Case => 5,
+            Self::Operation => 6,
+            Self::FunctionParameter | Self::OperationParameter => 7,
+            Self::LexicalBinding | Self::MatchPayloadBinding | Self::TransactionBinding => 8,
+            Self::Expression => 9,
+            Self::Requirement => 10,
+        }
+    }
+
+    fn allocate(self, seed: &[u8], ordinal: u64) -> OwnerKey {
+        match self {
+            Self::Module => OwnerKey::Module(ModuleId::allocate(seed, ordinal)),
+            Self::Declaration => OwnerKey::Declaration(DeclarationId::allocate(seed, ordinal)),
+            Self::TypeParameter => {
+                OwnerKey::TypeParameter(TypeParameterId::allocate(seed, ordinal))
+            }
+            Self::Field => OwnerKey::Field(FieldId::allocate(seed, ordinal)),
+            Self::Case => OwnerKey::Case(CaseId::allocate(seed, ordinal)),
+            Self::Operation => OwnerKey::Operation(OperationId::allocate(seed, ordinal)),
+            Self::FunctionParameter | Self::OperationParameter => {
+                OwnerKey::Parameter(ParameterId::allocate(seed, ordinal))
+            }
+            Self::LexicalBinding | Self::MatchPayloadBinding | Self::TransactionBinding => {
+                OwnerKey::Binding(BindingId::allocate(seed, ordinal))
+            }
+            Self::Expression => OwnerKey::Expression(ExpressionId::allocate(seed, ordinal)),
+            Self::Requirement => OwnerKey::Requirement(RequirementId::allocate(seed, ordinal)),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -124,38 +219,66 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
     }
 
     let seed = allocation_seed(base, request, idempotency_key)?;
-    let creations = collect_module_creations(request)?;
-    let mut allocated = BTreeMap::new();
-    for (index, symbol) in creations.keys().enumerate() {
-        let ordinal = u64::try_from(index)
-            .ok()
-            .and_then(|value| value.checked_add(1))
-            .ok_or_else(|| {
-                request_error(
-                    DiagnosticClass::Resource,
-                    "change_authored_allocation_ordinal",
-                    "request-local allocation ordinal was exhausted",
-                )
-            })?;
-        allocated.insert(
-            symbol.clone(),
-            OwnerKey::Module(ModuleId::allocate(&seed, ordinal)),
-        );
-    }
-
-    let mut lowerer = AuthoredLowerer::new(base, witness, allocated);
-    for (symbol, name) in creations {
-        let OwnerKey::Module(module) = lowerer.allocated[&symbol] else {
-            unreachable!("module creation allocation has a fixed typed domain")
-        };
-        lowerer.insert_created(OwnerRecord::Module(ModuleRecord {
-            header: OwnerHeader::new(OwnerKey::Module(module), OwnerKind::Module),
-            name,
-        }))?;
+    let definitions = collect_symbol_definitions(request)?;
+    let allocated = allocate_symbols(&seed, &definitions)?;
+    let mut lowerer = AuthoredLowerer::new(base, witness, seed, allocated, definitions)?;
+    for change in &request.changes {
+        if let AuthoredChange::CreateModule { symbol, name } = change {
+            let module = lowerer.module_symbol(symbol)?;
+            lowerer.insert_created(OwnerRecord::Module(ModuleRecord {
+                header: OwnerHeader::new(OwnerKey::Module(module), OwnerKind::Module),
+                name: name.clone(),
+            }))?;
+        }
     }
     for change in &request.changes {
         match change {
-            AuthoredChange::CreateModule { .. } => {}
+            AuthoredChange::CreateFunction {
+                symbol,
+                module,
+                name,
+                visibility,
+                type_parameters,
+                parameters,
+                result,
+                effect,
+                body,
+            } => creation::lower_function(
+                &mut lowerer,
+                symbol,
+                module,
+                name,
+                *visibility,
+                type_parameters,
+                parameters,
+                result,
+                effect,
+                body,
+            )?,
+            AuthoredChange::CreateTest {
+                symbol,
+                module,
+                name,
+                visibility,
+                actual,
+                expected,
+            } => creation::lower_test(
+                &mut lowerer,
+                symbol,
+                module,
+                name,
+                *visibility,
+                actual,
+                expected,
+            )?,
+            _ => {}
+        }
+    }
+    for change in &request.changes {
+        match change {
+            AuthoredChange::CreateModule { .. }
+            | AuthoredChange::CreateFunction { .. }
+            | AuthoredChange::CreateTest { .. } => {}
             AuthoredChange::RenameOwner { owner, name } => {
                 let owner = lowerer.resolve_owner(owner)?;
                 rename_owner(lowerer.candidate_mut(owner)?, name.clone())?;
@@ -198,23 +321,76 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
     lowerer.finish()
 }
 
-fn collect_module_creations(
+fn collect_symbol_definitions(
     request: &AuthoredChangeSet,
-) -> Result<BTreeMap<String, Name>, Diagnostic> {
-    let mut creations = BTreeMap::new();
+) -> Result<BTreeMap<String, SymbolKind>, Diagnostic> {
+    let mut definitions = BTreeMap::new();
     for change in &request.changes {
-        if let AuthoredChange::CreateModule { symbol, name } = change {
-            validate_symbol(symbol)?;
-            if creations.insert(symbol.clone(), name.clone()).is_some() {
-                return Err(request_error(
-                    DiagnosticClass::Source,
-                    "change_authored_symbol_duplicate",
-                    format!("request-local symbol {symbol} is defined more than once"),
-                ));
+        match change {
+            AuthoredChange::CreateModule { symbol, .. } => {
+                define_symbol(&mut definitions, symbol, SymbolKind::Module)?;
             }
+            AuthoredChange::CreateFunction {
+                symbol,
+                type_parameters,
+                parameters,
+                body,
+                ..
+            } => creation::collect_function_symbols(
+                symbol,
+                type_parameters,
+                parameters,
+                body,
+                &mut definitions,
+            )?,
+            AuthoredChange::CreateTest {
+                symbol,
+                actual,
+                expected,
+                ..
+            } => creation::collect_test_symbols(symbol, actual, expected, &mut definitions)?,
+            AuthoredChange::RenameOwner { .. }
+            | AuthoredChange::MoveDeclaration { .. }
+            | AuthoredChange::ReplaceExpression { .. } => {}
         }
     }
-    Ok(creations)
+    Ok(definitions)
+}
+
+pub(super) fn define_symbol(
+    definitions: &mut BTreeMap<String, SymbolKind>,
+    symbol: &str,
+    kind: SymbolKind,
+) -> Result<(), Diagnostic> {
+    validate_symbol(symbol)?;
+    if definitions.insert(symbol.to_owned(), kind).is_some() {
+        return Err(request_error(
+            DiagnosticClass::Source,
+            "change_authored_symbol_duplicate",
+            format!("request-local symbol {symbol} is defined more than once"),
+        ));
+    }
+    Ok(())
+}
+
+fn allocate_symbols(
+    seed: &[u8],
+    definitions: &BTreeMap<String, SymbolKind>,
+) -> Result<BTreeMap<String, OwnerKey>, Diagnostic> {
+    let mut ordinals = BTreeMap::<u8, u64>::new();
+    let mut allocated = BTreeMap::new();
+    for (symbol, kind) in definitions {
+        let ordinal = ordinals.entry(kind.allocation_domain()).or_default();
+        *ordinal = ordinal.checked_add(1).ok_or_else(|| {
+            request_error(
+                DiagnosticClass::Resource,
+                "change_authored_allocation_ordinal",
+                "request-local allocation ordinal was exhausted",
+            )
+        })?;
+        allocated.insert(symbol.clone(), kind.allocate(seed, *ordinal));
+    }
+    Ok(allocated)
 }
 
 fn allocation_seed<B: CanonicalBaseRead + ?Sized>(
@@ -255,12 +431,26 @@ fn allocation_seed<B: CanonicalBaseRead + ?Sized>(
         })?;
     debug_assert_eq!(written, encoded_bytes);
     let idempotency = idempotency_key.unwrap_or_default().as_bytes();
+    let request_length = u64::try_from(bytes.len()).map_err(|_| {
+        request_error(
+            DiagnosticClass::Resource,
+            "change_authored_length",
+            "authored change byte length exceeds its canonical allocation domain",
+        )
+    })?;
+    let idempotency_length = u64::try_from(idempotency.len()).map_err(|_| {
+        request_error(
+            DiagnosticClass::Resource,
+            "change_authored_idempotency_length",
+            "idempotency identity byte length exceeds its canonical allocation domain",
+        )
+    })?;
     let mut hasher = blake3::Hasher::new_derive_key(CHANGE_ALLOCATION_SEED_DOMAIN);
     hasher.update(&base.repository_id().bytes());
     hasher.update(&request.base.bytes());
-    hasher.update(&(bytes.len() as u64).to_be_bytes());
+    hasher.update(&request_length.to_be_bytes());
     hasher.update(&bytes);
-    hasher.update(&(idempotency.len() as u64).to_be_bytes());
+    hasher.update(&idempotency_length.to_be_bytes());
     hasher.update(idempotency);
     Ok(*hasher.finalize().as_bytes())
 }
@@ -273,22 +463,50 @@ struct WorkingOwner {
 struct AuthoredLowerer<'a, B: ?Sized, W: ?Sized> {
     base: &'a B,
     witness: &'a W,
+    allocation_seed: [u8; 32],
     allocated: BTreeMap<String, OwnerKey>,
+    definitions: BTreeMap<String, SymbolKind>,
     owners: BTreeMap<OwnerKey, WorkingOwner>,
     namespace: BTreeMap<NamespaceKey, Option<OwnerKey>>,
+    types: TypeObjectInterner,
+    next_anonymous_expression_ordinal: u64,
     work: AuthoredLoweringWork,
 }
 
 impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer<'a, B, W> {
-    fn new(base: &'a B, witness: &'a W, allocated: BTreeMap<String, OwnerKey>) -> Self {
-        Self {
+    fn new(
+        base: &'a B,
+        witness: &'a W,
+        allocation_seed: [u8; 32],
+        allocated: BTreeMap<String, OwnerKey>,
+        definitions: BTreeMap<String, SymbolKind>,
+    ) -> Result<Self, Diagnostic> {
+        let expression_symbol_count = definitions
+            .values()
+            .filter(|kind| **kind == SymbolKind::Expression)
+            .count();
+        let next_anonymous_expression_ordinal = u64::try_from(expression_symbol_count)
+            .ok()
+            .and_then(|count| count.checked_add(1))
+            .ok_or_else(|| {
+                request_error(
+                    DiagnosticClass::Resource,
+                    "change_authored_expression_ordinal",
+                    "expression allocation ordinal was exhausted",
+                )
+            })?;
+        Ok(Self {
             base,
             witness,
+            allocation_seed,
             allocated,
+            definitions,
             owners: BTreeMap::new(),
             namespace: BTreeMap::new(),
+            types: TypeObjectInterner::default(),
+            next_anonymous_expression_ordinal,
             work: AuthoredLoweringWork::default(),
-        }
+        })
     }
 
     fn insert_created(&mut self, record: OwnerRecord) -> Result<(), Diagnostic> {
@@ -363,6 +581,9 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                     name: name.clone(),
                 })?
             }
+            DeclarationSelector::Symbol { symbol } => {
+                self.symbol_owner(symbol, SymbolKind::Declaration)?
+            }
         };
         self.require_owner(owner)?;
         match owner {
@@ -384,6 +605,141 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 format!("request-local symbol {symbol} has no unique definition"),
             )
         })
+    }
+
+    fn symbol_kind(&self, symbol: &str) -> Result<SymbolKind, Diagnostic> {
+        validate_symbol(symbol)?;
+        self.definitions.get(symbol).copied().ok_or_else(|| {
+            request_error(
+                DiagnosticClass::Source,
+                "change_authored_symbol_missing",
+                format!("request-local symbol {symbol} has no unique definition"),
+            )
+        })
+    }
+
+    fn symbol_owner(&self, symbol: &str, expected: SymbolKind) -> Result<OwnerKey, Diagnostic> {
+        let actual = self.symbol_kind(symbol)?;
+        if actual != expected {
+            return Err(request_error(
+                DiagnosticClass::Semantic,
+                "change_authored_symbol_kind",
+                format!("request-local symbol {symbol} has kind {actual:?}, expected {expected:?}"),
+            ));
+        }
+        self.resolve_symbol(symbol)
+    }
+
+    fn module_symbol(&self, symbol: &str) -> Result<ModuleId, Diagnostic> {
+        match self.symbol_owner(symbol, SymbolKind::Module)? {
+            OwnerKey::Module(value) => Ok(value),
+            _ => Err(symbol_domain_corrupt(symbol)),
+        }
+    }
+
+    fn declaration_symbol(&self, symbol: &str) -> Result<DeclarationId, Diagnostic> {
+        match self.symbol_owner(symbol, SymbolKind::Declaration)? {
+            OwnerKey::Declaration(value) => Ok(value),
+            _ => Err(symbol_domain_corrupt(symbol)),
+        }
+    }
+
+    fn type_parameter_symbol(&self, symbol: &str) -> Result<TypeParameterId, Diagnostic> {
+        match self.symbol_owner(symbol, SymbolKind::TypeParameter)? {
+            OwnerKey::TypeParameter(value) => Ok(value),
+            _ => Err(symbol_domain_corrupt(symbol)),
+        }
+    }
+
+    fn field_symbol(&self, symbol: &str) -> Result<FieldId, Diagnostic> {
+        match self.symbol_owner(symbol, SymbolKind::Field)? {
+            OwnerKey::Field(value) => Ok(value),
+            _ => Err(symbol_domain_corrupt(symbol)),
+        }
+    }
+
+    fn case_symbol(&self, symbol: &str) -> Result<CaseId, Diagnostic> {
+        match self.symbol_owner(symbol, SymbolKind::Case)? {
+            OwnerKey::Case(value) => Ok(value),
+            _ => Err(symbol_domain_corrupt(symbol)),
+        }
+    }
+
+    fn operation_symbol(&self, symbol: &str) -> Result<OperationId, Diagnostic> {
+        match self.symbol_owner(symbol, SymbolKind::Operation)? {
+            OwnerKey::Operation(value) => Ok(value),
+            _ => Err(symbol_domain_corrupt(symbol)),
+        }
+    }
+
+    fn function_parameter_symbol(&self, symbol: &str) -> Result<ParameterId, Diagnostic> {
+        match self.symbol_owner(symbol, SymbolKind::FunctionParameter)? {
+            OwnerKey::Parameter(value) => Ok(value),
+            _ => Err(symbol_domain_corrupt(symbol)),
+        }
+    }
+
+    fn operation_parameter_symbol(&self, symbol: &str) -> Result<ParameterId, Diagnostic> {
+        match self.symbol_owner(symbol, SymbolKind::OperationParameter)? {
+            OwnerKey::Parameter(value) => Ok(value),
+            _ => Err(symbol_domain_corrupt(symbol)),
+        }
+    }
+
+    fn lexical_binding_symbol(&self, symbol: &str) -> Result<BindingId, Diagnostic> {
+        match self.symbol_owner(symbol, SymbolKind::LexicalBinding)? {
+            OwnerKey::Binding(value) => Ok(value),
+            _ => Err(symbol_domain_corrupt(symbol)),
+        }
+    }
+
+    fn match_payload_symbol(&self, symbol: &str) -> Result<BindingId, Diagnostic> {
+        match self.symbol_owner(symbol, SymbolKind::MatchPayloadBinding)? {
+            OwnerKey::Binding(value) => Ok(value),
+            _ => Err(symbol_domain_corrupt(symbol)),
+        }
+    }
+
+    fn transaction_binding_symbol(&self, symbol: &str) -> Result<BindingId, Diagnostic> {
+        match self.symbol_owner(symbol, SymbolKind::TransactionBinding)? {
+            OwnerKey::Binding(value) => Ok(value),
+            _ => Err(symbol_domain_corrupt(symbol)),
+        }
+    }
+
+    fn requirement_symbol(&self, symbol: &str) -> Result<RequirementId, Diagnostic> {
+        match self.symbol_owner(symbol, SymbolKind::Requirement)? {
+            OwnerKey::Requirement(value) => Ok(value),
+            _ => Err(symbol_domain_corrupt(symbol)),
+        }
+    }
+
+    fn resolve_creation_declaration(
+        &mut self,
+        selector: &DeclarationSelector,
+    ) -> Result<DeclarationId, Diagnostic> {
+        match selector {
+            DeclarationSelector::Symbol { symbol } => self.declaration_symbol(symbol),
+            _ => self.resolve_declaration(selector),
+        }
+    }
+
+    fn expression_identity(&mut self, symbol: Option<&str>) -> Result<ExpressionId, Diagnostic> {
+        if let Some(symbol) = symbol {
+            return match self.symbol_owner(symbol, SymbolKind::Expression)? {
+                OwnerKey::Expression(value) => Ok(value),
+                _ => Err(symbol_domain_corrupt(symbol)),
+            };
+        }
+        let ordinal = self.next_anonymous_expression_ordinal;
+        self.next_anonymous_expression_ordinal = ordinal.checked_add(1).ok_or_else(|| {
+            request_error(
+                DiagnosticClass::Resource,
+                "change_authored_expression_ordinal",
+                "anonymous expression allocation ordinal was exhausted",
+            )
+        })?;
+        Ok(ExpressionId::allocate(&self.allocation_seed, ordinal))
     }
 
     fn namespace_owner(&mut self, key: NamespaceKey) -> Result<OwnerKey, Diagnostic> {
@@ -441,6 +797,9 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
 
     fn finish(self) -> Result<AuthoredLowering, Diagnostic> {
         let mut edits = Vec::new();
+        for (digest, object) in self.types.into_objects() {
+            edits.push(PrimitiveEdit::AddTypeObject { digest, object });
+        }
         for (_, working) in self.owners {
             let (after, _) = encode_owner(&working.record)?;
             match working.before {
@@ -512,4 +871,12 @@ fn request_error(
     message: impl Into<String>,
 ) -> Diagnostic {
     Diagnostic::new(class, code, message)
+}
+
+fn symbol_domain_corrupt(symbol: &str) -> Diagnostic {
+    request_error(
+        DiagnosticClass::Corrupt,
+        "change_authored_symbol_domain",
+        format!("request-local symbol {symbol} disagrees with its allocated identity domain"),
+    )
 }

@@ -1,13 +1,20 @@
 use super::*;
 use crate::platform::change::{
-    AuthoredChange, AuthoredChangeSet, CanonicalDelta, DeclarationSelector, KernelOverlay,
+    AuthoredBindingDefinition, AuthoredCaseReference, AuthoredChange, AuthoredChangeSet,
+    AuthoredDeclarationReference, AuthoredExpression, AuthoredExpressionOperation,
+    AuthoredFieldReference, AuthoredFieldSelector, AuthoredFunctionEffect, AuthoredLetBinding,
+    AuthoredLocalReference, AuthoredMapExpressionEntry, AuthoredMatchExpressionArm,
+    AuthoredOperationReference, AuthoredParameter, AuthoredRecordExpressionField,
+    AuthoredRequirementReference, AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameter,
+    AuthoredTypeParameterReference, CanonicalDelta, DeclarationSelector, KernelOverlay,
     ModuleSelector, OwnerSelector, PrimitiveEdit, derive_local_delta, derive_summary_delta,
     derive_test_dependency_delta, plan_impact_and_summaries, prepare_change_analysis,
     validate_incremental_frontier, validate_structural_frontier,
 };
 use crate::platform::kernel::{
-    DeclarationPayload, ExactOwnerKey, ExpressionOperation, LocalValueReference, Name,
-    NamespaceClass, OwnerKey, OwnerRecord, PackageId, RelationEndpoint, encode_owner,
+    DeclarationPayload, DeclarationVisibility, ExactOwnerKey, ExpressionOperation,
+    LocalValueReference, Name, NamespaceClass, OwnerKey, OwnerRecord, PackageId, RelationEndpoint,
+    TypeForm, encode_owner,
 };
 use crate::platform::semantic_id::DeclarationId;
 use crate::platform::storage::object::{ObjectDomain, ObjectKey};
@@ -1063,6 +1070,657 @@ fn authored_request_rejects_invalid_symbols_kinds_and_empty_work() {
 }
 
 #[test]
+fn authored_request_creates_a_typed_function_and_test_from_forward_references() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let request = AuthoredChangeSet {
+        base: created.current.head.revision,
+        changes: vec![
+            AuthoredChange::CreateTest {
+                symbol: "$identity_test".to_owned(),
+                module: ModuleSelector::Symbol {
+                    symbol: "$authored".to_owned(),
+                },
+                name: Name::new("identity_test").unwrap(),
+                visibility: DeclarationVisibility::Private,
+                actual: AuthoredExpression {
+                    symbol: Some("$test_actual".to_owned()),
+                    operation: AuthoredExpressionOperation::Call {
+                        function: AuthoredDeclarationReference::Local {
+                            declaration: DeclarationSelector::Symbol {
+                                symbol: "$identity".to_owned(),
+                            },
+                        },
+                        type_arguments: Vec::new(),
+                        arguments: vec![AuthoredExpression {
+                            symbol: None,
+                            operation: AuthoredExpressionOperation::Bool { value: true },
+                        }],
+                    },
+                },
+                expected: AuthoredExpression {
+                    symbol: Some("$test_expected".to_owned()),
+                    operation: AuthoredExpressionOperation::Bool { value: true },
+                },
+            },
+            AuthoredChange::CreateFunction {
+                symbol: "$identity".to_owned(),
+                module: ModuleSelector::Symbol {
+                    symbol: "$authored".to_owned(),
+                },
+                name: Name::new("identity").unwrap(),
+                visibility: DeclarationVisibility::Package,
+                type_parameters: Vec::new(),
+                parameters: vec![AuthoredParameter {
+                    symbol: "$input".to_owned(),
+                    name: Name::new("input").unwrap(),
+                    ty: AuthoredType::Bool,
+                }],
+                result: AuthoredType::Bool,
+                effect: AuthoredFunctionEffect::Pure,
+                body: AuthoredExpression {
+                    symbol: Some("$function_body".to_owned()),
+                    operation: AuthoredExpressionOperation::Local {
+                        value: AuthoredLocalReference::Symbol {
+                            symbol: "$input".to_owned(),
+                        },
+                    },
+                },
+            },
+            AuthoredChange::CreateModule {
+                symbol: "$authored".to_owned(),
+                name: Name::new("authored").unwrap(),
+            },
+        ],
+    };
+    let prepared = created
+        .repository
+        .prepare_authored_change(&request, PublicationOptions::default())
+        .expect("prepare function and test creation");
+    assert_eq!(prepared.publication.receipt.counts.owners_created, 8);
+    assert_eq!(prepared.publication.receipt.counts.owners_updated, 0);
+    assert_eq!(prepared.publication.receipt.counts.type_objects_added, 1);
+    assert_eq!(prepared.publication.receipt.validation.tests_selected, 1);
+    assert_eq!(prepared.allocated.len(), 7);
+    assert!(matches!(
+        created
+            .repository
+            .publish(&prepared.publication)
+            .expect("publish function and test creation"),
+        PublicationOutcome::Accepted { .. }
+    ));
+
+    let view = created.repository.view_current().expect("advanced view");
+    let function = prepared.allocated["$identity"];
+    let test = prepared.allocated["$identity_test"];
+    let parameter = prepared.allocated["$input"];
+    let body = prepared.allocated["$function_body"];
+    let actual = prepared.allocated["$test_actual"];
+    let expected = prepared.allocated["$test_expected"];
+    let module = prepared.allocated["$authored"];
+    let Some(OwnerRecord::Declaration(function_record)) = view.owner(function).unwrap().value
+    else {
+        panic!("created function must be readable")
+    };
+    let DeclarationPayload::Function(function_payload) = function_record.payload else {
+        panic!("created declaration must retain function payload")
+    };
+    assert_eq!(OwnerKey::Expression(function_payload.body), body);
+    assert_eq!(
+        function_record.module,
+        match module {
+            OwnerKey::Module(module) => module,
+            _ => panic!("module allocation has a foreign domain"),
+        }
+    );
+    let Some(OwnerRecord::Parameter(parameter_record)) = view.owner(parameter).unwrap().value
+    else {
+        panic!("created parameter must be readable")
+    };
+    assert_eq!(parameter_record.ty, function_payload.result);
+    assert_eq!(
+        view.type_object(function_payload.result)
+            .unwrap()
+            .value
+            .unwrap()
+            .form,
+        TypeForm::Bool
+    );
+    let Some(OwnerRecord::Expression(body_record)) = view.owner(body).unwrap().value else {
+        panic!("created function body must be readable")
+    };
+    assert_eq!(
+        body_record.operation,
+        ExpressionOperation::Local {
+            value: LocalValueReference::FunctionParameter(match parameter {
+                OwnerKey::Parameter(parameter) => parameter,
+                _ => panic!("parameter allocation has a foreign domain"),
+            }),
+        }
+    );
+    let Some(OwnerRecord::Declaration(test_record)) = view.owner(test).unwrap().value else {
+        panic!("created test must be readable")
+    };
+    let DeclarationPayload::Test {
+        actual: test_actual,
+        expected: test_expected,
+        ..
+    } = test_record.payload
+    else {
+        panic!("created declaration must retain test payload")
+    };
+    assert_eq!(OwnerKey::Expression(test_actual), actual);
+    assert_eq!(OwnerKey::Expression(test_expected), expected);
+    let Some(OwnerRecord::Expression(actual_record)) = view.owner(actual).unwrap().value else {
+        panic!("created test actual must be readable")
+    };
+    let ExpressionOperation::Call {
+        function: called,
+        arguments,
+        ..
+    } = actual_record.operation
+    else {
+        panic!("created test actual must remain a call")
+    };
+    assert_eq!(OwnerKey::Declaration(called.declaration), function);
+    assert_eq!(arguments.len(), 1);
+    assert!(
+        view.owner(OwnerKey::Expression(arguments[0]))
+            .unwrap()
+            .value
+            .is_some()
+    );
+}
+
+#[test]
+fn authored_type_builder_interns_every_graph_five_type_form() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let package = created.current.semantic_root.package_id;
+    let payload =
+        authored_exact_declaration(package, owner_named(&created.initial.snapshot, "Payload"));
+    let parameters = vec![
+        authored_parameter("$p_unit", "p_unit", AuthoredType::Unit),
+        authored_parameter("$p_bool", "p_bool", AuthoredType::Bool),
+        authored_parameter("$p_i64", "p_i64", AuthoredType::I64),
+        authored_parameter("$p_bytes", "p_bytes", AuthoredType::Bytes),
+        authored_parameter("$p_text", "p_text", AuthoredType::Text),
+        authored_parameter("$p_static_text", "p_static_text", AuthoredType::StaticText),
+        authored_parameter("$p_secret", "p_secret", AuthoredType::Secret),
+        authored_parameter(
+            "$p_type_parameter",
+            "p_type_parameter",
+            AuthoredType::TypeParameter {
+                parameter: AuthoredTypeParameterReference::Symbol {
+                    symbol: "$type_parameter".to_owned(),
+                },
+            },
+        ),
+        authored_parameter(
+            "$p_named",
+            "p_named",
+            AuthoredType::Named {
+                declaration: payload,
+            },
+        ),
+        authored_parameter(
+            "$p_structural",
+            "p_structural",
+            AuthoredType::StructuralRecord {
+                fields: vec![AuthoredStructuralTypeField {
+                    name: Name::new("value").unwrap(),
+                    ty: AuthoredType::Unit,
+                }],
+            },
+        ),
+        authored_parameter(
+            "$p_list",
+            "p_list",
+            AuthoredType::List {
+                item: Box::new(AuthoredType::Unit),
+            },
+        ),
+        authored_parameter(
+            "$p_map",
+            "p_map",
+            AuthoredType::Map {
+                key: Box::new(AuthoredType::Bool),
+                value: Box::new(AuthoredType::Unit),
+            },
+        ),
+        authored_parameter(
+            "$p_option",
+            "p_option",
+            AuthoredType::Option {
+                item: Box::new(AuthoredType::I64),
+            },
+        ),
+        authored_parameter(
+            "$p_result",
+            "p_result",
+            AuthoredType::Result {
+                ok: Box::new(AuthoredType::Text),
+                error: Box::new(AuthoredType::Bytes),
+            },
+        ),
+        authored_parameter(
+            "$p_stream",
+            "p_stream",
+            AuthoredType::Stream {
+                item: Box::new(AuthoredType::Unit),
+            },
+        ),
+        authored_parameter(
+            "$p_function",
+            "p_function",
+            AuthoredType::Function {
+                parameters: vec![AuthoredType::Bool],
+                result: Box::new(AuthoredType::Unit),
+            },
+        ),
+    ];
+    let request = AuthoredChangeSet {
+        base: created.current.head.revision,
+        changes: vec![AuthoredChange::CreateFunction {
+            symbol: "$type_builder".to_owned(),
+            module: ModuleSelector::Name {
+                name: Name::new("second").unwrap(),
+            },
+            name: Name::new("type_builder").unwrap(),
+            visibility: DeclarationVisibility::Private,
+            type_parameters: vec![AuthoredTypeParameter {
+                symbol: "$type_parameter".to_owned(),
+                name: Name::new("T").unwrap(),
+            }],
+            parameters,
+            result: AuthoredType::Unit,
+            effect: AuthoredFunctionEffect::Pure,
+            body: AuthoredExpression {
+                symbol: Some("$type_body".to_owned()),
+                operation: AuthoredExpressionOperation::Unit,
+            },
+        }],
+    };
+    let prepared = created
+        .repository
+        .prepare_authored_change(&request, PublicationOptions::default())
+        .expect("every type form must lower and validate");
+    // The base fixture already owns canonical `unit`; all other requested shapes are new.
+    assert_eq!(prepared.publication.receipt.counts.type_objects_added, 15);
+    assert_eq!(prepared.publication.receipt.counts.owners_created, 19);
+    assert!(matches!(
+        created
+            .repository
+            .publish(&prepared.publication)
+            .expect("publish all type forms"),
+        PublicationOutcome::Accepted { .. }
+    ));
+
+    let view = created.repository.view_current().expect("advanced view");
+    let mut observed = std::collections::BTreeSet::new();
+    for symbol in [
+        "$p_unit",
+        "$p_bool",
+        "$p_i64",
+        "$p_bytes",
+        "$p_text",
+        "$p_static_text",
+        "$p_secret",
+        "$p_type_parameter",
+        "$p_named",
+        "$p_structural",
+        "$p_list",
+        "$p_map",
+        "$p_option",
+        "$p_result",
+        "$p_stream",
+        "$p_function",
+    ] {
+        let owner = prepared.allocated[symbol];
+        let Some(OwnerRecord::Parameter(parameter)) = view.owner(owner).unwrap().value else {
+            panic!("created type-form parameter must remain readable")
+        };
+        let form = view.type_object(parameter.ty).unwrap().value.unwrap().form;
+        observed.insert(match form {
+            TypeForm::Unit => "unit",
+            TypeForm::Bool => "bool",
+            TypeForm::I64 => "i64",
+            TypeForm::Bytes => "bytes",
+            TypeForm::Text => "text",
+            TypeForm::StaticText => "static_text",
+            TypeForm::Secret => "secret",
+            TypeForm::TypeParameter { .. } => "type_parameter",
+            TypeForm::Named { .. } => "named",
+            TypeForm::StructuralRecord { .. } => "structural_record",
+            TypeForm::List { .. } => "list",
+            TypeForm::Map { .. } => "map",
+            TypeForm::Option { .. } => "option",
+            TypeForm::Result { .. } => "result",
+            TypeForm::Stream { .. } => "stream",
+            TypeForm::Function { .. } => "function",
+        });
+    }
+    assert_eq!(observed.len(), 16);
+}
+
+#[test]
+fn authored_expression_builder_covers_every_graph_five_operation() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let package = created.current.semantic_root.package_id;
+    let callee = owner_named(&created.initial.snapshot, "callee");
+    let constant = owner_named(&created.initial.snapshot, "unit_constant");
+    let record = owner_named(&created.initial.snapshot, "Payload");
+    let field = field_named(&created.initial.snapshot, "value");
+    let case = case_named(&created.initial.snapshot, "Ready");
+    let requirement = requirement_named(&created.initial.snapshot, "store");
+    let operation = operation_named(&created.initial.snapshot, "read");
+    let callee_reference = authored_exact_declaration(package, callee);
+    let record_reference = authored_exact_declaration(package, record);
+    let constant_reference = authored_exact_declaration(package, constant);
+    let field_reference = AuthoredFieldReference::Exact {
+        package,
+        field: match field {
+            OwnerKey::Field(field) => field,
+            _ => panic!("field helper returned a foreign owner"),
+        },
+    };
+    let case_reference = AuthoredCaseReference::Exact {
+        package,
+        case: match case {
+            OwnerKey::Case(case) => case,
+            _ => panic!("case helper returned a foreign owner"),
+        },
+    };
+    let requirement_reference = AuthoredRequirementReference::Exact {
+        package,
+        requirement: match requirement {
+            OwnerKey::Requirement(requirement) => requirement,
+            _ => panic!("requirement helper returned a foreign owner"),
+        },
+    };
+    let operation_reference = AuthoredOperationReference::Exact {
+        package,
+        operation: match operation {
+            OwnerKey::Operation(operation) => operation,
+            _ => panic!("operation helper returned a foreign owner"),
+        },
+    };
+    let nominal_record = |symbol: &str| AuthoredExpression {
+        symbol: Some(symbol.to_owned()),
+        operation: AuthoredExpressionOperation::Record {
+            nominal_type: Some(record_reference.clone()),
+            fields: vec![AuthoredRecordExpressionField {
+                selector: AuthoredFieldSelector::Nominal {
+                    field: field_reference.clone(),
+                },
+                value: authored_expression(AuthoredExpressionOperation::Unit),
+            }],
+        },
+    };
+    let variant = |symbol: &str| AuthoredExpression {
+        symbol: Some(symbol.to_owned()),
+        operation: AuthoredExpressionOperation::Variant {
+            case: case_reference.clone(),
+            payload: None,
+        },
+    };
+    let pure_body = AuthoredExpression {
+        symbol: Some("$pure_body".to_owned()),
+        operation: AuthoredExpressionOperation::Sequence {
+            items: vec![
+                authored_expression(AuthoredExpressionOperation::Unit),
+                authored_expression(AuthoredExpressionOperation::Bool { value: true }),
+                authored_expression(AuthoredExpressionOperation::I64 { value: 7 }),
+                authored_expression(AuthoredExpressionOperation::Text {
+                    value: "text".to_owned(),
+                }),
+                authored_expression(AuthoredExpressionOperation::StaticText {
+                    value: "static".to_owned(),
+                }),
+                AuthoredExpression {
+                    symbol: Some("$constant".to_owned()),
+                    operation: AuthoredExpressionOperation::Constant {
+                        declaration: constant_reference,
+                    },
+                },
+                AuthoredExpression {
+                    symbol: Some("$if".to_owned()),
+                    operation: AuthoredExpressionOperation::If {
+                        condition: Box::new(authored_expression(
+                            AuthoredExpressionOperation::Bool { value: true },
+                        )),
+                        when_true: Box::new(authored_expression(AuthoredExpressionOperation::Unit)),
+                        when_false: Box::new(authored_expression(
+                            AuthoredExpressionOperation::Unit,
+                        )),
+                    },
+                },
+                AuthoredExpression {
+                    symbol: Some("$let".to_owned()),
+                    operation: AuthoredExpressionOperation::Let {
+                        bindings: vec![AuthoredLetBinding {
+                            symbol: "$local".to_owned(),
+                            name: Name::new("local").unwrap(),
+                            value: authored_expression(AuthoredExpressionOperation::Unit),
+                            declared_type: Some(AuthoredType::Unit),
+                        }],
+                        body: Box::new(AuthoredExpression {
+                            symbol: Some("$local_use".to_owned()),
+                            operation: AuthoredExpressionOperation::Local {
+                                value: AuthoredLocalReference::Symbol {
+                                    symbol: "$local".to_owned(),
+                                },
+                            },
+                        }),
+                    },
+                },
+                AuthoredExpression {
+                    symbol: Some("$call".to_owned()),
+                    operation: AuthoredExpressionOperation::Call {
+                        function: callee_reference.clone(),
+                        type_arguments: Vec::new(),
+                        arguments: vec![authored_expression(AuthoredExpressionOperation::Unit)],
+                    },
+                },
+                AuthoredExpression {
+                    symbol: Some("$function_value".to_owned()),
+                    operation: AuthoredExpressionOperation::FunctionValue {
+                        function: callee_reference.clone(),
+                        type_arguments: Vec::new(),
+                    },
+                },
+                AuthoredExpression {
+                    symbol: Some("$invoke".to_owned()),
+                    operation: AuthoredExpressionOperation::Invoke {
+                        callee: Box::new(authored_expression(
+                            AuthoredExpressionOperation::FunctionValue {
+                                function: callee_reference,
+                                type_arguments: Vec::new(),
+                            },
+                        )),
+                        arguments: vec![authored_expression(AuthoredExpressionOperation::Unit)],
+                    },
+                },
+                nominal_record("$record"),
+                AuthoredExpression {
+                    symbol: Some("$field".to_owned()),
+                    operation: AuthoredExpressionOperation::Field {
+                        value: Box::new(nominal_record("$field_record")),
+                        selector: AuthoredFieldSelector::Nominal {
+                            field: field_reference,
+                        },
+                    },
+                },
+                variant("$variant"),
+                AuthoredExpression {
+                    symbol: Some("$list".to_owned()),
+                    operation: AuthoredExpressionOperation::List {
+                        item_type: AuthoredType::Unit,
+                        items: vec![authored_expression(AuthoredExpressionOperation::Unit)],
+                    },
+                },
+                AuthoredExpression {
+                    symbol: Some("$map".to_owned()),
+                    operation: AuthoredExpressionOperation::Map {
+                        key_type: AuthoredType::Bool,
+                        value_type: AuthoredType::Unit,
+                        entries: vec![AuthoredMapExpressionEntry {
+                            key: authored_expression(AuthoredExpressionOperation::Bool {
+                                value: true,
+                            }),
+                            value: authored_expression(AuthoredExpressionOperation::Unit),
+                        }],
+                    },
+                },
+                AuthoredExpression {
+                    symbol: Some("$match".to_owned()),
+                    operation: AuthoredExpressionOperation::Match {
+                        value: Box::new(variant("$match_value")),
+                        arms: vec![AuthoredMatchExpressionArm {
+                            case: case_reference,
+                            payload_binding: None,
+                            body: authored_expression(AuthoredExpressionOperation::Unit),
+                        }],
+                    },
+                },
+                AuthoredExpression {
+                    symbol: Some("$structural_record".to_owned()),
+                    operation: AuthoredExpressionOperation::Record {
+                        nominal_type: None,
+                        fields: vec![AuthoredRecordExpressionField {
+                            selector: AuthoredFieldSelector::Structural {
+                                name: Name::new("item").unwrap(),
+                            },
+                            value: authored_expression(AuthoredExpressionOperation::Unit),
+                        }],
+                    },
+                },
+                AuthoredExpression {
+                    symbol: Some("$structural_field".to_owned()),
+                    operation: AuthoredExpressionOperation::Field {
+                        value: Box::new(authored_expression(AuthoredExpressionOperation::Record {
+                            nominal_type: None,
+                            fields: vec![AuthoredRecordExpressionField {
+                                selector: AuthoredFieldSelector::Structural {
+                                    name: Name::new("item").unwrap(),
+                                },
+                                value: authored_expression(AuthoredExpressionOperation::Unit),
+                            }],
+                        })),
+                        selector: AuthoredFieldSelector::Structural {
+                            name: Name::new("item").unwrap(),
+                        },
+                    },
+                },
+                authored_expression(AuthoredExpressionOperation::Unit),
+            ],
+        },
+    };
+    let task_body = AuthoredExpression {
+        symbol: Some("$task_body".to_owned()),
+        operation: AuthoredExpressionOperation::Sequence {
+            items: vec![
+                AuthoredExpression {
+                    symbol: Some("$capability".to_owned()),
+                    operation: AuthoredExpressionOperation::CapabilityCall {
+                        requirement: requirement_reference.clone(),
+                        operation: operation_reference,
+                        arguments: Vec::new(),
+                    },
+                },
+                AuthoredExpression {
+                    symbol: Some("$transaction".to_owned()),
+                    operation: AuthoredExpressionOperation::Transaction {
+                        requirement: requirement_reference.clone(),
+                        binding: AuthoredBindingDefinition {
+                            symbol: "$transaction_binding".to_owned(),
+                            name: Name::new("transaction").unwrap(),
+                        },
+                        body: Box::new(authored_expression(AuthoredExpressionOperation::Unit)),
+                    },
+                },
+                authored_expression(AuthoredExpressionOperation::Unit),
+            ],
+        },
+    };
+    let request = AuthoredChangeSet {
+        base: created.current.head.revision,
+        changes: vec![
+            AuthoredChange::CreateFunction {
+                symbol: "$all_pure".to_owned(),
+                module: ModuleSelector::Name {
+                    name: Name::new("second").unwrap(),
+                },
+                name: Name::new("all_pure").unwrap(),
+                visibility: DeclarationVisibility::Private,
+                type_parameters: Vec::new(),
+                parameters: Vec::new(),
+                result: AuthoredType::Unit,
+                effect: AuthoredFunctionEffect::Pure,
+                body: pure_body,
+            },
+            AuthoredChange::CreateFunction {
+                symbol: "$all_task".to_owned(),
+                module: ModuleSelector::Name {
+                    name: Name::new("second").unwrap(),
+                },
+                name: Name::new("all_task").unwrap(),
+                visibility: DeclarationVisibility::Private,
+                type_parameters: Vec::new(),
+                parameters: Vec::new(),
+                result: AuthoredType::Unit,
+                effect: AuthoredFunctionEffect::Task {
+                    requirements: vec![requirement_reference],
+                },
+                body: task_body,
+            },
+        ],
+    };
+    let prepared = created
+        .repository
+        .prepare_authored_change(&request, PublicationOptions::default())
+        .expect("every expression operation must lower and validate");
+    for symbol in [
+        "$pure_body",
+        "$constant",
+        "$if",
+        "$let",
+        "$local_use",
+        "$call",
+        "$function_value",
+        "$invoke",
+        "$record",
+        "$field",
+        "$variant",
+        "$list",
+        "$map",
+        "$match",
+        "$structural_record",
+        "$structural_field",
+        "$task_body",
+        "$capability",
+        "$transaction",
+    ] {
+        assert!(matches!(
+            prepared.allocated[symbol],
+            OwnerKey::Expression(_)
+        ));
+    }
+    assert!(matches!(
+        prepared.allocated["$transaction_binding"],
+        OwnerKey::Binding(_)
+    ));
+    assert!(prepared.publication.receipt.validation.semantically_checked >= 2);
+}
+
+#[test]
 fn locked_publication_accepts_once_reconciles_exact_retry_and_rejects_stale() {
     let temporary = tempfile::tempdir().expect("temporary repository parent");
     let destination = temporary.path().join("meaning");
@@ -1427,6 +2085,77 @@ fn owner_named(snapshot: &crate::platform::kernel::KernelSnapshot, name: &str) -
             _ => None,
         })
         .expect("named declaration")
+}
+
+fn field_named(snapshot: &crate::platform::kernel::KernelSnapshot, name: &str) -> OwnerKey {
+    snapshot
+        .owners
+        .iter()
+        .find_map(|(owner, record)| match record {
+            OwnerRecord::Field(field) if field.name.as_str() == name => Some(*owner),
+            _ => None,
+        })
+        .expect("named field")
+}
+
+fn case_named(snapshot: &crate::platform::kernel::KernelSnapshot, name: &str) -> OwnerKey {
+    snapshot
+        .owners
+        .iter()
+        .find_map(|(owner, record)| match record {
+            OwnerRecord::Case(case) if case.name.as_str() == name => Some(*owner),
+            _ => None,
+        })
+        .expect("named case")
+}
+
+fn requirement_named(snapshot: &crate::platform::kernel::KernelSnapshot, name: &str) -> OwnerKey {
+    snapshot
+        .owners
+        .iter()
+        .find_map(|(owner, record)| match record {
+            OwnerRecord::Requirement(requirement) if requirement.name.as_str() == name => {
+                Some(*owner)
+            }
+            _ => None,
+        })
+        .expect("named requirement")
+}
+
+fn operation_named(snapshot: &crate::platform::kernel::KernelSnapshot, name: &str) -> OwnerKey {
+    snapshot
+        .owners
+        .iter()
+        .find_map(|(owner, record)| match record {
+            OwnerRecord::Operation(operation) if operation.name.as_str() == name => Some(*owner),
+            _ => None,
+        })
+        .expect("named operation")
+}
+
+fn authored_exact_declaration(package: PackageId, owner: OwnerKey) -> AuthoredDeclarationReference {
+    let OwnerKey::Declaration(declaration) = owner else {
+        panic!("declaration helper returned a foreign owner")
+    };
+    AuthoredDeclarationReference::Exact {
+        package,
+        declaration,
+    }
+}
+
+fn authored_expression(operation: AuthoredExpressionOperation) -> AuthoredExpression {
+    AuthoredExpression {
+        symbol: None,
+        operation,
+    }
+}
+
+fn authored_parameter(symbol: &str, name: &str, ty: AuthoredType) -> AuthoredParameter {
+    AuthoredParameter {
+        symbol: symbol.to_owned(),
+        name: Name::new(name).expect("parameter name"),
+        ty,
+    }
 }
 
 fn function_body(snapshot: &crate::platform::kernel::KernelSnapshot, name: &str) -> OwnerKey {

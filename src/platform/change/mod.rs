@@ -36,7 +36,13 @@ pub use impact::{
 pub use overlay::KernelOverlay;
 pub use prepare::{PreparedChangeAnalysis, prepare_change_analysis};
 pub use request::{
-    AuthoredChange, AuthoredChangeSet, AuthoredLowering, AuthoredLoweringWork, DeclarationSelector,
+    AuthoredBindingDefinition, AuthoredCaseReference, AuthoredChange, AuthoredChangeSet,
+    AuthoredDeclarationReference, AuthoredExpression, AuthoredExpressionOperation,
+    AuthoredFieldReference, AuthoredFieldSelector, AuthoredFunctionEffect, AuthoredLetBinding,
+    AuthoredLocalReference, AuthoredLowering, AuthoredLoweringWork, AuthoredMapExpressionEntry,
+    AuthoredMatchExpressionArm, AuthoredOperationReference, AuthoredParameter,
+    AuthoredRecordExpressionField, AuthoredRequirementReference, AuthoredStructuralTypeField,
+    AuthoredType, AuthoredTypeParameter, AuthoredTypeParameterReference, DeclarationSelector,
     MAXIMUM_AUTHORED_CHANGE_BYTES, MAXIMUM_AUTHORED_CHANGES, ModuleSelector, OwnerSelector,
     lower_authored_changes,
 };

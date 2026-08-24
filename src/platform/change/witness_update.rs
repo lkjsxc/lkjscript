@@ -260,11 +260,14 @@ fn test_edits(tests: &TestDependencyDelta) -> Result<Vec<MapEdit>, Diagnostic> {
 
 fn apply_map<P: PageStore + ?Sized>(
     root: crate::platform::persistent_map::MapRoot,
-    edits: Vec<MapEdit>,
+    mut edits: Vec<MapEdit>,
     store: &mut OverlayPageStore<'_, P>,
     work: &mut MapWork,
     counts: &mut WitnessEditCounts,
 ) -> Result<crate::platform::persistent_map::MapRoot, Diagnostic> {
+    // Domain-level ordering is not necessarily canonical byte ordering. Namespace names, for
+    // example, compare lexically in memory while their bounded map encoding prefixes byte length.
+    edits.sort_unstable_by(|left, right| left.key.cmp(&right.key));
     let (map, outcome) = PersistentMap::from_root(root)
         .apply_sorted_edits(store, &edits, work)
         .map_err(map_diagnostic)?;
