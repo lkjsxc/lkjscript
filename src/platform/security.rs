@@ -38,34 +38,21 @@ impl CapabilityAdapter for WallClockAdapter {
                 "wall clock implements utc-milliseconds with no arguments",
             ));
         }
-        let duration = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|_| {
-            ExecutionError::new(
-                ExecutionFailureClass::Capability,
-                "clock_before_epoch",
-                "wall clock is before the Unix epoch",
-            )
-        })?;
-        let milliseconds = i64::try_from(duration.as_millis()).map_err(|_| {
-            ExecutionError::resource(
-                "clock_range",
-                "wall-clock milliseconds exceed signed 64-bit range",
-            )
-        })?;
-        Ok(Value::I64(milliseconds))
+        Ok(Value::I64(wall_clock_milliseconds()?))
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct DeterministicClockAdapter {
     interface: OwnerId,
-    observations: Arc<Mutex<VecDeque<i64>>>,
+    source: DeterministicClockSource,
 }
 
 impl DeterministicClockAdapter {
     pub fn new(interface: OwnerId, observations: Vec<i64>) -> Self {
         Self {
             interface,
-            observations: Arc::new(Mutex::new(observations.into())),
+            source: DeterministicClockSource::new(observations),
         }
     }
 }
@@ -81,16 +68,7 @@ impl CapabilityAdapter for DeterministicClockAdapter {
                 "deterministic clock implements utc-milliseconds with no arguments",
             ));
         }
-        let value = lock_unpoisoned(&self.observations)
-            .pop_front()
-            .ok_or_else(|| {
-                ExecutionError::new(
-                    ExecutionFailureClass::Infrastructure,
-                    "clock_fake_exhausted",
-                    "deterministic clock observation script is exhausted",
-                )
-            })?;
-        Ok(Value::I64(value))
+        Ok(Value::I64(self.source.next()?))
     }
 }
 
@@ -120,30 +98,26 @@ impl CapabilityAdapter for SecureRandomAdapter {
                 "secure-random bytes requires one I64 length",
             ));
         };
-        let length = bounded_random_length(*length, policy)?;
-        let mut bytes = vec![0; length];
-        getrandom::fill(&mut bytes).map_err(|_| {
-            ExecutionError::new(
-                ExecutionFailureClass::Capability,
-                "secure_random_unavailable",
-                "operating-system secure randomness is unavailable",
-            )
-        })?;
-        Ok(Value::bytes(bytes))
+        let granted = policy
+            .limits
+            .get("maximum_random_bytes")
+            .copied()
+            .unwrap_or(MAXIMUM_RANDOM_BYTES as u64);
+        Ok(Value::bytes(secure_random_bytes(*length, granted)?))
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct DeterministicRandomAdapter {
     interface: OwnerId,
-    values: Arc<Mutex<VecDeque<Vec<u8>>>>,
+    source: DeterministicRandomSource,
 }
 
 impl DeterministicRandomAdapter {
     pub fn new(interface: OwnerId, values: Vec<Vec<u8>>) -> Self {
         Self {
             interface,
-            values: Arc::new(Mutex::new(values.into())),
+            source: DeterministicRandomSource::new(values),
         }
     }
 }
@@ -164,22 +138,12 @@ impl CapabilityAdapter for DeterministicRandomAdapter {
                 "deterministic-random bytes requires one I64 length",
             ));
         };
-        let length = bounded_random_length(*length, policy)?;
-        let bytes = lock_unpoisoned(&self.values).pop_front().ok_or_else(|| {
-            ExecutionError::new(
-                ExecutionFailureClass::Infrastructure,
-                "random_fake_exhausted",
-                "deterministic randomness script is exhausted",
-            )
-        })?;
-        if bytes.len() != length {
-            return Err(ExecutionError::new(
-                ExecutionFailureClass::Infrastructure,
-                "random_fake_length",
-                "deterministic randomness script returned a foreign length",
-            ));
-        }
-        Ok(Value::bytes(bytes))
+        let granted = policy
+            .limits
+            .get("maximum_random_bytes")
+            .copied()
+            .unwrap_or(MAXIMUM_RANDOM_BYTES as u64);
+        Ok(Value::bytes(self.source.next(*length, granted)?))
     }
 }
 
@@ -206,31 +170,21 @@ impl CapabilityAdapter for IdentifierAdapter {
                 "identifier adapter implements uuid-v4 with no arguments",
             ));
         }
-        let mut bytes = [0u8; 16];
-        getrandom::fill(&mut bytes).map_err(|_| {
-            ExecutionError::new(
-                ExecutionFailureClass::Capability,
-                "identifier_random_unavailable",
-                "secure randomness for UUID generation is unavailable",
-            )
-        })?;
-        bytes[6] = (bytes[6] & 0x0f) | 0x40;
-        bytes[8] = (bytes[8] & 0x3f) | 0x80;
-        Ok(Value::text(format_uuid(bytes)))
+        Ok(Value::text(secure_identifier()?))
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct DeterministicIdentifierAdapter {
     interface: OwnerId,
-    values: Arc<Mutex<VecDeque<[u8; 16]>>>,
+    source: DeterministicIdentifierSource,
 }
 
 impl DeterministicIdentifierAdapter {
     pub fn new(interface: OwnerId, values: Vec<[u8; 16]>) -> Self {
         Self {
             interface,
-            values: Arc::new(Mutex::new(values.into())),
+            source: DeterministicIdentifierSource::new(values),
         }
     }
 }
@@ -246,16 +200,7 @@ impl CapabilityAdapter for DeterministicIdentifierAdapter {
                 "deterministic identifier implements uuid-v4 with no arguments",
             ));
         }
-        let mut bytes = lock_unpoisoned(&self.values).pop_front().ok_or_else(|| {
-            ExecutionError::new(
-                ExecutionFailureClass::Infrastructure,
-                "identifier_fake_exhausted",
-                "deterministic identifier script is exhausted",
-            )
-        })?;
-        bytes[6] = (bytes[6] & 0x0f) | 0x40;
-        bytes[8] = (bytes[8] & 0x3f) | 0x80;
-        Ok(Value::text(format_uuid(bytes)))
+        Ok(Value::text(self.source.next()?))
     }
 }
 
@@ -434,6 +379,134 @@ impl CapabilityAdapter for PasswordHashAdapter {
     }
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct DeterministicClockSource {
+    observations: Arc<Mutex<VecDeque<i64>>>,
+}
+
+impl DeterministicClockSource {
+    pub(crate) fn new(observations: Vec<i64>) -> Self {
+        Self {
+            observations: Arc::new(Mutex::new(observations.into())),
+        }
+    }
+
+    pub(crate) fn next(&self) -> Result<i64, ExecutionError> {
+        lock_unpoisoned(&self.observations)
+            .pop_front()
+            .ok_or_else(|| {
+                ExecutionError::new(
+                    ExecutionFailureClass::Infrastructure,
+                    "clock_fake_exhausted",
+                    "deterministic clock observation script is exhausted",
+                )
+            })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct DeterministicRandomSource {
+    values: Arc<Mutex<VecDeque<Vec<u8>>>>,
+}
+
+impl DeterministicRandomSource {
+    pub(crate) fn new(values: Vec<Vec<u8>>) -> Self {
+        Self {
+            values: Arc::new(Mutex::new(values.into())),
+        }
+    }
+
+    pub(crate) fn next(&self, length: i64, granted: u64) -> Result<Vec<u8>, ExecutionError> {
+        let length = bounded_random_length(length, granted)?;
+        let bytes = lock_unpoisoned(&self.values).pop_front().ok_or_else(|| {
+            ExecutionError::new(
+                ExecutionFailureClass::Infrastructure,
+                "random_fake_exhausted",
+                "deterministic randomness script is exhausted",
+            )
+        })?;
+        if bytes.len() != length {
+            return Err(ExecutionError::new(
+                ExecutionFailureClass::Infrastructure,
+                "random_fake_length",
+                "deterministic randomness script returned a foreign length",
+            ));
+        }
+        Ok(bytes)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct DeterministicIdentifierSource {
+    values: Arc<Mutex<VecDeque<[u8; 16]>>>,
+}
+
+impl DeterministicIdentifierSource {
+    pub(crate) fn new(values: Vec<[u8; 16]>) -> Self {
+        Self {
+            values: Arc::new(Mutex::new(values.into())),
+        }
+    }
+
+    pub(crate) fn next(&self) -> Result<String, ExecutionError> {
+        let bytes = lock_unpoisoned(&self.values).pop_front().ok_or_else(|| {
+            ExecutionError::new(
+                ExecutionFailureClass::Infrastructure,
+                "identifier_fake_exhausted",
+                "deterministic identifier script is exhausted",
+            )
+        })?;
+        Ok(format_uuid(uuid_v4_bytes(bytes)))
+    }
+}
+
+pub(crate) fn wall_clock_milliseconds() -> Result<i64, ExecutionError> {
+    let duration = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|_| {
+        ExecutionError::new(
+            ExecutionFailureClass::Capability,
+            "clock_before_epoch",
+            "wall clock is before the Unix epoch",
+        )
+    })?;
+    i64::try_from(duration.as_millis()).map_err(|_| {
+        ExecutionError::resource(
+            "clock_range",
+            "wall-clock milliseconds exceed signed 64-bit range",
+        )
+    })
+}
+
+pub(crate) fn secure_random_bytes(length: i64, granted: u64) -> Result<Vec<u8>, ExecutionError> {
+    let length = bounded_random_length(length, granted)?;
+    let mut bytes = vec![0; length];
+    getrandom::fill(&mut bytes).map_err(|_| {
+        ExecutionError::new(
+            ExecutionFailureClass::Capability,
+            "secure_random_unavailable",
+            "operating-system secure randomness is unavailable",
+        )
+    })?;
+    Ok(bytes)
+}
+
+pub(crate) fn secure_identifier() -> Result<String, ExecutionError> {
+    let mut bytes = [0u8; 16];
+    getrandom::fill(&mut bytes).map_err(|_| {
+        ExecutionError::new(
+            ExecutionFailureClass::Capability,
+            "identifier_random_unavailable",
+            "secure randomness for UUID generation is unavailable",
+        )
+    })?;
+    Ok(format_uuid(uuid_v4_bytes(bytes)))
+}
+
+fn uuid_v4_bytes(mut bytes: [u8; 16]) -> [u8; 16] {
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    bytes
+}
+
 pub fn parse_uuid(value: &str) -> Result<[u8; 16], ExecutionError> {
     if value.len() != 36
         || value.as_bytes().get(8) != Some(&b'-')
@@ -472,18 +545,13 @@ pub fn format_uuid(bytes: [u8; 16]) -> String {
     output
 }
 
-fn bounded_random_length(length: i64, policy: &CallPolicy) -> Result<usize, ExecutionError> {
+fn bounded_random_length(length: i64, granted: u64) -> Result<usize, ExecutionError> {
     let length = usize::try_from(length).map_err(|_| {
         ExecutionError::resource(
             "secure_random_length",
             "secure-random byte length must be non-negative",
         )
     })?;
-    let granted = policy
-        .limits
-        .get("maximum_random_bytes")
-        .copied()
-        .unwrap_or(MAXIMUM_RANDOM_BYTES as u64);
     if length > MAXIMUM_RANDOM_BYTES
         || u64::try_from(length).map_or(true, |length| length > granted)
     {

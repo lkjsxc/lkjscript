@@ -186,6 +186,7 @@ mod tests {
             idempotency: Idempotency::Idempotent,
             external_visibility: ExternalVisibility::None,
             requirement_limits: Arc::from([]),
+            grant_limits: Arc::new(BTreeMap::new()),
         }
     }
 

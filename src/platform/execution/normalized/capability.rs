@@ -5,7 +5,7 @@ use super::value::{NormalizedValue, OperationIndex, RequirementIndex};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::kernel::{
     DeclarationReference, ExternalVisibility, Idempotency, Name, OperationReference,
-    RequirementReference, ResourceLimit,
+    RequirementReference, ResourceLimit, ResourceUnit,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -20,6 +20,7 @@ pub struct NormalizedCallPolicy {
     pub idempotency: Idempotency,
     pub external_visibility: ExternalVisibility,
     pub requirement_limits: Arc<[ResourceLimit]>,
+    pub grant_limits: Arc<BTreeMap<Name, NormalizedGrantLimit>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -28,6 +29,13 @@ pub struct NormalizedTransactionPolicy {
     pub requirement_name: Name,
     pub interface: DeclarationReference,
     pub requirement_limits: Arc<[ResourceLimit]>,
+    pub grant_limits: Arc<BTreeMap<Name, NormalizedGrantLimit>>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NormalizedGrantLimit {
+    pub maximum: u64,
+    pub unit: ResourceUnit,
 }
 
 pub trait NormalizedCapabilityAdapter: Send + Sync {
@@ -72,7 +80,7 @@ pub trait NormalizedCapabilityTransaction: Send {
 pub struct NormalizedCapabilityGrant {
     pub requirement: RequirementReference,
     pub operations: BTreeSet<OperationReference>,
-    pub maximum_calls: u64,
+    pub limits: BTreeMap<Name, NormalizedGrantLimit>,
     pub adapter: Arc<dyn NormalizedCapabilityAdapter>,
 }
 
@@ -82,7 +90,7 @@ impl std::fmt::Debug for NormalizedCapabilityGrant {
             .debug_struct("NormalizedCapabilityGrant")
             .field("requirement", &self.requirement)
             .field("operations", &self.operations)
-            .field("maximum_calls", &self.maximum_calls)
+            .field("limits", &self.limits)
             .field("adapter", &"<opaque>")
             .finish()
     }
@@ -109,7 +117,7 @@ impl std::fmt::Debug for NormalizedCapabilities {
 struct BoundNormalizedCapability {
     operations: BTreeSet<OperationIndex>,
     exact_operations: BTreeSet<OperationReference>,
-    maximum_calls: u64,
+    limits: Arc<BTreeMap<Name, NormalizedGrantLimit>>,
     adapter: Arc<dyn NormalizedCapabilityAdapter>,
 }
 
@@ -155,10 +163,10 @@ impl NormalizedCapabilities {
                 ));
             }
             let declaration = &program.requirements[requirement.0 as usize];
-            if grant.maximum_calls == 0 || grant.adapter.interface() != declaration.interface {
+            if grant.adapter.interface() != declaration.interface {
                 return Err(capability_error(
                     "normalized_grant_interface",
-                    "deployment grant interface or call bound disagrees with the exact requirement",
+                    "deployment grant interface disagrees with the exact requirement",
                 ));
             }
             if grant.adapter.operations() != &grant.operations {
@@ -188,11 +196,12 @@ impl NormalizedCapabilities {
                     "deployment grant must bind the exact required operation set",
                 ));
             }
+            validate_limits(declaration, &grant.limits)?;
             let exact_requirement = declaration.reference;
             let binding = BoundNormalizedCapability {
                 operations,
                 exact_operations: grant.operations,
-                maximum_calls: grant.maximum_calls,
+                limits: Arc::new(grant.limits),
                 adapter: grant.adapter,
             };
             if bindings.insert(requirement, binding.clone()).is_some()
@@ -229,8 +238,7 @@ impl NormalizedCapabilities {
         &self,
         requirement: RequirementIndex,
     ) -> Result<u64, ExecutionError> {
-        self.binding(requirement)
-            .map(|binding| binding.maximum_calls)
+        maximum_calls(self.binding(requirement)?)
     }
 
     pub(crate) fn call(
@@ -269,8 +277,7 @@ impl NormalizedCapabilities {
         &self,
         requirement: RequirementReference,
     ) -> Result<u64, ExecutionError> {
-        self.exact_binding(requirement)
-            .map(|binding| binding.maximum_calls)
+        maximum_calls(self.exact_binding(requirement)?)
     }
 
     pub(crate) fn call_exact(
@@ -347,6 +354,7 @@ impl NormalizedCapabilities {
             idempotency: operation.idempotency,
             external_visibility: operation.external_visibility,
             requirement_limits: Arc::clone(&requirement.limits),
+            grant_limits: Arc::clone(&binding.limits),
         })
     }
 
@@ -393,7 +401,7 @@ impl NormalizedCapabilities {
         program: &NormalizedProgram,
         requirement: RequirementIndex,
     ) -> Result<NormalizedTransactionPolicy, ExecutionError> {
-        self.binding(requirement)?;
+        let binding = self.binding(requirement)?;
         let requirement = program
             .requirements
             .get(requirement.0 as usize)
@@ -408,6 +416,7 @@ impl NormalizedCapabilities {
             requirement_name: requirement.name.clone(),
             interface: requirement.interface,
             requirement_limits: Arc::clone(&requirement.limits),
+            grant_limits: Arc::clone(&binding.limits),
         })
     }
 
@@ -454,6 +463,67 @@ impl NormalizedCapabilities {
             )
         })
     }
+}
+
+fn validate_limits(
+    requirement: &super::prepare::NormalizedRequirement,
+    limits: &BTreeMap<Name, NormalizedGrantLimit>,
+) -> Result<(), ExecutionError> {
+    if limits.values().any(|limit| limit.maximum == 0) {
+        return Err(capability_error(
+            "normalized_grant_limit_zero",
+            "deployment grant limits must be nonzero",
+        ));
+    }
+    let Some(call_limit) = limits
+        .iter()
+        .find_map(|(name, limit)| (name.as_str() == "maximum_calls").then_some(limit))
+    else {
+        return Err(capability_error(
+            "normalized_grant_call_limit",
+            "deployment grant must define a maximum_calls bound",
+        ));
+    };
+    if call_limit.unit != ResourceUnit::Calls {
+        return Err(capability_error(
+            "normalized_grant_call_unit",
+            "deployment maximum_calls limit must use the calls unit",
+        ));
+    }
+    for required in requirement.limits.iter() {
+        let Some(granted) = limits.get(&required.name) else {
+            return Err(capability_error(
+                "normalized_grant_limit_missing",
+                "deployment grant omits a graph-declared requirement limit",
+            ));
+        };
+        if granted.unit != required.unit {
+            return Err(capability_error(
+                "normalized_grant_limit_unit",
+                "deployment grant limit unit disagrees with the graph requirement",
+            ));
+        }
+        if granted.maximum > required.maximum {
+            return Err(capability_error(
+                "normalized_grant_limit_excess",
+                "deployment grant exceeds a graph-declared requirement limit",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn maximum_calls(binding: &BoundNormalizedCapability) -> Result<u64, ExecutionError> {
+    binding
+        .limits
+        .iter()
+        .find_map(|(name, limit)| (name.as_str() == "maximum_calls").then_some(limit.maximum))
+        .ok_or_else(|| {
+            capability_error(
+                "normalized_grant_call_limit",
+                "bound deployment grant lost its maximum_calls limit",
+            )
+        })
 }
 
 pub(crate) fn validate_outcome(

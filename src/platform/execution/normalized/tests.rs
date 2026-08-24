@@ -2,7 +2,8 @@
 
 use super::capability::{
     NormalizedCallPolicy, NormalizedCapabilities, NormalizedCapabilityAdapter,
-    NormalizedCapabilityGrant, NormalizedCapabilityTransaction, NormalizedTransactionPolicy,
+    NormalizedCapabilityGrant, NormalizedCapabilityTransaction, NormalizedGrantLimit,
+    NormalizedTransactionPolicy,
 };
 use super::codec::{decode_typed, encode_typed};
 use super::prepare::{NormalizedFunctionBody, NormalizedInstruction, NormalizedProgram};
@@ -27,7 +28,7 @@ use crate::platform::kernel::{
 use crate::platform::package::RunnerKind;
 use crate::platform::publication::{GraphRepository, RepositoryView};
 use crate::platform::semantic_id::{DeclarationId, PortId, RevisionId, TargetId};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -365,7 +366,7 @@ fn bind_fixture_capability(
     let grant = NormalizedCapabilityGrant {
         requirement: requirement_record.reference,
         operations: operations.clone(),
-        maximum_calls,
+        limits: exact_grant_limits(requirement_record, maximum_calls),
         adapter: Arc::new(UnitAdapter {
             interface: requirement_record.interface,
             operations,
@@ -398,7 +399,7 @@ fn bind_tracking_capability(
     let grant = NormalizedCapabilityGrant {
         requirement: requirement.reference,
         operations: operations.clone(),
-        maximum_calls,
+        limits: exact_grant_limits(requirement, maximum_calls),
         adapter: Arc::new(TrackingAdapter {
             interface: requirement.interface,
             operations,
@@ -411,6 +412,33 @@ fn bind_tracking_capability(
             .expect("exact tracked fixture grant"),
         stats,
     )
+}
+
+fn exact_grant_limits(
+    requirement: &super::prepare::NormalizedRequirement,
+    maximum_calls: u64,
+) -> BTreeMap<Name, NormalizedGrantLimit> {
+    let mut limits = requirement
+        .limits
+        .iter()
+        .map(|limit| {
+            (
+                limit.name.clone(),
+                NormalizedGrantLimit {
+                    maximum: limit.maximum,
+                    unit: limit.unit,
+                },
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    limits.insert(
+        Name::new("maximum_calls").unwrap(),
+        NormalizedGrantLimit {
+            maximum: maximum_calls,
+            unit: ResourceUnit::Calls,
+        },
+    );
+    limits
 }
 
 fn transaction_call_snapshot(
@@ -981,7 +1009,7 @@ fn dense_vm_enforces_exact_grants_cancellation_and_separate_budgets() {
         vec![NormalizedCapabilityGrant {
             requirement: requirement.reference,
             operations: Default::default(),
-            maximum_calls: 1,
+            limits: exact_grant_limits(requirement, 1),
             adapter: Arc::new(UnitAdapter {
                 interface: requirement.interface,
                 operations: Default::default(),
@@ -1003,8 +1031,8 @@ fn dense_vm_enforces_exact_grants_cancellation_and_separate_budgets() {
         target.component,
         vec![NormalizedCapabilityGrant {
             requirement: requirement.reference,
-            operations: required_operations,
-            maximum_calls: 1,
+            operations: required_operations.clone(),
+            limits: exact_grant_limits(requirement, 1),
             adapter: Arc::new(UnitAdapter {
                 interface: requirement.interface,
                 operations: Default::default(),
@@ -1015,6 +1043,47 @@ fn dense_vm_enforces_exact_grants_cancellation_and_separate_budgets() {
     .expect_err("adapter operation bindings must equal the exact grant");
     assert_eq!(invalid.class, ExecutionFailureClass::Capability);
     assert_eq!(invalid.code, "normalized_grant_adapter_operations");
+
+    for (limits, expected) in [
+        (BTreeMap::new(), "normalized_grant_call_limit"),
+        (
+            BTreeMap::from([(
+                Name::new("maximum_calls").unwrap(),
+                NormalizedGrantLimit {
+                    maximum: 0,
+                    unit: ResourceUnit::Calls,
+                },
+            )]),
+            "normalized_grant_limit_zero",
+        ),
+        (
+            BTreeMap::from([(
+                Name::new("maximum_calls").unwrap(),
+                NormalizedGrantLimit {
+                    maximum: 1,
+                    unit: ResourceUnit::Bytes,
+                },
+            )]),
+            "normalized_grant_call_unit",
+        ),
+    ] {
+        let invalid = NormalizedCapabilities::bind(
+            &program,
+            target.component,
+            vec![NormalizedCapabilityGrant {
+                requirement: requirement.reference,
+                operations: required_operations.clone(),
+                limits,
+                adapter: Arc::new(UnitAdapter {
+                    interface: requirement.interface,
+                    operations: required_operations.clone(),
+                    calls: Arc::new(AtomicU64::new(0)),
+                }),
+            }],
+        )
+        .expect_err("invalid exact grant limit");
+        assert_eq!(invalid.code, expected);
+    }
 
     let cancelled = ExecutionControl::uncancelled();
     cancelled.cancel();
@@ -1168,6 +1237,61 @@ fn both_graph5_execution_tiers_commit_and_rollback_exact_transactions() {
     let failing_snapshot = transaction_call_snapshot(ExternalVisibility::Possible);
     let failing_program = prepare_snapshot(&failing_snapshot);
     let failing_caller = declaration_named(&failing_snapshot, "caller");
+    let failing_target = failing_program
+        .root_target(&Name::new("command").unwrap())
+        .expect("failing fixture target");
+    let failing_requirement =
+        failing_program.components[failing_target.component.0 as usize].requirements[0];
+    let failing_requirement = &failing_program.requirements[failing_requirement.0 as usize];
+    let failing_operations = failing_requirement
+        .operations
+        .iter()
+        .map(|operation| failing_program.operations[operation.0 as usize].reference)
+        .collect::<BTreeSet<_>>();
+    for (input_limit, expected) in [
+        (None, "normalized_grant_limit_missing"),
+        (
+            Some((65, ResourceUnit::Bytes)),
+            "normalized_grant_limit_excess",
+        ),
+        (
+            Some((64, ResourceUnit::Calls)),
+            "normalized_grant_limit_unit",
+        ),
+    ] {
+        let mut limits = BTreeMap::from([(
+            Name::new("maximum_calls").unwrap(),
+            NormalizedGrantLimit {
+                maximum: 3,
+                unit: ResourceUnit::Calls,
+            },
+        )]);
+        if let Some((input_limit, unit)) = input_limit {
+            limits.insert(
+                Name::new("maximum_input_bytes").unwrap(),
+                NormalizedGrantLimit {
+                    maximum: input_limit,
+                    unit,
+                },
+            );
+        }
+        let invalid = NormalizedCapabilities::bind(
+            &failing_program,
+            failing_target.component,
+            vec![NormalizedCapabilityGrant {
+                requirement: failing_requirement.reference,
+                operations: failing_operations.clone(),
+                limits,
+                adapter: Arc::new(UnitAdapter {
+                    interface: failing_requirement.interface,
+                    operations: failing_operations.clone(),
+                    calls: Arc::new(AtomicU64::new(0)),
+                }),
+            }],
+        )
+        .expect_err("missing or excessive graph-declared grant limit");
+        assert_eq!(invalid.code, expected);
+    }
     let (failing_capabilities, failing_stats) = bind_tracking_capability(&failing_program, 3, true);
     let dense_error = NormalizedVm::new(&failing_program, policy)
         .invoke(
@@ -1211,6 +1335,22 @@ fn both_graph5_execution_tiers_commit_and_rollback_exact_transactions() {
         idempotency: Idempotency::Idempotent,
         external_visibility: ExternalVisibility::Possible,
         requirement_limits: Arc::clone(&expected_limits),
+        grant_limits: Arc::new(BTreeMap::from([
+            (
+                Name::new("maximum_calls").unwrap(),
+                NormalizedGrantLimit {
+                    maximum: 3,
+                    unit: ResourceUnit::Calls,
+                },
+            ),
+            (
+                Name::new("maximum_input_bytes").unwrap(),
+                NormalizedGrantLimit {
+                    maximum: 64,
+                    unit: ResourceUnit::Bytes,
+                },
+            ),
+        ])),
     };
     assert_eq!(
         *failing_stats
@@ -1224,6 +1364,22 @@ fn both_graph5_execution_tiers_commit_and_rollback_exact_transactions() {
         requirement_name: Name::new("store").unwrap(),
         interface: requirement.interface,
         requirement_limits: expected_limits,
+        grant_limits: Arc::new(BTreeMap::from([
+            (
+                Name::new("maximum_calls").unwrap(),
+                NormalizedGrantLimit {
+                    maximum: 3,
+                    unit: ResourceUnit::Calls,
+                },
+            ),
+            (
+                Name::new("maximum_input_bytes").unwrap(),
+                NormalizedGrantLimit {
+                    maximum: 64,
+                    unit: ResourceUnit::Bytes,
+                },
+            ),
+        ])),
     };
     assert_eq!(
         *failing_stats

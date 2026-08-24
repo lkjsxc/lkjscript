@@ -6,6 +6,7 @@ mod configuration;
 mod prepare;
 mod reference;
 mod runner;
+mod security;
 mod value;
 mod vm;
 
