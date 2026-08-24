@@ -1,12 +1,13 @@
 use super::*;
 use crate::platform::change::{
-    CanonicalDelta, KernelOverlay, PrimitiveEdit, derive_local_delta, derive_summary_delta,
+    AuthoredChange, AuthoredChangeSet, CanonicalDelta, DeclarationSelector, KernelOverlay,
+    ModuleSelector, OwnerSelector, PrimitiveEdit, derive_local_delta, derive_summary_delta,
     derive_test_dependency_delta, plan_impact_and_summaries, prepare_change_analysis,
     validate_incremental_frontier, validate_structural_frontier,
 };
 use crate::platform::kernel::{
-    DeclarationPayload, ExactOwnerKey, ExpressionOperation, Name, NamespaceClass, OwnerKey,
-    OwnerRecord, PackageId, RelationEndpoint, encode_owner,
+    DeclarationPayload, ExactOwnerKey, ExpressionOperation, LocalValueReference, Name,
+    NamespaceClass, OwnerKey, OwnerRecord, PackageId, RelationEndpoint, encode_owner,
 };
 use crate::platform::semantic_id::DeclarationId;
 use crate::platform::storage::object::{ObjectDomain, ObjectKey};
@@ -816,6 +817,252 @@ fn revision_view_detects_corruption_in_the_selected_owner_without_full_scan() {
 }
 
 #[test]
+fn authored_request_allocates_forward_symbols_and_preserves_exact_uses() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let callee = owner_named(&created.initial.snapshot, "callee");
+    let caller = owner_named(&created.initial.snapshot, "caller");
+    let binding = binding_named(&created.initial.snapshot, "local");
+    let body = function_body(&created.initial.snapshot, "callee");
+    let OwnerKey::Expression(body) = body else {
+        panic!("callee body must be an expression")
+    };
+    let call = expression_calling(&created.initial.snapshot, callee);
+    let local_use = expression_using_binding(&created.initial.snapshot, binding);
+    let caller_before = encode_owner(&created.initial.snapshot.owners[&caller])
+        .expect("caller encoding")
+        .0;
+    let call_before = encode_owner(&created.initial.snapshot.owners[&call])
+        .expect("call encoding")
+        .0;
+    let local_use_before = encode_owner(&created.initial.snapshot.owners[&local_use])
+        .expect("local-use encoding")
+        .0;
+    let request = AuthoredChangeSet {
+        base: created.current.head.revision,
+        changes: vec![
+            AuthoredChange::MoveDeclaration {
+                declaration: DeclarationSelector::Qualified {
+                    module: ModuleSelector::Name {
+                        name: Name::new("first").unwrap(),
+                    },
+                    name: Name::new("callee").unwrap(),
+                },
+                module: ModuleSelector::Symbol {
+                    symbol: "$destination".to_owned(),
+                },
+            },
+            AuthoredChange::RenameOwner {
+                owner: OwnerSelector::Exact { owner: callee },
+                name: Name::new("renamed_callee").unwrap(),
+            },
+            AuthoredChange::RenameOwner {
+                owner: OwnerSelector::Exact { owner: binding },
+                name: Name::new("renamed_local").unwrap(),
+            },
+            AuthoredChange::ReplaceExpression {
+                expression: body,
+                operation: ExpressionOperation::Unit,
+            },
+            AuthoredChange::CreateModule {
+                symbol: "$destination".to_owned(),
+                name: Name::new("destination").unwrap(),
+            },
+        ],
+    };
+    let options = PublicationOptions {
+        idempotency_key: Some("authored-request-1".to_owned()),
+        intent: Some("stable move, rename, and body replacement".to_owned()),
+    };
+    let prepared = created
+        .repository
+        .prepare_authored_change(&request, options.clone())
+        .expect("prepare authored request");
+    let repeated = created
+        .repository
+        .prepare_authored_change(&request, options)
+        .expect("repeat deterministic authored preparation");
+    assert_eq!(prepared.allocated, repeated.allocated);
+    assert_eq!(prepared.publication.head, repeated.publication.head);
+    assert_eq!(prepared.publication.receipt.counts.owners_created, 1);
+    assert_eq!(prepared.publication.receipt.counts.owners_updated, 3);
+    assert!(prepared.lowering_work.canonical.point_reads <= 4);
+    assert!(prepared.lowering_work.canonical.canonical_records_decoded <= 4);
+    assert!(prepared.lowering_work.witness.point_reads <= 2);
+    assert!(prepared.publication.receipt.work.map_pages_read > 0);
+    let new_module = prepared.allocated["$destination"];
+    let OwnerKey::Module(new_module_id) = new_module else {
+        panic!("module symbol must allocate one module identity")
+    };
+
+    assert!(matches!(
+        created
+            .repository
+            .publish(&prepared.publication)
+            .expect("publish authored request"),
+        PublicationOutcome::Accepted { .. }
+    ));
+    let view = created.repository.view_current().expect("advanced view");
+    let Some(OwnerRecord::Declaration(declaration)) = view.owner(callee).unwrap().value else {
+        panic!("moved declaration must remain live")
+    };
+    assert_eq!(declaration.module, new_module_id);
+    assert_eq!(declaration.name.as_str(), "renamed_callee");
+    let Some(OwnerRecord::Expression(expression)) =
+        view.owner(OwnerKey::Expression(body)).unwrap().value
+    else {
+        panic!("selected expression must remain live")
+    };
+    assert_eq!(expression.id, body);
+    assert_eq!(expression.operation, ExpressionOperation::Unit);
+    let Some(OwnerRecord::Binding(renamed_binding)) = view.owner(binding).unwrap().value else {
+        panic!("renamed binding must remain live")
+    };
+    assert_eq!(renamed_binding.name.as_str(), "renamed_local");
+
+    let caller_after = view
+        .owner(caller)
+        .unwrap()
+        .value
+        .expect("caller remains live");
+    let call_after = view.owner(call).unwrap().value.expect("call remains live");
+    let local_use_after = view
+        .owner(local_use)
+        .unwrap()
+        .value
+        .expect("local use remains live");
+    assert_eq!(encode_owner(&caller_after).unwrap().0, caller_before);
+    assert_eq!(encode_owner(&call_after).unwrap().0, call_before);
+    assert_eq!(encode_owner(&local_use_after).unwrap().0, local_use_before);
+    let OwnerRecord::Expression(call_record) = call_after else {
+        panic!("exact caller use must remain an expression")
+    };
+    let ExpressionOperation::Call { function, .. } = call_record.operation else {
+        panic!("exact caller use must remain a call")
+    };
+    assert_eq!(OwnerKey::Declaration(function.declaration), callee);
+    let OwnerRecord::Expression(local_record) = local_use_after else {
+        panic!("exact local use must remain an expression")
+    };
+    assert_eq!(
+        local_record.operation,
+        ExpressionOperation::Local {
+            value: LocalValueReference::LexicalBinding(match binding {
+                OwnerKey::Binding(binding) => binding,
+                _ => panic!("binding helper returned a foreign owner"),
+            }),
+        }
+    );
+    assert_eq!(
+        view.namespace(&NamespaceKey {
+            parent: Some(new_module),
+            class: NamespaceClass::Declaration,
+            name: Name::new("renamed_callee").unwrap(),
+        })
+        .unwrap()
+        .value,
+        Some(callee)
+    );
+    assert_eq!(
+        created
+            .repository
+            .prepare_authored_change(&request, PublicationOptions::default())
+            .expect_err("current view must reject stale authored base")[0]
+            .code,
+        "change_authored_stale_base"
+    );
+}
+
+#[test]
+fn authored_request_rejects_invalid_symbols_kinds_and_empty_work() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let base = created.current.head.revision;
+    let callee = owner_named(&created.initial.snapshot, "callee");
+    let body = function_body(&created.initial.snapshot, "callee");
+
+    let duplicate = AuthoredChangeSet {
+        base,
+        changes: vec![
+            AuthoredChange::CreateModule {
+                symbol: "$module".to_owned(),
+                name: Name::new("one").unwrap(),
+            },
+            AuthoredChange::CreateModule {
+                symbol: "$module".to_owned(),
+                name: Name::new("two").unwrap(),
+            },
+        ],
+    };
+    assert_eq!(
+        created
+            .repository
+            .prepare_authored_change(&duplicate, PublicationOptions::default())
+            .expect_err("duplicate request-local symbols must reject")[0]
+            .code,
+        "change_authored_symbol_duplicate"
+    );
+
+    let missing = AuthoredChangeSet {
+        base,
+        changes: vec![AuthoredChange::MoveDeclaration {
+            declaration: match callee {
+                OwnerKey::Declaration(declaration) => DeclarationSelector::Id { declaration },
+                _ => panic!("named function must be a declaration"),
+            },
+            module: ModuleSelector::Symbol {
+                symbol: "$missing".to_owned(),
+            },
+        }],
+    };
+    assert_eq!(
+        created
+            .repository
+            .prepare_authored_change(&missing, PublicationOptions::default())
+            .expect_err("undefined request-local symbol must reject")[0]
+            .code,
+        "change_authored_symbol_missing"
+    );
+
+    let wrong_kind = AuthoredChangeSet {
+        base,
+        changes: vec![AuthoredChange::RenameOwner {
+            owner: OwnerSelector::Exact { owner: body },
+            name: Name::new("not_an_expression_name").unwrap(),
+        }],
+    };
+    assert_eq!(
+        created
+            .repository
+            .prepare_authored_change(&wrong_kind, PublicationOptions::default())
+            .expect_err("expression rename must reject")[0]
+            .code,
+        "change_authored_rename_kind"
+    );
+
+    let empty = AuthoredChangeSet {
+        base,
+        changes: Vec::new(),
+    };
+    assert_eq!(
+        created
+            .repository
+            .prepare_authored_change(&empty, PublicationOptions::default())
+            .expect_err("empty authored request must reject")[0]
+            .code,
+        "change_authored_count"
+    );
+    assert_eq!(
+        created.repository.current().unwrap().head,
+        created.current.head
+    );
+}
+
+#[test]
 fn locked_publication_accepts_once_reconciles_exact_retry_and_rejects_stale() {
     let temporary = tempfile::tempdir().expect("temporary repository parent");
     let destination = temporary.path().join("meaning");
@@ -1213,4 +1460,53 @@ fn binding_named(snapshot: &crate::platform::kernel::KernelSnapshot, name: &str)
             _ => None,
         })
         .expect("named binding")
+}
+
+fn expression_calling(
+    snapshot: &crate::platform::kernel::KernelSnapshot,
+    declaration: OwnerKey,
+) -> OwnerKey {
+    let OwnerKey::Declaration(declaration) = declaration else {
+        panic!("call target must be a declaration")
+    };
+    snapshot
+        .owners
+        .iter()
+        .find_map(|(owner, record)| match record {
+            OwnerRecord::Expression(expression)
+                if matches!(
+                    expression.operation,
+                    ExpressionOperation::Call { function, .. }
+                        if function.declaration == declaration
+                ) =>
+            {
+                Some(*owner)
+            }
+            _ => None,
+        })
+        .expect("exact declaration call")
+}
+
+fn expression_using_binding(
+    snapshot: &crate::platform::kernel::KernelSnapshot,
+    binding: OwnerKey,
+) -> OwnerKey {
+    let OwnerKey::Binding(binding) = binding else {
+        panic!("local reference target must be a binding")
+    };
+    snapshot
+        .owners
+        .iter()
+        .find_map(|(owner, record)| match record {
+            OwnerRecord::Expression(expression)
+                if expression.operation
+                    == (ExpressionOperation::Local {
+                        value: LocalValueReference::LexicalBinding(binding),
+                    }) =>
+            {
+                Some(*owner)
+            }
+            _ => None,
+        })
+        .expect("exact binding use")
 }

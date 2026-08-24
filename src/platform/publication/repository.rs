@@ -4,11 +4,11 @@ use super::contract::{HEAD_MAGIC, MAXIMUM_HEAD_BYTES, REVISION_CONTRACT_VERSION}
 use super::prepare::validate_history_base;
 use super::read_view::RepositoryView;
 use super::{
-    AcceptedBinding, HeadRecord, NormalizedTransaction, PreparedInitialPublication,
-    PreparedPublication, PublicationOptions, PublicationReceipt, RevisionRecord, SemanticDiff,
-    prepare_initial_publication,
+    AcceptedBinding, HeadRecord, NormalizedTransaction, PreparedAuthoredPublication,
+    PreparedInitialPublication, PreparedPublication, PublicationOptions, PublicationReceipt,
+    RevisionRecord, SemanticDiff, prepare_initial_publication,
 };
-use crate::platform::change::PrimitiveEdit;
+use crate::platform::change::{AuthoredChangeSet, PrimitiveEdit};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{KernelSnapshot, SemanticRoot, decode_root, encode_root};
 use crate::platform::storage::contract::TARGET_PACK_BYTES;
@@ -257,6 +257,17 @@ impl GraphRepository {
         self.view_current()
             .map_err(|diagnostic| vec![diagnostic])?
             .prepare_change(edits, options)
+    }
+
+    /// Prepares one high-level Graph 5 request against the currently observed exact revision.
+    pub fn prepare_authored_change(
+        &self,
+        request: &AuthoredChangeSet,
+        options: PublicationOptions,
+    ) -> Result<PreparedAuthoredPublication, Vec<Diagnostic>> {
+        self.view_current()
+            .map_err(|diagnostic| vec![diagnostic])?
+            .prepare_authored_change(request, options)
     }
 
     pub fn publish(

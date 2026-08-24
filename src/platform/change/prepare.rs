@@ -3,8 +3,9 @@
 use super::{
     CanonicalBaseRead, CanonicalDelta, CanonicalReadWork, DerivedDelta,
     IncrementalValidationReport, KernelOverlay, PlannedSummaries, TestDependencyDelta,
-    WitnessMapBase, WitnessMapUpdate, derive_local_delta, derive_test_dependency_delta,
-    plan_impact_and_summaries, validate_incremental_frontier, validate_structural_frontier,
+    WitnessMapBase, WitnessMapUpdate, WitnessReadWork, derive_local_delta,
+    derive_test_dependency_delta, plan_impact_and_summaries, validate_incremental_frontier,
+    validate_structural_frontier,
 };
 use crate::platform::diagnostic::Diagnostic;
 
@@ -17,6 +18,7 @@ pub struct PreparedChangeAnalysis {
     pub witness: WitnessMapUpdate,
     pub validation: IncrementalValidationReport,
     pub canonical_read_work: CanonicalReadWork,
+    pub witness_read_work: WitnessReadWork,
 }
 
 pub fn prepare_change_analysis<B: CanonicalBaseRead + ?Sized, W: WitnessMapBase + ?Sized>(
@@ -52,5 +54,6 @@ pub fn prepare_change_analysis<B: CanonicalBaseRead + ?Sized, W: WitnessMapBase 
         witness,
         validation,
         canonical_read_work,
+        witness_read_work: WitnessReadWork::default(),
     })
 }

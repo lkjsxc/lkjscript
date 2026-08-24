@@ -13,6 +13,7 @@ mod impact;
 mod overlay;
 mod prepare;
 mod relation_view;
+mod request;
 mod summary_delta;
 mod test_delta;
 mod validate;
@@ -34,6 +35,11 @@ pub use impact::{
 };
 pub use overlay::KernelOverlay;
 pub use prepare::{PreparedChangeAnalysis, prepare_change_analysis};
+pub use request::{
+    AuthoredChange, AuthoredChangeSet, AuthoredLowering, AuthoredLoweringWork, DeclarationSelector,
+    MAXIMUM_AUTHORED_CHANGE_BYTES, MAXIMUM_AUTHORED_CHANGES, ModuleSelector, OwnerSelector,
+    lower_authored_changes,
+};
 pub use summary_delta::{
     OwnerSummaryEdit, SummaryDelta, derive_summary_delta, derive_summary_delta_for,
 };

@@ -4,10 +4,11 @@ use super::{
     CurrentPublication, PreparedPublication, PublicationOptions, prepare_change_publication,
 };
 use crate::platform::change::{
-    BoundOwnerSummary, CanonicalBaseRead, CanonicalDelta, CanonicalRead, CanonicalReadWork,
-    DerivedDelta, PrimitiveEdit, SummaryDelta, TestDependencyDelta, WitnessBaseRead,
-    WitnessMapBase, WitnessMapUpdate, WitnessRead, WitnessReadWork, WitnessRelationRead,
-    WitnessTestDependencyRead, prepare_change_analysis, update_witness_maps_from,
+    AuthoredChangeSet, AuthoredLoweringWork, BoundOwnerSummary, CanonicalBaseRead, CanonicalDelta,
+    CanonicalRead, CanonicalReadWork, DerivedDelta, PrimitiveEdit, SummaryDelta,
+    TestDependencyDelta, WitnessBaseRead, WitnessMapBase, WitnessMapUpdate, WitnessRead,
+    WitnessReadWork, WitnessRelationRead, WitnessTestDependencyRead, lower_authored_changes,
+    prepare_change_analysis, update_witness_maps_from,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
@@ -31,6 +32,7 @@ use crate::platform::witness::{
     forward_relation_prefix, owner_key_bytes, reverse_relation_prefix,
     test_dependency_forward_prefix,
 };
+use std::collections::BTreeMap;
 
 pub const MAXIMUM_RELATION_READ_ITEMS: usize =
     crate::platform::witness::MAXIMUM_RELATION_PREFIX_ITEMS;
@@ -73,6 +75,14 @@ pub struct RevisionWitnessMapUpdate {
     pub store_work: StoreWork,
 }
 
+/// One fully validated authored request plus its exact request-local identity allocation.
+#[derive(Clone, Debug)]
+pub struct PreparedAuthoredPublication {
+    pub publication: PreparedPublication,
+    pub allocated: BTreeMap<String, OwnerKey>,
+    pub lowering_work: AuthoredLoweringWork,
+}
+
 /// One immutable catalog snapshot plus the exact accepted revision it was opened against.
 ///
 /// Packs are append-only in the current Graph 5 store, so a later HEAD publication cannot alter
@@ -108,6 +118,35 @@ impl RepositoryView {
         edits: Vec<PrimitiveEdit>,
         options: PublicationOptions,
     ) -> Result<PreparedPublication, Vec<Diagnostic>> {
+        self.prepare_change_with_prior_work(edits, options, AuthoredLoweringWork::default())
+    }
+
+    /// Resolves one strict authored request at this view's exact revision and prepares its one
+    /// generic canonical publication. Request-local allocations are returned separately from
+    /// accepted authority so callers can render a compact protocol receipt.
+    pub fn prepare_authored_change(
+        &self,
+        request: &AuthoredChangeSet,
+        options: PublicationOptions,
+    ) -> Result<PreparedAuthoredPublication, Vec<Diagnostic>> {
+        let lowering =
+            lower_authored_changes(self, self, request, options.idempotency_key.as_deref())
+                .map_err(|diagnostic| vec![diagnostic])?;
+        let publication =
+            self.prepare_change_with_prior_work(lowering.edits, options, lowering.work)?;
+        Ok(PreparedAuthoredPublication {
+            publication,
+            allocated: lowering.allocated,
+            lowering_work: lowering.work,
+        })
+    }
+
+    fn prepare_change_with_prior_work(
+        &self,
+        edits: Vec<PrimitiveEdit>,
+        options: PublicationOptions,
+        prior_work: AuthoredLoweringWork,
+    ) -> Result<PreparedPublication, Vec<Diagnostic>> {
         let normalization =
             CanonicalDelta::normalize_from(self, edits).map_err(|diagnostic| vec![diagnostic])?;
         if normalization.base_revision != Some(self.revision()) {
@@ -118,7 +157,9 @@ impl RepositoryView {
             )]);
         }
         let mut analysis = prepare_change_analysis(self, self, normalization.canonical)?;
+        analysis.canonical_read_work.add(prior_work.canonical);
         analysis.canonical_read_work.add(normalization.work);
+        analysis.witness_read_work.add(prior_work.witness);
         prepare_change_publication(
             self.current.accepted,
             self,

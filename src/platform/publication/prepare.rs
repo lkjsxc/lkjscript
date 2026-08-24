@@ -821,6 +821,7 @@ fn change_work(
         .saturating_add(analysis.validation.work.type_objects_checked)
         .saturating_add(analysis.validation.work.expression_work);
     let mut witness_reads = analysis.derived.read_work;
+    witness_reads.add(analysis.witness_read_work);
     witness_reads.add(analysis.summaries.initial.read_work);
     witness_reads.add(analysis.summaries.final_delta.read_work);
     witness_reads.add(analysis.summaries.plan.work.witness_reads);
