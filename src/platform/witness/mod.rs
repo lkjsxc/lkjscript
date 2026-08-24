@@ -21,7 +21,7 @@ pub(crate) use codec::bind_witness_manifest;
 pub use codec::{
     decode_owner_summary, decode_witness_manifest, encode_owner_summary, encode_witness_manifest,
 };
-pub(crate) use contract::MAXIMUM_RELATION_PREFIX_ITEMS;
+pub(crate) use contract::{MAXIMUM_RELATION_PREFIX_ITEMS, MAXIMUM_TEST_DEPENDENCY_PREFIX_ITEMS};
 pub use digest::{
     OwnerSummaryDigest, SemanticDigest, ValidationCertificateDigest, ValidationWitnessDigest,
     ValidatorContractDigest,

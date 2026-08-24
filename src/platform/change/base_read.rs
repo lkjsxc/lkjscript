@@ -7,8 +7,8 @@ use crate::platform::kernel::{
 };
 use crate::platform::semantic_id::{RepositoryId, RevisionId};
 use crate::platform::witness::{
-    FullWitness, MAXIMUM_RELATION_PREFIX_ITEMS, NamespaceKey, OwnerSummary, OwnerSummaryDigest,
-    OwnershipEntry,
+    FullWitness, MAXIMUM_RELATION_PREFIX_ITEMS, MAXIMUM_TEST_DEPENDENCY_PREFIX_ITEMS, NamespaceKey,
+    OwnerSummary, OwnerSummaryDigest, OwnershipEntry, TestDependency,
 };
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -118,6 +118,12 @@ pub struct WitnessRelationRead {
     pub truncated: bool,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WitnessTestDependencyRead {
+    pub dependencies: Vec<TestDependency>,
+    pub truncated: bool,
+}
+
 /// Narrow accepted-authority surface required before high-level edits become an exact canonical
 /// delta. Implementations must pin one immutable base for the lifetime of a normalization.
 pub trait CanonicalBaseRead {
@@ -185,6 +191,12 @@ pub trait WitnessBaseRead {
         owner: OwnerKey,
         maximum_items: usize,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic>;
+
+    fn read_test_dependencies(
+        &self,
+        test: OwnerKey,
+        maximum_items: usize,
+    ) -> Result<WitnessRead<WitnessTestDependencyRead>, Diagnostic>;
 }
 
 impl CanonicalBaseRead for KernelSnapshot {
@@ -318,6 +330,41 @@ impl WitnessBaseRead for FullWitness {
         maximum_items: usize,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         read_memory_relations(self, owner, maximum_items, true)
+    }
+
+    fn read_test_dependencies(
+        &self,
+        test: OwnerKey,
+        maximum_items: usize,
+    ) -> Result<WitnessRead<WitnessTestDependencyRead>, Diagnostic> {
+        if maximum_items == 0 || maximum_items > MAXIMUM_TEST_DEPENDENCY_PREFIX_ITEMS {
+            return Err(base_read_error(
+                DiagnosticClass::Resource,
+                "change_test_dependency_item_budget",
+                "test-dependency item budget is outside the current supported range",
+            ));
+        }
+        if !matches!(test, OwnerKey::Declaration(_)) {
+            return Err(base_read_error(
+                DiagnosticClass::Source,
+                "change_test_dependency_owner",
+                "test-dependency lookup requires a declaration owner",
+            ));
+        }
+        let dependencies = self
+            .entries
+            .test_dependencies_by_test
+            .get(&test)
+            .map(|entries| entries.iter().copied().collect::<Vec<_>>())
+            .unwrap_or_default();
+        let returned = dependencies.len().min(maximum_items);
+        Ok(WitnessRead::memory_records(
+            WitnessTestDependencyRead {
+                dependencies: dependencies[..returned].to_vec(),
+                truncated: dependencies.len() > maximum_items,
+            },
+            returned as u64,
+        ))
     }
 }
 

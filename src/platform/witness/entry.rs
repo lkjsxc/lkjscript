@@ -217,6 +217,54 @@ pub fn test_dependency_keys(dependency: TestDependency) -> [Vec<u8>; 2] {
     [forward, reverse]
 }
 
+pub fn test_dependency_forward_prefix(test: OwnerKey) -> Vec<u8> {
+    let mut prefix = Vec::with_capacity(18);
+    prefix.push(1);
+    prefix.extend_from_slice(&EncodedOwnerKey::new(test).bytes());
+    prefix
+}
+
+pub fn decode_test_dependency_forward_key(bytes: &[u8]) -> Result<TestDependency, Diagnostic> {
+    if bytes.first().copied() != Some(1) {
+        return Err(entry_error(
+            "witness_test_dependency_direction",
+            "test-dependency key is not in the forward domain",
+        ));
+    }
+    let owner_bytes = bytes.get(1..18).ok_or_else(|| {
+        entry_error(
+            "witness_test_dependency_owner",
+            "test-dependency key has no complete test owner identity",
+        )
+    })?;
+    let test = EncodedOwnerKey::decode(owner_bytes)?;
+    if !matches!(test, OwnerKey::Declaration(_)) {
+        return Err(entry_error(
+            "witness_test_dependency_test",
+            "test-dependency key does not identify a declaration owner",
+        ));
+    }
+    let mut cursor = 18;
+    let kind = bytes
+        .get(cursor)
+        .and_then(|tag| RelationKind::from_tag(*tag))
+        .ok_or_else(|| {
+            entry_error(
+                "witness_test_dependency_kind",
+                "test-dependency key contains an unknown relation kind",
+            )
+        })?;
+    cursor += 1;
+    let target = decode_endpoint(bytes, &mut cursor)?;
+    if cursor != bytes.len() {
+        return Err(entry_error(
+            "witness_test_dependency_trailing",
+            "test-dependency key contains trailing bytes",
+        ));
+    }
+    Ok(TestDependency { test, kind, target })
+}
+
 fn relation_key(first: RelationEndpoint, kind: RelationKind, second: RelationEndpoint) -> Vec<u8> {
     let mut bytes = Vec::with_capacity(70);
     encode_endpoint(&mut bytes, first);

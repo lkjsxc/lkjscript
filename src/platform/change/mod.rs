@@ -24,7 +24,7 @@ pub use authority::{
 };
 pub use base_read::{
     BoundOwnerSummary, CanonicalBaseRead, CanonicalRead, CanonicalReadWork, WitnessBaseRead,
-    WitnessRead, WitnessReadWork, WitnessRelationRead,
+    WitnessRead, WitnessReadWork, WitnessRelationRead, WitnessTestDependencyRead,
 };
 pub use delta::{CanonicalDelta, CanonicalNormalization, ExactEdit, PrimitiveEdit};
 pub use derived::{DerivedDelta, DerivedValueEdit, RelationDelta, derive_local_delta};

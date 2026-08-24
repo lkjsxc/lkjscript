@@ -339,6 +339,33 @@ fn test_dependencies_are_exact_bidirectional_witness_entries() {
         witness.manifest.roots.test_dependencies.entries(),
         witness.entries.test_dependencies.len() as u64 * 2
     );
+    let exact = witness
+        .entries
+        .test_dependencies
+        .iter()
+        .find(|entry| entry.test == test)
+        .copied()
+        .expect("test dependency");
+    let [forward, reverse] = test_dependency_keys(exact);
+    assert_eq!(
+        decode_test_dependency_forward_key(&forward).expect("forward dependency key must decode"),
+        exact
+    );
+    assert!(forward.starts_with(&test_dependency_forward_prefix(test)));
+    assert_eq!(
+        decode_test_dependency_forward_key(&reverse)
+            .expect_err("reverse dependency key must reject as forward")
+            .code,
+        "witness_test_dependency_direction"
+    );
+    let mut trailing = forward;
+    trailing.push(0);
+    assert_eq!(
+        decode_test_dependency_forward_key(&trailing)
+            .expect_err("trailing dependency-key bytes must reject")
+            .code,
+        "witness_test_dependency_trailing"
+    );
 }
 
 #[test]

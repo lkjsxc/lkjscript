@@ -4,7 +4,7 @@ use super::CurrentPublication;
 use crate::platform::change::{
     BoundOwnerSummary, CanonicalBaseRead, CanonicalRead, CanonicalReadWork, DerivedDelta,
     SummaryDelta, TestDependencyDelta, WitnessBaseRead, WitnessMapUpdate, WitnessRead,
-    WitnessReadWork, WitnessRelationRead, update_witness_maps_from,
+    WitnessReadWork, WitnessRelationRead, WitnessTestDependencyRead, update_witness_maps_from,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
@@ -22,14 +22,18 @@ use crate::platform::storage::object::{
 };
 use crate::platform::storage::page_store::ObjectPageReader;
 use crate::platform::witness::{
-    NamespaceKey, OwnerSummary, OwnershipEntry, SummaryBinding, decode_forward_relation_key,
-    decode_owner_summary, decode_ownership, decode_reverse_relation_key, forward_relation_prefix,
-    owner_key_bytes, reverse_relation_prefix,
+    MAXIMUM_TEST_DEPENDENCY_PREFIX_ITEMS, NamespaceKey, OwnerSummary, OwnershipEntry,
+    SummaryBinding, TestDependency, decode_forward_relation_key, decode_owner_summary,
+    decode_ownership, decode_reverse_relation_key, decode_test_dependency_forward_key,
+    forward_relation_prefix, owner_key_bytes, reverse_relation_prefix,
+    test_dependency_forward_prefix,
 };
 
 pub const MAXIMUM_RELATION_READ_ITEMS: usize =
     crate::platform::witness::MAXIMUM_RELATION_PREFIX_ITEMS;
+pub const MAXIMUM_TEST_DEPENDENCY_READ_ITEMS: usize = MAXIMUM_TEST_DEPENDENCY_PREFIX_ITEMS;
 const RELATION_LIMIT_STOP: &str = "publication_relation_limit_stop";
+const TEST_DEPENDENCY_LIMIT_STOP: &str = "publication_test_dependency_limit_stop";
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct RepositoryReadWork {
@@ -50,6 +54,12 @@ pub struct RevisionRead<T> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RelationRead {
     pub edges: Vec<RelationEdge>,
+    pub truncated: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TestDependencyRead {
+    pub dependencies: Vec<TestDependency>,
     pub truncated: bool,
 }
 
@@ -316,6 +326,84 @@ impl RepositoryView {
         maximum_items: usize,
     ) -> Result<RevisionRead<RelationRead>, Diagnostic> {
         self.relations(target, kind, maximum_items, true)
+    }
+
+    pub fn test_dependencies(
+        &self,
+        test: OwnerKey,
+        maximum_items: usize,
+    ) -> Result<RevisionRead<TestDependencyRead>, Diagnostic> {
+        if maximum_items == 0 || maximum_items > MAXIMUM_TEST_DEPENDENCY_READ_ITEMS {
+            return Err(read_error(
+                DiagnosticClass::Resource,
+                "publication_test_dependency_item_budget",
+                format!(
+                    "test-dependency item budget must be 1 through {MAXIMUM_TEST_DEPENDENCY_READ_ITEMS}"
+                ),
+            ));
+        }
+        if !matches!(test, OwnerKey::Declaration(_)) {
+            return Err(read_error(
+                DiagnosticClass::Source,
+                "publication_test_dependency_owner",
+                "test-dependency lookup requires a declaration owner",
+            ));
+        }
+        let prefix = test_dependency_forward_prefix(test);
+        let mut work = RepositoryReadWork::default();
+        let mut keys = Vec::with_capacity(maximum_items.min(64));
+        let mut truncated = false;
+        let reader = ObjectPageReader::new(&self.store);
+        let mut map_work = MapWork::default();
+        let result = PersistentMap::from_root(self.current.witness.roots.test_dependencies)
+            .for_each_prefix(&reader, &prefix, &mut map_work, |key, value| {
+                if !value.is_empty() {
+                    return Err(MapError {
+                        class: MapErrorClass::Corrupt,
+                        code: "publication_test_dependency_value",
+                        message: "test-dependency witness entry has a nonempty value".to_owned(),
+                    });
+                }
+                if keys.len() == maximum_items {
+                    truncated = true;
+                    return Err(MapError {
+                        class: MapErrorClass::Resource,
+                        code: TEST_DEPENDENCY_LIMIT_STOP,
+                        message: "bounded test-dependency prefix has more matching entries"
+                            .to_owned(),
+                    });
+                }
+                keys.push(key.to_vec());
+                Ok(())
+            });
+        work.map = map_work;
+        work.store = reader.work();
+        if let Err(error) = result
+            && error.code != TEST_DEPENDENCY_LIMIT_STOP
+        {
+            return Err(map_diagnostic(error));
+        }
+        let mut dependencies = Vec::with_capacity(keys.len());
+        for key_bytes in keys {
+            let dependency = decode_test_dependency_forward_key(&key_bytes)?;
+            if dependency.test != test {
+                return Err(read_error(
+                    DiagnosticClass::Corrupt,
+                    "publication_test_dependency_prefix",
+                    "decoded test dependency does not agree with its selected witness prefix",
+                ));
+            }
+            dependencies.push(dependency);
+        }
+        work.items_returned = dependencies.len() as u64;
+        work.witness_records_decoded = dependencies.len() as u64;
+        Ok(self.read(
+            TestDependencyRead {
+                dependencies,
+                truncated,
+            },
+            work,
+        ))
     }
 
     fn relations(
@@ -589,6 +677,15 @@ impl WitnessBaseRead for RepositoryView {
         RepositoryView::incoming_relations(self, endpoint, None, maximum_items)
             .map(witness_relation_read)
     }
+
+    fn read_test_dependencies(
+        &self,
+        test: OwnerKey,
+        maximum_items: usize,
+    ) -> Result<WitnessRead<WitnessTestDependencyRead>, Diagnostic> {
+        RepositoryView::test_dependencies(self, test, maximum_items)
+            .map(witness_test_dependency_read)
+    }
 }
 
 fn canonical_read<T>(read: RevisionRead<T>) -> CanonicalRead<T> {
@@ -625,6 +722,26 @@ fn witness_relation_read(read: RevisionRead<RelationRead>) -> WitnessRead<Witnes
     WitnessRead {
         value: WitnessRelationRead {
             edges: read.value.edges,
+            truncated: read.value.truncated,
+        },
+        work: WitnessReadWork {
+            point_reads: 1,
+            map_pages_read: read.work.map.pages_read,
+            map_entries_visited: read.work.map.entries_visited,
+            catalog_lookups: read.work.store.catalog_lookups,
+            objects_read: read.work.store.objects_read,
+            bytes_read: read.work.store.bytes_read,
+            witness_records_decoded: read.work.witness_records_decoded,
+        },
+    }
+}
+
+fn witness_test_dependency_read(
+    read: RevisionRead<TestDependencyRead>,
+) -> WitnessRead<WitnessTestDependencyRead> {
+    WitnessRead {
+        value: WitnessTestDependencyRead {
+            dependencies: read.value.dependencies,
             truncated: read.value.truncated,
         },
         work: WitnessReadWork {

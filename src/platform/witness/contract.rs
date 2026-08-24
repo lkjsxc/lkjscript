@@ -34,6 +34,7 @@ pub const MAXIMUM_OWNER_SUMMARY_BYTES: usize = 64 * 1024;
 pub const MAXIMUM_WITNESS_MANIFEST_BYTES: usize = 64 * 1024;
 pub const MAXIMUM_OWNERSHIP_VALUE_BYTES: usize = 256;
 pub const MAXIMUM_RELATION_PREFIX_ITEMS: usize = 10_000;
+pub const MAXIMUM_TEST_DEPENDENCY_PREFIX_ITEMS: usize = 10_000;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ValidatorFeatureDescriptor {

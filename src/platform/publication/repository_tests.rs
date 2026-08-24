@@ -1,7 +1,7 @@
 use super::*;
 use crate::platform::change::{
     CanonicalDelta, KernelOverlay, PrimitiveEdit, derive_local_delta, derive_summary_delta,
-    plan_impact_and_summaries, prepare_change_analysis,
+    derive_test_dependency_delta, plan_impact_and_summaries, prepare_change_analysis,
 };
 use crate::platform::kernel::{
     DeclarationPayload, ExactOwnerKey, ExpressionOperation, Name, NamespaceClass, OwnerKey,
@@ -240,6 +240,28 @@ fn revision_view_reads_exact_canonical_and_witness_records_with_local_work() {
         .code,
         "publication_relation_item_budget"
     );
+
+    let test = owner_named(&created.initial.snapshot, "caller_test");
+    let expected_dependencies = created.initial.witness.entries.test_dependencies_by_test[&test]
+        .iter()
+        .copied()
+        .collect::<Vec<_>>();
+    let dependencies = view
+        .test_dependencies(test, MAXIMUM_TEST_DEPENDENCY_READ_ITEMS)
+        .expect("bounded test dependencies");
+    assert_eq!(dependencies.value.dependencies, expected_dependencies);
+    assert!(!dependencies.value.truncated);
+    assert_eq!(
+        dependencies.work.witness_records_decoded,
+        expected_dependencies.len() as u64
+    );
+    assert!(dependencies.work.map.pages_read > 0);
+    assert_eq!(
+        view.test_dependencies(callee, 0)
+            .expect_err("zero test-dependency budget must reject")
+            .code,
+        "publication_test_dependency_item_budget"
+    );
 }
 
 #[test]
@@ -455,6 +477,60 @@ fn repository_impact_plan_matches_full_witness_oracle() {
     assert!(repository.plan.work.witness_reads.point_reads < 64);
     assert!(repository.plan.work.witness_reads.map_pages_read < 256);
     assert!(repository.plan.work.witness_reads.objects_read < 256);
+}
+
+#[test]
+fn repository_test_delta_reads_only_the_affected_test_witness_closure() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let view = created.repository.view_current().expect("pinned view");
+    let test = owner_named(&created.initial.snapshot, "caller_test");
+    let actual = test_actual(&created.initial.snapshot, "caller_test");
+    let mut replacement = created.initial.snapshot.owners[&actual].clone();
+    let OwnerRecord::Expression(record) = &mut replacement else {
+        panic!("test actual must be an expression")
+    };
+    record.operation = ExpressionOperation::Unit;
+    let canonical = CanonicalDelta::normalize(
+        &created.initial.snapshot,
+        vec![PrimitiveEdit::ReplaceOwner {
+            expected: encode_owner(&created.initial.snapshot.owners[&actual])
+                .expect("base test expression encoding")
+                .0,
+            record: replacement,
+        }],
+    )
+    .expect("canonical test edit");
+    let overlay = KernelOverlay::new(&created.initial.snapshot, &canonical);
+    let derived = derive_local_delta(&created.initial.snapshot, &overlay, &canonical, &view)
+        .expect("repository-backed derived delta");
+
+    let repository = derive_test_dependency_delta(&overlay, &canonical, &derived, &view)
+        .expect("repository-backed test delta");
+    let oracle =
+        derive_test_dependency_delta(&overlay, &canonical, &derived, &created.initial.witness)
+            .expect("full-witness test delta oracle");
+    assert_eq!(
+        repository.affected_tests,
+        std::collections::BTreeSet::from([test])
+    );
+    assert_eq!(repository.affected_tests, oracle.affected_tests);
+    assert_eq!(repository.removed, oracle.removed);
+    assert_eq!(repository.added, oracle.added);
+    assert!(!repository.removed.is_empty());
+    assert!(repository.added.is_empty());
+    assert_eq!(repository.work.ownership_steps, oracle.work.ownership_steps);
+    assert_eq!(repository.work.owners_visited, oracle.work.owners_visited);
+    assert_eq!(
+        repository.work.relation_edges_visited,
+        oracle.work.relation_edges_visited
+    );
+    assert!(repository.work.witness_reads.point_reads > 0);
+    assert!(repository.work.witness_reads.point_reads < 64);
+    assert!(repository.work.witness_reads.map_pages_read < 256);
+    assert!(repository.work.witness_reads.objects_read < 256);
 }
 
 #[test]
@@ -968,6 +1044,17 @@ fn function_body(snapshot: &crate::platform::kernel::KernelSnapshot, name: &str)
         panic!("named declaration must be a function")
     };
     OwnerKey::Expression(function.body)
+}
+
+fn test_actual(snapshot: &crate::platform::kernel::KernelSnapshot, name: &str) -> OwnerKey {
+    let declaration = owner_named(snapshot, name);
+    let OwnerRecord::Declaration(record) = &snapshot.owners[&declaration] else {
+        panic!("named owner must be a declaration")
+    };
+    let DeclarationPayload::Test { actual, .. } = &record.payload else {
+        panic!("named declaration must be a test")
+    };
+    OwnerKey::Expression(*actual)
 }
 
 fn binding_named(snapshot: &crate::platform::kernel::KernelSnapshot, name: &str) -> OwnerKey {
