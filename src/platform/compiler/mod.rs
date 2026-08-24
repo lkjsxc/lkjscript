@@ -10,16 +10,25 @@
     reason = "private compiler exports become artifact and runtime consumers at the Graph 5 cutover"
 )]
 
+mod artifact;
 mod cache;
+mod link;
 mod lower;
 pub(crate) mod manifest;
 pub(crate) mod unit;
 
+pub use artifact::{
+    ARTIFACT_BUNDLE_CONTRACT_IDENTITY, ARTIFACT_CONTRACT_VERSION,
+    ARTIFACT_MANIFEST_CONTRACT_IDENTITY, ArtifactBundleDigest, ArtifactClosureDigest,
+    ArtifactLoadWork, ArtifactManifest, ArtifactManifestDigest, ArtifactPackage, ArtifactTarget,
+    EncodedArtifact, LoadedArtifact, load_artifact,
+};
 pub use cache::{
     CachedCompilation, CompilationBuildProfile, CompilationBuildReceipt, CompilationBuildWork,
     CompilationValidationReceipt, build_clean, build_incremental, load_current_compilation,
     validate_current_compilation,
 };
+pub use link::{ArtifactLinkReceipt, ArtifactLinkWork, link_artifact};
 pub use lower::{CompilationReceipt, CompilationWork, compile_unit};
 pub use manifest::{
     COMPILATION_MANIFEST_CONTRACT_IDENTITY, COMPILATION_MANIFEST_CONTRACT_VERSION,

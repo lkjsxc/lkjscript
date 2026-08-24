@@ -163,6 +163,17 @@ pub fn load_current_compilation(
     }))
 }
 
+pub(crate) fn load_exact_current_compilation(
+    repository: &GraphRepository,
+    digest: CompilationManifestDigest,
+) -> Result<CachedCompilation, Diagnostic> {
+    let current = repository.current()?;
+    let mut store = repository.object_store()?;
+    let manifest = read_manifest(&mut store, digest)?;
+    bind_manifest_to_current(&manifest, &current)?;
+    Ok(CachedCompilation { manifest, digest })
+}
+
 pub fn build_clean(
     repository: &GraphRepository,
     optimization: OptimizationPolicy,

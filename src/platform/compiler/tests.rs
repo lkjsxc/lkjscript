@@ -1,12 +1,12 @@
 //! Focused normalized compiler-unit tests.
 
 use super::*;
-use crate::platform::change::PrimitiveEdit;
+use crate::platform::change::{AuthoredChange, AuthoredChangeSet, ChangeBudget, PrimitiveEdit};
 use crate::platform::kernel::{
     BindingKind, BindingRecord, CaseRecord, CaseReference, DeclarationVisibility,
     ExpressionOperation, ExpressionRecord, FieldSelector, LocalValueReference, MapExpressionEntry,
     MatchExpressionArm, Name, OwnerHeader, OwnerKey, OwnerKind, OwnerRecord, RequirementReference,
-    TextValue, TypeForm, TypeObject,
+    TextValue, TypeForm, TypeObject, TypeObjectDigest, encode_type_object,
 };
 use crate::platform::persistent_map::MapRoot;
 use crate::platform::publication::{GraphRepository, PublicationOptions, PublicationOutcome};
@@ -82,6 +82,33 @@ fn add_expression(
             .is_none()
     );
     id
+}
+
+fn structurally_empty_snapshot(seed: &[u8]) -> crate::platform::kernel::KernelSnapshot {
+    let root_placeholder = |marker| {
+        MapRoot::from_parts(
+            crate::platform::persistent_map::PageDigest::from_bytes([marker; 32]),
+            0,
+        )
+    };
+    crate::platform::kernel::KernelSnapshot {
+        root: crate::platform::kernel::SemanticRoot {
+            graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+            repository_id: crate::platform::semantic_id::RepositoryId::migrate(seed, 0),
+            package_id: crate::platform::kernel::PackageId::migrate(seed, 0),
+            package_name: Name::new("empty_compiler").unwrap(),
+            owners: root_placeholder(1),
+            dependencies: root_placeholder(2),
+            retirements: root_placeholder(3),
+        },
+        owners: std::collections::BTreeMap::new(),
+        types: std::collections::BTreeMap::new(),
+        dependency_interfaces: std::collections::BTreeMap::new(),
+        dependency_types: std::collections::BTreeMap::new(),
+        blobs: std::collections::BTreeMap::new(),
+        dependencies: std::collections::BTreeMap::new(),
+        retirements: std::collections::BTreeMap::new(),
+    }
 }
 
 fn complete_expression_snapshot() -> crate::platform::kernel::KernelSnapshot {
@@ -780,33 +807,7 @@ fn clean_compilation_manifest_persists_and_reopens_exactly() {
 
 #[test]
 fn structurally_empty_package_builds_one_valid_empty_manifest() {
-    let root_placeholder = |marker| {
-        MapRoot::from_parts(
-            crate::platform::persistent_map::PageDigest::from_bytes([marker; 32]),
-            0,
-        )
-    };
-    let snapshot = crate::platform::kernel::KernelSnapshot {
-        root: crate::platform::kernel::SemanticRoot {
-            graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-            repository_id: crate::platform::semantic_id::RepositoryId::migrate(
-                b"empty-compiler-manifest",
-                0,
-            ),
-            package_id: crate::platform::kernel::PackageId::migrate(b"empty-compiler-manifest", 0),
-            package_name: Name::new("empty_compiler").unwrap(),
-            owners: root_placeholder(1),
-            dependencies: root_placeholder(2),
-            retirements: root_placeholder(3),
-        },
-        owners: std::collections::BTreeMap::new(),
-        types: std::collections::BTreeMap::new(),
-        dependency_interfaces: std::collections::BTreeMap::new(),
-        dependency_types: std::collections::BTreeMap::new(),
-        blobs: std::collections::BTreeMap::new(),
-        dependencies: std::collections::BTreeMap::new(),
-        retirements: std::collections::BTreeMap::new(),
-    };
+    let snapshot = structurally_empty_snapshot(b"empty-compiler-manifest");
     let temporary = tempfile::tempdir().expect("empty compiler parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
         .expect("empty Graph 5 repository");
@@ -825,6 +826,17 @@ fn structurally_empty_package_builds_one_valid_empty_manifest() {
             .expect("validate empty manifest")
             .units,
         0
+    );
+    let artifact = link_artifact(&created.repository, built.manifest_digest, &[])
+        .expect("link empty package artifact");
+    let loaded = load_artifact(&artifact.artifact.bytes).expect("load empty package artifact");
+    assert_eq!(loaded.manifest.packages.len(), 1);
+    assert!(
+        loaded
+            .root_package()
+            .expect("root package")
+            .targets
+            .is_empty()
     );
 }
 
@@ -923,6 +935,8 @@ fn body_edit_incremental_manifest_equals_a_clean_rebuild() {
     .expect("current caller binding")
     .expect("current caller unit");
     assert_ne!(before_caller, after_caller);
+    let incremental_artifact = link_artifact(&created.repository, incremental.manifest_digest, &[])
+        .expect("link incremental compilation");
 
     let clean = build_clean(
         &created.repository,
@@ -932,6 +946,16 @@ fn body_edit_incremental_manifest_equals_a_clean_rebuild() {
     assert_eq!(incremental.manifest_digest, clean.manifest_digest);
     assert_eq!(incremental.manifest_bytes, clean.manifest_bytes);
     assert_eq!(incremental.manifest, clean.manifest);
+    let clean_artifact = link_artifact(&created.repository, clean.manifest_digest, &[])
+        .expect("link clean compilation");
+    assert_eq!(
+        incremental_artifact.artifact.bytes,
+        clean_artifact.artifact.bytes
+    );
+    assert_eq!(
+        incremental_artifact.artifact.bundle_digest,
+        clean_artifact.artifact.bundle_digest
+    );
     assert_eq!(
         validate_current_compilation(&created.repository, incremental.manifest_digest)
             .expect("validate incremental manifest")
@@ -1257,6 +1281,251 @@ fn compilation_cache_never_follows_head_or_lock_symlinks() {
     );
     assert_eq!(std::fs::read(&outside).unwrap(), sentinel);
     assert_eq!(created.repository.current().unwrap().head, initial_head);
+}
+
+#[test]
+fn graph5_artifact_links_deterministically_and_reopens_without_graph4_modules() {
+    let snapshot = crate::platform::kernel::tests::witness_snapshot();
+    let temporary = tempfile::tempdir().expect("artifact link parent");
+    let root = temporary.path().join("repository");
+    let created = GraphRepository::create(&root, &snapshot, None).expect("Graph 5 repository");
+    let compilation = build_clean(
+        &created.repository,
+        OptimizationPolicy::DeterministicBaseline,
+    )
+    .expect("clean normalized compilation");
+
+    let first = link_artifact(&created.repository, compilation.manifest_digest, &[])
+        .expect("link Graph 5 artifact");
+    let second = link_artifact(&created.repository, compilation.manifest_digest, &[])
+        .expect("repeat Graph 5 link");
+    assert_eq!(first.artifact.bytes, second.artifact.bytes);
+    assert_eq!(first.artifact.bundle_digest, second.artifact.bundle_digest);
+    assert_eq!(first.work.compiler_units, 11);
+    assert_eq!(first.work.target_owners, 1);
+    assert_eq!(first.work.packages, 1);
+    assert!(
+        !first
+            .artifact
+            .bytes
+            .windows("MeaningModule".len())
+            .any(|window| window == b"MeaningModule")
+    );
+
+    let loaded = load_artifact(&first.artifact.bytes).expect("strict artifact load");
+    assert_eq!(loaded.manifest_digest, first.artifact.manifest_digest);
+    assert_eq!(loaded.bundle_digest, first.artifact.bundle_digest);
+    assert_eq!(
+        loaded.root_package().expect("root package").package,
+        snapshot.root.package_id
+    );
+    assert_eq!(
+        loaded.root_package().expect("root package").targets.len(),
+        1
+    );
+
+    drop(created);
+    let reopened = GraphRepository::open(&root).expect("reopen artifact repository");
+    let after_restart = link_artifact(&reopened, compilation.manifest_digest, &[])
+        .expect("link after repository restart");
+    assert_eq!(after_restart.artifact.bytes, first.artifact.bytes);
+}
+
+#[test]
+fn graph5_artifact_links_exact_compiled_dependency_closure() {
+    let temporary = tempfile::tempdir().expect("dependency artifact parent");
+    let source_snapshot = crate::platform::kernel::tests::witness_snapshot();
+    let source = GraphRepository::create(&temporary.path().join("source"), &source_snapshot, None)
+        .expect("source Graph 5 repository");
+    let source_compilation = build_clean(
+        &source.repository,
+        OptimizationPolicy::DeterministicBaseline,
+    )
+    .expect("source clean compilation");
+    let source_artifact =
+        link_artifact(&source.repository, source_compilation.manifest_digest, &[])
+            .expect("source artifact");
+    let source_loaded =
+        load_artifact(&source_artifact.artifact.bytes).expect("source strict artifact");
+    let exported = source
+        .repository
+        .export_package_object()
+        .expect("source package object");
+
+    let target_snapshot = structurally_empty_snapshot(b"artifact-dependency-target");
+    let target = GraphRepository::create(&temporary.path().join("target"), &target_snapshot, None)
+        .expect("target Graph 5 repository");
+    target
+        .repository
+        .stage_package_object(exported.digest, &exported.packs)
+        .expect("stage exact source interface");
+    let request = AuthoredChangeSet {
+        base: target.current.head.revision,
+        preconditions: Vec::new(),
+        changes: vec![AuthoredChange::AddDependency {
+            package: exported.object.package,
+            semantic_revision: exported.object.semantic_revision,
+            package_object: exported.digest,
+        }],
+        budget: ChangeBudget::default(),
+    };
+    let prepared = target
+        .repository
+        .prepare_authored_change(&request, PublicationOptions::default())
+        .expect("prepare target dependency");
+    assert!(matches!(
+        target
+            .repository
+            .publish(&prepared.publication)
+            .expect("publish target dependency"),
+        PublicationOutcome::Accepted { .. }
+    ));
+    let target_compilation = build_clean(
+        &target.repository,
+        OptimizationPolicy::DeterministicBaseline,
+    )
+    .expect("target clean compilation");
+    assert_eq!(
+        link_artifact(&target.repository, target_compilation.manifest_digest, &[])
+            .expect_err("missing dependency artifact must reject")
+            .code,
+        "artifact_link_dependency_missing"
+    );
+    let linked = link_artifact(
+        &target.repository,
+        target_compilation.manifest_digest,
+        std::slice::from_ref(&source_loaded),
+    )
+    .expect("link exact dependency closure");
+    assert_eq!(linked.work.dependency_artifacts, 1);
+    assert_eq!(linked.work.packages, 2);
+    let loaded = load_artifact(&linked.artifact.bytes).expect("load linked dependency artifact");
+    assert_eq!(
+        loaded.manifest.root_package,
+        target_snapshot.root.package_id
+    );
+    assert!(loaded.package(source_snapshot.root.package_id).is_some());
+    assert!(loaded.package(target_snapshot.root.package_id).is_some());
+
+    let unrelated_snapshot = structurally_empty_snapshot(b"artifact-unrelated-package");
+    let unrelated = GraphRepository::create(
+        &temporary.path().join("unrelated"),
+        &unrelated_snapshot,
+        None,
+    )
+    .expect("unrelated Graph 5 repository");
+    let unrelated_compilation = build_clean(
+        &unrelated.repository,
+        OptimizationPolicy::DeterministicBaseline,
+    )
+    .expect("unrelated clean compilation");
+    let unrelated_artifact = link_artifact(
+        &unrelated.repository,
+        unrelated_compilation.manifest_digest,
+        &[],
+    )
+    .expect("unrelated artifact");
+    let unrelated_loaded =
+        load_artifact(&unrelated_artifact.artifact.bytes).expect("unrelated strict artifact");
+    assert_eq!(
+        link_artifact(
+            &target.repository,
+            target_compilation.manifest_digest,
+            &[source_loaded, unrelated_loaded],
+        )
+        .expect_err("unrelated dependency package must not enter the closure")
+        .code,
+        "artifact_package_closure"
+    );
+}
+
+#[test]
+fn graph5_artifact_rejects_predecessor_corruption_and_inexact_closures() {
+    let snapshot = crate::platform::kernel::tests::witness_snapshot();
+    let temporary = tempfile::tempdir().expect("artifact rejection parent");
+    let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
+        .expect("Graph 5 repository");
+    let compilation = build_clean(
+        &created.repository,
+        OptimizationPolicy::DeterministicBaseline,
+    )
+    .expect("clean normalized compilation");
+    let linked = link_artifact(&created.repository, compilation.manifest_digest, &[])
+        .expect("link current artifact");
+    let loaded = load_artifact(&linked.artifact.bytes).expect("load current artifact");
+
+    let mut predecessor = linked.artifact.bytes.clone();
+    predecessor[..8].copy_from_slice(b"LKJART04");
+    assert_eq!(
+        load_artifact(&predecessor)
+            .expect_err("predecessor bundle must reject")
+            .code,
+        "artifact_bundle_contract"
+    );
+
+    let mut wrong_manifest = linked.artifact.bytes.clone();
+    wrong_manifest[28] ^= 0x80;
+    assert_eq!(
+        load_artifact(&wrong_manifest)
+            .expect_err("wrong manifest digest must reject")
+            .code,
+        "object_digest_mismatch"
+    );
+
+    let mut bad_checksum = linked.artifact.bytes.clone();
+    let checksum_offset = bad_checksum.len() - 40;
+    bad_checksum[checksum_offset] ^= 0x01;
+    assert_eq!(
+        load_artifact(&bad_checksum)
+            .expect_err("corrupt bundle checksum must reject")
+            .code,
+        "artifact_bundle_checksum"
+    );
+
+    let mut missing_objects = loaded.objects.clone();
+    let missing = missing_objects
+        .keys()
+        .find(|key| key.domain == ObjectDomain::CompilerUnit)
+        .copied()
+        .expect("compiler unit object");
+    missing_objects.remove(&missing);
+    let mut missing_manifest = loaded.manifest.clone();
+    let (closure, count, bytes) = super::artifact::closure_facts(&missing_objects).unwrap();
+    missing_manifest.closure = closure;
+    missing_manifest.object_count = count;
+    missing_manifest.object_bytes = bytes;
+    assert_eq!(
+        super::artifact::encode_artifact(missing_manifest, &missing_objects)
+            .expect_err("missing reachable unit must reject")
+            .code,
+        "artifact_object_missing"
+    );
+
+    let mut extra_objects = loaded.objects.clone();
+    let child = extra_objects
+        .keys()
+        .find(|key| key.domain == ObjectDomain::Type)
+        .map(|key| TypeObjectDigest::from_bytes(key.digest.bytes()))
+        .expect("artifact type object");
+    let extra = TypeObject::new(TypeForm::Function {
+        parameters: vec![child, child, child],
+        result: child,
+    })
+    .expect("valid unreachable type");
+    let (extra_digest, extra_bytes) = encode_type_object(&extra).unwrap();
+    let extra_key = ObjectKey::from_digest(ObjectDomain::Type, extra_digest.bytes());
+    assert!(extra_objects.insert(extra_key, extra_bytes).is_none());
+    let mut extra_manifest = loaded.manifest.clone();
+    let (closure, count, bytes) = super::artifact::closure_facts(&extra_objects).unwrap();
+    extra_manifest.closure = closure;
+    extra_manifest.object_count = count;
+    extra_manifest.object_bytes = bytes;
+    assert_eq!(
+        super::artifact::encode_artifact(extra_manifest, &extra_objects)
+            .expect_err("unreachable object must reject")
+            .code,
+        "artifact_unreachable_object"
+    );
 }
 
 trait PayloadCodes {

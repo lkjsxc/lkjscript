@@ -34,6 +34,10 @@ impl CompilationManifestDigest {
     pub const fn bytes(self) -> [u8; 32] {
         self.0
     }
+
+    pub const fn object_key(self) -> ObjectKey {
+        ObjectKey::from_digest(ObjectDomain::CompilationManifest, self.0)
+    }
 }
 
 impl fmt::Display for CompilationManifestDigest {
