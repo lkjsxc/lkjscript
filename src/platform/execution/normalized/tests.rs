@@ -27,6 +27,7 @@ use crate::platform::kernel::{
 use crate::platform::package::RunnerKind;
 use crate::platform::publication::{GraphRepository, RepositoryView};
 use crate::platform::semantic_id::{DeclarationId, PortId, RevisionId, TargetId};
+use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -172,6 +173,7 @@ fn pure_command_snapshot() -> crate::platform::kernel::KernelSnapshot {
 #[derive(Clone)]
 struct UnitAdapter {
     interface: DeclarationReference,
+    operations: BTreeSet<crate::platform::kernel::OperationReference>,
     calls: Arc<AtomicU64>,
 }
 
@@ -192,6 +194,10 @@ impl NormalizedReferenceRead for WrongRevisionReader<'_> {
 impl NormalizedCapabilityAdapter for UnitAdapter {
     fn interface(&self) -> DeclarationReference {
         self.interface
+    }
+
+    fn operations(&self) -> &BTreeSet<crate::platform::kernel::OperationReference> {
+        &self.operations
     }
 
     fn call(
@@ -250,6 +256,7 @@ struct TransactionStats {
 #[derive(Clone)]
 struct TrackingAdapter {
     interface: DeclarationReference,
+    operations: BTreeSet<crate::platform::kernel::OperationReference>,
     stats: Arc<TransactionStats>,
     fail_transaction_call: bool,
 }
@@ -257,6 +264,10 @@ struct TrackingAdapter {
 impl NormalizedCapabilityAdapter for TrackingAdapter {
     fn interface(&self) -> DeclarationReference {
         self.interface
+    }
+
+    fn operations(&self) -> &BTreeSet<crate::platform::kernel::OperationReference> {
+        &self.operations
     }
 
     fn call(
@@ -346,16 +357,18 @@ fn bind_fixture_capability(
     let requirement = component.requirements[0];
     let requirement_record = &program.requirements[requirement.0 as usize];
     let calls = Arc::new(AtomicU64::new(0));
+    let operations = requirement_record
+        .operations
+        .iter()
+        .map(|operation| program.operations[operation.0 as usize].reference)
+        .collect::<BTreeSet<_>>();
     let grant = NormalizedCapabilityGrant {
         requirement: requirement_record.reference,
-        operations: requirement_record
-            .operations
-            .iter()
-            .map(|operation| program.operations[operation.0 as usize].reference)
-            .collect(),
+        operations: operations.clone(),
         maximum_calls,
         adapter: Arc::new(UnitAdapter {
             interface: requirement_record.interface,
+            operations,
             calls: Arc::clone(&calls),
         }),
     };
@@ -377,16 +390,18 @@ fn bind_tracking_capability(
     let requirement = program.components[target.component.0 as usize].requirements[0];
     let requirement = &program.requirements[requirement.0 as usize];
     let stats = Arc::new(TransactionStats::default());
+    let operations = requirement
+        .operations
+        .iter()
+        .map(|operation| program.operations[operation.0 as usize].reference)
+        .collect::<BTreeSet<_>>();
     let grant = NormalizedCapabilityGrant {
         requirement: requirement.reference,
-        operations: requirement
-            .operations
-            .iter()
-            .map(|operation| program.operations[operation.0 as usize].reference)
-            .collect(),
+        operations: operations.clone(),
         maximum_calls,
         adapter: Arc::new(TrackingAdapter {
             interface: requirement.interface,
+            operations,
             stats: Arc::clone(&stats),
             fail_transaction_call,
         }),
@@ -969,6 +984,7 @@ fn dense_vm_enforces_exact_grants_cancellation_and_separate_budgets() {
             maximum_calls: 1,
             adapter: Arc::new(UnitAdapter {
                 interface: requirement.interface,
+                operations: Default::default(),
                 calls: Arc::new(AtomicU64::new(0)),
             }),
         }],
@@ -976,6 +992,29 @@ fn dense_vm_enforces_exact_grants_cancellation_and_separate_budgets() {
     .expect_err("partial operation grants are forbidden");
     assert_eq!(invalid.class, ExecutionFailureClass::Capability);
     assert_eq!(invalid.code, "normalized_grant_operation_set");
+
+    let required_operations = requirement
+        .operations
+        .iter()
+        .map(|operation| program.operations[operation.0 as usize].reference)
+        .collect::<BTreeSet<_>>();
+    let invalid = NormalizedCapabilities::bind(
+        &program,
+        target.component,
+        vec![NormalizedCapabilityGrant {
+            requirement: requirement.reference,
+            operations: required_operations,
+            maximum_calls: 1,
+            adapter: Arc::new(UnitAdapter {
+                interface: requirement.interface,
+                operations: Default::default(),
+                calls: Arc::new(AtomicU64::new(0)),
+            }),
+        }],
+    )
+    .expect_err("adapter operation bindings must equal the exact grant");
+    assert_eq!(invalid.class, ExecutionFailureClass::Capability);
+    assert_eq!(invalid.code, "normalized_grant_adapter_operations");
 
     let cancelled = ExecutionControl::uncancelled();
     cancelled.cancel();

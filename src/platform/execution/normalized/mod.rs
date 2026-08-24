@@ -2,6 +2,7 @@
 
 mod capability;
 mod codec;
+mod configuration;
 mod prepare;
 mod reference;
 mod runner;

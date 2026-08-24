@@ -45,10 +45,106 @@ pub struct ConfigurationObservation {
     pub fields: BTreeMap<String, String>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ConfigurationOperation {
+    Exists,
+    Text,
+    I64,
+    Bool,
+}
+
+impl ConfigurationOperation {
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "exists" => Some(Self::Exists),
+            "text" => Some(Self::Text),
+            "i64" => Some(Self::I64),
+            "bool" => Some(Self::Bool),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum ConfigurationOutput {
+    Text(String),
+    I64(i64),
+    Bool(bool),
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ConfigurationStore {
+    values: Arc<BTreeMap<String, ConfigurationValue>>,
+}
+
+impl ConfigurationStore {
+    pub(crate) fn new(values: BTreeMap<String, ConfigurationValue>) -> Result<Self, Diagnostic> {
+        validate_values(&values)?;
+        Ok(Self {
+            values: Arc::new(values),
+        })
+    }
+
+    pub(crate) fn observe_values(
+        values: &BTreeMap<String, ConfigurationValue>,
+    ) -> Result<ConfigurationObservation, Diagnostic> {
+        validate_values(values)?;
+        Ok(observation(values))
+    }
+
+    pub(crate) fn observe_redacted(&self) -> ConfigurationObservation {
+        observation(&self.values)
+    }
+
+    pub(crate) fn execute(
+        &self,
+        operation: ConfigurationOperation,
+        name: &str,
+    ) -> Result<ConfigurationOutput, ExecutionError> {
+        validate_name(name)?;
+        if operation == ConfigurationOperation::Exists {
+            return Ok(ConfigurationOutput::Bool(self.values.contains_key(name)));
+        }
+        let value = self.values.get(name).ok_or_else(|| {
+            ExecutionError::new(
+                ExecutionFailureClass::Capability,
+                "configuration_missing",
+                format!("required configuration field '{name}' is absent"),
+            )
+        })?;
+        match (operation, value) {
+            (ConfigurationOperation::Text, ConfigurationValue::Text(value)) => {
+                Ok(ConfigurationOutput::Text(value.clone()))
+            }
+            (ConfigurationOperation::I64, ConfigurationValue::I64(value)) => {
+                Ok(ConfigurationOutput::I64(*value))
+            }
+            (ConfigurationOperation::Bool, ConfigurationValue::Bool(value)) => {
+                Ok(ConfigurationOutput::Bool(*value))
+            }
+            (
+                ConfigurationOperation::Text
+                | ConfigurationOperation::I64
+                | ConfigurationOperation::Bool,
+                _,
+            ) => Err(ExecutionError::new(
+                ExecutionFailureClass::Capability,
+                "configuration_type",
+                format!("configuration field '{name}' has a different declared type"),
+            )),
+            (ConfigurationOperation::Exists, _) => Err(ExecutionError::new(
+                ExecutionFailureClass::Infrastructure,
+                "configuration_operation_state",
+                "configuration exists operation reached a value-only branch",
+            )),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ConfigurationAdapter {
     interface: OwnerId,
-    values: Arc<BTreeMap<String, ConfigurationValue>>,
+    store: ConfigurationStore,
 }
 
 impl ConfigurationAdapter {
@@ -56,56 +152,20 @@ impl ConfigurationAdapter {
         interface: OwnerId,
         values: BTreeMap<String, ConfigurationValue>,
     ) -> Result<Self, Diagnostic> {
-        Self::validate_values(&values)?;
         Ok(Self {
             interface,
-            values: Arc::new(values),
+            store: ConfigurationStore::new(values)?,
         })
     }
 
     pub fn observe_values(
         values: &BTreeMap<String, ConfigurationValue>,
     ) -> Result<ConfigurationObservation, Diagnostic> {
-        Self::validate_values(values)?;
-        Ok(ConfigurationObservation {
-            contract_version: CONFIGURATION_ADAPTER_CONTRACT_VERSION,
-            fields: values
-                .iter()
-                .map(|(name, value)| (name.clone(), value.kind().to_owned()))
-                .collect(),
-        })
-    }
-
-    fn validate_values(values: &BTreeMap<String, ConfigurationValue>) -> Result<(), Diagnostic> {
-        if values.len() > MAXIMUM_CONFIGURATION_FIELDS {
-            return Err(configuration_diagnostic(
-                "configuration_field_limit",
-                format!("configuration has more than {MAXIMUM_CONFIGURATION_FIELDS} fields"),
-            ));
-        }
-        for (name, value) in values {
-            validate_name(name).map_err(|error| {
-                configuration_diagnostic("configuration_field_name", error.message)
-            })?;
-            if value.byte_length() > MAXIMUM_CONFIGURATION_VALUE_BYTES {
-                return Err(configuration_diagnostic(
-                    "configuration_value_limit",
-                    format!("configuration field '{name}' exceeds its byte limit"),
-                ));
-            }
-        }
-        Ok(())
+        ConfigurationStore::observe_values(values)
     }
 
     pub fn observe_redacted(&self) -> ConfigurationObservation {
-        ConfigurationObservation {
-            contract_version: CONFIGURATION_ADAPTER_CONTRACT_VERSION,
-            fields: self
-                .values
-                .iter()
-                .map(|(name, value)| (name.clone(), value.kind().to_owned()))
-                .collect(),
-        }
+        self.store.observe_redacted()
     }
 }
 
@@ -121,32 +181,51 @@ impl CapabilityAdapter for ConfigurationAdapter {
                 "configuration operation expects one source-origin StaticText field name",
             ));
         };
-        validate_name(name)?;
-        if policy.operation == "exists" {
-            return Ok(Value::Bool(self.values.contains_key(name.as_ref())));
-        }
-        let value = self.values.get(name.as_ref()).ok_or_else(|| {
+        let operation = ConfigurationOperation::parse(&policy.operation).ok_or_else(|| {
             ExecutionError::new(
-                ExecutionFailureClass::Capability,
-                "configuration_missing",
-                format!("required configuration field '{name}' is absent"),
-            )
-        })?;
-        match (policy.operation.as_str(), value) {
-            ("text", ConfigurationValue::Text(value)) => Ok(Value::text(value.clone())),
-            ("i64", ConfigurationValue::I64(value)) => Ok(Value::I64(*value)),
-            ("bool", ConfigurationValue::Bool(value)) => Ok(Value::Bool(*value)),
-            ("text" | "i64" | "bool", _) => Err(ExecutionError::new(
-                ExecutionFailureClass::Capability,
-                "configuration_type",
-                format!("configuration field '{name}' has a different declared type"),
-            )),
-            (operation, _) => Err(ExecutionError::new(
                 ExecutionFailureClass::Infrastructure,
                 "configuration_operation_unknown",
-                format!("configuration adapter does not implement '{operation}'"),
-            )),
+                format!(
+                    "configuration adapter does not implement '{}'",
+                    policy.operation
+                ),
+            )
+        })?;
+        match self.store.execute(operation, name)? {
+            ConfigurationOutput::Text(value) => Ok(Value::text(value)),
+            ConfigurationOutput::I64(value) => Ok(Value::I64(value)),
+            ConfigurationOutput::Bool(value) => Ok(Value::Bool(value)),
         }
+    }
+}
+
+fn validate_values(values: &BTreeMap<String, ConfigurationValue>) -> Result<(), Diagnostic> {
+    if values.len() > MAXIMUM_CONFIGURATION_FIELDS {
+        return Err(configuration_diagnostic(
+            "configuration_field_limit",
+            format!("configuration has more than {MAXIMUM_CONFIGURATION_FIELDS} fields"),
+        ));
+    }
+    for (name, value) in values {
+        validate_name(name)
+            .map_err(|error| configuration_diagnostic("configuration_field_name", error.message))?;
+        if value.byte_length() > MAXIMUM_CONFIGURATION_VALUE_BYTES {
+            return Err(configuration_diagnostic(
+                "configuration_value_limit",
+                format!("configuration field '{name}' exceeds its byte limit"),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn observation(values: &BTreeMap<String, ConfigurationValue>) -> ConfigurationObservation {
+    ConfigurationObservation {
+        contract_version: CONFIGURATION_ADAPTER_CONTRACT_VERSION,
+        fields: values
+            .iter()
+            .map(|(name, value)| (name.clone(), value.kind().to_owned()))
+            .collect(),
     }
 }
 

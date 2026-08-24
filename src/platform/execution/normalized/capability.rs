@@ -33,6 +33,8 @@ pub struct NormalizedTransactionPolicy {
 pub trait NormalizedCapabilityAdapter: Send + Sync {
     fn interface(&self) -> DeclarationReference;
 
+    fn operations(&self) -> &BTreeSet<OperationReference>;
+
     fn call(
         &self,
         policy: &NormalizedCallPolicy,
@@ -157,6 +159,12 @@ impl NormalizedCapabilities {
                 return Err(capability_error(
                     "normalized_grant_interface",
                     "deployment grant interface or call bound disagrees with the exact requirement",
+                ));
+            }
+            if grant.adapter.operations() != &grant.operations {
+                return Err(capability_error(
+                    "normalized_grant_adapter_operations",
+                    "capability adapter operation bindings disagree with the exact deployment grant",
                 ));
             }
             let mut operations = BTreeSet::new();
