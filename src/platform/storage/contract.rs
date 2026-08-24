@@ -36,6 +36,7 @@ pub const SEMANTIC_DIFF_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.semantic-diff-ob
 pub const DRAFT_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.draft-object.v5";
 pub const CONFLICT_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.conflict-object.v5";
 pub const COMPILER_UNIT_DIGEST_DOMAIN: &str = "lkjscript.compiler-unit.v1";
+pub const COMPILATION_MANIFEST_DIGEST_DOMAIN: &str = "lkjscript.compilation-manifest-object.v1";
 pub const ARTIFACT_MANIFEST_DIGEST_DOMAIN: &str = "lkjscript.artifact-manifest.v5";
 pub const BACKUP_MANIFEST_DIGEST_DOMAIN: &str = "lkjscript.backup-manifest.v5";
 pub const BACKUP_SEGMENT_DIGEST_DOMAIN: &str = "lkjscript.backup-segment.v5";

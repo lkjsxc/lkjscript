@@ -439,6 +439,90 @@ impl GraphRepository {
         })
     }
 
+    /// Durably stages one exact set of derived compiler objects without changing accepted HEAD.
+    ///
+    /// The repository publication lock serializes pack installation with accepted publication.
+    /// Only compiler units, their small manifest, and persistent-map pages are admitted here;
+    /// callers cannot use this operational path to write canonical semantic objects.
+    pub(crate) fn stage_compilation_objects(
+        &self,
+        expected: HeadRecord,
+        objects: &BTreeMap<ObjectKey, Vec<u8>>,
+    ) -> Result<(SealReceipt, StoreWork), Diagnostic> {
+        if objects.is_empty()
+            || objects.keys().any(|key| {
+                !matches!(
+                    key.domain,
+                    ObjectDomain::CompilerUnit
+                        | ObjectDomain::CompilationManifest
+                        | ObjectDomain::MapPage
+                )
+            })
+        {
+            return Err(repository_error(
+                DiagnosticClass::Source,
+                "publication_compilation_object_domain",
+                "derived compilation staging admits only compiler units, one manifest, and map pages",
+            ));
+        }
+        let manifest_count = objects
+            .keys()
+            .filter(|key| key.domain == ObjectDomain::CompilationManifest)
+            .count();
+        if manifest_count != 1 {
+            return Err(repository_error(
+                DiagnosticClass::Source,
+                "publication_compilation_manifest_count",
+                "derived compilation staging requires exactly one compilation manifest",
+            ));
+        }
+
+        let root_directory = open_directory(&self.root)?;
+        let lock = open_lock(&root_directory)?;
+        FileExt::lock_exclusive(&lock).map_err(|error| {
+            io_diagnostic("publication_compilation_stage_lock", &self.root, error)
+        })?;
+        let mut store = PackDirectoryStore::open(&self.root).map_err(store_diagnostic)?;
+        let before = read_current_optional(&root_directory, &store)?.ok_or_else(|| {
+            repository_error(
+                DiagnosticClass::Source,
+                "publication_repository_unpublished",
+                "Graph 5 repository has no accepted HEAD",
+            )
+        })?;
+        if before.head != expected {
+            return Err(repository_error(
+                DiagnosticClass::Semantic,
+                "publication_compilation_stage_stale",
+                "accepted HEAD changed before derived compilation objects could be staged",
+            ));
+        }
+        let mut work = StoreWork::default();
+        for (key, bytes) in objects {
+            store
+                .stage(*key, bytes, &mut work)
+                .map_err(store_diagnostic)?;
+        }
+        let seal = store
+            .seal_staged(TARGET_PACK_BYTES, &mut work)
+            .map_err(store_diagnostic)?;
+        let after = read_current_optional(&root_directory, &store)?.ok_or_else(|| {
+            repository_error(
+                DiagnosticClass::Corrupt,
+                "publication_compilation_stage_head_missing",
+                "derived compilation staging made accepted HEAD unreadable",
+            )
+        })?;
+        if after.head != expected {
+            return Err(repository_error(
+                DiagnosticClass::Corrupt,
+                "publication_compilation_stage_head_changed",
+                "derived compilation staging changed accepted authority",
+            ));
+        }
+        Ok((seal, work))
+    }
+
     pub fn current(&self) -> Result<CurrentPublication, Diagnostic> {
         let root_directory = open_directory(&self.root)?;
         let lock = open_lock(&root_directory)?;

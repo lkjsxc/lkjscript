@@ -140,6 +140,22 @@ impl OwnerKind {
                 | (Self::Annotation, OwnerKey::Annotation(_))
         )
     }
+
+    pub const fn has_compilation_unit(self) -> bool {
+        matches!(
+            self,
+            Self::Record
+                | Self::Variant
+                | Self::Interface
+                | Self::External
+                | Self::PureFunction
+                | Self::TaskFunction
+                | Self::Constant
+                | Self::Component
+                | Self::Test
+                | Self::Target
+        )
+    }
 }
 
 #[derive(

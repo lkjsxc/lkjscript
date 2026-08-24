@@ -1,6 +1,7 @@
 //! Focused normalized compiler-unit tests.
 
 use super::*;
+use crate::platform::change::PrimitiveEdit;
 use crate::platform::kernel::{
     BindingKind, BindingRecord, CaseRecord, CaseReference, DeclarationVisibility,
     ExpressionOperation, ExpressionRecord, FieldSelector, LocalValueReference, MapExpressionEntry,
@@ -8,7 +9,7 @@ use crate::platform::kernel::{
     TextValue, TypeForm, TypeObject,
 };
 use crate::platform::persistent_map::MapRoot;
-use crate::platform::publication::GraphRepository;
+use crate::platform::publication::{GraphRepository, PublicationOptions, PublicationOutcome};
 use crate::platform::semantic_id::{BindingId, CaseId, ExpressionId};
 use crate::platform::storage::object::{ObjectDomain, ObjectKey};
 use crate::platform::witness::rebuild_full_witness;
@@ -731,6 +732,531 @@ fn compiler_unit_decoder_rejects_foreign_identity_predecessor_and_bad_dense_inde
             .code,
         "compiler_unit_index"
     );
+}
+
+#[test]
+fn clean_compilation_manifest_persists_and_reopens_exactly() {
+    let snapshot = crate::platform::kernel::tests::witness_snapshot();
+    let temporary = tempfile::tempdir().expect("compiler manifest parent");
+    let root = temporary.path().join("repository");
+    let created = GraphRepository::create(&root, &snapshot, None).expect("Graph 5 repository");
+
+    let built = build_clean(
+        &created.repository,
+        OptimizationPolicy::DeterministicBaseline,
+    )
+    .expect("clean normalized compilation");
+    assert_eq!(built.profile, CompilationBuildProfile::Clean);
+    assert_eq!(built.units_compiled, 11);
+    assert_eq!(built.units_reused, 0);
+    assert_eq!(built.units_removed, 0);
+    assert_eq!(built.manifest.units.entries(), 11);
+    assert_eq!(built.work.inventory_bindings, snapshot.owners.len() as u64);
+    assert!(built.work.compilation.owner_records_read < snapshot.owners.len() as u64 * 11);
+
+    let cached = load_current_compilation(&created.repository)
+        .expect("load current compilation")
+        .expect("current cache head");
+    assert_eq!(cached.digest, built.manifest_digest);
+    assert_eq!(cached.manifest, built.manifest);
+    let validation = validate_current_compilation(&created.repository, built.manifest_digest)
+        .expect("full compilation validation");
+    assert_eq!(validation.units, 11);
+    assert_eq!(validation.map.entries_visited, 22);
+
+    drop(created);
+    let reopened = GraphRepository::open(&root).expect("reopen Graph 5 repository");
+    let cached = load_current_compilation(&reopened)
+        .expect("load reopened compilation")
+        .expect("reopened cache head");
+    assert_eq!(cached.digest, built.manifest_digest);
+    assert_eq!(
+        validate_current_compilation(&reopened, cached.digest)
+            .expect("validate reopened compilation")
+            .units,
+        11
+    );
+}
+
+#[test]
+fn structurally_empty_package_builds_one_valid_empty_manifest() {
+    let root_placeholder = |marker| {
+        MapRoot::from_parts(
+            crate::platform::persistent_map::PageDigest::from_bytes([marker; 32]),
+            0,
+        )
+    };
+    let snapshot = crate::platform::kernel::KernelSnapshot {
+        root: crate::platform::kernel::SemanticRoot {
+            graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+            repository_id: crate::platform::semantic_id::RepositoryId::migrate(
+                b"empty-compiler-manifest",
+                0,
+            ),
+            package_id: crate::platform::kernel::PackageId::migrate(b"empty-compiler-manifest", 0),
+            package_name: Name::new("empty_compiler").unwrap(),
+            owners: root_placeholder(1),
+            dependencies: root_placeholder(2),
+            retirements: root_placeholder(3),
+        },
+        owners: std::collections::BTreeMap::new(),
+        types: std::collections::BTreeMap::new(),
+        dependency_interfaces: std::collections::BTreeMap::new(),
+        dependency_types: std::collections::BTreeMap::new(),
+        blobs: std::collections::BTreeMap::new(),
+        dependencies: std::collections::BTreeMap::new(),
+        retirements: std::collections::BTreeMap::new(),
+    };
+    let temporary = tempfile::tempdir().expect("empty compiler parent");
+    let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
+        .expect("empty Graph 5 repository");
+
+    let built = build_clean(
+        &created.repository,
+        OptimizationPolicy::DeterministicBaseline,
+    )
+    .expect("empty clean compilation");
+    assert_eq!(built.units_compiled, 0);
+    assert_eq!(built.units_reused, 0);
+    assert_eq!(built.units_removed, 0);
+    assert_eq!(built.manifest.units.entries(), 0);
+    assert_eq!(
+        validate_current_compilation(&created.repository, built.manifest_digest)
+            .expect("validate empty manifest")
+            .units,
+        0
+    );
+}
+
+#[test]
+fn body_edit_incremental_manifest_equals_a_clean_rebuild() {
+    let snapshot = crate::platform::kernel::tests::witness_snapshot();
+    let caller = declaration_named(&snapshot, "caller");
+    let body = match &snapshot.owners[&OwnerKey::Declaration(caller)] {
+        OwnerRecord::Declaration(record) => match &record.payload {
+            crate::platform::kernel::DeclarationPayload::Function(function) => function.body,
+            _ => panic!("caller function"),
+        },
+        _ => panic!("caller declaration"),
+    };
+    let temporary = tempfile::tempdir().expect("incremental manifest parent");
+    let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
+        .expect("Graph 5 repository");
+    let base = build_clean(
+        &created.repository,
+        OptimizationPolicy::DeterministicBaseline,
+    )
+    .expect("base clean compilation");
+    let before_caller = super::cache::read_current_binding(
+        &created.repository,
+        base.manifest_digest,
+        OwnerKey::Declaration(caller),
+    )
+    .expect("base caller binding")
+    .expect("base caller unit");
+
+    let view = created.repository.view_current().expect("body edit view");
+    let mut replacement = view
+        .owner(OwnerKey::Expression(body))
+        .expect("body read")
+        .value
+        .expect("body owner");
+    let expected = crate::platform::kernel::encode_owner(&replacement)
+        .expect("base body encoding")
+        .0;
+    let OwnerRecord::Expression(expression) = &mut replacement else {
+        panic!("body expression")
+    };
+    let ExpressionOperation::Sequence { items } = &mut expression.operation else {
+        panic!("caller sequence")
+    };
+    items.swap(0, 1);
+    let prepared = view
+        .prepare_change(
+            vec![PrimitiveEdit::ReplaceOwner {
+                expected,
+                record: replacement,
+            }],
+            PublicationOptions::default(),
+        )
+        .expect("prepare body edit");
+    assert!(
+        prepared
+            .compiler_units
+            .contains(&OwnerKey::Declaration(caller))
+    );
+    assert_eq!(prepared.compiler_units.len(), 2);
+    assert!(matches!(
+        created
+            .repository
+            .publish(&prepared)
+            .expect("publish body edit"),
+        PublicationOutcome::Accepted { .. }
+    ));
+    assert!(
+        load_current_compilation(&created.repository)
+            .expect("stale cache lookup")
+            .is_none()
+    );
+
+    let mut underreported = prepared.clone();
+    underreported.compiler_units.clear();
+    assert_eq!(
+        build_incremental(&created.repository, base.manifest_digest, &underreported,)
+            .expect_err("an underreported prepared compiler plan must reject")
+            .code,
+        "compilation_incremental_prepared_binding"
+    );
+
+    let incremental = build_incremental(&created.repository, base.manifest_digest, &prepared)
+        .expect("incremental compilation");
+    assert_eq!(incremental.profile, CompilationBuildProfile::Incremental);
+    assert_eq!(incremental.units_compiled, 2);
+    assert_eq!(incremental.units_reused, 9);
+    assert_eq!(incremental.units_removed, 0);
+    assert_ne!(incremental.manifest.units, base.manifest.units);
+    let after_caller = super::cache::read_current_binding(
+        &created.repository,
+        incremental.manifest_digest,
+        OwnerKey::Declaration(caller),
+    )
+    .expect("current caller binding")
+    .expect("current caller unit");
+    assert_ne!(before_caller, after_caller);
+
+    let clean = build_clean(
+        &created.repository,
+        OptimizationPolicy::DeterministicBaseline,
+    )
+    .expect("clean oracle compilation");
+    assert_eq!(incremental.manifest_digest, clean.manifest_digest);
+    assert_eq!(incremental.manifest_bytes, clean.manifest_bytes);
+    assert_eq!(incremental.manifest, clean.manifest);
+    assert_eq!(
+        validate_current_compilation(&created.repository, incremental.manifest_digest)
+            .expect("validate incremental manifest")
+            .units,
+        11
+    );
+}
+
+#[test]
+fn rename_and_move_reuse_the_complete_compilation_unit_map() {
+    let snapshot = crate::platform::kernel::tests::witness_snapshot();
+    let callee = declaration_named(&snapshot, "callee");
+    let caller = declaration_named(&snapshot, "caller");
+    let destination = module_named(&snapshot, "second");
+    let temporary = tempfile::tempdir().expect("rename manifest parent");
+    let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
+        .expect("Graph 5 repository");
+    let base = build_clean(
+        &created.repository,
+        OptimizationPolicy::DeterministicBaseline,
+    )
+    .expect("base clean compilation");
+    let base_callee = super::cache::read_current_binding(
+        &created.repository,
+        base.manifest_digest,
+        OwnerKey::Declaration(callee),
+    )
+    .unwrap()
+    .unwrap();
+    let base_caller = super::cache::read_current_binding(
+        &created.repository,
+        base.manifest_digest,
+        OwnerKey::Declaration(caller),
+    )
+    .unwrap()
+    .unwrap();
+
+    let view = created.repository.view_current().expect("rename move view");
+    let mut replacement = view
+        .owner(OwnerKey::Declaration(callee))
+        .unwrap()
+        .value
+        .expect("callee owner");
+    let expected = crate::platform::kernel::encode_owner(&replacement)
+        .expect("callee encoding")
+        .0;
+    let OwnerRecord::Declaration(record) = &mut replacement else {
+        panic!("callee declaration")
+    };
+    record.name = Name::new("renamed_callee").unwrap();
+    record.module = destination;
+    let prepared = view
+        .prepare_change(
+            vec![PrimitiveEdit::ReplaceOwner {
+                expected,
+                record: replacement,
+            }],
+            PublicationOptions::default(),
+        )
+        .expect("prepare rename and move");
+    assert!(prepared.compiler_units.is_empty());
+    assert!(matches!(
+        created
+            .repository
+            .publish(&prepared)
+            .expect("publish rename and move"),
+        PublicationOutcome::Accepted { .. }
+    ));
+
+    let incremental = build_incremental(&created.repository, base.manifest_digest, &prepared)
+        .expect("presentation-only incremental compilation");
+    assert_eq!(incremental.units_compiled, 0);
+    assert_eq!(incremental.units_reused, 11);
+    assert_eq!(incremental.units_removed, 0);
+    assert_eq!(incremental.manifest.units, base.manifest.units);
+    assert_ne!(incremental.manifest_digest, base.manifest_digest);
+    assert_eq!(
+        super::cache::read_current_binding(
+            &created.repository,
+            incremental.manifest_digest,
+            OwnerKey::Declaration(callee),
+        )
+        .unwrap()
+        .unwrap(),
+        base_callee
+    );
+    assert_eq!(
+        super::cache::read_current_binding(
+            &created.repository,
+            incremental.manifest_digest,
+            OwnerKey::Declaration(caller),
+        )
+        .unwrap()
+        .unwrap(),
+        base_caller
+    );
+    assert_eq!(
+        validate_current_compilation(&created.repository, incremental.manifest_digest)
+            .expect("validate reused unit map")
+            .units,
+        11
+    );
+}
+
+#[test]
+fn declaration_deletion_removes_one_unit_and_matches_a_clean_rebuild() {
+    let snapshot = crate::platform::kernel::tests::witness_snapshot();
+    let constant = declaration_named(&snapshot, "unit_constant");
+    let value = match &snapshot.owners[&OwnerKey::Declaration(constant)] {
+        OwnerRecord::Declaration(record) => match record.payload {
+            crate::platform::kernel::DeclarationPayload::Constant { value, .. } => value,
+            _ => panic!("constant declaration"),
+        },
+        _ => panic!("constant owner"),
+    };
+    let temporary = tempfile::tempdir().expect("deletion manifest parent");
+    let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
+        .expect("Graph 5 repository");
+    let base = build_clean(
+        &created.repository,
+        OptimizationPolicy::DeterministicBaseline,
+    )
+    .expect("base clean compilation");
+    let view = created.repository.view_current().expect("deletion view");
+    let constant_record = view
+        .owner(OwnerKey::Declaration(constant))
+        .unwrap()
+        .value
+        .expect("constant record");
+    let value_record = view
+        .owner(OwnerKey::Expression(value))
+        .unwrap()
+        .value
+        .expect("constant value record");
+    let prepared = view
+        .prepare_change(
+            vec![
+                PrimitiveEdit::DeleteOwner {
+                    owner: OwnerKey::Declaration(constant),
+                    expected: crate::platform::kernel::encode_owner(&constant_record)
+                        .unwrap()
+                        .0,
+                },
+                PrimitiveEdit::DeleteOwner {
+                    owner: OwnerKey::Expression(value),
+                    expected: crate::platform::kernel::encode_owner(&value_record)
+                        .unwrap()
+                        .0,
+                },
+            ],
+            PublicationOptions::default(),
+        )
+        .expect("prepare declaration deletion");
+    assert_eq!(
+        prepared.compiler_units,
+        [OwnerKey::Declaration(constant)].into_iter().collect()
+    );
+    assert!(matches!(
+        created
+            .repository
+            .publish(&prepared)
+            .expect("publish declaration deletion"),
+        PublicationOutcome::Accepted { .. }
+    ));
+
+    let incremental = build_incremental(&created.repository, base.manifest_digest, &prepared)
+        .expect("incremental deletion compilation");
+    assert_eq!(incremental.units_compiled, 0);
+    assert_eq!(incremental.units_reused, 10);
+    assert_eq!(incremental.units_removed, 1);
+    assert_eq!(incremental.manifest.units.entries(), 10);
+    assert!(
+        super::cache::read_current_binding(
+            &created.repository,
+            incremental.manifest_digest,
+            OwnerKey::Declaration(constant),
+        )
+        .unwrap()
+        .is_none()
+    );
+
+    let clean = build_clean(
+        &created.repository,
+        OptimizationPolicy::DeterministicBaseline,
+    )
+    .expect("clean deletion oracle");
+    assert_eq!(incremental.manifest_digest, clean.manifest_digest);
+    assert_eq!(incremental.manifest_bytes, clean.manifest_bytes);
+}
+
+#[test]
+fn missing_and_corrupt_cache_heads_rebuild_without_changing_authority() {
+    let snapshot = crate::platform::kernel::tests::witness_snapshot();
+    let temporary = tempfile::tempdir().expect("cache recovery parent");
+    let root = temporary.path().join("repository");
+    let created = GraphRepository::create(&root, &snapshot, None).expect("Graph 5 repository");
+    let original_head = created.repository.current().unwrap().head;
+    let first = build_clean(
+        &created.repository,
+        OptimizationPolicy::DeterministicBaseline,
+    )
+    .expect("first clean compilation");
+    let cache_head = root.join("derived/compiler/CURRENT");
+
+    std::fs::remove_file(&cache_head).expect("remove disposable cache head");
+    assert!(
+        load_current_compilation(&created.repository)
+            .unwrap()
+            .is_none()
+    );
+    let rebuilt = build_clean(
+        &created.repository,
+        OptimizationPolicy::DeterministicBaseline,
+    )
+    .expect("rebuild missing cache");
+    assert_eq!(rebuilt.manifest_digest, first.manifest_digest);
+
+    std::fs::write(&cache_head, b"corrupt derived cache head").expect("corrupt cache head");
+    assert!(load_current_compilation(&created.repository).is_err());
+    let recovered = build_clean(
+        &created.repository,
+        OptimizationPolicy::DeterministicBaseline,
+    )
+    .expect("replace corrupt cache head");
+    assert_eq!(recovered.manifest_digest, first.manifest_digest);
+    assert_eq!(
+        load_current_compilation(&created.repository)
+            .expect("load recovered cache")
+            .expect("recovered cache hit")
+            .digest,
+        first.manifest_digest
+    );
+    assert_eq!(created.repository.current().unwrap().head, original_head);
+}
+
+#[test]
+fn compilation_manifest_rejects_predecessor_magic_and_wrong_object_digest() {
+    let snapshot = crate::platform::kernel::tests::witness_snapshot();
+    let temporary = tempfile::tempdir().expect("manifest decoder parent");
+    let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
+        .expect("Graph 5 repository");
+    let built = build_clean(
+        &created.repository,
+        OptimizationPolicy::DeterministicBaseline,
+    )
+    .expect("clean compilation");
+
+    let mut predecessor = built.manifest_bytes.clone();
+    predecessor[..8].copy_from_slice(b"LKJCMF00");
+    let predecessor_key = ObjectKey::for_bytes(ObjectDomain::CompilationManifest, &predecessor);
+    assert_eq!(
+        CompilationManifest::decode(
+            &predecessor,
+            CompilationManifestDigest::from_bytes(predecessor_key.digest.bytes()),
+        )
+        .expect_err("predecessor manifest magic must reject")
+        .code,
+        "packed_contract"
+    );
+
+    let wrong = CompilationManifestDigest::from_bytes([7; 32]);
+    assert_eq!(
+        CompilationManifest::decode(&built.manifest_bytes, wrong)
+            .expect_err("wrong object digest must reject")
+            .code,
+        "object_digest_mismatch"
+    );
+}
+
+#[test]
+fn compilation_cache_never_follows_head_or_lock_symlinks() {
+    use std::os::unix::fs::symlink;
+
+    let snapshot = crate::platform::kernel::tests::witness_snapshot();
+    let temporary = tempfile::tempdir().expect("cache symlink parent");
+    let root = temporary.path().join("repository");
+    let outside = temporary.path().join("outside");
+    let sentinel = b"outside cache sentinel";
+    std::fs::write(&outside, sentinel).expect("outside sentinel");
+    let created = GraphRepository::create(&root, &snapshot, None).expect("Graph 5 repository");
+    let initial_head = created.repository.current().unwrap().head;
+    let first = build_clean(
+        &created.repository,
+        OptimizationPolicy::DeterministicBaseline,
+    )
+    .expect("initial clean compilation");
+    let cache_directory = root.join("derived/compiler");
+    let current = cache_directory.join("CURRENT");
+    let lock = cache_directory.join("LOCK");
+
+    std::fs::remove_file(&current).expect("remove current cache head");
+    symlink(&outside, &current).expect("symlink cache head");
+    assert_eq!(
+        load_current_compilation(&created.repository)
+            .expect_err("symlinked cache head must reject")
+            .code,
+        "compilation_cache_regular_open"
+    );
+    let recovered = build_clean(
+        &created.repository,
+        OptimizationPolicy::DeterministicBaseline,
+    )
+    .expect("atomically replace cache-head symlink");
+    assert_eq!(recovered.manifest_digest, first.manifest_digest);
+    assert!(
+        !std::fs::symlink_metadata(&current)
+            .expect("replacement cache head")
+            .file_type()
+            .is_symlink()
+    );
+    assert_eq!(std::fs::read(&outside).unwrap(), sentinel);
+
+    std::fs::remove_file(&lock).expect("remove cache lock");
+    symlink(&outside, &lock).expect("symlink cache lock");
+    assert_eq!(
+        build_clean(
+            &created.repository,
+            OptimizationPolicy::DeterministicBaseline,
+        )
+        .expect_err("symlinked cache lock must reject")
+        .code,
+        "compilation_cache_lock_open"
+    );
+    assert_eq!(std::fs::read(&outside).unwrap(), sentinel);
+    assert_eq!(created.repository.current().unwrap().head, initial_head);
 }
 
 trait PayloadCodes {

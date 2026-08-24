@@ -13,8 +13,8 @@ use crate::platform::change::{
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    BlobObjectDigest, DependencyRecord, EncodedOwnerKey, KernelSnapshot, OwnerKey, OwnerRecord,
-    PackageId, PackageInterfaceRecord, RelationEdge, RelationEndpoint, RelationKind,
+    BlobObjectDigest, DependencyRecord, EncodedOwnerKey, KernelSnapshot, OwnerKey, OwnerKind,
+    OwnerRecord, PackageId, PackageInterfaceRecord, RelationEdge, RelationEndpoint, RelationKind,
     RetirementRecord, TypeObject, TypeObjectDigest, decode_dependency, decode_dependency_binding,
     decode_owner, decode_owner_binding, decode_retirement, decode_retirement_binding,
     decode_type_object, dependency_map_key, owner_map_key, retirement_map_key,
@@ -1004,6 +1004,69 @@ impl RepositoryView {
             value: read.value.map(|bound| bound.summary),
             work: read.work,
         })
+    }
+
+    /// Explicit broad inventory for a clean normalized compilation.
+    ///
+    /// This scans only committed summary-map keys and their inline kind bindings. It does not
+    /// decode owner or summary objects, and ordinary incremental builds use their exact impact
+    /// set instead.
+    pub(crate) fn compilation_unit_owners(
+        &self,
+        maximum_items: u64,
+    ) -> Result<RevisionRead<Vec<OwnerKey>>, Diagnostic> {
+        let reader = ObjectPageReader::new(&self.store);
+        let mut map_work = MapWork::default();
+        let mut owners = Vec::new();
+        let mut captured = None;
+        let result = PersistentMap::from_root(self.current.witness.roots.owner_summaries).for_each(
+            &reader,
+            &mut map_work,
+            |key, value| {
+                let operation = (|| {
+                    let owner = EncodedOwnerKey::decode(key)?;
+                    let binding = SummaryBinding::decode(value, owner)?;
+                    if binding.kind.has_compilation_unit() {
+                        if owners.len() as u64 >= maximum_items {
+                            return Err(read_error(
+                                DiagnosticClass::Resource,
+                                "publication_compilation_inventory_count",
+                                "clean compiler inventory exceeds the current derived-unit implementation bound",
+                            ));
+                        }
+                        owners.push(owner);
+                    }
+                    Ok::<(), Diagnostic>(())
+                })();
+                match operation {
+                    Ok(()) => Ok(()),
+                    Err(diagnostic) => {
+                        captured = Some(diagnostic);
+                        Err(MapError {
+                            class: MapErrorClass::Corrupt,
+                            code: "publication_compilation_inventory_stop",
+                            message: "compiler inventory stopped after an exact diagnostic"
+                                .to_owned(),
+                        })
+                    }
+                }
+            },
+        );
+        if let Some(diagnostic) = captured {
+            return Err(diagnostic);
+        }
+        result.map_err(map_diagnostic)?;
+        let items_returned = owners.len() as u64;
+        Ok(self.read(
+            owners,
+            RepositoryReadWork {
+                map: map_work,
+                store: reader.work(),
+                witness_records_decoded: self.current.witness.roots.owner_summaries.entries(),
+                items_returned,
+                ..RepositoryReadWork::default()
+            },
+        ))
     }
 
     pub fn bound_owner_summary(

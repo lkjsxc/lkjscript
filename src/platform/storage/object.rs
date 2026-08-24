@@ -29,10 +29,11 @@ pub enum ObjectDomain {
     Transaction,
     SemanticDiff,
     PackageInterface,
+    CompilationManifest,
 }
 
 impl ObjectDomain {
-    pub const ALL: [Self; 23] = [
+    pub const ALL: [Self; 24] = [
         Self::Owner,
         Self::Type,
         Self::Blob,
@@ -56,6 +57,7 @@ impl ObjectDomain {
         Self::Transaction,
         Self::SemanticDiff,
         Self::PackageInterface,
+        Self::CompilationManifest,
     ];
 
     pub const fn tag(self) -> u8 {
@@ -83,6 +85,7 @@ impl ObjectDomain {
             Self::Transaction => 21,
             Self::SemanticDiff => 22,
             Self::PackageInterface => 23,
+            Self::CompilationManifest => 24,
         }
     }
 
@@ -124,6 +127,7 @@ impl ObjectDomain {
             Self::Transaction => "transaction",
             Self::SemanticDiff => "semantic_diff",
             Self::PackageInterface => "package_interface",
+            Self::CompilationManifest => "compilation_manifest",
         }
     }
 
@@ -152,13 +156,18 @@ impl ObjectDomain {
             Self::Transaction => contract::TRANSACTION_OBJECT_DIGEST_DOMAIN,
             Self::SemanticDiff => contract::SEMANTIC_DIFF_OBJECT_DIGEST_DOMAIN,
             Self::PackageInterface => contract::PACKAGE_INTERFACE_OWNER_DIGEST_DOMAIN,
+            Self::CompilationManifest => contract::COMPILATION_MANIFEST_DIGEST_DOMAIN,
         }
     }
 
     pub const fn maximum_bytes(self) -> usize {
         match self {
             Self::MapPage => crate::platform::persistent_map::MAXIMUM_PAGE_BYTES,
-            Self::SemanticRoot | Self::Revision | Self::Receipt | Self::Retirement => 64 * 1024,
+            Self::SemanticRoot
+            | Self::Revision
+            | Self::Receipt
+            | Self::Retirement
+            | Self::CompilationManifest => 64 * 1024,
             Self::Type | Self::OwnerSummary | Self::Dependency | Self::PackageInterface => {
                 1024 * 1024
             }

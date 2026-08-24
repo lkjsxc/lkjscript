@@ -57,6 +57,7 @@ pub struct PreparedPublication {
     pub head: HeadRecord,
     pub head_bytes: Vec<u8>,
     pub accepted: AcceptedBinding,
+    pub compiler_units: BTreeSet<OwnerKey>,
     pub objects: BTreeMap<ObjectKey, Vec<u8>>,
     pub store_work: StoreWork,
     pub budget_work: crate::platform::change::ChangeBudgetWork,
@@ -189,6 +190,7 @@ pub fn prepare_change_publication<
         &mut stage,
     )?;
     let mut prepared = finish_prepared(bound, stage);
+    prepared.compiler_units = analysis.summaries.plan.compiler_units.clone();
     prepared.budget_work = analysis.budget_work;
     Ok(prepared)
 }
@@ -510,6 +512,7 @@ fn finish_prepared<S: ImmutableObjectStore + ?Sized>(
         head: bound.head,
         head_bytes: bound.head_bytes,
         accepted: bound.accepted,
+        compiler_units: BTreeSet::new(),
         objects: stage.into_objects(),
         store_work: bound.store_work,
         budget_work: crate::platform::change::ChangeBudgetWork::default(),
