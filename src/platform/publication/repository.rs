@@ -21,6 +21,8 @@ use crate::platform::package_object::{
 };
 use crate::platform::persistent_map::{MapWork, MemoryPageStore, OverlayPageStore};
 use crate::platform::storage::contract::TARGET_PACK_BYTES;
+#[cfg(test)]
+use crate::platform::storage::directory::SealCheckpoint;
 use crate::platform::storage::directory::{PackDirectoryStore, SealReceipt};
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, ObjectStage, StageOutcome, StoreError,
@@ -182,6 +184,8 @@ pub enum PublicationPoint {
     AfterHeadFileSynced,
     AfterHeadRenamed,
     AfterHeadDirectorySynced,
+    #[cfg(test)]
+    Storage(SealCheckpoint),
 }
 
 impl GraphRepository {
@@ -626,6 +630,16 @@ impl GraphRepository {
                 inject(fault, PublicationPoint::AfterFirstObjectStage)?;
             }
         }
+        #[cfg(test)]
+        let seal = match fault {
+            Some(PublicationPoint::Storage(checkpoint)) => store
+                .seal_staged_with_fault(TARGET_PACK_BYTES, &mut store_work, checkpoint)
+                .map_err(store_diagnostic)?,
+            _ => store
+                .seal_staged(TARGET_PACK_BYTES, &mut store_work)
+                .map_err(store_diagnostic)?,
+        };
+        #[cfg(not(test))]
         let seal = store
             .seal_staged(TARGET_PACK_BYTES, &mut store_work)
             .map_err(store_diagnostic)?;

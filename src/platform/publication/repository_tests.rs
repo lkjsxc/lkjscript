@@ -25,6 +25,7 @@ use crate::platform::kernel::{
 use crate::platform::package::RunnerKind;
 use crate::platform::persistent_map::{MapRoot, PageDigest};
 use crate::platform::semantic_id::{DeclarationId, RepositoryId};
+use crate::platform::storage::directory::SealCheckpoint;
 use crate::platform::storage::object::{ObjectDomain, ObjectKey, StageOutcome};
 use crate::platform::storage::pack::{PackBuilder, PackMetadata};
 use crate::platform::witness::{NamespaceKey, OwnershipParent};
@@ -4841,6 +4842,56 @@ fn deterministic_publication_interruptions_reopen_old_or_new_complete_head() {
                 PublicationOutcome::AlreadyAccepted { .. }
             ));
         }
+    }
+}
+
+#[test]
+fn packed_store_interruptions_keep_head_old_until_exact_retry() {
+    for checkpoint in SealCheckpoint::ALL {
+        let temporary = tempfile::tempdir().expect("temporary storage interruption parent");
+        let destination = temporary.path().join(checkpoint.name());
+        let logical = crate::platform::kernel::tests::witness_snapshot();
+        let created =
+            GraphRepository::create(&destination, &logical, None).expect("create repository");
+        let prepared = prepare_body_publication(
+            &created,
+            PublicationOptions {
+                idempotency_key: Some(format!("storage-{}", checkpoint.name())),
+                intent: None,
+            },
+        );
+
+        let error = created
+            .repository
+            .publish_with_fault(&prepared, PublicationPoint::Storage(checkpoint))
+            .expect_err("storage checkpoint must interrupt before HEAD publication");
+        assert_eq!(error.code, "pack_store_injected_interruption");
+
+        let reopened = GraphRepository::open(&destination).expect("interrupted repository reopens");
+        assert_eq!(
+            reopened.current().unwrap().head,
+            created.current.head,
+            "storage interruption advanced HEAD at {checkpoint:?}"
+        );
+        assert!(reopened.head_staging_leftovers().unwrap().is_empty());
+        let reconciliation = reopened
+            .reconcile(&prepared)
+            .expect("interrupted publication must reconcile exactly");
+        assert!(matches!(
+            reconciliation.status,
+            ReconciliationStatus::NotStarted {
+                current: Some(current)
+            } if current == created.current.head
+        ));
+
+        let PublicationOutcome::Accepted { current, .. } = reopened
+            .publish(&prepared)
+            .expect("exact retry must publish safely")
+        else {
+            panic!("exact retry did not publish at {checkpoint:?}")
+        };
+        assert_eq!(current.head, prepared.head);
+        assert_eq!(reopened.current().unwrap().head, prepared.head);
     }
 }
 

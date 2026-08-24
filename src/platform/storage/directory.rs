@@ -17,12 +17,66 @@ const PACKS_DIRECTORY: &str = "packs";
 const CATALOG_DIRECTORY: &str = "catalog";
 const STAGING_DIRECTORY: &str = "staging";
 const CURRENT_CATALOG: &str = "current.lkjc";
+const INJECTED_INTERRUPTION_CODE: &str = "pack_store_injected_interruption";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CatalogState {
     Loaded,
     RebuiltPersisted,
     RebuiltMemoryOnly,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum SealCheckpoint {
+    PackStageCreated,
+    PackPayloadWritten,
+    PackFooterWritten,
+    PackFileSynced,
+    PackPublished,
+    PackStageRemoved,
+    PackDirectorySynced,
+    StagingDirectorySynced,
+    CatalogStageCreated,
+    CatalogBytesWritten,
+    CatalogFileSynced,
+    CatalogPublished,
+    CatalogDirectorySynced,
+}
+
+impl SealCheckpoint {
+    pub(crate) const ALL: [Self; 13] = [
+        Self::PackStageCreated,
+        Self::PackPayloadWritten,
+        Self::PackFooterWritten,
+        Self::PackFileSynced,
+        Self::PackPublished,
+        Self::PackStageRemoved,
+        Self::PackDirectorySynced,
+        Self::StagingDirectorySynced,
+        Self::CatalogStageCreated,
+        Self::CatalogBytesWritten,
+        Self::CatalogFileSynced,
+        Self::CatalogPublished,
+        Self::CatalogDirectorySynced,
+    ];
+
+    pub(crate) const fn name(self) -> &'static str {
+        match self {
+            Self::PackStageCreated => "pack_stage_created",
+            Self::PackPayloadWritten => "pack_payload_written",
+            Self::PackFooterWritten => "pack_footer_written",
+            Self::PackFileSynced => "pack_file_synced",
+            Self::PackPublished => "pack_published",
+            Self::PackStageRemoved => "pack_stage_removed",
+            Self::PackDirectorySynced => "pack_directory_synced",
+            Self::StagingDirectorySynced => "staging_directory_synced",
+            Self::CatalogStageCreated => "catalog_stage_created",
+            Self::CatalogBytesWritten => "catalog_bytes_written",
+            Self::CatalogFileSynced => "catalog_file_synced",
+            Self::CatalogPublished => "catalog_published",
+            Self::CatalogDirectorySynced => "catalog_directory_synced",
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -56,6 +110,7 @@ pub struct PackDirectoryStore {
     catalog_rebuild_note: Option<String>,
     catalog_persist_error: Option<String>,
     staging_leftovers: Vec<String>,
+    catalog_leftovers: Vec<String>,
 }
 
 impl PackDirectoryStore {
@@ -109,6 +164,10 @@ impl PackDirectoryStore {
         let metadata = scan_pack_metadata(&packs_directory)?;
         let build = ObjectCatalog::rebuild(metadata.iter().map(|(pack, data)| (*pack, data)))?;
         let staging_leftovers = list_directory_names(&staging_directory, "pack_staging_scan")?;
+        let catalog_leftovers = list_directory_names(&catalog_directory, "pack_catalog_scan")?
+            .into_iter()
+            .filter(|name| name != CURRENT_CATALOG)
+            .collect();
         let loaded = read_catalog(&catalog_directory, build.catalog.generation());
         let (catalog_state, catalog_rebuild_note, catalog_persist_error) = match loaded {
             Ok(Some(catalog)) if catalog == build.catalog => (CatalogState::Loaded, None, None),
@@ -151,6 +210,7 @@ impl PackDirectoryStore {
             catalog_rebuild_note,
             catalog_persist_error,
             staging_leftovers,
+            catalog_leftovers,
         })
     }
 
@@ -182,6 +242,10 @@ impl PackDirectoryStore {
         &self.staging_leftovers
     }
 
+    pub fn catalog_leftovers(&self) -> &[String] {
+        &self.catalog_leftovers
+    }
+
     pub fn staged_len(&self) -> usize {
         self.staged.len()
     }
@@ -190,6 +254,39 @@ impl PackDirectoryStore {
         &mut self,
         target_bytes: usize,
         work: &mut StoreWork,
+    ) -> Result<SealReceipt, StoreError> {
+        self.seal_staged_inner(target_bytes, work, &mut |_| Ok(()))
+    }
+
+    #[cfg(test)]
+    pub fn seal_staged_with_fault(
+        &mut self,
+        target_bytes: usize,
+        work: &mut StoreWork,
+        fault: SealCheckpoint,
+    ) -> Result<SealReceipt, StoreError> {
+        let mut fired = false;
+        self.seal_staged_inner(target_bytes, work, &mut |observed| {
+            if !fired && observed == fault {
+                fired = true;
+                return Err(StoreError::new(
+                    StoreErrorClass::Io,
+                    INJECTED_INTERRUPTION_CODE,
+                    format!(
+                        "deterministic packed-store interruption at {}",
+                        observed.name()
+                    ),
+                ));
+            }
+            Ok(())
+        })
+    }
+
+    fn seal_staged_inner(
+        &mut self,
+        target_bytes: usize,
+        work: &mut StoreWork,
+        checkpoint: &mut dyn FnMut(SealCheckpoint) -> Result<(), StoreError>,
     ) -> Result<SealReceipt, StoreError> {
         if self.staged.is_empty() {
             return Ok(SealReceipt {
@@ -206,23 +303,31 @@ impl PackDirectoryStore {
         let packs = builder.seal_targeted(target_bytes)?;
         let ids = packs.iter().map(|pack| pack.id).collect::<Vec<_>>();
         for pack in &packs {
-            install_pack(&self.packs_directory, &self.staging_directory, pack)?;
+            install_pack(
+                &self.packs_directory,
+                &self.staging_directory,
+                pack,
+                checkpoint,
+            )?;
             work.packs_sealed = work.packs_sealed.saturating_add(1);
         }
         sync_directory(&self.packs_directory, "pack_directory_sync")?;
+        checkpoint(SealCheckpoint::PackDirectorySynced)?;
         sync_directory(&self.staging_directory, "pack_staging_sync")?;
+        checkpoint(SealCheckpoint::StagingDirectorySynced)?;
         let metadata = scan_pack_metadata(&self.packs_directory)?;
         let build = ObjectCatalog::rebuild(metadata.iter().map(|(pack, data)| (*pack, data)))?;
         self.metadata = metadata;
         self.catalog = build.catalog;
         self.duplicates = build.duplicates;
         self.staged.clear();
-        match write_catalog(&self.catalog_directory, &self.catalog) {
+        match write_catalog_with_checkpoints(&self.catalog_directory, &self.catalog, checkpoint) {
             Ok(()) => {
                 self.catalog_state = CatalogState::RebuiltPersisted;
                 self.catalog_rebuild_note = Some("sealed pack set changed".to_owned());
                 self.catalog_persist_error = None;
             }
+            Err(error) if error.code == INJECTED_INTERRUPTION_CODE => return Err(error),
             Err(error) => {
                 self.catalog_state = CatalogState::RebuiltMemoryOnly;
                 self.catalog_rebuild_note = Some("sealed pack set changed".to_owned());
@@ -413,6 +518,14 @@ fn read_catalog(
 }
 
 fn write_catalog(directory: &File, catalog: &ObjectCatalog) -> Result<(), StoreError> {
+    write_catalog_with_checkpoints(directory, catalog, &mut |_| Ok(()))
+}
+
+fn write_catalog_with_checkpoints(
+    directory: &File,
+    catalog: &ObjectCatalog,
+    checkpoint: &mut dyn FnMut(SealCheckpoint) -> Result<(), StoreError>,
+) -> Result<(), StoreError> {
     let bytes = catalog.encode()?;
     let temporary = format!(".catalog-stage-{}", random_hex()?);
     let fd = rustix::fs::openat(
@@ -429,21 +542,28 @@ fn write_catalog(directory: &File, catalog: &ObjectCatalog) -> Result<(), StoreE
         )
     })?;
     let mut file = File::from(fd);
-    let write_result = file
-        .write_all(&bytes)
-        .and_then(|()| file.sync_all())
-        .map_err(|error| {
-            io_error(
-                "pack_catalog_write",
-                "failed to persist catalog stage",
-                error,
-            )
-        });
-    drop(file);
-    if let Err(error) = write_result {
+    checkpoint(SealCheckpoint::CatalogStageCreated)?;
+    if let Err(error) = file.write_all(&bytes) {
+        drop(file);
         let _ = rustix::fs::unlinkat(directory, temporary.as_str(), AtFlags::empty());
-        return Err(error);
+        return Err(io_error(
+            "pack_catalog_write",
+            "failed to write catalog stage",
+            error,
+        ));
     }
+    checkpoint(SealCheckpoint::CatalogBytesWritten)?;
+    if let Err(error) = file.sync_all() {
+        drop(file);
+        let _ = rustix::fs::unlinkat(directory, temporary.as_str(), AtFlags::empty());
+        return Err(io_error(
+            "pack_catalog_write",
+            "failed to synchronize catalog stage",
+            error,
+        ));
+    }
+    checkpoint(SealCheckpoint::CatalogFileSynced)?;
+    drop(file);
     if let Err(error) =
         rustix::fs::renameat(directory, temporary.as_str(), directory, CURRENT_CATALOG)
     {
@@ -454,13 +574,16 @@ fn write_catalog(directory: &File, catalog: &ObjectCatalog) -> Result<(), StoreE
             error,
         ));
     }
-    sync_directory(directory, "pack_catalog_sync")
+    checkpoint(SealCheckpoint::CatalogPublished)?;
+    sync_directory(directory, "pack_catalog_sync")?;
+    checkpoint(SealCheckpoint::CatalogDirectorySynced)
 }
 
 fn install_pack(
     packs_directory: &File,
     staging_directory: &File,
     pack: &SealedPack,
+    checkpoint: &mut dyn FnMut(SealCheckpoint) -> Result<(), StoreError>,
 ) -> Result<(), StoreError> {
     let temporary = format!(".pack-stage-{}", random_hex()?);
     let fd = rustix::fs::openat(
@@ -471,15 +594,52 @@ fn install_pack(
     )
     .map_err(|error| rustix_error("pack_stage_create", "failed to create pack stage", error))?;
     let mut file = File::from(fd);
-    let write_result = file
-        .write_all(&pack.bytes)
-        .and_then(|()| file.sync_all())
-        .map_err(|error| io_error("pack_stage_write", "failed to persist pack stage", error));
-    drop(file);
-    if let Err(error) = write_result {
+    checkpoint(SealCheckpoint::PackStageCreated)?;
+    let payload_end = super::pack::HEADER_BYTES
+        .checked_add(usize::try_from(pack.metadata.payload_bytes).map_err(|_| {
+            resource(
+                "pack_payload_size",
+                "sealed pack payload length does not fit this platform",
+            )
+        })?)
+        .filter(|end| *end <= pack.bytes.len())
+        .ok_or_else(|| {
+            corrupt(
+                "pack_payload_size",
+                "sealed pack payload bounds are invalid",
+            )
+        })?;
+    if let Err(error) = file.write_all(&pack.bytes[..payload_end]) {
+        drop(file);
         let _ = rustix::fs::unlinkat(staging_directory, temporary.as_str(), AtFlags::empty());
-        return Err(error);
+        return Err(io_error(
+            "pack_stage_write",
+            "failed to persist pack payload",
+            error,
+        ));
     }
+    checkpoint(SealCheckpoint::PackPayloadWritten)?;
+    if let Err(error) = file.write_all(&pack.bytes[payload_end..]) {
+        drop(file);
+        let _ = rustix::fs::unlinkat(staging_directory, temporary.as_str(), AtFlags::empty());
+        return Err(io_error(
+            "pack_stage_write",
+            "failed to persist pack footer",
+            error,
+        ));
+    }
+    checkpoint(SealCheckpoint::PackFooterWritten)?;
+    if let Err(error) = file.sync_all() {
+        drop(file);
+        let _ = rustix::fs::unlinkat(staging_directory, temporary.as_str(), AtFlags::empty());
+        return Err(io_error(
+            "pack_stage_write",
+            "failed to synchronize pack stage",
+            error,
+        ));
+    }
+    checkpoint(SealCheckpoint::PackFileSynced)?;
+    drop(file);
     let final_name = pack.id.file_name();
     match rustix::fs::linkat(
         staging_directory,
@@ -501,8 +661,10 @@ fn install_pack(
             ));
         }
     }
+    checkpoint(SealCheckpoint::PackPublished)?;
     rustix::fs::unlinkat(staging_directory, temporary.as_str(), AtFlags::empty())
         .map_err(|error| rustix_error("pack_stage_remove", "failed to remove pack stage", error))?;
+    checkpoint(SealCheckpoint::PackStageRemoved)?;
     verify_existing_pack(packs_directory, pack.id)
 }
 

@@ -1,7 +1,7 @@
 //! Generic immutable store and pack conformance tests.
 
 use super::catalog::ObjectCatalog;
-use super::directory::{CatalogState, PackDirectoryStore};
+use super::directory::{CatalogState, PackDirectoryStore, SealCheckpoint};
 use super::memory::MemoryPackedStore;
 use super::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, ObjectStage, StageOutcome, StoreWork,
@@ -9,6 +9,7 @@ use super::object::{
 use super::pack::{PackBuilder, PackId, PackMetadata};
 use super::page_store::ObjectPageStore;
 use crate::platform::persistent_map::{MapWork, PersistentMap};
+use std::collections::BTreeSet;
 use std::io::{Cursor, Seek, SeekFrom, Write};
 
 fn object(domain: ObjectDomain, value: &[u8]) -> (ObjectKey, Vec<u8>) {
@@ -409,6 +410,96 @@ fn directory_store_seals_reopens_rebuilds_and_deep_verifies() {
     assert!(rebuilt.catalog_rebuild_note().is_some());
     assert!(rebuilt.catalog_persist_error().is_none());
     assert_eq!(rebuilt.catalog().len(), entries.len());
+}
+
+#[test]
+fn every_pack_seal_checkpoint_reopens_and_retries_safely() {
+    let names = SealCheckpoint::ALL
+        .into_iter()
+        .map(SealCheckpoint::name)
+        .collect::<BTreeSet<_>>();
+    assert_eq!(names.len(), SealCheckpoint::ALL.len());
+    for checkpoint in SealCheckpoint::ALL {
+        let temporary = tempfile::TempDir::new().expect("temporary failpoint parent");
+        let root = temporary.path().join(checkpoint.name());
+        let mut store = PackDirectoryStore::initialize(&root).expect("initialize failpoint store");
+        let (key, bytes) = object(ObjectDomain::Owner, checkpoint.name().as_bytes());
+        let mut work = StoreWork::default();
+        assert_eq!(
+            store.stage(key, &bytes, &mut work).expect("stage fixture"),
+            StageOutcome::Inserted
+        );
+        let error = store
+            .seal_staged_with_fault(16 * 1024, &mut work, checkpoint)
+            .expect_err("named checkpoint must interrupt sealing");
+        assert_eq!(error.code, "pack_store_injected_interruption");
+        assert!(error.message.contains(checkpoint.name()));
+        drop(store);
+
+        let published = !matches!(
+            checkpoint,
+            SealCheckpoint::PackStageCreated
+                | SealCheckpoint::PackPayloadWritten
+                | SealCheckpoint::PackFooterWritten
+                | SealCheckpoint::PackFileSynced
+        );
+        let leaves_pack_stage = matches!(
+            checkpoint,
+            SealCheckpoint::PackStageCreated
+                | SealCheckpoint::PackPayloadWritten
+                | SealCheckpoint::PackFooterWritten
+                | SealCheckpoint::PackFileSynced
+                | SealCheckpoint::PackPublished
+        );
+        let leaves_catalog_stage = matches!(
+            checkpoint,
+            SealCheckpoint::CatalogStageCreated
+                | SealCheckpoint::CatalogBytesWritten
+                | SealCheckpoint::CatalogFileSynced
+        );
+        let mut reopened = PackDirectoryStore::open(&root).expect("interrupted store must reopen");
+        assert_eq!(
+            !reopened.staging_leftovers().is_empty(),
+            leaves_pack_stage,
+            "wrong pack-stage classification at {checkpoint:?}"
+        );
+        assert_eq!(
+            !reopened.catalog_leftovers().is_empty(),
+            leaves_catalog_stage,
+            "wrong catalog-stage classification at {checkpoint:?}"
+        );
+        assert_eq!(
+            reopened
+                .read(key, bytes.len(), &mut StoreWork::default())
+                .expect("interrupted lookup"),
+            published.then_some(bytes.clone()),
+            "wrong visible immutable object state at {checkpoint:?}"
+        );
+
+        let retry_outcome = reopened
+            .stage(key, &bytes, &mut StoreWork::default())
+            .expect("retry staging must be safe");
+        assert_eq!(
+            retry_outcome,
+            if published {
+                StageOutcome::Reused
+            } else {
+                StageOutcome::Inserted
+            }
+        );
+        reopened
+            .seal_staged(16 * 1024, &mut StoreWork::default())
+            .expect("retry seal must complete");
+        assert_eq!(
+            reopened
+                .read(key, bytes.len(), &mut StoreWork::default())
+                .expect("retried lookup"),
+            Some(bytes)
+        );
+        let deep = reopened.deep_verify().expect("retried store must verify");
+        assert_eq!(deep.packs, 1);
+        assert_eq!(deep.objects, 1);
+    }
 }
 
 #[test]
