@@ -17,12 +17,14 @@ use super::reference::{
     NormalizedReferenceBinding, NormalizedReferenceInterpreter, NormalizedReferenceOwnerRead,
     NormalizedReferenceRead,
 };
+use super::resident::NormalizedResidentDeployment;
 use super::resource::NormalizedResourceScope;
 use super::runner::{
     NormalizedCommandPolicy, run_effectful_command, run_graph_tests, run_pure_command,
 };
 use super::value::{NormalizedMapKey, NormalizedValue};
 use super::vm::{NormalizedRunPolicy, NormalizedVm};
+use crate::platform::ResidentLimits;
 use crate::platform::compiler::{OptimizationPolicy, build_clean, link_artifact, load_artifact};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::json::JsonLimits;
@@ -1230,6 +1232,53 @@ fn normalized_runners_execute_pure_commands_and_graph_owned_tests_differentially
     assert_eq!(tests.differential, "equal");
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn normalized_resident_reuses_the_bounded_execution_kernel() {
+    let snapshot = pure_command_snapshot();
+    let (_temporary, _repository, program) = prepare_repository(&snapshot);
+    let program = Arc::new(program);
+    let target = Name::new("pure").unwrap();
+    let deployment = NormalizedPreparedDeployment::prepare(
+        &program,
+        target,
+        Vec::new(),
+        NormalizedDeploymentResourcePolicy::default(),
+        &SecretCatalog::from_environment(&[]).expect("empty exact secret catalog"),
+    )
+    .expect("pure normalized deployment");
+    let resident = NormalizedResidentDeployment::prepare(
+        Arc::clone(&program),
+        deployment,
+        ResidentLimits::default(),
+        NormalizedRunPolicy::default(),
+    )
+    .expect("normalized resident deployment");
+
+    assert_eq!(resident.target().runner, RunnerKind::Command);
+    assert_eq!(
+        resident.deployment().observation().revision,
+        program.root_revision
+    );
+    let receipt = resident.invoke(Vec::new()).await.expect("resident invoke");
+    assert_eq!(receipt.value, NormalizedValue::Unit);
+    assert!(receipt.execution.instructions > 0);
+    assert_eq!(receipt.task_id, 1);
+    assert_eq!(resident.observe().completed, 1);
+    assert_eq!(resident.limits(), &ResidentLimits::default());
+
+    let shutdown = resident.shutdown().await;
+    assert!(shutdown.drained_before_cancellation);
+    assert_eq!(shutdown.remaining_tasks, 0);
+    assert_eq!(
+        resident
+            .invoke(Vec::new())
+            .await
+            .expect_err("shutdown stops normalized admission")
+            .code,
+        "resident_shutting_down"
+    );
+}
+
 #[test]
 fn normalized_deployment_resolves_and_runs_one_exact_effect_adapter() {
     let snapshot = wall_clock_command_snapshot();
@@ -1291,6 +1340,10 @@ fn normalized_deployment_resolves_and_runs_one_exact_effect_adapter() {
 
     assert_eq!(deployment.target().as_str(), "command");
     assert_eq!(deployment.observation(), repeated.observation());
+    assert_eq!(
+        deployment.observation().artifact_manifest,
+        program.artifact().manifest_digest
+    );
     let observation = deployment
         .observation()
         .grants

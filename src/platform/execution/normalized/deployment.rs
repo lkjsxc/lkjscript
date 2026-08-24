@@ -14,6 +14,7 @@ use super::resource::NormalizedResourceScope;
 use super::secret::NormalizedSecretVerifierAdapter;
 use super::security::NormalizedSecurityAdapter;
 use super::value::NormalizedValue;
+use crate::platform::compiler::ArtifactManifestDigest;
 use crate::platform::configuration::ConfigurationValue;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::{ExecutionError, ExecutionFailureClass};
@@ -86,6 +87,7 @@ pub(crate) struct NormalizedDeploymentGrantObservation {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct NormalizedDeploymentObservation {
+    pub artifact_manifest: ArtifactManifestDigest,
     pub repository: RepositoryId,
     pub package: PackageId,
     pub revision: RevisionId,
@@ -230,6 +232,7 @@ impl NormalizedPreparedDeployment {
             capabilities,
             streams,
             observation: NormalizedDeploymentObservation {
+                artifact_manifest: program.artifact().manifest_digest,
                 repository: program.root_repository,
                 package: program.root_package,
                 revision: program.root_revision,

@@ -5,7 +5,7 @@ use super::capability::{
 };
 use super::prepare::{
     NormalizedCode, NormalizedEntryPoint, NormalizedFieldSelector, NormalizedFunctionBody,
-    NormalizedInstruction, NormalizedProgram,
+    NormalizedInstruction, NormalizedProgram, NormalizedTarget,
 };
 use super::resource::NormalizedResourceScope;
 use super::value::{
@@ -154,6 +154,17 @@ impl<'a> NormalizedVm<'a> {
                 "root artifact package has no target with the exact selected name",
             )
         })?;
+        self.invoke_target_scoped(target, arguments, capabilities, resources, control)
+    }
+
+    pub(crate) fn invoke_target_scoped(
+        &self,
+        target: &NormalizedTarget,
+        arguments: Vec<NormalizedValue>,
+        capabilities: Option<&NormalizedCapabilities>,
+        resources: &NormalizedResourceScope,
+        control: &ExecutionControl,
+    ) -> Result<NormalizedInvocation, ExecutionError> {
         let port = self
             .program
             .ports

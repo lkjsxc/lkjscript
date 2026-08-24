@@ -8,6 +8,7 @@ mod deployment;
 mod password;
 mod prepare;
 mod reference;
+mod resident;
 mod resource;
 mod runner;
 mod secret;
