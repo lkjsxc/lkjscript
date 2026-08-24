@@ -143,8 +143,17 @@ struct RuntimeInner {
     program: Arc<PreparedProgram>,
     target: PreparedTarget,
     capabilities: BoundCapabilities,
-    limits: ResidentLimits,
     run_policy: RunPolicy,
+    kernel: ResidentKernel,
+}
+
+#[derive(Clone)]
+pub(crate) struct ResidentKernel {
+    inner: Arc<ResidentKernelInner>,
+}
+
+struct ResidentKernelInner {
+    limits: ResidentLimits,
     accepting: AtomicBool,
     admission: Arc<Semaphore>,
     workers: Arc<Semaphore>,
@@ -155,6 +164,13 @@ struct RuntimeInner {
     next_task: AtomicU64,
     controls: Mutex<BTreeMap<u64, ExecutionControl>>,
     counters: RuntimeCounters,
+}
+
+pub(crate) struct ResidentKernelReceipt<T> {
+    pub value: T,
+    pub queue_nanoseconds: u64,
+    pub execution_nanoseconds: u64,
+    pub task_id: u64,
 }
 
 #[derive(Default)]
@@ -177,7 +193,6 @@ impl ResidentDeployment {
         limits: ResidentLimits,
         run_policy: RunPolicy,
     ) -> Result<Self, Diagnostic> {
-        limits.validate()?;
         let target = program.target(target_name)?.clone();
         let component = program.components().get(&target.component).ok_or_else(|| {
             runtime_diagnostic(
@@ -186,6 +201,69 @@ impl ResidentDeployment {
             )
         })?;
         let capabilities = BoundCapabilities::bind(component, grants)?;
+        let kernel = ResidentKernel::new(limits)?;
+        Ok(Self {
+            inner: Arc::new(RuntimeInner {
+                program,
+                target,
+                capabilities,
+                run_policy,
+                kernel,
+            }),
+        })
+    }
+
+    pub fn target(&self) -> &PreparedTarget {
+        &self.inner.target
+    }
+
+    pub fn limits(&self) -> &ResidentLimits {
+        self.inner.kernel.limits()
+    }
+
+    pub fn observe(&self) -> ResidentObservation {
+        self.inner.kernel.observe()
+    }
+
+    pub async fn invoke(&self, arguments: Vec<Value>) -> Result<InvocationReceipt, ExecutionError> {
+        let program = self.inner.program.clone();
+        let function = self.inner.target.port.function.clone();
+        let capabilities = self.inner.capabilities.task_scope();
+        let policy = self.inner.run_policy;
+        let receipt = self
+            .inner
+            .kernel
+            .invoke(move |control| {
+                Vm::new(&program, policy).invoke_controlled(
+                    &function,
+                    arguments,
+                    Some(&capabilities),
+                    &control,
+                )
+            })
+            .await?;
+        let (value, execution) = receipt.value;
+        Ok(InvocationReceipt {
+            value,
+            execution,
+            queue_nanoseconds: receipt.queue_nanoseconds,
+            execution_nanoseconds: receipt.execution_nanoseconds,
+            task_id: receipt.task_id,
+        })
+    }
+
+    pub async fn shutdown(&self) -> ShutdownReceipt {
+        let capabilities = self.inner.capabilities.clone();
+        self.inner
+            .kernel
+            .shutdown(move || capabilities.shutdown())
+            .await
+    }
+}
+
+impl ResidentKernel {
+    pub(crate) fn new(limits: ResidentLimits) -> Result<Self, Diagnostic> {
+        limits.validate()?;
         let admission_capacity = limits
             .maximum_concurrent_tasks
             .checked_add(limits.maximum_queued_tasks)
@@ -198,12 +276,8 @@ impl ResidentDeployment {
         let maximum_concurrent_tasks = limits.maximum_concurrent_tasks;
         let (shutdown, _) = watch::channel(false);
         Ok(Self {
-            inner: Arc::new(RuntimeInner {
-                program,
-                target,
-                capabilities,
+            inner: Arc::new(ResidentKernelInner {
                 limits,
-                run_policy,
                 accepting: AtomicBool::new(true),
                 admission: Arc::new(Semaphore::new(admission_capacity)),
                 workers: Arc::new(Semaphore::new(maximum_concurrent_tasks)),
@@ -218,15 +292,11 @@ impl ResidentDeployment {
         })
     }
 
-    pub fn target(&self) -> &PreparedTarget {
-        &self.inner.target
-    }
-
-    pub fn limits(&self) -> &ResidentLimits {
+    pub(crate) fn limits(&self) -> &ResidentLimits {
         &self.inner.limits
     }
 
-    pub fn observe(&self) -> ResidentObservation {
+    pub(crate) fn observe(&self) -> ResidentObservation {
         ResidentObservation {
             accepting: self.inner.accepting.load(Ordering::Acquire),
             queued: self.inner.queued.load(Ordering::Acquire),
@@ -246,7 +316,14 @@ impl ResidentDeployment {
         }
     }
 
-    pub async fn invoke(&self, arguments: Vec<Value>) -> Result<InvocationReceipt, ExecutionError> {
+    pub(crate) async fn invoke<T, F>(
+        &self,
+        operation: F,
+    ) -> Result<ResidentKernelReceipt<T>, ExecutionError>
+    where
+        T: Send + 'static,
+        F: FnOnce(ExecutionControl) -> Result<T, ExecutionError> + Send + 'static,
+    {
         if !self.inner.accepting.load(Ordering::Acquire) {
             self.inner
                 .counters
@@ -318,15 +395,18 @@ impl ResidentDeployment {
         }
 
         let queue_nanoseconds = duration_nanoseconds(queue_started.elapsed());
-        let task_id = self.inner.next_task.fetch_add(1, Ordering::AcqRel);
-        if task_id == u64::MAX {
-            drop(worker);
-            drop(admission);
-            return Err(ExecutionError::resource(
-                "resident_task_identity_exhausted",
-                "resident task identity domain was exhausted",
-            ));
-        }
+        let task_id = self
+            .inner
+            .next_task
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+                current.checked_add(1)
+            })
+            .map_err(|_| {
+                ExecutionError::resource(
+                    "resident_task_identity_exhausted",
+                    "resident task identity domain was exhausted",
+                )
+            })?;
         let deadline_duration =
             Duration::from_millis(self.inner.limits.request_deadline_milliseconds);
         let control = ExecutionControl::with_deadline(Instant::now() + deadline_duration);
@@ -334,10 +414,6 @@ impl ResidentDeployment {
         let active = self.inner.active.fetch_add(1, Ordering::AcqRel) + 1;
         update_maximum(&self.inner.counters.maximum_active, active);
 
-        let program = self.inner.program.clone();
-        let function = self.inner.target.port.function.clone();
-        let capabilities = self.inner.capabilities.task_scope();
-        let policy = self.inner.run_policy;
         let inner = self.inner.clone();
         let execution_started = Instant::now();
         let closure_control = control.clone();
@@ -350,12 +426,7 @@ impl ResidentDeployment {
         };
         let mut task = tokio::task::spawn_blocking(move || {
             let _guard = guard;
-            let outcome = Vm::new(&program, policy).invoke_controlled(
-                &function,
-                arguments,
-                Some(&capabilities),
-                &closure_control,
-            );
+            let outcome = operation(closure_control);
             inner.record_outcome(&outcome);
             outcome
         });
@@ -376,17 +447,18 @@ impl ResidentDeployment {
             }
         };
         cancellation.disarm();
-        let (value, execution) = outcome?;
-        Ok(InvocationReceipt {
-            value,
-            execution,
+        Ok(ResidentKernelReceipt {
+            value: outcome?,
             queue_nanoseconds,
             execution_nanoseconds: duration_nanoseconds(execution_started.elapsed()),
             task_id,
         })
     }
 
-    pub async fn shutdown(&self) -> ShutdownReceipt {
+    pub(crate) async fn shutdown(
+        &self,
+        cleanup: impl FnOnce() -> Vec<ExecutionError>,
+    ) -> ShutdownReceipt {
         let started = Instant::now();
         self.inner.accepting.store(false, Ordering::Release);
         self.inner.admission.close();
@@ -416,7 +488,7 @@ impl ResidentDeployment {
             .queued
             .load(Ordering::Acquire)
             .saturating_add(self.inner.active.load(Ordering::Acquire));
-        let cleanup_failures = self.inner.capabilities.shutdown();
+        let cleanup_failures = cleanup();
         ShutdownReceipt {
             contract_version: RESIDENT_RUNTIME_CONTRACT_VERSION,
             admission_stopped: true,
@@ -429,7 +501,7 @@ impl ResidentDeployment {
     }
 }
 
-impl RuntimeInner {
+impl ResidentKernelInner {
     async fn wait_idle(&self) {
         loop {
             let notified = self.idle.notified();
@@ -441,7 +513,7 @@ impl RuntimeInner {
         }
     }
 
-    fn record_outcome(&self, outcome: &Result<(Value, RunObservation), ExecutionError>) {
+    fn record_outcome<T>(&self, outcome: &Result<T, ExecutionError>) {
         self.counters.completed.fetch_add(1, Ordering::AcqRel);
         if let Err(error) = outcome {
             self.counters.failed.fetch_add(1, Ordering::AcqRel);
@@ -453,7 +525,7 @@ impl RuntimeInner {
 }
 
 struct ActiveGuard {
-    inner: Arc<RuntimeInner>,
+    inner: Arc<ResidentKernelInner>,
     task_id: u64,
     _worker: OwnedSemaphorePermit,
     _admission: OwnedSemaphorePermit,
@@ -493,9 +565,9 @@ impl Drop for CancelOnDrop {
     }
 }
 
-fn join_outcome(
-    outcome: Result<Result<(Value, RunObservation), ExecutionError>, tokio::task::JoinError>,
-) -> Result<(Value, RunObservation), ExecutionError> {
+fn join_outcome<T>(
+    outcome: Result<Result<T, ExecutionError>, tokio::task::JoinError>,
+) -> Result<T, ExecutionError> {
     outcome.map_err(|_| {
         ExecutionError::new(
             ExecutionFailureClass::Infrastructure,
@@ -596,6 +668,23 @@ mod tests {
             .await
             .expect_err("admission stopped");
         assert_eq!(error.code, "resident_shutting_down");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn resident_kernel_is_value_agnostic() {
+        let kernel = ResidentKernel::new(ResidentLimits::default()).expect("kernel");
+        let receipt = kernel
+            .invoke(|control| {
+                control.check()?;
+                Ok(String::from("normalized"))
+            })
+            .await
+            .expect("invoke");
+
+        assert_eq!(receipt.value, "normalized");
+        assert_eq!(receipt.task_id, 1);
+        assert_eq!(kernel.observe().completed, 1);
+        assert_eq!(kernel.shutdown(Vec::new).await.remaining_tasks, 0);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
