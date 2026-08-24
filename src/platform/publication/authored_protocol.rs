@@ -4,6 +4,7 @@
 //! Contract 5 schema from the actual Graph 5 request decoder and compact response projection so
 //! the eventual cutover cannot depend on a handwritten parallel catalog.
 
+use super::idempotency::idempotency_key_is_valid;
 use super::{
     ChangeCounts, PreparedAuthoredPublication, PublicationOptions, PublicationOutcome,
     SemanticDiffDigest, TransactionDigest, ValidationEvidence, WorkObservation,
@@ -131,11 +132,7 @@ impl AuthoredChangeRequest {
             self.semantic.preconditions.len(),
         )?;
         if let Some(key) = &self.idempotency_key
-            && (key.is_empty()
-                || key.len() > super::contract::MAXIMUM_IDEMPOTENCY_KEY_BYTES
-                || !key
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.')))
+            && !idempotency_key_is_valid(key)
         {
             return Err(protocol_error(
                 DiagnosticClass::Source,
@@ -242,9 +239,9 @@ impl AuthoredChangeResponse {
                 AuthoredChangeResponseStatus::Accepted,
                 current.head.revision,
             ),
-            PublicationOutcome::AlreadyAccepted { current } => (
+            PublicationOutcome::AlreadyAccepted { accepted, .. } => (
                 AuthoredChangeResponseStatus::AlreadyAccepted,
-                current.head.revision,
+                accepted.head.revision,
             ),
             PublicationOutcome::Stale { .. } => {
                 return Err(protocol_error(

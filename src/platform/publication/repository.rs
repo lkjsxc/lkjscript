@@ -1,6 +1,10 @@
 //! Exact Graph 5 repository reads and one locked, atomic accepted-HEAD publication point.
 
 use super::contract::{HEAD_MAGIC, MAXIMUM_HEAD_BYTES, REVISION_CONTRACT_VERSION};
+use super::idempotency::{
+    IdempotencyBinding, advance_idempotency_history, empty_idempotency_history,
+    lookup_idempotency_history,
+};
 use super::prepare::validate_history_base;
 use super::read_view::RepositoryView;
 use super::{
@@ -15,6 +19,7 @@ use crate::platform::kernel::{KernelSnapshot, SemanticRoot, decode_root, encode_
 use crate::platform::package_object::{
     PackageObject, validate_package_object_closure, validate_package_object_closure_with_interface,
 };
+use crate::platform::persistent_map::{MapWork, MemoryPageStore, OverlayPageStore};
 use crate::platform::storage::contract::TARGET_PACK_BYTES;
 use crate::platform::storage::directory::{PackDirectoryStore, SealReceipt};
 use crate::platform::storage::object::{
@@ -22,12 +27,13 @@ use crate::platform::storage::object::{
     StoreErrorClass, StoreWork,
 };
 use crate::platform::storage::pack::PackMetadata;
+use crate::platform::storage::page_store::ObjectPageReader;
 use crate::platform::witness::{
     ValidationWitnessManifest, decode_witness_manifest, encode_witness_manifest,
 };
 use fs2::FileExt;
 use rustix::fs::{AtFlags, Mode, OFlags};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -82,7 +88,8 @@ pub enum PublicationOutcome {
         store_work: StoreWork,
     },
     AlreadyAccepted {
-        current: CurrentPublication,
+        accepted: CurrentPublication,
+        observed: HeadRecord,
     },
     Stale {
         expected: Option<HeadRecord>,
@@ -96,21 +103,70 @@ pub enum ReconciliationStatus {
         current: Option<HeadRecord>,
     },
     Accepted {
-        current: Box<CurrentPublication>,
+        accepted: Box<CurrentPublication>,
+        observed: HeadRecord,
     },
     Stale {
         expected: Option<HeadRecord>,
         current: Option<HeadRecord>,
     },
     ConflictingIdempotency {
-        current: HeadRecord,
+        accepted: HeadRecord,
     },
+}
+
+#[derive(Clone, Debug)]
+pub struct ReconciliationResult {
+    pub status: ReconciliationStatus,
+    pub work: ReconciliationWork,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ReconciliationWork {
+    pub objects_read: u64,
+    pub bytes_read: u64,
+    pub idempotency_lookup_pages_read: u64,
+    pub idempotency_lookup_entries_visited: u64,
+    pub accepted_publications_loaded: u64,
+}
+
+impl ReconciliationWork {
+    fn add_store(&mut self, work: StoreWork) {
+        self.objects_read = self.objects_read.saturating_add(work.objects_read);
+        self.bytes_read = self.bytes_read.saturating_add(work.bytes_read);
+    }
+
+    fn add_map(&mut self, work: MapWork) {
+        self.idempotency_lookup_pages_read = self
+            .idempotency_lookup_pages_read
+            .saturating_add(work.pages_read);
+        self.idempotency_lookup_entries_visited = self
+            .idempotency_lookup_entries_visited
+            .saturating_add(work.entries_visited);
+    }
+
+    fn add(&mut self, other: Self) {
+        self.objects_read = self.objects_read.saturating_add(other.objects_read);
+        self.bytes_read = self.bytes_read.saturating_add(other.bytes_read);
+        self.idempotency_lookup_pages_read = self
+            .idempotency_lookup_pages_read
+            .saturating_add(other.idempotency_lookup_pages_read);
+        self.idempotency_lookup_entries_visited = self
+            .idempotency_lookup_entries_visited
+            .saturating_add(other.idempotency_lookup_entries_visited);
+        self.accepted_publications_loaded = self
+            .accepted_publications_loaded
+            .saturating_add(other.accepted_publications_loaded);
+    }
 }
 
 #[derive(Clone, Debug)]
 enum PublicationDecision {
     Ready,
-    Accepted(Box<CurrentPublication>),
+    Accepted {
+        accepted: Box<CurrentPublication>,
+        observed: HeadRecord,
+    },
     Stale {
         expected: Option<HeadRecord>,
         current: Option<HeadRecord>,
@@ -456,7 +512,7 @@ impl GraphRepository {
     pub fn reconcile(
         &self,
         prepared: &PreparedPublication,
-    ) -> Result<ReconciliationStatus, Diagnostic> {
+    ) -> Result<ReconciliationResult, Diagnostic> {
         let root_directory = open_directory(&self.root)?;
         let lock = open_lock(&root_directory)?;
         FileExt::lock_shared(&lock).map_err(|error| {
@@ -465,7 +521,13 @@ impl GraphRepository {
         let store = PackDirectoryStore::open(&self.root).map_err(store_diagnostic)?;
         let current = read_current_optional(&root_directory, &store)?;
         validate_prepared_repository(prepared)?;
-        Ok(match classify_publication(current.as_ref(), prepared) {
+        let mut work = ReconciliationWork::default();
+        if let Some(current) = current.as_ref() {
+            work.add_store(current.store_work);
+        }
+        let (decision, decision_work) = classify_publication(&store, current.as_ref(), prepared)?;
+        work.add(decision_work);
+        let status = match decision {
             PublicationDecision::Ready => {
                 validate_history_base(
                     current.as_ref().map(|value| value.accepted),
@@ -473,18 +535,30 @@ impl GraphRepository {
                     &prepared.transaction,
                     &prepared.semantic_diff,
                 )?;
+                let mut transition_work = StoreWork::default();
+                validate_candidate_idempotency_transition(
+                    &store,
+                    prepared.revision.core.idempotency_receipts,
+                    current.as_ref().map(|value| value.accepted),
+                    &prepared.objects,
+                    &mut transition_work,
+                )?;
+                work.add_store(transition_work);
                 ReconciliationStatus::NotStarted {
                     current: current.as_ref().map(|value| value.head),
                 }
             }
-            PublicationDecision::Accepted(current) => ReconciliationStatus::Accepted { current },
+            PublicationDecision::Accepted { accepted, observed } => {
+                ReconciliationStatus::Accepted { accepted, observed }
+            }
             PublicationDecision::Stale { expected, current } => {
                 ReconciliationStatus::Stale { expected, current }
             }
-            PublicationDecision::ConflictingIdempotency(current) => {
-                ReconciliationStatus::ConflictingIdempotency { current }
+            PublicationDecision::ConflictingIdempotency(accepted) => {
+                ReconciliationStatus::ConflictingIdempotency { accepted }
             }
-        })
+        };
+        Ok(ReconciliationResult { status, work })
     }
 
     #[cfg(test)]
@@ -509,10 +583,13 @@ impl GraphRepository {
         let mut store = PackDirectoryStore::open(&self.root).map_err(store_diagnostic)?;
         let current = read_current_optional(&root_directory, &store)?;
         validate_prepared_repository(prepared)?;
-        match classify_publication(current.as_ref(), prepared) {
+        match classify_publication(&store, current.as_ref(), prepared)?.0 {
             PublicationDecision::Ready => {}
-            PublicationDecision::Accepted(current) => {
-                return Ok(PublicationOutcome::AlreadyAccepted { current: *current });
+            PublicationDecision::Accepted { accepted, observed } => {
+                return Ok(PublicationOutcome::AlreadyAccepted {
+                    accepted: *accepted,
+                    observed,
+                });
             }
             PublicationDecision::Stale { expected, current } => {
                 return Ok(PublicationOutcome::Stale { expected, current });
@@ -521,7 +598,7 @@ impl GraphRepository {
                 return Err(repository_error(
                     DiagnosticClass::Source,
                     "publication_repository_idempotency_conflict",
-                    "current HEAD already binds this idempotency key to a different normalized transaction",
+                    "accepted history already binds this idempotency key to a different normalized transaction",
                 ));
             }
         }
@@ -531,9 +608,16 @@ impl GraphRepository {
             &prepared.transaction,
             &prepared.semantic_diff,
         )?;
+        let mut store_work = StoreWork::default();
+        validate_candidate_idempotency_transition(
+            &store,
+            prepared.revision.core.idempotency_receipts,
+            current.as_ref().map(|value| value.accepted),
+            &prepared.objects,
+            &mut store_work,
+        )?;
         inject(fault, PublicationPoint::BeforeObjectStage)?;
 
-        let mut store_work = StoreWork::default();
         for (index, (key, bytes)) in prepared.objects.iter().enumerate() {
             store
                 .stage(*key, bytes, &mut store_work)
@@ -604,33 +688,90 @@ impl GraphRepository {
 }
 
 fn classify_publication(
+    store: &PackDirectoryStore,
     current: Option<&CurrentPublication>,
     prepared: &PreparedPublication,
-) -> PublicationDecision {
+) -> Result<(PublicationDecision, ReconciliationWork), Diagnostic> {
+    let mut work = ReconciliationWork::default();
     if let Some(current) = current {
         if current.head == prepared.head {
-            return PublicationDecision::Accepted(Box::new(current.clone()));
+            return Ok((
+                PublicationDecision::Accepted {
+                    accepted: Box::new(current.clone()),
+                    observed: current.head,
+                },
+                work,
+            ));
         }
         if let Some(key) = prepared.receipt.idempotency_key.as_ref()
             && current.receipt.idempotency_key.as_ref() == Some(key)
         {
-            if current.receipt.bases == prepared.receipt.bases
-                && current.receipt.transaction == prepared.receipt.transaction
-                && current.head.repository_id == prepared.head.repository_id
-            {
-                return PublicationDecision::Accepted(Box::new(current.clone()));
+            let binding = IdempotencyBinding::from_accepted(current.accepted, &current.receipt)?
+                .ok_or_else(|| {
+                    repository_error(
+                        DiagnosticClass::Corrupt,
+                        "publication_repository_idempotency_current",
+                        "current keyed receipt did not produce its exact idempotency binding",
+                    )
+                })?;
+            if binding.matches_prepared(&prepared.receipt) {
+                return Ok((
+                    PublicationDecision::Accepted {
+                        accepted: Box::new(current.clone()),
+                        observed: current.head,
+                    },
+                    work,
+                ));
             }
-            return PublicationDecision::ConflictingIdempotency(current.head);
+            return Ok((
+                PublicationDecision::ConflictingIdempotency(current.head),
+                work,
+            ));
+        }
+        if let Some(key) = prepared.receipt.idempotency_key.as_deref() {
+            let reader = ObjectPageReader::new(store);
+            let mut map_work = MapWork::default();
+            let binding = lookup_idempotency_history(
+                current.revision.core.idempotency_receipts,
+                key,
+                &reader,
+                &mut map_work,
+            )?;
+            work.add_map(map_work);
+            work.add_store(reader.work());
+            if let Some(binding) = binding {
+                if !binding.matches_prepared(&prepared.receipt) {
+                    return Ok((
+                        PublicationDecision::ConflictingIdempotency(binding.result),
+                        work,
+                    ));
+                }
+                let accepted = read_publication(store, binding.result)?;
+                work.add_store(accepted.store_work);
+                work.accepted_publications_loaded =
+                    work.accepted_publications_loaded.saturating_add(1);
+                validate_idempotency_result(&binding, &accepted)?;
+                return Ok((
+                    PublicationDecision::Accepted {
+                        accepted: Box::new(accepted),
+                        observed: current.head,
+                    },
+                    work,
+                ));
+            }
         }
     }
     let observed = current.map(|value| value.head);
     if observed == prepared.expected_base {
-        PublicationDecision::Ready
+        Ok((PublicationDecision::Ready, work))
     } else {
-        PublicationDecision::Stale {
-            expected: prepared.expected_base,
-            current: observed,
-        }
+        Ok((
+            PublicationDecision::Stale {
+                expected: prepared.expected_base,
+                current: observed,
+            },
+            work,
+        ))
     }
 }
 
@@ -648,6 +789,13 @@ fn read_current_optional(
         return Ok(None);
     };
     let head = HeadRecord::decode(&head_bytes)?;
+    read_publication(store, head).map(Some)
+}
+
+fn read_publication(
+    store: &PackDirectoryStore,
+    head: HeadRecord,
+) -> Result<CurrentPublication, Diagnostic> {
     let mut store_work = StoreWork::default();
     let revision_bytes = read_required(
         store,
@@ -742,7 +890,13 @@ fn read_current_optional(
         _ => unreachable!("revision codec rejects more than two parents"),
     };
     validate_history_base(base, receipt.status, &transaction, &semantic_diff)?;
-    Ok(Some(CurrentPublication {
+    validate_idempotency_transition(
+        store,
+        revision.core.idempotency_receipts,
+        base,
+        &mut store_work,
+    )?;
+    Ok(CurrentPublication {
         head,
         revision,
         receipt,
@@ -752,7 +906,7 @@ fn read_current_optional(
         witness,
         accepted,
         store_work,
-    }))
+    })
 }
 
 fn load_parent_binding(
@@ -803,6 +957,145 @@ fn load_parent_binding(
         revision.core.validation_witness,
         &witness,
     )
+}
+
+fn validate_idempotency_transition(
+    store: &PackDirectoryStore,
+    observed: crate::platform::persistent_map::MapRoot,
+    base: Option<AcceptedBinding>,
+    work: &mut StoreWork,
+) -> Result<(), Diagnostic> {
+    let (expected, generated) = derive_idempotency_transition(store, base, work)?;
+    require_idempotency_transition(observed, expected)?;
+    validate_idempotency_pages(store, &generated, None, work)?;
+
+    let reader = ObjectPageReader::new(store);
+    let mut map_work = MapWork::default();
+    let _ = lookup_idempotency_history(
+        observed,
+        "lkjscript-integrity-probe",
+        &reader,
+        &mut map_work,
+    )?;
+    work.add(reader.work());
+    Ok(())
+}
+
+fn validate_candidate_idempotency_transition(
+    store: &PackDirectoryStore,
+    observed: crate::platform::persistent_map::MapRoot,
+    base: Option<AcceptedBinding>,
+    objects: &BTreeMap<ObjectKey, Vec<u8>>,
+    work: &mut StoreWork,
+) -> Result<(), Diagnostic> {
+    let (expected, generated) = derive_idempotency_transition(store, base, work)?;
+    require_idempotency_transition(observed, expected)?;
+    validate_idempotency_pages(store, &generated, Some(objects), work)
+}
+
+fn derive_idempotency_transition(
+    store: &PackDirectoryStore,
+    base: Option<AcceptedBinding>,
+    work: &mut StoreWork,
+) -> Result<(crate::platform::persistent_map::MapRoot, MemoryPageStore), Diagnostic> {
+    let mut map_work = MapWork::default();
+    match base {
+        None => {
+            let mut pages = MemoryPageStore::default();
+            let root = empty_idempotency_history(&mut pages, &mut map_work)?;
+            Ok((root, pages))
+        }
+        Some(base) => {
+            let receipt_bytes =
+                read_required(store, ObjectDomain::Receipt, base.receipt.bytes(), work)?;
+            let receipt = PublicationReceipt::decode(&receipt_bytes, base.receipt)?;
+            let binding = IdempotencyBinding::from_accepted(base, &receipt)?;
+            let reader = ObjectPageReader::new(store);
+            let mut overlay = OverlayPageStore::new(&reader);
+            let expected = advance_idempotency_history(
+                base.idempotency_receipts,
+                binding.as_ref(),
+                &mut overlay,
+                &mut map_work,
+            )?;
+            let generated = overlay.into_pages();
+            work.add(reader.work());
+            Ok((expected, generated))
+        }
+    }
+}
+
+fn validate_idempotency_pages(
+    store: &PackDirectoryStore,
+    generated: &MemoryPageStore,
+    candidate: Option<&BTreeMap<ObjectKey, Vec<u8>>>,
+    work: &mut StoreWork,
+) -> Result<(), Diagnostic> {
+    for (digest, expected) in generated.objects() {
+        let key = ObjectKey::from_digest(ObjectDomain::MapPage, digest.bytes());
+        if let Some(observed) = candidate.and_then(|objects| objects.get(&key)) {
+            if observed.as_slice() != expected {
+                return Err(repository_error(
+                    DiagnosticClass::Corrupt,
+                    "publication_repository_idempotency_page_bytes",
+                    "prepared idempotency page differs from its exact derived bytes",
+                ));
+            }
+            continue;
+        }
+        let observed = store
+            .read(key, ObjectDomain::MapPage.maximum_bytes(), work)
+            .map_err(store_diagnostic)?
+            .ok_or_else(|| {
+                repository_error(
+                    DiagnosticClass::Corrupt,
+                    "publication_repository_idempotency_page_missing",
+                    "exact derived idempotency page is absent from prepared and accepted storage",
+                )
+            })?;
+        if observed.as_slice() != expected {
+            return Err(repository_error(
+                DiagnosticClass::Corrupt,
+                "publication_repository_idempotency_page_bytes",
+                "stored idempotency page differs from its exact derived bytes",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn require_idempotency_transition(
+    observed: crate::platform::persistent_map::MapRoot,
+    expected: crate::platform::persistent_map::MapRoot,
+) -> Result<(), Diagnostic> {
+    if observed != expected {
+        return Err(repository_error(
+            DiagnosticClass::Corrupt,
+            "publication_repository_idempotency_root",
+            "revision idempotency root is not the exact parent root advanced by its accepted parent receipt",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_idempotency_result(
+    binding: &IdempotencyBinding,
+    accepted: &CurrentPublication,
+) -> Result<(), Diagnostic> {
+    if accepted.head != binding.result
+        || accepted.revision.receipt != binding.receipt
+        || accepted.receipt.repository_id != binding.repository_id
+        || accepted.receipt.idempotency_key.as_deref() != Some(binding.key.as_str())
+        || accepted.receipt.bases.as_slice() != [binding.base]
+        || accepted.receipt.transaction != binding.transaction
+    {
+        return Err(repository_error(
+            DiagnosticClass::Corrupt,
+            "publication_repository_idempotency_result",
+            "idempotency history binding disagrees with its exact accepted publication",
+        ));
+    }
+    Ok(())
 }
 
 fn validate_prepared_repository(prepared: &PreparedPublication) -> Result<(), Diagnostic> {
@@ -921,6 +1214,15 @@ fn verify_prepared_closure(
             ));
         }
     }
+    let reader = ObjectPageReader::new(store);
+    let mut map_work = MapWork::default();
+    let _ = lookup_idempotency_history(
+        prepared.revision.core.idempotency_receipts,
+        "lkjscript-integrity-probe",
+        &reader,
+        &mut map_work,
+    )?;
+    work.add(reader.work());
     Ok(())
 }
 

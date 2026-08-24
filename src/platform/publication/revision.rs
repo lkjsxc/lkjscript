@@ -10,6 +10,7 @@ use super::digest::{
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::SemanticRootDigest;
+use crate::platform::persistent_map::MapRoot;
 use crate::platform::semantic_id::{RepositoryId, RevisionId};
 use crate::platform::witness::{
     ValidationCertificateDigest, ValidationWitnessDigest, ValidationWitnessManifest,
@@ -39,6 +40,7 @@ pub struct RevisionCore {
     pub validation_witness: ValidationWitnessDigest,
     pub validation_certificate: ValidationCertificateDigest,
     pub validator_contract: ValidatorContractDigest,
+    pub idempotency_receipts: MapRoot,
     pub transaction: TransactionDigest,
     pub semantic_diff: SemanticDiffDigest,
 }
@@ -221,6 +223,8 @@ pub struct AcceptedBinding {
     pub validation_witness: ValidationWitnessDigest,
     pub validation_certificate: ValidationCertificateDigest,
     pub validator_contract: ValidatorContractDigest,
+    pub idempotency_receipts: MapRoot,
+    pub receipt: ReceiptObjectDigest,
 }
 
 impl AcceptedBinding {
@@ -260,6 +264,8 @@ impl AcceptedBinding {
             validation_witness: witness_digest,
             validation_certificate: witness.certificate,
             validator_contract: witness.validator_contract,
+            idempotency_receipts: record.core.idempotency_receipts,
+            receipt: record.receipt,
         })
     }
 

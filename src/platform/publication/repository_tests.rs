@@ -4383,6 +4383,58 @@ fn locked_publication_accepts_once_reconciles_exact_retry_and_rejects_stale() {
         created.current.head
     );
 
+    let mut forged = prepared.clone();
+    forged.revision.core.idempotency_receipts = created.current.semantic_root.owners;
+    forged.receipt.result = forged.revision.core.revision_id().unwrap();
+    let (receipt_digest, receipt_bytes) = forged.receipt.encode().unwrap();
+    forged.revision = RevisionRecord::new(forged.revision.core.clone(), receipt_digest).unwrap();
+    let (revision_digest, revision_bytes) = forged.revision.encode().unwrap();
+    forged.head = HeadRecord {
+        contract_version: contract::REVISION_CONTRACT_VERSION,
+        graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+        repository_id: forged.head.repository_id,
+        revision: forged.revision.revision,
+        record: revision_digest,
+    };
+    forged.receipt_digest = receipt_digest;
+    forged.receipt_bytes = receipt_bytes.clone();
+    forged.revision_digest = revision_digest;
+    forged.revision_bytes = revision_bytes.clone();
+    forged.head_bytes = forged.head.encode().unwrap();
+    forged.accepted = AcceptedBinding::verify(
+        forged.head,
+        &forged.revision,
+        forged.authority.witness.digest,
+        &forged.authority.witness.manifest,
+    )
+    .unwrap();
+    forged.objects.insert(
+        ObjectKey::from_digest(ObjectDomain::Receipt, receipt_digest.bytes()),
+        receipt_bytes,
+    );
+    forged.objects.insert(
+        ObjectKey::from_digest(ObjectDomain::Revision, revision_digest.bytes()),
+        revision_bytes,
+    );
+    assert_eq!(
+        created
+            .repository
+            .reconcile(&forged)
+            .expect_err("reconciliation must reject a non-derived prepared history root")
+            .code,
+        "publication_repository_idempotency_root"
+    );
+    let error = created
+        .repository
+        .publish(&forged)
+        .expect_err("commit must derive the exact idempotency root before visibility");
+    assert_eq!(error.code, "publication_repository_idempotency_root");
+    assert_eq!(
+        created.repository.current().unwrap().head,
+        created.current.head,
+        "a forged but internally consistent history root must publish nothing"
+    );
+
     let outcome = created
         .repository
         .publish(&prepared)
@@ -4403,11 +4455,16 @@ fn locked_publication_accepts_once_reconciles_exact_retry_and_rejects_stale() {
         .repository
         .publish(&prepared)
         .expect("exact retry reconciliation");
-    let PublicationOutcome::AlreadyAccepted { current: replay } = retry else {
+    let PublicationOutcome::AlreadyAccepted {
+        accepted: replay,
+        observed,
+    } = retry
+    else {
         panic!("exact retry must return original accepted publication")
     };
     assert_eq!(replay.head, prepared.head);
     assert_eq!(replay.receipt, prepared.receipt);
+    assert_eq!(observed, prepared.head);
 
     let stale = prepare_rename_publication(&created, "stale_rename", None);
     let outcome = created
@@ -4426,7 +4483,7 @@ fn locked_publication_accepts_once_reconciles_exact_retry_and_rejects_stale() {
     let ReconciliationStatus::Stale {
         expected,
         current: observed,
-    } = created.repository.reconcile(&stale).unwrap()
+    } = created.repository.reconcile(&stale).unwrap().status
     else {
         panic!("stale reconciliation must stay distinct")
     };
@@ -4492,19 +4549,235 @@ fn idempotency_key_is_exactly_bound_to_base_and_normalized_transaction() {
         created.repository.publish(&accepted).unwrap(),
         PublicationOutcome::AlreadyAccepted { .. }
     ));
+    let exact_reconciliation = created
+        .repository
+        .reconcile(&accepted)
+        .expect("current exact reconciliation");
+    assert_eq!(exact_reconciliation.work.idempotency_lookup_pages_read, 0);
+    assert_eq!(exact_reconciliation.work.accepted_publications_loaded, 0);
+    assert!(matches!(
+        exact_reconciliation.status,
+        ReconciliationStatus::Accepted { .. }
+    ));
     let error = created
         .repository
         .publish(&conflict)
         .expect_err("one key cannot identify two normalized transactions");
     assert_eq!(error.code, "publication_repository_idempotency_conflict");
-    let ReconciliationStatus::ConflictingIdempotency { current } = created
+    let conflict_reconciliation = created
         .repository
         .reconcile(&conflict)
-        .expect("idempotency reconciliation")
+        .expect("idempotency reconciliation");
+    assert_eq!(
+        conflict_reconciliation.work.idempotency_lookup_pages_read,
+        0
+    );
+    assert_eq!(conflict_reconciliation.work.accepted_publications_loaded, 0);
+    let ReconciliationStatus::ConflictingIdempotency { accepted: bound } =
+        conflict_reconciliation.status
     else {
         panic!("idempotency conflict must remain a typed reconciliation outcome")
     };
-    assert_eq!(current, accepted.head);
+    assert_eq!(bound, accepted.head);
+}
+
+#[test]
+fn idempotency_reconciliation_survives_later_revisions_and_restart() {
+    let temporary = tempfile::tempdir().expect("temporary idempotency history parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let callee = owner_named(&created.initial.snapshot, "callee");
+
+    let first = prepare_body_publication(
+        &created,
+        PublicationOptions {
+            idempotency_key: Some("request-1".to_owned()),
+            intent: None,
+        },
+    );
+    let conflict = prepare_rename_publication(&created, "conflicting_request", Some("request-1"));
+    let absent = prepare_rename_publication(&created, "absent_request", Some("request-absent"));
+    let PublicationOutcome::Accepted {
+        current: first_current,
+        ..
+    } = created
+        .repository
+        .publish(&first)
+        .expect("publish first key")
+    else {
+        panic!("first idempotent publication must advance HEAD")
+    };
+    assert_eq!(
+        first_current.revision.core.idempotency_receipts.entries(),
+        0,
+        "a revision excludes its own receipt from its ancestor index"
+    );
+
+    let second =
+        prepare_current_rename(&created.repository, callee, "later_one", Some("request-2"));
+    let mut missing_idempotency_page = second.clone();
+    let idempotency_root_page = ObjectKey::from_digest(
+        ObjectDomain::MapPage,
+        second.revision.core.idempotency_receipts.page().bytes(),
+    );
+    assert!(
+        missing_idempotency_page
+            .objects
+            .remove(&idempotency_root_page)
+            .is_some(),
+        "keyed parent advancement must stage its derived root page"
+    );
+    assert_eq!(
+        created
+            .repository
+            .publish(&missing_idempotency_page)
+            .expect_err("missing derived history page must reject before publication")
+            .code,
+        "publication_repository_idempotency_page_missing"
+    );
+    assert_eq!(created.repository.current().unwrap().head, first.head);
+    let PublicationOutcome::Accepted {
+        current: second_current,
+        ..
+    } = created
+        .repository
+        .publish(&second)
+        .expect("publish second key")
+    else {
+        panic!("second idempotent publication must advance HEAD")
+    };
+    assert_eq!(
+        second_current.revision.core.idempotency_receipts.entries(),
+        1
+    );
+
+    let third = prepare_current_rename(&created.repository, callee, "later_two", None);
+    let PublicationOutcome::Accepted {
+        current: third_current,
+        ..
+    } = created
+        .repository
+        .publish(&third)
+        .expect("publish later revision")
+    else {
+        panic!("later publication must advance HEAD")
+    };
+    assert_eq!(
+        third_current.revision.core.idempotency_receipts.entries(),
+        2
+    );
+
+    for (prepared, expected) in [(&first, first.head), (&second, second.head)] {
+        let reconciliation = created
+            .repository
+            .reconcile(prepared)
+            .expect("historical exact reconciliation");
+        assert!(
+            reconciliation.work.idempotency_lookup_pages_read > 0
+                && reconciliation.work.idempotency_lookup_pages_read < 32,
+            "historical reconciliation must use one bounded persistent-map lookup: {:?}",
+            reconciliation.work
+        );
+        assert!(
+            reconciliation.work.idempotency_lookup_entries_visited < 32,
+            "historical reconciliation must not scan accepted history: {:?}",
+            reconciliation.work
+        );
+        assert_eq!(reconciliation.work.accepted_publications_loaded, 1);
+        assert!(
+            reconciliation.work.objects_read < 64,
+            "historical reconciliation must load bounded exact authority: {:?}",
+            reconciliation.work
+        );
+        let ReconciliationStatus::Accepted { accepted, observed } = reconciliation.status else {
+            panic!("historical idempotency key must resolve its original publication")
+        };
+        assert_eq!(accepted.head, expected);
+        assert_eq!(observed, third.head);
+    }
+    let PublicationOutcome::AlreadyAccepted { accepted, observed } = created
+        .repository
+        .publish(&first)
+        .expect("historical exact replay")
+    else {
+        panic!("historical replay must return the original acceptance")
+    };
+    assert_eq!(accepted.head, first.head);
+    assert_eq!(observed, third.head);
+    assert_eq!(created.repository.current().unwrap().head, third.head);
+
+    let absent_reconciliation = created
+        .repository
+        .reconcile(&absent)
+        .expect("absent historical key reconciliation");
+    assert!(
+        absent_reconciliation.work.idempotency_lookup_pages_read > 0
+            && absent_reconciliation.work.idempotency_lookup_pages_read < 32
+    );
+    assert!(
+        absent_reconciliation
+            .work
+            .idempotency_lookup_entries_visited
+            < 32
+    );
+    assert!(absent_reconciliation.work.objects_read < 64);
+    assert_eq!(absent_reconciliation.work.accepted_publications_loaded, 0);
+    assert!(matches!(
+        absent_reconciliation.status,
+        ReconciliationStatus::Stale { .. }
+    ));
+
+    let conflict_reconciliation = created
+        .repository
+        .reconcile(&conflict)
+        .expect("historical idempotency conflict");
+    assert!(
+        conflict_reconciliation.work.idempotency_lookup_pages_read > 0
+            && conflict_reconciliation.work.idempotency_lookup_pages_read < 32
+    );
+    assert!(
+        conflict_reconciliation
+            .work
+            .idempotency_lookup_entries_visited
+            < 32
+    );
+    assert!(conflict_reconciliation.work.objects_read < 64);
+    assert_eq!(
+        conflict_reconciliation.work.accepted_publications_loaded, 0,
+        "a conflicting historical binding does not need to load the accepted publication"
+    );
+    let ReconciliationStatus::ConflictingIdempotency { accepted } = conflict_reconciliation.status
+    else {
+        panic!("historical key reuse must remain a typed conflict")
+    };
+    assert_eq!(accepted, first.head);
+    assert_eq!(
+        created
+            .repository
+            .publish(&conflict)
+            .expect_err("historical key reuse cannot publish")
+            .code,
+        "publication_repository_idempotency_conflict"
+    );
+
+    let reopened = GraphRepository::open(&destination).expect("reopen idempotency history");
+    assert_eq!(reopened.current().unwrap().head, third.head);
+    let reconciliation = reopened
+        .reconcile(&first)
+        .expect("reconcile historical key after restart");
+    assert!(
+        reconciliation.work.idempotency_lookup_pages_read > 0
+            && reconciliation.work.idempotency_lookup_pages_read < 32
+    );
+    assert!(reconciliation.work.idempotency_lookup_entries_visited < 32);
+    assert!(reconciliation.work.objects_read < 64);
+    assert_eq!(reconciliation.work.accepted_publications_loaded, 1);
+    let ReconciliationStatus::Accepted { accepted, observed } = reconciliation.status else {
+        panic!("reopened repository must retain exact idempotency history")
+    };
+    assert_eq!(accepted.head, first.head);
+    assert_eq!(observed, third.head);
 }
 
 #[test]
@@ -4548,9 +4821,14 @@ fn deterministic_publication_interruptions_reopen_old_or_new_complete_head() {
             usize::from(leaves_head_stage),
             "unexpected HEAD-stage classification at {point:?}"
         );
-        match reopened.reconcile(&prepared).expect("exact reconciliation") {
-            ReconciliationStatus::Accepted { current } if expects_new => {
-                assert_eq!(current.head, prepared.head);
+        match reopened
+            .reconcile(&prepared)
+            .expect("exact reconciliation")
+            .status
+        {
+            ReconciliationStatus::Accepted { accepted, observed } if expects_new => {
+                assert_eq!(accepted.head, prepared.head);
+                assert_eq!(observed, prepared.head);
             }
             ReconciliationStatus::NotStarted { current } if !expects_new => {
                 assert_eq!(current, Some(created.current.head));
@@ -4573,7 +4851,7 @@ fn repository_rejects_predecessor_head_and_missing_accepted_pack() {
     let logical = crate::platform::kernel::tests::witness_snapshot();
     let _ = GraphRepository::create(&predecessor, &logical, None).expect("create repository");
     let mut head = std::fs::read(predecessor.join("HEAD")).expect("HEAD bytes");
-    head[..8].copy_from_slice(b"LKJHEAD4");
+    head[..8].copy_from_slice(b"LKJHEAD5");
     std::fs::write(predecessor.join("HEAD"), head).expect("replace test HEAD");
     assert_eq!(
         GraphRepository::open(&predecessor)
@@ -4679,6 +4957,36 @@ fn prepare_rename_publication(
             intent: None,
         },
     )
+}
+
+fn prepare_current_rename(
+    repository: &GraphRepository,
+    owner: OwnerKey,
+    name: &str,
+    idempotency_key: Option<&str>,
+) -> PreparedPublication {
+    let view = repository.view_current().expect("current rename view");
+    let Some(mut replacement) = view.owner(owner).unwrap().value else {
+        panic!("current rename owner must exist")
+    };
+    let expected = encode_owner(&replacement)
+        .expect("current owner encoding")
+        .0;
+    let OwnerRecord::Declaration(declaration) = &mut replacement else {
+        panic!("current rename owner must be a declaration")
+    };
+    declaration.name = Name::new(name).expect("current replacement name");
+    view.prepare_change(
+        vec![PrimitiveEdit::ReplaceOwner {
+            expected,
+            record: replacement,
+        }],
+        PublicationOptions {
+            idempotency_key: idempotency_key.map(str::to_owned),
+            intent: None,
+        },
+    )
+    .expect("prepare current rename")
 }
 
 fn prepare_publication(

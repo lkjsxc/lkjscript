@@ -9,6 +9,7 @@ mod authored_protocol;
 pub(crate) mod contract;
 mod diff;
 mod digest;
+mod idempotency;
 mod prepare;
 mod read_view;
 mod receipt;
@@ -30,6 +31,7 @@ pub use diff::{
 pub use digest::{
     ReceiptObjectDigest, RevisionObjectDigest, SemanticDiffDigest, TransactionDigest,
 };
+pub use idempotency::IdempotencyBinding;
 pub use prepare::{
     PreparedInitialPublication, PreparedPublication, PublicationOptions,
     prepare_change_publication, prepare_initial_publication,
@@ -45,7 +47,8 @@ pub use receipt::{
 };
 pub use repository::{
     CreatedRepository, CurrentPublication, GraphRepository, PackageObjectStageReceipt,
-    PublicationOutcome, PublicationPoint, ReconciliationStatus,
+    PublicationOutcome, PublicationPoint, ReconciliationResult, ReconciliationStatus,
+    ReconciliationWork,
 };
 pub use revision::{AcceptedBinding, HeadRecord, ParentRevision, RevisionCore, RevisionRecord};
 pub use transaction::{

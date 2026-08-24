@@ -201,9 +201,21 @@ fn history_codecs_reject_predecessor_magic_and_inconsistent_evidence() {
     let initial = prepare_initial_publication(&logical, &store, None).expect("initial publication");
 
     let mut predecessor_head = initial.publication.head_bytes.clone();
-    predecessor_head[..8].copy_from_slice(b"LKJHEAD4");
+    predecessor_head[..8].copy_from_slice(b"LKJHEAD5");
     let error = HeadRecord::decode(&predecessor_head).expect_err("predecessor HEAD must reject");
     assert_eq!(error.code, "packed_contract");
+
+    let mut predecessor_revision = initial.publication.revision_bytes.clone();
+    predecessor_revision[..8].copy_from_slice(b"LKJREV05");
+    assert_eq!(
+        RevisionRecord::decode(
+            &predecessor_revision,
+            RevisionObjectDigest::of(&predecessor_revision),
+        )
+        .expect_err("predecessor revision must reject")
+        .code,
+        "packed_contract"
+    );
 
     let mut foreign_head = initial.publication.head;
     foreign_head.contract_version -= 1;

@@ -4,6 +4,9 @@ use super::contract::{
     RECEIPT_CONTRACT_VERSION, REVISION_CONTRACT_VERSION, SEMANTIC_DIFF_CONTRACT_VERSION,
     TRANSACTION_CONTRACT_VERSION,
 };
+use super::idempotency::{
+    IdempotencyBinding, advance_idempotency_history, empty_idempotency_history,
+};
 use super::{
     AcceptedBinding, ChangeCounts, DependencyDiffEntry, DependencyTransactionEdit, DigestEdit,
     FullOracleStatus, HeadRecord, NormalizedTransaction, OwnerChangeClass, OwnerDiffEntry,
@@ -20,10 +23,12 @@ use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     KernelSnapshot, OwnerKey, OwnerObjectDigest, OwnerRecord, encode_owner, encode_root,
 };
+use crate::platform::persistent_map::{MapRoot, MapWork};
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, ObjectStage, StoreError, StoreErrorClass,
     StoreWork,
 };
+use crate::platform::storage::page_store::ObjectPageStore;
 use crate::platform::witness::{FullWitness, encode_witness_manifest};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -257,6 +262,15 @@ fn bind_history<S: ImmutableObjectStore + ?Sized>(
         &mut store_work,
     )?;
 
+    let (idempotency_receipts, idempotency_map_work) =
+        prepare_idempotency_history(base, stage, &mut store_work)?;
+    work.map_pages_read = work
+        .map_pages_read
+        .saturating_add(idempotency_map_work.pages_read);
+    work.map_pages_written = work
+        .map_pages_written
+        .saturating_add(idempotency_map_work.pages_written);
+
     let parents = base.into_iter().map(AcceptedBinding::parent).collect();
     let core = RevisionCore {
         contract_version: REVISION_CONTRACT_VERSION,
@@ -268,6 +282,7 @@ fn bind_history<S: ImmutableObjectStore + ?Sized>(
         validation_witness: authority.witness.digest,
         validation_certificate: authority.witness.manifest.certificate,
         validator_contract: authority.witness.manifest.validator_contract,
+        idempotency_receipts,
         transaction: transaction_digest,
         semantic_diff: semantic_diff_digest,
     };
@@ -355,6 +370,48 @@ fn bind_history<S: ImmutableObjectStore + ?Sized>(
         accepted,
         store_work,
     })
+}
+
+fn prepare_idempotency_history<S: ImmutableObjectStore + ?Sized>(
+    base: Option<AcceptedBinding>,
+    stage: &mut ObjectStage<'_, S>,
+    store_work: &mut StoreWork,
+) -> Result<(MapRoot, MapWork), Vec<Diagnostic>> {
+    let binding = match base {
+        Some(base) => {
+            let bytes = stage
+                .read(
+                    ObjectKey::from_digest(ObjectDomain::Receipt, base.receipt.bytes()),
+                    ObjectDomain::Receipt.maximum_bytes(),
+                    store_work,
+                )
+                .map_err(|error| vec![store_diagnostic(error)])?
+                .ok_or_else(|| {
+                    vec![publication_error(
+                        DiagnosticClass::Corrupt,
+                        "publication_idempotency_base_receipt_missing",
+                        "accepted base references a missing receipt required for idempotency history",
+                    )]
+                })?;
+            let receipt = PublicationReceipt::decode(&bytes, base.receipt).map_err(single)?;
+            IdempotencyBinding::from_accepted(base, &receipt).map_err(single)?
+        }
+        None => None,
+    };
+    let mut map_work = MapWork::default();
+    let mut page_store = ObjectPageStore::new(&mut *stage);
+    let root = match base {
+        Some(base) => advance_idempotency_history(
+            base.idempotency_receipts,
+            binding.as_ref(),
+            &mut page_store,
+            &mut map_work,
+        ),
+        None => empty_idempotency_history(&mut page_store, &mut map_work),
+    }
+    .map_err(single)?;
+    store_work.add(page_store.work());
+    Ok((root, map_work))
 }
 
 pub(super) fn validate_history_base(

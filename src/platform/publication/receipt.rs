@@ -1,10 +1,11 @@
 //! Compact, honest evidence for one accepted Graph 5 publication.
 
 use super::contract::{
-    MAXIMUM_IDEMPOTENCY_KEY_BYTES, MAXIMUM_INTENT_BYTES, MAXIMUM_RECEIPT_BYTES,
-    RECEIPT_CONTRACT_VERSION, RECEIPT_ENVELOPE_DOMAIN, RECEIPT_MAGIC,
+    MAXIMUM_INTENT_BYTES, MAXIMUM_RECEIPT_BYTES, RECEIPT_CONTRACT_VERSION, RECEIPT_ENVELOPE_DOMAIN,
+    RECEIPT_MAGIC,
 };
 use super::digest::{ReceiptObjectDigest, SemanticDiffDigest, TransactionDigest};
+use super::idempotency::idempotency_key_is_valid;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::semantic_id::{RepositoryId, RevisionId};
 use bincode::{Decode, Encode};
@@ -189,12 +190,7 @@ impl PublicationReceipt {
             ));
         }
         if let Some(key) = &self.idempotency_key
-            && (self.bases.len() != 1
-                || key.is_empty()
-                || key.len() > MAXIMUM_IDEMPOTENCY_KEY_BYTES
-                || !key
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.')))
+            && (self.bases.len() != 1 || !idempotency_key_is_valid(key))
         {
             return Err(receipt_error(
                 DiagnosticClass::Source,
