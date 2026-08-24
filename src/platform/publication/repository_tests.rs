@@ -1,21 +1,25 @@
 use super::*;
 use crate::platform::change::{
-    AuthoredBindingDefinition, AuthoredCaseReference, AuthoredChange, AuthoredChangeSet,
-    AuthoredDeclarationReference, AuthoredExpression, AuthoredExpressionOperation,
-    AuthoredFieldReference, AuthoredFieldSelector, AuthoredFunctionEffect, AuthoredLetBinding,
-    AuthoredLocalReference, AuthoredMapExpressionEntry, AuthoredMatchExpressionArm,
-    AuthoredOperationReference, AuthoredParameter, AuthoredRecordExpressionField,
-    AuthoredRequirementReference, AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameter,
+    AuthoredAnnotationValue, AuthoredBindingDefinition, AuthoredCase, AuthoredCaseReference,
+    AuthoredChange, AuthoredChangeSet, AuthoredDeclarationReference, AuthoredExpression,
+    AuthoredExpressionOperation, AuthoredField, AuthoredFieldReference, AuthoredFieldSelector,
+    AuthoredFunctionEffect, AuthoredLetBinding, AuthoredLocalReference, AuthoredMapExpressionEntry,
+    AuthoredMatchExpressionArm, AuthoredOperation, AuthoredOperationReference, AuthoredParameter,
+    AuthoredPort, AuthoredPortImplementation, AuthoredPortReference, AuthoredRecordExpressionField,
+    AuthoredRequirement, AuthoredRequirementReference, AuthoredResourceLimit,
+    AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameter,
     AuthoredTypeParameterReference, CanonicalDelta, DeclarationSelector, KernelOverlay,
     ModuleSelector, OwnerSelector, PrimitiveEdit, derive_local_delta, derive_summary_delta,
     derive_test_dependency_delta, plan_impact_and_summaries, prepare_change_analysis,
     validate_incremental_frontier, validate_structural_frontier,
 };
 use crate::platform::kernel::{
-    DeclarationPayload, DeclarationVisibility, ExactOwnerKey, ExpressionOperation,
-    LocalValueReference, Name, NamespaceClass, OwnerKey, OwnerRecord, PackageId, RelationEndpoint,
-    TypeForm, encode_owner,
+    AnnotationClass, DeclarationPayload, DeclarationVisibility, DocumentationClass, ExactOwnerKey,
+    ExpressionOperation, ExternalVisibility, Idempotency, LocalValueReference, Name,
+    NamespaceClass, OwnerKey, OwnerRecord, PackageId, RelationEndpoint, ResourceUnit, TypeForm,
+    encode_owner,
 };
+use crate::platform::package::RunnerKind;
 use crate::platform::semantic_id::DeclarationId;
 use crate::platform::storage::object::{ObjectDomain, ObjectKey};
 use crate::platform::witness::NamespaceKey;
@@ -1063,6 +1067,38 @@ fn authored_request_rejects_invalid_symbols_kinds_and_empty_work() {
             .code,
         "change_authored_count"
     );
+
+    let duplicate_member_name = AuthoredChangeSet {
+        base,
+        changes: vec![AuthoredChange::CreateRecord {
+            symbol: "$record".to_owned(),
+            module: ModuleSelector::Name {
+                name: Name::new("second").unwrap(),
+            },
+            name: Name::new("DuplicateFields").unwrap(),
+            visibility: DeclarationVisibility::Private,
+            fields: vec![
+                AuthoredField {
+                    symbol: "$first_field".to_owned(),
+                    name: Name::new("same").unwrap(),
+                    ty: AuthoredType::Unit,
+                },
+                AuthoredField {
+                    symbol: "$second_field".to_owned(),
+                    name: Name::new("same").unwrap(),
+                    ty: AuthoredType::Unit,
+                },
+            ],
+        }],
+    };
+    assert_eq!(
+        created
+            .repository
+            .prepare_authored_change(&duplicate_member_name, PublicationOptions::default())
+            .expect_err("duplicate member namespace must reject")[0]
+            .code,
+        "change_namespace_candidate_duplicate"
+    );
     assert_eq!(
         created.repository.current().unwrap().head,
         created.current.head
@@ -1405,6 +1441,338 @@ fn authored_type_builder_interns_every_graph_five_type_form() {
         });
     }
     assert_eq!(observed.len(), 16);
+}
+
+#[test]
+fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let local_declaration = |symbol: &str| AuthoredDeclarationReference::Local {
+        declaration: DeclarationSelector::Symbol {
+            symbol: symbol.to_owned(),
+        },
+    };
+    let request = AuthoredChangeSet {
+        base: created.current.head.revision,
+        changes: vec![
+            AuthoredChange::CreateTarget {
+                symbol: "$target".to_owned(),
+                name: Name::new("authored_command").unwrap(),
+                component: local_declaration("$component"),
+                port: AuthoredPortReference::Symbol {
+                    symbol: "$port".to_owned(),
+                },
+                runner: RunnerKind::Command,
+            },
+            AuthoredChange::CreateDocumentation {
+                symbol: "$documentation".to_owned(),
+                owner: OwnerSelector::Symbol {
+                    symbol: "$record".to_owned(),
+                },
+                class: DocumentationClass::Nonsemantic,
+                text: "authored record".to_owned(),
+            },
+            AuthoredChange::CreateAnnotation {
+                symbol: "$annotation".to_owned(),
+                owner: OwnerSelector::Symbol {
+                    symbol: "$field".to_owned(),
+                },
+                class: AnnotationClass::Semantic,
+                key: Name::new("indexed").unwrap(),
+                value: AuthoredAnnotationValue::Bool(true),
+            },
+            AuthoredChange::CreateComponent {
+                symbol: "$component".to_owned(),
+                module: ModuleSelector::Symbol {
+                    symbol: "$domain".to_owned(),
+                },
+                name: Name::new("Application").unwrap(),
+                visibility: DeclarationVisibility::Public,
+                requirements: vec![AuthoredRequirement {
+                    symbol: "$requirement".to_owned(),
+                    name: Name::new("store").unwrap(),
+                    interface: local_declaration("$interface"),
+                    operations: vec![AuthoredOperationReference::Symbol {
+                        symbol: "$operation".to_owned(),
+                    }],
+                    limits: vec![AuthoredResourceLimit {
+                        name: Name::new("calls").unwrap(),
+                        maximum: 1,
+                        unit: ResourceUnit::Calls,
+                    }],
+                }],
+                ports: vec![
+                    AuthoredPort {
+                        symbol: "$port".to_owned(),
+                        name: Name::new("run").unwrap(),
+                        function_type: AuthoredType::Function {
+                            parameters: Vec::new(),
+                            result: Box::new(AuthoredType::Unit),
+                        },
+                        implementation: AuthoredPortImplementation::Function {
+                            function: local_declaration("$entry"),
+                        },
+                    },
+                    AuthoredPort {
+                        symbol: "$expression_port".to_owned(),
+                        name: Name::new("invoke").unwrap(),
+                        function_type: AuthoredType::Function {
+                            parameters: Vec::new(),
+                            result: Box::new(AuthoredType::Unit),
+                        },
+                        implementation: AuthoredPortImplementation::Expression {
+                            expression: AuthoredExpression {
+                                symbol: Some("$port_expression".to_owned()),
+                                operation: AuthoredExpressionOperation::FunctionValue {
+                                    function: local_declaration("$entry"),
+                                    type_arguments: Vec::new(),
+                                },
+                            },
+                        },
+                    },
+                ],
+            },
+            AuthoredChange::CreateConstant {
+                symbol: "$constant".to_owned(),
+                module: ModuleSelector::Symbol {
+                    symbol: "$domain".to_owned(),
+                },
+                name: Name::new("unit").unwrap(),
+                visibility: DeclarationVisibility::Package,
+                ty: AuthoredType::Unit,
+                value: AuthoredExpression {
+                    symbol: Some("$constant_value".to_owned()),
+                    operation: AuthoredExpressionOperation::Unit,
+                },
+            },
+            AuthoredChange::CreateExternal {
+                symbol: "$external".to_owned(),
+                module: ModuleSelector::Symbol {
+                    symbol: "$domain".to_owned(),
+                },
+                name: Name::new("identity_external").unwrap(),
+                visibility: DeclarationVisibility::Package,
+                type_parameters: vec![AuthoredTypeParameter {
+                    symbol: "$external_type".to_owned(),
+                    name: Name::new("T").unwrap(),
+                }],
+                parameters: vec![AuthoredParameter {
+                    symbol: "$external_parameter".to_owned(),
+                    name: Name::new("value").unwrap(),
+                    ty: AuthoredType::TypeParameter {
+                        parameter: AuthoredTypeParameterReference::Symbol {
+                            symbol: "$external_type".to_owned(),
+                        },
+                    },
+                }],
+                result: AuthoredType::TypeParameter {
+                    parameter: AuthoredTypeParameterReference::Symbol {
+                        symbol: "$external_type".to_owned(),
+                    },
+                },
+                implementation: Name::new("identity_host").unwrap(),
+            },
+            AuthoredChange::CreateInterface {
+                symbol: "$interface".to_owned(),
+                module: ModuleSelector::Symbol {
+                    symbol: "$domain".to_owned(),
+                },
+                name: Name::new("Store").unwrap(),
+                visibility: DeclarationVisibility::Public,
+                operations: vec![AuthoredOperation {
+                    symbol: "$operation".to_owned(),
+                    name: Name::new("write").unwrap(),
+                    parameters: vec![AuthoredParameter {
+                        symbol: "$operation_parameter".to_owned(),
+                        name: Name::new("payload").unwrap(),
+                        ty: AuthoredType::Named {
+                            declaration: local_declaration("$record"),
+                        },
+                    }],
+                    result: AuthoredType::Unit,
+                    idempotency: Idempotency::Idempotent,
+                    external_visibility: ExternalVisibility::None,
+                }],
+            },
+            AuthoredChange::CreateVariant {
+                symbol: "$variant".to_owned(),
+                module: ModuleSelector::Symbol {
+                    symbol: "$domain".to_owned(),
+                },
+                name: Name::new("State").unwrap(),
+                visibility: DeclarationVisibility::Public,
+                cases: vec![AuthoredCase {
+                    symbol: "$case".to_owned(),
+                    name: Name::new("Ready").unwrap(),
+                    payload: Some(AuthoredType::Named {
+                        declaration: local_declaration("$record"),
+                    }),
+                }],
+            },
+            AuthoredChange::CreateRecord {
+                symbol: "$record".to_owned(),
+                module: ModuleSelector::Symbol {
+                    symbol: "$domain".to_owned(),
+                },
+                name: Name::new("Payload").unwrap(),
+                visibility: DeclarationVisibility::Public,
+                fields: vec![AuthoredField {
+                    symbol: "$field".to_owned(),
+                    name: Name::new("value").unwrap(),
+                    ty: AuthoredType::Unit,
+                }],
+            },
+            AuthoredChange::CreateFunction {
+                symbol: "$entry".to_owned(),
+                module: ModuleSelector::Symbol {
+                    symbol: "$domain".to_owned(),
+                },
+                name: Name::new("entry").unwrap(),
+                visibility: DeclarationVisibility::Package,
+                type_parameters: Vec::new(),
+                parameters: Vec::new(),
+                result: AuthoredType::Unit,
+                effect: AuthoredFunctionEffect::Pure,
+                body: AuthoredExpression {
+                    symbol: Some("$entry_body".to_owned()),
+                    operation: AuthoredExpressionOperation::Sequence {
+                        items: vec![
+                            AuthoredExpression {
+                                symbol: Some("$record_literal".to_owned()),
+                                operation: AuthoredExpressionOperation::Record {
+                                    nominal_type: Some(local_declaration("$record")),
+                                    fields: vec![AuthoredRecordExpressionField {
+                                        selector: AuthoredFieldSelector::Nominal {
+                                            field: AuthoredFieldReference::Symbol {
+                                                symbol: "$field".to_owned(),
+                                            },
+                                        },
+                                        value: authored_expression(
+                                            AuthoredExpressionOperation::Unit,
+                                        ),
+                                    }],
+                                },
+                            },
+                            authored_expression(AuthoredExpressionOperation::Unit),
+                        ],
+                    },
+                },
+            },
+            AuthoredChange::CreateModule {
+                symbol: "$domain".to_owned(),
+                name: Name::new("domain").unwrap(),
+            },
+            AuthoredChange::RenameOwner {
+                owner: OwnerSelector::Symbol {
+                    symbol: "$field".to_owned(),
+                },
+                name: Name::new("renamed_value").unwrap(),
+            },
+        ],
+    };
+    let prepared = created
+        .repository
+        .prepare_authored_change(&request, PublicationOptions::default())
+        .expect("all foundational owners must lower and validate through one request");
+    assert_eq!(prepared.allocated.len(), 24);
+    assert_eq!(prepared.publication.receipt.counts.owners_created, 26);
+    // Canonical `unit` and `() -> unit` are reused from the accepted fixture.
+    assert_eq!(prepared.publication.receipt.counts.type_objects_added, 2);
+    assert_eq!(
+        prepared.publication.receipt.validation.profile,
+        ValidationProfile::IncrementalOwnerFrontier
+    );
+    assert_eq!(
+        prepared.publication.receipt.validation.full_oracle,
+        FullOracleStatus::NotRun
+    );
+    assert_eq!(prepared.lowering_work.canonical.point_reads, 0);
+    assert!(matches!(
+        created
+            .repository
+            .publish(&prepared.publication)
+            .expect("publish foundational owner request"),
+        PublicationOutcome::Accepted { .. }
+    ));
+
+    let view = created.repository.view_current().expect("advanced view");
+    for owner in prepared.allocated.values() {
+        assert!(view.owner(*owner).unwrap().value.is_some());
+    }
+    let component = prepared.allocated["$component"];
+    let requirement = prepared.allocated["$requirement"];
+    let port = prepared.allocated["$port"];
+    let expression_port = prepared.allocated["$expression_port"];
+    let target = prepared.allocated["$target"];
+    let Some(OwnerRecord::Declaration(component_record)) = view.owner(component).unwrap().value
+    else {
+        panic!("component must remain a declaration")
+    };
+    let DeclarationPayload::Component {
+        requirements,
+        ports,
+    } = component_record.payload
+    else {
+        panic!("component declaration must retain its closed payload")
+    };
+    let OwnerKey::Requirement(requirement_id) = requirement else {
+        panic!("requirement allocation has a foreign domain")
+    };
+    let OwnerKey::Port(port_id) = port else {
+        panic!("port allocation has a foreign domain")
+    };
+    let OwnerKey::Port(expression_port_id) = expression_port else {
+        panic!("expression-port allocation has a foreign domain")
+    };
+    let mut expected_ports = vec![port_id, expression_port_id];
+    expected_ports.sort_unstable();
+    assert_eq!(requirements.as_slice(), &[requirement_id]);
+    assert_eq!(ports, expected_ports);
+    let Some(OwnerRecord::Target(target_record)) = view.owner(target).unwrap().value else {
+        panic!("target must remain readable")
+    };
+    let OwnerKey::Declaration(component_id) = component else {
+        panic!("component allocation has a foreign domain")
+    };
+    assert_eq!(target_record.component.declaration, component_id);
+    assert_eq!(target_record.port.port, port_id);
+    let Some(OwnerRecord::Documentation(documentation)) = view
+        .owner(prepared.allocated["$documentation"])
+        .unwrap()
+        .value
+    else {
+        panic!("documentation must remain readable")
+    };
+    assert_eq!(documentation.owner, prepared.allocated["$record"]);
+    let Some(OwnerRecord::Annotation(annotation)) =
+        view.owner(prepared.allocated["$annotation"]).unwrap().value
+    else {
+        panic!("annotation must remain readable")
+    };
+    assert_eq!(annotation.owner, prepared.allocated["$field"]);
+    let Some(OwnerRecord::Field(field_record)) =
+        view.owner(prepared.allocated["$field"]).unwrap().value
+    else {
+        panic!("renamed field must remain readable")
+    };
+    assert_eq!(field_record.name.as_str(), "renamed_value");
+    let Some(OwnerRecord::Expression(record_literal)) = view
+        .owner(prepared.allocated["$record_literal"])
+        .unwrap()
+        .value
+    else {
+        panic!("nominal record expression must remain readable")
+    };
+    let ExpressionOperation::Record { fields, .. } = record_literal.operation else {
+        panic!("record literal must retain its operation")
+    };
+    assert!(matches!(
+        fields[0].selector,
+        crate::platform::kernel::FieldSelector::Nominal(reference)
+            if OwnerKey::Field(reference.field) == prepared.allocated["$field"]
+    ));
 }
 
 #[test]

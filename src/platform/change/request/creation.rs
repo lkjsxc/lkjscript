@@ -1,5 +1,19 @@
 //! Typed Graph 5 declaration, type-object, and expression authoring builders.
 
+mod declarations;
+
+pub use declarations::{
+    AuthoredAnnotationValue, AuthoredCase, AuthoredField, AuthoredOperation, AuthoredPort,
+    AuthoredPortImplementation, AuthoredPortReference, AuthoredRequirement, AuthoredResourceLimit,
+};
+pub(super) use declarations::{
+    collect_annotation_symbols, collect_component_symbols, collect_constant_symbols,
+    collect_documentation_symbols, collect_external_symbols, collect_interface_symbols,
+    collect_record_symbols, collect_target_symbols, collect_variant_symbols, lower_annotation,
+    lower_component, lower_constant, lower_documentation, lower_external, lower_interface,
+    lower_record, lower_target, lower_variant,
+};
+
 use super::{
     AuthoredLowerer, DeclarationSelector, ModuleSelector, SymbolKind, define_symbol, request_error,
 };

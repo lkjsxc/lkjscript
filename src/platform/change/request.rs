@@ -3,12 +3,15 @@
 mod creation;
 
 pub use creation::{
-    AuthoredBindingDefinition, AuthoredCaseReference, AuthoredDeclarationReference,
-    AuthoredExpression, AuthoredExpressionOperation, AuthoredFieldReference, AuthoredFieldSelector,
-    AuthoredFunctionEffect, AuthoredLetBinding, AuthoredLocalReference, AuthoredMapExpressionEntry,
-    AuthoredMatchExpressionArm, AuthoredOperationReference, AuthoredParameter,
-    AuthoredRecordExpressionField, AuthoredRequirementReference, AuthoredStructuralTypeField,
-    AuthoredType, AuthoredTypeParameter, AuthoredTypeParameterReference,
+    AuthoredAnnotationValue, AuthoredBindingDefinition, AuthoredCase, AuthoredCaseReference,
+    AuthoredDeclarationReference, AuthoredExpression, AuthoredExpressionOperation, AuthoredField,
+    AuthoredFieldReference, AuthoredFieldSelector, AuthoredFunctionEffect, AuthoredLetBinding,
+    AuthoredLocalReference, AuthoredMapExpressionEntry, AuthoredMatchExpressionArm,
+    AuthoredOperation, AuthoredOperationReference, AuthoredParameter, AuthoredPort,
+    AuthoredPortImplementation, AuthoredPortReference, AuthoredRecordExpressionField,
+    AuthoredRequirement, AuthoredRequirementReference, AuthoredResourceLimit,
+    AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameter,
+    AuthoredTypeParameterReference,
 };
 
 use super::{
@@ -21,8 +24,9 @@ use crate::platform::kernel::{
     OwnerKey, OwnerKind, OwnerRecord, TypeObjectInterner, encode_owner,
 };
 use crate::platform::semantic_id::{
-    BindingId, CaseId, DeclarationId, ExpressionId, FieldId, ModuleId, OperationId, ParameterId,
-    RequirementId, RevisionId, TypeParameterId,
+    AnnotationId, BindingId, CaseId, DeclarationId, DocumentationId, ExpressionId, FieldId,
+    ModuleId, OperationId, ParameterId, PortId, RequirementId, RevisionId, TargetId,
+    TypeParameterId,
 };
 use crate::platform::witness::NamespaceKey;
 use bincode::{Decode, Encode};
@@ -62,6 +66,62 @@ pub enum AuthoredChange {
         effect: AuthoredFunctionEffect,
         body: AuthoredExpression,
     },
+    CreateRecord {
+        #[serde(rename = "as")]
+        symbol: String,
+        module: ModuleSelector,
+        name: Name,
+        visibility: crate::platform::kernel::DeclarationVisibility,
+        fields: Vec<AuthoredField>,
+    },
+    CreateVariant {
+        #[serde(rename = "as")]
+        symbol: String,
+        module: ModuleSelector,
+        name: Name,
+        visibility: crate::platform::kernel::DeclarationVisibility,
+        cases: Vec<AuthoredCase>,
+    },
+    CreateInterface {
+        #[serde(rename = "as")]
+        symbol: String,
+        module: ModuleSelector,
+        name: Name,
+        visibility: crate::platform::kernel::DeclarationVisibility,
+        operations: Vec<AuthoredOperation>,
+    },
+    CreateExternal {
+        #[serde(rename = "as")]
+        symbol: String,
+        module: ModuleSelector,
+        name: Name,
+        visibility: crate::platform::kernel::DeclarationVisibility,
+        #[serde(default)]
+        type_parameters: Vec<AuthoredTypeParameter>,
+        #[serde(default)]
+        parameters: Vec<AuthoredParameter>,
+        result: AuthoredType,
+        implementation: Name,
+    },
+    CreateConstant {
+        #[serde(rename = "as")]
+        symbol: String,
+        module: ModuleSelector,
+        name: Name,
+        visibility: crate::platform::kernel::DeclarationVisibility,
+        ty: AuthoredType,
+        value: AuthoredExpression,
+    },
+    CreateComponent {
+        #[serde(rename = "as")]
+        symbol: String,
+        module: ModuleSelector,
+        name: Name,
+        visibility: crate::platform::kernel::DeclarationVisibility,
+        #[serde(default)]
+        requirements: Vec<AuthoredRequirement>,
+        ports: Vec<AuthoredPort>,
+    },
     CreateTest {
         #[serde(rename = "as")]
         symbol: String,
@@ -70,6 +130,29 @@ pub enum AuthoredChange {
         visibility: crate::platform::kernel::DeclarationVisibility,
         actual: AuthoredExpression,
         expected: AuthoredExpression,
+    },
+    CreateTarget {
+        #[serde(rename = "as")]
+        symbol: String,
+        name: Name,
+        component: AuthoredDeclarationReference,
+        port: AuthoredPortReference,
+        runner: crate::platform::package::RunnerKind,
+    },
+    CreateDocumentation {
+        #[serde(rename = "as")]
+        symbol: String,
+        owner: OwnerSelector,
+        class: crate::platform::kernel::DocumentationClass,
+        text: String,
+    },
+    CreateAnnotation {
+        #[serde(rename = "as")]
+        symbol: String,
+        owner: OwnerSelector,
+        class: crate::platform::kernel::AnnotationClass,
+        key: Name,
+        value: AuthoredAnnotationValue,
     },
     RenameOwner {
         owner: OwnerSelector,
@@ -132,6 +215,10 @@ pub(super) enum SymbolKind {
     TransactionBinding,
     Expression,
     Requirement,
+    Port,
+    Target,
+    Documentation,
+    Annotation,
 }
 
 impl SymbolKind {
@@ -147,6 +234,10 @@ impl SymbolKind {
             Self::LexicalBinding | Self::MatchPayloadBinding | Self::TransactionBinding => 8,
             Self::Expression => 9,
             Self::Requirement => 10,
+            Self::Port => 11,
+            Self::Target => 12,
+            Self::Documentation => 13,
+            Self::Annotation => 14,
         }
     }
 
@@ -168,6 +259,12 @@ impl SymbolKind {
             }
             Self::Expression => OwnerKey::Expression(ExpressionId::allocate(seed, ordinal)),
             Self::Requirement => OwnerKey::Requirement(RequirementId::allocate(seed, ordinal)),
+            Self::Port => OwnerKey::Port(PortId::allocate(seed, ordinal)),
+            Self::Target => OwnerKey::Target(TargetId::allocate(seed, ordinal)),
+            Self::Documentation => {
+                OwnerKey::Documentation(DocumentationId::allocate(seed, ordinal))
+            }
+            Self::Annotation => OwnerKey::Annotation(AnnotationId::allocate(seed, ordinal)),
         }
     }
 }
@@ -233,6 +330,54 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
     }
     for change in &request.changes {
         match change {
+            AuthoredChange::CreateRecord {
+                symbol,
+                module,
+                name,
+                visibility,
+                fields,
+            } => creation::lower_record(&mut lowerer, symbol, module, name, *visibility, fields)?,
+            AuthoredChange::CreateVariant {
+                symbol,
+                module,
+                name,
+                visibility,
+                cases,
+            } => creation::lower_variant(&mut lowerer, symbol, module, name, *visibility, cases)?,
+            AuthoredChange::CreateInterface {
+                symbol,
+                module,
+                name,
+                visibility,
+                operations,
+            } => creation::lower_interface(
+                &mut lowerer,
+                symbol,
+                module,
+                name,
+                *visibility,
+                operations,
+            )?,
+            AuthoredChange::CreateExternal {
+                symbol,
+                module,
+                name,
+                visibility,
+                type_parameters,
+                parameters,
+                result,
+                implementation,
+            } => creation::lower_external(
+                &mut lowerer,
+                symbol,
+                module,
+                name,
+                *visibility,
+                type_parameters,
+                parameters,
+                result,
+                implementation,
+            )?,
             AuthoredChange::CreateFunction {
                 symbol,
                 module,
@@ -255,6 +400,38 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
                 effect,
                 body,
             )?,
+            AuthoredChange::CreateConstant {
+                symbol,
+                module,
+                name,
+                visibility,
+                ty,
+                value,
+            } => creation::lower_constant(
+                &mut lowerer,
+                symbol,
+                module,
+                name,
+                *visibility,
+                ty,
+                value,
+            )?,
+            AuthoredChange::CreateComponent {
+                symbol,
+                module,
+                name,
+                visibility,
+                requirements,
+                ports,
+            } => creation::lower_component(
+                &mut lowerer,
+                symbol,
+                module,
+                name,
+                *visibility,
+                requirements,
+                ports,
+            )?,
             AuthoredChange::CreateTest {
                 symbol,
                 module,
@@ -271,14 +448,43 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
                 actual,
                 expected,
             )?,
+            AuthoredChange::CreateTarget {
+                symbol,
+                name,
+                component,
+                port,
+                runner,
+            } => creation::lower_target(&mut lowerer, symbol, name, component, port, *runner)?,
+            AuthoredChange::CreateDocumentation {
+                symbol,
+                owner,
+                class,
+                text,
+            } => creation::lower_documentation(&mut lowerer, symbol, owner, *class, text)?,
+            AuthoredChange::CreateAnnotation {
+                symbol,
+                owner,
+                class,
+                key,
+                value,
+            } => creation::lower_annotation(&mut lowerer, symbol, owner, *class, key, value)?,
             _ => {}
         }
     }
     for change in &request.changes {
         match change {
             AuthoredChange::CreateModule { .. }
+            | AuthoredChange::CreateRecord { .. }
+            | AuthoredChange::CreateVariant { .. }
+            | AuthoredChange::CreateInterface { .. }
+            | AuthoredChange::CreateExternal { .. }
             | AuthoredChange::CreateFunction { .. }
-            | AuthoredChange::CreateTest { .. } => {}
+            | AuthoredChange::CreateConstant { .. }
+            | AuthoredChange::CreateComponent { .. }
+            | AuthoredChange::CreateTest { .. }
+            | AuthoredChange::CreateTarget { .. }
+            | AuthoredChange::CreateDocumentation { .. }
+            | AuthoredChange::CreateAnnotation { .. } => {}
             AuthoredChange::RenameOwner { owner, name } => {
                 let owner = lowerer.resolve_owner(owner)?;
                 rename_owner(lowerer.candidate_mut(owner)?, name.clone())?;
@@ -330,6 +536,26 @@ fn collect_symbol_definitions(
             AuthoredChange::CreateModule { symbol, .. } => {
                 define_symbol(&mut definitions, symbol, SymbolKind::Module)?;
             }
+            AuthoredChange::CreateRecord { symbol, fields, .. } => {
+                creation::collect_record_symbols(symbol, fields, &mut definitions)?
+            }
+            AuthoredChange::CreateVariant { symbol, cases, .. } => {
+                creation::collect_variant_symbols(symbol, cases, &mut definitions)?
+            }
+            AuthoredChange::CreateInterface {
+                symbol, operations, ..
+            } => creation::collect_interface_symbols(symbol, operations, &mut definitions)?,
+            AuthoredChange::CreateExternal {
+                symbol,
+                type_parameters,
+                parameters,
+                ..
+            } => creation::collect_external_symbols(
+                symbol,
+                type_parameters,
+                parameters,
+                &mut definitions,
+            )?,
             AuthoredChange::CreateFunction {
                 symbol,
                 type_parameters,
@@ -343,12 +569,32 @@ fn collect_symbol_definitions(
                 body,
                 &mut definitions,
             )?,
+            AuthoredChange::CreateConstant { symbol, value, .. } => {
+                creation::collect_constant_symbols(symbol, value, &mut definitions)?
+            }
+            AuthoredChange::CreateComponent {
+                symbol,
+                requirements,
+                ports,
+                ..
+            } => {
+                creation::collect_component_symbols(symbol, requirements, ports, &mut definitions)?
+            }
             AuthoredChange::CreateTest {
                 symbol,
                 actual,
                 expected,
                 ..
             } => creation::collect_test_symbols(symbol, actual, expected, &mut definitions)?,
+            AuthoredChange::CreateTarget { symbol, .. } => {
+                creation::collect_target_symbols(symbol, &mut definitions)?
+            }
+            AuthoredChange::CreateDocumentation { symbol, .. } => {
+                creation::collect_documentation_symbols(symbol, &mut definitions)?
+            }
+            AuthoredChange::CreateAnnotation { symbol, .. } => {
+                creation::collect_annotation_symbols(symbol, &mut definitions)?
+            }
             AuthoredChange::RenameOwner { .. }
             | AuthoredChange::MoveDeclaration { .. }
             | AuthoredChange::ReplaceExpression { .. } => {}
@@ -714,6 +960,41 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         }
     }
 
+    fn port_symbol(&self, symbol: &str) -> Result<PortId, Diagnostic> {
+        match self.symbol_owner(symbol, SymbolKind::Port)? {
+            OwnerKey::Port(value) => Ok(value),
+            _ => Err(symbol_domain_corrupt(symbol)),
+        }
+    }
+
+    fn target_symbol(&self, symbol: &str) -> Result<TargetId, Diagnostic> {
+        match self.symbol_owner(symbol, SymbolKind::Target)? {
+            OwnerKey::Target(value) => Ok(value),
+            _ => Err(symbol_domain_corrupt(symbol)),
+        }
+    }
+
+    fn documentation_symbol(&self, symbol: &str) -> Result<DocumentationId, Diagnostic> {
+        match self.symbol_owner(symbol, SymbolKind::Documentation)? {
+            OwnerKey::Documentation(value) => Ok(value),
+            _ => Err(symbol_domain_corrupt(symbol)),
+        }
+    }
+
+    fn annotation_symbol(&self, symbol: &str) -> Result<AnnotationId, Diagnostic> {
+        match self.symbol_owner(symbol, SymbolKind::Annotation)? {
+            OwnerKey::Annotation(value) => Ok(value),
+            _ => Err(symbol_domain_corrupt(symbol)),
+        }
+    }
+
+    fn resolve_creation_owner(&mut self, selector: &OwnerSelector) -> Result<OwnerKey, Diagnostic> {
+        match selector {
+            OwnerSelector::Symbol { symbol } => self.resolve_symbol(symbol),
+            _ => self.resolve_owner(selector),
+        }
+    }
+
     fn resolve_creation_declaration(
         &mut self,
         selector: &DeclarationSelector,
@@ -721,6 +1002,29 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         match selector {
             DeclarationSelector::Symbol { symbol } => self.declaration_symbol(symbol),
             _ => self.resolve_declaration(selector),
+        }
+    }
+
+    fn lower_port_reference(
+        &mut self,
+        selector: &AuthoredPortReference,
+    ) -> Result<crate::platform::kernel::PortReference, Diagnostic> {
+        match selector {
+            AuthoredPortReference::Exact { package, port } => {
+                if *package == self.base.package_id() {
+                    self.require_owner(OwnerKey::Port(*port))?;
+                }
+                Ok(crate::platform::kernel::PortReference {
+                    package: *package,
+                    port: *port,
+                })
+            }
+            AuthoredPortReference::Symbol { symbol } => {
+                Ok(crate::platform::kernel::PortReference {
+                    package: self.base.package_id(),
+                    port: self.port_symbol(symbol)?,
+                })
+            }
         }
     }
 
