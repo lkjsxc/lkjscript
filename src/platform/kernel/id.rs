@@ -12,13 +12,28 @@ use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
+use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::borrow::Cow;
 use std::fmt;
 use std::str::FromStr;
 
 #[derive(
-    Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Decode,
+    Deserialize,
+    Encode,
+    Eq,
+    Hash,
+    JsonSchema,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
 )]
+#[schemars(rename = "lkjscript.Graph5OwnerKindV1")]
 #[serde(rename_all = "snake_case")]
 pub enum OwnerKind {
     Module,
@@ -128,9 +143,27 @@ impl OwnerKind {
 }
 
 #[derive(
-    Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Decode,
+    Deserialize,
+    Encode,
+    Eq,
+    Hash,
+    JsonSchema,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
 )]
-#[serde(tag = "domain", content = "id", rename_all = "snake_case")]
+#[schemars(rename = "lkjscript.Graph5OwnerKeyV1")]
+#[serde(
+    tag = "domain",
+    content = "id",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
 pub enum OwnerKey {
     Module(ModuleId),
     Declaration(DeclarationId),
@@ -227,7 +260,8 @@ impl IdentityKind {
     }
 }
 
-#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5OwnerHeaderV1")]
 #[serde(deny_unknown_fields)]
 pub struct OwnerHeader {
     pub contract_version: u16,
@@ -311,8 +345,20 @@ impl EncodedOwnerKey {
 }
 
 #[derive(
-    Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, Ord, PartialEq, PartialOrd, Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Decode,
+    Deserialize,
+    Encode,
+    Eq,
+    JsonSchema,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
 )]
+#[schemars(rename = "lkjscript.Graph5ExactOwnerKeyV1")]
 #[serde(deny_unknown_fields)]
 pub struct ExactOwnerKey {
     pub package: PackageId,
@@ -425,6 +471,26 @@ impl<'de> Deserialize<'de> for PackageId {
     {
         let value = String::deserialize(deserializer)?;
         value.parse().map_err(serde::de::Error::custom)
+    }
+}
+
+impl JsonSchema for PackageId {
+    fn schema_name() -> Cow<'static, str> {
+        "lkjscript.Graph5PackageIdV1".into()
+    }
+
+    fn schema_id() -> Cow<'static, str> {
+        concat!(module_path!(), "::PackageId").into()
+    }
+
+    fn json_schema(_: &mut SchemaGenerator) -> Schema {
+        let pattern = format!("^{}[0-9a-f]{{32}}$", Self::PREFIX);
+        json_schema!({
+            "type": "string",
+            "minLength": Self::PREFIX.len() + 32,
+            "maxLength": Self::PREFIX.len() + 32,
+            "pattern": pattern
+        })
     }
 }
 

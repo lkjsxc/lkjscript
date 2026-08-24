@@ -6,7 +6,9 @@ use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
+use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::borrow::Cow;
 use std::fmt;
 use std::str::FromStr;
 
@@ -74,6 +76,26 @@ macro_rules! kernel_digest {
             {
                 let value = String::deserialize(deserializer)?;
                 value.parse().map_err(serde::de::Error::custom)
+            }
+        }
+
+        impl JsonSchema for $name {
+            fn schema_name() -> Cow<'static, str> {
+                concat!("lkjscript.", stringify!($name), "V5").into()
+            }
+
+            fn schema_id() -> Cow<'static, str> {
+                concat!(module_path!(), "::", stringify!($name)).into()
+            }
+
+            fn json_schema(_: &mut SchemaGenerator) -> Schema {
+                let pattern = format!("^{}[0-9a-f]{{64}}$", Self::PREFIX);
+                json_schema!({
+                    "type": "string",
+                    "minLength": Self::PREFIX.len() + 64,
+                    "maxLength": Self::PREFIX.len() + 64,
+                    "pattern": pattern
+                })
             }
         }
 

@@ -256,7 +256,7 @@ fn body_edit_changes_its_declaration_but_not_callers_validation_key() {
     else {
         panic!("body must be an expression");
     };
-    record.operation = crate::platform::kernel::ExpressionOperation::Unit;
+    record.operation = crate::platform::kernel::ExpressionOperation::Unit {};
     let after = rebuild_full_witness(&snapshot).expect("edited witness");
 
     assert_ne!(

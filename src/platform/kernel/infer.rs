@@ -248,7 +248,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         };
         let next = depth.saturating_add(1);
         match record.operation {
-            ExpressionOperation::Unit => self.canonical_type(TypeForm::Unit),
+            ExpressionOperation::Unit {} => self.canonical_type(TypeForm::Unit),
             ExpressionOperation::Bool { .. } => self.canonical_type(TypeForm::Bool),
             ExpressionOperation::I64 { .. } => self.canonical_type(TypeForm::I64),
             ExpressionOperation::Text { .. } => self.canonical_type(TypeForm::Text),

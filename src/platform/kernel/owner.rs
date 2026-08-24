@@ -16,6 +16,7 @@ use crate::platform::semantic_id::{
     RequirementId, TypeParameterId,
 };
 use bincode::{Decode, Encode};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
@@ -269,7 +270,8 @@ impl DeclarationRecord {
     }
 }
 
-#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5DeclarationVisibilityV1")]
 #[serde(rename_all = "snake_case")]
 pub enum DeclarationVisibility {
     Private,
@@ -351,7 +353,8 @@ pub enum FunctionEffect {
     Task { requirements: Vec<RequirementId> },
 }
 
-#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5ComparisonPolicyV1")]
 #[serde(rename_all = "snake_case")]
 pub enum ComparisonPolicy {
     Exact,
@@ -403,7 +406,8 @@ impl OperationRecord {
     }
 }
 
-#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5IdempotencyV1")]
 #[serde(rename_all = "snake_case")]
 pub enum Idempotency {
     Idempotent,
@@ -411,7 +415,8 @@ pub enum Idempotency {
     NonIdempotent,
 }
 
-#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5ExternalVisibilityV1")]
 #[serde(rename_all = "snake_case")]
 pub enum ExternalVisibility {
     None,
@@ -458,7 +463,8 @@ impl BindingRecord {
     }
 }
 
-#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5BindingKindV1")]
 #[serde(rename_all = "snake_case")]
 pub enum BindingKind {
     Let,
@@ -511,7 +517,8 @@ pub struct ResourceLimit {
     pub unit: ResourceUnit,
 }
 
-#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5ResourceUnitV1")]
 #[serde(rename_all = "snake_case")]
 pub enum ResourceUnit {
     Bytes,
@@ -586,7 +593,8 @@ impl DocumentationRecord {
     }
 }
 
-#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5DocumentationClassV1")]
 #[serde(rename_all = "snake_case")]
 pub enum DocumentationClass {
     Semantic,
@@ -629,7 +637,8 @@ impl AnnotationRecord {
     }
 }
 
-#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AnnotationClassV1")]
 #[serde(rename_all = "snake_case")]
 pub enum AnnotationClass {
     Semantic,

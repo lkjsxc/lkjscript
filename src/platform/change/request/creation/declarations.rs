@@ -8,8 +8,10 @@ use crate::platform::kernel::{
     ResourceUnit, TargetRecord,
 };
 use crate::platform::package::RunnerKind;
+use schemars::JsonSchema;
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredFieldV1")]
 #[serde(deny_unknown_fields)]
 pub struct AuthoredField {
     #[serde(rename = "as")]
@@ -18,7 +20,8 @@ pub struct AuthoredField {
     pub ty: AuthoredType,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredCaseV1")]
 #[serde(deny_unknown_fields)]
 pub struct AuthoredCase {
     #[serde(rename = "as")]
@@ -28,7 +31,8 @@ pub struct AuthoredCase {
     pub payload: Option<AuthoredType>,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredOperationV1")]
 #[serde(deny_unknown_fields)]
 pub struct AuthoredOperation {
     #[serde(rename = "as")]
@@ -41,7 +45,8 @@ pub struct AuthoredOperation {
     pub external_visibility: ExternalVisibility,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredResourceLimitV1")]
 #[serde(deny_unknown_fields)]
 pub struct AuthoredResourceLimit {
     pub name: Name,
@@ -49,7 +54,8 @@ pub struct AuthoredResourceLimit {
     pub unit: ResourceUnit,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredRequirementV1")]
 #[serde(deny_unknown_fields)]
 pub struct AuthoredRequirement {
     #[serde(rename = "as")]
@@ -62,7 +68,8 @@ pub struct AuthoredRequirement {
     pub limits: Vec<AuthoredResourceLimit>,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredPortImplementationV1")]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AuthoredPortImplementation {
     Expression {
@@ -73,7 +80,8 @@ pub enum AuthoredPortImplementation {
     },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredPortV1")]
 #[serde(deny_unknown_fields)]
 pub struct AuthoredPort {
     #[serde(rename = "as")]
@@ -83,7 +91,8 @@ pub struct AuthoredPort {
     pub implementation: AuthoredPortImplementation,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredAnnotationValueV1")]
 #[serde(
     tag = "kind",
     content = "value",
@@ -594,7 +603,8 @@ pub(in crate::platform::change::request) fn lower_annotation<
     }))
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredPortReferenceV1")]
 #[serde(tag = "by", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AuthoredPortReference {
     Exact {

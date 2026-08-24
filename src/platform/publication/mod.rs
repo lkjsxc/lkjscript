@@ -5,6 +5,7 @@
     reason = "private publication exports become repository consumers at the Graph 5 cutover"
 )]
 
+mod authored_protocol;
 pub(crate) mod contract;
 mod diff;
 mod digest;
@@ -15,6 +16,13 @@ mod repository;
 mod revision;
 mod transaction;
 
+pub use authored_protocol::{
+    AUTHORED_CHANGE_CONTRACT_IDENTITY, AUTHORED_CHANGE_CONTRACT_VERSION,
+    AUTHORED_PROTOCOL_SCHEMA_DIGEST_DOMAIN, AUTHORED_PROTOCOL_SCHEMA_ID, AuthoredChangeContract,
+    AuthoredChangeRequest, AuthoredChangeResponse, AuthoredChangeResponseStatus,
+    MAXIMUM_AUTHORED_RESPONSE_BYTES, authored_protocol_schema, authored_protocol_schema_bytes,
+    authored_protocol_schema_digest,
+};
 pub use diff::{
     DependencyDiffEntry, OwnerChangeClass, OwnerDiffEntry, RetirementDiffEntry, SemanticDiff,
     SemanticDiffBody, SummaryDimensions,

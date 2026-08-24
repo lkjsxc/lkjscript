@@ -4,9 +4,10 @@ use super::contract::{HEAD_MAGIC, MAXIMUM_HEAD_BYTES, REVISION_CONTRACT_VERSION}
 use super::prepare::validate_history_base;
 use super::read_view::RepositoryView;
 use super::{
-    AcceptedBinding, HeadRecord, NormalizedTransaction, PreparedAuthoredPublication,
-    PreparedInitialPublication, PreparedPublication, PublicationOptions, PublicationReceipt,
-    RevisionRecord, SemanticDiff, prepare_initial_publication,
+    AcceptedBinding, AuthoredChangeRequest, AuthoredChangeResponse, HeadRecord,
+    NormalizedTransaction, PreparedAuthoredPublication, PreparedInitialPublication,
+    PreparedPublication, PublicationOptions, PublicationReceipt, RevisionRecord, SemanticDiff,
+    prepare_initial_publication,
 };
 use crate::platform::change::{AuthoredChangeSet, PrimitiveEdit};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
@@ -360,6 +361,15 @@ impl GraphRepository {
         self.view_current()
             .map_err(|diagnostic| vec![diagnostic])?
             .prepare_authored_change(request, options)
+    }
+
+    pub fn prepare_authored_protocol_change(
+        &self,
+        request: &AuthoredChangeRequest,
+    ) -> Result<(PreparedAuthoredPublication, AuthoredChangeResponse), Vec<Diagnostic>> {
+        self.view_current()
+            .map_err(|diagnostic| vec![diagnostic])?
+            .prepare_authored_protocol_change(request)
     }
 
     pub fn publish(

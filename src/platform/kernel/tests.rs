@@ -257,7 +257,7 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             }),
         }),
     );
-    let constant_value = expression(&mut owners, 19, ExpressionOperation::Unit);
+    let constant_value = expression(&mut owners, 19, ExpressionOperation::Unit {});
     insert(
         &mut owners,
         OwnerRecord::Declaration(DeclarationRecord {
@@ -327,7 +327,7 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
         }),
     );
 
-    let call_argument = expression(&mut owners, 1, ExpressionOperation::Unit);
+    let call_argument = expression(&mut owners, 1, ExpressionOperation::Unit {});
     let call = expression(
         &mut owners,
         2,
@@ -340,7 +340,7 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             arguments: vec![call_argument],
         },
     );
-    let record_value = expression(&mut owners, 3, ExpressionOperation::Unit);
+    let record_value = expression(&mut owners, 3, ExpressionOperation::Unit {});
     let record_expression = expression(
         &mut owners,
         4,
@@ -355,7 +355,7 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             }],
         },
     );
-    let field_value = expression(&mut owners, 5, ExpressionOperation::Unit);
+    let field_value = expression(&mut owners, 5, ExpressionOperation::Unit {});
     let field_record = expression(
         &mut owners,
         6,
@@ -394,7 +394,7 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             payload: None,
         },
     );
-    let match_body = expression(&mut owners, 10, ExpressionOperation::Unit);
+    let match_body = expression(&mut owners, 10, ExpressionOperation::Unit {});
     let match_expression = expression(
         &mut owners,
         11,
@@ -452,7 +452,7 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
         }),
     );
 
-    let binding_value = expression(&mut owners, 14, ExpressionOperation::Unit);
+    let binding_value = expression(&mut owners, 14, ExpressionOperation::Unit {});
     let binding_expression = expression(
         &mut owners,
         15,
@@ -510,7 +510,7 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
             arguments: Vec::new(),
         },
     );
-    let test_expected = expression(&mut owners, 18, ExpressionOperation::Unit);
+    let test_expected = expression(&mut owners, 18, ExpressionOperation::Unit {});
     insert(
         &mut owners,
         OwnerRecord::Declaration(DeclarationRecord {
@@ -1051,7 +1051,7 @@ fn canonical_map_bindings_are_compact_strict_and_domain_checked() {
 #[test]
 fn subtree_replacement_can_preserve_selected_expression_identity() {
     let selected = ExpressionId::migrate(TEST_SEED, 100);
-    let before = ExpressionRecord::new(selected, ExpressionOperation::Unit)
+    let before = ExpressionRecord::new(selected, ExpressionOperation::Unit {})
         .expect("unit expression must be valid");
     let after = ExpressionRecord::new(selected, ExpressionOperation::Bool { value: true })
         .expect("bool expression must be valid");
@@ -1075,7 +1075,7 @@ fn full_oracle_rejects_expression_cycle_and_unreachable_record() {
     insert(
         &mut snapshot.owners,
         OwnerRecord::Expression(
-            ExpressionRecord::new(unreachable, ExpressionOperation::Unit)
+            ExpressionRecord::new(unreachable, ExpressionOperation::Unit {})
                 .expect("unreachable expression remains locally valid"),
         ),
     );

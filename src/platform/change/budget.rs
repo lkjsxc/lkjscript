@@ -7,6 +7,7 @@ use super::{
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use bincode::{Decode, Encode};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
@@ -15,12 +16,17 @@ pub const MAXIMUM_CHANGE_AFFECTED_OWNERS: u64 = 100_000;
 pub const MAXIMUM_CHANGE_RELATION_EDGES: u64 = 10_000_000;
 pub const MAXIMUM_CHANGE_WORK: u64 = 10_000_000;
 
-#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5ChangeBudgetV1")]
 #[serde(deny_unknown_fields)]
 pub struct ChangeBudget {
+    #[schemars(range(min = 1, max = MAXIMUM_CHANGE_OPERATIONS))]
     pub maximum_operations: u64,
+    #[schemars(range(min = 1, max = MAXIMUM_CHANGE_AFFECTED_OWNERS))]
     pub maximum_affected_owners: u64,
+    #[schemars(range(min = 1, max = MAXIMUM_CHANGE_RELATION_EDGES))]
     pub maximum_relation_edges: u64,
+    #[schemars(range(min = 1, max = MAXIMUM_CHANGE_WORK))]
     pub maximum_work: u64,
 }
 
@@ -102,7 +108,10 @@ impl ChangeBudget {
 ///
 /// It deliberately counts semantic items and exact reads rather than wall time. Byte and page I/O
 /// remain separately retained in the publication receipt.
-#[derive(Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(
+    Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize,
+)]
+#[schemars(rename = "lkjscript.Graph5ChangeBudgetWorkV1")]
 #[serde(deny_unknown_fields)]
 pub struct ChangeBudgetWork {
     pub authored_operations: u64,

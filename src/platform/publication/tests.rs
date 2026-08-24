@@ -93,7 +93,7 @@ fn incremental_publication_is_deterministic_parent_bound_and_isolated() {
     let OwnerRecord::Expression(expression) = &mut replacement else {
         panic!("callee body must be an expression");
     };
-    expression.operation = ExpressionOperation::Unit;
+    expression.operation = ExpressionOperation::Unit {};
     let expected = encode_owner(&initial.snapshot.owners[&body])
         .expect("base expression encoding")
         .0;

@@ -5,10 +5,11 @@ use crate::platform::semantic_id::{
     CaseId, DeclarationId, FieldId, ModuleId, OperationId, PortId, RequirementId, TargetId,
 };
 use bincode::{Decode, Encode};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 macro_rules! exact_reference {
-    ($name:ident, $field:ident, $id:ty) => {
+    ($name:ident, $field:ident, $id:ty, $schema:literal) => {
         #[derive(
             Clone,
             Copy,
@@ -17,11 +18,13 @@ macro_rules! exact_reference {
             Deserialize,
             Encode,
             Eq,
+            JsonSchema,
             Ord,
             PartialEq,
             PartialOrd,
             Serialize,
         )]
+        #[schemars(rename = $schema)]
         #[serde(deny_unknown_fields)]
         pub struct $name {
             pub package: PackageId,
@@ -30,11 +33,51 @@ macro_rules! exact_reference {
     };
 }
 
-exact_reference!(DeclarationReference, declaration, DeclarationId);
-exact_reference!(ModuleReference, module, ModuleId);
-exact_reference!(FieldReference, field, FieldId);
-exact_reference!(CaseReference, case, CaseId);
-exact_reference!(OperationReference, operation, OperationId);
-exact_reference!(RequirementReference, requirement, RequirementId);
-exact_reference!(PortReference, port, PortId);
-exact_reference!(TargetReference, target, TargetId);
+exact_reference!(
+    DeclarationReference,
+    declaration,
+    DeclarationId,
+    "lkjscript.Graph5DeclarationReferenceV1"
+);
+exact_reference!(
+    ModuleReference,
+    module,
+    ModuleId,
+    "lkjscript.Graph5ModuleReferenceV1"
+);
+exact_reference!(
+    FieldReference,
+    field,
+    FieldId,
+    "lkjscript.Graph5FieldReferenceV1"
+);
+exact_reference!(
+    CaseReference,
+    case,
+    CaseId,
+    "lkjscript.Graph5CaseReferenceV1"
+);
+exact_reference!(
+    OperationReference,
+    operation,
+    OperationId,
+    "lkjscript.Graph5OperationReferenceV1"
+);
+exact_reference!(
+    RequirementReference,
+    requirement,
+    RequirementId,
+    "lkjscript.Graph5RequirementReferenceV1"
+);
+exact_reference!(
+    PortReference,
+    port,
+    PortId,
+    "lkjscript.Graph5PortReferenceV1"
+);
+exact_reference!(
+    TargetReference,
+    target,
+    TargetId,
+    "lkjscript.Graph5TargetReferenceV1"
+);

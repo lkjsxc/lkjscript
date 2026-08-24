@@ -644,7 +644,7 @@ where
             requirement.package,
             OwnerKey::Requirement(requirement.requirement),
         ),
-        ExpressionOperation::Unit
+        ExpressionOperation::Unit {}
         | ExpressionOperation::Bool { .. }
         | ExpressionOperation::I64 { .. }
         | ExpressionOperation::Text { .. }

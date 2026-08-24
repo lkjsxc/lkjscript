@@ -72,6 +72,68 @@ fn repository_create_reopen_and_exact_current_reads_bind_every_object() {
 }
 
 #[test]
+fn strict_authored_protocol_prepares_the_same_exact_publication_and_compact_response() {
+    let temporary = tempfile::tempdir().expect("temporary authored protocol repository");
+    let created = GraphRepository::create(
+        &temporary.path().join("meaning"),
+        &crate::platform::kernel::tests::witness_snapshot(),
+        None,
+    )
+    .expect("Graph 5 protocol repository");
+    let request = AuthoredChangeRequest {
+        contract: AuthoredChangeContract::Current,
+        idempotency_key: Some("graph5-protocol-test".to_owned()),
+        semantic: AuthoredChangeSet {
+            base: created.current.head.revision,
+            preconditions: Vec::new(),
+            changes: vec![AuthoredChange::CreateModule {
+                symbol: "$protocol_module".to_owned(),
+                name: Name::new("protocol_added").unwrap(),
+            }],
+            budget: ChangeBudget::default(),
+        },
+        intent: Some("strict authored protocol acceptance".to_owned()),
+    };
+    let decoded = AuthoredChangeRequest::decode_json(&request.encode_json().unwrap())
+        .expect("strict protocol decode");
+    let (prepared, response) = created
+        .repository
+        .prepare_authored_protocol_change(&decoded)
+        .expect("strict protocol preparation");
+    assert_eq!(response.contract, AuthoredChangeContract::Current);
+    assert_eq!(response.status, AuthoredChangeResponseStatus::Prepared);
+    assert_eq!(response.base, created.current.head.revision);
+    assert_eq!(response.result, prepared.publication.head.revision);
+    assert_eq!(
+        response.transaction,
+        prepared.publication.transaction_digest
+    );
+    assert_eq!(
+        response.semantic_diff,
+        prepared.publication.semantic_diff_digest
+    );
+    assert_eq!(response.allocated, prepared.allocated);
+    assert_eq!(
+        response.schema_digest,
+        authored_protocol_schema_digest().unwrap()
+    );
+    assert!(response.encode_json().unwrap().len() < MAXIMUM_AUTHORED_RESPONSE_BYTES);
+
+    let outcome = created
+        .repository
+        .publish(&prepared.publication)
+        .expect("publish strict protocol result");
+    let PublicationOutcome::Accepted { current, .. } = &outcome else {
+        panic!("strict protocol publication must advance HEAD")
+    };
+    assert_eq!(current.head.revision, response.result);
+    let accepted =
+        AuthoredChangeResponse::accepted(&prepared, &outcome).expect("accepted protocol response");
+    assert_eq!(accepted.status, AuthoredChangeResponseStatus::Accepted);
+    assert_eq!(accepted.result, response.result);
+}
+
+#[test]
 fn staged_package_objects_bind_authored_dependency_lifecycle_without_advancing_head() {
     let temporary = tempfile::tempdir().expect("temporary package staging repositories");
     let source_path = temporary.path().join("source");
@@ -880,7 +942,7 @@ fn repository_test_delta_reads_only_the_affected_test_witness_closure() {
     let OwnerRecord::Expression(record) = &mut replacement else {
         panic!("test actual must be an expression")
     };
-    record.operation = ExpressionOperation::Unit;
+    record.operation = ExpressionOperation::Unit {};
     let canonical = CanonicalDelta::normalize(
         &created.initial.snapshot,
         vec![PrimitiveEdit::ReplaceOwner {
@@ -1155,7 +1217,7 @@ fn authored_request_allocates_forward_symbols_and_preserves_exact_uses() {
             },
             AuthoredChange::ReplaceExpression {
                 expression: body,
-                operation: ExpressionOperation::Unit,
+                operation: ExpressionOperation::Unit {},
             },
             AuthoredChange::CreateModule {
                 symbol: "$destination".to_owned(),
@@ -1207,7 +1269,7 @@ fn authored_request_allocates_forward_symbols_and_preserves_exact_uses() {
         panic!("selected expression must remain live")
     };
     assert_eq!(expression.id, body);
-    assert_eq!(expression.operation, ExpressionOperation::Unit);
+    assert_eq!(expression.operation, ExpressionOperation::Unit {});
     let Some(OwnerRecord::Binding(renamed_binding)) = view.owner(binding).unwrap().value else {
         panic!("renamed binding must remain live")
     };
@@ -1371,12 +1433,12 @@ fn authored_request_rejects_invalid_symbols_kinds_and_empty_work() {
                 AuthoredField {
                     symbol: "$first_field".to_owned(),
                     name: Name::new("same").unwrap(),
-                    ty: AuthoredType::Unit,
+                    ty: AuthoredType::Unit {},
                 },
                 AuthoredField {
                     symbol: "$second_field".to_owned(),
                     name: Name::new("same").unwrap(),
-                    ty: AuthoredType::Unit,
+                    ty: AuthoredType::Unit {},
                 },
             ],
         }],
@@ -1617,11 +1679,11 @@ fn authored_module_cascade_uses_exact_reverse_ownership_without_graph_reconstruc
                 visibility: DeclarationVisibility::Private,
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result: AuthoredType::Unit,
-                effect: AuthoredFunctionEffect::Pure,
+                result: AuthoredType::Unit {},
+                effect: AuthoredFunctionEffect::Pure {},
                 body: AuthoredExpression {
                     symbol: Some("$retired_body".to_owned()),
-                    operation: AuthoredExpressionOperation::Unit,
+                    operation: AuthoredExpressionOperation::Unit {},
                 },
             },
         ],
@@ -1690,9 +1752,9 @@ fn authored_deletion_analyzes_the_complete_request_independent_of_delete_order()
                 visibility: DeclarationVisibility::Private,
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result: AuthoredType::Unit,
-                effect: AuthoredFunctionEffect::Pure,
-                body: authored_expression(AuthoredExpressionOperation::Unit),
+                result: AuthoredType::Unit {},
+                effect: AuthoredFunctionEffect::Pure {},
+                body: authored_expression(AuthoredExpressionOperation::Unit {}),
             },
             AuthoredChange::CreateFunction {
                 symbol: "$delete_order_caller".to_owned(),
@@ -1703,8 +1765,8 @@ fn authored_deletion_analyzes_the_complete_request_independent_of_delete_order()
                 visibility: DeclarationVisibility::Private,
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result: AuthoredType::Unit,
-                effect: AuthoredFunctionEffect::Pure,
+                result: AuthoredType::Unit {},
+                effect: AuthoredFunctionEffect::Pure {},
                 body: authored_expression(AuthoredExpressionOperation::Call {
                     function: AuthoredDeclarationReference::Local {
                         declaration: DeclarationSelector::Symbol {
@@ -1778,10 +1840,10 @@ fn authored_deletion_accepts_an_exact_same_request_rebind() {
             parameters: vec![authored_parameter(
                 "$replacement_input",
                 "replacement_input",
-                AuthoredType::Unit,
+                AuthoredType::Unit {},
             )],
-            result: AuthoredType::Unit,
-            effect: AuthoredFunctionEffect::Pure,
+            result: AuthoredType::Unit {},
+            effect: AuthoredFunctionEffect::Pure {},
             body: authored_expression(AuthoredExpressionOperation::Local {
                 value: AuthoredLocalReference::Symbol {
                     symbol: "$replacement_input".to_owned(),
@@ -1882,12 +1944,12 @@ fn authored_member_deletion_detaches_the_exact_parent_and_preserves_siblings() {
                 AuthoredField {
                     symbol: "$removed_field".to_owned(),
                     name: Name::new("removed").unwrap(),
-                    ty: AuthoredType::Unit,
+                    ty: AuthoredType::Unit {},
                 },
                 AuthoredField {
                     symbol: "$retained_field".to_owned(),
                     name: Name::new("retained").unwrap(),
-                    ty: AuthoredType::Unit,
+                    ty: AuthoredType::Unit {},
                 },
             ],
         }],
@@ -2301,7 +2363,7 @@ fn authored_budget_rejects_invalid_and_exhausted_work_before_publication() {
                 OwnerKey::Expression(expression) => expression,
                 _ => panic!("caller body must be an expression"),
             },
-            operation: ExpressionOperation::Unit,
+            operation: ExpressionOperation::Unit {},
         }],
     };
     assert_eq!(
@@ -2364,10 +2426,10 @@ fn authored_request_creates_a_typed_function_and_test_from_forward_references() 
                 parameters: vec![AuthoredParameter {
                     symbol: "$input".to_owned(),
                     name: Name::new("input").unwrap(),
-                    ty: AuthoredType::Bool,
+                    ty: AuthoredType::Bool {},
                 }],
-                result: AuthoredType::Bool,
-                effect: AuthoredFunctionEffect::Pure,
+                result: AuthoredType::Bool {},
+                effect: AuthoredFunctionEffect::Pure {},
                 body: AuthoredExpression {
                     symbol: Some("$function_body".to_owned()),
                     operation: AuthoredExpressionOperation::Local {
@@ -2492,13 +2554,17 @@ fn authored_type_builder_interns_every_graph_five_type_form() {
     let payload =
         authored_exact_declaration(package, owner_named(&created.initial.snapshot, "Payload"));
     let parameters = vec![
-        authored_parameter("$p_unit", "p_unit", AuthoredType::Unit),
-        authored_parameter("$p_bool", "p_bool", AuthoredType::Bool),
-        authored_parameter("$p_i64", "p_i64", AuthoredType::I64),
-        authored_parameter("$p_bytes", "p_bytes", AuthoredType::Bytes),
-        authored_parameter("$p_text", "p_text", AuthoredType::Text),
-        authored_parameter("$p_static_text", "p_static_text", AuthoredType::StaticText),
-        authored_parameter("$p_secret", "p_secret", AuthoredType::Secret),
+        authored_parameter("$p_unit", "p_unit", AuthoredType::Unit {}),
+        authored_parameter("$p_bool", "p_bool", AuthoredType::Bool {}),
+        authored_parameter("$p_i64", "p_i64", AuthoredType::I64 {}),
+        authored_parameter("$p_bytes", "p_bytes", AuthoredType::Bytes {}),
+        authored_parameter("$p_text", "p_text", AuthoredType::Text {}),
+        authored_parameter(
+            "$p_static_text",
+            "p_static_text",
+            AuthoredType::StaticText {},
+        ),
+        authored_parameter("$p_secret", "p_secret", AuthoredType::Secret {}),
         authored_parameter(
             "$p_type_parameter",
             "p_type_parameter",
@@ -2521,7 +2587,7 @@ fn authored_type_builder_interns_every_graph_five_type_form() {
             AuthoredType::StructuralRecord {
                 fields: vec![AuthoredStructuralTypeField {
                     name: Name::new("value").unwrap(),
-                    ty: AuthoredType::Unit,
+                    ty: AuthoredType::Unit {},
                 }],
             },
         ),
@@ -2529,45 +2595,45 @@ fn authored_type_builder_interns_every_graph_five_type_form() {
             "$p_list",
             "p_list",
             AuthoredType::List {
-                item: Box::new(AuthoredType::Unit),
+                item: Box::new(AuthoredType::Unit {}),
             },
         ),
         authored_parameter(
             "$p_map",
             "p_map",
             AuthoredType::Map {
-                key: Box::new(AuthoredType::Bool),
-                value: Box::new(AuthoredType::Unit),
+                key: Box::new(AuthoredType::Bool {}),
+                value: Box::new(AuthoredType::Unit {}),
             },
         ),
         authored_parameter(
             "$p_option",
             "p_option",
             AuthoredType::Option {
-                item: Box::new(AuthoredType::I64),
+                item: Box::new(AuthoredType::I64 {}),
             },
         ),
         authored_parameter(
             "$p_result",
             "p_result",
             AuthoredType::Result {
-                ok: Box::new(AuthoredType::Text),
-                error: Box::new(AuthoredType::Bytes),
+                ok: Box::new(AuthoredType::Text {}),
+                error: Box::new(AuthoredType::Bytes {}),
             },
         ),
         authored_parameter(
             "$p_stream",
             "p_stream",
             AuthoredType::Stream {
-                item: Box::new(AuthoredType::Unit),
+                item: Box::new(AuthoredType::Unit {}),
             },
         ),
         authored_parameter(
             "$p_function",
             "p_function",
             AuthoredType::Function {
-                parameters: vec![AuthoredType::Bool],
-                result: Box::new(AuthoredType::Unit),
+                parameters: vec![AuthoredType::Bool {}],
+                result: Box::new(AuthoredType::Unit {}),
             },
         ),
     ];
@@ -2587,11 +2653,11 @@ fn authored_type_builder_interns_every_graph_five_type_form() {
                 name: Name::new("T").unwrap(),
             }],
             parameters,
-            result: AuthoredType::Unit,
-            effect: AuthoredFunctionEffect::Pure,
+            result: AuthoredType::Unit {},
+            effect: AuthoredFunctionEffect::Pure {},
             body: AuthoredExpression {
                 symbol: Some("$type_body".to_owned()),
-                operation: AuthoredExpressionOperation::Unit,
+                operation: AuthoredExpressionOperation::Unit {},
             },
         }],
     };
@@ -2725,7 +2791,7 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
                         name: Name::new("run").unwrap(),
                         function_type: AuthoredType::Function {
                             parameters: Vec::new(),
-                            result: Box::new(AuthoredType::Unit),
+                            result: Box::new(AuthoredType::Unit {}),
                         },
                         implementation: AuthoredPortImplementation::Function {
                             function: local_declaration("$entry"),
@@ -2736,7 +2802,7 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
                         name: Name::new("invoke").unwrap(),
                         function_type: AuthoredType::Function {
                             parameters: Vec::new(),
-                            result: Box::new(AuthoredType::Unit),
+                            result: Box::new(AuthoredType::Unit {}),
                         },
                         implementation: AuthoredPortImplementation::Expression {
                             expression: AuthoredExpression {
@@ -2757,10 +2823,10 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
                 },
                 name: Name::new("unit").unwrap(),
                 visibility: DeclarationVisibility::Package,
-                ty: AuthoredType::Unit,
+                ty: AuthoredType::Unit {},
                 value: AuthoredExpression {
                     symbol: Some("$constant_value".to_owned()),
-                    operation: AuthoredExpressionOperation::Unit,
+                    operation: AuthoredExpressionOperation::Unit {},
                 },
             },
             AuthoredChange::CreateExternal {
@@ -2807,7 +2873,7 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
                             declaration: local_declaration("$record"),
                         },
                     }],
-                    result: AuthoredType::Unit,
+                    result: AuthoredType::Unit {},
                     idempotency: Idempotency::Idempotent,
                     external_visibility: ExternalVisibility::None,
                 }],
@@ -2837,7 +2903,7 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
                 fields: vec![AuthoredField {
                     symbol: "$field".to_owned(),
                     name: Name::new("value").unwrap(),
-                    ty: AuthoredType::Unit,
+                    ty: AuthoredType::Unit {},
                 }],
             },
             AuthoredChange::CreateFunction {
@@ -2849,8 +2915,8 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
                 visibility: DeclarationVisibility::Package,
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result: AuthoredType::Unit,
-                effect: AuthoredFunctionEffect::Pure,
+                result: AuthoredType::Unit {},
+                effect: AuthoredFunctionEffect::Pure {},
                 body: AuthoredExpression {
                     symbol: Some("$entry_body".to_owned()),
                     operation: AuthoredExpressionOperation::Sequence {
@@ -2866,12 +2932,12 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
                                             },
                                         },
                                         value: authored_expression(
-                                            AuthoredExpressionOperation::Unit,
+                                            AuthoredExpressionOperation::Unit {},
                                         ),
                                     }],
                                 },
                             },
-                            authored_expression(AuthoredExpressionOperation::Unit),
+                            authored_expression(AuthoredExpressionOperation::Unit {}),
                         ],
                     },
                 },
@@ -3018,7 +3084,7 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
                 fields: vec![AuthoredField {
                     symbol: "$base_field".to_owned(),
                     name: Name::new("base").unwrap(),
-                    ty: AuthoredType::Unit,
+                    ty: AuthoredType::Unit {},
                 }],
             },
             AuthoredChange::CreateVariant {
@@ -3039,8 +3105,8 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
                 visibility: DeclarationVisibility::Private,
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result: AuthoredType::Bool,
-                effect: AuthoredFunctionEffect::Pure,
+                result: AuthoredType::Bool {},
+                effect: AuthoredFunctionEffect::Pure {},
                 body: AuthoredExpression {
                     symbol: Some("$mutable_body".to_owned()),
                     operation: AuthoredExpressionOperation::Bool { value: true },
@@ -3111,7 +3177,7 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
                 operation: OwnerSelector::Symbol {
                     symbol: "$added_operation".to_owned(),
                 },
-                result: AuthoredType::Bool,
+                result: AuthoredType::Bool {},
                 idempotency: Idempotency::NonIdempotent,
                 external_visibility: ExternalVisibility::Possible,
             },
@@ -3140,7 +3206,7 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
                 function: DeclarationSelector::Id {
                     declaration: declaration_id(function),
                 },
-                result: AuthoredType::Bool,
+                result: AuthoredType::Bool {},
                 effect: AuthoredFunctionEffect::Task {
                     requirements: vec![AuthoredRequirementReference::Symbol {
                         symbol: "$added_requirement".to_owned(),
@@ -3155,11 +3221,11 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
             },
             AuthoredChange::SetFieldType {
                 field: OwnerSelector::Exact { owner: base_field },
-                ty: AuthoredType::Bool,
+                ty: AuthoredType::Bool {},
             },
             AuthoredChange::SetCasePayload {
                 case: OwnerSelector::Exact { owner: base_case },
-                payload: Some(AuthoredType::Bool),
+                payload: Some(AuthoredType::Bool {}),
             },
             AuthoredChange::AddParameter {
                 parent: ParameterParentSelector::Operation {
@@ -3170,7 +3236,7 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
                 parameter: AuthoredParameter {
                     symbol: "$added_operation_parameter".to_owned(),
                     name: Name::new("value").unwrap(),
-                    ty: AuthoredType::Bool,
+                    ty: AuthoredType::Bool {},
                 },
             },
             AuthoredChange::AddPort {
@@ -3182,7 +3248,7 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
                     name: Name::new("alternate").unwrap(),
                     function_type: AuthoredType::Function {
                         parameters: Vec::new(),
-                        result: Box::new(AuthoredType::Unit),
+                        result: Box::new(AuthoredType::Unit {}),
                     },
                     implementation: AuthoredPortImplementation::Function {
                         function: exact_declaration(caller),
@@ -3209,7 +3275,7 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
                     symbol: "$added_operation".to_owned(),
                     name: Name::new("write_v2").unwrap(),
                     parameters: Vec::new(),
-                    result: AuthoredType::Unit,
+                    result: AuthoredType::Unit {},
                     idempotency: Idempotency::Idempotent,
                     external_visibility: ExternalVisibility::None,
                 },
@@ -3223,7 +3289,7 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
                 parameter: AuthoredParameter {
                     symbol: "$external_value".to_owned(),
                     name: Name::new("value").unwrap(),
-                    ty: AuthoredType::Unit,
+                    ty: AuthoredType::Unit {},
                 },
             },
             AuthoredChange::AddTypeParameter {
@@ -3252,7 +3318,7 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
                 field: AuthoredField {
                     symbol: "$added_field".to_owned(),
                     name: Name::new("added").unwrap(),
-                    ty: AuthoredType::Unit,
+                    ty: AuthoredType::Unit {},
                 },
             },
         ],
@@ -3455,7 +3521,7 @@ fn authored_member_additions_revalidate_exact_reverse_dependents() {
             field: AuthoredField {
                 symbol: "$required_field".to_owned(),
                 name: Name::new("required").unwrap(),
-                ty: AuthoredType::Unit,
+                ty: AuthoredType::Unit {},
             },
         },
         AuthoredChange::AddCase {
@@ -3477,7 +3543,7 @@ fn authored_member_additions_revalidate_exact_reverse_dependents() {
             parameter: AuthoredParameter {
                 symbol: "$new_parameter".to_owned(),
                 name: Name::new("additional").unwrap(),
-                ty: AuthoredType::Unit,
+                ty: AuthoredType::Unit {},
             },
         },
     ];
@@ -3555,7 +3621,7 @@ fn authored_expression_builder_covers_every_graph_five_operation() {
                 selector: AuthoredFieldSelector::Nominal {
                     field: field_reference.clone(),
                 },
-                value: authored_expression(AuthoredExpressionOperation::Unit),
+                value: authored_expression(AuthoredExpressionOperation::Unit {}),
             }],
         },
     };
@@ -3570,7 +3636,7 @@ fn authored_expression_builder_covers_every_graph_five_operation() {
         symbol: Some("$pure_body".to_owned()),
         operation: AuthoredExpressionOperation::Sequence {
             items: vec![
-                authored_expression(AuthoredExpressionOperation::Unit),
+                authored_expression(AuthoredExpressionOperation::Unit {}),
                 authored_expression(AuthoredExpressionOperation::Bool { value: true }),
                 authored_expression(AuthoredExpressionOperation::I64 { value: 7 }),
                 authored_expression(AuthoredExpressionOperation::Text {
@@ -3591,9 +3657,11 @@ fn authored_expression_builder_covers_every_graph_five_operation() {
                         condition: Box::new(authored_expression(
                             AuthoredExpressionOperation::Bool { value: true },
                         )),
-                        when_true: Box::new(authored_expression(AuthoredExpressionOperation::Unit)),
+                        when_true: Box::new(authored_expression(
+                            AuthoredExpressionOperation::Unit {},
+                        )),
                         when_false: Box::new(authored_expression(
-                            AuthoredExpressionOperation::Unit,
+                            AuthoredExpressionOperation::Unit {},
                         )),
                     },
                 },
@@ -3603,8 +3671,8 @@ fn authored_expression_builder_covers_every_graph_five_operation() {
                         bindings: vec![AuthoredLetBinding {
                             symbol: "$local".to_owned(),
                             name: Name::new("local").unwrap(),
-                            value: authored_expression(AuthoredExpressionOperation::Unit),
-                            declared_type: Some(AuthoredType::Unit),
+                            value: authored_expression(AuthoredExpressionOperation::Unit {}),
+                            declared_type: Some(AuthoredType::Unit {}),
                         }],
                         body: Box::new(AuthoredExpression {
                             symbol: Some("$local_use".to_owned()),
@@ -3621,7 +3689,7 @@ fn authored_expression_builder_covers_every_graph_five_operation() {
                     operation: AuthoredExpressionOperation::Call {
                         function: callee_reference.clone(),
                         type_arguments: Vec::new(),
-                        arguments: vec![authored_expression(AuthoredExpressionOperation::Unit)],
+                        arguments: vec![authored_expression(AuthoredExpressionOperation::Unit {})],
                     },
                 },
                 AuthoredExpression {
@@ -3640,7 +3708,7 @@ fn authored_expression_builder_covers_every_graph_five_operation() {
                                 type_arguments: Vec::new(),
                             },
                         )),
-                        arguments: vec![authored_expression(AuthoredExpressionOperation::Unit)],
+                        arguments: vec![authored_expression(AuthoredExpressionOperation::Unit {})],
                     },
                 },
                 nominal_record("$record"),
@@ -3657,20 +3725,20 @@ fn authored_expression_builder_covers_every_graph_five_operation() {
                 AuthoredExpression {
                     symbol: Some("$list".to_owned()),
                     operation: AuthoredExpressionOperation::List {
-                        item_type: AuthoredType::Unit,
-                        items: vec![authored_expression(AuthoredExpressionOperation::Unit)],
+                        item_type: AuthoredType::Unit {},
+                        items: vec![authored_expression(AuthoredExpressionOperation::Unit {})],
                     },
                 },
                 AuthoredExpression {
                     symbol: Some("$map".to_owned()),
                     operation: AuthoredExpressionOperation::Map {
-                        key_type: AuthoredType::Bool,
-                        value_type: AuthoredType::Unit,
+                        key_type: AuthoredType::Bool {},
+                        value_type: AuthoredType::Unit {},
                         entries: vec![AuthoredMapExpressionEntry {
                             key: authored_expression(AuthoredExpressionOperation::Bool {
                                 value: true,
                             }),
-                            value: authored_expression(AuthoredExpressionOperation::Unit),
+                            value: authored_expression(AuthoredExpressionOperation::Unit {}),
                         }],
                     },
                 },
@@ -3681,7 +3749,7 @@ fn authored_expression_builder_covers_every_graph_five_operation() {
                         arms: vec![AuthoredMatchExpressionArm {
                             case: case_reference,
                             payload_binding: None,
-                            body: authored_expression(AuthoredExpressionOperation::Unit),
+                            body: authored_expression(AuthoredExpressionOperation::Unit {}),
                         }],
                     },
                 },
@@ -3693,7 +3761,7 @@ fn authored_expression_builder_covers_every_graph_five_operation() {
                             selector: AuthoredFieldSelector::Structural {
                                 name: Name::new("item").unwrap(),
                             },
-                            value: authored_expression(AuthoredExpressionOperation::Unit),
+                            value: authored_expression(AuthoredExpressionOperation::Unit {}),
                         }],
                     },
                 },
@@ -3706,7 +3774,7 @@ fn authored_expression_builder_covers_every_graph_five_operation() {
                                 selector: AuthoredFieldSelector::Structural {
                                     name: Name::new("item").unwrap(),
                                 },
-                                value: authored_expression(AuthoredExpressionOperation::Unit),
+                                value: authored_expression(AuthoredExpressionOperation::Unit {}),
                             }],
                         })),
                         selector: AuthoredFieldSelector::Structural {
@@ -3714,7 +3782,7 @@ fn authored_expression_builder_covers_every_graph_five_operation() {
                         },
                     },
                 },
-                authored_expression(AuthoredExpressionOperation::Unit),
+                authored_expression(AuthoredExpressionOperation::Unit {}),
             ],
         },
     };
@@ -3738,10 +3806,10 @@ fn authored_expression_builder_covers_every_graph_five_operation() {
                             symbol: "$transaction_binding".to_owned(),
                             name: Name::new("transaction").unwrap(),
                         },
-                        body: Box::new(authored_expression(AuthoredExpressionOperation::Unit)),
+                        body: Box::new(authored_expression(AuthoredExpressionOperation::Unit {})),
                     },
                 },
-                authored_expression(AuthoredExpressionOperation::Unit),
+                authored_expression(AuthoredExpressionOperation::Unit {}),
             ],
         },
     };
@@ -3759,8 +3827,8 @@ fn authored_expression_builder_covers_every_graph_five_operation() {
                 visibility: DeclarationVisibility::Private,
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result: AuthoredType::Unit,
-                effect: AuthoredFunctionEffect::Pure,
+                result: AuthoredType::Unit {},
+                effect: AuthoredFunctionEffect::Pure {},
                 body: pure_body,
             },
             AuthoredChange::CreateFunction {
@@ -3772,7 +3840,7 @@ fn authored_expression_builder_covers_every_graph_five_operation() {
                 visibility: DeclarationVisibility::Private,
                 type_parameters: Vec::new(),
                 parameters: Vec::new(),
-                result: AuthoredType::Unit,
+                result: AuthoredType::Unit {},
                 effect: AuthoredFunctionEffect::Task {
                     requirements: vec![requirement_reference],
                 },
@@ -4112,7 +4180,7 @@ fn prepare_body_publication(
     let OwnerRecord::Expression(expression) = &mut replacement else {
         panic!("callee body must be an expression")
     };
-    expression.operation = ExpressionOperation::Unit;
+    expression.operation = ExpressionOperation::Unit {};
     let expected = encode_owner(&created.initial.snapshot.owners[&body])
         .expect("base body encoding")
         .0;

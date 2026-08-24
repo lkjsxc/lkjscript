@@ -1,7 +1,8 @@
 //! Revision-pinned, bounded reads over accepted Graph 5 authority and its committed witness.
 
 use super::{
-    CurrentPublication, PreparedPublication, PublicationOptions, prepare_change_publication,
+    AuthoredChangeRequest, AuthoredChangeResponse, CurrentPublication, PreparedPublication,
+    PublicationOptions, prepare_change_publication,
 };
 use crate::platform::change::{
     AuthoredChangeSet, AuthoredLoweringWork, BoundOwnerSummary, CanonicalBaseRead, CanonicalDelta,
@@ -161,6 +162,20 @@ impl RepositoryView {
             allocated: lowering.allocated,
             lowering_work: lowering.work,
         })
+    }
+
+    /// Decodes operational options from the strict Change Contract 5 envelope and returns the
+    /// compact response projection derived from the same prepared publication.
+    pub fn prepare_authored_protocol_change(
+        &self,
+        request: &AuthoredChangeRequest,
+    ) -> Result<(PreparedAuthoredPublication, AuthoredChangeResponse), Vec<Diagnostic>> {
+        request.validate().map_err(|diagnostic| vec![diagnostic])?;
+        let prepared =
+            self.prepare_authored_change(&request.semantic, request.publication_options())?;
+        let response =
+            AuthoredChangeResponse::prepared(&prepared).map_err(|diagnostic| vec![diagnostic])?;
+        Ok((prepared, response))
     }
 
     fn prepare_change_with_prior_work(

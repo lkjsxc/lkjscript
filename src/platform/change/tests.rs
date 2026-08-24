@@ -91,7 +91,7 @@ fn body_edit_derives_local_relation_removal_and_enclosing_summary_candidates() {
     let OwnerRecord::Expression(record) = &mut replacement else {
         panic!("body must be an expression");
     };
-    record.operation = ExpressionOperation::Unit;
+    record.operation = ExpressionOperation::Unit {};
     let delta = replace_owner_delta(&base, body, replacement);
     let overlay = KernelOverlay::new(&base, &delta);
     let derived = derive_local_delta(&overlay, &delta, &base_witness).expect("derived body edit");
@@ -194,7 +194,7 @@ fn test_relation_rebind_updates_only_the_affected_test_dependency_entries() {
     let new_body =
         crate::platform::semantic_id::ExpressionId::migrate(b"change-test-dependency", 1);
     let body_record = OwnerRecord::Expression(
-        crate::platform::kernel::ExpressionRecord::new(new_body, ExpressionOperation::Unit)
+        crate::platform::kernel::ExpressionRecord::new(new_body, ExpressionOperation::Unit {})
             .expect("new body"),
     );
     let function_record = OwnerRecord::Declaration(crate::platform::kernel::DeclarationRecord {
@@ -496,7 +496,7 @@ fn prepared_authority_path_copies_semantic_and_witness_roots_through_one_object_
     let OwnerRecord::Expression(record) = &mut replacement else {
         panic!("callee body must be an expression");
     };
-    record.operation = ExpressionOperation::Unit;
+    record.operation = ExpressionOperation::Unit {};
     let delta = replace_owner_delta(&base, body, replacement);
     let overlay = KernelOverlay::new(&base, &delta);
     let analysis =

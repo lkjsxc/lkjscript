@@ -9,6 +9,7 @@ use super::reference::{
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::semantic_id::{BindingId, ExpressionId, ParameterId};
 use bincode::{Decode, Encode};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
@@ -63,10 +64,11 @@ impl ExpressionRecord {
     }
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5ExpressionOperationV1")]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ExpressionOperation {
-    Unit,
+    Unit {},
     Bool {
         value: bool,
     },
@@ -147,8 +149,9 @@ pub enum ExpressionOperation {
     },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
-#[serde(tag = "storage", rename_all = "snake_case")]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5TextValueV1")]
+#[serde(tag = "storage", rename_all = "snake_case", deny_unknown_fields)]
 pub enum TextValue {
     Inline {
         text: String,
@@ -160,9 +163,26 @@ pub enum TextValue {
 }
 
 #[derive(
-    Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, Ord, PartialEq, PartialOrd, Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Decode,
+    Deserialize,
+    Encode,
+    Eq,
+    JsonSchema,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
 )]
-#[serde(tag = "kind", content = "id", rename_all = "snake_case")]
+#[schemars(rename = "lkjscript.Graph5LocalValueReferenceV1")]
+#[serde(
+    tag = "kind",
+    content = "id",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
 pub enum LocalValueReference {
     FunctionParameter(ParameterId),
     OperationParameter(ParameterId),
@@ -171,28 +191,39 @@ pub enum LocalValueReference {
     TransactionBinding(BindingId),
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5RecordExpressionFieldV1")]
 #[serde(deny_unknown_fields)]
 pub struct RecordExpressionField {
     pub selector: FieldSelector,
     pub value: ExpressionId,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, Ord, PartialEq, PartialOrd, Serialize)]
-#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
+#[derive(
+    Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, Ord, PartialEq, PartialOrd, Serialize,
+)]
+#[schemars(rename = "lkjscript.Graph5FieldSelectorV1")]
+#[serde(
+    tag = "kind",
+    content = "value",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
 pub enum FieldSelector {
     Nominal(FieldReference),
     Structural(Name),
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5MapExpressionEntryV1")]
 #[serde(deny_unknown_fields)]
 pub struct MapExpressionEntry {
     pub key: ExpressionId,
     pub value: ExpressionId,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5MatchExpressionArmV1")]
 #[serde(deny_unknown_fields)]
 pub struct MatchExpressionArm {
     pub case: CaseReference,
@@ -308,7 +339,7 @@ fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic>
         ExpressionOperation::CapabilityCall { arguments, .. } => {
             require_count("capability arguments", arguments.len(), true)?;
         }
-        ExpressionOperation::Unit
+        ExpressionOperation::Unit {}
         | ExpressionOperation::Bool { .. }
         | ExpressionOperation::I64 { .. }
         | ExpressionOperation::Local { .. }
@@ -459,7 +490,7 @@ fn expression_children(operation: &ExpressionOperation) -> Vec<ExpressionChild> 
                 0,
             );
         }
-        ExpressionOperation::Unit
+        ExpressionOperation::Unit {}
         | ExpressionOperation::Bool { .. }
         | ExpressionOperation::I64 { .. }
         | ExpressionOperation::Text { .. }

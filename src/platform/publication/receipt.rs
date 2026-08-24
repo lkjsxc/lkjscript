@@ -8,9 +8,11 @@ use super::digest::{ReceiptObjectDigest, SemanticDiffDigest, TransactionDigest};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::semantic_id::{RepositoryId, RevisionId};
 use bincode::{Decode, Encode};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5PublicationStatusV1")]
 #[serde(rename_all = "snake_case")]
 pub enum PublicationStatus {
     AcceptedChange,
@@ -18,7 +20,10 @@ pub enum PublicationStatus {
     MergeAccepted,
 }
 
-#[derive(Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(
+    Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize,
+)]
+#[schemars(rename = "lkjscript.Graph5ValidationProfileV1")]
 #[serde(rename_all = "snake_case")]
 pub enum ValidationProfile {
     FullRebuild,
@@ -26,7 +31,10 @@ pub enum ValidationProfile {
     IncrementalOwnerFrontier,
 }
 
-#[derive(Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(
+    Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize,
+)]
+#[schemars(rename = "lkjscript.Graph5FullOracleStatusV1")]
 #[serde(rename_all = "snake_case")]
 pub enum FullOracleStatus {
     NotApplicable,
@@ -35,7 +43,10 @@ pub enum FullOracleStatus {
     Equal,
 }
 
-#[derive(Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(
+    Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize,
+)]
+#[schemars(rename = "lkjscript.Graph5ChangeCountsV1")]
 #[serde(deny_unknown_fields)]
 pub struct ChangeCounts {
     pub owners_created: u64,
@@ -47,7 +58,10 @@ pub struct ChangeCounts {
     pub witness_entries_changed: u64,
 }
 
-#[derive(Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(
+    Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize,
+)]
+#[schemars(rename = "lkjscript.Graph5ValidationEvidenceV1")]
 #[serde(deny_unknown_fields)]
 pub struct ValidationEvidence {
     pub profile: ValidationProfile,
@@ -62,7 +76,10 @@ pub struct ValidationEvidence {
     pub full_oracle: FullOracleStatus,
 }
 
-#[derive(Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(
+    Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize,
+)]
+#[schemars(rename = "lkjscript.Graph5WorkObservationV1")]
 #[serde(deny_unknown_fields)]
 pub struct WorkObservation {
     /// Complete validator work when its implementation exposes one aggregate count.

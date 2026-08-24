@@ -36,6 +36,7 @@ use crate::platform::semantic_id::{
 };
 use crate::platform::witness::NamespaceKey;
 use bincode::{Decode, Encode};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -43,18 +44,22 @@ pub const MAXIMUM_AUTHORED_CHANGES: usize = 10_000;
 pub const MAXIMUM_AUTHORED_CHANGE_BYTES: usize = 4 * 1_048_576;
 const MAXIMUM_REQUEST_SYMBOL_BYTES: usize = 128;
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredChangeSetV1")]
 #[serde(deny_unknown_fields)]
 pub struct AuthoredChangeSet {
     pub base: RevisionId,
     #[serde(default)]
+    #[schemars(length(max = MAXIMUM_AUTHORED_CHANGES))]
     pub preconditions: Vec<AuthoredPrecondition>,
+    #[schemars(length(min = 1, max = MAXIMUM_AUTHORED_CHANGES))]
     pub changes: Vec<AuthoredChange>,
     #[serde(default)]
     pub budget: ChangeBudget,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredChangeV1")]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AuthoredChange {
     CreateModule {
@@ -270,7 +275,8 @@ pub enum AuthoredChange {
     },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5OwnerSelectorV1")]
 #[serde(tag = "by", rename_all = "snake_case", deny_unknown_fields)]
 pub enum OwnerSelector {
     Exact { owner: OwnerKey },
@@ -279,7 +285,8 @@ pub enum OwnerSelector {
     Symbol { symbol: String },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5ModuleSelectorV1")]
 #[serde(tag = "by", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ModuleSelector {
     Id { module: ModuleId },
@@ -287,7 +294,8 @@ pub enum ModuleSelector {
     Symbol { symbol: String },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5DeclarationSelectorV1")]
 #[serde(tag = "by", rename_all = "snake_case", deny_unknown_fields)]
 pub enum DeclarationSelector {
     Id {
@@ -302,7 +310,8 @@ pub enum DeclarationSelector {
     },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5ParameterParentSelectorV1")]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ParameterParentSelector {
     Declaration { declaration: DeclarationSelector },

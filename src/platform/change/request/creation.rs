@@ -35,10 +35,12 @@ use crate::platform::semantic_id::{
     TypeParameterId,
 };
 use bincode::{Decode, Encode};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredTypeParameterV1")]
 #[serde(deny_unknown_fields)]
 pub struct AuthoredTypeParameter {
     #[serde(rename = "as")]
@@ -46,7 +48,8 @@ pub struct AuthoredTypeParameter {
     pub name: Name,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredParameterV1")]
 #[serde(deny_unknown_fields)]
 pub struct AuthoredParameter {
     #[serde(rename = "as")]
@@ -55,26 +58,28 @@ pub struct AuthoredParameter {
     pub ty: AuthoredType,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredFunctionEffectV1")]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AuthoredFunctionEffect {
-    Pure,
+    Pure {},
     Task {
         #[serde(default)]
         requirements: Vec<AuthoredRequirementReference>,
     },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredTypeV1")]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AuthoredType {
-    Unit,
-    Bool,
-    I64,
-    Bytes,
-    Text,
-    StaticText,
-    Secret,
+    Unit {},
+    Bool {},
+    I64 {},
+    Bytes {},
+    Text {},
+    StaticText {},
+    Secret {},
     TypeParameter {
         parameter: AuthoredTypeParameterReference,
     },
@@ -108,21 +113,24 @@ pub enum AuthoredType {
     },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredStructuralTypeFieldV1")]
 #[serde(deny_unknown_fields)]
 pub struct AuthoredStructuralTypeField {
     pub name: Name,
     pub ty: AuthoredType,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredTypeParameterReferenceV1")]
 #[serde(tag = "by", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AuthoredTypeParameterReference {
     Id { parameter: TypeParameterId },
     Symbol { symbol: String },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredDeclarationReferenceV1")]
 #[serde(tag = "scope", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AuthoredDeclarationReference {
     Local {
@@ -134,7 +142,8 @@ pub enum AuthoredDeclarationReference {
     },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredFieldReferenceV1")]
 #[serde(tag = "by", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AuthoredFieldReference {
     Exact {
@@ -146,7 +155,8 @@ pub enum AuthoredFieldReference {
     },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredCaseReferenceV1")]
 #[serde(tag = "by", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AuthoredCaseReference {
     Exact {
@@ -158,7 +168,8 @@ pub enum AuthoredCaseReference {
     },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredOperationReferenceV1")]
 #[serde(tag = "by", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AuthoredOperationReference {
     Exact {
@@ -170,7 +181,8 @@ pub enum AuthoredOperationReference {
     },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredRequirementReferenceV1")]
 #[serde(tag = "by", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AuthoredRequirementReference {
     Exact {
@@ -182,7 +194,8 @@ pub enum AuthoredRequirementReference {
     },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredLocalReferenceV1")]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AuthoredLocalReference {
     FunctionParameter { parameter: ParameterId },
@@ -193,7 +206,8 @@ pub enum AuthoredLocalReference {
     Symbol { symbol: String },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredExpressionV1")]
 #[serde(deny_unknown_fields)]
 pub struct AuthoredExpression {
     #[serde(default, rename = "as")]
@@ -201,10 +215,11 @@ pub struct AuthoredExpression {
     pub operation: AuthoredExpressionOperation,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredExpressionOperationV1")]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AuthoredExpressionOperation {
-    Unit,
+    Unit {},
     Bool {
         value: bool,
     },
@@ -294,7 +309,8 @@ pub enum AuthoredExpressionOperation {
     },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredLetBindingV1")]
 #[serde(deny_unknown_fields)]
 pub struct AuthoredLetBinding {
     #[serde(rename = "as")]
@@ -305,7 +321,8 @@ pub struct AuthoredLetBinding {
     pub declared_type: Option<AuthoredType>,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredBindingDefinitionV1")]
 #[serde(deny_unknown_fields)]
 pub struct AuthoredBindingDefinition {
     #[serde(rename = "as")]
@@ -313,28 +330,32 @@ pub struct AuthoredBindingDefinition {
     pub name: Name,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredFieldSelectorV1")]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AuthoredFieldSelector {
     Nominal { field: AuthoredFieldReference },
     Structural { name: Name },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredRecordExpressionFieldV1")]
 #[serde(deny_unknown_fields)]
 pub struct AuthoredRecordExpressionField {
     pub selector: AuthoredFieldSelector,
     pub value: AuthoredExpression,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredMapExpressionEntryV1")]
 #[serde(deny_unknown_fields)]
 pub struct AuthoredMapExpressionEntry {
     pub key: AuthoredExpression,
     pub value: AuthoredExpression,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
+#[schemars(rename = "lkjscript.Graph5AuthoredMatchExpressionArmV1")]
 #[serde(deny_unknown_fields)]
 pub struct AuthoredMatchExpressionArm {
     pub case: AuthoredCaseReference,
@@ -455,7 +476,7 @@ fn collect_expression_symbols(
             define_symbol(definitions, &binding.symbol, SymbolKind::TransactionBinding)?;
             collect_expression_symbols(body, definitions)
         }
-        AuthoredExpressionOperation::Unit
+        AuthoredExpressionOperation::Unit {}
         | AuthoredExpressionOperation::Bool { .. }
         | AuthoredExpressionOperation::I64 { .. }
         | AuthoredExpressionOperation::Text { .. }
@@ -571,13 +592,13 @@ pub(super) fn lower_test<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Si
 impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer<'a, B, W> {
     fn lower_type(&mut self, authored: &AuthoredType) -> Result<TypeObjectDigest, Diagnostic> {
         let form = match authored {
-            AuthoredType::Unit => TypeForm::Unit,
-            AuthoredType::Bool => TypeForm::Bool,
-            AuthoredType::I64 => TypeForm::I64,
-            AuthoredType::Bytes => TypeForm::Bytes,
-            AuthoredType::Text => TypeForm::Text,
-            AuthoredType::StaticText => TypeForm::StaticText,
-            AuthoredType::Secret => TypeForm::Secret,
+            AuthoredType::Unit {} => TypeForm::Unit,
+            AuthoredType::Bool {} => TypeForm::Bool,
+            AuthoredType::I64 {} => TypeForm::I64,
+            AuthoredType::Bytes {} => TypeForm::Bytes,
+            AuthoredType::Text {} => TypeForm::Text,
+            AuthoredType::StaticText {} => TypeForm::StaticText,
+            AuthoredType::Secret {} => TypeForm::Secret,
             AuthoredType::TypeParameter { parameter } => TypeForm::TypeParameter {
                 parameter: self.lower_type_parameter_reference(parameter)?,
             },
@@ -631,7 +652,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         authored: &AuthoredFunctionEffect,
     ) -> Result<FunctionEffect, Diagnostic> {
         match authored {
-            AuthoredFunctionEffect::Pure => Ok(FunctionEffect::Pure),
+            AuthoredFunctionEffect::Pure {} => Ok(FunctionEffect::Pure),
             AuthoredFunctionEffect::Task { requirements } => {
                 let mut lowered = requirements
                     .iter()
@@ -658,7 +679,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
     ) -> Result<crate::platform::semantic_id::ExpressionId, Diagnostic> {
         let id = self.expression_identity(authored.symbol.as_deref())?;
         let operation = match &authored.operation {
-            AuthoredExpressionOperation::Unit => ExpressionOperation::Unit,
+            AuthoredExpressionOperation::Unit {} => ExpressionOperation::Unit {},
             AuthoredExpressionOperation::Bool { value } => {
                 ExpressionOperation::Bool { value: *value }
             }
