@@ -1,15 +1,12 @@
 //! Deterministic full witness reconstruction and Merkle-map materialization.
 
-use super::codec::{certificate_digest, encode_owner_summary, encode_witness_manifest};
-use super::contract::{WITNESS_CONTRACT_VERSION, validator_contract_digest};
+use super::codec::{bind_witness_manifest, encode_owner_summary};
 use super::entry::{
     NamespaceKey, OwnershipEntry, TestDependency, encode_ownership, forward_relation_key,
     owner_key_bytes, owner_value_bytes, reverse_relation_key, test_dependency_keys,
 };
 use super::ownership::{derive_namespaces, derive_ownership, derive_test_dependencies};
-use super::summary::{
-    CertificateCore, OwnerSummary, SummaryBinding, ValidationWitnessManifest, WitnessRoots,
-};
+use super::summary::{OwnerSummary, SummaryBinding, ValidationWitnessManifest, WitnessRoots};
 use super::summary_build::build_owner_summaries;
 use super::{OwnerSummaryDigest, ValidationWitnessDigest, witness_error};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
@@ -119,28 +116,12 @@ fn build_validated_witness(
     let mut map_work = MapWork::default();
     let roots = build_witness_maps(&entries, &summaries, &mut pages, &mut map_work)?;
     let (semantic_root, _) = crate::platform::kernel::encode_root(&snapshot.root)?;
-    let validator_contract = validator_contract_digest();
-    let core = CertificateCore {
-        contract_version: WITNESS_CONTRACT_VERSION,
-        graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-        validator_contract,
-        repository_id: snapshot.root.repository_id,
-        package_id: snapshot.root.package_id,
+    let (manifest, manifest_digest, manifest_bytes) = bind_witness_manifest(
+        snapshot.root.repository_id,
+        snapshot.root.package_id,
         semantic_root,
         roots,
-    };
-    let certificate = certificate_digest(&core)?;
-    let manifest = ValidationWitnessManifest {
-        contract_version: core.contract_version,
-        graph_contract_version: core.graph_contract_version,
-        validator_contract: core.validator_contract,
-        repository_id: core.repository_id,
-        package_id: core.package_id,
-        semantic_root: core.semantic_root,
-        roots: core.roots,
-        certificate,
-    };
-    let (manifest_digest, manifest_bytes) = encode_witness_manifest(&manifest)?;
+    )?;
     let report = WitnessBuildReport {
         full_validation,
         owners_summarized: summaries.len() as u64,

@@ -5,6 +5,7 @@
     reason = "private change exports become crate consumers at the Graph 5 repository cutover"
 )]
 
+mod authority;
 mod delta;
 mod derived;
 mod impact;
@@ -16,6 +17,10 @@ mod test_delta;
 mod validate;
 mod witness_update;
 
+pub use authority::{
+    CanonicalMapEditCounts, FullStagedAuthority, PreparedAuthority, SemanticAuthority,
+    WitnessAuthority, stage_full_authority, stage_prepared_authority,
+};
 pub use delta::{CanonicalDelta, ExactEdit, PrimitiveEdit};
 pub use derived::{DerivedDelta, DerivedValueEdit, RelationDelta, derive_local_delta};
 pub use impact::{

@@ -266,6 +266,137 @@ pub trait ImmutableObjectStore {
     ) -> Result<StageOutcome, StoreError>;
 }
 
+/// Private read-through stage for one prepared publication. Reads observe staged objects first and
+/// then the exact accepted base; writes remain isolated in memory until a publication owner moves
+/// them into durable immutable packs.
+pub struct ObjectStage<'a, S: ImmutableObjectStore + ?Sized> {
+    base: &'a S,
+    objects: BTreeMap<ObjectKey, Vec<u8>>,
+}
+
+impl<'a, S: ImmutableObjectStore + ?Sized> ObjectStage<'a, S> {
+    pub const fn new(base: &'a S) -> Self {
+        Self {
+            base,
+            objects: BTreeMap::new(),
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.objects.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.objects.is_empty()
+    }
+
+    pub fn stored_bytes(&self) -> usize {
+        self.objects
+            .values()
+            .fold(0_usize, |total, bytes| total.saturating_add(bytes.len()))
+    }
+
+    pub fn objects(&self) -> impl Iterator<Item = (ObjectKey, &[u8])> {
+        self.objects
+            .iter()
+            .map(|(key, bytes)| (*key, bytes.as_slice()))
+    }
+
+    pub fn into_objects(self) -> BTreeMap<ObjectKey, Vec<u8>> {
+        self.objects
+    }
+}
+
+impl<S: ImmutableObjectStore + ?Sized> ImmutableObjectStore for ObjectStage<'_, S> {
+    fn read(
+        &self,
+        key: ObjectKey,
+        maximum_bytes: usize,
+        work: &mut StoreWork,
+    ) -> Result<Option<Vec<u8>>, StoreError> {
+        if let Some(bytes) = self.objects.get(&key) {
+            if bytes.len() > maximum_bytes {
+                return Err(StoreError::new(
+                    StoreErrorClass::Resource,
+                    "object_stage_read_limit",
+                    "staged object exceeds the caller read bound",
+                ));
+            }
+            key.verify(bytes)?;
+            work.objects_read = work.objects_read.saturating_add(1);
+            work.bytes_read = work.bytes_read.saturating_add(bytes.len() as u64);
+            return Ok(Some(bytes.clone()));
+        }
+        self.base.read(key, maximum_bytes, work)
+    }
+
+    fn contains(&self, key: ObjectKey, work: &mut StoreWork) -> Result<bool, StoreError> {
+        if self.objects.contains_key(&key) {
+            return Ok(true);
+        }
+        self.base.contains(key, work)
+    }
+
+    fn stage(
+        &mut self,
+        key: ObjectKey,
+        bytes: &[u8],
+        work: &mut StoreWork,
+    ) -> Result<StageOutcome, StoreError> {
+        key.verify(bytes)?;
+        if let Some(existing) = self.objects.get(&key) {
+            if existing != bytes {
+                return Err(StoreError::new(
+                    StoreErrorClass::Corrupt,
+                    "object_stage_collision",
+                    "one staged immutable object identity is bound to different bytes",
+                ));
+            }
+            work.objects_reused = work.objects_reused.saturating_add(1);
+            return Ok(StageOutcome::Reused);
+        }
+        if let Some(existing) = self.base.read(key, key.domain.maximum_bytes(), work)? {
+            if existing != bytes {
+                return Err(StoreError::new(
+                    StoreErrorClass::Corrupt,
+                    "object_stage_base_collision",
+                    "accepted storage binds one immutable object identity to different bytes",
+                ));
+            }
+            work.objects_reused = work.objects_reused.saturating_add(1);
+            return Ok(StageOutcome::Reused);
+        }
+        let outcome = stage_into_map(&mut self.objects, key, bytes)?;
+        work.objects_staged = work.objects_staged.saturating_add(1);
+        work.bytes_staged = work.bytes_staged.saturating_add(bytes.len() as u64);
+        Ok(outcome)
+    }
+}
+
+impl<S: ImmutableObjectStore + ?Sized> ImmutableObjectStore for &mut S {
+    fn read(
+        &self,
+        key: ObjectKey,
+        maximum_bytes: usize,
+        work: &mut StoreWork,
+    ) -> Result<Option<Vec<u8>>, StoreError> {
+        (**self).read(key, maximum_bytes, work)
+    }
+
+    fn contains(&self, key: ObjectKey, work: &mut StoreWork) -> Result<bool, StoreError> {
+        (**self).contains(key, work)
+    }
+
+    fn stage(
+        &mut self,
+        key: ObjectKey,
+        bytes: &[u8],
+        work: &mut StoreWork,
+    ) -> Result<StageOutcome, StoreError> {
+        (**self).stage(key, bytes, work)
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StoreErrorClass {
     Input,

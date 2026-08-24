@@ -934,6 +934,48 @@ fn every_prototype_owner_and_root_round_trips_canonically() {
 }
 
 #[test]
+fn canonical_map_bindings_are_compact_strict_and_domain_checked() {
+    let (snapshot, ids) = prototype_snapshot();
+    let owner = OwnerKey::Declaration(ids.callee);
+    let record = &snapshot.owners[&owner];
+    let (owner_digest, _) = encode_owner(record).expect("owner must encode");
+    let owner_binding = OwnerBinding {
+        kind: record.kind(),
+        object: owner_digest,
+    };
+    let owner_bytes = encode_owner_binding(&owner_binding);
+    assert_eq!(owner_bytes.len(), OWNER_BINDING_BYTES);
+    assert_eq!(
+        decode_owner_binding(&owner_bytes, owner).expect("owner binding must decode"),
+        owner_binding
+    );
+    assert!(decode_owner_binding(&owner_bytes, OwnerKey::Field(ids.field)).is_err());
+    assert!(decode_owner_binding(&owner_bytes[..32], owner).is_err());
+
+    let dependency = DependencyBinding {
+        object: DependencyObjectDigest::from_bytes([31; 32]),
+    };
+    let dependency_bytes = encode_dependency_binding(&dependency);
+    assert_eq!(dependency_bytes.len(), DEPENDENCY_BINDING_BYTES);
+    assert_eq!(
+        decode_dependency_binding(&dependency_bytes).expect("dependency binding must decode"),
+        dependency
+    );
+    assert!(decode_dependency_binding(&dependency_bytes[..31]).is_err());
+
+    let retirement = RetirementBinding {
+        object: RetirementObjectDigest::from_bytes([32; 32]),
+    };
+    let retirement_bytes = encode_retirement_binding(&retirement);
+    assert_eq!(retirement_bytes.len(), RETIREMENT_BINDING_BYTES);
+    assert_eq!(
+        decode_retirement_binding(&retirement_bytes).expect("retirement binding must decode"),
+        retirement
+    );
+    assert!(decode_retirement_binding(&retirement_bytes[..31]).is_err());
+}
+
+#[test]
 fn subtree_replacement_can_preserve_selected_expression_identity() {
     let selected = ExpressionId::migrate(TEST_SEED, 100);
     let before = ExpressionRecord::new(selected, ExpressionOperation::Unit)

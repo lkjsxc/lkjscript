@@ -1,8 +1,14 @@
 use super::*;
 use crate::platform::kernel::{
-    DeclarationPayload, ExpressionOperation, Name, OwnerKey, OwnerRecord, encode_owner,
-    validate_full,
+    DeclarationPayload, ExpressionOperation, KernelSnapshot, Name, OwnerKey, OwnerRecord,
+    encode_owner, validate_full,
 };
+use crate::platform::persistent_map::{MapWork, PersistentMap};
+use crate::platform::storage::memory::MemoryPackedStore;
+use crate::platform::storage::object::{
+    ImmutableObjectStore, ObjectDomain, ObjectKey, ObjectStage, StoreWork,
+};
+use crate::platform::storage::page_store::ObjectPageStore;
 use crate::platform::witness::{FullWitness, rebuild_full_witness};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -475,6 +481,134 @@ fn generic_preparation_rejects_deleting_a_still_referenced_expression() {
     );
 }
 
+#[test]
+fn prepared_authority_path_copies_semantic_and_witness_roots_through_one_object_stage() {
+    let (base, base_witness, store) = packed_base();
+    let callee = declaration_named(&base, "callee");
+    let caller = declaration_named(&base, "caller");
+    let body = function_body(&base, callee);
+    let mut replacement = base.owners[&body].clone();
+    let OwnerRecord::Expression(record) = &mut replacement else {
+        panic!("callee body must be an expression");
+    };
+    record.operation = ExpressionOperation::Unit;
+    let delta = replace_owner_delta(&base, body, replacement);
+    let overlay = KernelOverlay::new(&base, &delta);
+    let analysis =
+        prepare_change_analysis(&base, &base_witness, delta.clone()).expect("generic preparation");
+    let mut stage = ObjectStage::new(&store);
+    let authority = stage_prepared_authority(&base, &base_witness, &analysis, &mut stage)
+        .expect("candidate authority must stage");
+
+    assert_ne!(
+        authority.semantic.digest,
+        base_witness.manifest.semantic_root
+    );
+    assert_eq!(authority.semantic.map_edits.replaced, 1);
+    assert_eq!(
+        authority.semantic.root.owners.entries(),
+        base.root.owners.entries()
+    );
+    assert_eq!(
+        authority.witness.manifest.semantic_root,
+        authority.semantic.digest
+    );
+    assert_eq!(authority.witness.manifest.roots, analysis.witness.roots);
+    assert!(authority.semantic.map_work.pages_read <= 2);
+
+    let expected_body = encode_owner(overlay.owner(body).expect("candidate body"))
+        .expect("candidate body encoding")
+        .0;
+    let binding_bytes = {
+        let page_store = ObjectPageStore::new(&mut stage);
+        PersistentMap::from_root(authority.semantic.root.owners)
+            .lookup(
+                &page_store,
+                &crate::platform::kernel::owner_map_key(body),
+                &mut MapWork::default(),
+            )
+            .expect("candidate owner map lookup")
+            .expect("candidate body binding")
+    };
+    let binding = crate::platform::kernel::decode_owner_binding(&binding_bytes, body)
+        .expect("candidate owner binding");
+    assert_eq!(binding.object, expected_body);
+    let caller_digest = encode_owner(&base.owners[&caller]).expect("base caller").0;
+    let caller_key = ObjectKey::from_digest(ObjectDomain::Owner, caller_digest.bytes());
+    assert!(!stage.objects().any(|(key, _)| key == caller_key));
+    assert!(stage.objects().any(|(key, _)| {
+        key == ObjectKey::from_digest(
+            ObjectDomain::SemanticRoot,
+            authority.semantic.digest.bytes(),
+        )
+    }));
+    assert!(stage.objects().any(|(key, _)| {
+        key == ObjectKey::from_digest(
+            ObjectDomain::ValidationWitness,
+            authority.witness.digest.bytes(),
+        )
+    }));
+
+    let mut candidate = overlay.materialize_logical_oracle();
+    candidate.root = authority.semantic.root.clone();
+    validate_full(&candidate).expect("candidate full semantic oracle");
+    let full = rebuild_full_witness(&candidate).expect("candidate full witness oracle");
+    assert_eq!(authority.semantic.digest, full.manifest.semantic_root);
+    assert_eq!(authority.witness.digest, full.manifest_digest);
+    assert_eq!(authority.witness.bytes, full.manifest_bytes);
+    assert_eq!(authority.witness.manifest.roots, full.manifest.roots);
+}
+
+#[test]
+fn full_authority_root_is_independent_of_placeholder_roots_and_reopens_from_packs() {
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let mut altered = logical.clone();
+    altered.root.owners = crate::platform::persistent_map::MapRoot::from_parts(
+        crate::platform::persistent_map::PageDigest::from_bytes([91; 32]),
+        altered.owners.len() as u64,
+    );
+    altered.root.dependencies = crate::platform::persistent_map::MapRoot::from_parts(
+        crate::platform::persistent_map::PageDigest::from_bytes([92; 32]),
+        altered.dependencies.len() as u64,
+    );
+    altered.root.retirements = crate::platform::persistent_map::MapRoot::from_parts(
+        crate::platform::persistent_map::PageDigest::from_bytes([93; 32]),
+        altered.retirements.len() as u64,
+    );
+
+    let mut first_store = MemoryPackedStore::default();
+    let first = stage_full_authority(&logical, &mut first_store).expect("first full authority");
+    let mut second_store = MemoryPackedStore::default();
+    let second = stage_full_authority(&altered, &mut second_store).expect("second full authority");
+    assert_eq!(
+        first.binding.semantic.digest,
+        second.binding.semantic.digest
+    );
+    assert_eq!(first.binding.semantic.bytes, second.binding.semantic.bytes);
+    assert_eq!(first.binding.witness.digest, second.binding.witness.digest);
+
+    let mut work = StoreWork::default();
+    first_store
+        .seal_staged(64 * 1024, &mut work)
+        .expect("full authority must seal");
+    assert!(first_store.staged_len() == 0);
+    assert!(first_store.pack_len() > 0);
+    let root_key = ObjectKey::from_digest(
+        ObjectDomain::SemanticRoot,
+        first.binding.semantic.digest.bytes(),
+    );
+    assert_eq!(
+        first_store
+            .read(
+                root_key,
+                crate::platform::storage::object::ObjectDomain::SemanticRoot.maximum_bytes(),
+                &mut work,
+            )
+            .expect("packed root read"),
+        Some(first.binding.semantic.bytes)
+    );
+}
+
 fn assert_matches_full_oracle(
     base: &FullWitness,
     overlay: &KernelOverlay<'_>,
@@ -563,6 +697,16 @@ fn assert_matches_full_oracle(
     assert_eq!(test_dependencies, full.entries.test_dependencies);
 
     assert_eq!(prepared.witness.roots, full.manifest.roots);
+}
+
+fn packed_base() -> (KernelSnapshot, FullWitness, MemoryPackedStore) {
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let mut store = MemoryPackedStore::default();
+    let full = stage_full_authority(&logical, &mut store).expect("full base authority");
+    store
+        .seal_staged(64 * 1024, &mut StoreWork::default())
+        .expect("base authority packs");
+    (full.snapshot, full.witness, store)
 }
 
 fn apply_value_edits<K: Clone + Ord, V: Clone>(

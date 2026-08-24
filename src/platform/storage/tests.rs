@@ -3,7 +3,9 @@
 use super::catalog::ObjectCatalog;
 use super::directory::{CatalogState, PackDirectoryStore};
 use super::memory::MemoryPackedStore;
-use super::object::{ImmutableObjectStore, ObjectDomain, ObjectKey, StageOutcome, StoreWork};
+use super::object::{
+    ImmutableObjectStore, ObjectDomain, ObjectKey, ObjectStage, StageOutcome, StoreWork,
+};
 use super::pack::{PackBuilder, PackId, PackMetadata};
 use super::page_store::ObjectPageStore;
 use crate::platform::persistent_map::{MapWork, PersistentMap};
@@ -85,6 +87,60 @@ fn multi_domain_pack_is_deterministic_and_exact() {
             expected
         );
     }
+}
+
+#[test]
+fn object_stage_reads_through_without_mutating_accepted_storage() {
+    let mut base = MemoryPackedStore::default();
+    let (accepted_key, accepted_bytes) = object(ObjectDomain::Owner, b"accepted-owner");
+    let mut base_work = StoreWork::default();
+    base.stage(accepted_key, &accepted_bytes, &mut base_work)
+        .expect("accepted object must stage");
+    base.seal_staged(16 * 1024, &mut base_work)
+        .expect("accepted object must seal");
+
+    let (candidate_key, candidate_bytes) = object(ObjectDomain::Type, b"candidate-type");
+    let staged_objects = {
+        let mut stage = ObjectStage::new(&base);
+        let mut work = StoreWork::default();
+        assert_eq!(
+            stage
+                .stage(accepted_key, &accepted_bytes, &mut work)
+                .expect("accepted bytes must deduplicate"),
+            StageOutcome::Reused
+        );
+        assert_eq!(
+            stage
+                .stage(candidate_key, &candidate_bytes, &mut work)
+                .expect("candidate bytes must stage"),
+            StageOutcome::Inserted
+        );
+        assert_eq!(stage.len(), 1);
+        assert_eq!(stage.stored_bytes(), candidate_bytes.len());
+        assert_eq!(
+            stage
+                .read(accepted_key, accepted_bytes.len(), &mut work)
+                .expect("accepted read"),
+            Some(accepted_bytes.clone())
+        );
+        assert_eq!(
+            stage
+                .read(candidate_key, candidate_bytes.len(), &mut work)
+                .expect("candidate read"),
+            Some(candidate_bytes.clone())
+        );
+        stage.into_objects()
+    };
+    assert_eq!(staged_objects.get(&candidate_key), Some(&candidate_bytes));
+    assert!(
+        base.read(
+            candidate_key,
+            candidate_bytes.len(),
+            &mut StoreWork::default()
+        )
+        .expect("base lookup")
+        .is_none()
+    );
 }
 
 #[test]

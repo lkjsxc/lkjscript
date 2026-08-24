@@ -8,7 +8,9 @@ use super::contract::{
 use super::summary::{CertificateCore, OwnerSummary, ValidationWitnessManifest};
 use super::{OwnerSummaryDigest, ValidationCertificateDigest, ValidationWitnessDigest};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
+use crate::platform::kernel::{PackageId, SemanticRootDigest};
 use crate::platform::packed;
+use crate::platform::semantic_id::RepositoryId;
 
 pub fn encode_owner_summary(
     summary: &OwnerSummary,
@@ -88,6 +90,36 @@ pub fn decode_witness_manifest(
         ));
     }
     Ok(manifest)
+}
+
+pub(crate) fn bind_witness_manifest(
+    repository_id: RepositoryId,
+    package_id: PackageId,
+    semantic_root: SemanticRootDigest,
+    roots: super::WitnessRoots,
+) -> Result<(ValidationWitnessManifest, ValidationWitnessDigest, Vec<u8>), Diagnostic> {
+    let core = CertificateCore {
+        contract_version: WITNESS_CONTRACT_VERSION,
+        graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+        validator_contract: super::contract::validator_contract_digest(),
+        repository_id,
+        package_id,
+        semantic_root,
+        roots,
+    };
+    let certificate = certificate_digest(&core)?;
+    let manifest = ValidationWitnessManifest {
+        contract_version: core.contract_version,
+        graph_contract_version: core.graph_contract_version,
+        validator_contract: core.validator_contract,
+        repository_id: core.repository_id,
+        package_id: core.package_id,
+        semantic_root: core.semantic_root,
+        roots: core.roots,
+        certificate,
+    };
+    let (digest, bytes) = encode_witness_manifest(&manifest)?;
+    Ok((manifest, digest, bytes))
 }
 
 pub(crate) fn certificate_digest(

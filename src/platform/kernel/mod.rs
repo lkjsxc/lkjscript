@@ -25,8 +25,11 @@ mod type_object;
 mod validate;
 
 pub use codec::{
-    decode_dependency, decode_owner, decode_retirement, decode_root, decode_type_object,
-    encode_dependency, encode_owner, encode_retirement, encode_root, encode_type_object,
+    DEPENDENCY_BINDING_BYTES, OWNER_BINDING_BYTES, RETIREMENT_BINDING_BYTES, decode_dependency,
+    decode_dependency_binding, decode_owner, decode_owner_binding, decode_retirement,
+    decode_retirement_binding, decode_root, decode_type_object, encode_dependency,
+    encode_dependency_binding, encode_owner, encode_owner_binding, encode_retirement,
+    encode_retirement_binding, encode_root, encode_type_object,
 };
 pub use digest::{
     BlobObjectDigest, ChangeDigest, DependencyObjectDigest, OwnerObjectDigest, PackageObjectDigest,

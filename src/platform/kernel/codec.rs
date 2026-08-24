@@ -12,11 +12,93 @@ use super::digest::{
     TypeObjectDigest,
 };
 use super::id::{OwnerKey, OwnerKind, PackageId};
-use super::owner::OwnerRecord;
-use super::root::{DependencyRecord, RetirementRecord, SemanticRoot};
+use super::owner::{OwnerBinding, OwnerRecord};
+use super::root::{
+    DependencyBinding, DependencyRecord, RetirementBinding, RetirementRecord, SemanticRoot,
+};
 use super::type_object::TypeObject;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::packed;
+
+pub const OWNER_BINDING_BYTES: usize = 33;
+pub const DEPENDENCY_BINDING_BYTES: usize = 32;
+pub const RETIREMENT_BINDING_BYTES: usize = 32;
+
+pub fn encode_owner_binding(binding: &OwnerBinding) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(OWNER_BINDING_BYTES);
+    bytes.push(binding.kind.tag());
+    bytes.extend_from_slice(&binding.object.bytes());
+    bytes
+}
+
+pub fn decode_owner_binding(
+    bytes: &[u8],
+    expected_owner: OwnerKey,
+) -> Result<OwnerBinding, Diagnostic> {
+    if bytes.len() != OWNER_BINDING_BYTES {
+        return Err(codec_error(
+            "kernel_owner_binding_length",
+            "owner binding has a noncanonical byte length",
+        ));
+    }
+    let kind = OwnerKind::ALL
+        .into_iter()
+        .find(|kind| kind.tag() == bytes[0])
+        .ok_or_else(|| {
+            codec_error(
+                "kernel_owner_binding_kind",
+                "owner binding contains an unknown owner-kind tag",
+            )
+        })?;
+    if !kind.accepts_owner(expected_owner) {
+        return Err(codec_error(
+            "kernel_owner_binding_domain",
+            "owner binding kind disagrees with its map-key identity domain",
+        ));
+    }
+    let object = bytes[1..].try_into().map_err(|_| {
+        codec_error(
+            "kernel_owner_binding_length",
+            "owner binding has a noncanonical digest length",
+        )
+    })?;
+    Ok(OwnerBinding {
+        kind,
+        object: OwnerObjectDigest::from_bytes(object),
+    })
+}
+
+pub fn encode_dependency_binding(binding: &DependencyBinding) -> Vec<u8> {
+    binding.object.bytes().to_vec()
+}
+
+pub fn decode_dependency_binding(bytes: &[u8]) -> Result<DependencyBinding, Diagnostic> {
+    let object = bytes.try_into().map_err(|_| {
+        codec_error(
+            "kernel_dependency_binding_length",
+            "dependency binding has a noncanonical byte length",
+        )
+    })?;
+    Ok(DependencyBinding {
+        object: DependencyObjectDigest::from_bytes(object),
+    })
+}
+
+pub fn encode_retirement_binding(binding: &RetirementBinding) -> Vec<u8> {
+    binding.object.bytes().to_vec()
+}
+
+pub fn decode_retirement_binding(bytes: &[u8]) -> Result<RetirementBinding, Diagnostic> {
+    let object = bytes.try_into().map_err(|_| {
+        codec_error(
+            "kernel_retirement_binding_length",
+            "retirement binding has a noncanonical byte length",
+        )
+    })?;
+    Ok(RetirementBinding {
+        object: RetirementObjectDigest::from_bytes(object),
+    })
+}
 
 pub fn encode_owner(record: &OwnerRecord) -> Result<(OwnerObjectDigest, Vec<u8>), Diagnostic> {
     record.validate_local()?;
