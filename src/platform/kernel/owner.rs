@@ -5,7 +5,7 @@ use super::contract::{
     MAXIMUM_INLINE_TEXT_BYTES, MAXIMUM_RESOURCE_LIMITS,
 };
 use super::digest::{BlobObjectDigest, OwnerObjectDigest, TypeObjectDigest};
-use super::expression::ExpressionRecord;
+use super::expression::{ExpressionOperation, ExpressionRecord, TextValue};
 use super::id::{OwnerHeader, OwnerKey, OwnerKind};
 use super::name::Name;
 use super::reference::{DeclarationReference, OperationReference, PortReference};
@@ -158,6 +158,36 @@ impl OwnerRecord {
             | Self::Requirement(_)
             | Self::Target(_)
             | Self::Documentation(_)
+            | Self::Annotation(_) => Vec::new(),
+        }
+    }
+
+    pub fn blob_roots(&self) -> Vec<(BlobObjectDigest, u64)> {
+        match self {
+            Self::Expression(record) => match &record.operation {
+                ExpressionOperation::Text {
+                    value: TextValue::Blob { digest, bytes },
+                }
+                | ExpressionOperation::StaticText {
+                    value: TextValue::Blob { digest, bytes },
+                } => vec![(*digest, *bytes)],
+                _ => Vec::new(),
+            },
+            Self::Documentation(record) => match &record.content {
+                DocumentContent::Blob { digest, bytes } => vec![(*digest, *bytes)],
+                DocumentContent::Inline(_) => Vec::new(),
+            },
+            Self::Module(_)
+            | Self::Declaration(_)
+            | Self::TypeParameter(_)
+            | Self::Field(_)
+            | Self::Case(_)
+            | Self::Operation(_)
+            | Self::Parameter(_)
+            | Self::Binding(_)
+            | Self::Requirement(_)
+            | Self::Port(_)
+            | Self::Target(_)
             | Self::Annotation(_) => Vec::new(),
         }
     }

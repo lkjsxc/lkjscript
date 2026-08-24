@@ -1431,3 +1431,37 @@ fn generic_call_substitutes_the_exact_type_parameter() {
     snapshot.root.owners = map_root(snapshot.owners.len(), 1);
     validate_full(&snapshot).expect("exact generic substitution must validate");
 }
+
+#[test]
+fn owner_blob_roots_cover_expression_and_documentation_authority() {
+    let text_digest = BlobObjectDigest::from_bytes([41; 32]);
+    let expression = OwnerRecord::Expression(
+        ExpressionRecord::new(
+            ExpressionId::migrate(TEST_SEED, 90),
+            ExpressionOperation::Text {
+                value: TextValue::Blob {
+                    digest: text_digest,
+                    bytes: 17,
+                },
+            },
+        )
+        .expect("blob-backed text expression"),
+    );
+    assert_eq!(expression.blob_roots(), vec![(text_digest, 17)]);
+
+    let documentation_digest = BlobObjectDigest::from_bytes([42; 32]);
+    let documentation_id = DocumentationId::migrate(TEST_SEED, 90);
+    let documentation = OwnerRecord::Documentation(DocumentationRecord {
+        header: OwnerHeader::new(
+            OwnerKey::Documentation(documentation_id),
+            OwnerKind::Documentation,
+        ),
+        owner: OwnerKey::Expression(ExpressionId::migrate(TEST_SEED, 90)),
+        class: DocumentationClass::Nonsemantic,
+        content: DocumentContent::Blob {
+            digest: documentation_digest,
+            bytes: 29,
+        },
+    });
+    assert_eq!(documentation.blob_roots(), vec![(documentation_digest, 29)]);
+}

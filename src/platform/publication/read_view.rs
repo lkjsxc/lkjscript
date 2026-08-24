@@ -13,18 +13,19 @@ use crate::platform::change::{
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    DependencyRecord, EncodedOwnerKey, OwnerKey, OwnerRecord, PackageId, PackageInterfaceRecord,
-    RelationEdge, RelationEndpoint, RelationKind, RetirementRecord, TypeObject, TypeObjectDigest,
-    decode_dependency, decode_dependency_binding, decode_owner, decode_owner_binding,
-    decode_retirement, decode_retirement_binding, decode_type_object, dependency_map_key,
-    owner_map_key, retirement_map_key,
+    BlobObjectDigest, DependencyRecord, EncodedOwnerKey, KernelSnapshot, OwnerKey, OwnerRecord,
+    PackageId, PackageInterfaceRecord, RelationEdge, RelationEndpoint, RelationKind,
+    RetirementRecord, TypeObject, TypeObjectDigest, decode_dependency, decode_dependency_binding,
+    decode_owner, decode_owner_binding, decode_retirement, decode_retirement_binding,
+    decode_type_object, dependency_map_key, owner_map_key, retirement_map_key,
 };
 use crate::platform::package_interface::{
-    PackageInterfaceOwner, PackageInterfaceSelection, build_package_interface,
-    decode_package_interface_binding,
+    PackageInterfaceOwner, PackageInterfaceSelection, PackageInterfaceValidation,
+    build_package_interface, decode_package_interface_binding,
 };
 use crate::platform::package_object::{
     MAXIMUM_PACKAGE_OBJECT_DEPENDENCIES, PackageObject, validate_package_object_closure,
+    validate_package_object_closure_with_interface,
 };
 use crate::platform::persistent_map::{MapError, MapErrorClass, MapRoot, MapWork, PersistentMap};
 use crate::platform::semantic_id::RevisionId;
@@ -43,7 +44,7 @@ use crate::platform::witness::{
     forward_relation_prefix, owner_key_bytes, reverse_relation_package_owner_prefix,
     reverse_relation_prefix, test_dependency_forward_prefix,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 
 pub const MAXIMUM_RELATION_READ_ITEMS: usize =
     crate::platform::witness::MAXIMUM_RELATION_PREFIX_ITEMS;
@@ -62,49 +63,7 @@ pub struct RepositoryReadWork {
 
 impl RepositoryReadWork {
     fn add(&mut self, other: Self) {
-        self.map.pages_read = self.map.pages_read.saturating_add(other.map.pages_read);
-        self.map.pages_decoded = self
-            .map
-            .pages_decoded
-            .saturating_add(other.map.pages_decoded);
-        self.map.pages_encoded = self
-            .map
-            .pages_encoded
-            .saturating_add(other.map.pages_encoded);
-        self.map.pages_written = self
-            .map
-            .pages_written
-            .saturating_add(other.map.pages_written);
-        self.map.pages_reused = self.map.pages_reused.saturating_add(other.map.pages_reused);
-        self.map.bytes_read = self.map.bytes_read.saturating_add(other.map.bytes_read);
-        self.map.bytes_encoded = self
-            .map
-            .bytes_encoded
-            .saturating_add(other.map.bytes_encoded);
-        self.map.bytes_written = self
-            .map
-            .bytes_written
-            .saturating_add(other.map.bytes_written);
-        self.map.key_comparisons = self
-            .map
-            .key_comparisons
-            .saturating_add(other.map.key_comparisons);
-        self.map.entries_visited = self
-            .map
-            .entries_visited
-            .saturating_add(other.map.entries_visited);
-        self.map.differences_emitted = self
-            .map
-            .differences_emitted
-            .saturating_add(other.map.differences_emitted);
-        self.map.subtrees_skipped = self
-            .map
-            .subtrees_skipped
-            .saturating_add(other.map.subtrees_skipped);
-        self.map.entries_skipped = self
-            .map
-            .entries_skipped
-            .saturating_add(other.map.entries_skipped);
+        self.add_map(other.map);
         self.store.add(other.store);
         self.canonical_records_decoded = self
             .canonical_records_decoded
@@ -113,6 +72,37 @@ impl RepositoryReadWork {
             .witness_records_decoded
             .saturating_add(other.witness_records_decoded);
         self.items_returned = self.items_returned.saturating_add(other.items_returned);
+    }
+
+    fn add_map(&mut self, other: MapWork) {
+        self.map.pages_read = self.map.pages_read.saturating_add(other.pages_read);
+        self.map.pages_decoded = self.map.pages_decoded.saturating_add(other.pages_decoded);
+        self.map.pages_encoded = self.map.pages_encoded.saturating_add(other.pages_encoded);
+        self.map.pages_written = self.map.pages_written.saturating_add(other.pages_written);
+        self.map.pages_reused = self.map.pages_reused.saturating_add(other.pages_reused);
+        self.map.bytes_read = self.map.bytes_read.saturating_add(other.bytes_read);
+        self.map.bytes_encoded = self.map.bytes_encoded.saturating_add(other.bytes_encoded);
+        self.map.bytes_written = self.map.bytes_written.saturating_add(other.bytes_written);
+        self.map.key_comparisons = self
+            .map
+            .key_comparisons
+            .saturating_add(other.key_comparisons);
+        self.map.entries_visited = self
+            .map
+            .entries_visited
+            .saturating_add(other.entries_visited);
+        self.map.differences_emitted = self
+            .map
+            .differences_emitted
+            .saturating_add(other.differences_emitted);
+        self.map.subtrees_skipped = self
+            .map
+            .subtrees_skipped
+            .saturating_add(other.subtrees_skipped);
+        self.map.entries_skipped = self
+            .map
+            .entries_skipped
+            .saturating_add(other.entries_skipped);
     }
 }
 
@@ -403,6 +393,257 @@ impl RepositoryView {
         Ok(self.read(Some(value.record), work))
     }
 
+    /// Reconstructs the complete logical Graph 5 view for independent full validation and
+    /// witness comparison. This is an explicitly broad oracle operation: ordinary reads and
+    /// changes continue to use exact point and prefix lookups through this revision-pinned view.
+    pub fn reconstruct_full_oracle(&self) -> Result<RevisionRead<KernelSnapshot>, Diagnostic> {
+        let declared_records = self
+            .current
+            .semantic_root
+            .owners
+            .entries()
+            .checked_add(self.current.semantic_root.dependencies.entries())
+            .and_then(|count| count.checked_add(self.current.semantic_root.retirements.entries()))
+            .ok_or_else(|| {
+                read_error(
+                    DiagnosticClass::Resource,
+                    "publication_full_oracle_record_count",
+                    "full-oracle canonical record count overflowed",
+                )
+            })?;
+        if declared_records > crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK as u64 {
+            return Err(full_oracle_work_error());
+        }
+        let mut consumed = usize::try_from(declared_records).map_err(|_| {
+            read_error(
+                DiagnosticClass::Resource,
+                "publication_full_oracle_record_count",
+                "full-oracle canonical record count does not fit this platform",
+            )
+        })?;
+        let mut work = RepositoryReadWork::default();
+
+        let mut owners = BTreeMap::new();
+        work.add(self.for_each_owner_record(|owner, record| {
+            if owners.insert(owner, record.clone()).is_some() {
+                return Err(read_error(
+                    DiagnosticClass::Corrupt,
+                    "publication_full_oracle_owner_duplicate",
+                    "owner map reconstructed one stable identity more than once",
+                ));
+            }
+            Ok(())
+        })?);
+        if owners.len() as u64 != self.current.semantic_root.owners.entries() {
+            return Err(read_error(
+                DiagnosticClass::Corrupt,
+                "publication_full_oracle_owner_count",
+                "reconstructed owner count disagrees with the accepted semantic root",
+            ));
+        }
+
+        let dependency_read = self.package_dependencies()?;
+        work.add(dependency_read.work);
+        let mut dependencies = BTreeMap::new();
+        for dependency in dependency_read.value {
+            let package = dependency.package;
+            if dependencies.insert(package, dependency).is_some() {
+                return Err(read_error(
+                    DiagnosticClass::Corrupt,
+                    "publication_full_oracle_dependency_duplicate",
+                    "dependency map reconstructed one package identity more than once",
+                ));
+            }
+        }
+        if dependencies.len() as u64 != self.current.semantic_root.dependencies.entries() {
+            return Err(read_error(
+                DiagnosticClass::Corrupt,
+                "publication_full_oracle_dependency_count",
+                "reconstructed dependency count disagrees with the accepted semantic root",
+            ));
+        }
+
+        let retirement_read = self.all_retirements()?;
+        work.add(retirement_read.work);
+        let retirements = retirement_read.value;
+        if retirements.len() as u64 != self.current.semantic_root.retirements.entries() {
+            return Err(read_error(
+                DiagnosticClass::Corrupt,
+                "publication_full_oracle_retirement_count",
+                "reconstructed retirement count disagrees with the accepted semantic root",
+            ));
+        }
+
+        let mut types = BTreeMap::new();
+        let mut pending_types = owners
+            .values()
+            .flat_map(OwnerRecord::type_roots)
+            .collect::<BTreeSet<_>>();
+        while let Some(digest) = pending_types.pop_first() {
+            if types.contains_key(&digest) {
+                continue;
+            }
+            consume_full_oracle_work(&mut consumed, 1)?;
+            let read = self.type_object(digest)?;
+            work.add(read.work);
+            let object = read.value.ok_or_else(|| {
+                read_error(
+                    DiagnosticClass::Corrupt,
+                    "publication_full_oracle_type_missing",
+                    format!("accepted owner authority references missing type object {digest}"),
+                )
+            })?;
+            pending_types.extend(object.child_types());
+            types.insert(digest, object);
+        }
+
+        let mut declared_blobs = BTreeMap::<BlobObjectDigest, u64>::new();
+        for (digest, bytes) in owners.values().flat_map(OwnerRecord::blob_roots) {
+            if let Some(previous) = declared_blobs.insert(digest, bytes)
+                && previous != bytes
+            {
+                return Err(read_error(
+                    DiagnosticClass::Corrupt,
+                    "publication_full_oracle_blob_binding",
+                    format!(
+                        "blob {digest} is referenced with conflicting lengths {previous} and {bytes}"
+                    ),
+                ));
+            }
+        }
+        let mut blobs = BTreeMap::new();
+        for (digest, expected_bytes) in declared_blobs {
+            consume_full_oracle_work(&mut consumed, 1)?;
+            let bytes = self.read_required_object(
+                ObjectDomain::Blob,
+                digest.bytes(),
+                "accepted owner authority references a missing blob object",
+                &mut work,
+            )?;
+            let actual_bytes = u64::try_from(bytes.len()).map_err(|_| {
+                read_error(
+                    DiagnosticClass::Resource,
+                    "publication_full_oracle_blob_length",
+                    "blob byte length does not fit the canonical length domain",
+                )
+            })?;
+            if actual_bytes != expected_bytes {
+                return Err(read_error(
+                    DiagnosticClass::Corrupt,
+                    "publication_full_oracle_blob_length",
+                    format!(
+                        "blob {digest} is bound as {expected_bytes} bytes but contains {actual_bytes}"
+                    ),
+                ));
+            }
+            blobs.insert(digest, actual_bytes);
+        }
+
+        let mut dependency_interfaces = BTreeMap::new();
+        let mut dependency_types = BTreeMap::new();
+        for dependency in dependencies.values() {
+            let mut closure_work = StoreWork::default();
+            let validated = validate_package_object_closure_with_interface(
+                &self.store,
+                dependency.package_object,
+                Some(dependency),
+                &mut closure_work,
+            )?;
+            work.store.add(closure_work);
+            let PackageInterfaceValidation {
+                owners: interface_owners,
+                type_objects: interface_types,
+                reachable_objects: _,
+                map_work,
+            } = validated.root_interface;
+            work.add_map(map_work);
+            let interface_items = interface_owners
+                .len()
+                .checked_add(interface_types.len())
+                .ok_or_else(full_oracle_work_error)?;
+            consume_full_oracle_work(&mut consumed, interface_items)?;
+            work.canonical_records_decoded = work
+                .canonical_records_decoded
+                .saturating_add(interface_owners.len() as u64)
+                .saturating_add(interface_types.len() as u64);
+            let records = interface_owners
+                .into_iter()
+                .map(|(owner, value)| (owner, value.record))
+                .collect::<BTreeMap<_, _>>();
+            match dependency_interfaces.entry(dependency.package_object) {
+                Entry::Vacant(entry) => {
+                    entry.insert(records);
+                }
+                Entry::Occupied(entry) if entry.get() != &records => {
+                    return Err(read_error(
+                        DiagnosticClass::Corrupt,
+                        "publication_full_oracle_interface_conflict",
+                        "one exact package object reconstructed two different interfaces",
+                    ));
+                }
+                Entry::Occupied(_) => {}
+            }
+            for (digest, object) in interface_types {
+                match dependency_types.entry(digest) {
+                    Entry::Vacant(entry) => {
+                        entry.insert(object);
+                    }
+                    Entry::Occupied(entry) if entry.get() != &object => {
+                        return Err(read_error(
+                            DiagnosticClass::Corrupt,
+                            "publication_full_oracle_dependency_type_conflict",
+                            "one dependency type digest reconstructed two different objects",
+                        ));
+                    }
+                    Entry::Occupied(_) => {}
+                }
+            }
+        }
+
+        let returned_items = [
+            owners.len(),
+            types.len(),
+            blobs.len(),
+            dependencies.len(),
+            retirements.len(),
+            dependency_types.len(),
+        ]
+        .into_iter()
+        .try_fold(0_usize, usize::checked_add)
+        .and_then(|count| {
+            dependency_interfaces
+                .values()
+                .try_fold(count, |count, records| count.checked_add(records.len()))
+        })
+        .ok_or_else(|| {
+            read_error(
+                DiagnosticClass::Resource,
+                "publication_full_oracle_result_count",
+                "full-oracle result item count overflowed",
+            )
+        })?;
+        work.items_returned = u64::try_from(returned_items).map_err(|_| {
+            read_error(
+                DiagnosticClass::Resource,
+                "publication_full_oracle_result_count",
+                "full-oracle result item count does not fit its observation domain",
+            )
+        })?;
+        Ok(self.read(
+            KernelSnapshot {
+                root: self.current.semantic_root.clone(),
+                owners,
+                types,
+                dependency_interfaces,
+                dependency_types,
+                blobs,
+                dependencies,
+                retirements,
+            },
+            work,
+        ))
+    }
+
     /// Builds one exact package descriptor from the pinned accepted revision. This explicit
     /// export may enumerate direct dependencies, but it does not reconstruct owner authority.
     pub fn export_package_object(&self) -> Result<ExportedPackageObject, Diagnostic> {
@@ -652,6 +893,47 @@ impl RepositoryView {
         work.canonical_records_decoded = dependencies.len() as u64;
         work.items_returned = dependencies.len() as u64;
         Ok(self.read(dependencies, work))
+    }
+
+    fn all_retirements(
+        &self,
+    ) -> Result<RevisionRead<BTreeMap<OwnerKey, RetirementRecord>>, Diagnostic> {
+        let reader = ObjectPageReader::new(&self.store);
+        let mut map_work = MapWork::default();
+        let mut bindings = Vec::new();
+        PersistentMap::from_root(self.current.semantic_root.retirements)
+            .for_each(&reader, &mut map_work, |key, value| {
+                bindings.push((key.to_vec(), value.to_vec()));
+                Ok(())
+            })
+            .map_err(map_diagnostic)?;
+        let mut work = RepositoryReadWork {
+            map: map_work,
+            store: reader.work(),
+            ..RepositoryReadWork::default()
+        };
+        let mut retirements = BTreeMap::new();
+        for (key_bytes, binding_bytes) in bindings {
+            let owner = EncodedOwnerKey::decode(&key_bytes)?;
+            let binding = decode_retirement_binding(&binding_bytes)?;
+            let bytes = self.read_required_object(
+                ObjectDomain::Retirement,
+                binding.object.bytes(),
+                "full-oracle reconstruction found a missing retirement object",
+                &mut work,
+            )?;
+            let record = decode_retirement(&bytes, owner, binding.object)?;
+            if retirements.insert(owner, record).is_some() {
+                return Err(read_error(
+                    DiagnosticClass::Corrupt,
+                    "publication_full_oracle_retirement_duplicate",
+                    "retirement map reconstructed one owner identity more than once",
+                ));
+            }
+        }
+        work.canonical_records_decoded = retirements.len() as u64;
+        work.items_returned = retirements.len() as u64;
+        Ok(self.read(retirements, work))
     }
 
     pub fn retirement(
@@ -1109,6 +1391,27 @@ fn map_diagnostic(error: MapError) -> Diagnostic {
         MapErrorClass::Store => DiagnosticClass::Infrastructure,
     };
     read_error(class, error.code, error.message)
+}
+
+fn consume_full_oracle_work(consumed: &mut usize, additional: usize) -> Result<(), Diagnostic> {
+    *consumed = consumed
+        .checked_add(additional)
+        .ok_or_else(full_oracle_work_error)?;
+    if *consumed > crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK {
+        return Err(full_oracle_work_error());
+    }
+    Ok(())
+}
+
+fn full_oracle_work_error() -> Diagnostic {
+    read_error(
+        DiagnosticClass::Resource,
+        "publication_full_oracle_work",
+        format!(
+            "full-oracle reconstruction exceeds its explicit {}-item work budget",
+            crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK
+        ),
+    )
 }
 
 fn store_diagnostic(error: StoreError) -> Diagnostic {

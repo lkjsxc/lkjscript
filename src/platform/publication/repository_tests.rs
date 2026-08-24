@@ -511,12 +511,10 @@ fn staged_package_interface_validates_an_exact_cross_package_pure_call() {
         ])
     );
 
-    let target = GraphRepository::create(
-        &temporary.path().join("target"),
-        &empty_snapshot(b"cross-package-target"),
-        None,
-    )
-    .expect("target repository");
+    let target_path = temporary.path().join("target");
+    let target =
+        GraphRepository::create(&target_path, &empty_snapshot(b"cross-package-target"), None)
+            .expect("target repository");
     target
         .repository
         .stage_package_object(exported.digest, &exported.packs)
@@ -610,6 +608,39 @@ fn staged_package_interface_validates_an_exact_cross_package_pure_call() {
                 if function.package == exported.object.package
                     && function.declaration == source_function)
     ));
+
+    let reopened = GraphRepository::open(&target_path).expect("reopen cross-package target");
+    let accepted = reopened
+        .current()
+        .expect("accepted cross-package publication");
+    let oracle = reopened
+        .view_current()
+        .expect("revision-pinned cross-package view")
+        .reconstruct_full_oracle()
+        .expect("reconstruct exact full-oracle dependency interfaces");
+    assert_eq!(oracle.revision, current.head.revision);
+    assert_eq!(oracle.value.dependencies.len(), 1);
+    assert_eq!(oracle.value.dependency_interfaces.len(), 1);
+    assert_eq!(oracle.value.dependency_types.len(), 1);
+    assert!(matches!(
+        oracle.value.dependency_interfaces[&exported.digest]
+            .get(&OwnerKey::Declaration(source_function)),
+        Some(crate::platform::kernel::PackageInterfaceRecord::Declaration(declaration))
+            if matches!(
+                declaration.payload,
+                crate::platform::kernel::PackageInterfaceDeclarationPayload::Function(_)
+            )
+    ));
+    crate::platform::kernel::validate_full(&oracle.value)
+        .expect("reconstructed dependency interfaces must pass the independent full validator");
+    let rebuilt = crate::platform::witness::rebuild_full_witness(&oracle.value)
+        .expect("reconstruct accepted witness from exact package interfaces");
+    assert_eq!(
+        rebuilt.manifest_digest,
+        accepted.accepted.validation_witness
+    );
+    assert_eq!(rebuilt.manifest, accepted.witness);
+    assert!(oracle.work.canonical_records_decoded >= 6);
 }
 
 #[test]
