@@ -1,6 +1,7 @@
 //! Typed Graph 5 declaration, type-object, and expression authoring builders.
 
 mod declarations;
+mod mutation;
 
 pub use declarations::{
     AuthoredAnnotationValue, AuthoredCase, AuthoredField, AuthoredOperation, AuthoredPort,
@@ -13,9 +14,11 @@ pub(super) use declarations::{
     lower_component, lower_constant, lower_documentation, lower_external, lower_interface,
     lower_record, lower_target, lower_variant,
 };
+pub(super) use mutation::{collect_mutation_symbols, lower_mutation};
 
 use super::{
-    AuthoredLowerer, DeclarationSelector, ModuleSelector, SymbolKind, define_symbol, request_error,
+    AuthoredLowerer, DeclarationSelector, ModuleSelector, OwnerSelector, ParameterParentSelector,
+    SymbolKind, define_symbol, request_error,
 };
 use crate::platform::change::{CanonicalBaseRead, WitnessBaseRead};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};

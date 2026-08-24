@@ -50,6 +50,7 @@ pub enum RelationKind {
     DocumentationOwnership,
     AnnotationOwnership,
     PackageDependency,
+    VariantExhaustiveness,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -66,7 +67,7 @@ pub enum PropagationClass {
 }
 
 impl RelationKind {
-    pub const ALL: [Self; 25] = [
+    pub const ALL: [Self; 26] = [
         Self::DeclarationModule,
         Self::MemberDeclaration,
         Self::ParameterOperation,
@@ -92,6 +93,7 @@ impl RelationKind {
         Self::DocumentationOwnership,
         Self::AnnotationOwnership,
         Self::PackageDependency,
+        Self::VariantExhaustiveness,
     ];
 
     pub const fn tag(self) -> u8 {
@@ -111,6 +113,7 @@ impl RelationKind {
             Self::NominalFieldAccess => 13,
             Self::VariantConstruction => 14,
             Self::VariantMatch => 15,
+            Self::VariantExhaustiveness => 26,
             Self::CapabilityInterface => 16,
             Self::CapabilityOperation => 17,
             Self::ComponentRequirement => 18,
@@ -141,7 +144,8 @@ impl RelationKind {
             | Self::NominalFieldConstruction
             | Self::NominalFieldAccess
             | Self::VariantConstruction
-            | Self::VariantMatch => PropagationClass::Value,
+            | Self::VariantMatch
+            | Self::VariantExhaustiveness => PropagationClass::Value,
             Self::FunctionCall | Self::FunctionValue => PropagationClass::Behavior,
             Self::CapabilityInterface
             | Self::CapabilityOperation
@@ -189,6 +193,15 @@ pub fn extract_relations(
             record,
             package,
             &mut |digest| Ok(types.get(&digest).cloned()),
+            &mut |target_package, case| {
+                if target_package != package {
+                    return Ok(None);
+                }
+                Ok(match owners.get(&OwnerKey::Case(case)) {
+                    Some(OwnerRecord::Case(record)) => Some(record.declaration),
+                    _ => None,
+                })
+            },
             &mut edges,
             &mut work,
         )?;
@@ -206,14 +219,19 @@ pub fn extract_relations(
 
 /// Extracts the exact relation set contributed by one canonical owner record. Incremental witness
 /// maintenance and the full oracle call this same switch; only traversal scheduling differs.
-pub fn extract_owner_relations<F>(
+pub fn extract_owner_relations<F, C>(
     package: PackageId,
     owner: OwnerKey,
     record: &OwnerRecord,
     mut type_object: F,
+    mut case_parent: C,
 ) -> Result<Vec<RelationEdge>, Diagnostic>
 where
     F: FnMut(TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic>,
+    C: FnMut(
+        PackageId,
+        crate::platform::semantic_id::CaseId,
+    ) -> Result<Option<crate::platform::semantic_id::DeclarationId>, Diagnostic>,
 {
     if record.owner() != owner {
         return Err(relation_error(
@@ -228,22 +246,28 @@ where
         record,
         package,
         &mut type_object,
+        &mut case_parent,
         &mut edges,
         &mut work,
     )?;
     Ok(edges.into_iter().collect())
 }
 
-fn extract_owner<F>(
+fn extract_owner<F, C>(
     source: ExactOwnerKey,
     record: &OwnerRecord,
     package: PackageId,
     type_object: &mut F,
+    case_parent: &mut C,
     edges: &mut BTreeSet<RelationEdge>,
     work: &mut usize,
 ) -> Result<(), Diagnostic>
 where
     F: FnMut(TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic>,
+    C: FnMut(
+        PackageId,
+        crate::platform::semantic_id::CaseId,
+    ) -> Result<Option<crate::platform::semantic_id::DeclarationId>, Diagnostic>,
 {
     match record {
         OwnerRecord::Module(_) => {}
@@ -404,7 +428,7 @@ where
                     source.owner,
                 );
             }
-            extract_expression(source, &expression.operation, package, edges);
+            extract_expression(source, &expression.operation, package, case_parent, edges)?;
         }
         OwnerRecord::Requirement(requirement) => {
             exact_edge(
@@ -480,12 +504,19 @@ where
     Ok(())
 }
 
-fn extract_expression(
+fn extract_expression<C>(
     source: ExactOwnerKey,
     operation: &ExpressionOperation,
     package: PackageId,
+    case_parent: &mut C,
     edges: &mut BTreeSet<RelationEdge>,
-) {
+) -> Result<(), Diagnostic>
+where
+    C: FnMut(
+        PackageId,
+        crate::platform::semantic_id::CaseId,
+    ) -> Result<Option<crate::platform::semantic_id::DeclarationId>, Diagnostic>,
+{
     match operation {
         ExpressionOperation::Local { value } => {
             let target = match value {
@@ -575,6 +606,15 @@ fn extract_expression(
                     arm.case.package,
                     OwnerKey::Case(arm.case.case),
                 );
+                if let Some(declaration) = case_parent(arm.case.package, arm.case.case)? {
+                    exact_edge(
+                        edges,
+                        source,
+                        RelationKind::VariantExhaustiveness,
+                        arm.case.package,
+                        OwnerKey::Declaration(declaration),
+                    );
+                }
             }
         }
         ExpressionOperation::CapabilityCall {
@@ -620,6 +660,7 @@ fn extract_expression(
         | ExpressionOperation::List { .. }
         | ExpressionOperation::Map { .. } => {}
     }
+    Ok(())
 }
 
 fn extract_type_relations<F>(

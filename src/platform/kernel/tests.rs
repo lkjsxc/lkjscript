@@ -592,7 +592,7 @@ fn normalized_prototype_passes_full_oracle() {
     assert_eq!(report.owners_checked, 43);
     assert_eq!(report.type_objects_checked, 2);
     assert_eq!(report.expression_records_checked, 20);
-    assert_eq!(report.relation_edges, 61);
+    assert_eq!(report.relation_edges, 62);
     assert!(report.work_consumed < 1_000);
 }
 
@@ -695,6 +695,55 @@ fn normalization_relation_footprints_ignore_names_and_track_only_current_ownersh
     assert_eq!(added.len(), 1);
     assert_eq!(removed[0].kind, RelationKind::DeclarationModule);
     assert_eq!(added[0].kind, RelationKind::DeclarationModule);
+}
+
+#[test]
+fn match_relations_bind_cases_for_queries_and_variant_shape_for_exhaustiveness() {
+    let (snapshot, ids) = prototype_snapshot();
+    let match_expression = snapshot
+        .owners
+        .iter()
+        .find_map(|(owner, record)| match record {
+            OwnerRecord::Expression(expression)
+                if matches!(expression.operation, ExpressionOperation::Match { .. }) =>
+            {
+                Some(*owner)
+            }
+            _ => None,
+        })
+        .expect("fixture match expression");
+    let OwnerRecord::Case(case) = &snapshot.owners[&OwnerKey::Case(ids.case)] else {
+        panic!("fixture case must remain a case record")
+    };
+    let source = RelationEndpoint::Owner(ExactOwnerKey {
+        package: snapshot.root.package_id,
+        owner: match_expression,
+    });
+    let relations = extract_relations(
+        snapshot.root.package_id,
+        &snapshot.owners,
+        &snapshot.types,
+        &snapshot.dependencies,
+    )
+    .expect("relations must extract");
+    assert!(relations.iter().any(|edge| {
+        edge.source == source
+            && edge.kind == RelationKind::VariantMatch
+            && edge.target
+                == RelationEndpoint::Owner(ExactOwnerKey {
+                    package: snapshot.root.package_id,
+                    owner: OwnerKey::Case(ids.case),
+                })
+    }));
+    assert!(relations.iter().any(|edge| {
+        edge.source == source
+            && edge.kind == RelationKind::VariantExhaustiveness
+            && edge.target
+                == RelationEndpoint::Owner(ExactOwnerKey {
+                    package: snapshot.root.package_id,
+                    owner: OwnerKey::Declaration(case.declaration),
+                })
+    }));
 }
 
 #[test]

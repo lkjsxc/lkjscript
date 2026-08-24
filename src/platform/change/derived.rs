@@ -74,6 +74,15 @@ pub fn derive_local_delta<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?S
                 *owner,
                 &record,
                 |digest| overlay.base_type_object(digest),
+                |package, case| {
+                    if package != overlay.package_id() {
+                        return Ok(None);
+                    }
+                    Ok(match overlay.base_owner(OwnerKey::Case(case))? {
+                        Some(OwnerRecord::Case(record)) => Some(record.declaration),
+                        _ => None,
+                    })
+                },
             )?);
         }
         if let Some((_, record)) = &edit.after {
@@ -84,6 +93,15 @@ pub fn derive_local_delta<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?S
                 *owner,
                 record,
                 |digest| overlay.type_object(digest),
+                |package, case| {
+                    if package != overlay.package_id() {
+                        return Ok(None);
+                    }
+                    Ok(match overlay.owner(OwnerKey::Case(case))? {
+                        Some(OwnerRecord::Case(record)) => Some(record.declaration),
+                        _ => None,
+                    })
+                },
             )?);
         }
     }

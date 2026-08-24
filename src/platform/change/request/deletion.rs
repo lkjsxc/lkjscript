@@ -5,8 +5,9 @@ use crate::platform::change::{CanonicalBaseRead, WitnessBaseRead};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
 use crate::platform::kernel::{
-    DeclarationPayload, ExactOwnerKey, OwnerKey, OwnerRecord, ParameterParent, RelationEdge,
-    RelationEndpoint, RelationKind, RetirementRecord, encode_owner, extract_owner_relations,
+    DeclarationPayload, ExactOwnerKey, ExpressionOperation, OwnerKey, OwnerRecord, ParameterParent,
+    RelationEdge, RelationEndpoint, RelationKind, RetirementRecord, encode_owner,
+    extract_owner_relations,
 };
 use crate::platform::witness::{
     MAXIMUM_RELATION_PREFIX_ITEMS, OwnershipParent, aggregation_children,
@@ -460,9 +461,36 @@ fn extract_candidate_relations<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead
         ));
     };
     let record = working.record.clone();
-    let relations = extract_owner_relations(lowerer.base.package_id(), owner, &record, |digest| {
-        lowerer.candidate_type_object(digest)
-    })?;
+    let package = lowerer.base.package_id();
+    let mut case_parents = BTreeMap::new();
+    if let OwnerRecord::Expression(expression) = &record
+        && let ExpressionOperation::Match { arms, .. } = &expression.operation
+    {
+        for arm in arms {
+            if arm.case.package != package || case_parents.contains_key(&arm.case.case) {
+                continue;
+            }
+            let case_owner = OwnerKey::Case(arm.case.case);
+            lowerer.require_owner(case_owner)?;
+            let parent = match &lowerer.owners[&case_owner].record {
+                OwnerRecord::Case(record) => Some(record.declaration),
+                _ => None,
+            };
+            case_parents.insert(arm.case.case, parent);
+        }
+    }
+    let relations = extract_owner_relations(
+        package,
+        owner,
+        &record,
+        |digest| lowerer.candidate_type_object(digest),
+        |target_package, case| {
+            if target_package != package {
+                return Ok(None);
+            }
+            Ok(case_parents.get(&case).copied().flatten())
+        },
+    )?;
     lowerer.check_budget("authored deletion final relation extraction")?;
     Ok(relations)
 }

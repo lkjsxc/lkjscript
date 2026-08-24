@@ -163,6 +163,81 @@ pub enum AuthoredChange {
         key: Name,
         value: AuthoredAnnotationValue,
     },
+    AddField {
+        record: DeclarationSelector,
+        field: AuthoredField,
+    },
+    AddCase {
+        variant: DeclarationSelector,
+        case: AuthoredCase,
+    },
+    AddOperation {
+        interface: DeclarationSelector,
+        operation: AuthoredOperation,
+    },
+    AddTypeParameter {
+        declaration: DeclarationSelector,
+        parameter: AuthoredTypeParameter,
+    },
+    AddParameter {
+        parent: ParameterParentSelector,
+        parameter: AuthoredParameter,
+    },
+    AddRequirement {
+        component: DeclarationSelector,
+        requirement: AuthoredRequirement,
+    },
+    AddPort {
+        component: DeclarationSelector,
+        port: AuthoredPort,
+    },
+    SetDeclarationVisibility {
+        declaration: DeclarationSelector,
+        visibility: crate::platform::kernel::DeclarationVisibility,
+    },
+    SetFunctionContract {
+        function: DeclarationSelector,
+        result: AuthoredType,
+        effect: AuthoredFunctionEffect,
+    },
+    SetExternalContract {
+        external: DeclarationSelector,
+        result: AuthoredType,
+        implementation: Name,
+    },
+    SetFieldType {
+        field: OwnerSelector,
+        ty: AuthoredType,
+    },
+    SetCasePayload {
+        case: OwnerSelector,
+        #[serde(default)]
+        payload: Option<AuthoredType>,
+    },
+    SetParameterType {
+        parameter: OwnerSelector,
+        ty: AuthoredType,
+    },
+    SetOperationContract {
+        operation: OwnerSelector,
+        result: AuthoredType,
+        idempotency: crate::platform::kernel::Idempotency,
+        external_visibility: crate::platform::kernel::ExternalVisibility,
+    },
+    SetRequirementContract {
+        requirement: OwnerSelector,
+        interface: AuthoredDeclarationReference,
+        #[serde(default)]
+        operations: Vec<AuthoredOperationReference>,
+        #[serde(default)]
+        limits: Vec<AuthoredResourceLimit>,
+    },
+    SetTarget {
+        target: OwnerSelector,
+        component: AuthoredDeclarationReference,
+        port: AuthoredPortReference,
+        runner: crate::platform::package::RunnerKind,
+    },
     DeleteOwner {
         owner: OwnerSelector,
         cascade: bool,
@@ -211,6 +286,13 @@ pub enum DeclarationSelector {
     Symbol {
         symbol: String,
     },
+}
+
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ParameterParentSelector {
+    Declaration { declaration: DeclarationSelector },
+    Operation { operation: OwnerSelector },
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -519,6 +601,26 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
     }
     for change in &request.changes {
         match change {
+            AuthoredChange::AddField { .. }
+            | AuthoredChange::AddCase { .. }
+            | AuthoredChange::AddOperation { .. }
+            | AuthoredChange::AddTypeParameter { .. }
+            | AuthoredChange::AddRequirement { .. }
+            | AuthoredChange::AddPort { .. } => {
+                creation::lower_mutation(&mut lowerer, change)?;
+            }
+            _ => {}
+        }
+        lowerer.check_budget("member addition lowering")?;
+    }
+    for change in &request.changes {
+        if matches!(change, AuthoredChange::AddParameter { .. }) {
+            creation::lower_mutation(&mut lowerer, change)?;
+        }
+        lowerer.check_budget("parameter addition lowering")?;
+    }
+    for change in &request.changes {
+        match change {
             AuthoredChange::CreateModule { .. }
             | AuthoredChange::CreateRecord { .. }
             | AuthoredChange::CreateVariant { .. }
@@ -530,7 +632,25 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
             | AuthoredChange::CreateTest { .. }
             | AuthoredChange::CreateTarget { .. }
             | AuthoredChange::CreateDocumentation { .. }
-            | AuthoredChange::CreateAnnotation { .. } => {}
+            | AuthoredChange::CreateAnnotation { .. }
+            | AuthoredChange::AddField { .. }
+            | AuthoredChange::AddCase { .. }
+            | AuthoredChange::AddOperation { .. }
+            | AuthoredChange::AddTypeParameter { .. }
+            | AuthoredChange::AddParameter { .. }
+            | AuthoredChange::AddRequirement { .. }
+            | AuthoredChange::AddPort { .. } => {}
+            AuthoredChange::SetDeclarationVisibility { .. }
+            | AuthoredChange::SetFunctionContract { .. }
+            | AuthoredChange::SetExternalContract { .. }
+            | AuthoredChange::SetFieldType { .. }
+            | AuthoredChange::SetCasePayload { .. }
+            | AuthoredChange::SetParameterType { .. }
+            | AuthoredChange::SetOperationContract { .. }
+            | AuthoredChange::SetRequirementContract { .. }
+            | AuthoredChange::SetTarget { .. } => {
+                creation::lower_mutation(&mut lowerer, change)?;
+            }
             AuthoredChange::DeleteOwner { .. } => {}
             AuthoredChange::RenameOwner { owner, name } => {
                 let owner = lowerer.resolve_owner(owner)?;
@@ -650,6 +770,24 @@ fn collect_symbol_definitions(
             }
             AuthoredChange::CreateAnnotation { symbol, .. } => {
                 creation::collect_annotation_symbols(symbol, &mut definitions)?
+            }
+            AuthoredChange::AddField { .. }
+            | AuthoredChange::AddCase { .. }
+            | AuthoredChange::AddOperation { .. }
+            | AuthoredChange::AddTypeParameter { .. }
+            | AuthoredChange::AddParameter { .. }
+            | AuthoredChange::AddRequirement { .. }
+            | AuthoredChange::AddPort { .. }
+            | AuthoredChange::SetDeclarationVisibility { .. }
+            | AuthoredChange::SetFunctionContract { .. }
+            | AuthoredChange::SetExternalContract { .. }
+            | AuthoredChange::SetFieldType { .. }
+            | AuthoredChange::SetCasePayload { .. }
+            | AuthoredChange::SetParameterType { .. }
+            | AuthoredChange::SetOperationContract { .. }
+            | AuthoredChange::SetRequirementContract { .. }
+            | AuthoredChange::SetTarget { .. } => {
+                creation::collect_mutation_symbols(change, &mut definitions)?
             }
             AuthoredChange::DeleteOwner { .. }
             | AuthoredChange::RenameOwner { .. }

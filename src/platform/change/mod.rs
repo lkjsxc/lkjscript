@@ -53,7 +53,8 @@ pub use request::{
     AuthoredRecordExpressionField, AuthoredRequirement, AuthoredRequirementReference,
     AuthoredResourceLimit, AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameter,
     AuthoredTypeParameterReference, DeclarationSelector, MAXIMUM_AUTHORED_CHANGE_BYTES,
-    MAXIMUM_AUTHORED_CHANGES, ModuleSelector, OwnerSelector, lower_authored_changes,
+    MAXIMUM_AUTHORED_CHANGES, ModuleSelector, OwnerSelector, ParameterParentSelector,
+    lower_authored_changes,
 };
 pub use summary_delta::{
     OwnerSummaryEdit, SummaryDelta, derive_summary_delta, derive_summary_delta_for,
