@@ -394,8 +394,9 @@ impl FullValidator<'_> {
                 }
                 if let FunctionEffect::Task { requirements } = &function.effect {
                     for requirement in requirements {
-                        self.require_local_kind(
-                            OwnerKey::Requirement(*requirement),
+                        self.require_exact_kind(
+                            requirement.package,
+                            OwnerKey::Requirement(requirement.requirement),
                             &[OwnerKind::Requirement],
                             "function requirement",
                         );
@@ -1056,12 +1057,7 @@ impl FullValidator<'_> {
                     &[OwnerKind::Operation],
                     "capability operation",
                 );
-                if requirement.package != self.snapshot.root.package_id {
-                    self.error(
-                        "kernel_full_capability_requirement_package",
-                        "capability calls must use a requirement owned by the current package",
-                    );
-                } else if !self.requirement_allows(requirement.requirement, *operation) {
+                if !self.requirement_allows(*requirement, *operation) {
                     self.error(
                         "kernel_full_capability_operation",
                         "capability operation is outside the requirement's exact interface or allowed-operation set",
@@ -1380,20 +1376,35 @@ impl FullValidator<'_> {
 
     fn requirement_allows(
         &self,
-        requirement: crate::platform::semantic_id::RequirementId,
+        requirement: crate::platform::kernel::RequirementReference,
         operation: crate::platform::kernel::OperationReference,
     ) -> bool {
-        match self
-            .snapshot
-            .owners
-            .get(&OwnerKey::Requirement(requirement))
-        {
-            Some(OwnerRecord::Requirement(record)) => {
-                record.interface.package == operation.package
-                    && record.operations.contains(&operation)
+        let record = if requirement.package == self.snapshot.root.package_id {
+            match self
+                .snapshot
+                .owners
+                .get(&OwnerKey::Requirement(requirement.requirement))
+            {
+                Some(OwnerRecord::Requirement(record)) => Some(record),
+                _ => None,
             }
-            _ => false,
-        }
+        } else {
+            let dependency = self.snapshot.dependencies.get(&requirement.package);
+            dependency
+                .and_then(|dependency| {
+                    self.snapshot
+                        .dependency_interfaces
+                        .get(&dependency.package_object)
+                })
+                .and_then(|owners| owners.get(&OwnerKey::Requirement(requirement.requirement)))
+                .and_then(|record| match record {
+                    PackageInterfaceRecord::Requirement(record) => Some(record),
+                    _ => None,
+                })
+        };
+        record.is_some_and(|record| {
+            record.interface.package == operation.package && record.operations.contains(&operation)
+        })
     }
 
     fn validate_document_content(&mut self, content: &super::owner::DocumentContent) {

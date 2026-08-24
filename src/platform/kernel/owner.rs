@@ -8,7 +8,9 @@ use super::digest::{BlobObjectDigest, OwnerObjectDigest, TypeObjectDigest};
 use super::expression::{ExpressionOperation, ExpressionRecord, TextValue};
 use super::id::{OwnerHeader, OwnerKey, OwnerKind};
 use super::name::Name;
-use super::reference::{DeclarationReference, OperationReference, PortReference};
+use super::reference::{
+    DeclarationReference, OperationReference, PortReference, RequirementReference,
+};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::package::RunnerKind;
 use crate::platform::semantic_id::{
@@ -380,7 +382,9 @@ impl FunctionDeclaration {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum FunctionEffect {
     Pure,
-    Task { requirements: Vec<RequirementId> },
+    Task {
+        requirements: Vec<RequirementReference>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]

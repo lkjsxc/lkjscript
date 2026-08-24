@@ -445,7 +445,10 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
                 parameters: Vec::new(),
                 result: unit_type,
                 effect: FunctionEffect::Task {
-                    requirements: vec![requirement],
+                    requirements: vec![RequirementReference {
+                        package,
+                        requirement,
+                    }],
                 },
                 body: caller_root,
             }),
@@ -594,7 +597,7 @@ fn normalized_prototype_passes_full_oracle() {
     assert_eq!(report.owners_checked, 43);
     assert_eq!(report.type_objects_checked, 2);
     assert_eq!(report.expression_records_checked, 20);
-    assert_eq!(report.relation_edges, 62);
+    assert_eq!(report.relation_edges, 63);
     assert!(report.work_consumed < 1_000);
 }
 
@@ -947,7 +950,7 @@ fn canonical_kernel_codec_manifest_is_frozen() {
     hasher.update(&root);
     assert_eq!(
         crate::platform::semantic_id::encode_hex(hasher.finalize().as_bytes()),
-        "9d09b85eda7e5dc41d13bc80531cebb53ad1c7cddb112e139b3335d4e4f75a1b"
+        "e96c22c854c87bc691064b620c1977a03dbd18f11055cec7090120d1aeb36a38"
     );
 }
 

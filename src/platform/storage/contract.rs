@@ -39,7 +39,7 @@ pub const COMPILER_UNIT_DIGEST_DOMAIN: &str = "lkjscript.compiler-unit.v1";
 pub const ARTIFACT_MANIFEST_DIGEST_DOMAIN: &str = "lkjscript.artifact-manifest.v5";
 pub const BACKUP_MANIFEST_DIGEST_DOMAIN: &str = "lkjscript.backup-manifest.v5";
 pub const BACKUP_SEGMENT_DIGEST_DOMAIN: &str = "lkjscript.backup-segment.v5";
-pub const PACKAGE_INTERFACE_OWNER_DIGEST_DOMAIN: &str = "lkjscript.package-interface-owner.v1";
+pub const PACKAGE_INTERFACE_OWNER_DIGEST_DOMAIN: &str = "lkjscript.package-interface-owner.v2";
 pub const MAP_PAGE_DIGEST_DOMAIN: &str =
     crate::platform::contract::registry::MAP_PAGE_DIGEST_DOMAIN;
 

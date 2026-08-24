@@ -8,8 +8,9 @@
 
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    DependencyRecord, OwnerKey, OwnerKind, PackageId, PackageInterfaceDeclarationPayload,
-    PackageInterfaceRecord, PackageObjectDigest, SemanticRootDigest, TypeForm,
+    DependencyRecord, FunctionEffect, OwnerKey, OwnerKind, PackageId,
+    PackageInterfaceDeclarationPayload, PackageInterfaceRecord, PackageObjectDigest,
+    SemanticRootDigest, TypeForm,
 };
 use crate::platform::package_interface::{PackageInterfaceValidation, validate_package_interface};
 use crate::platform::persistent_map::MapRoot;
@@ -23,10 +24,10 @@ use crate::platform::witness::{
 use bincode::{Decode, Encode};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-pub const PACKAGE_OBJECT_CONTRACT_IDENTITY: &str = "lkjscript-package-object-6";
-pub const PACKAGE_OBJECT_CONTRACT_VERSION: u16 = 6;
-pub const PACKAGE_OBJECT_MAGIC: [u8; 8] = *b"LKJPKG06";
-pub const PACKAGE_OBJECT_ENVELOPE_DOMAIN: &str = "lkjscript.package-object-envelope.v6";
+pub const PACKAGE_OBJECT_CONTRACT_IDENTITY: &str = "lkjscript-package-object-7";
+pub const PACKAGE_OBJECT_CONTRACT_VERSION: u16 = 7;
+pub const PACKAGE_OBJECT_MAGIC: [u8; 8] = *b"LKJPKG07";
+pub const PACKAGE_OBJECT_ENVELOPE_DOMAIN: &str = "lkjscript.package-object-envelope.v7";
 pub const MAXIMUM_PACKAGE_OBJECT_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_PACKAGE_OBJECT_DEPENDENCIES: usize = 10_000;
 pub const MAXIMUM_PACKAGE_OBJECT_CLOSURE: usize = 10_000;
@@ -308,60 +309,97 @@ fn validate_interface_dependencies(
             }
         }
         for owner in interface.owners.values() {
-            let PackageInterfaceRecord::Requirement(requirement) = &owner.record else {
-                continue;
-            };
-            let interface_owner = closure.require_owner(
-                object,
-                requirement.interface.package,
-                OwnerKey::Declaration(requirement.interface.declaration),
-                &[OwnerKind::Interface],
-                "requirement interface",
-            )?;
-            if !matches!(
-                interface_owner.record,
-                PackageInterfaceRecord::Declaration(ref declaration)
-                    if matches!(
-                        declaration.payload,
-                        PackageInterfaceDeclarationPayload::Interface { .. }
-                    )
-            ) {
-                return Err(package_error(
-                    DiagnosticClass::Semantic,
-                    "package_object_interface_requirement_kind",
-                    "requirement interface does not name an interface declaration payload",
-                ));
-            }
-            for operation in &requirement.operations {
-                if operation.package != requirement.interface.package {
-                    return Err(package_error(
-                        DiagnosticClass::Semantic,
-                        "package_object_interface_operation_package",
-                        "requirement interface and operation belong to different packages",
-                    ));
+            match &owner.record {
+                PackageInterfaceRecord::Declaration(declaration) => {
+                    let PackageInterfaceDeclarationPayload::Function(signature) =
+                        &declaration.payload
+                    else {
+                        continue;
+                    };
+                    let FunctionEffect::Task { requirements } = &signature.effect else {
+                        continue;
+                    };
+                    for requirement in requirements {
+                        let requirement_owner = closure.require_owner(
+                            object,
+                            requirement.package,
+                            OwnerKey::Requirement(requirement.requirement),
+                            &[OwnerKind::Requirement],
+                            "task function requirement",
+                        )?;
+                        if !matches!(
+                            requirement_owner.record,
+                            PackageInterfaceRecord::Requirement(_)
+                        ) {
+                            return Err(package_error(
+                                DiagnosticClass::Corrupt,
+                                "package_object_interface_function_requirement_variant",
+                                "task function requirement has a foreign package-interface record variant",
+                            ));
+                        }
+                    }
                 }
-                let operation_owner = closure.require_owner(
-                    object,
-                    operation.package,
-                    OwnerKey::Operation(operation.operation),
-                    &[OwnerKind::Operation],
-                    "requirement operation",
-                )?;
-                let PackageInterfaceRecord::Operation(operation_record) = &operation_owner.record
-                else {
-                    return Err(package_error(
-                        DiagnosticClass::Corrupt,
-                        "package_object_interface_operation_variant",
-                        "validated operation kind disagrees with its package-interface record variant",
-                    ));
-                };
-                if operation_record.declaration != requirement.interface.declaration {
-                    return Err(package_error(
-                        DiagnosticClass::Semantic,
-                        "package_object_interface_operation_owner",
-                        "requirement operation does not belong to its exact interface declaration",
-                    ));
+                PackageInterfaceRecord::Requirement(requirement) => {
+                    let interface_owner = closure.require_owner(
+                        object,
+                        requirement.interface.package,
+                        OwnerKey::Declaration(requirement.interface.declaration),
+                        &[OwnerKind::Interface],
+                        "requirement interface",
+                    )?;
+                    if !matches!(
+                        interface_owner.record,
+                        PackageInterfaceRecord::Declaration(ref declaration)
+                            if matches!(
+                                declaration.payload,
+                                PackageInterfaceDeclarationPayload::Interface { .. }
+                            )
+                    ) {
+                        return Err(package_error(
+                            DiagnosticClass::Semantic,
+                            "package_object_interface_requirement_kind",
+                            "requirement interface does not name an interface declaration payload",
+                        ));
+                    }
+                    for operation in &requirement.operations {
+                        if operation.package != requirement.interface.package {
+                            return Err(package_error(
+                                DiagnosticClass::Semantic,
+                                "package_object_interface_operation_package",
+                                "requirement interface and operation belong to different packages",
+                            ));
+                        }
+                        let operation_owner = closure.require_owner(
+                            object,
+                            operation.package,
+                            OwnerKey::Operation(operation.operation),
+                            &[OwnerKind::Operation],
+                            "requirement operation",
+                        )?;
+                        let PackageInterfaceRecord::Operation(operation_record) =
+                            &operation_owner.record
+                        else {
+                            return Err(package_error(
+                                DiagnosticClass::Corrupt,
+                                "package_object_interface_operation_variant",
+                                "validated operation kind disagrees with its package-interface record variant",
+                            ));
+                        };
+                        if operation_record.declaration != requirement.interface.declaration {
+                            return Err(package_error(
+                                DiagnosticClass::Semantic,
+                                "package_object_interface_operation_owner",
+                                "requirement operation does not belong to its exact interface declaration",
+                            ));
+                        }
+                    }
                 }
+                PackageInterfaceRecord::TypeParameter(_)
+                | PackageInterfaceRecord::Field(_)
+                | PackageInterfaceRecord::Case(_)
+                | PackageInterfaceRecord::Operation(_)
+                | PackageInterfaceRecord::Parameter(_)
+                | PackageInterfaceRecord::Port(_) => {}
             }
         }
     }
@@ -609,7 +647,7 @@ mod tests {
             "package_object_digest"
         );
         let mut predecessor = bytes;
-        predecessor[..8].copy_from_slice(b"LKJPKG05");
+        predecessor[..8].copy_from_slice(b"LKJPKG06");
         assert!(
             PackageObject::decode(&predecessor, PackageObjectDigest::of(&predecessor)).is_err()
         );

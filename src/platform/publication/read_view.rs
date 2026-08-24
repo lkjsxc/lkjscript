@@ -648,7 +648,7 @@ impl RepositoryView {
     /// export may enumerate direct dependencies, but it does not reconstruct owner authority.
     pub fn export_package_object(&self) -> Result<ExportedPackageObject, Diagnostic> {
         let dependencies = self.package_dependencies()?;
-        let mut selection = PackageInterfaceSelection::default();
+        let mut selection = PackageInterfaceSelection::new(self.package());
         let mut read_work = dependencies.work;
         read_work
             .add(self.for_each_owner_record(|_, record| selection.observe_declaration(record))?);

@@ -16,9 +16,10 @@ use crate::platform::change::{
 };
 use crate::platform::kernel::{
     AnnotationClass, DeclarationPayload, DeclarationVisibility, DependencyObjectDigest,
-    DocumentationClass, ExactOwnerKey, ExpressionOperation, ExternalVisibility, Idempotency,
-    LocalValueReference, Name, NamespaceClass, OwnerKey, OwnerRecord, PackageId, RelationEndpoint,
-    ResourceUnit, RetirementObjectDigest, SemanticRoot, SemanticRootDigest, TypeForm, TypeObject,
+    DocumentationClass, ExactOwnerKey, ExpressionOperation, ExternalVisibility, FunctionEffect,
+    Idempotency, LocalValueReference, Name, NamespaceClass, OwnerKey, OwnerRecord, PackageId,
+    RelationEdge, RelationEndpoint, RelationKind, RequirementReference, ResourceUnit,
+    RetirementObjectDigest, SemanticRoot, SemanticRootDigest, TypeForm, TypeObject,
     TypeObjectDigest, encode_owner, encode_type_object,
 };
 use crate::platform::package::RunnerKind;
@@ -641,6 +642,226 @@ fn staged_package_interface_validates_an_exact_cross_package_pure_call() {
     );
     assert_eq!(rebuilt.manifest, accepted.witness);
     assert!(oracle.work.canonical_records_decoded >= 6);
+}
+
+#[test]
+fn staged_package_interface_validates_exact_cross_package_task_requirements() {
+    let temporary = tempfile::tempdir().expect("temporary cross-package task repositories");
+    let source_snapshot = crate::platform::kernel::tests::witness_snapshot();
+    let source_package = source_snapshot.root.package_id;
+    let OwnerKey::Declaration(source_function) = owner_named(&source_snapshot, "caller") else {
+        panic!("source task function identity domain")
+    };
+    let OwnerKey::Requirement(source_requirement) = requirement_named(&source_snapshot, "store")
+    else {
+        panic!("source requirement identity domain")
+    };
+    let OwnerKey::Operation(source_operation) = operation_named(&source_snapshot, "read") else {
+        panic!("source operation identity domain")
+    };
+    let source = GraphRepository::create(
+        &temporary.path().join("source-task"),
+        &source_snapshot,
+        None,
+    )
+    .expect("source task repository");
+    let exported = source
+        .repository
+        .export_package_object()
+        .expect("export exact source task interface");
+
+    let target_path = temporary.path().join("target-task");
+    let target = GraphRepository::create(
+        &target_path,
+        &empty_snapshot(b"cross-package-task-target"),
+        None,
+    )
+    .expect("target task repository");
+    target
+        .repository
+        .stage_package_object(exported.digest, &exported.packs)
+        .expect("stage source task interface closure");
+
+    let exact_requirement = AuthoredRequirementReference::Exact {
+        package: source_package,
+        requirement: source_requirement,
+    };
+    let request = |requirements| AuthoredChangeSet {
+        base: target.current.head.revision,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
+        changes: vec![
+            AuthoredChange::AddDependency {
+                package: exported.object.package,
+                semantic_revision: exported.object.semantic_revision,
+                package_object: exported.digest,
+            },
+            AuthoredChange::CreateModule {
+                symbol: "$task_module".to_owned(),
+                name: Name::new("application").unwrap(),
+            },
+            AuthoredChange::CreateFunction {
+                symbol: "$foreign_task".to_owned(),
+                module: ModuleSelector::Symbol {
+                    symbol: "$task_module".to_owned(),
+                },
+                name: Name::new("use_library_task").unwrap(),
+                visibility: DeclarationVisibility::Public,
+                type_parameters: Vec::new(),
+                parameters: Vec::new(),
+                result: AuthoredType::Unit {},
+                effect: AuthoredFunctionEffect::Task { requirements },
+                body: AuthoredExpression {
+                    symbol: Some("$foreign_body".to_owned()),
+                    operation: AuthoredExpressionOperation::Sequence {
+                        items: vec![
+                            AuthoredExpression {
+                                symbol: Some("$foreign_call".to_owned()),
+                                operation: AuthoredExpressionOperation::Call {
+                                    function: AuthoredDeclarationReference::Exact {
+                                        package: source_package,
+                                        declaration: source_function,
+                                    },
+                                    type_arguments: Vec::new(),
+                                    arguments: Vec::new(),
+                                },
+                            },
+                            AuthoredExpression {
+                                symbol: Some("$foreign_capability".to_owned()),
+                                operation: AuthoredExpressionOperation::CapabilityCall {
+                                    requirement: exact_requirement.clone(),
+                                    operation: AuthoredOperationReference::Exact {
+                                        package: source_package,
+                                        operation: source_operation,
+                                    },
+                                    arguments: Vec::new(),
+                                },
+                            },
+                        ],
+                    },
+                },
+            },
+        ],
+    };
+
+    let rejected = target
+        .repository
+        .prepare_authored_change(&request(Vec::new()), PublicationOptions::default())
+        .expect_err("a foreign task call must require its exact capability grant");
+    assert!(
+        rejected
+            .iter()
+            .any(|diagnostic| diagnostic.code == "kernel_type_task_requirement")
+    );
+    assert_eq!(
+        target.repository.current().unwrap().head,
+        target.current.head,
+        "rejected foreign task preparation must publish nothing"
+    );
+
+    let prepared = target
+        .repository
+        .prepare_authored_change(
+            &request(vec![exact_requirement.clone()]),
+            PublicationOptions::default(),
+        )
+        .expect("exact foreign task requirement must validate");
+    let OwnerKey::Declaration(target_function) = prepared.allocated["$foreign_task"] else {
+        panic!("target task function allocation domain")
+    };
+    let OwnerKey::Expression(foreign_call) = prepared.allocated["$foreign_call"] else {
+        panic!("foreign call allocation domain")
+    };
+    let OwnerKey::Expression(foreign_capability) = prepared.allocated["$foreign_capability"] else {
+        panic!("foreign capability allocation domain")
+    };
+    let PublicationOutcome::Accepted { current, .. } = target
+        .repository
+        .publish(&prepared.publication)
+        .expect("publish exact foreign task caller")
+    else {
+        panic!("cross-package task publication must advance HEAD")
+    };
+
+    let view = target.repository.view_current().unwrap();
+    assert!(matches!(
+        view.owner(OwnerKey::Declaration(target_function)).unwrap().value,
+        Some(OwnerRecord::Declaration(record))
+            if matches!(record.payload, DeclarationPayload::Function(ref function)
+                if function.effect == FunctionEffect::Task {
+                    requirements: vec![RequirementReference {
+                        package: source_package,
+                        requirement: source_requirement,
+                    }],
+                })
+    ));
+    assert!(matches!(
+        view.owner(OwnerKey::Expression(foreign_call)).unwrap().value,
+        Some(OwnerRecord::Expression(record))
+            if matches!(record.operation, ExpressionOperation::Call { function, .. }
+                if function.package == source_package
+                    && function.declaration == source_function)
+    ));
+    assert!(matches!(
+        view.owner(OwnerKey::Expression(foreign_capability)).unwrap().value,
+        Some(OwnerRecord::Expression(record))
+            if matches!(record.operation, ExpressionOperation::CapabilityCall {
+                requirement,
+                operation,
+                ..
+            } if requirement.package == source_package
+                && requirement.requirement == source_requirement
+                && operation.package == source_package
+                && operation.operation == source_operation)
+    ));
+    let requirement_edge = RelationEdge {
+        source: RelationEndpoint::Owner(ExactOwnerKey {
+            package: target
+                .repository
+                .current()
+                .unwrap()
+                .semantic_root
+                .package_id,
+            owner: OwnerKey::Declaration(target_function),
+        }),
+        kind: RelationKind::FunctionRequirement,
+        target: RelationEndpoint::Owner(ExactOwnerKey {
+            package: source_package,
+            owner: OwnerKey::Requirement(source_requirement),
+        }),
+    };
+    assert!(
+        view.contains_forward_relation(requirement_edge)
+            .unwrap()
+            .value
+    );
+    let reexported = target
+        .repository
+        .export_package_object()
+        .expect("public foreign-task signature must export with its exact dependency closure");
+    assert_eq!(reexported.interface_owner_count, 1);
+    assert_eq!(reexported.object.dependencies.len(), 1);
+    assert_eq!(reexported.object.dependencies[0].package, source_package);
+
+    let reopened = GraphRepository::open(&target_path).expect("reopen cross-package task target");
+    let accepted = reopened
+        .current()
+        .expect("accepted cross-package task publication");
+    let oracle = reopened
+        .view_current()
+        .expect("revision-pinned cross-package task view")
+        .reconstruct_full_oracle()
+        .expect("reconstruct exact cross-package task oracle");
+    assert_eq!(oracle.revision, current.head.revision);
+    crate::platform::kernel::validate_full(&oracle.value)
+        .expect("foreign task and capability references must pass the full validator");
+    let rebuilt = crate::platform::witness::rebuild_full_witness(&oracle.value)
+        .expect("foreign task witness must rebuild from canonical authority");
+    assert_eq!(
+        rebuilt.manifest_digest,
+        accepted.accepted.validation_witness
+    );
+    assert_eq!(rebuilt.manifest, accepted.witness);
 }
 
 #[test]
@@ -3713,9 +3934,12 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
     assert!(matches!(
         function_payload.effect,
         crate::platform::kernel::FunctionEffect::Task { requirements }
-            if requirements.as_slice() == [match requirement {
-                OwnerKey::Requirement(requirement) => requirement,
-                _ => panic!("requirement has a foreign domain"),
+            if requirements.as_slice() == [crate::platform::kernel::RequirementReference {
+                package,
+                requirement: match requirement {
+                    OwnerKey::Requirement(requirement) => requirement,
+                    _ => panic!("requirement has a foreign domain"),
+                },
             }]
     ));
 

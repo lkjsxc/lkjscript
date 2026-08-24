@@ -6,15 +6,15 @@ use super::expression::{ExpressionOperation, FieldSelector, LocalValueReference}
 use super::id::{OwnerKey, OwnerKind, PackageId};
 use super::owner::{
     BindingKind, CaseRecord, DeclarationPayload, FieldRecord, FunctionEffect, OperationRecord,
-    OwnerRecord, ParameterParent, PortImplementation,
+    OwnerRecord, ParameterParent, PortImplementation, RequirementRecord,
 };
-use super::reference::DeclarationReference;
+use super::reference::{DeclarationReference, RequirementReference};
 use super::type_object::{StructuralTypeField, TypeForm, TypeObject};
 use super::validate::KernelSnapshot;
 use super::{PackageInterfaceDeclarationPayload, PackageInterfaceRecord};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::semantic_id::{
-    CaseId, DeclarationId, ExpressionId, FieldId, OperationId, RequirementId, TypeParameterId,
+    CaseId, DeclarationId, ExpressionId, FieldId, OperationId, TypeParameterId,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -22,7 +22,7 @@ use std::collections::{BTreeMap, BTreeSet};
 struct ExecutionContext {
     declaration: Option<DeclarationId>,
     pure: bool,
-    requirements: BTreeSet<RequirementId>,
+    requirements: BTreeSet<RequirementReference>,
     allow_task_function_value: bool,
 }
 
@@ -30,7 +30,7 @@ struct ExecutionContext {
 struct FunctionSignature {
     parameters: Vec<TypeObjectDigest>,
     result: TypeObjectDigest,
-    requirements: BTreeSet<RequirementId>,
+    requirements: BTreeSet<RequirementReference>,
     task: bool,
 }
 
@@ -145,6 +145,11 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         let (pure, requirements) = match function.effect {
                             FunctionEffect::Pure => (true, BTreeSet::new()),
                             FunctionEffect::Task { requirements } => {
+                                for requirement in &requirements {
+                                    if let Err(diagnostic) = self.requirement_record(*requirement) {
+                                        self.diagnostics.push(diagnostic);
+                                    }
+                                }
                                 (false, requirements.into_iter().collect())
                             }
                         };
@@ -453,26 +458,13 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         "pure expression performs a capability operation",
                     ));
                 }
-                if requirement.package != self.read.package_id()
-                    || !context.requirements.contains(&requirement.requirement)
-                {
+                if !context.requirements.contains(&requirement) {
                     return Err(type_error(
                         "kernel_type_capability_missing",
                         "capability requirement is unavailable in this task context",
                     ));
                 }
-                let requirement_record = match self
-                    .read
-                    .owner(OwnerKey::Requirement(requirement.requirement))?
-                {
-                    Some(OwnerRecord::Requirement(record)) => record,
-                    _ => {
-                        return Err(type_error(
-                            "kernel_type_capability_missing",
-                            "capability requirement record is missing",
-                        ));
-                    }
-                };
+                let requirement_record = self.requirement_record(requirement)?;
                 if requirement_record.interface.package != operation.package
                     || !requirement_record.operations.contains(&operation)
                 {
@@ -503,14 +495,13 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         "pure expression opens a live transaction",
                     ));
                 }
-                if requirement.package != self.read.package_id()
-                    || !context.requirements.contains(&requirement.requirement)
-                {
+                if !context.requirements.contains(&requirement) {
                     return Err(type_error(
                         "kernel_type_transaction_requirement",
                         "transaction requirement is unavailable in this task context",
                     ));
                 }
+                self.requirement_record(requirement)?;
                 self.infer(body, context, next)
             }
         }
@@ -996,11 +987,11 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     PackageInterfaceDeclarationPayload::Function(function) => {
                         let (requirements, task) = match function.effect {
                             FunctionEffect::Pure => (BTreeSet::new(), false),
-                            FunctionEffect::Task { .. } => {
-                                return Err(type_error(
-                                    "kernel_type_foreign_task_unsupported",
-                                    "cross-package task calls require exact package-qualified capability requirements",
-                                ));
+                            FunctionEffect::Task { requirements } => {
+                                for requirement in &requirements {
+                                    self.requirement_record(*requirement)?;
+                                }
+                                (requirements.into_iter().collect(), true)
                             }
                         };
                         (
@@ -1050,6 +1041,9 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     let (requirements, task) = match function.effect {
                         FunctionEffect::Pure => (BTreeSet::new(), false),
                         FunctionEffect::Task { requirements } => {
+                            for requirement in &requirements {
+                                self.requirement_record(*requirement)?;
+                            }
                             (requirements.into_iter().collect(), true)
                         }
                     };
@@ -1270,16 +1264,51 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
     fn component_requirements(
         &self,
         declaration: DeclarationId,
-    ) -> Result<BTreeSet<RequirementId>, Diagnostic> {
+    ) -> Result<BTreeSet<RequirementReference>, Diagnostic> {
+        let package = self.read.package_id();
         Ok(match self.read.owner(OwnerKey::Declaration(declaration))? {
             Some(OwnerRecord::Declaration(record)) => match &record.payload {
-                DeclarationPayload::Component { requirements, .. } => {
-                    requirements.iter().copied().collect()
-                }
+                DeclarationPayload::Component { requirements, .. } => requirements
+                    .iter()
+                    .copied()
+                    .map(|requirement| RequirementReference {
+                        package,
+                        requirement,
+                    })
+                    .collect(),
                 _ => BTreeSet::new(),
             },
             _ => BTreeSet::new(),
         })
+    }
+
+    fn requirement_record(
+        &self,
+        reference: RequirementReference,
+    ) -> Result<RequirementRecord, Diagnostic> {
+        if reference.package != self.read.package_id() {
+            return match self.dependency_owner(
+                reference.package,
+                OwnerKey::Requirement(reference.requirement),
+                "capability requirement",
+            )? {
+                PackageInterfaceRecord::Requirement(record) => Ok(record),
+                _ => Err(type_error(
+                    "kernel_type_capability_requirement_kind",
+                    "capability requirement names another dependency owner kind",
+                )),
+            };
+        }
+        match self
+            .read
+            .owner(OwnerKey::Requirement(reference.requirement))?
+        {
+            Some(OwnerRecord::Requirement(record)) => Ok(record),
+            _ => Err(type_error(
+                "kernel_type_capability_missing",
+                "capability requirement record is missing",
+            )),
+        }
     }
 
     fn dependency_owner(

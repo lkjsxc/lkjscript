@@ -36,7 +36,7 @@ fn witness_contract_domains_are_closed_and_unique() {
     assert_ne!(contract::validator_contract_digest().bytes(), [0_u8; 32]);
     assert_eq!(
         contract::validator_contract_digest().to_string(),
-        "validator_contract_c28c4e7baced70231a80c02be7abb2062bfdbee7c5d99e8bf3c00c803b0218cf"
+        "validator_contract_f097e525a146e6bc7ff4ed2328dbedafb4989dd74ccfc2e8239da3a8728233e0"
     );
 }
 
@@ -48,7 +48,7 @@ fn full_witness_rebuilds_the_normalized_kernel_fixture() {
     assert_eq!(witness.report.summary_objects, 43);
     assert_eq!(witness.report.namespace_entries, 20);
     assert_eq!(witness.report.ownership_entries, 43);
-    assert_eq!(witness.report.relation_edges, 62);
+    assert_eq!(witness.report.relation_edges, 63);
     assert_eq!(witness.report.test_dependency_entries, 1);
     assert_eq!(witness.manifest.roots.owner_summaries.entries(), 43);
     assert_eq!(witness.manifest.roots.ownership.entries(), 43);

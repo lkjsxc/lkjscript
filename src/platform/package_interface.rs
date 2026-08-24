@@ -31,10 +31,10 @@ use bincode::{Decode, Encode};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-1";
-pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 1;
-pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF01";
-pub const PACKAGE_INTERFACE_ENVELOPE_DOMAIN: &str = "lkjscript.package-interface-owner-envelope.v1";
+pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-2";
+pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 2;
+pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF02";
+pub const PACKAGE_INTERFACE_ENVELOPE_DOMAIN: &str = "lkjscript.package-interface-owner-envelope.v2";
 pub const MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES: usize = 1024 * 1024;
 pub const MAXIMUM_PACKAGE_INTERFACE_VALIDATION_WORK: usize =
     crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
@@ -202,8 +202,9 @@ impl PackageInterfaceOwner {
     }
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PackageInterfaceSelection {
+    package: PackageId,
     declarations: BTreeSet<DeclarationId>,
     type_parameters: BTreeSet<TypeParameterId>,
     fields: BTreeSet<FieldId>,
@@ -215,6 +216,20 @@ pub struct PackageInterfaceSelection {
 }
 
 impl PackageInterfaceSelection {
+    pub fn new(package: PackageId) -> Self {
+        Self {
+            package,
+            declarations: BTreeSet::new(),
+            type_parameters: BTreeSet::new(),
+            fields: BTreeSet::new(),
+            cases: BTreeSet::new(),
+            operations: BTreeSet::new(),
+            parameters: BTreeSet::new(),
+            requirements: BTreeSet::new(),
+            ports: BTreeSet::new(),
+        }
+    }
+
     fn contains(&self, owner: OwnerKey) -> bool {
         match owner {
             OwnerKey::Declaration(id) => self.declarations.contains(&id),
@@ -234,8 +249,11 @@ impl PackageInterfaceSelection {
         }
     }
 
-    pub fn from_records(records: &BTreeMap<OwnerKey, OwnerRecord>) -> Result<Self, Diagnostic> {
-        let mut selection = Self::default();
+    pub fn from_records(
+        package: PackageId,
+        records: &BTreeMap<OwnerKey, OwnerRecord>,
+    ) -> Result<Self, Diagnostic> {
+        let mut selection = Self::new(package);
         for record in records.values() {
             selection.observe_declaration(record)?;
         }
@@ -282,7 +300,12 @@ impl PackageInterfaceSelection {
                 self.type_parameters.extend(type_parameters);
                 self.parameters.extend(parameters);
                 if let FunctionEffect::Task { requirements } = effect {
-                    self.requirements.extend(requirements);
+                    self.requirements.extend(
+                        requirements
+                            .iter()
+                            .filter(|requirement| requirement.package == self.package)
+                            .map(|requirement| requirement.requirement),
+                    );
                 }
             }
             DeclarationPayload::Component {
@@ -488,7 +511,7 @@ pub fn validate_package_interface<S: ImmutableObjectStore + ?Sized>(
             ));
         }
     }
-    validate_owner_closure(&owners)?;
+    validate_owner_closure(package, &owners)?;
     let (type_objects, type_keys) = validate_type_closure(package, &owners, store, work)?;
     reachable_objects.extend(type_keys);
     Ok(PackageInterfaceValidation {
@@ -500,6 +523,7 @@ pub fn validate_package_interface<S: ImmutableObjectStore + ?Sized>(
 }
 
 fn validate_owner_closure(
+    package: PackageId,
     owners: &BTreeMap<OwnerKey, PackageInterfaceOwner>,
 ) -> Result<(), Diagnostic> {
     let mut expected = owners
@@ -588,13 +612,15 @@ fn validate_owner_closure(
                 )?;
                 if let FunctionEffect::Task { requirements } = &signature.effect {
                     for requirement in requirements {
-                        require_child(
-                            owners,
-                            &mut expected,
-                            OwnerKey::Requirement(*requirement),
-                            OwnerKind::Requirement,
-                            None,
-                        )?;
+                        if requirement.package == package {
+                            require_child(
+                                owners,
+                                &mut expected,
+                                OwnerKey::Requirement(requirement.requirement),
+                                OwnerKind::Requirement,
+                                None,
+                            )?;
+                        }
                     }
                 }
             }
@@ -1054,7 +1080,8 @@ mod tests {
         let snapshot = crate::platform::kernel::tests::witness_snapshot();
         let witness = rebuild_full_witness(&snapshot).expect("valid witness fixture");
         let selection =
-            PackageInterfaceSelection::from_records(&snapshot.owners).expect("public selection");
+            PackageInterfaceSelection::from_records(snapshot.root.package_id, &snapshot.owners)
+                .expect("public selection");
         let mut owners = BTreeMap::new();
         let mut pending = Vec::new();
         for (owner, record) in &snapshot.owners {
@@ -1086,7 +1113,8 @@ mod tests {
         let snapshot = crate::platform::kernel::tests::witness_snapshot();
         let witness = rebuild_full_witness(&snapshot).expect("valid witness fixture");
         let selection =
-            PackageInterfaceSelection::from_records(&snapshot.owners).expect("public selection");
+            PackageInterfaceSelection::from_records(snapshot.root.package_id, &snapshot.owners)
+                .expect("public selection");
         let mut projected = BTreeMap::new();
         for (owner, record) in &snapshot.owners {
             if let Some(interface) = PackageInterfaceOwner::project(
@@ -1139,7 +1167,8 @@ mod tests {
         let snapshot = crate::platform::kernel::tests::witness_snapshot();
         let witness = rebuild_full_witness(&snapshot).expect("valid witness fixture");
         let selection =
-            PackageInterfaceSelection::from_records(&snapshot.owners).expect("public selection");
+            PackageInterfaceSelection::from_records(snapshot.root.package_id, &snapshot.owners)
+                .expect("public selection");
         let (owner, canonical) = snapshot
             .owners
             .iter()
@@ -1178,7 +1207,8 @@ mod tests {
         let snapshot = crate::platform::kernel::tests::witness_snapshot();
         let witness = rebuild_full_witness(&snapshot).expect("valid witness fixture");
         let selection =
-            PackageInterfaceSelection::from_records(&snapshot.owners).expect("public selection");
+            PackageInterfaceSelection::from_records(snapshot.root.package_id, &snapshot.owners)
+                .expect("public selection");
         let (owner, value) = snapshot
             .owners
             .iter()
@@ -1201,7 +1231,7 @@ mod tests {
             "package_interface_owner_key"
         );
         let mut predecessor = bytes;
-        predecessor[..8].copy_from_slice(b"LKJPIF00");
+        predecessor[..8].copy_from_slice(b"LKJPIF01");
         let predecessor_digest = PackageInterfaceOwnerDigest::of(&predecessor);
         assert!(PackageInterfaceOwner::decode(&predecessor, owner, predecessor_digest).is_err());
     }

@@ -4,7 +4,9 @@ use super::TypeObjectDigest;
 use super::contract::MAXIMUM_VALIDATION_WORK;
 use super::expression::{ExpressionOperation, FieldSelector, LocalValueReference};
 use super::id::{ExactOwnerKey, OwnerKey, PackageId};
-use super::owner::{DeclarationPayload, OwnerRecord, ParameterParent, PortImplementation};
+use super::owner::{
+    DeclarationPayload, FunctionEffect, OwnerRecord, ParameterParent, PortImplementation,
+};
 use super::root::DependencyRecord;
 use super::type_object::{TypeForm, TypeObject};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
@@ -36,6 +38,7 @@ pub enum RelationKind {
     ConstantReference,
     FunctionCall,
     FunctionValue,
+    FunctionRequirement,
     NominalFieldConstruction,
     NominalFieldAccess,
     VariantConstruction,
@@ -67,7 +70,7 @@ pub enum PropagationClass {
 }
 
 impl RelationKind {
-    pub const ALL: [Self; 26] = [
+    pub const ALL: [Self; 27] = [
         Self::DeclarationModule,
         Self::MemberDeclaration,
         Self::ParameterOperation,
@@ -79,6 +82,7 @@ impl RelationKind {
         Self::ConstantReference,
         Self::FunctionCall,
         Self::FunctionValue,
+        Self::FunctionRequirement,
         Self::NominalFieldConstruction,
         Self::NominalFieldAccess,
         Self::VariantConstruction,
@@ -109,6 +113,7 @@ impl RelationKind {
             Self::ConstantReference => 9,
             Self::FunctionCall => 10,
             Self::FunctionValue => 11,
+            Self::FunctionRequirement => 27,
             Self::NominalFieldConstruction => 12,
             Self::NominalFieldAccess => 13,
             Self::VariantConstruction => 14,
@@ -147,7 +152,8 @@ impl RelationKind {
             | Self::VariantMatch
             | Self::VariantExhaustiveness => PropagationClass::Value,
             Self::FunctionCall | Self::FunctionValue => PropagationClass::Behavior,
-            Self::CapabilityInterface
+            Self::FunctionRequirement
+            | Self::CapabilityInterface
             | Self::CapabilityOperation
             | Self::ComponentRequirement
             | Self::ComponentPort => PropagationClass::Capability,
@@ -313,6 +319,19 @@ where
                         );
                     }
                 }
+                DeclarationPayload::Function(function) => {
+                    if let FunctionEffect::Task { requirements } = &function.effect {
+                        for requirement in requirements {
+                            exact_edge(
+                                edges,
+                                source,
+                                RelationKind::FunctionRequirement,
+                                requirement.package,
+                                OwnerKey::Requirement(requirement.requirement),
+                            );
+                        }
+                    }
+                }
                 DeclarationPayload::Component {
                     requirements,
                     ports,
@@ -349,9 +368,7 @@ where
                         );
                     }
                 }
-                DeclarationPayload::External(_)
-                | DeclarationPayload::Function(_)
-                | DeclarationPayload::Constant { .. } => {}
+                DeclarationPayload::External(_) | DeclarationPayload::Constant { .. } => {}
             }
             for root in record.expression_roots() {
                 owner_edge(

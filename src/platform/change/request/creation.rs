@@ -656,7 +656,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             AuthoredFunctionEffect::Task { requirements } => {
                 let mut lowered = requirements
                     .iter()
-                    .map(|requirement| self.lower_local_requirement(requirement))
+                    .map(|requirement| self.lower_requirement_reference(requirement))
                     .collect::<Result<Vec<_>, _>>()?;
                 lowered.sort_unstable();
                 if lowered.windows(2).any(|pair| pair[0] == pair[1]) {
@@ -1073,21 +1073,6 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 requirement: self.requirement_symbol(symbol)?,
             }),
         }
-    }
-
-    fn lower_local_requirement(
-        &mut self,
-        selector: &AuthoredRequirementReference,
-    ) -> Result<RequirementId, Diagnostic> {
-        let reference = self.lower_requirement_reference(selector)?;
-        if reference.package != self.base.package_id() {
-            return Err(request_error(
-                DiagnosticClass::Semantic,
-                "change_authored_effect_requirement_package",
-                "a function effect can name only a requirement owned by its package",
-            ));
-        }
-        Ok(reference.requirement)
     }
 
     fn insert_scoped_binding(
