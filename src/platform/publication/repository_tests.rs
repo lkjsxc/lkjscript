@@ -228,6 +228,50 @@ fn revision_view_reads_exact_canonical_and_witness_records_with_local_work() {
 }
 
 #[test]
+fn canonical_normalization_reads_only_touched_repository_keys() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let view = created.repository.view_current().expect("pinned view");
+    let callee = owner_named(&created.initial.snapshot, "callee");
+    let mut replacement = created.initial.snapshot.owners[&callee].clone();
+    let OwnerRecord::Declaration(declaration) = &mut replacement else {
+        panic!("callee must be a declaration")
+    };
+    declaration.name = Name::new("repository_normalized").unwrap();
+    let expected = encode_owner(&created.initial.snapshot.owners[&callee])
+        .expect("base owner encoding")
+        .0;
+    let edits = vec![PrimitiveEdit::ReplaceOwner {
+        expected,
+        record: replacement,
+    }];
+
+    let repository = CanonicalDelta::normalize_from(&view, edits.clone())
+        .expect("repository-backed normalization");
+    let memory = CanonicalDelta::normalize(&created.initial.snapshot, edits)
+        .expect("in-memory normalization oracle");
+    assert_eq!(
+        repository.base_revision,
+        Some(created.current.head.revision)
+    );
+    assert_eq!(repository.canonical.owners, memory.owners);
+    assert_eq!(repository.canonical.type_additions, memory.type_additions);
+    assert_eq!(repository.canonical.dependencies, memory.dependencies);
+    assert_eq!(repository.canonical.retirements, memory.retirements);
+    assert_eq!(repository.work.point_reads, 2);
+    assert_eq!(repository.work.canonical_records_decoded, 1);
+    assert!(repository.work.map_pages_read > 0);
+    assert!(repository.work.map_pages_read < 32);
+    assert_eq!(
+        repository.work.objects_read,
+        repository.work.map_pages_read + 1,
+        "normalization must read owner and retirement map paths plus only the selected owner"
+    );
+}
+
+#[test]
 fn pinned_view_keeps_old_revision_and_namespace_after_head_advances() {
     let temporary = tempfile::tempdir().expect("temporary repository parent");
     let destination = temporary.path().join("meaning");

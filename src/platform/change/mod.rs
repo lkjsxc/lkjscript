@@ -6,6 +6,7 @@
 )]
 
 mod authority;
+mod base_read;
 mod delta;
 mod derived;
 mod impact;
@@ -21,7 +22,8 @@ pub use authority::{
     CanonicalMapEditCounts, FullStagedAuthority, PreparedAuthority, SemanticAuthority,
     WitnessAuthority, stage_full_authority, stage_prepared_authority,
 };
-pub use delta::{CanonicalDelta, ExactEdit, PrimitiveEdit};
+pub use base_read::{CanonicalBaseRead, CanonicalRead, CanonicalReadWork};
+pub use delta::{CanonicalDelta, CanonicalNormalization, ExactEdit, PrimitiveEdit};
 pub use derived::{DerivedDelta, DerivedValueEdit, RelationDelta, derive_local_delta};
 pub use impact::{
     ImpactPlan, ImpactReason, ImpactReasonKind, ImpactWork, PlannedSummaries,

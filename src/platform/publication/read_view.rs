@@ -1,6 +1,7 @@
 //! Revision-pinned, bounded reads over accepted Graph 5 authority and its committed witness.
 
 use super::CurrentPublication;
+use crate::platform::change::{CanonicalBaseRead, CanonicalRead, CanonicalReadWork};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     DependencyRecord, EncodedOwnerKey, OwnerKey, OwnerRecord, PackageId, RelationEdge,
@@ -410,4 +411,61 @@ fn read_error(
     message: impl Into<String>,
 ) -> Diagnostic {
     Diagnostic::new(class, code, message)
+}
+
+impl CanonicalBaseRead for RepositoryView {
+    fn repository_id(&self) -> crate::platform::semantic_id::RepositoryId {
+        self.current.semantic_root.repository_id
+    }
+
+    fn package_id(&self) -> PackageId {
+        self.package()
+    }
+
+    fn exact_revision(&self) -> Option<RevisionId> {
+        Some(self.revision())
+    }
+
+    fn read_owner(
+        &self,
+        owner: OwnerKey,
+    ) -> Result<CanonicalRead<Option<OwnerRecord>>, Diagnostic> {
+        RepositoryView::owner(self, owner).map(canonical_read)
+    }
+
+    fn read_type_object(
+        &self,
+        digest: TypeObjectDigest,
+    ) -> Result<CanonicalRead<Option<TypeObject>>, Diagnostic> {
+        RepositoryView::type_object(self, digest).map(canonical_read)
+    }
+
+    fn read_dependency(
+        &self,
+        package: PackageId,
+    ) -> Result<CanonicalRead<Option<DependencyRecord>>, Diagnostic> {
+        RepositoryView::dependency(self, package).map(canonical_read)
+    }
+
+    fn read_retirement(
+        &self,
+        owner: OwnerKey,
+    ) -> Result<CanonicalRead<Option<RetirementRecord>>, Diagnostic> {
+        RepositoryView::retirement(self, owner).map(canonical_read)
+    }
+}
+
+fn canonical_read<T>(read: RevisionRead<T>) -> CanonicalRead<T> {
+    CanonicalRead {
+        value: read.value,
+        work: CanonicalReadWork {
+            point_reads: 1,
+            map_pages_read: read.work.map.pages_read,
+            map_entries_visited: read.work.map.entries_visited,
+            catalog_lookups: read.work.store.catalog_lookups,
+            objects_read: read.work.store.objects_read,
+            bytes_read: read.work.store.bytes_read,
+            canonical_records_decoded: read.work.canonical_records_decoded,
+        },
+    }
 }
