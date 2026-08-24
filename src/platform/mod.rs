@@ -12,6 +12,11 @@ pub mod bootstrap;
 )]
 pub(crate) mod change;
 pub mod cli;
+#[allow(
+    dead_code,
+    reason = "normalized Graph 5 compiler units remain private until artifact and runtime cutover"
+)]
+pub(crate) mod compiler;
 pub mod configuration;
 pub mod contract;
 pub mod database;

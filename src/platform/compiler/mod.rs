@@ -1,0 +1,24 @@
+//! Declaration-sized compiler units for normalized Graph 5 authority.
+//!
+//! This boundary is intentionally separate from the predecessor recursive-AST compiler. It reads
+//! exact stable-ID records through the same revision-pinned surfaces as validation and emits
+//! typed dense operands. The public artifact and runtime still use the predecessor compiler until
+//! the dependency-closed direct cutover.
+
+#![allow(
+    unused_imports,
+    reason = "private compiler exports become artifact and runtime consumers at the Graph 5 cutover"
+)]
+
+mod lower;
+mod unit;
+
+pub use lower::{CompilationReceipt, CompilationWork, compile_unit};
+pub use unit::{
+    BYTECODE_CONTRACT_IDENTITY, BYTECODE_CONTRACT_VERSION, COMPILER_UNIT_CONTRACT_IDENTITY,
+    COMPILER_UNIT_CONTRACT_VERSION, CompilationPayload, CompilationSource, CompilationUnit,
+    CompilationUnitKey, CompiledCode, CompiledInstruction, OptimizationPolicy,
+};
+
+#[cfg(test)]
+mod tests;
