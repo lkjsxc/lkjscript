@@ -25,16 +25,17 @@ use super::runner::{
 };
 use super::value::{NormalizedMapKey, NormalizedValue};
 use super::vm::{NormalizedRunPolicy, NormalizedVm};
+use super::worker::NormalizedWorkerApplication;
 use crate::platform::compiler::{OptimizationPolicy, build_clean, link_artifact, load_artifact};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::json::JsonLimits;
 use crate::platform::kernel::{
     DeclarationPayload, DeclarationRecord, DeclarationReference, DeclarationVisibility,
-    ExpressionOperation, ExpressionRecord, ExternalVisibility, FieldSelector, Idempotency,
-    LocalValueReference, Name, OperationRecord, OwnerHeader, OwnerKey, OwnerKind, OwnerRecord,
-    ParameterParent, ParameterRecord, PortImplementation, PortRecord, PortReference,
-    RecordExpressionField, ResourceLimit, ResourceUnit, StructuralTypeField, TargetRecord,
-    TypeForm, TypeObject, TypeObjectDigest, encode_type_object,
+    ExpressionOperation, ExpressionRecord, ExternalVisibility, FieldSelector, FunctionDeclaration,
+    FunctionEffect, Idempotency, LocalValueReference, Name, OperationRecord, OwnerHeader, OwnerKey,
+    OwnerKind, OwnerRecord, ParameterParent, ParameterRecord, PortImplementation, PortRecord,
+    PortReference, RecordExpressionField, ResourceLimit, ResourceUnit, StructuralTypeField,
+    TargetRecord, TypeForm, TypeObject, TypeObjectDigest, encode_type_object,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::publication::{GraphRepository, RepositoryView};
@@ -43,7 +44,7 @@ use crate::platform::semantic_id::{
     DeclarationId, ExpressionId, OperationId, ParameterId, PortId, RevisionId, TargetId,
 };
 use crate::platform::stream::{StreamLimits, StreamRegistry};
-use crate::platform::{HttpHeader, HttpLimits, HttpRequest, ResidentLimits};
+use crate::platform::{HttpHeader, HttpLimits, HttpRequest, ResidentLimits, WorkerLimits};
 use axum::body::{Body, to_bytes};
 use axum::http::Request;
 use std::collections::{BTreeMap, BTreeSet};
@@ -183,6 +184,106 @@ fn pure_command_snapshot() -> crate::platform::kernel::KernelSnapshot {
             )
             .is_none()
     );
+    snapshot.root.owners = crate::platform::persistent_map::MapRoot::from_parts(
+        snapshot.root.owners.page(),
+        snapshot.owners.len() as u64,
+    );
+    snapshot
+}
+
+fn normalized_worker_snapshot() -> crate::platform::kernel::KernelSnapshot {
+    const SEED: &[u8] = b"normalized-worker-runner";
+
+    let mut snapshot = pure_command_snapshot();
+    let bool_type = admit_snapshot_type(&mut snapshot, TypeForm::Bool);
+    let port_type = admit_snapshot_type(
+        &mut snapshot,
+        TypeForm::Function {
+            parameters: Vec::new(),
+            result: bool_type,
+        },
+    );
+    let implementation = declaration_named(&snapshot, "with_binding");
+    let module = match snapshot
+        .owners
+        .get(&OwnerKey::Declaration(implementation.declaration))
+        .expect("worker fixture implementation")
+    {
+        OwnerRecord::Declaration(record) => record.module,
+        _ => panic!("worker fixture implementation kind"),
+    };
+    let function = DeclarationId::migrate(SEED, 0);
+    let body = ExpressionId::migrate(SEED, 0);
+    let package = snapshot.root.package_id;
+    let (target, port) = snapshot
+        .owners
+        .iter()
+        .find_map(|(owner, record)| match (owner, record) {
+            (OwnerKey::Target(target), OwnerRecord::Target(record))
+                if record.name.as_str() == "pure" =>
+            {
+                Some((*target, record.port.port))
+            }
+            _ => None,
+        })
+        .expect("pure command target and port");
+    assert!(
+        snapshot
+            .owners
+            .insert(
+                OwnerKey::Expression(body),
+                OwnerRecord::Expression(
+                    ExpressionRecord::new(body, ExpressionOperation::Bool { value: false })
+                        .expect("worker idle result"),
+                ),
+            )
+            .is_none()
+    );
+    assert!(
+        snapshot
+            .owners
+            .insert(
+                OwnerKey::Declaration(function),
+                OwnerRecord::Declaration(DeclarationRecord {
+                    header: OwnerHeader::new(
+                        OwnerKey::Declaration(function),
+                        OwnerKind::PureFunction,
+                    ),
+                    module,
+                    name: Name::new("worker_iteration").unwrap(),
+                    visibility: DeclarationVisibility::Package,
+                    payload: DeclarationPayload::Function(FunctionDeclaration {
+                        type_parameters: Vec::new(),
+                        parameters: Vec::new(),
+                        result: bool_type,
+                        effect: FunctionEffect::Pure,
+                        body,
+                    }),
+                }),
+            )
+            .is_none()
+    );
+    let OwnerRecord::Port(port_record) = snapshot
+        .owners
+        .get_mut(&OwnerKey::Port(port))
+        .expect("pure command port")
+    else {
+        panic!("pure command port owner kind")
+    };
+    port_record.function_type = port_type;
+    port_record.implementation = PortImplementation::Function(DeclarationReference {
+        package,
+        declaration: function,
+    });
+    let OwnerRecord::Target(target_record) = snapshot
+        .owners
+        .get_mut(&OwnerKey::Target(target))
+        .expect("pure command target")
+    else {
+        panic!("pure command target owner kind")
+    };
+    target_record.name = Name::new("work").unwrap();
+    target_record.runner = RunnerKind::Worker;
     snapshot.root.owners = crate::platform::persistent_map::MapRoot::from_parts(
         snapshot.root.owners.page(),
         snapshot.owners.len() as u64,
@@ -1582,6 +1683,57 @@ async fn normalized_resident_reuses_the_bounded_execution_kernel() {
             .code,
         "resident_shutting_down"
     );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn normalized_worker_uses_shared_structured_topology() {
+    let snapshot = normalized_worker_snapshot();
+    let (_temporary, _repository, program) = prepare_repository(&snapshot);
+    let program = Arc::new(program);
+    let deployment = NormalizedPreparedDeployment::prepare(
+        &program,
+        Name::new("work").unwrap(),
+        Vec::new(),
+        NormalizedDeploymentResourcePolicy::default(),
+        &SecretCatalog::from_environment(&[]).expect("empty exact secret catalog"),
+    )
+    .expect("pure normalized worker deployment");
+    let resident = NormalizedResidentDeployment::prepare(
+        Arc::clone(&program),
+        deployment,
+        ResidentLimits::default(),
+        NormalizedRunPolicy::default(),
+    )
+    .expect("normalized worker resident");
+    let application = NormalizedWorkerApplication::new(
+        resident,
+        WorkerLimits {
+            maximum_workers: 1,
+            idle_wait_milliseconds: 1,
+            ..WorkerLimits::default()
+        },
+    )
+    .expect("normalized worker application");
+    let observer = application.resident().clone();
+    let shutdown = async move {
+        loop {
+            if observer.observe().completed >= 2 {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    };
+
+    let receipt =
+        tokio::time::timeout(std::time::Duration::from_secs(2), application.run(shutdown))
+            .await
+            .expect("bounded normalized worker run")
+            .expect("normalized worker topology");
+    assert!(receipt.iterations >= 1);
+    assert_eq!(receipt.productive_iterations, 0);
+    assert_eq!(receipt.idle_iterations, receipt.iterations);
+    assert!(receipt.shutdown.admission_stopped);
+    assert_eq!(receipt.shutdown.remaining_tasks, 0);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

@@ -16,6 +16,7 @@ mod secret;
 mod security;
 mod value;
 mod vm;
+mod worker;
 
 #[cfg(test)]
 mod tests;

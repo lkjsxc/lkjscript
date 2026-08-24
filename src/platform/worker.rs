@@ -113,62 +113,93 @@ impl WorkerApplication {
         self,
         shutdown: impl Future<Output = ()> + Send,
     ) -> Result<WorkerReceipt, Diagnostic> {
-        let counters = Arc::new(WorkerCounters::default());
-        let (stop, _) = watch::channel(false);
-        let mut workers = JoinSet::new();
-        for _ in 0..self.limits.maximum_workers {
-            workers.spawn(worker_loop(
-                self.deployment.clone(),
-                stop.subscribe(),
-                Duration::from_millis(self.limits.idle_wait_milliseconds),
-                counters.clone(),
-            ));
-        }
-
-        tokio::pin!(shutdown);
-        let failure = tokio::select! {
-            () = &mut shutdown => None,
-            joined = workers.join_next() => match joined {
-                Some(Ok(Err(error))) => Some(execution_diagnostic(error)),
-                Some(Err(_)) => Some(worker_diagnostic(
-                    DiagnosticClass::Infrastructure,
-                    "worker_task_panic",
-                    "a resident worker task terminated unexpectedly",
-                )),
-                Some(Ok(Ok(()))) | None => Some(worker_diagnostic(
-                    DiagnosticClass::Infrastructure,
-                    "worker_task_unowned_exit",
-                    "a resident worker task exited before its owning shutdown scope",
-                )),
-            }
-        };
-
-        let _ = stop.send(true);
-        let runtime_shutdown = self.deployment.shutdown().await;
-        workers.abort_all();
-        while workers.join_next().await.is_some() {}
-        if let Some(error) = failure {
-            return Err(error);
-        }
-        if runtime_shutdown.remaining_tasks != 0 || !runtime_shutdown.cleanup_failures.is_empty() {
-            return Err(worker_diagnostic(
-                DiagnosticClass::Infrastructure,
-                "worker_shutdown_incomplete",
-                format!(
-                    "{} resident tasks and {} cleanup failures remained after worker shutdown",
-                    runtime_shutdown.remaining_tasks,
-                    runtime_shutdown.cleanup_failures.len()
-                ),
-            ));
-        }
-        Ok(WorkerReceipt {
-            contract_version: WORKER_RUNNER_CONTRACT_VERSION,
-            iterations: counters.iterations.load(Ordering::Acquire),
-            productive_iterations: counters.productive.load(Ordering::Acquire),
-            idle_iterations: counters.idle.load(Ordering::Acquire),
-            shutdown: runtime_shutdown,
-        })
+        run_worker_topology(self.deployment, self.limits, shutdown).await
     }
+}
+
+pub(crate) trait ResidentWorker: Clone + Send + Sync + 'static {
+    fn invoke_worker(&self) -> impl Future<Output = Result<bool, ExecutionError>> + Send;
+
+    fn shutdown_worker(&self) -> impl Future<Output = ShutdownReceipt> + Send;
+}
+
+impl ResidentWorker for ResidentDeployment {
+    async fn invoke_worker(&self) -> Result<bool, ExecutionError> {
+        let receipt = self.invoke(Vec::new()).await?;
+        match receipt.value {
+            Value::Bool(value) => Ok(value),
+            _ => Err(worker_result_type()),
+        }
+    }
+
+    async fn shutdown_worker(&self) -> ShutdownReceipt {
+        self.shutdown().await
+    }
+}
+
+pub(crate) async fn run_worker_topology<D>(
+    deployment: D,
+    limits: WorkerLimits,
+    shutdown: impl Future<Output = ()> + Send,
+) -> Result<WorkerReceipt, Diagnostic>
+where
+    D: ResidentWorker,
+{
+    let counters = Arc::new(WorkerCounters::default());
+    let (stop, _) = watch::channel(false);
+    let mut workers = JoinSet::new();
+    for _ in 0..limits.maximum_workers {
+        workers.spawn(worker_loop(
+            deployment.clone(),
+            stop.subscribe(),
+            Duration::from_millis(limits.idle_wait_milliseconds),
+            counters.clone(),
+        ));
+    }
+
+    tokio::pin!(shutdown);
+    let failure = tokio::select! {
+        () = &mut shutdown => None,
+        joined = workers.join_next() => match joined {
+            Some(Ok(Err(error))) => Some(execution_diagnostic(error)),
+            Some(Err(_)) => Some(worker_diagnostic(
+                DiagnosticClass::Infrastructure,
+                "worker_task_panic",
+                "a resident worker task terminated unexpectedly",
+            )),
+            Some(Ok(Ok(()))) | None => Some(worker_diagnostic(
+                DiagnosticClass::Infrastructure,
+                "worker_task_unowned_exit",
+                "a resident worker task exited before its owning shutdown scope",
+            )),
+        }
+    };
+
+    let _ = stop.send(true);
+    let runtime_shutdown = deployment.shutdown_worker().await;
+    workers.abort_all();
+    while workers.join_next().await.is_some() {}
+    if let Some(error) = failure {
+        return Err(error);
+    }
+    if runtime_shutdown.remaining_tasks != 0 || !runtime_shutdown.cleanup_failures.is_empty() {
+        return Err(worker_diagnostic(
+            DiagnosticClass::Infrastructure,
+            "worker_shutdown_incomplete",
+            format!(
+                "{} resident tasks and {} cleanup failures remained after worker shutdown",
+                runtime_shutdown.remaining_tasks,
+                runtime_shutdown.cleanup_failures.len()
+            ),
+        ));
+    }
+    Ok(WorkerReceipt {
+        contract_version: WORKER_RUNNER_CONTRACT_VERSION,
+        iterations: counters.iterations.load(Ordering::Acquire),
+        productive_iterations: counters.productive.load(Ordering::Acquire),
+        idle_iterations: counters.idle.load(Ordering::Acquire),
+        shutdown: runtime_shutdown,
+    })
 }
 
 #[derive(Default)]
@@ -178,8 +209,8 @@ struct WorkerCounters {
     idle: AtomicU64,
 }
 
-async fn worker_loop(
-    deployment: ResidentDeployment,
+async fn worker_loop<D: ResidentWorker>(
+    deployment: D,
     mut stop: watch::Receiver<bool>,
     idle_wait: Duration,
     counters: Arc<WorkerCounters>,
@@ -188,11 +219,11 @@ async fn worker_loop(
         if *stop.borrow() {
             return Ok(());
         }
-        let receipt = deployment.invoke(Vec::new()).await?;
+        let productive = deployment.invoke_worker().await?;
         increment(&counters.iterations)?;
-        match receipt.value {
-            Value::Bool(true) => increment(&counters.productive)?,
-            Value::Bool(false) => {
+        match productive {
+            true => increment(&counters.productive)?,
+            false => {
                 increment(&counters.idle)?;
                 tokio::select! {
                     biased;
@@ -202,15 +233,16 @@ async fn worker_loop(
                     () = tokio::time::sleep(idle_wait) => {}
                 }
             }
-            _ => {
-                return Err(ExecutionError::new(
-                    ExecutionFailureClass::Infrastructure,
-                    "worker_result_type",
-                    "validated worker port returned a non-Bool value",
-                ));
-            }
         }
     }
+}
+
+pub(crate) fn worker_result_type() -> ExecutionError {
+    ExecutionError::new(
+        ExecutionFailureClass::Infrastructure,
+        "worker_result_type",
+        "validated worker port returned a non-Bool value",
+    )
 }
 
 fn increment(counter: &AtomicU64) -> Result<(), ExecutionError> {
