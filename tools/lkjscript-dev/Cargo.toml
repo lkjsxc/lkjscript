@@ -11,8 +11,6 @@ fs2 = "0.4.3"
 rustix = { version = "1.1.4", default-features = false, features = ["process", "std"] }
 serde = { version = "1.0.228", default-features = false, features = ["derive", "std"] }
 serde_json = { version = "1.0.149", default-features = false, features = ["std"] }
-
-[dev-dependencies]
 tempfile = "3.23.0"
 
 [lints.clippy]

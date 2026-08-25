@@ -2,46 +2,17 @@ use super::model::{InputEntry, InputSnapshot, InputSource, PlatformIdentity, Run
 use super::registry;
 use crate::error::DevError;
 use crate::evidence::{self, FileKind, VerificationDigest};
+use crate::process;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::ffi::OsStr;
-use std::os::unix::ffi::OsStrExt;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 
 const MAXIMUM_COMMAND_OUTPUT_BYTES: usize = 64 * 1024 * 1024;
 const MAXIMUM_COMMAND_ERROR_BYTES: usize = 1024 * 1024;
-const APPROVED_ENVIRONMENT: &[&str] = &[
-    "AR",
-    "CARGO_BUILD_JOBS",
-    "CARGO_BUILD_TARGET",
-    "CARGO_ENCODED_RUSTFLAGS",
-    "CARGO_HOME",
-    "CARGO_TARGET_DIR",
-    "CC",
-    "CFLAGS",
-    "CXX",
-    "CXXFLAGS",
-    "DOCKER_CONFIG",
-    "DOCKER_CONTEXT",
-    "DOCKER_HOST",
-    "HOME",
-    "LANG",
-    "LC_ALL",
-    "PATH",
-    "PKG_CONFIG_PATH",
-    "RANLIB",
-    "RUSTC",
-    "RUSTC_WRAPPER",
-    "RUSTFLAGS",
-    "RUSTUP_HOME",
-    "RUSTUP_TOOLCHAIN",
-    "SOURCE_DATE_EPOCH",
-    "TMPDIR",
-    "TZ",
-];
 
 pub(crate) fn capture(repository: &Path) -> Result<InputSnapshot, DevError> {
     let tracked = listed_paths(repository, &["ls-files", "--cached", "-z"])?;
@@ -166,17 +137,6 @@ pub(crate) fn runtime_identity(
     })
 }
 
-pub(crate) fn process_environment() -> BTreeMap<String, String> {
-    let mut environment = BTreeMap::new();
-    for name in APPROVED_ENVIRONMENT {
-        if let Ok(value) = env::var(name) {
-            environment.insert((*name).to_owned(), value);
-        }
-    }
-    environment.insert("CARGO_NET_OFFLINE".to_owned(), "true".to_owned());
-    environment
-}
-
 pub(crate) fn changed_profile(repository: &Path) -> Result<Vec<String>, DevError> {
     let output = checked_bytes(
         repository,
@@ -238,7 +198,7 @@ pub(crate) fn changed_profile(repository: &Path) -> Result<Vec<String>, DevError
             selected.insert("checker_self_test".to_owned());
         } else if path == "tools/service-acceptance" {
             selected.extend(service.iter().cloned());
-        } else if path == "tools/semantic-scale"
+        } else if path.starts_with("tools/lkjscript-dev/src/scale")
             || path.starts_with("tools/lkjscript-dev/src/process")
             || path.starts_with("tools/lkjscript-dev/src/evidence")
             || path.starts_with("tools/lkjscript-dev/src/lib")
@@ -263,18 +223,9 @@ pub(crate) fn changed_profile(repository: &Path) -> Result<Vec<String>, DevError
 
 fn environment_identity() -> Result<(VerificationDigest, Vec<String>), DevError> {
     let mut values = BTreeMap::new();
-    for name in APPROVED_ENVIRONMENT {
-        if let Some(value) = env::var_os(name) {
-            values.insert(
-                (*name).to_owned(),
-                VerificationDigest::of(value.as_os_str().as_bytes()),
-            );
-        }
+    for (name, value) in process::environment() {
+        values.insert(name, VerificationDigest::of(value.as_bytes()));
     }
-    values.insert(
-        "CARGO_NET_OFFLINE".to_owned(),
-        VerificationDigest::of(b"true"),
-    );
     let names = values.keys().cloned().collect();
     let bytes = serde_json::to_vec(&values).map_err(|error| {
         DevError::infrastructure(format!("encode redacted environment identity: {error}"))
@@ -331,7 +282,7 @@ fn checked_bytes_with_limit(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env_clear()
-        .envs(process_environment());
+        .envs(process::environment());
     let mut child = child.spawn().map_err(|error| {
         DevError::infrastructure(format!("run identity command '{program}': {error}"))
     })?;

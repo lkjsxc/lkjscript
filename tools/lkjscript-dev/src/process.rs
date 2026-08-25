@@ -4,6 +4,7 @@ use crate::evidence::{self, FileProof};
 use rustix::process::{Pid, Signal, kill_process_group};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::env;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 #[cfg(target_os = "linux")]
@@ -17,6 +18,46 @@ use std::time::{Duration, Instant};
 
 const READ_CHUNK_BYTES: usize = 64 * 1024;
 const POLL_INTERVAL: Duration = Duration::from_millis(10);
+const APPROVED_ENVIRONMENT: &[&str] = &[
+    "AR",
+    "CARGO_BUILD_JOBS",
+    "CARGO_BUILD_TARGET",
+    "CARGO_ENCODED_RUSTFLAGS",
+    "CARGO_HOME",
+    "CARGO_TARGET_DIR",
+    "CC",
+    "CFLAGS",
+    "CXX",
+    "CXXFLAGS",
+    "DOCKER_CONFIG",
+    "DOCKER_CONTEXT",
+    "DOCKER_HOST",
+    "HOME",
+    "LANG",
+    "LC_ALL",
+    "PATH",
+    "PKG_CONFIG_PATH",
+    "RANLIB",
+    "RUSTC",
+    "RUSTC_WRAPPER",
+    "RUSTFLAGS",
+    "RUSTUP_HOME",
+    "RUSTUP_TOOLCHAIN",
+    "SOURCE_DATE_EPOCH",
+    "TMPDIR",
+    "TZ",
+];
+
+pub(crate) fn environment() -> BTreeMap<String, String> {
+    let mut environment = BTreeMap::new();
+    for name in APPROVED_ENVIRONMENT {
+        if let Ok(value) = env::var(name) {
+            environment.insert((*name).to_owned(), value);
+        }
+    }
+    environment.insert("CARGO_NET_OFFLINE".to_owned(), "true".to_owned());
+    environment
+}
 
 #[derive(Clone, Debug)]
 pub(crate) struct ProcessSpec {
@@ -462,6 +503,36 @@ pub(crate) fn excerpt(path: &Path, maximum: usize) -> Result<String, DevError> {
         selected
     };
     Ok(String::from_utf8_lossy(&selected).into_owned())
+}
+
+pub(crate) fn read_bounded(path: &Path, maximum: u64) -> Result<Vec<u8>, DevError> {
+    let metadata = std::fs::symlink_metadata(path).map_err(|error| {
+        DevError::infrastructure(format!(
+            "inspect bounded file '{}': {error}",
+            path.display()
+        ))
+    })?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > maximum {
+        return Err(DevError::infrastructure(format!(
+            "file '{}' is unsafe or exceeds {maximum} bytes",
+            path.display()
+        )));
+    }
+    let capacity = usize::try_from(metadata.len())
+        .map_err(|_| DevError::infrastructure("bounded file length does not fit this platform"))?;
+    let mut bytes = Vec::with_capacity(capacity);
+    File::open(path)
+        .and_then(|file| file.take(maximum.saturating_add(1)).read_to_end(&mut bytes))
+        .map_err(|error| {
+            DevError::infrastructure(format!("read bounded file '{}': {error}", path.display()))
+        })?;
+    if bytes.len() as u64 != metadata.len() {
+        return Err(DevError::infrastructure(format!(
+            "file '{}' changed during bounded read",
+            path.display()
+        )));
+    }
+    Ok(bytes)
 }
 
 fn duration_nanoseconds(duration: Duration) -> u64 {

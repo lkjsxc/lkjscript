@@ -5,6 +5,7 @@ mod check;
 mod error;
 mod evidence;
 mod process;
+mod scale;
 
 use error::DevError;
 use std::ffi::OsString;
@@ -27,10 +28,11 @@ fn run(arguments: impl IntoIterator<Item = OsString>) -> Result<u8, DevError> {
     let command = next_utf8(&mut arguments, "command")?;
     match command.as_deref() {
         Some("check") => check::command(arguments),
+        Some("scale") => scale::command(arguments),
         Some("__fixture") => check::fixture(arguments),
         Some("help") | Some("--help") | Some("-h") | None => {
             println!(
-                "usage: lkjscript-dev check <focused|changed|product|service|full|self-test> [--fresh] [--jobs N] [--machine] [--details]"
+                "usage: lkjscript-dev check <focused|changed|product|service|full|self-test> ... | lkjscript-dev scale <independent-modules|small-functions|wide-module|deep-chain|wide-fanout> ..."
             );
             Ok(0)
         }

@@ -264,7 +264,7 @@ fn execute_fresh(
         &ProcessSpec {
             command: gate.command.clone(),
             cwd: repository.to_path_buf(),
-            environment: snapshot::process_environment(),
+            environment: process::environment(),
             timeout: gate.timeout,
             maximum_stdout_bytes: gate.maximum_stdout_bytes,
             maximum_stderr_bytes: gate.maximum_stderr_bytes,
