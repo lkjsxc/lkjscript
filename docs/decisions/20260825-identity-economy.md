@@ -4,8 +4,10 @@ Date: 2026-08-25 UTC.
 
 ## Status
 
-Proposed. The inventory and design audit are complete; scoped-storage implementation,
-cross-package round trips, and complete-workflow measurements are required before acceptance.
+Proposed. The inventory and storage-shape audit are complete. Commits `ad16477d` and `44670505`
+retain the private typed-token/key foundation with package-local stored keys and package-qualified
+external references. Dependency-closed authority migration, cross-package round trips, and
+complete-workflow measurements are required before acceptance.
 
 ## Problem
 
@@ -27,23 +29,28 @@ references to dense indexes and task-local slots.
   requirements, ports, type parameters, parameters, expressions, and bindings.
 - Scope member tokens to their declaration or operation. Scope body tokens to an exact body owner
   and role, such as function body, constant value, test actual or expected value, port
-  implementation, or binding value.
+  implementation. Binding initializers remain inside the exact enclosing body scope.
 - Make every external exact selector carry package and parent scope. A bare local token is never a
-  valid public selector.
-- Keep logical collection ordering explicit and independent from identity. Preserve local identity
-  across rename, insertion, and reorder; allocate a new token after deletion and recreation or a
-  move to another parent scope.
+  valid public selector. Omit the package from stored scoped-map keys because the owning semantic
+  root already binds exactly one package.
+- Keep declaration-member ordering as typed intrusive links independent from identity. Preserve
+  local identity across rename, insertion, and reorder; allocate a new token after deletion and
+  recreation or a move to another parent scope. Expression and binding membership is token-sorted
+  only for canonical storage; expression child vectors and the root graph own program order.
 - Contract the global owner, witness, relation, diff, retirement, and tombstone domains to genuine
-  package-level owners. Parent-owned member and body records may use segmented physical maps for
-  sparse edits without making segment identity semantic.
-- Remove allocated documentation and annotation identities. Store documentation by canonical
-  content attachment and annotations as unique owner-scoped class/key slots. Nonsemantic
-  attachments must not enter semantic revision identity.
+  package-level owners. Store fine records in one package-wide persistent map keyed by exact
+  parent/body scope, local domain, and token. Bind its logical `MapContentRoot` into semantic state
+  while keeping its page root in publication evidence. This avoids both whole-parent rewrites and
+  a root/catalog per small scope.
+- Remove allocated documentation and annotation identities. Store semantic documentation by
+  attachment target plus content digest and annotations as unique attachment-target/key slots in
+  the scoped map. Nonsemantic attachments live in a separately revision-bound presentation record
+  and must not enter semantic revision identity.
 - Keep immutable type and blob structures content-addressed, request symbols ephemeral, and
   compiler/runtime indexes derived and dense.
-- Bind deterministic local allocation to repository, exact base, normalized request contract and
-  digest, idempotency key, parent scope, local identity domain, declared symbol ordinal, and a
-  deterministic collision counter.
+- Bind deterministic local allocation to the exact base through a typed normalized change digest,
+  parent scope, local identity domain, declared symbol ordinal, and a deterministic collision
+  counter. Request-local spelling and transport bytes must not affect that digest.
 
 ## Alternatives
 
@@ -53,8 +60,16 @@ references to dense indexes and task-local slots.
   insertion, reorder, exact reference, deletion/recreation, and merge.
 - Scoped syntax over the existing universal owner maps changes vocabulary without delivering the
   storage or locality contraction.
+- A map/content root per parent scope improves isolation for unusually wide bodies but creates a
+  second-level catalog, durability rules, and fixed overhead for many tiny scopes before evidence
+  shows a benefit.
 - Reducing token width before removing global infrastructure adds collision risk while saving less
   than scoping and contextual encoding.
+
+Operation parameters remain exact members of an interface operation, but they are not executable
+local values: the current language has no operation body or runtime binding for them. The cutover
+therefore removes the unsupported operation-parameter local-expression form instead of carrying a
+dead capability into the current contract.
 
 ## Evidence required for acceptance
 
@@ -81,7 +96,7 @@ fully qualified external references.
 
 ## Reversal condition
 
-If parent-owned segmented storage makes a sparse edit proportional to the complete body or member
-collection, refine the local physical index without restoring global semantic identity. Promote an
-identity to broader scope only when a demonstrated cross-parent continuity consumer cannot carry
-the parent scope.
+If prefix-scoped edits in the package-wide map are materially nonlocal for wide bodies, promote
+physical sections to parent-owned content roots plus an external catalog without restoring global
+semantic identity. Promote an identity to broader scope only when a demonstrated cross-parent
+continuity consumer cannot carry the parent scope.
