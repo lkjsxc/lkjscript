@@ -8,7 +8,7 @@ use crate::platform::kernel::{
 
 pub(in crate::platform::change::request) fn collect_mutation_symbols(
     change: &super::super::AuthoredChange,
-    definitions: &mut BTreeMap<String, SymbolKind>,
+    definitions: &mut SymbolDefinitions,
 ) -> Result<(), Diagnostic> {
     use super::super::AuthoredChange;
     match change {

@@ -41,7 +41,10 @@ pub use digest::{
 };
 pub use expression::*;
 pub use id::{EncodedOwnerKey, ExactOwnerKey, OwnerHeader, OwnerKey, OwnerKind, PackageId};
-pub(crate) use infer::{ExpressionRead, validate_expression_roots};
+pub(crate) use infer::{
+    ExpressionRead, ExpressionValidationExhaustion, ExpressionValidationLimits,
+    validate_expression_roots, validate_expression_roots_with_limits,
+};
 pub use interface::*;
 pub use name::Name;
 pub use namespace::{NamespaceClass, NamespaceEntryRef, owner_namespace};
@@ -49,7 +52,7 @@ pub use owner::*;
 pub use reference::*;
 pub use relation::{
     PropagationClass, RelationEdge, RelationEndpoint, RelationKind, extract_owner_relations,
-    extract_relations,
+    extract_owner_relations_with_limit, extract_relations,
 };
 pub use root::*;
 pub(crate) use scoped::*;

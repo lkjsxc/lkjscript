@@ -29,8 +29,11 @@ pub use base_read::{
     WitnessRead, WitnessReadWork, WitnessRelationRead, WitnessTestDependencyRead,
 };
 pub use budget::{
-    ChangeBudget, ChangeBudgetWork, MAXIMUM_CHANGE_AFFECTED_OWNERS, MAXIMUM_CHANGE_OPERATIONS,
-    MAXIMUM_CHANGE_RELATION_EDGES, MAXIMUM_CHANGE_WORK,
+    AuthoredChangeAdmission, CanonicalEditAdmission, CanonicalEditWork,
+    CanonicalMapUpdateAdmission, CanonicalMapUpdateWork, CanonicalReadAdmission, ChangeBudget,
+    ChangeBudgetWork, ImpactAdmission, MAXIMUM_CHANGE_OPERATIONS, StagingAdmission,
+    StagingBudgetWork, TestAdmission, TestBudgetWork, ValidationAdmission, ValidationBudgetWork,
+    WitnessReadAdmission, WitnessUpdateAdmission, WitnessUpdateWork,
 };
 pub use delta::{CanonicalDelta, CanonicalNormalization, ExactEdit, PrimitiveEdit};
 pub use derived::{DerivedDelta, DerivedValueEdit, RelationDelta, derive_local_delta};
@@ -65,7 +68,7 @@ pub use validate::{
     StructuralValidationReport, validate_incremental_frontier, validate_structural_frontier,
 };
 pub use witness_update::{
-    WitnessEditCounts, WitnessMapBase, WitnessMapUpdate, update_witness_maps,
+    WitnessEditCounts, WitnessMapAdmission, WitnessMapBase, WitnessMapUpdate, update_witness_maps,
     update_witness_maps_from,
 };
 

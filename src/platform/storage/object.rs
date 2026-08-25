@@ -1,6 +1,7 @@
 //! Typed immutable object identities and narrow store interface.
 
 use super::contract;
+use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::fmt;
 
@@ -277,6 +278,7 @@ pub struct StoreWork {
     pub objects_reused: u64,
     pub bytes_read: u64,
     pub bytes_staged: u64,
+    pub pages_staged: u64,
     pub packs_sealed: u64,
 }
 
@@ -289,8 +291,102 @@ impl StoreWork {
         self.objects_reused = self.objects_reused.saturating_add(other.objects_reused);
         self.bytes_read = self.bytes_read.saturating_add(other.bytes_read);
         self.bytes_staged = self.bytes_staged.saturating_add(other.bytes_staged);
+        self.pages_staged = self.pages_staged.saturating_add(other.pages_staged);
         self.packs_sealed = self.packs_sealed.saturating_add(other.packs_sealed);
     }
+}
+
+/// Exact remaining aggregate allowance for immutable-object reads at one owning boundary.
+///
+/// Object and byte allowances apply only to present objects. A missing lookup consumes one
+/// catalog lookup and no object or byte allowance. Store implementations that support admitted
+/// reads must inspect already-retained catalog metadata, admit the exact payload length, and only
+/// then open, copy, hash, or otherwise consume the object payload.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct StoreReadLimits {
+    pub maximum_catalog_lookups: u64,
+    pub maximum_objects: u64,
+    pub maximum_bytes: u64,
+}
+
+/// Mutable pre-consumption admission for one aggregate immutable-object read boundary.
+///
+/// [`StoreWork`] remains the observation of work actually completed. This value owns only the
+/// remaining permission and deliberately does not infer observations after a read has occurred.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StoreReadAdmission {
+    remaining: StoreReadLimits,
+}
+
+impl StoreReadAdmission {
+    pub const fn new(limits: StoreReadLimits) -> Self {
+        Self { remaining: limits }
+    }
+
+    pub const fn unbounded() -> Self {
+        Self::new(StoreReadLimits {
+            maximum_catalog_lookups: u64::MAX,
+            maximum_objects: u64::MAX,
+            maximum_bytes: u64::MAX,
+        })
+    }
+
+    pub const fn remaining(&self) -> StoreReadLimits {
+        self.remaining
+    }
+
+    pub fn admit_catalog_lookup(&mut self) -> Result<(), StoreError> {
+        let Some(remaining) = self.remaining.maximum_catalog_lookups.checked_sub(1) else {
+            return Err(read_exhausted(
+                "object_read_catalog_lookups_exhausted",
+                "catalog lookups",
+                1,
+                self.remaining.maximum_catalog_lookups,
+            ));
+        };
+        self.remaining.maximum_catalog_lookups = remaining;
+        Ok(())
+    }
+
+    pub fn admit_object(&mut self, byte_count: usize) -> Result<(), StoreError> {
+        let byte_count = u64::try_from(byte_count).map_err(|_| {
+            StoreError::new(
+                StoreErrorClass::Resource,
+                "object_read_byte_count",
+                "immutable object byte count cannot be represented by the read admission",
+            )
+        })?;
+        self.admit_object_bytes(byte_count)
+    }
+
+    pub fn admit_object_bytes(&mut self, byte_count: u64) -> Result<(), StoreError> {
+        if self.remaining.maximum_objects == 0 {
+            return Err(read_exhausted(
+                "object_read_objects_exhausted",
+                "objects",
+                1,
+                0,
+            ));
+        }
+        if byte_count > self.remaining.maximum_bytes {
+            return Err(read_exhausted(
+                "object_read_bytes_exhausted",
+                "bytes",
+                byte_count,
+                self.remaining.maximum_bytes,
+            ));
+        }
+        self.remaining.maximum_objects -= 1;
+        self.remaining.maximum_bytes -= byte_count;
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ObjectStageLimits {
+    pub maximum_objects: u64,
+    pub maximum_bytes: u64,
+    pub maximum_pages: u64,
 }
 
 pub trait ImmutableObjectStore {
@@ -301,8 +397,33 @@ pub trait ImmutableObjectStore {
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError>;
 
+    /// Reads through an aggregate pre-consumption admission boundary.
+    ///
+    /// Implementations must override this method when they can expose admitted reads. The default
+    /// fails before invoking [`Self::read`], so a generic store can never silently turn a
+    /// retrospective observation into an admission claim.
+    fn read_admitted(
+        &self,
+        _key: ObjectKey,
+        _maximum_bytes: usize,
+        _admission: &mut StoreReadAdmission,
+        _work: &mut StoreWork,
+    ) -> Result<Option<Vec<u8>>, StoreError> {
+        Err(read_admission_unsupported())
+    }
+
     fn contains(&self, key: ObjectKey, work: &mut StoreWork) -> Result<bool, StoreError> {
         Ok(self.read(key, key.domain.maximum_bytes(), work)?.is_some())
+    }
+
+    /// Checks presence while admitting its catalog access before inspection.
+    fn contains_admitted(
+        &self,
+        _key: ObjectKey,
+        _admission: &mut StoreReadAdmission,
+        _work: &mut StoreWork,
+    ) -> Result<bool, StoreError> {
+        Err(read_admission_unsupported())
     }
 
     fn stage(
@@ -311,6 +432,17 @@ pub trait ImmutableObjectStore {
         bytes: &[u8],
         work: &mut StoreWork,
     ) -> Result<StageOutcome, StoreError>;
+
+    /// Stages bytes while admitting any immutable-base read used for deduplication.
+    fn stage_admitted(
+        &mut self,
+        _key: ObjectKey,
+        _bytes: &[u8],
+        _admission: &mut StoreReadAdmission,
+        _work: &mut StoreWork,
+    ) -> Result<StageOutcome, StoreError> {
+        Err(read_admission_unsupported())
+    }
 }
 
 /// Private read-through stage for one prepared publication. Reads observe staged objects first and
@@ -319,6 +451,10 @@ pub trait ImmutableObjectStore {
 pub struct ObjectStage<'a, S: ImmutableObjectStore + ?Sized> {
     base: &'a S,
     objects: BTreeMap<ObjectKey, Vec<u8>>,
+    limits: Option<ObjectStageLimits>,
+    read_admission: Option<Cell<StoreReadAdmission>>,
+    staged_bytes: u64,
+    staged_pages: u64,
 }
 
 impl<'a, S: ImmutableObjectStore + ?Sized> ObjectStage<'a, S> {
@@ -326,6 +462,38 @@ impl<'a, S: ImmutableObjectStore + ?Sized> ObjectStage<'a, S> {
         Self {
             base,
             objects: BTreeMap::new(),
+            limits: None,
+            read_admission: None,
+            staged_bytes: 0,
+            staged_pages: 0,
+        }
+    }
+
+    pub const fn with_limits(base: &'a S, limits: ObjectStageLimits) -> Self {
+        Self {
+            base,
+            objects: BTreeMap::new(),
+            limits: Some(limits),
+            read_admission: None,
+            staged_bytes: 0,
+            staged_pages: 0,
+        }
+    }
+
+    /// Creates a request-local stage whose ordinary store operations share one accepted-base
+    /// read admission.
+    pub const fn with_limits_and_read_admission(
+        base: &'a S,
+        limits: ObjectStageLimits,
+        read_admission: StoreReadAdmission,
+    ) -> Self {
+        Self {
+            base,
+            objects: BTreeMap::new(),
+            limits: Some(limits),
+            read_admission: Some(Cell::new(read_admission)),
+            staged_bytes: 0,
+            staged_pages: 0,
         }
     }
 
@@ -338,9 +506,21 @@ impl<'a, S: ImmutableObjectStore + ?Sized> ObjectStage<'a, S> {
     }
 
     pub fn stored_bytes(&self) -> usize {
-        self.objects
-            .values()
-            .fold(0_usize, |total, bytes| total.saturating_add(bytes.len()))
+        usize::try_from(self.staged_bytes).unwrap_or(usize::MAX)
+    }
+
+    pub const fn staged_byte_count(&self) -> u64 {
+        self.staged_bytes
+    }
+
+    pub const fn staged_page_count(&self) -> u64 {
+        self.staged_pages
+    }
+
+    pub fn remaining_read_admission(&self) -> Option<StoreReadLimits> {
+        self.read_admission
+            .as_ref()
+            .map(|admission| admission.get().remaining())
     }
 
     pub fn objects(&self) -> impl Iterator<Item = (ObjectKey, &[u8])> {
@@ -352,13 +532,12 @@ impl<'a, S: ImmutableObjectStore + ?Sized> ObjectStage<'a, S> {
     pub fn into_objects(self) -> BTreeMap<ObjectKey, Vec<u8>> {
         self.objects
     }
-}
 
-impl<S: ImmutableObjectStore + ?Sized> ImmutableObjectStore for ObjectStage<'_, S> {
-    fn read(
+    fn read_inner(
         &self,
         key: ObjectKey,
         maximum_bytes: usize,
+        admission: Option<&mut StoreReadAdmission>,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
         if let Some(bytes) = self.objects.get(&key) {
@@ -369,25 +548,34 @@ impl<S: ImmutableObjectStore + ?Sized> ImmutableObjectStore for ObjectStage<'_, 
                     "staged object exceeds the caller read bound",
                 ));
             }
+            if let Some(admission) = admission {
+                admission.admit_object(bytes.len())?;
+            }
             key.verify(bytes)?;
             work.objects_read = work.objects_read.saturating_add(1);
             work.bytes_read = work.bytes_read.saturating_add(bytes.len() as u64);
             return Ok(Some(bytes.clone()));
         }
-        self.base.read(key, maximum_bytes, work)
+        self.read_base(key, maximum_bytes, admission, work)
     }
 
-    fn contains(&self, key: ObjectKey, work: &mut StoreWork) -> Result<bool, StoreError> {
+    fn contains_inner(
+        &self,
+        key: ObjectKey,
+        admission: Option<&mut StoreReadAdmission>,
+        work: &mut StoreWork,
+    ) -> Result<bool, StoreError> {
         if self.objects.contains_key(&key) {
             return Ok(true);
         }
-        self.base.contains(key, work)
+        self.contains_base(key, admission, work)
     }
 
-    fn stage(
+    fn stage_inner(
         &mut self,
         key: ObjectKey,
         bytes: &[u8],
+        admission: Option<&mut StoreReadAdmission>,
         work: &mut StoreWork,
     ) -> Result<StageOutcome, StoreError> {
         key.verify(bytes)?;
@@ -402,7 +590,8 @@ impl<S: ImmutableObjectStore + ?Sized> ImmutableObjectStore for ObjectStage<'_, 
             work.objects_reused = work.objects_reused.saturating_add(1);
             return Ok(StageOutcome::Reused);
         }
-        if let Some(existing) = self.base.read(key, key.domain.maximum_bytes(), work)? {
+        let existing = self.read_base(key, key.domain.maximum_bytes(), admission, work)?;
+        if let Some(existing) = existing {
             if existing != bytes {
                 return Err(StoreError::new(
                     StoreErrorClass::Corrupt,
@@ -413,11 +602,176 @@ impl<S: ImmutableObjectStore + ?Sized> ImmutableObjectStore for ObjectStage<'_, 
             work.objects_reused = work.objects_reused.saturating_add(1);
             return Ok(StageOutcome::Reused);
         }
+        let byte_count = u64::try_from(bytes.len()).map_err(|_| {
+            StoreError::new(
+                StoreErrorClass::Resource,
+                "change_budget_staged_bytes",
+                "staged object byte count cannot be represented by the staging budget",
+            )
+        })?;
+        let staged_objects = u64::try_from(self.objects.len()).unwrap_or(u64::MAX);
+        let admitted_objects = staged_objects.checked_add(1).ok_or_else(|| {
+            StoreError::new(
+                StoreErrorClass::Resource,
+                "change_budget_staged_objects",
+                "staged object observation overflowed",
+            )
+        })?;
+        let admitted_bytes = self.staged_bytes.checked_add(byte_count).ok_or_else(|| {
+            StoreError::new(
+                StoreErrorClass::Resource,
+                "change_budget_staged_bytes",
+                "staged byte observation overflowed",
+            )
+        })?;
+        let admitted_pages = self
+            .staged_pages
+            .checked_add(u64::from(key.domain == ObjectDomain::MapPage))
+            .ok_or_else(|| {
+                StoreError::new(
+                    StoreErrorClass::Resource,
+                    "change_budget_staged_pages",
+                    "staged page observation overflowed",
+                )
+            })?;
+        if let Some(limits) = self.limits {
+            check_stage_limit(
+                "change_budget_staged_objects",
+                "objects",
+                admitted_objects,
+                limits.maximum_objects,
+            )?;
+            check_stage_limit(
+                "change_budget_staged_bytes",
+                "bytes",
+                admitted_bytes,
+                limits.maximum_bytes,
+            )?;
+            check_stage_limit(
+                "change_budget_staged_pages",
+                "pages",
+                admitted_pages,
+                limits.maximum_pages,
+            )?;
+        }
         let outcome = stage_into_map(&mut self.objects, key, bytes)?;
+        self.staged_bytes = admitted_bytes;
+        self.staged_pages = admitted_pages;
         work.objects_staged = work.objects_staged.saturating_add(1);
-        work.bytes_staged = work.bytes_staged.saturating_add(bytes.len() as u64);
+        work.bytes_staged = work.bytes_staged.saturating_add(byte_count);
+        work.pages_staged = work
+            .pages_staged
+            .saturating_add(u64::from(key.domain == ObjectDomain::MapPage));
         Ok(outcome)
     }
+
+    fn read_base(
+        &self,
+        key: ObjectKey,
+        maximum_bytes: usize,
+        admission: Option<&mut StoreReadAdmission>,
+        work: &mut StoreWork,
+    ) -> Result<Option<Vec<u8>>, StoreError> {
+        if let Some(admission) = admission {
+            return self.base.read_admitted(key, maximum_bytes, admission, work);
+        }
+        let Some(shared) = &self.read_admission else {
+            return self.base.read(key, maximum_bytes, work);
+        };
+        let mut admission = shared.get();
+        let result = self
+            .base
+            .read_admitted(key, maximum_bytes, &mut admission, work);
+        shared.set(admission);
+        result
+    }
+
+    fn contains_base(
+        &self,
+        key: ObjectKey,
+        admission: Option<&mut StoreReadAdmission>,
+        work: &mut StoreWork,
+    ) -> Result<bool, StoreError> {
+        if let Some(admission) = admission {
+            return self.base.contains_admitted(key, admission, work);
+        }
+        let Some(shared) = &self.read_admission else {
+            return self.base.contains(key, work);
+        };
+        let mut admission = shared.get();
+        let result = self.base.contains_admitted(key, &mut admission, work);
+        shared.set(admission);
+        result
+    }
+}
+
+impl<S: ImmutableObjectStore + ?Sized> ImmutableObjectStore for ObjectStage<'_, S> {
+    fn read(
+        &self,
+        key: ObjectKey,
+        maximum_bytes: usize,
+        work: &mut StoreWork,
+    ) -> Result<Option<Vec<u8>>, StoreError> {
+        self.read_inner(key, maximum_bytes, None, work)
+    }
+
+    fn read_admitted(
+        &self,
+        key: ObjectKey,
+        maximum_bytes: usize,
+        admission: &mut StoreReadAdmission,
+        work: &mut StoreWork,
+    ) -> Result<Option<Vec<u8>>, StoreError> {
+        self.read_inner(key, maximum_bytes, Some(admission), work)
+    }
+
+    fn contains(&self, key: ObjectKey, work: &mut StoreWork) -> Result<bool, StoreError> {
+        self.contains_inner(key, None, work)
+    }
+
+    fn contains_admitted(
+        &self,
+        key: ObjectKey,
+        admission: &mut StoreReadAdmission,
+        work: &mut StoreWork,
+    ) -> Result<bool, StoreError> {
+        self.contains_inner(key, Some(admission), work)
+    }
+
+    fn stage(
+        &mut self,
+        key: ObjectKey,
+        bytes: &[u8],
+        work: &mut StoreWork,
+    ) -> Result<StageOutcome, StoreError> {
+        self.stage_inner(key, bytes, None, work)
+    }
+
+    fn stage_admitted(
+        &mut self,
+        key: ObjectKey,
+        bytes: &[u8],
+        admission: &mut StoreReadAdmission,
+        work: &mut StoreWork,
+    ) -> Result<StageOutcome, StoreError> {
+        self.stage_inner(key, bytes, Some(admission), work)
+    }
+}
+
+fn check_stage_limit(
+    code: &'static str,
+    unit: &'static str,
+    observed: u64,
+    maximum: u64,
+) -> Result<(), StoreError> {
+    if observed > maximum {
+        return Err(StoreError::new(
+            StoreErrorClass::Resource,
+            code,
+            format!("staging requires {observed} {unit}, exceeding the declared maximum {maximum}"),
+        ));
+    }
+    Ok(())
 }
 
 impl<S: ImmutableObjectStore + ?Sized> ImmutableObjectStore for &mut S {
@@ -430,8 +784,27 @@ impl<S: ImmutableObjectStore + ?Sized> ImmutableObjectStore for &mut S {
         (**self).read(key, maximum_bytes, work)
     }
 
+    fn read_admitted(
+        &self,
+        key: ObjectKey,
+        maximum_bytes: usize,
+        admission: &mut StoreReadAdmission,
+        work: &mut StoreWork,
+    ) -> Result<Option<Vec<u8>>, StoreError> {
+        (**self).read_admitted(key, maximum_bytes, admission, work)
+    }
+
     fn contains(&self, key: ObjectKey, work: &mut StoreWork) -> Result<bool, StoreError> {
         (**self).contains(key, work)
+    }
+
+    fn contains_admitted(
+        &self,
+        key: ObjectKey,
+        admission: &mut StoreReadAdmission,
+        work: &mut StoreWork,
+    ) -> Result<bool, StoreError> {
+        (**self).contains_admitted(key, admission, work)
     }
 
     fn stage(
@@ -441,6 +814,16 @@ impl<S: ImmutableObjectStore + ?Sized> ImmutableObjectStore for &mut S {
         work: &mut StoreWork,
     ) -> Result<StageOutcome, StoreError> {
         (**self).stage(key, bytes, work)
+    }
+
+    fn stage_admitted(
+        &mut self,
+        key: ObjectKey,
+        bytes: &[u8],
+        admission: &mut StoreReadAdmission,
+        work: &mut StoreWork,
+    ) -> Result<StageOutcome, StoreError> {
+        (**self).stage_admitted(key, bytes, admission, work)
     }
 }
 
@@ -476,6 +859,27 @@ impl fmt::Display for StoreError {
 }
 
 impl std::error::Error for StoreError {}
+
+fn read_admission_unsupported() -> StoreError {
+    StoreError::new(
+        StoreErrorClass::Input,
+        "object_read_admission_unsupported",
+        "immutable object store does not implement pre-consumption read admission",
+    )
+}
+
+fn read_exhausted(
+    code: &'static str,
+    unit: &'static str,
+    required: u64,
+    remaining: u64,
+) -> StoreError {
+    StoreError::new(
+        StoreErrorClass::Resource,
+        code,
+        format!("immutable object read requires {required} {unit}, but only {remaining} remain"),
+    )
+}
 
 pub fn stage_into_map(
     objects: &mut BTreeMap<ObjectKey, Vec<u8>>,

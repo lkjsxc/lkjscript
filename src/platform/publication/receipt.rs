@@ -1,4 +1,4 @@
-//! Compact, honest evidence for one accepted Graph 5 publication.
+//! Compact, honest evidence for one accepted semantic publication.
 
 use super::contract::{
     MAXIMUM_INTENT_BYTES, MAXIMUM_RECEIPT_BYTES, RECEIPT_CONTRACT_VERSION, RECEIPT_ENVELOPE_DOMAIN,
@@ -13,7 +13,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5PublicationStatusV1")]
+#[schemars(rename = "lkjscript.PublicationStatusV1")]
 #[serde(rename_all = "snake_case")]
 pub enum PublicationStatus {
     AcceptedChange,
@@ -24,7 +24,7 @@ pub enum PublicationStatus {
 #[derive(
     Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize,
 )]
-#[schemars(rename = "lkjscript.Graph5ValidationProfileV1")]
+#[schemars(rename = "lkjscript.ValidationProfileV1")]
 #[serde(rename_all = "snake_case")]
 pub enum ValidationProfile {
     FullRebuild,
@@ -35,7 +35,7 @@ pub enum ValidationProfile {
 #[derive(
     Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize,
 )]
-#[schemars(rename = "lkjscript.Graph5FullOracleStatusV1")]
+#[schemars(rename = "lkjscript.FullOracleStatusV1")]
 #[serde(rename_all = "snake_case")]
 pub enum FullOracleStatus {
     NotApplicable,
@@ -47,7 +47,7 @@ pub enum FullOracleStatus {
 #[derive(
     Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize,
 )]
-#[schemars(rename = "lkjscript.Graph5ChangeCountsV1")]
+#[schemars(rename = "lkjscript.ChangeCountsV1")]
 #[serde(deny_unknown_fields)]
 pub struct ChangeCounts {
     pub owners_created: u64,
@@ -62,7 +62,7 @@ pub struct ChangeCounts {
 #[derive(
     Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize,
 )]
-#[schemars(rename = "lkjscript.Graph5ValidationEvidenceV1")]
+#[schemars(rename = "lkjscript.ValidationEvidenceV1")]
 #[serde(deny_unknown_fields)]
 pub struct ValidationEvidence {
     pub profile: ValidationProfile,
@@ -80,17 +80,23 @@ pub struct ValidationEvidence {
 #[derive(
     Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize,
 )]
-#[schemars(rename = "lkjscript.Graph5WorkObservationV1")]
+#[schemars(rename = "lkjscript.WorkObservationV3")]
 #[serde(deny_unknown_fields)]
 pub struct WorkObservation {
+    /// Exact multidimensional change-meter observation before this receipt and its enclosing
+    /// revision are encoded. Bootstrap receipts retain the all-zero observation.
+    pub budget: crate::platform::change::ChangeBudgetWork,
     /// Complete validator work when its implementation exposes one aggregate count.
     pub validation_work: u64,
     pub map_pages_read: u64,
     pub map_pages_written: u64,
     pub objects_read: u64,
-    /// New authority, transaction, and diff objects staged before the receipt and revision are
-    /// encoded. Including either enclosing object would make this observation self-referential.
+    /// New authority, transaction, diff, and history-index objects staged before the receipt and
+    /// revision are encoded. Including either enclosing object would make this observation
+    /// self-referential.
     pub objects_staged: u64,
+    /// Newly staged immutable persistent-map pages included by `objects_staged`.
+    pub pages_staged: u64,
     pub owner_records_checked: u64,
     pub ownership_entries_checked: u64,
     pub type_objects_checked: u64,

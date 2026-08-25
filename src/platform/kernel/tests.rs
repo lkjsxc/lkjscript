@@ -844,6 +844,25 @@ fn type_interner_deduplicates_and_requires_exact_children() {
 }
 
 #[test]
+fn type_interner_admits_before_materializing_a_new_object() {
+    let mut interner = TypeObjectInterner::with_maximum_objects(1);
+    let unit = interner.intern(TypeForm::Unit).expect("unit must intern");
+    assert_eq!(interner.len(), 1);
+    assert_eq!(
+        interner
+            .intern(TypeForm::Unit)
+            .expect("equal type must reuse"),
+        unit
+    );
+    assert_eq!(interner.len(), 1);
+    let error = interner
+        .intern(TypeForm::Bool)
+        .expect_err("a second distinct type must be rejected before insertion");
+    assert_eq!(error.code, "kernel_type_interner_exhausted");
+    assert_eq!(interner.len(), 1);
+}
+
+#[test]
 fn package_identity_has_a_distinct_binary_domain() {
     let parameter = crate::platform::semantic_id::TypeParameterId::migrate(TEST_SEED, 0);
     let bytes = bincode::encode_to_vec(parameter, bincode::config::standard())

@@ -7,9 +7,9 @@ use super::{
 use crate::platform::change::{
     AuthoredChangeSet, AuthoredLoweringWork, BoundOwnerSummary, CanonicalBaseRead, CanonicalDelta,
     CanonicalRead, CanonicalReadWork, ChangeBudget, DerivedDelta, PrimitiveEdit, SummaryDelta,
-    TestDependencyDelta, WitnessBaseRead, WitnessMapBase, WitnessMapUpdate, WitnessRead,
-    WitnessReadWork, WitnessRelationRead, WitnessTestDependencyRead, lower_authored_changes,
-    prepare_change_analysis_with_budget, update_witness_maps_from,
+    TestDependencyDelta, WitnessBaseRead, WitnessMapAdmission, WitnessMapBase, WitnessMapUpdate,
+    WitnessRead, WitnessReadWork, WitnessRelationRead, WitnessTestDependencyRead,
+    lower_authored_changes, prepare_change_analysis_with_budget, update_witness_maps_from,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
@@ -36,7 +36,7 @@ use crate::platform::storage::contract::TARGET_PACK_BYTES;
 use crate::platform::storage::directory::PackDirectoryStore;
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, ObjectStage, StoreError, StoreErrorClass,
-    StoreWork,
+    StoreReadAdmission, StoreReadLimits, StoreWork,
 };
 use crate::platform::storage::pack::PackBuilder;
 use crate::platform::storage::page_store::ObjectPageReader;
@@ -238,7 +238,7 @@ impl RepositoryView {
         })
     }
 
-    /// Decodes operational options from the strict Change Contract 5 envelope and returns the
+    /// Decodes operational options from the current strict authored-change envelope and returns the
     /// compact response projection derived from the same prepared publication.
     pub fn prepare_authored_protocol_change(
         &self,
@@ -1254,14 +1254,31 @@ impl RepositoryView {
         derived: &DerivedDelta,
         summaries: &SummaryDelta,
         tests: &TestDependencyDelta,
+        admission: WitnessMapAdmission,
     ) -> Result<RevisionWitnessMapUpdate, Diagnostic> {
-        let reader = ObjectPageReader::new(&self.store);
-        let update =
-            update_witness_maps_from(&self.current.witness, &reader, derived, summaries, tests)?;
+        let reader = ObjectPageReader::new_admitted(
+            &self.store,
+            StoreReadAdmission::new(StoreReadLimits {
+                maximum_catalog_lookups: admission.maximum_catalog_lookups,
+                maximum_objects: admission.maximum_objects,
+                maximum_bytes: admission.maximum_bytes,
+            }),
+        );
+        let mut update = update_witness_maps_from(
+            &self.current.witness,
+            &reader,
+            derived,
+            summaries,
+            tests,
+            admission,
+        )?;
+        let store_work = reader.work();
+        update.read_work.catalog_lookups = store_work.catalog_lookups;
+        update.read_work.objects_read = store_work.objects_read;
         Ok(RevisionWitnessMapUpdate {
             revision: self.revision(),
             update,
-            store_work: reader.work(),
+            store_work,
         })
     }
 
@@ -1781,8 +1798,9 @@ impl WitnessMapBase for RepositoryView {
         derived: &DerivedDelta,
         summaries: &SummaryDelta,
         tests: &TestDependencyDelta,
+        admission: WitnessMapAdmission,
     ) -> Result<WitnessMapUpdate, Diagnostic> {
-        RepositoryView::update_witness_maps(self, derived, summaries, tests)
+        RepositoryView::update_witness_maps(self, derived, summaries, tests, admission)
             .map(|updated| updated.update)
     }
 }

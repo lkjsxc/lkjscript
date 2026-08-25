@@ -1394,9 +1394,13 @@ mod tests {
     }
 
     impl PageStore for CountingPageStore {
-        fn read_page(&self, digest: PageDigest) -> Result<Option<Vec<u8>>, MapError> {
+        fn read_page(
+            &self,
+            digest: PageDigest,
+            maximum_bytes: usize,
+        ) -> Result<Option<Vec<u8>>, MapError> {
             self.reads.set(self.reads.get() + 1);
-            let bytes = self.inner.read_page(digest)?;
+            let bytes = self.inner.read_page(digest, maximum_bytes)?;
             if let Some(bytes) = &bytes {
                 self.bytes_read.set(
                     self.bytes_read.get()

@@ -1,9 +1,10 @@
 //! One deterministic reverse-impact plan from owner-summary dimension changes.
 
 use super::relation_view::CandidateRelations;
+use super::summary_delta::derive_summary_delta_for_with_relation_limit;
 use super::{
-    CanonicalBaseRead, CanonicalDelta, DerivedDelta, KernelOverlay, OwnerSummaryEdit, SummaryDelta,
-    WitnessBaseRead, WitnessReadWork, derive_summary_delta, derive_summary_delta_for,
+    CanonicalBaseRead, CanonicalDelta, DerivedDelta, ImpactAdmission, KernelOverlay,
+    OwnerSummaryEdit, SummaryDelta, WitnessBaseRead, WitnessReadWork,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
@@ -82,6 +83,7 @@ pub struct ImpactReason {
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct ImpactWork {
+    pub summary_owners_examined: u64,
     pub summary_edits_examined: u64,
     pub reverse_edges_visited: u64,
     pub ownership_steps: u64,
@@ -113,10 +115,50 @@ pub fn plan_impact_and_summaries<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRe
     derived: &DerivedDelta,
     base_witness: &W,
 ) -> Result<PlannedSummaries, Diagnostic> {
-    let initial = derive_summary_delta(overlay, derived, base_witness)?;
+    plan_impact_and_summaries_with_admission(
+        overlay,
+        canonical,
+        derived,
+        base_witness,
+        ImpactAdmission::default(),
+    )
+}
+
+pub(crate) fn plan_impact_and_summaries_with_admission<
+    B: CanonicalBaseRead + ?Sized,
+    W: WitnessBaseRead + ?Sized,
+>(
+    overlay: &KernelOverlay<'_, B>,
+    canonical: &CanonicalDelta,
+    derived: &DerivedDelta,
+    base_witness: &W,
+    admission: ImpactAdmission,
+) -> Result<PlannedSummaries, Diagnostic> {
+    admit_count(
+        "change_budget_impact_summary_owners",
+        "summary owners",
+        u64::try_from(derived.summary_candidates.len()).unwrap_or(u64::MAX),
+        admission.maximum_summary_owners,
+    )?;
+    let initial = derive_summary_delta_for_with_relation_limit(
+        overlay,
+        derived,
+        base_witness,
+        derived.summary_candidates.clone(),
+        admission.maximum_relation_edges,
+        admission.maximum_relation_fanout,
+    )?;
+    let mut admitted = BTreeSet::new();
+    for owner in canonical.owners.keys().chain(&initial.selected).copied() {
+        admit_affected(&mut admitted, owner, admission.maximum_affected_owners)?;
+    }
     let mut plan = ImpactPlan {
         structurally_checked: canonical.owners.keys().copied().collect(),
         summary_owners: initial.selected.clone(),
+        work: ImpactWork {
+            summary_owners_examined: u64::try_from(initial.selected.len()).unwrap_or(u64::MAX),
+            ..ImpactWork::default()
+        },
         ..ImpactPlan::default()
     };
     let package = overlay.package_id();
@@ -127,7 +169,7 @@ pub fn plan_impact_and_summaries<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRe
     let mut behavior_enqueued = BTreeSet::new();
 
     for edit in &initial.edits {
-        plan.work.summary_edits_examined = plan.work.summary_edits_examined.saturating_add(1);
+        admit_summary_edit(&mut plan.work, admission.maximum_summary_edits)?;
         let change = summary_dimension_change(edit);
         let kind = edit
             .after
@@ -135,6 +177,7 @@ pub fn plan_impact_and_summaries<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRe
             .or(edit.before.as_ref())
             .map(|summary| summary.kind);
         if change.executable() && kind.is_some_and(has_executable_meaning) {
+            admit_affected(&mut admitted, edit.owner, admission.maximum_affected_owners)?;
             plan.semantically_checked.insert(edit.owner);
             add_owning_units(
                 edit.owner,
@@ -142,6 +185,11 @@ pub fn plan_impact_and_summaries<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRe
                 &mut ownership,
                 &mut plan.compiler_units,
                 &mut plan.work,
+                &mut admitted,
+                OwningUnitAdmission {
+                    maximum_affected: admission.maximum_affected_owners,
+                    maximum_ownership_steps: admission.maximum_ownership_steps,
+                },
             )?;
             add_owning_units(
                 edit.owner,
@@ -149,6 +197,11 @@ pub fn plan_impact_and_summaries<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRe
                 &mut ownership,
                 &mut plan.semantically_checked,
                 &mut plan.work,
+                &mut admitted,
+                OwningUnitAdmission {
+                    maximum_affected: admission.maximum_affected_owners,
+                    maximum_ownership_steps: admission.maximum_ownership_steps,
+                },
             )?;
             if behavior_enqueued.insert(edit.owner) {
                 behavior.push_back(edit.owner);
@@ -160,8 +213,21 @@ pub fn plan_impact_and_summaries<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRe
                 relation: None,
             });
         }
-        for edge in relations.incoming(edit.owner)? {
-            plan.work.reverse_edges_visited = plan.work.reverse_edges_visited.saturating_add(1);
+        let relation_read = relations.incoming(
+            edit.owner,
+            remaining_relations(
+                admission.maximum_relation_edges,
+                initial
+                    .relation_edges_read
+                    .saturating_add(plan.work.reverse_edges_visited),
+            )?,
+            admission.maximum_relation_fanout,
+        )?;
+        plan.work.reverse_edges_visited = plan
+            .work
+            .reverse_edges_visited
+            .saturating_add(relation_read.edges_examined);
+        for edge in relation_read.edges {
             if !change.affects_validation(edge.kind.propagation()) {
                 continue;
             }
@@ -173,6 +239,9 @@ pub fn plan_impact_and_summaries<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRe
                 &mut ownership,
                 &mut plan.summary_owners,
                 &mut plan.work,
+                &mut admitted,
+                admission.maximum_affected_owners,
+                admission.maximum_ownership_steps,
             )?;
             add_owning_units(
                 source,
@@ -180,6 +249,11 @@ pub fn plan_impact_and_summaries<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRe
                 &mut ownership,
                 &mut plan.semantically_checked,
                 &mut plan.work,
+                &mut admitted,
+                OwningUnitAdmission {
+                    maximum_affected: admission.maximum_affected_owners,
+                    maximum_ownership_steps: admission.maximum_ownership_steps,
+                },
             )?;
             add_owning_units(
                 source,
@@ -187,6 +261,11 @@ pub fn plan_impact_and_summaries<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRe
                 &mut ownership,
                 &mut plan.compiler_units,
                 &mut plan.work,
+                &mut admitted,
+                OwningUnitAdmission {
+                    maximum_affected: admission.maximum_affected_owners,
+                    maximum_ownership_steps: admission.maximum_ownership_steps,
+                },
             )?;
             plan.reasons.push(ImpactReason {
                 kind: ImpactReasonKind::ValidationDependency,
@@ -201,8 +280,21 @@ pub fn plan_impact_and_summaries<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRe
         if edit.before.is_none() {
             continue;
         }
-        for edge in relations.incoming_package(*dependency)? {
-            plan.work.reverse_edges_visited = plan.work.reverse_edges_visited.saturating_add(1);
+        let relation_read = relations.incoming_package(
+            *dependency,
+            remaining_relations(
+                admission.maximum_relation_edges,
+                initial
+                    .relation_edges_read
+                    .saturating_add(plan.work.reverse_edges_visited),
+            )?,
+            admission.maximum_relation_fanout,
+        )?;
+        plan.work.reverse_edges_visited = plan
+            .work
+            .reverse_edges_visited
+            .saturating_add(relation_read.edges_examined);
+        for edge in relation_read.edges {
             let Some(source) = local_owner(edge.source, package) else {
                 continue;
             };
@@ -211,8 +303,22 @@ pub fn plan_impact_and_summaries<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRe
                 &mut ownership,
                 &mut plan.summary_owners,
                 &mut plan.work,
+                &mut admitted,
+                admission.maximum_affected_owners,
+                admission.maximum_ownership_steps,
             )?;
-            for declaration in owning_units(source, overlay, &mut ownership, &mut plan.work)? {
+            for declaration in owning_units(
+                source,
+                overlay,
+                &mut ownership,
+                &mut plan.work,
+                admission.maximum_ownership_steps,
+            )? {
+                admit_affected(
+                    &mut admitted,
+                    declaration,
+                    admission.maximum_affected_owners,
+                )?;
                 plan.semantically_checked.insert(declaration);
                 plan.compiler_units.insert(declaration);
                 if behavior_enqueued.insert(declaration) {
@@ -229,12 +335,26 @@ pub fn plan_impact_and_summaries<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRe
     }
 
     while let Some(target) = behavior.pop_front() {
-        if !behavior_seen.insert(target) {
+        if behavior_seen.contains(&target) {
             continue;
         }
-        plan.work.behavior_owners_visited = plan.work.behavior_owners_visited.saturating_add(1);
-        for edge in relations.incoming(target)? {
-            plan.work.reverse_edges_visited = plan.work.reverse_edges_visited.saturating_add(1);
+        admit_behavior_owner(&mut plan.work, admission.maximum_behavior_owners)?;
+        behavior_seen.insert(target);
+        let relation_read = relations.incoming(
+            target,
+            remaining_relations(
+                admission.maximum_relation_edges,
+                initial
+                    .relation_edges_read
+                    .saturating_add(plan.work.reverse_edges_visited),
+            )?,
+            admission.maximum_relation_fanout,
+        )?;
+        plan.work.reverse_edges_visited = plan
+            .work
+            .reverse_edges_visited
+            .saturating_add(relation_read.edges_examined);
+        for edge in relation_read.edges {
             if matches!(
                 edge.kind.propagation(),
                 PropagationClass::Ownership | PropagationClass::Presentation
@@ -244,9 +364,20 @@ pub fn plan_impact_and_summaries<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRe
             let Some(source) = local_owner(edge.source, package) else {
                 continue;
             };
-            let declarations = owning_units(source, overlay, &mut ownership, &mut plan.work)?;
+            let declarations = owning_units(
+                source,
+                overlay,
+                &mut ownership,
+                &mut plan.work,
+                admission.maximum_ownership_steps,
+            )?;
             for declaration in declarations {
                 if ownership.owner_kind(declaration, overlay)? == Some(OwnerKind::Test) {
+                    admit_affected(
+                        &mut admitted,
+                        declaration,
+                        admission.maximum_affected_owners,
+                    )?;
                     plan.tests.insert(declaration);
                     plan.reasons.push(ImpactReason {
                         kind: ImpactReasonKind::TestBehavior,
@@ -263,6 +394,7 @@ pub fn plan_impact_and_summaries<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRe
 
     for owner in &plan.semantically_checked {
         if ownership.owner_kind(*owner, overlay)? == Some(OwnerKind::Test) {
+            admit_affected(&mut admitted, *owner, admission.maximum_affected_owners)?;
             plan.tests.insert(*owner);
         }
     }
@@ -270,8 +402,38 @@ pub fn plan_impact_and_summaries<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRe
     plan.work.witness_reads.add(relations.work());
     plan.reasons.sort_unstable();
     plan.reasons.dedup();
-    let final_delta =
-        derive_summary_delta_for(overlay, derived, base_witness, plan.summary_owners.clone())?;
+    let final_relation_limit = remaining_relations(
+        admission.maximum_relation_edges,
+        initial
+            .relation_edges_read
+            .saturating_add(plan.work.reverse_edges_visited),
+    )?;
+    let final_summary_owners = u64::try_from(plan.summary_owners.len()).unwrap_or(u64::MAX);
+    let total_summary_owners = plan
+        .work
+        .summary_owners_examined
+        .checked_add(final_summary_owners)
+        .ok_or_else(|| {
+            impact_resource_error(
+                "change_budget_impact_summary_owners",
+                "summary-owner observation overflowed",
+            )
+        })?;
+    admit_count(
+        "change_budget_impact_summary_owners",
+        "summary owners",
+        total_summary_owners,
+        admission.maximum_summary_owners,
+    )?;
+    plan.work.summary_owners_examined = total_summary_owners;
+    let final_delta = derive_summary_delta_for_with_relation_limit(
+        overlay,
+        derived,
+        base_witness,
+        plan.summary_owners.clone(),
+        final_relation_limit,
+        admission.maximum_relation_fanout,
+    )?;
     Ok(PlannedSummaries {
         initial,
         final_delta,
@@ -375,9 +537,28 @@ fn add_summary_paths<W: WitnessBaseRead + ?Sized>(
     ownership: &mut CandidateOwnership<'_, W>,
     selected: &mut BTreeSet<OwnerKey>,
     work: &mut ImpactWork,
+    admitted: &mut BTreeSet<OwnerKey>,
+    maximum_affected: u64,
+    maximum_ownership_steps: u64,
 ) -> Result<(), Diagnostic> {
-    walk_aggregating_path(owner, |key| ownership.before(key), selected, work)?;
-    walk_aggregating_path(owner, |key| ownership.candidate(key), selected, work)
+    walk_aggregating_path(
+        owner,
+        |key| ownership.before(key),
+        selected,
+        work,
+        admitted,
+        maximum_affected,
+        maximum_ownership_steps,
+    )?;
+    walk_aggregating_path(
+        owner,
+        |key| ownership.candidate(key),
+        selected,
+        work,
+        admitted,
+        maximum_affected,
+        maximum_ownership_steps,
+    )
 }
 
 fn walk_aggregating_path(
@@ -385,17 +566,21 @@ fn walk_aggregating_path(
     mut lookup: impl FnMut(OwnerKey) -> Result<Option<OwnershipEntry>, Diagnostic>,
     selected: &mut BTreeSet<OwnerKey>,
     work: &mut ImpactWork,
+    admitted: &mut BTreeSet<OwnerKey>,
+    maximum_affected: u64,
+    maximum_ownership_steps: u64,
 ) -> Result<(), Diagnostic> {
     let mut current = owner;
     let mut observed = BTreeSet::new();
     loop {
-        work.ownership_steps = work.ownership_steps.saturating_add(1);
         if !observed.insert(current) {
             return Err(impact_error(
                 "change_impact_ownership_cycle",
                 "impact ownership path is cyclic",
             ));
         }
+        admit_ownership_step(work, maximum_ownership_steps)?;
+        admit_affected(admitted, current, maximum_affected)?;
         selected.insert(current);
         let Some(entry) = lookup(current)? else {
             break;
@@ -411,14 +596,111 @@ fn walk_aggregating_path(
     Ok(())
 }
 
+#[derive(Clone, Copy)]
+struct OwningUnitAdmission {
+    maximum_affected: u64,
+    maximum_ownership_steps: u64,
+}
+
 fn add_owning_units<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     owner: OwnerKey,
     overlay: &KernelOverlay<'_, B>,
     ownership: &mut CandidateOwnership<'_, W>,
     units: &mut BTreeSet<OwnerKey>,
     work: &mut ImpactWork,
+    admitted: &mut BTreeSet<OwnerKey>,
+    admission: OwningUnitAdmission,
 ) -> Result<(), Diagnostic> {
-    units.extend(owning_units(owner, overlay, ownership, work)?);
+    for unit in owning_units(
+        owner,
+        overlay,
+        ownership,
+        work,
+        admission.maximum_ownership_steps,
+    )? {
+        admit_affected(admitted, unit, admission.maximum_affected)?;
+        units.insert(unit);
+    }
+    Ok(())
+}
+
+fn admit_affected(
+    admitted: &mut BTreeSet<OwnerKey>,
+    owner: OwnerKey,
+    maximum: u64,
+) -> Result<(), Diagnostic> {
+    if admitted.contains(&owner) {
+        return Ok(());
+    }
+    if u64::try_from(admitted.len()).unwrap_or(u64::MAX) >= maximum {
+        return Err(Diagnostic::new(
+            DiagnosticClass::Resource,
+            "change_budget_affected_frontier_owners",
+            format!("affected frontier exceeds the declared {maximum}-owner budget"),
+        ));
+    }
+    admitted.insert(owner);
+    Ok(())
+}
+
+fn admit_summary_edit(work: &mut ImpactWork, maximum: u64) -> Result<(), Diagnostic> {
+    if work.summary_edits_examined >= maximum {
+        return Err(impact_resource_error(
+            "change_budget_impact_summary_edits",
+            format!("impact planning exceeds the declared {maximum}-summary-edit budget"),
+        ));
+    }
+    work.summary_edits_examined = work.summary_edits_examined.saturating_add(1);
+    Ok(())
+}
+
+fn admit_behavior_owner(work: &mut ImpactWork, maximum: u64) -> Result<(), Diagnostic> {
+    if work.behavior_owners_visited >= maximum {
+        return Err(impact_resource_error(
+            "change_budget_impact_behavior_owners",
+            format!("impact planning exceeds the declared {maximum}-behavior-owner budget"),
+        ));
+    }
+    work.behavior_owners_visited = work.behavior_owners_visited.saturating_add(1);
+    Ok(())
+}
+
+fn admit_count(
+    code: &'static str,
+    unit: &'static str,
+    observed: u64,
+    maximum: u64,
+) -> Result<(), Diagnostic> {
+    if observed > maximum {
+        return Err(impact_resource_error(
+            code,
+            format!("impact planning requires {observed} {unit}, exceeding the declared {maximum}"),
+        ));
+    }
+    Ok(())
+}
+
+fn remaining_relations(maximum: u64, observed: u64) -> Result<u64, Diagnostic> {
+    maximum.checked_sub(observed).ok_or_else(|| {
+        Diagnostic::new(
+            DiagnosticClass::Resource,
+            "change_budget_relation_edges",
+            format!(
+                "relation traversal observed {observed} edges, exceeding the declared {maximum}-edge budget"
+            ),
+        )
+    })
+}
+
+fn admit_ownership_step(work: &mut ImpactWork, maximum: u64) -> Result<(), Diagnostic> {
+    if work.ownership_steps >= maximum {
+        return Err(Diagnostic::new(
+            DiagnosticClass::Resource,
+            "change_budget_impact_ownership_steps",
+            format!("impact ownership traversal exceeds the declared {maximum}-step budget"),
+        ));
+    }
+    work.ownership_steps = work.ownership_steps.saturating_add(1);
     Ok(())
 }
 
@@ -427,19 +709,20 @@ fn owning_units<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     overlay: &KernelOverlay<'_, B>,
     ownership: &mut CandidateOwnership<'_, W>,
     work: &mut ImpactWork,
+    maximum_ownership_steps: u64,
 ) -> Result<BTreeSet<OwnerKey>, Diagnostic> {
     let mut units = BTreeSet::new();
     for candidate in [false, true] {
         let mut current = owner;
         let mut observed = BTreeSet::new();
         loop {
-            work.ownership_steps = work.ownership_steps.saturating_add(1);
             if !observed.insert(current) {
                 return Err(impact_error(
                     "change_impact_unit_cycle",
                     "compiler-unit ownership path is cyclic",
                 ));
             }
+            admit_ownership_step(work, maximum_ownership_steps)?;
             if matches!(current, OwnerKey::Declaration(_) | OwnerKey::Target(_)) {
                 units.insert(current);
                 break;
@@ -488,4 +771,8 @@ fn local_owner(
 
 fn impact_error(code: &'static str, message: impl Into<String>) -> Diagnostic {
     Diagnostic::new(DiagnosticClass::Corrupt, code, message)
+}
+
+fn impact_resource_error(code: &'static str, message: impl Into<String>) -> Diagnostic {
+    Diagnostic::new(DiagnosticClass::Resource, code, message)
 }

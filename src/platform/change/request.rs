@@ -38,14 +38,14 @@ use crate::platform::witness::NamespaceKey;
 use bincode::{Decode, Encode};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub const MAXIMUM_AUTHORED_CHANGES: usize = 10_000;
 pub const MAXIMUM_AUTHORED_CHANGE_BYTES: usize = 4 * 1_048_576;
 const MAXIMUM_REQUEST_SYMBOL_BYTES: usize = 128;
 
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5AuthoredChangeSetV1")]
+#[schemars(rename = "lkjscript.Graph5AuthoredChangeSetV2")]
 #[serde(deny_unknown_fields)]
 pub struct AuthoredChangeSet {
     pub base: RevisionId,
@@ -391,6 +391,8 @@ impl SymbolKind {
 pub struct AuthoredLoweringWork {
     pub operations_lowered: u64,
     pub preconditions_checked: u64,
+    pub allocated_identities: u64,
+    pub type_nodes_interned: u64,
     pub relation_edges_read: u64,
     pub canonical: CanonicalReadWork,
     pub witness: WitnessReadWork,
@@ -401,6 +403,8 @@ impl AuthoredLoweringWork {
         ChangeBudgetWork::authored(
             usize::try_from(self.operations_lowered).unwrap_or(usize::MAX),
             usize::try_from(self.preconditions_checked).unwrap_or(usize::MAX),
+            usize::try_from(self.allocated_identities).unwrap_or(usize::MAX),
+            usize::try_from(self.type_nodes_interned).unwrap_or(usize::MAX),
             self.canonical,
             self.witness,
             self.relation_edges_read,
@@ -454,7 +458,10 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
     let request_bytes = canonical_authored_request_bytes(request)?;
     let seed = allocation_seed(base, request.base, &request_bytes, idempotency_key)?;
     let deletion_change = ChangeDigest::of(&request_bytes);
-    let definitions = collect_symbol_definitions(request)?;
+    let (definitions, total_identity_count) =
+        collect_symbol_definitions(request, budget.authored.maximum_allocated_identities)?;
+    budget.check_allocated_identities(total_identity_count)?;
+    let definition_count = definitions.len();
     let allocated = allocate_symbols(&seed, &definitions)?;
     let mut lowerer = AuthoredLowerer::new(
         base,
@@ -466,6 +473,7 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
         budget,
     )?;
     lowerer.work.operations_lowered = u64::try_from(request.changes.len()).unwrap_or(u64::MAX);
+    lowerer.work.allocated_identities = u64::try_from(definition_count).unwrap_or(u64::MAX);
     precondition::evaluate(&mut lowerer, &request.preconditions)?;
     lowerer.check_budget("authored preconditions")?;
     for change in &request.changes {
@@ -760,8 +768,9 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
 
 fn collect_symbol_definitions(
     request: &AuthoredChangeSet,
-) -> Result<BTreeMap<String, SymbolKind>, Diagnostic> {
-    let mut definitions = BTreeMap::new();
+    maximum: u64,
+) -> Result<(BTreeMap<String, SymbolKind>, usize), Diagnostic> {
+    let mut definitions = SymbolDefinitions::new(maximum);
     for change in &request.changes {
         match change {
             AuthoredChange::CreateModule { symbol, .. } => {
@@ -853,22 +862,69 @@ fn collect_symbol_definitions(
             | AuthoredChange::ReplaceExpression { .. } => {}
         }
     }
-    Ok(definitions)
+    Ok(definitions.into_entries())
+}
+
+pub(super) struct SymbolDefinitions {
+    maximum: u64,
+    entries: BTreeMap<String, SymbolKind>,
+    anonymous_identities: usize,
+}
+
+impl SymbolDefinitions {
+    fn new(maximum: u64) -> Self {
+        Self {
+            maximum,
+            entries: BTreeMap::new(),
+            anonymous_identities: 0,
+        }
+    }
+
+    fn into_entries(self) -> (BTreeMap<String, SymbolKind>, usize) {
+        let identity_count = self.identity_count();
+        (self.entries, identity_count)
+    }
+
+    fn identity_count(&self) -> usize {
+        self.entries.len().saturating_add(self.anonymous_identities)
+    }
+
+    pub(super) fn define_anonymous_identity(&mut self) -> Result<(), Diagnostic> {
+        self.admit_one_identity()?;
+        self.anonymous_identities = self.anonymous_identities.saturating_add(1);
+        Ok(())
+    }
+
+    fn admit_one_identity(&self) -> Result<(), Diagnostic> {
+        if u64::try_from(self.identity_count()).unwrap_or(u64::MAX) >= self.maximum {
+            return Err(request_error(
+                DiagnosticClass::Resource,
+                "change_budget_allocated_identities",
+                format!(
+                    "request-local identity collection exceeds the declared {}-identity budget",
+                    self.maximum
+                ),
+            ));
+        }
+        Ok(())
+    }
 }
 
 pub(super) fn define_symbol(
-    definitions: &mut BTreeMap<String, SymbolKind>,
+    definitions: &mut SymbolDefinitions,
     symbol: &str,
     kind: SymbolKind,
 ) -> Result<(), Diagnostic> {
     validate_symbol(symbol)?;
-    if definitions.insert(symbol.to_owned(), kind).is_some() {
+    if definitions.entries.contains_key(symbol) {
         return Err(request_error(
             DiagnosticClass::Source,
             "change_authored_symbol_duplicate",
             format!("request-local symbol {symbol} is defined more than once"),
         ));
     }
+    definitions.admit_one_identity()?;
+    definitions.entries.insert(symbol.to_owned(), kind);
     Ok(())
 }
 
@@ -979,13 +1035,17 @@ struct AuthoredLowerer<'a, B: ?Sized, W: ?Sized> {
     allocated: BTreeMap<String, OwnerKey>,
     definitions: BTreeMap<String, SymbolKind>,
     owners: BTreeMap<OwnerKey, WorkingOwner>,
+    owner_edits: BTreeSet<OwnerKey>,
     dependencies: BTreeMap<PackageId, WorkingDependency>,
+    dependency_edits: BTreeSet<PackageId>,
     retirements: BTreeMap<OwnerKey, RetirementRecord>,
+    retirement_edits: BTreeSet<OwnerKey>,
     namespace: BTreeMap<NamespaceKey, Option<OwnerKey>>,
     ownership: BTreeMap<OwnerKey, Option<crate::platform::witness::OwnershipEntry>>,
     incoming_relations: BTreeMap<OwnerKey, Vec<crate::platform::kernel::RelationEdge>>,
     base_types: BTreeMap<TypeObjectDigest, Option<TypeObject>>,
     types: TypeObjectInterner,
+    type_additions: BTreeSet<TypeObjectDigest>,
     next_anonymous_expression_ordinal: u64,
     work: AuthoredLoweringWork,
     budget: ChangeBudget,
@@ -1023,13 +1083,19 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             allocated,
             definitions,
             owners: BTreeMap::new(),
+            owner_edits: BTreeSet::new(),
             dependencies: BTreeMap::new(),
+            dependency_edits: BTreeSet::new(),
             retirements: BTreeMap::new(),
+            retirement_edits: BTreeSet::new(),
             namespace: BTreeMap::new(),
             ownership: BTreeMap::new(),
             incoming_relations: BTreeMap::new(),
             base_types: BTreeMap::new(),
-            types: TypeObjectInterner::default(),
+            types: TypeObjectInterner::with_maximum_objects(
+                usize::try_from(budget.authored.maximum_type_nodes).unwrap_or(usize::MAX),
+            ),
+            type_additions: BTreeSet::new(),
             next_anonymous_expression_ordinal,
             work: AuthoredLoweringWork::default(),
             budget,
@@ -1049,6 +1115,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 "one request-local identity was allocated more than once",
             ));
         }
+        self.admit_owner_edit(owner)?;
         self.owners.insert(
             owner,
             WorkingOwner {
@@ -1322,6 +1389,20 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 _ => Err(symbol_domain_corrupt(symbol)),
             };
         }
+        let allocated_identities =
+            self.work
+                .allocated_identities
+                .checked_add(1)
+                .ok_or_else(|| {
+                    request_error(
+                        DiagnosticClass::Resource,
+                        "change_budget_allocated_identities",
+                        "allocated identity observation overflowed",
+                    )
+                })?;
+        self.budget.check_allocated_identities(
+            usize::try_from(allocated_identities).unwrap_or(usize::MAX),
+        )?;
         let ordinal = self.next_anonymous_expression_ordinal;
         self.next_anonymous_expression_ordinal = ordinal.checked_add(1).ok_or_else(|| {
             request_error(
@@ -1330,6 +1411,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 "anonymous expression allocation ordinal was exhausted",
             )
         })?;
+        self.work.allocated_identities = allocated_identities;
         Ok(ExpressionId::allocate(&self.allocation_seed, ordinal))
     }
 
@@ -1383,6 +1465,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
     }
 
     fn candidate_mut(&mut self, owner: OwnerKey) -> Result<&mut OwnerRecord, Diagnostic> {
+        self.admit_owner_edit(owner)?;
         self.require_owner(owner)?;
         self.owners
             .get_mut(&owner)
@@ -1435,6 +1518,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
 
     fn add_dependency(&mut self, record: DependencyRecord) -> Result<(), Diagnostic> {
         self.validate_dependency_candidate(&record)?;
+        self.admit_dependency_edit(record.package)?;
         self.load_dependency(record.package)?;
         let working = self
             .dependencies
@@ -1456,6 +1540,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
 
     fn replace_dependency(&mut self, record: DependencyRecord) -> Result<(), Diagnostic> {
         self.validate_dependency_candidate(&record)?;
+        self.admit_dependency_edit(record.package)?;
         self.load_dependency(record.package)?;
         let working = self
             .dependencies
@@ -1476,6 +1561,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
     }
 
     fn delete_dependency(&mut self, package: PackageId) -> Result<(), Diagnostic> {
+        self.admit_dependency_edit(package)?;
         self.load_dependency(package)?;
         let working = self
             .dependencies
@@ -1503,10 +1589,85 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         Ok(())
     }
 
-    fn finish(self) -> Result<AuthoredLowering, Diagnostic> {
-        let mut edits = Vec::new();
-        for (digest, object) in self.types.into_objects() {
-            edits.push(PrimitiveEdit::AddTypeObject { digest, object });
+    pub(super) fn admit_owner_edit(&mut self, owner: OwnerKey) -> Result<(), Diagnostic> {
+        if self.owner_edits.contains(&owner) {
+            return Ok(());
+        }
+        self.check_canonical_edit_admission(
+            self.owner_edits.len().saturating_add(1),
+            self.dependency_edits.len(),
+            self.retirement_edits.len(),
+            "authored owner edit admission",
+        )?;
+        self.owner_edits.insert(owner);
+        Ok(())
+    }
+
+    fn admit_dependency_edit(&mut self, package: PackageId) -> Result<(), Diagnostic> {
+        if self.dependency_edits.contains(&package) {
+            return Ok(());
+        }
+        self.check_canonical_edit_admission(
+            self.owner_edits.len(),
+            self.dependency_edits.len().saturating_add(1),
+            self.retirement_edits.len(),
+            "authored dependency edit admission",
+        )?;
+        self.dependency_edits.insert(package);
+        Ok(())
+    }
+
+    pub(super) fn admit_retirement_edit(&mut self, owner: OwnerKey) -> Result<(), Diagnostic> {
+        if self.retirement_edits.contains(&owner) {
+            return Ok(());
+        }
+        self.check_canonical_edit_admission(
+            self.owner_edits.len(),
+            self.dependency_edits.len(),
+            self.retirement_edits.len().saturating_add(1),
+            "authored retirement edit admission",
+        )?;
+        self.retirement_edits.insert(owner);
+        Ok(())
+    }
+
+    fn check_canonical_edit_admission(
+        &self,
+        owner_edits: usize,
+        dependency_edits: usize,
+        retirement_edits: usize,
+        phase: &str,
+    ) -> Result<(), Diagnostic> {
+        self.budget.check_canonical_edit_counts(
+            u64::try_from(owner_edits).unwrap_or(u64::MAX),
+            u64::try_from(self.type_additions.len()).unwrap_or(u64::MAX),
+            u64::try_from(dependency_edits).unwrap_or(u64::MAX),
+            u64::try_from(retirement_edits).unwrap_or(u64::MAX),
+            phase,
+        )
+    }
+
+    fn finish(mut self) -> Result<AuthoredLowering, Diagnostic> {
+        self.work.type_nodes_interned = u64::try_from(self.types.len()).unwrap_or(u64::MAX);
+        let type_objects = self.types.into_objects();
+        self.budget.check_canonical_edit_counts(
+            u64::try_from(self.owner_edits.len()).unwrap_or(u64::MAX),
+            u64::try_from(self.type_additions.len()).unwrap_or(u64::MAX),
+            u64::try_from(self.dependency_edits.len()).unwrap_or(u64::MAX),
+            u64::try_from(self.retirement_edits.len()).unwrap_or(u64::MAX),
+            "authored canonical edit preflight",
+        )?;
+        let estimated_edits = self
+            .owner_edits
+            .len()
+            .saturating_add(self.type_additions.len())
+            .saturating_add(self.dependency_edits.len())
+            .saturating_add(self.retirement_edits.len());
+        let mut edits = Vec::with_capacity(estimated_edits);
+        for (digest, object) in type_objects {
+            if self.type_additions.contains(&digest) {
+                edits.push(PrimitiveEdit::AddTypeObject { digest, object });
+            }
         }
         for (_, working) in self.owners {
             if working.deleted {

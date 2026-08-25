@@ -4,7 +4,8 @@ use super::catalog::ObjectCatalog;
 use super::directory::{CatalogState, PackDirectoryStore, SealCheckpoint};
 use super::memory::MemoryPackedStore;
 use super::object::{
-    ImmutableObjectStore, ObjectDomain, ObjectKey, ObjectStage, StageOutcome, StoreWork,
+    ImmutableObjectStore, ObjectDomain, ObjectKey, ObjectStage, ObjectStageLimits, StageOutcome,
+    StoreReadAdmission, StoreReadLimits, StoreWork,
 };
 use super::pack::{PackBuilder, PackId, PackMetadata};
 use super::page_store::ObjectPageStore;
@@ -14,6 +15,14 @@ use std::io::{Cursor, Seek, SeekFrom, Write};
 
 fn object(domain: ObjectDomain, value: &[u8]) -> (ObjectKey, Vec<u8>) {
     (ObjectKey::for_bytes(domain, value), value.to_vec())
+}
+
+fn read_admission(catalog_lookups: u64, objects: u64, bytes: u64) -> StoreReadAdmission {
+    StoreReadAdmission::new(StoreReadLimits {
+        maximum_catalog_lookups: catalog_lookups,
+        maximum_objects: objects,
+        maximum_bytes: bytes,
+    })
 }
 
 fn pack_footer_offset(bytes: &[u8]) -> usize {
@@ -141,6 +150,227 @@ fn object_stage_reads_through_without_mutating_accepted_storage() {
         )
         .expect("base lookup")
         .is_none()
+    );
+}
+
+#[test]
+fn admitted_memory_reads_reject_before_payload_consumption() {
+    let mut store = MemoryPackedStore::default();
+    let (key, bytes) = object(ObjectDomain::Owner, b"admitted-owner");
+    let byte_count = bytes.len() as u64;
+    let mut setup_work = StoreWork::default();
+    store
+        .stage(key, &bytes, &mut setup_work)
+        .expect("fixture object must stage");
+    store
+        .seal_staged(16 * 1024, &mut setup_work)
+        .expect("fixture object must seal");
+
+    let mut admission = read_admission(0, 1, byte_count);
+    let mut work = StoreWork::default();
+    let error = store
+        .read_admitted(key, bytes.len(), &mut admission, &mut work)
+        .expect_err("zero catalog allowance must reject");
+    assert_eq!(error.code, "object_read_catalog_lookups_exhausted");
+    assert_eq!(work, StoreWork::default());
+    assert_eq!(
+        admission.remaining(),
+        read_admission(0, 1, byte_count).remaining()
+    );
+
+    let mut admission = read_admission(1, 0, byte_count);
+    let mut work = StoreWork::default();
+    let error = store
+        .read_admitted(key, bytes.len(), &mut admission, &mut work)
+        .expect_err("zero object allowance must reject");
+    assert_eq!(error.code, "object_read_objects_exhausted");
+    assert_eq!(work.catalog_lookups, 1);
+    assert_eq!(work.packs_opened, 0);
+    assert_eq!(work.objects_read, 0);
+    assert_eq!(work.bytes_read, 0);
+
+    let mut admission = read_admission(1, 1, byte_count - 1);
+    let mut work = StoreWork::default();
+    let error = store
+        .read_admitted(key, bytes.len(), &mut admission, &mut work)
+        .expect_err("short byte allowance must reject");
+    assert_eq!(error.code, "object_read_bytes_exhausted");
+    assert_eq!(work.catalog_lookups, 1);
+    assert_eq!(work.packs_opened, 0);
+    assert_eq!(work.objects_read, 0);
+    assert_eq!(work.bytes_read, 0);
+    assert_eq!(admission.remaining().maximum_objects, 1);
+    assert_eq!(admission.remaining().maximum_bytes, byte_count - 1);
+
+    let mut admission = read_admission(1, 1, byte_count);
+    let mut work = StoreWork::default();
+    assert_eq!(
+        store
+            .read_admitted(key, bytes.len(), &mut admission, &mut work)
+            .expect("exact allowance must read"),
+        Some(bytes.clone())
+    );
+    assert_eq!(admission.remaining(), read_admission(0, 0, 0).remaining());
+    assert_eq!(work.catalog_lookups, 1);
+    assert_eq!(work.packs_opened, 1);
+    assert_eq!(work.objects_read, 1);
+    assert_eq!(work.bytes_read, byte_count);
+
+    let missing = ObjectKey::for_bytes(ObjectDomain::Owner, b"missing-owner");
+    let mut admission = read_admission(1, 0, 0);
+    let mut work = StoreWork::default();
+    assert_eq!(
+        store
+            .read_admitted(missing, 0, &mut admission, &mut work)
+            .expect("missing lookup needs no payload allowance"),
+        None
+    );
+    assert_eq!(work.catalog_lookups, 1);
+    assert_eq!(work.objects_read, 0);
+}
+
+#[test]
+fn admitted_object_stage_reads_local_objects_without_catalog_work() {
+    let base = MemoryPackedStore::default();
+    let (key, bytes) = object(ObjectDomain::Type, b"locally-staged-type");
+    let byte_count = bytes.len() as u64;
+    let mut stage = ObjectStage::new(&base);
+    stage
+        .stage(key, &bytes, &mut StoreWork::default())
+        .expect("local object must stage");
+
+    let mut admission = read_admission(0, 0, byte_count);
+    let mut work = StoreWork::default();
+    let error = stage
+        .read_admitted(key, bytes.len(), &mut admission, &mut work)
+        .expect_err("zero object allowance must reject the staged payload");
+    assert_eq!(error.code, "object_read_objects_exhausted");
+    assert_eq!(work, StoreWork::default());
+
+    let mut admission = read_admission(0, 1, byte_count - 1);
+    let mut work = StoreWork::default();
+    let error = stage
+        .read_admitted(key, bytes.len(), &mut admission, &mut work)
+        .expect_err("short byte allowance must reject the staged payload");
+    assert_eq!(error.code, "object_read_bytes_exhausted");
+    assert_eq!(work, StoreWork::default());
+    assert_eq!(admission.remaining().maximum_objects, 1);
+
+    let mut admission = read_admission(0, 1, byte_count);
+    let mut work = StoreWork::default();
+    assert_eq!(
+        stage
+            .read_admitted(key, bytes.len(), &mut admission, &mut work)
+            .expect("exact staged allowance must read"),
+        Some(bytes.clone())
+    );
+    assert_eq!(work.catalog_lookups, 0);
+    assert_eq!(work.objects_read, 1);
+    assert_eq!(work.bytes_read, byte_count);
+    assert_eq!(admission.remaining(), read_admission(0, 0, 0).remaining());
+
+    let mut admission = read_admission(0, 0, 0);
+    let mut work = StoreWork::default();
+    assert!(
+        stage
+            .contains_admitted(key, &mut admission, &mut work)
+            .expect("local presence needs no catalog lookup")
+    );
+    assert_eq!(work, StoreWork::default());
+}
+
+#[test]
+fn admitted_object_stage_deduplication_is_fail_closed() {
+    let mut base = MemoryPackedStore::default();
+    let (key, bytes) = object(ObjectDomain::Owner, b"accepted-deduplication-object");
+    let byte_count = bytes.len() as u64;
+    let mut setup_work = StoreWork::default();
+    base.stage(key, &bytes, &mut setup_work)
+        .expect("base object must stage");
+    base.seal_staged(16 * 1024, &mut setup_work)
+        .expect("base object must seal");
+
+    let mut stage = ObjectStage::new(&base);
+    let mut admission = read_admission(0, 1, byte_count);
+    let mut work = StoreWork::default();
+    let error = stage
+        .stage_admitted(key, &bytes, &mut admission, &mut work)
+        .expect_err("deduplication may not read before catalog admission");
+    assert_eq!(error.code, "object_read_catalog_lookups_exhausted");
+    assert!(stage.is_empty());
+    assert_eq!(work, StoreWork::default());
+
+    let mut admission = read_admission(1, 1, byte_count);
+    let mut work = StoreWork::default();
+    assert_eq!(
+        stage
+            .stage_admitted(key, &bytes, &mut admission, &mut work)
+            .expect("admitted deduplication must reuse the base object"),
+        StageOutcome::Reused
+    );
+    assert!(stage.is_empty());
+    assert_eq!(work.catalog_lookups, 1);
+    assert_eq!(work.objects_read, 1);
+    assert_eq!(work.bytes_read, byte_count);
+    assert_eq!(work.objects_reused, 1);
+}
+
+#[test]
+fn request_local_object_stage_shares_one_base_read_admission() {
+    let mut base = MemoryPackedStore::default();
+    let first = object(ObjectDomain::Owner, b"first-accepted-owner");
+    let second = object(ObjectDomain::Owner, b"second-accepted-owner");
+    let third = object(ObjectDomain::Owner, b"third-accepted-owner");
+    let mut setup_work = StoreWork::default();
+    for (key, bytes) in [&first, &second, &third] {
+        base.stage(*key, bytes, &mut setup_work)
+            .expect("base object must stage");
+    }
+    base.seal_staged(16 * 1024, &mut setup_work)
+        .expect("base objects must seal");
+
+    let admitted_bytes = (first.1.len() + second.1.len()) as u64;
+    let mut stage = ObjectStage::with_limits_and_read_admission(
+        &base,
+        ObjectStageLimits {
+            maximum_objects: 4,
+            maximum_bytes: 4 * 1024,
+            maximum_pages: 0,
+        },
+        read_admission(4, 2, admitted_bytes),
+    );
+    let mut work = StoreWork::default();
+    assert_eq!(
+        stage
+            .stage(first.0, &first.1, &mut work)
+            .expect("ordinary stage must use shared admission for base deduplication"),
+        StageOutcome::Reused
+    );
+    assert_eq!(
+        stage
+            .read(second.0, second.1.len(), &mut work)
+            .expect("ordinary read must use the same shared admission"),
+        Some(second.1.clone())
+    );
+    let missing = ObjectKey::for_bytes(ObjectDomain::Owner, b"absent-owner");
+    assert!(
+        !stage
+            .contains(missing, &mut work)
+            .expect("ordinary contains must use the same shared admission")
+    );
+
+    let error = stage
+        .read(third.0, third.1.len(), &mut work)
+        .expect_err("next base payload must reject after cumulative object exhaustion");
+    assert_eq!(error.code, "object_read_objects_exhausted");
+    assert_eq!(work.catalog_lookups, 4);
+    assert_eq!(work.packs_opened, 2);
+    assert_eq!(work.objects_read, 2);
+    assert_eq!(work.bytes_read, admitted_bytes);
+    assert_eq!(work.objects_reused, 1);
+    assert_eq!(
+        stage.remaining_read_admission(),
+        Some(read_admission(0, 0, 0).remaining())
     );
 }
 
@@ -410,6 +640,71 @@ fn directory_store_seals_reopens_rebuilds_and_deep_verifies() {
     assert!(rebuilt.catalog_rebuild_note().is_some());
     assert!(rebuilt.catalog_persist_error().is_none());
     assert_eq!(rebuilt.catalog().len(), entries.len());
+}
+
+#[test]
+fn admitted_directory_reads_reject_before_opening_pack_payload() {
+    let temporary = tempfile::TempDir::new().expect("temporary store parent");
+    let root = temporary.path().join("objects");
+    let mut store = PackDirectoryStore::initialize(&root).expect("store must initialize");
+    let (key, bytes) = object(ObjectDomain::Owner, b"directory-admission-owner");
+    let byte_count = bytes.len() as u64;
+    let mut setup_work = StoreWork::default();
+    store
+        .stage(key, &bytes, &mut setup_work)
+        .expect("fixture object must stage");
+    let receipt = store
+        .seal_staged(16 * 1024, &mut setup_work)
+        .expect("fixture object must seal");
+
+    let mut admission = read_admission(1, 1, byte_count);
+    let mut work = StoreWork::default();
+    assert_eq!(
+        store
+            .read_admitted(key, bytes.len(), &mut admission, &mut work)
+            .expect("exact directory allowance must read"),
+        Some(bytes.clone())
+    );
+    assert_eq!(admission.remaining(), read_admission(0, 0, 0).remaining());
+    assert_eq!(work.catalog_lookups, 1);
+    assert_eq!(work.packs_opened, 1);
+    assert_eq!(work.objects_read, 1);
+    assert_eq!(work.bytes_read, byte_count);
+
+    let pack_path = root.join("packs").join(receipt.packs[0].file_name());
+    std::fs::rename(&pack_path, root.join("unavailable-pack-tripwire"))
+        .expect("tripwire pack must move out of the store");
+
+    let mut admission = read_admission(0, 1, byte_count);
+    let mut work = StoreWork::default();
+    let error = store
+        .read_admitted(key, bytes.len(), &mut admission, &mut work)
+        .expect_err("zero catalog allowance must reject before opening the missing pack");
+    assert_eq!(error.code, "object_read_catalog_lookups_exhausted");
+    assert_eq!(work, StoreWork::default());
+
+    let mut admission = read_admission(1, 0, byte_count);
+    let mut work = StoreWork::default();
+    let error = store
+        .read_admitted(key, bytes.len(), &mut admission, &mut work)
+        .expect_err("zero object allowance must reject before opening the missing pack");
+    assert_eq!(error.code, "object_read_objects_exhausted");
+    assert_eq!(work.catalog_lookups, 1);
+    assert_eq!(work.packs_opened, 0);
+    assert_eq!(work.objects_read, 0);
+    assert_eq!(work.bytes_read, 0);
+
+    let mut admission = read_admission(1, 1, byte_count - 1);
+    let mut work = StoreWork::default();
+    let error = store
+        .read_admitted(key, bytes.len(), &mut admission, &mut work)
+        .expect_err("short byte allowance must reject before opening the missing pack");
+    assert_eq!(error.code, "object_read_bytes_exhausted");
+    assert_eq!(work.catalog_lookups, 1);
+    assert_eq!(work.packs_opened, 0);
+    assert_eq!(work.objects_read, 0);
+    assert_eq!(work.bytes_read, 0);
+    assert_eq!(admission.remaining().maximum_objects, 1);
 }
 
 #[test]

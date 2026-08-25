@@ -43,9 +43,10 @@ pub(super) fn lower_deletions<
         return Ok(());
     }
 
+    let candidate_external_children = index_candidate_external_children(lowerer);
     let mut closure = BTreeSet::new();
     for (root, cascade) in &roots {
-        let direct_children = current_owned_children(lowerer, *root)?;
+        let direct_children = current_owned_children(lowerer, *root, &candidate_external_children)?;
         let undeclared_children = direct_children
             .iter()
             .filter(|child| !roots.contains_key(child))
@@ -61,12 +62,15 @@ pub(super) fn lower_deletions<
         }
         let mut frontier = VecDeque::from([*root]);
         while let Some(owner) = frontier.pop_front() {
-            if !closure.insert(owner) {
+            if closure.contains(&owner) {
                 continue;
             }
+            lowerer.admit_owner_edit(owner)?;
+            lowerer.admit_retirement_edit(owner)?;
+            closure.insert(owner);
             require_accepted_owner(lowerer, owner)?;
             if *cascade {
-                for child in current_owned_children(lowerer, owner)? {
+                for child in current_owned_children(lowerer, owner, &candidate_external_children)? {
                     if !closure.contains(&child) {
                         frontier.push_back(child);
                     }
@@ -109,6 +113,7 @@ fn require_accepted_owner<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?S
 fn current_owned_children<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     lowerer: &mut AuthoredLowerer<'_, B, W>,
     owner: OwnerKey,
+    candidate_external_children: &BTreeMap<OwnerKey, BTreeSet<OwnerKey>>,
 ) -> Result<Vec<OwnerKey>, Diagnostic> {
     require_accepted_owner(lowerer, owner)?;
     let record = lowerer
@@ -143,44 +148,103 @@ fn current_owned_children<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?S
         }
     }
 
-    for (candidate_owner, working) in &lowerer.owners {
-        if !working.deleted && record_is_external_child_of(&working.record, owner) {
-            children.insert(*candidate_owner);
-        }
+    if let Some(candidate_children) = candidate_external_children.get(&owner) {
+        children.extend(candidate_children);
     }
     children.remove(&owner);
     Ok(children.into_iter().collect())
 }
 
-fn record_is_external_child_of(record: &OwnerRecord, parent: OwnerKey) -> bool {
-    match (record, parent) {
-        (OwnerRecord::Declaration(record), OwnerKey::Module(module)) => record.module == module,
-        (OwnerRecord::Documentation(record), owner) => record.owner == owner,
-        (OwnerRecord::Annotation(record), owner) => record.owner == owner,
-        _ => false,
+fn index_candidate_external_children<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+    lowerer: &AuthoredLowerer<'_, B, W>,
+) -> BTreeMap<OwnerKey, BTreeSet<OwnerKey>> {
+    let mut children = BTreeMap::<OwnerKey, BTreeSet<OwnerKey>>::new();
+    for (owner, working) in &lowerer.owners {
+        if !working.deleted
+            && let Some(parent) = external_parent(&working.record)
+        {
+            children.entry(parent).or_default().insert(*owner);
+        }
     }
+    children
+}
+
+fn external_parent(record: &OwnerRecord) -> Option<OwnerKey> {
+    match record {
+        OwnerRecord::Declaration(record) => Some(OwnerKey::Module(record.module)),
+        OwnerRecord::Documentation(record) => Some(record.owner),
+        OwnerRecord::Annotation(record) => Some(record.owner),
+        OwnerRecord::Module(_)
+        | OwnerRecord::TypeParameter(_)
+        | OwnerRecord::Field(_)
+        | OwnerRecord::Case(_)
+        | OwnerRecord::Operation(_)
+        | OwnerRecord::Parameter(_)
+        | OwnerRecord::Binding(_)
+        | OwnerRecord::Expression(_)
+        | OwnerRecord::Requirement(_)
+        | OwnerRecord::Port(_)
+        | OwnerRecord::Target(_) => None,
+    }
+}
+
+fn record_is_external_child_of(record: &OwnerRecord, parent: OwnerKey) -> bool {
+    external_parent(record) == Some(parent)
 }
 
 fn incoming_relations<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     lowerer: &mut AuthoredLowerer<'_, B, W>,
     owner: OwnerKey,
 ) -> Result<Vec<RelationEdge>, Diagnostic> {
-    if let Some(edges) = lowerer.incoming_relations.get(&owner) {
-        return Ok(edges.clone());
+    if let Some(edge_count) = lowerer.incoming_relations.get(&owner).map(Vec::len) {
+        charge_relation_traversal(
+            lowerer,
+            u64::try_from(edge_count).unwrap_or(u64::MAX),
+            "authored deletion cached relation traversal",
+        )?;
+        return Ok(lowerer.incoming_relations[&owner].clone());
+    }
+    let remaining = lowerer.budget.remaining_relation_edges(
+        lowerer.work.relation_edges_read,
+        "authored deletion relation read",
+    )?;
+    let maximum_items = usize::try_from(remaining)
+        .unwrap_or(usize::MAX)
+        .min(usize::try_from(lowerer.budget.impact.maximum_relation_fanout).unwrap_or(usize::MAX))
+        .min(MAXIMUM_RELATION_PREFIX_ITEMS);
+    if maximum_items == 0 {
+        let (code, message) = if lowerer.budget.impact.maximum_relation_fanout == 0 {
+            (
+                "change_budget_relation_fanout",
+                "authored deletion has a zero per-owner relation fanout budget",
+            )
+        } else {
+            (
+                "change_budget_relation_edges",
+                "authored deletion has no remaining relation-edge budget",
+            )
+        };
+        return Err(delete_resource(code, message));
     }
     let read = lowerer
         .witness
-        .read_incoming_relations(owner, MAXIMUM_RELATION_PREFIX_ITEMS)?;
+        .read_incoming_relations(owner, maximum_items)?;
     lowerer.work.witness.add(read.work);
-    lowerer.work.relation_edges_read = lowerer
-        .work
-        .relation_edges_read
-        .saturating_add(u64::try_from(read.value.edges.len()).unwrap_or(u64::MAX));
+    charge_relation_traversal(
+        lowerer,
+        u64::try_from(read.value.edges.len()).unwrap_or(u64::MAX),
+        "authored deletion accepted relation traversal",
+    )?;
     if read.value.truncated {
+        let code = if lowerer.budget.impact.maximum_relation_fanout <= remaining {
+            "change_budget_relation_fanout"
+        } else {
+            "change_budget_relation_edges"
+        };
         return Err(delete_resource(
-            "change_delete_relation_budget",
+            code,
             format!(
-                "owner {owner:?} has more than {MAXIMUM_RELATION_PREFIX_ITEMS} incoming relations; use a narrower dependency-closed change"
+                "owner {owner:?} has more than the admitted {maximum_items}-edge relation prefix"
             ),
         ));
     }
@@ -189,6 +253,24 @@ fn incoming_relations<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized
         .insert(owner, read.value.edges.clone());
     lowerer.check_budget("authored deletion relation read")?;
     Ok(read.value.edges)
+}
+
+fn charge_relation_traversal<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+    lowerer: &mut AuthoredLowerer<'_, B, W>,
+    edges: u64,
+    phase: &str,
+) -> Result<(), Diagnostic> {
+    let remaining = lowerer
+        .budget
+        .remaining_relation_edges(lowerer.work.relation_edges_read, phase)?;
+    if edges > remaining {
+        return Err(delete_resource(
+            "change_budget_relation_edges",
+            format!("{phase} requires {edges} edge inspections with only {remaining} remaining"),
+        ));
+    }
+    lowerer.work.relation_edges_read = lowerer.work.relation_edges_read.saturating_add(edges);
+    Ok(())
 }
 
 fn local_relation_owner<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
@@ -490,6 +572,21 @@ fn extract_candidate_relations<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead
             }
             Ok(case_parents.get(&case).copied().flatten())
         },
+    )?;
+    let relation_count = u64::try_from(relations.len()).unwrap_or(u64::MAX);
+    if relation_count > lowerer.budget.impact.maximum_relation_fanout {
+        return Err(delete_resource(
+            "change_budget_relation_fanout",
+            format!(
+                "candidate owner {owner:?} has {relation_count} outgoing relations, exceeding the declared {}-edge fanout budget",
+                lowerer.budget.impact.maximum_relation_fanout
+            ),
+        ));
+    }
+    charge_relation_traversal(
+        lowerer,
+        relation_count,
+        "authored deletion candidate relation extraction",
     )?;
     lowerer.check_budget("authored deletion final relation extraction")?;
     Ok(relations)

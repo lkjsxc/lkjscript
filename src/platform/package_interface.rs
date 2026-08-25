@@ -969,7 +969,11 @@ struct ReachablePageRecorder {
 }
 
 impl PageStore for ReachablePageRecorder {
-    fn read_page(&self, _digest: PageDigest) -> Result<Option<Vec<u8>>, MapError> {
+    fn read_page(
+        &self,
+        _digest: PageDigest,
+        _maximum_bytes: usize,
+    ) -> Result<Option<Vec<u8>>, MapError> {
         Ok(None)
     }
 

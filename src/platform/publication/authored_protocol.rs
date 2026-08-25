@@ -1,7 +1,7 @@
-//! Strict private Graph 5 authored-change JSON contract pending the direct public cutover.
+//! Strict private authored-change JSON contract pending the compact public cutover.
 //!
 //! The current public CLI remains Change Contract 3. This module derives a candidate Change
-//! Contract 5 schema from the actual Graph 5 request decoder and compact response projection so
+//! Contract 6 schema from the actual semantic request decoder and compact response projection so
 //! the eventual cutover cannot depend on a handwritten parallel catalog.
 
 use super::idempotency::idempotency_key_is_valid;
@@ -19,26 +19,25 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
-pub const AUTHORED_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-5";
-pub const AUTHORED_CHANGE_CONTRACT_VERSION: u16 = 5;
+pub const AUTHORED_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-6";
+pub const AUTHORED_CHANGE_CONTRACT_VERSION: u16 = 6;
 pub const AUTHORED_PROTOCOL_SCHEMA_ID: &str =
-    "https://lkjscript.org/schema/private/graph5-authored-change-5.json";
-pub const AUTHORED_PROTOCOL_SCHEMA_DIGEST_DOMAIN: &str =
-    "lkjscript.graph5-authored-protocol-schema.v5";
+    "https://lkjscript.org/schema/private/authored-change-6.json";
+pub const AUTHORED_PROTOCOL_SCHEMA_DIGEST_DOMAIN: &str = "lkjscript.authored-protocol-schema.v6";
 pub const MAXIMUM_AUTHORED_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_AUTHORED_JSON_DEPTH: usize = 128;
 pub const MAXIMUM_AUTHORED_JSON_ITEMS: usize =
     crate::platform::change::MAXIMUM_AUTHORED_CHANGE_BYTES / 2;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5ChangeContractV1")]
+#[schemars(rename = "lkjscript.Graph5ChangeContractV2")]
 pub enum AuthoredChangeContract {
-    #[serde(rename = "lkjscript-change-5")]
+    #[serde(rename = "lkjscript-change-6")]
     Current,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5AuthoredChangeRequestV1")]
+#[schemars(rename = "lkjscript.Graph5AuthoredChangeRequestV2")]
 #[serde(deny_unknown_fields)]
 pub struct AuthoredChangeRequest {
     pub contract: AuthoredChangeContract,
@@ -165,7 +164,7 @@ pub enum AuthoredChangeResponseStatus {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5AuthoredChangeResponseV1")]
+#[schemars(rename = "lkjscript.Graph5AuthoredChangeResponseV2")]
 #[serde(deny_unknown_fields)]
 pub struct AuthoredChangeResponse {
     pub contract: AuthoredChangeContract,
@@ -265,7 +264,7 @@ impl AuthoredChangeResponse {
 }
 
 #[derive(JsonSchema)]
-#[schemars(rename = "lkjscript.Graph5AuthoredProtocolDocumentV1")]
+#[schemars(rename = "lkjscript.Graph5AuthoredProtocolDocumentV2")]
 #[allow(dead_code)]
 struct AuthoredProtocolDocument {
     request: AuthoredChangeRequest,
@@ -381,7 +380,7 @@ mod tests {
         assert_eq!(AuthoredChangeRequest::decode_json(&bytes).unwrap(), request);
 
         let text = String::from_utf8(bytes.clone()).expect("UTF-8 request");
-        let duplicate = text.replacen('{', "{\"contract\":\"lkjscript-change-5\",", 1);
+        let duplicate = text.replacen('{', "{\"contract\":\"lkjscript-change-6\",", 1);
         assert_eq!(
             AuthoredChangeRequest::decode_json(duplicate.as_bytes())
                 .expect_err("duplicate field must reject")
@@ -401,7 +400,7 @@ mod tests {
             "change_protocol_request_json"
         );
 
-        let predecessor = text.replace("lkjscript-change-5", "lkjscript-change-3");
+        let predecessor = text.replace("lkjscript-change-6", "lkjscript-change-3");
         assert_eq!(
             AuthoredChangeRequest::decode_json(predecessor.as_bytes())
                 .expect_err("predecessor contract must reject")
@@ -535,7 +534,7 @@ mod tests {
             nested_type = format!(r#"{{"kind":"list","item":{nested_type}}}"#);
         }
         let deep_request = format!(
-            r#"{{"contract":"lkjscript-change-5","base":"{}","changes":[{{"op":"create_function","as":"$function","module":{{"by":"symbol","symbol":"$module"}},"name":"function","visibility":"private","result":{nested_type},"effect":{{"kind":"pure"}},"body":{{"operation":{{"kind":"unit"}}}}}}]}}"#,
+            r#"{{"contract":"lkjscript-change-6","base":"{}","changes":[{{"op":"create_function","as":"$function","module":{{"by":"symbol","symbol":"$module"}},"name":"function","visibility":"private","result":{nested_type},"effect":{{"kind":"pure"}},"body":{{"operation":{{"kind":"unit"}}}}}}]}}"#,
             RevisionId::from_digest([5; 32])
         );
         assert_eq!(
@@ -584,7 +583,7 @@ mod tests {
         assert!(encoded.contains("\"additionalProperties\": false"));
         assert_eq!(
             authored_protocol_schema_digest().unwrap(),
-            "8cf8304a68f8e689cda8a579f412a0c23027f6bf5d3d5361a28689e7b7fc5a37"
+            "87cd2ef8f8b2fe94dcee3368f678c7e244628f61f624da91df19fc5264df8ba5"
         );
     }
 

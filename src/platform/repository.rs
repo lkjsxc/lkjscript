@@ -118,7 +118,11 @@ impl<'a> RepositoryPageStore<'a> {
 }
 
 impl PageStore for RepositoryPageStore<'_> {
-    fn read_page(&self, digest: PageDigest) -> Result<Option<Vec<u8>>, MapError> {
+    fn read_page(
+        &self,
+        digest: PageDigest,
+        maximum_bytes: usize,
+    ) -> Result<Option<Vec<u8>>, MapError> {
         let path = map_page_path(self.store, digest);
         match fs::symlink_metadata(&path) {
             Ok(metadata) => {
@@ -134,7 +138,7 @@ impl PageStore for RepositoryPageStore<'_> {
                 }
                 read_bounded(
                     &path,
-                    super::persistent_map::MAXIMUM_PAGE_BYTES,
+                    maximum_bytes.min(super::persistent_map::MAXIMUM_PAGE_BYTES),
                     "persistent root page",
                 )
                 .map(Some)
@@ -186,7 +190,11 @@ impl SemanticFactPageStore<'_> {
 }
 
 impl PageStore for SemanticFactPageStore<'_> {
-    fn read_page(&self, digest: PageDigest) -> Result<Option<Vec<u8>>, MapError> {
+    fn read_page(
+        &self,
+        digest: PageDigest,
+        maximum_bytes: usize,
+    ) -> Result<Option<Vec<u8>>, MapError> {
         let path = semantic_fact_page_path(self.store, digest);
         match fs::symlink_metadata(&path) {
             Ok(metadata) => {
@@ -202,7 +210,7 @@ impl PageStore for SemanticFactPageStore<'_> {
                 }
                 read_bounded(
                     &path,
-                    super::persistent_map::MAXIMUM_PAGE_BYTES,
+                    maximum_bytes.min(super::persistent_map::MAXIMUM_PAGE_BYTES),
                     "derived semantic fact page",
                 )
                 .map(Some)
@@ -239,7 +247,11 @@ struct BackupPageCollector {
 }
 
 impl PageStore for BackupPageCollector {
-    fn read_page(&self, _digest: PageDigest) -> Result<Option<Vec<u8>>, MapError> {
+    fn read_page(
+        &self,
+        _digest: PageDigest,
+        _maximum_bytes: usize,
+    ) -> Result<Option<Vec<u8>>, MapError> {
         Ok(None)
     }
 

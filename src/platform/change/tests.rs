@@ -246,6 +246,26 @@ fn test_relation_rebind_updates_only_the_affected_test_dependency_entries() {
     let overlay = KernelOverlay::new(&base, &delta);
     let derived =
         derive_local_delta(&overlay, &delta, &base_witness).expect("derived test relation rebind");
+    let admission = TestAdmission {
+        maximum_dependencies_per_test: 0,
+        ..TestAdmission::default()
+    };
+    let budget = ChangeBudget::default();
+    let error = super::test_delta::derive_test_dependency_delta_with_admission(
+        &overlay,
+        &delta,
+        &derived,
+        &base_witness,
+        super::test_delta::TestDependencyAdmission::new(
+            admission,
+            budget.impact.maximum_relation_edges,
+            budget.impact.maximum_relation_fanout,
+            budget.witness_reads.maximum_decoded_records,
+            budget.witness_update.maximum_edits / 2,
+        ),
+    )
+    .expect_err("zero per-test dependency admission must reject before collection");
+    assert_eq!(error.code, "change_budget_test_dependencies_per_test");
     let test_delta = derive_test_dependency_delta(&overlay, &delta, &derived, &base_witness)
         .expect("test dependency delta");
     assert_eq!(test_delta.affected_tests, BTreeSet::from([test]));
@@ -382,6 +402,90 @@ fn candidate_ownership_collision_rejects_before_full_validation() {
 }
 
 #[test]
+fn candidate_ownership_cycle_rejects_before_impact_planning() {
+    let base = crate::platform::kernel::tests::witness_snapshot();
+    let base_witness = rebuild_full_witness(&base).expect("base witness");
+    let first = crate::platform::semantic_id::ExpressionId::migrate(b"change-cycle", 1);
+    let second = crate::platform::semantic_id::ExpressionId::migrate(b"change-cycle", 2);
+    let first_record = OwnerRecord::Expression(
+        crate::platform::kernel::ExpressionRecord::new(
+            first,
+            ExpressionOperation::Sequence {
+                items: vec![second],
+            },
+        )
+        .expect("first expression"),
+    );
+    let second_record = OwnerRecord::Expression(
+        crate::platform::kernel::ExpressionRecord::new(
+            second,
+            ExpressionOperation::Sequence { items: vec![first] },
+        )
+        .expect("second expression"),
+    );
+    let delta = CanonicalDelta::normalize(
+        &base,
+        vec![
+            PrimitiveEdit::InsertOwner {
+                record: first_record,
+            },
+            PrimitiveEdit::InsertOwner {
+                record: second_record,
+            },
+        ],
+    )
+    .expect("cyclic ownership delta normalizes");
+    let overlay = KernelOverlay::new(&base, &delta);
+    let error = super::derived::derive_local_delta_with_admission(
+        &overlay,
+        &delta,
+        &base_witness,
+        ImpactAdmission::default().maximum_ownership_steps,
+        ImpactAdmission::default().maximum_relation_edges,
+    )
+    .expect_err("cyclic candidate ownership must reject before impact planning");
+    assert_eq!(
+        error.class,
+        crate::platform::diagnostic::DiagnosticClass::Semantic
+    );
+    assert_eq!(error.code, "change_derived_ownership_cycle");
+}
+
+#[test]
+fn derived_ownership_step_admission_rejects_before_overrun_and_accepts_exact_fit() {
+    let base = crate::platform::kernel::tests::witness_snapshot();
+    let base_witness = rebuild_full_witness(&base).expect("base witness");
+    let module = module_named(&base, "second");
+    let mut replacement = base.owners[&module].clone();
+    let OwnerRecord::Module(record) = &mut replacement else {
+        panic!("module record expected");
+    };
+    record.name = Name::new("renamed_second").expect("valid name");
+    let delta = replace_owner_delta(&base, module, replacement);
+    let overlay = KernelOverlay::new(&base, &delta);
+
+    let error = super::derived::derive_local_delta_with_admission(
+        &overlay,
+        &delta,
+        &base_witness,
+        1,
+        ImpactAdmission::default().maximum_relation_edges,
+    )
+    .expect_err("the second ownership step must be rejected before consumption");
+    assert_eq!(error.code, "change_budget_impact_ownership_steps");
+
+    let derived = super::derived::derive_local_delta_with_admission(
+        &overlay,
+        &delta,
+        &base_witness,
+        2,
+        ImpactAdmission::default().maximum_relation_edges,
+    )
+    .expect("two admitted steps must fit exactly");
+    assert_eq!(derived.ownership_steps, 2);
+}
+
+#[test]
 fn exact_preconditions_duplicates_and_live_retired_overlap_reject() {
     let base = crate::platform::kernel::tests::witness_snapshot();
     let callee = declaration_named(&base, "callee");
@@ -462,6 +566,98 @@ fn generic_preparation_rejects_an_invalid_result_type_on_the_owner_frontier() {
 }
 
 #[test]
+fn request_expression_step_admission_stops_before_zero_and_accepts_exactly_one() {
+    let base = crate::platform::kernel::tests::witness_snapshot();
+    let base_witness = rebuild_full_witness(&base).expect("base witness");
+    let callee = declaration_named(&base, "callee");
+    let body = function_body(&base, callee);
+    let mut replacement = base.owners[&body].clone();
+    let OwnerRecord::Expression(record) = &mut replacement else {
+        panic!("callee body must be an expression");
+    };
+    record.operation = ExpressionOperation::Unit {};
+    let delta = replace_owner_delta(&base, body, replacement);
+
+    let mut zero = ChangeBudget::default();
+    zero.validation.maximum_expression_steps = 0;
+    let diagnostics = prepare_change_analysis_with_budget(
+        &base,
+        &base_witness,
+        delta.clone(),
+        zero,
+        ChangeBudgetWork::default(),
+    )
+    .expect_err("zero expression steps must reject before inference");
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(
+        diagnostics[0].code,
+        "change_budget_validation_expression_steps"
+    );
+
+    let mut one = ChangeBudget::default();
+    one.validation.maximum_expression_steps = 1;
+    let prepared = prepare_change_analysis_with_budget(
+        &base,
+        &base_witness,
+        delta,
+        one,
+        ChangeBudgetWork::default(),
+    )
+    .expect("one-step expression validation must fit an exact one-step admission");
+    assert_eq!(prepared.validation.work.expression_work, 1);
+}
+
+#[test]
+fn request_diagnostic_admission_stops_before_zero_and_accepts_exactly_one() {
+    let base = crate::platform::kernel::tests::witness_snapshot();
+    let base_witness = rebuild_full_witness(&base).expect("base witness");
+    let constant = declaration_named(&base, "unit_constant");
+    let function_type = base
+        .owners
+        .values()
+        .find_map(|record| match record {
+            OwnerRecord::Port(record) => Some(record.function_type),
+            _ => None,
+        })
+        .expect("fixture function type");
+    let mut replacement = base.owners[&constant].clone();
+    let OwnerRecord::Declaration(record) = &mut replacement else {
+        panic!("constant declaration expected");
+    };
+    let DeclarationPayload::Constant { ty, .. } = &mut record.payload else {
+        panic!("constant payload expected");
+    };
+    *ty = function_type;
+    let delta = replace_owner_delta(&base, constant, replacement);
+
+    let mut zero = ChangeBudget::default();
+    zero.validation.maximum_diagnostics = 0;
+    let diagnostics = prepare_change_analysis_with_budget(
+        &base,
+        &base_witness,
+        delta.clone(),
+        zero,
+        ChangeBudgetWork::default(),
+    )
+    .expect_err("zero diagnostics must reject before insertion");
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].code, "change_budget_validation_diagnostics");
+
+    let mut one = ChangeBudget::default();
+    one.validation.maximum_diagnostics = 1;
+    let diagnostics = prepare_change_analysis_with_budget(
+        &base,
+        &base_witness,
+        delta,
+        one,
+        ChangeBudgetWork::default(),
+    )
+    .expect_err("one semantic mismatch must remain a semantic rejection");
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].code, "kernel_type_root");
+}
+
+#[test]
 fn generic_preparation_rejects_deleting_a_still_referenced_expression() {
     let base = crate::platform::kernel::tests::witness_snapshot();
     let base_witness = rebuild_full_witness(&base).expect("base witness");
@@ -502,8 +698,14 @@ fn prepared_authority_path_copies_semantic_and_witness_roots_through_one_object_
     let analysis =
         prepare_change_analysis(&base, &base_witness, delta.clone()).expect("generic preparation");
     let mut stage = ObjectStage::new(&store);
-    let authority = stage_prepared_authority(&base, &base_witness, &analysis, &mut stage)
-        .expect("candidate authority must stage");
+    let authority = stage_prepared_authority(
+        &base,
+        &base_witness,
+        &analysis,
+        &mut stage,
+        crate::platform::persistent_map::MapAdmission::unbounded(),
+    )
+    .expect("candidate authority must stage");
 
     assert_ne!(
         authority.semantic.digest,

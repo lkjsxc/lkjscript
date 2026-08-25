@@ -4,7 +4,7 @@ use super::{CanonicalBaseRead, CanonicalDelta, KernelOverlay, WitnessBaseRead, W
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     ExactOwnerKey, OwnerKey, OwnerRecord, RelationEdge, RelationEndpoint, RelationKind,
-    extract_owner_relations, owner_namespace,
+    extract_owner_relations_with_limit, owner_namespace,
 };
 use crate::platform::witness::{
     NamespaceKey, OwnershipEntry, OwnershipParent, ownership_contributions,
@@ -31,6 +31,8 @@ pub struct DerivedDelta {
     pub ownership: Vec<DerivedValueEdit<OwnerKey, OwnershipEntry>>,
     pub relations: RelationDelta,
     pub summary_candidates: BTreeSet<OwnerKey>,
+    pub ownership_steps: u64,
+    pub relation_edges_examined: u64,
     pub read_work: WitnessReadWork,
 }
 
@@ -38,6 +40,25 @@ pub fn derive_local_delta<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?S
     overlay: &KernelOverlay<'_, B>,
     delta: &CanonicalDelta,
     base_witness: &W,
+) -> Result<DerivedDelta, Diagnostic> {
+    derive_local_delta_with_admission(
+        overlay,
+        delta,
+        base_witness,
+        super::ImpactAdmission::default().maximum_ownership_steps,
+        super::ImpactAdmission::default().maximum_relation_edges,
+    )
+}
+
+pub(crate) fn derive_local_delta_with_admission<
+    B: CanonicalBaseRead + ?Sized,
+    W: WitnessBaseRead + ?Sized,
+>(
+    overlay: &KernelOverlay<'_, B>,
+    delta: &CanonicalDelta,
+    base_witness: &W,
+    maximum_ownership_steps: u64,
+    maximum_relation_edges: u64,
 ) -> Result<DerivedDelta, Diagnostic> {
     if !base_witness.witness_contract_is_current()
         || base_witness.witness_repository_id() != overlay.repository_id()
@@ -56,6 +77,7 @@ pub fn derive_local_delta<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?S
     let mut after_ownership = BTreeMap::new();
     let mut before_relations = BTreeSet::new();
     let mut after_relations = BTreeSet::new();
+    let mut relation_edges_examined = 0_u64;
     let mut witness = CachedWitness::new(base_witness);
 
     for (owner, edit) in &delta.owners {
@@ -69,7 +91,7 @@ pub fn derive_local_delta<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?S
             })?;
             insert_namespace_contribution(&mut before_namespaces, &record)?;
             insert_ownership_contributions(&mut before_ownership, &record)?;
-            before_relations.extend(extract_owner_relations(
+            let (relations, examined) = extract_relations(
                 overlay.package_id(),
                 *owner,
                 &record,
@@ -83,12 +105,15 @@ pub fn derive_local_delta<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?S
                         _ => None,
                     })
                 },
-            )?);
+                remaining_relation_edges(maximum_relation_edges, relation_edges_examined)?,
+            )?;
+            relation_edges_examined = relation_edges_examined.saturating_add(examined);
+            before_relations.extend(relations);
         }
         if let Some((_, record)) = &edit.after {
             insert_namespace_contribution(&mut after_namespaces, record)?;
             insert_ownership_contributions(&mut after_ownership, record)?;
-            after_relations.extend(extract_owner_relations(
+            let (relations, examined) = extract_relations(
                 overlay.package_id(),
                 *owner,
                 record,
@@ -102,15 +127,20 @@ pub fn derive_local_delta<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?S
                         _ => None,
                     })
                 },
-            )?);
+                remaining_relation_edges(maximum_relation_edges, relation_edges_examined)?,
+            )?;
+            relation_edges_examined = relation_edges_examined.saturating_add(examined);
+            after_relations.extend(relations);
         }
     }
 
     for (package, edit) in &delta.dependencies {
         if edit.before.is_some() {
+            admit_relation_edge(&mut relation_edges_examined, maximum_relation_edges)?;
             before_relations.insert(package_dependency(overlay.package_id(), *package));
         }
         if edit.after.is_some() {
+            admit_relation_edge(&mut relation_edges_examined, maximum_relation_edges)?;
             after_relations.insert(package_dependency(overlay.package_id(), *package));
         }
     }
@@ -132,6 +162,7 @@ pub fn derive_local_delta<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?S
         .copied()
         .collect::<BTreeSet<_>>();
     for edge in &removed {
+        admit_relation_edge(&mut relation_edges_examined, maximum_relation_edges)?;
         if !witness.contains_relation(*edge)? {
             return Err(derived_error(
                 DiagnosticClass::Corrupt,
@@ -141,19 +172,22 @@ pub fn derive_local_delta<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?S
         }
     }
 
-    let summary_candidates = summary_candidates(
+    let (summary_candidates, ownership_steps) = summary_candidates(
         overlay.package_id(),
         delta,
         &ownership,
         &removed,
         &added,
         &mut witness,
+        maximum_ownership_steps,
     )?;
     Ok(DerivedDelta {
         namespaces,
         ownership,
         relations: RelationDelta { removed, added },
         summary_candidates,
+        ownership_steps,
+        relation_edges_examined,
         read_work: witness.work,
     })
 }
@@ -260,6 +294,68 @@ fn package_dependency(
     }
 }
 
+fn extract_relations<F, C>(
+    package: crate::platform::kernel::PackageId,
+    owner: OwnerKey,
+    record: &OwnerRecord,
+    type_object: F,
+    case_parent: C,
+    maximum_edges: u64,
+) -> Result<(Vec<RelationEdge>, u64), Diagnostic>
+where
+    F: FnMut(
+        crate::platform::kernel::TypeObjectDigest,
+    ) -> Result<Option<crate::platform::kernel::TypeObject>, Diagnostic>,
+    C: FnMut(
+        crate::platform::kernel::PackageId,
+        crate::platform::semantic_id::CaseId,
+    ) -> Result<Option<crate::platform::semantic_id::DeclarationId>, Diagnostic>,
+{
+    extract_owner_relations_with_limit(
+        package,
+        owner,
+        record,
+        type_object,
+        case_parent,
+        usize::try_from(maximum_edges).unwrap_or(usize::MAX),
+    )
+    .map_err(|diagnostic| {
+        if diagnostic.code == "kernel_relation_edge_budget" {
+            derived_error(
+                DiagnosticClass::Resource,
+                "change_budget_relation_edges",
+                diagnostic.message,
+            )
+        } else {
+            diagnostic
+        }
+    })
+}
+
+fn remaining_relation_edges(maximum: u64, observed: u64) -> Result<u64, Diagnostic> {
+    maximum.checked_sub(observed).ok_or_else(|| {
+        derived_error(
+            DiagnosticClass::Resource,
+            "change_budget_relation_edges",
+            format!(
+                "derived relation extraction observed {observed} edges, exceeding the declared {maximum}-edge budget"
+            ),
+        )
+    })
+}
+
+fn admit_relation_edge(observed: &mut u64, maximum: u64) -> Result<(), Diagnostic> {
+    if *observed >= maximum {
+        return Err(derived_error(
+            DiagnosticClass::Resource,
+            "change_budget_relation_edges",
+            format!("derived relation work exceeds the declared {maximum}-edge budget"),
+        ));
+    }
+    *observed = observed.saturating_add(1);
+    Ok(())
+}
+
 fn summary_candidates<W: WitnessBaseRead + ?Sized>(
     package: crate::platform::kernel::PackageId,
     delta: &CanonicalDelta,
@@ -267,7 +363,8 @@ fn summary_candidates<W: WitnessBaseRead + ?Sized>(
     removed_relations: &BTreeSet<RelationEdge>,
     added_relations: &BTreeSet<RelationEdge>,
     witness: &mut CachedWitness<'_, W>,
-) -> Result<BTreeSet<OwnerKey>, Diagnostic> {
+    maximum_ownership_steps: u64,
+) -> Result<(BTreeSet<OwnerKey>, u64), Diagnostic> {
     let candidate_edits = ownership
         .iter()
         .map(|edit| (edit.key, edit.after))
@@ -288,8 +385,15 @@ fn summary_candidates<W: WitnessBaseRead + ?Sized>(
         },
     ));
     let mut affected = BTreeSet::new();
+    let mut ownership_steps = 0_u64;
     for seed in seeds {
-        walk_summary_ancestors(seed, |owner| witness.ownership(owner), &mut affected)?;
+        walk_summary_ancestors(
+            seed,
+            |owner| witness.ownership(owner),
+            &mut affected,
+            &mut ownership_steps,
+            maximum_ownership_steps,
+        )?;
         walk_summary_ancestors(
             seed,
             |owner| match candidate_edits.get(&owner) {
@@ -297,18 +401,40 @@ fn summary_candidates<W: WitnessBaseRead + ?Sized>(
                 None => witness.ownership(owner),
             },
             &mut affected,
+            &mut ownership_steps,
+            maximum_ownership_steps,
         )?;
     }
-    Ok(affected)
+    Ok((affected, ownership_steps))
 }
 
 fn walk_summary_ancestors(
     seed: OwnerKey,
     mut ownership: impl FnMut(OwnerKey) -> Result<Option<OwnershipEntry>, Diagnostic>,
     affected: &mut BTreeSet<OwnerKey>,
+    ownership_steps: &mut u64,
+    maximum_ownership_steps: u64,
 ) -> Result<(), Diagnostic> {
     let mut current = seed;
+    let mut observed = BTreeSet::new();
     loop {
+        if !observed.insert(current) {
+            return Err(derived_error(
+                DiagnosticClass::Semantic,
+                "change_derived_ownership_cycle",
+                "candidate summary ownership path is cyclic",
+            ));
+        }
+        if *ownership_steps >= maximum_ownership_steps {
+            return Err(derived_error(
+                DiagnosticClass::Resource,
+                "change_budget_impact_ownership_steps",
+                format!(
+                    "summary ownership traversal exceeds the declared {maximum_ownership_steps}-step budget"
+                ),
+            ));
+        }
+        *ownership_steps = ownership_steps.saturating_add(1);
         affected.insert(current);
         let Some(entry) = ownership(current)? else {
             break;

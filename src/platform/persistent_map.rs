@@ -233,7 +233,38 @@ impl fmt::Display for MapError {
 
 impl std::error::Error for MapError {}
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+/// Independent admission bounds for one persistent-map operation.
+///
+/// These are deterministic implementation-work limits, not logical map limits. Callers that do
+/// not own a request budget use [`MapAdmission::unbounded`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MapAdmission {
+    pub maximum_pages_read: u64,
+    pub maximum_bytes_read: u64,
+    pub maximum_entries_visited: u64,
+    pub maximum_pages_encoded: u64,
+    pub maximum_bytes_encoded: u64,
+}
+
+impl MapAdmission {
+    pub const fn unbounded() -> Self {
+        Self {
+            maximum_pages_read: u64::MAX,
+            maximum_bytes_read: u64::MAX,
+            maximum_entries_visited: u64::MAX,
+            maximum_pages_encoded: u64::MAX,
+            maximum_bytes_encoded: u64::MAX,
+        }
+    }
+}
+
+impl Default for MapAdmission {
+    fn default() -> Self {
+        Self::unbounded()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MapWork {
     pub pages_read: u64,
     pub pages_decoded: u64,
@@ -248,6 +279,101 @@ pub struct MapWork {
     pub differences_emitted: u64,
     pub subtrees_skipped: u64,
     pub entries_skipped: u64,
+    admission: MapAdmission,
+}
+
+impl Default for MapWork {
+    fn default() -> Self {
+        Self::with_admission(MapAdmission::unbounded())
+    }
+}
+
+impl MapWork {
+    pub const fn with_admission(admission: MapAdmission) -> Self {
+        Self {
+            pages_read: 0,
+            pages_decoded: 0,
+            pages_encoded: 0,
+            pages_written: 0,
+            pages_reused: 0,
+            bytes_read: 0,
+            bytes_encoded: 0,
+            bytes_written: 0,
+            key_comparisons: 0,
+            entries_visited: 0,
+            differences_emitted: 0,
+            subtrees_skipped: 0,
+            entries_skipped: 0,
+            admission,
+        }
+    }
+
+    fn admit_page_read(&mut self) -> Result<(), MapError> {
+        let observed = admitted_total(
+            self.pages_read,
+            1,
+            self.admission.maximum_pages_read,
+            "persistent_map_admission_pages_read",
+            "pages read",
+        )?;
+        self.pages_read = observed;
+        Ok(())
+    }
+
+    fn maximum_next_page_bytes(&self) -> usize {
+        let remaining = self
+            .admission
+            .maximum_bytes_read
+            .saturating_sub(self.bytes_read);
+        usize::try_from(remaining)
+            .unwrap_or(usize::MAX)
+            .min(MAXIMUM_PAGE_BYTES)
+    }
+
+    fn admit_page_bytes_read(&mut self, bytes: usize) -> Result<(), MapError> {
+        let byte_count = usize_to_u64(bytes, "persistent_map_admission_bytes_read")?;
+        self.bytes_read = admitted_total(
+            self.bytes_read,
+            byte_count,
+            self.admission.maximum_bytes_read,
+            "persistent_map_admission_bytes_read",
+            "bytes read",
+        )?;
+        Ok(())
+    }
+
+    fn admit_entries_visited(&mut self, additional: u64) -> Result<(), MapError> {
+        let observed = admitted_total(
+            self.entries_visited,
+            additional,
+            self.admission.maximum_entries_visited,
+            "persistent_map_admission_entries_visited",
+            "entries visited",
+        )?;
+        self.entries_visited = observed;
+        Ok(())
+    }
+
+    fn admit_page_encoding(&mut self, bytes: usize) -> Result<(), MapError> {
+        let byte_count = usize_to_u64(bytes, "persistent_map_admission_bytes_encoded")?;
+        let pages = admitted_total(
+            self.pages_encoded,
+            1,
+            self.admission.maximum_pages_encoded,
+            "persistent_map_admission_pages_encoded",
+            "pages encoded",
+        )?;
+        let bytes = admitted_total(
+            self.bytes_encoded,
+            byte_count,
+            self.admission.maximum_bytes_encoded,
+            "persistent_map_admission_bytes_encoded",
+            "encoded bytes",
+        )?;
+        self.pages_encoded = pages;
+        self.bytes_encoded = bytes;
+        Ok(())
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -256,10 +382,15 @@ pub enum PageWrite {
     Reused,
 }
 
-/// Immutable object interface. Implementations must bound reads to [`MAXIMUM_PAGE_BYTES`] before
-/// allocation and reject a digest collision with foreign bytes.
+/// Immutable object interface. Implementations must inspect retained length metadata and reject a
+/// page larger than `maximum_bytes` before allocating, copying, hashing, or decoding its payload.
+/// They must also enforce [`MAXIMUM_PAGE_BYTES`] and reject a digest collision with foreign bytes.
 pub trait PageStore {
-    fn read_page(&self, digest: PageDigest) -> Result<Option<Vec<u8>>, MapError>;
+    fn read_page(
+        &self,
+        digest: PageDigest,
+        maximum_bytes: usize,
+    ) -> Result<Option<Vec<u8>>, MapError>;
 
     fn write_page(&mut self, digest: PageDigest, bytes: &[u8]) -> Result<PageWrite, MapError>;
 }
@@ -309,18 +440,22 @@ impl<'a, S: PageStore + ?Sized> OverlayPageStore<'a, S> {
 }
 
 impl<S: PageStore + ?Sized> PageStore for OverlayPageStore<'_, S> {
-    fn read_page(&self, digest: PageDigest) -> Result<Option<Vec<u8>>, MapError> {
-        match self.pages.read_page(digest)? {
+    fn read_page(
+        &self,
+        digest: PageDigest,
+        maximum_bytes: usize,
+    ) -> Result<Option<Vec<u8>>, MapError> {
+        match self.pages.read_page(digest, maximum_bytes)? {
             Some(bytes) => Ok(Some(bytes)),
-            None => self.base.read_page(digest),
+            None => self.base.read_page(digest, maximum_bytes),
         }
     }
 
     fn write_page(&mut self, digest: PageDigest, bytes: &[u8]) -> Result<PageWrite, MapError> {
-        if self.pages.read_page(digest)?.is_some() {
+        if self.pages.read_page(digest, bytes.len())?.is_some() {
             return self.pages.write_page(digest, bytes);
         }
-        match self.base.read_page(digest)? {
+        match self.base.read_page(digest, bytes.len())? {
             Some(existing) if existing == bytes => {
                 let _ = self.pages.write_page(digest, bytes)?;
                 Ok(PageWrite::Reused)
@@ -336,8 +471,25 @@ impl<S: PageStore + ?Sized> PageStore for OverlayPageStore<'_, S> {
 }
 
 impl PageStore for MemoryPageStore {
-    fn read_page(&self, digest: PageDigest) -> Result<Option<Vec<u8>>, MapError> {
-        Ok(self.pages.get(&digest).cloned())
+    fn read_page(
+        &self,
+        digest: PageDigest,
+        maximum_bytes: usize,
+    ) -> Result<Option<Vec<u8>>, MapError> {
+        let Some(bytes) = self.pages.get(&digest) else {
+            return Ok(None);
+        };
+        if bytes.len() > maximum_bytes {
+            return Err(map_error(
+                MapErrorClass::Resource,
+                "persistent_map_read_byte_limit",
+                format!(
+                    "stored page has {} bytes, exceeding the caller maximum {maximum_bytes}",
+                    bytes.len()
+                ),
+            ));
+        }
+        Ok(Some(bytes.clone()))
     }
 
     fn write_page(&mut self, digest: PageDigest, bytes: &[u8]) -> Result<PageWrite, MapError> {
@@ -764,6 +916,32 @@ fn add_counter(counter: &mut u64, amount: u64, code: &'static str) -> Result<(),
     Ok(())
 }
 
+fn admitted_total(
+    current: u64,
+    additional: u64,
+    maximum: u64,
+    code: &'static str,
+    unit: &'static str,
+) -> Result<u64, MapError> {
+    let observed = current.checked_add(additional).ok_or_else(|| {
+        map_error(
+            MapErrorClass::Resource,
+            code,
+            format!("persistent-map {unit} observation overflowed"),
+        )
+    })?;
+    if observed > maximum {
+        return Err(map_error(
+            MapErrorClass::Resource,
+            code,
+            format!(
+                "persistent-map operation requires {observed} {unit}, exceeding the admitted maximum {maximum}"
+            ),
+        ));
+    }
+    Ok(observed)
+}
+
 fn usize_to_u64(value: usize, code: &'static str) -> Result<u64, MapError> {
     u64::try_from(value).map_err(|_| {
         map_error(
@@ -1013,6 +1191,45 @@ fn leaf_encoded_length(
     checked_add_usize(length, PAGE_CHECKSUM_BYTES, "persistent_map_leaf_size")
 }
 
+fn page_encoded_length(page: &Page) -> Result<usize, MapError> {
+    validate_page_local(page)?;
+    match page {
+        Page::Leaf {
+            prefix,
+            count,
+            logical_bytes,
+            ..
+        } => leaf_encoded_length(prefix.len(), *count, *logical_bytes),
+        Page::Branch {
+            prefix,
+            terminal,
+            children,
+            ..
+        } => {
+            let mut length = PAGE_HEADER_BYTES;
+            length = checked_add_usize(
+                length,
+                PAGE_COMMON_PAYLOAD_BYTES,
+                "persistent_map_branch_size",
+            )?;
+            length = checked_add_usize(length, prefix.len(), "persistent_map_branch_size")?;
+            // Terminal-presence tag and child-count prefix.
+            length = checked_add_usize(length, 1 + 2, "persistent_map_branch_size")?;
+            if let Some(value) = terminal {
+                length = checked_add_usize(length, 4, "persistent_map_branch_size")?;
+                length = checked_add_usize(length, value.len(), "persistent_map_branch_size")?;
+            }
+            let children_bytes = checked_mul_usize(
+                children.len(),
+                BRANCH_CHILD_BYTES,
+                "persistent_map_branch_size",
+            )?;
+            length = checked_add_usize(length, children_bytes, "persistent_map_branch_size")?;
+            checked_add_usize(length, PAGE_CHECKSUM_BYTES, "persistent_map_branch_size")
+        }
+    }
+}
+
 fn validate_page_local(page: &Page) -> Result<(), MapError> {
     validate_key(page.prefix())?;
     match page {
@@ -1183,9 +1400,22 @@ fn validate_page_local(page: &Page) -> Result<(), MapError> {
 }
 
 fn encode_page(page: &Page) -> Result<Vec<u8>, MapError> {
-    validate_page_local(page)?;
+    let capacity = page_encoded_length(page)?;
+    encode_page_with_capacity(page, capacity)
+}
+
+fn encode_page_with_capacity(page: &Page, capacity: usize) -> Result<Vec<u8>, MapError> {
     let content = page.content()?;
-    let mut payload = Vec::new();
+    let payload_capacity = capacity
+        .checked_sub(PAGE_HEADER_BYTES + PAGE_CHECKSUM_BYTES)
+        .ok_or_else(|| {
+            map_error(
+                MapErrorClass::Corrupt,
+                "persistent_map_page_length",
+                "encoded page length is smaller than its fixed envelope",
+            )
+        })?;
+    let mut payload = Vec::with_capacity(payload_capacity);
     push_u16(
         &mut payload,
         page.prefix().len(),
@@ -1236,7 +1466,7 @@ fn encode_page(page: &Page) -> Result<Vec<u8>, MapError> {
         }
     };
     let payload_length = usize_to_u64(payload.len(), "persistent_map_payload_length")?;
-    let capacity = PAGE_HEADER_BYTES
+    let observed_capacity = PAGE_HEADER_BYTES
         .checked_add(payload.len())
         .and_then(|length| length.checked_add(PAGE_CHECKSUM_BYTES))
         .ok_or_else(|| {
@@ -1246,6 +1476,13 @@ fn encode_page(page: &Page) -> Result<Vec<u8>, MapError> {
                 "encoded page length overflowed",
             )
         })?;
+    if observed_capacity != capacity {
+        return Err(map_error(
+            MapErrorClass::Corrupt,
+            "persistent_map_page_length",
+            "precomputed page length disagrees with its exact canonical payload",
+        ));
+    }
     if capacity > MAXIMUM_PAGE_BYTES {
         return Err(map_error(
             MapErrorClass::Resource,
@@ -1265,7 +1502,15 @@ fn encode_page(page: &Page) -> Result<Vec<u8>, MapError> {
     Ok(bytes)
 }
 
+#[cfg(test)]
 fn decode_page(bytes: &[u8]) -> Result<Page, MapError> {
+    decode_page_with_admission(bytes, None)
+}
+
+fn decode_page_with_admission(
+    bytes: &[u8],
+    mut work: Option<&mut MapWork>,
+) -> Result<Page, MapError> {
     if bytes.len() > MAXIMUM_PAGE_BYTES {
         return Err(map_error(
             MapErrorClass::Resource,
@@ -1367,6 +1612,12 @@ fn decode_page(bytes: &[u8]) -> Result<Page, MapError> {
                 "leaf entry count exceeds its strict page-derived bound",
             ));
         }
+        if let Some(work) = work.as_mut() {
+            work.admit_entries_visited(usize_to_u64(
+                entry_count,
+                "persistent_map_decode_entries_visited",
+            )?)?;
+        }
         let mut entries = Vec::with_capacity(entry_count);
         for _ in 0..entry_count {
             let suffix_length = usize::from(decoder.u16()?);
@@ -1428,6 +1679,9 @@ fn decode_page(bytes: &[u8]) -> Result<Page, MapError> {
                         "persistent_map_value_limit",
                         "decoded terminal exceeds the hostile value bound",
                     ));
+                }
+                if let Some(work) = work.as_mut() {
+                    work.admit_entries_visited(1)?;
                 }
                 Some(decoder.take(value_length)?.to_vec())
             }
@@ -1507,13 +1761,18 @@ fn load_page<S: PageStore + ?Sized>(
     digest: PageDigest,
     work: &mut MapWork,
 ) -> Result<Page, MapError> {
-    let bytes = store.read_page(digest)?.ok_or_else(|| {
-        map_error(
-            MapErrorClass::Corrupt,
-            "persistent_map_page_missing",
-            format!("referenced page {digest} is absent"),
-        )
-    })?;
+    work.admit_page_read()?;
+    let maximum_bytes = work.maximum_next_page_bytes();
+    let bytes = store
+        .read_page(digest, maximum_bytes)
+        .map_err(map_page_read_limit)?
+        .ok_or_else(|| {
+            map_error(
+                MapErrorClass::Corrupt,
+                "persistent_map_page_missing",
+                format!("referenced page {digest} is absent"),
+            )
+        })?;
     if bytes.len() > MAXIMUM_PAGE_BYTES {
         return Err(map_error(
             MapErrorClass::Resource,
@@ -1521,12 +1780,7 @@ fn load_page<S: PageStore + ?Sized>(
             format!("stored page exceeds {MAXIMUM_PAGE_BYTES} bytes"),
         ));
     }
-    add_counter(&mut work.pages_read, 1, "persistent_map_work_pages_read")?;
-    add_counter(
-        &mut work.bytes_read,
-        usize_to_u64(bytes.len(), "persistent_map_work_bytes_read")?,
-        "persistent_map_work_bytes_read",
-    )?;
+    work.admit_page_bytes_read(bytes.len())?;
     if PageDigest::of(&bytes) != digest {
         return Err(map_error(
             MapErrorClass::Corrupt,
@@ -1534,7 +1788,7 @@ fn load_page<S: PageStore + ?Sized>(
             format!("referenced page {digest} has foreign bytes"),
         ));
     }
-    let page = decode_page(&bytes)?;
+    let page = decode_page_with_admission(&bytes, Some(work))?;
     add_counter(
         &mut work.pages_decoded,
         1,
@@ -1543,23 +1797,34 @@ fn load_page<S: PageStore + ?Sized>(
     Ok(page)
 }
 
+fn map_page_read_limit(error: MapError) -> MapError {
+    let caller_bound_error = matches!(
+        error.code,
+        "persistent_map_read_byte_limit"
+            | "repository_read_limit"
+            | "memory_read_limit"
+            | "pack_read_limit"
+            | "object_stage_read_limit"
+    );
+    if error.class == MapErrorClass::Resource && caller_bound_error {
+        return map_error(
+            MapErrorClass::Resource,
+            "persistent_map_admission_bytes_read",
+            error.message,
+        );
+    }
+    error
+}
+
 fn write_page<S: PageStore + ?Sized>(
     store: &mut S,
     page: &Page,
     work: &mut MapWork,
 ) -> Result<NodeRef, MapError> {
-    let bytes = encode_page(page)?;
+    let encoded_length = page_encoded_length(page)?;
+    work.admit_page_encoding(encoded_length)?;
+    let bytes = encode_page_with_capacity(page, encoded_length)?;
     let digest = PageDigest::of(&bytes);
-    add_counter(
-        &mut work.pages_encoded,
-        1,
-        "persistent_map_work_pages_encoded",
-    )?;
-    add_counter(
-        &mut work.bytes_encoded,
-        usize_to_u64(bytes.len(), "persistent_map_work_bytes_encoded")?,
-        "persistent_map_work_bytes_encoded",
-    )?;
     match store.write_page(digest, &bytes)? {
         PageWrite::Inserted => {
             add_counter(
@@ -1834,11 +2099,6 @@ where
         Page::Leaf { entries, .. } => {
             for entry in entries {
                 visitor(&entry.key, &entry.value, work)?;
-                add_counter(
-                    &mut work.entries_visited,
-                    1,
-                    "persistent_map_work_entries_visited",
-                )?;
                 visited = visited.checked_add(1).ok_or_else(|| {
                     map_error(
                         MapErrorClass::Resource,
@@ -1856,11 +2116,6 @@ where
         } => {
             if let Some(value) = terminal {
                 visitor(prefix, value, work)?;
-                add_counter(
-                    &mut work.entries_visited,
-                    1,
-                    "persistent_map_work_entries_visited",
-                )?;
                 visited = 1;
             }
             for child in children {
@@ -1926,11 +2181,6 @@ where
                 )?;
                 if entry.key.starts_with(requested) {
                     visitor(&entry.key, &entry.value, work)?;
-                    add_counter(
-                        &mut work.entries_visited,
-                        1,
-                        "persistent_map_work_entries_visited",
-                    )?;
                     visited = visited.checked_add(1).ok_or_else(|| {
                         map_error(
                             MapErrorClass::Resource,
@@ -2322,6 +2572,10 @@ fn merge_leaf_edits<S: PageStore + ?Sized>(
     work: &mut MapWork,
 ) -> Result<BatchResult, MapError> {
     let original = NodeRef::from_page(digest, page)?;
+    work.admit_entries_visited(usize_to_u64(
+        entries.len(),
+        "persistent_map_batch_entries_visited",
+    )?)?;
     let mut merged = Vec::with_capacity(entries.len().saturating_add(edits.len()));
     let mut entry_index = 0usize;
     let mut edit_index = 0usize;
@@ -3229,6 +3483,50 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::Cell;
+
+    #[derive(Clone)]
+    struct CountingPageStore {
+        inner: MemoryPageStore,
+        reads: Cell<u64>,
+        bytes_read: Cell<u64>,
+        writes: u64,
+    }
+
+    impl CountingPageStore {
+        fn new(inner: MemoryPageStore) -> Self {
+            Self {
+                inner,
+                reads: Cell::new(0),
+                bytes_read: Cell::new(0),
+                writes: 0,
+            }
+        }
+    }
+
+    impl PageStore for CountingPageStore {
+        fn read_page(
+            &self,
+            digest: PageDigest,
+            maximum_bytes: usize,
+        ) -> Result<Option<Vec<u8>>, MapError> {
+            self.reads.set(self.reads.get().saturating_add(1));
+            let bytes = self.inner.read_page(digest, maximum_bytes)?;
+            if let Some(bytes) = &bytes {
+                self.bytes_read.set(
+                    self.bytes_read
+                        .get()
+                        .saturating_add(u64::try_from(bytes.len()).unwrap_or(u64::MAX)),
+                );
+            }
+            Ok(bytes)
+        }
+
+        fn write_page(&mut self, digest: PageDigest, bytes: &[u8]) -> Result<PageWrite, MapError> {
+            self.writes = self.writes.saturating_add(1);
+            self.inner.write_page(digest, bytes)
+        }
+    }
 
     fn empty() -> (MemoryPageStore, PersistentMap) {
         let mut store = MemoryPageStore::default();
@@ -3333,6 +3631,121 @@ mod tests {
             });
         }
         Ok((content_branch_digest(&prefix, terminal, &children)?, pages))
+    }
+
+    #[test]
+    fn admitted_batch_work_rejects_before_each_bounded_consumption() {
+        let (mut base_store, base) = empty();
+        let base = insert(&mut base_store, base, b"key", b"before");
+        let edits = [MapEdit {
+            key: b"key".to_vec(),
+            before: Some(b"before".to_vec()),
+            after: Some(b"after".to_vec()),
+        }];
+
+        let mut baseline_store = CountingPageStore::new(base_store.clone());
+        let mut baseline_work = MapWork::default();
+        base.apply_sorted_edits(&mut baseline_store, &edits, &mut baseline_work)
+            .expect("baseline batch update");
+        assert!(baseline_work.pages_read > 0);
+        assert!(baseline_work.bytes_read > 0);
+        assert!(baseline_work.entries_visited > 0);
+        assert!(baseline_work.pages_encoded > 0);
+        assert!(baseline_work.bytes_encoded > 0);
+
+        let cases = [
+            (
+                MapAdmission {
+                    maximum_pages_read: 0,
+                    ..MapAdmission::unbounded()
+                },
+                "persistent_map_admission_pages_read",
+            ),
+            (
+                MapAdmission {
+                    maximum_bytes_read: 0,
+                    ..MapAdmission::unbounded()
+                },
+                "persistent_map_admission_bytes_read",
+            ),
+            (
+                MapAdmission {
+                    maximum_entries_visited: 0,
+                    ..MapAdmission::unbounded()
+                },
+                "persistent_map_admission_entries_visited",
+            ),
+            (
+                MapAdmission {
+                    maximum_pages_encoded: 0,
+                    ..MapAdmission::unbounded()
+                },
+                "persistent_map_admission_pages_encoded",
+            ),
+            (
+                MapAdmission {
+                    maximum_bytes_encoded: baseline_work.bytes_encoded - 1,
+                    ..MapAdmission::unbounded()
+                },
+                "persistent_map_admission_bytes_encoded",
+            ),
+        ];
+        for (admission, code) in cases {
+            let mut store = CountingPageStore::new(base_store.clone());
+            let mut work = MapWork::with_admission(admission);
+            let error = base
+                .apply_sorted_edits(&mut store, &edits, &mut work)
+                .expect_err("exhausted map dimension must reject");
+            assert_eq!(error.code, code);
+            if code == "persistent_map_admission_pages_read" {
+                assert_eq!(store.reads.get(), 0);
+            }
+            if code == "persistent_map_admission_bytes_read" {
+                assert_eq!(store.bytes_read.get(), 0);
+            }
+            if code == "persistent_map_admission_pages_encoded"
+                || code == "persistent_map_admission_bytes_encoded"
+            {
+                assert_eq!(store.writes, 0);
+            }
+        }
+
+        let exact = MapAdmission {
+            maximum_pages_read: baseline_work.pages_read,
+            maximum_bytes_read: baseline_work.bytes_read,
+            maximum_entries_visited: baseline_work.entries_visited,
+            maximum_pages_encoded: baseline_work.pages_encoded,
+            maximum_bytes_encoded: baseline_work.bytes_encoded,
+        };
+        let mut exact_store = CountingPageStore::new(base_store);
+        let mut exact_work = MapWork::with_admission(exact);
+        base.apply_sorted_edits(&mut exact_store, &edits, &mut exact_work)
+            .expect("exact map admission must succeed");
+        assert_eq!(exact_work.pages_read, baseline_work.pages_read);
+        assert_eq!(exact_work.bytes_read, baseline_work.bytes_read);
+        assert_eq!(exact_store.bytes_read.get(), baseline_work.bytes_read);
+        assert_eq!(exact_work.entries_visited, baseline_work.entries_visited);
+        assert_eq!(exact_work.pages_encoded, baseline_work.pages_encoded);
+        assert_eq!(exact_work.bytes_encoded, baseline_work.bytes_encoded);
+    }
+
+    #[test]
+    fn memory_page_reads_honor_the_caller_byte_bound_before_clone() {
+        let (store, map) = empty();
+        let bytes = store
+            .pages
+            .get(&map.root().page())
+            .expect("empty root page");
+        let error = store
+            .read_page(map.root().page(), bytes.len() - 1)
+            .expect_err("undersized caller bound must reject");
+        assert_eq!(error.code, "persistent_map_read_byte_limit");
+        assert!(
+            store
+                .read_page(map.root().page(), bytes.len())
+                .expect("exact caller bound")
+                .is_some()
+        );
     }
 
     #[test]
@@ -5061,30 +5474,39 @@ where
     }
 }
 
+#[derive(Default)]
+struct VerificationState {
+    seen: BTreeSet<PageDigest>,
+    pages: u64,
+    entries: u64,
+}
+
 fn verify_loaded<S: PageStore + ?Sized>(
     store: &S,
     digest: PageDigest,
     page: &Page,
     depth: usize,
-    seen: &mut BTreeSet<PageDigest>,
-    pages: &mut u64,
+    state: &mut VerificationState,
     work: &mut MapWork,
 ) -> Result<(), MapError> {
     ensure_depth(depth)?;
-    if !seen.insert(digest) {
+    if !state.seen.insert(digest) {
         return Err(map_error(
             MapErrorClass::Corrupt,
             "persistent_map_page_reused_in_tree",
             "one page object is reachable through more than one map edge",
         ));
     }
-    add_counter(pages, 1, "persistent_map_verify_pages")?;
+    add_counter(&mut state.pages, 1, "persistent_map_verify_pages")?;
     match page {
-        Page::Leaf { entries, .. } => add_counter(
-            &mut work.entries_visited,
-            usize_to_u64(entries.len(), "persistent_map_verify_entries")?,
-            "persistent_map_work_entries_visited",
-        )?,
+        Page::Leaf { entries, .. } => {
+            let entry_count = usize_to_u64(entries.len(), "persistent_map_verify_entries")?;
+            add_counter(
+                &mut state.entries,
+                entry_count,
+                "persistent_map_verify_entries",
+            )?;
+        }
         Page::Branch {
             prefix,
             terminal,
@@ -5092,24 +5514,12 @@ fn verify_loaded<S: PageStore + ?Sized>(
             ..
         } => {
             if terminal.is_some() {
-                add_counter(
-                    &mut work.entries_visited,
-                    1,
-                    "persistent_map_work_entries_visited",
-                )?;
+                add_counter(&mut state.entries, 1, "persistent_map_verify_entries")?;
             }
             for child in children {
                 let child_page = load_page(store, child.digest, work)?;
                 verify_child_link(prefix, child, &child_page)?;
-                verify_loaded(
-                    store,
-                    child.digest,
-                    &child_page,
-                    depth + 1,
-                    seen,
-                    pages,
-                    work,
-                )?;
+                verify_loaded(store, child.digest, &child_page, depth + 1, state, work)?;
             }
         }
     }
@@ -5163,23 +5573,11 @@ impl PersistentMap {
         store: &S,
         work: &mut MapWork,
     ) -> Result<VerificationReport, MapError> {
-        let entries_before = work.entries_visited;
         let page = load_page(store, self.root.page, work)?;
         verify_root(self.root, &page)?;
-        let mut seen = BTreeSet::new();
-        let mut pages = 0;
-        verify_loaded(store, self.root.page, &page, 0, &mut seen, &mut pages, work)?;
-        let entries_verified = work
-            .entries_visited
-            .checked_sub(entries_before)
-            .ok_or_else(|| {
-                map_error(
-                    MapErrorClass::Resource,
-                    "persistent_map_verify_entries",
-                    "verified entry accounting moved backwards",
-                )
-            })?;
-        if entries_verified != self.root.entries {
+        let mut state = VerificationState::default();
+        verify_loaded(store, self.root.page, &page, 0, &mut state, work)?;
+        if state.entries != self.root.entries {
             return Err(map_error(
                 MapErrorClass::Corrupt,
                 "persistent_map_verify_entries",
@@ -5187,7 +5585,7 @@ impl PersistentMap {
             ));
         }
         Ok(VerificationReport {
-            pages,
+            pages: state.pages,
             entries: self.root.entries,
             logical_bytes: page.logical_bytes(),
         })

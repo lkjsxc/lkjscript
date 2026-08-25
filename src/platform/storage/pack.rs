@@ -372,6 +372,28 @@ impl PackMetadata {
             .map(|index| &self.entries[index])
     }
 
+    /// Resolves and bounds one exact payload using footer metadata only.
+    ///
+    /// Store admission uses this before opening or copying the corresponding payload.
+    pub(crate) fn bounded_read_entry(
+        &self,
+        key: ObjectKey,
+        maximum_bytes: usize,
+    ) -> Result<Option<(&PackIndexEntry, usize)>, StoreError> {
+        let Some(entry) = self.find(key) else {
+            return Ok(None);
+        };
+        let length = usize_from_u64(entry.encoded_length, "pack_read_length")?;
+        if length > maximum_bytes || length > key.domain.maximum_bytes() {
+            return Err(pack_error(
+                StoreErrorClass::Resource,
+                "pack_read_limit",
+                format!("object has {length} bytes; caller allowed {maximum_bytes}"),
+            ));
+        }
+        Ok(Some((entry, length)))
+    }
+
     pub fn verify_all(&self, bytes: &[u8]) -> Result<(), StoreError> {
         if bytes.len() as u64 != self.byte_length {
             return Err(corrupt(
@@ -398,17 +420,9 @@ impl PackMetadata {
         key: ObjectKey,
         maximum_bytes: usize,
     ) -> Result<Option<Vec<u8>>, StoreError> {
-        let Some(entry) = self.find(key) else {
+        let Some((entry, length)) = self.bounded_read_entry(key, maximum_bytes)? else {
             return Ok(None);
         };
-        let length = usize_from_u64(entry.encoded_length, "pack_read_length")?;
-        if length > maximum_bytes || length > key.domain.maximum_bytes() {
-            return Err(pack_error(
-                StoreErrorClass::Resource,
-                "pack_read_limit",
-                format!("object has {length} bytes; caller allowed {maximum_bytes}"),
-            ));
-        }
         let start = usize_from_u64(entry.offset, "pack_read_offset")?;
         let end = start
             .checked_add(length)
@@ -432,17 +446,9 @@ impl PackMetadata {
         key: ObjectKey,
         maximum_bytes: usize,
     ) -> Result<Option<Vec<u8>>, StoreError> {
-        let Some(entry) = self.find(key) else {
+        let Some((entry, length)) = self.bounded_read_entry(key, maximum_bytes)? else {
             return Ok(None);
         };
-        let length = usize_from_u64(entry.encoded_length, "pack_read_length")?;
-        if length > maximum_bytes || length > key.domain.maximum_bytes() {
-            return Err(pack_error(
-                StoreErrorClass::Resource,
-                "pack_read_limit",
-                format!("object has {length} bytes; caller allowed {maximum_bytes}"),
-            ));
-        }
         let mut value = vec![0_u8; length];
         read_at(reader, entry.offset, &mut value)?;
         if digest(contract::PACK_ENTRY_CHECKSUM_DOMAIN, &value) != entry.checksum {

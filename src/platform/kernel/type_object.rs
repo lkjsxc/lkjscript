@@ -150,12 +150,29 @@ pub struct StructuralTypeField {
 
 /// Request-local structural type interner. Equal canonical values reuse one digest, and child
 /// availability is checked by exact digest lookup rather than a global scan.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct TypeObjectInterner {
     objects: BTreeMap<TypeObjectDigest, TypeObject>,
+    maximum_objects: usize,
+}
+
+impl Default for TypeObjectInterner {
+    fn default() -> Self {
+        Self {
+            objects: BTreeMap::new(),
+            maximum_objects: usize::MAX,
+        }
+    }
 }
 
 impl TypeObjectInterner {
+    pub fn with_maximum_objects(maximum_objects: usize) -> Self {
+        Self {
+            objects: BTreeMap::new(),
+            maximum_objects,
+        }
+    }
+
     pub fn admit(
         &mut self,
         digest: TypeObjectDigest,
@@ -168,7 +185,7 @@ impl TypeObjectInterner {
                 "admitted type object does not match its exact digest",
             ));
         }
-        self.objects.entry(digest).or_insert(object);
+        self.insert_if_absent(digest, object)?;
         Ok(())
     }
 
@@ -183,8 +200,12 @@ impl TypeObjectInterner {
             }
         }
         let (digest, _) = super::codec::encode_type_object(&object)?;
-        self.objects.entry(digest).or_insert(object);
+        self.insert_if_absent(digest, object)?;
         Ok(digest)
+    }
+
+    pub fn len(&self) -> usize {
+        self.objects.len()
     }
 
     pub fn get(&self, digest: TypeObjectDigest) -> Option<&TypeObject> {
@@ -193,6 +214,28 @@ impl TypeObjectInterner {
 
     pub fn into_objects(self) -> BTreeMap<TypeObjectDigest, TypeObject> {
         self.objects
+    }
+
+    fn insert_if_absent(
+        &mut self,
+        digest: TypeObjectDigest,
+        object: TypeObject,
+    ) -> Result<(), Diagnostic> {
+        if self.objects.contains_key(&digest) {
+            return Ok(());
+        }
+        if self.objects.len() >= self.maximum_objects {
+            return Err(Diagnostic::new(
+                DiagnosticClass::Resource,
+                "kernel_type_interner_exhausted",
+                format!(
+                    "request-local type interning exceeds the declared {}-type-object budget",
+                    self.maximum_objects
+                ),
+            ));
+        }
+        self.objects.insert(digest, object);
+        Ok(())
     }
 }
 

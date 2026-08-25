@@ -189,7 +189,7 @@ pub fn extract_relations(
     types: &BTreeMap<TypeObjectDigest, TypeObject>,
     dependencies: &BTreeMap<PackageId, DependencyRecord>,
 ) -> Result<Vec<RelationEdge>, Diagnostic> {
-    let mut edges = BTreeSet::new();
+    let mut edges = RelationCollector::new(MAXIMUM_VALIDATION_WORK);
     let mut work = 0_usize;
     for (key, record) in owners {
         consume_work(&mut work)?;
@@ -218,9 +218,9 @@ pub fn extract_relations(
             source: RelationEndpoint::Package(package),
             kind: RelationKind::PackageDependency,
             target: RelationEndpoint::Package(*dependency),
-        });
+        })?;
     }
-    Ok(edges.into_iter().collect())
+    Ok(edges.into_edges())
 }
 
 /// Extracts the exact relation set contributed by one canonical owner record. Incremental witness
@@ -229,9 +229,35 @@ pub fn extract_owner_relations<F, C>(
     package: PackageId,
     owner: OwnerKey,
     record: &OwnerRecord,
+    type_object: F,
+    case_parent: C,
+) -> Result<Vec<RelationEdge>, Diagnostic>
+where
+    F: FnMut(TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic>,
+    C: FnMut(
+        PackageId,
+        crate::platform::semantic_id::CaseId,
+    ) -> Result<Option<crate::platform::semantic_id::DeclarationId>, Diagnostic>,
+{
+    extract_owner_relations_with_limit(
+        package,
+        owner,
+        record,
+        type_object,
+        case_parent,
+        MAXIMUM_VALIDATION_WORK,
+    )
+    .map(|(edges, _)| edges)
+}
+
+pub fn extract_owner_relations_with_limit<F, C>(
+    package: PackageId,
+    owner: OwnerKey,
+    record: &OwnerRecord,
     mut type_object: F,
     mut case_parent: C,
-) -> Result<Vec<RelationEdge>, Diagnostic>
+    maximum_edges: usize,
+) -> Result<(Vec<RelationEdge>, u64), Diagnostic>
 where
     F: FnMut(TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic>,
     C: FnMut(
@@ -245,7 +271,7 @@ where
             "relation extraction owner key disagrees with the canonical record header",
         ));
     }
-    let mut edges = BTreeSet::new();
+    let mut edges = RelationCollector::new(maximum_edges);
     let mut work = 0;
     extract_owner(
         exact(package, owner),
@@ -256,7 +282,8 @@ where
         &mut edges,
         &mut work,
     )?;
-    Ok(edges.into_iter().collect())
+    let examined = edges.examined;
+    Ok((edges.into_edges(), examined))
 }
 
 fn extract_owner<F, C>(
@@ -265,7 +292,7 @@ fn extract_owner<F, C>(
     package: PackageId,
     type_object: &mut F,
     case_parent: &mut C,
-    edges: &mut BTreeSet<RelationEdge>,
+    edges: &mut RelationCollector,
     work: &mut usize,
 ) -> Result<(), Diagnostic>
 where
@@ -284,7 +311,7 @@ where
                 RelationKind::DeclarationModule,
                 package,
                 OwnerKey::Module(declaration.module),
-            );
+            )?;
             match &declaration.payload {
                 DeclarationPayload::Record { fields } => {
                     for field in fields {
@@ -294,7 +321,7 @@ where
                             RelationKind::MemberDeclaration,
                             package,
                             source.owner,
-                        );
+                        )?;
                     }
                 }
                 DeclarationPayload::Variant { cases } => {
@@ -305,7 +332,7 @@ where
                             RelationKind::MemberDeclaration,
                             package,
                             source.owner,
-                        );
+                        )?;
                     }
                 }
                 DeclarationPayload::Interface { operations } => {
@@ -316,7 +343,7 @@ where
                             RelationKind::MemberDeclaration,
                             package,
                             source.owner,
-                        );
+                        )?;
                     }
                 }
                 DeclarationPayload::Function(function) => {
@@ -328,7 +355,7 @@ where
                                 RelationKind::FunctionRequirement,
                                 requirement.package,
                                 OwnerKey::Requirement(requirement.requirement),
-                            );
+                            )?;
                         }
                     }
                 }
@@ -343,7 +370,7 @@ where
                             RelationKind::ComponentRequirement,
                             package,
                             OwnerKey::Requirement(*requirement),
-                        );
+                        )?;
                     }
                     for port in ports {
                         owner_edge(
@@ -352,7 +379,7 @@ where
                             RelationKind::ComponentPort,
                             package,
                             OwnerKey::Port(*port),
-                        );
+                        )?;
                     }
                 }
                 DeclarationPayload::Test {
@@ -365,7 +392,7 @@ where
                             RelationKind::TestExecutionDependency,
                             package,
                             OwnerKey::Expression(*root),
-                        );
+                        )?;
                     }
                 }
                 DeclarationPayload::External(_) | DeclarationPayload::Constant { .. } => {}
@@ -377,7 +404,7 @@ where
                     RelationKind::ExpressionRoot,
                     package,
                     source.owner,
-                );
+                )?;
             }
         }
         OwnerRecord::TypeParameter(parameter) => owner_edge(
@@ -386,28 +413,28 @@ where
             RelationKind::MemberDeclaration,
             package,
             OwnerKey::Declaration(parameter.declaration),
-        ),
+        )?,
         OwnerRecord::Field(field) => owner_edge(
             edges,
             source,
             RelationKind::MemberDeclaration,
             package,
             OwnerKey::Declaration(field.declaration),
-        ),
+        )?,
         OwnerRecord::Case(case) => owner_edge(
             edges,
             source,
             RelationKind::MemberDeclaration,
             package,
             OwnerKey::Declaration(case.declaration),
-        ),
+        )?,
         OwnerRecord::Operation(operation) => owner_edge(
             edges,
             source,
             RelationKind::MemberDeclaration,
             package,
             OwnerKey::Declaration(operation.declaration),
-        ),
+        )?,
         OwnerRecord::Parameter(parameter) => match parameter.parent {
             ParameterParent::Function(declaration) => owner_edge(
                 edges,
@@ -415,14 +442,14 @@ where
                 RelationKind::MemberDeclaration,
                 package,
                 OwnerKey::Declaration(declaration),
-            ),
+            )?,
             ParameterParent::Operation(operation) => owner_edge(
                 edges,
                 source,
                 RelationKind::ParameterOperation,
                 package,
                 OwnerKey::Operation(operation),
-            ),
+            )?,
         },
         OwnerRecord::Binding(binding) => {
             if let Some(value) = binding.value {
@@ -432,7 +459,7 @@ where
                     RelationKind::ExpressionRoot,
                     package,
                     source.owner,
-                );
+                )?;
             }
         }
         OwnerRecord::Expression(expression) => {
@@ -443,7 +470,7 @@ where
                     RelationKind::ExpressionParent,
                     package,
                     source.owner,
-                );
+                )?;
             }
             extract_expression(source, &expression.operation, package, case_parent, edges)?;
         }
@@ -454,7 +481,7 @@ where
                 RelationKind::CapabilityInterface,
                 requirement.interface.package,
                 OwnerKey::Declaration(requirement.interface.declaration),
-            );
+            )?;
             for operation in &requirement.operations {
                 exact_edge(
                     edges,
@@ -462,7 +489,7 @@ where
                     RelationKind::CapabilityOperation,
                     operation.package,
                     OwnerKey::Operation(operation.operation),
-                );
+                )?;
             }
         }
         OwnerRecord::Port(port) => {
@@ -472,7 +499,7 @@ where
                 RelationKind::MemberDeclaration,
                 package,
                 OwnerKey::Declaration(port.declaration),
-            );
+            )?;
             if let PortImplementation::Function(function) = &port.implementation {
                 exact_edge(
                     edges,
@@ -480,7 +507,7 @@ where
                     RelationKind::FunctionValue,
                     function.package,
                     OwnerKey::Declaration(function.declaration),
-                );
+                )?;
             }
         }
         OwnerRecord::Target(target) => {
@@ -490,14 +517,14 @@ where
                 RelationKind::TargetComponent,
                 target.component.package,
                 OwnerKey::Declaration(target.component.declaration),
-            );
+            )?;
             exact_edge(
                 edges,
                 source,
                 RelationKind::TargetPort,
                 target.port.package,
                 OwnerKey::Port(target.port.port),
-            );
+            )?;
         }
         OwnerRecord::Documentation(documentation) => owner_edge(
             edges,
@@ -505,14 +532,14 @@ where
             RelationKind::DocumentationOwnership,
             package,
             documentation.owner,
-        ),
+        )?,
         OwnerRecord::Annotation(annotation) => owner_edge(
             edges,
             source,
             RelationKind::AnnotationOwnership,
             package,
             annotation.owner,
-        ),
+        )?,
     }
 
     for root in record.type_roots() {
@@ -526,7 +553,7 @@ fn extract_expression<C>(
     operation: &ExpressionOperation,
     package: PackageId,
     case_parent: &mut C,
-    edges: &mut BTreeSet<RelationEdge>,
+    edges: &mut RelationCollector,
 ) -> Result<(), Diagnostic>
 where
     C: FnMut(
@@ -549,7 +576,7 @@ where
                 RelationKind::LocalValueReference,
                 package,
                 target,
-            );
+            )?;
         }
         ExpressionOperation::Constant { declaration } => exact_edge(
             edges,
@@ -557,21 +584,21 @@ where
             RelationKind::ConstantReference,
             declaration.package,
             OwnerKey::Declaration(declaration.declaration),
-        ),
+        )?,
         ExpressionOperation::Call { function, .. } => exact_edge(
             edges,
             source,
             RelationKind::FunctionCall,
             function.package,
             OwnerKey::Declaration(function.declaration),
-        ),
+        )?,
         ExpressionOperation::FunctionValue { function, .. } => exact_edge(
             edges,
             source,
             RelationKind::FunctionValue,
             function.package,
             OwnerKey::Declaration(function.declaration),
-        ),
+        )?,
         ExpressionOperation::Record {
             nominal_type,
             fields,
@@ -583,7 +610,7 @@ where
                     RelationKind::NamedTypeUse,
                     declaration.package,
                     OwnerKey::Declaration(declaration.declaration),
-                );
+                )?;
             }
             for field in fields {
                 if let FieldSelector::Nominal(field) = field.selector {
@@ -593,7 +620,7 @@ where
                         RelationKind::NominalFieldConstruction,
                         field.package,
                         OwnerKey::Field(field.field),
-                    );
+                    )?;
                 }
             }
         }
@@ -603,7 +630,7 @@ where
             RelationKind::VariantConstruction,
             case.package,
             OwnerKey::Case(case.case),
-        ),
+        )?,
         ExpressionOperation::Field {
             selector: FieldSelector::Nominal(field),
             ..
@@ -613,7 +640,7 @@ where
             RelationKind::NominalFieldAccess,
             field.package,
             OwnerKey::Field(field.field),
-        ),
+        )?,
         ExpressionOperation::Match { arms, .. } => {
             for arm in arms {
                 exact_edge(
@@ -622,7 +649,7 @@ where
                     RelationKind::VariantMatch,
                     arm.case.package,
                     OwnerKey::Case(arm.case.case),
-                );
+                )?;
                 if let Some(declaration) = case_parent(arm.case.package, arm.case.case)? {
                     exact_edge(
                         edges,
@@ -630,7 +657,7 @@ where
                         RelationKind::VariantExhaustiveness,
                         arm.case.package,
                         OwnerKey::Declaration(declaration),
-                    );
+                    )?;
                 }
             }
         }
@@ -645,14 +672,14 @@ where
                 RelationKind::ComponentRequirement,
                 requirement.package,
                 OwnerKey::Requirement(requirement.requirement),
-            );
+            )?;
             exact_edge(
                 edges,
                 source,
                 RelationKind::CapabilityOperation,
                 operation.package,
                 OwnerKey::Operation(operation.operation),
-            );
+            )?;
         }
         ExpressionOperation::Transaction { requirement, .. } => exact_edge(
             edges,
@@ -660,7 +687,7 @@ where
             RelationKind::ComponentRequirement,
             requirement.package,
             OwnerKey::Requirement(requirement.requirement),
-        ),
+        )?,
         ExpressionOperation::Unit {}
         | ExpressionOperation::Bool { .. }
         | ExpressionOperation::I64 { .. }
@@ -685,7 +712,7 @@ fn extract_type_relations<F>(
     root: TypeObjectDigest,
     package: PackageId,
     type_object: &mut F,
-    edges: &mut BTreeSet<RelationEdge>,
+    edges: &mut RelationCollector,
     work: &mut usize,
 ) -> Result<(), Diagnostic>
 where
@@ -705,20 +732,24 @@ where
             )
         })?;
         match &object.form {
-            TypeForm::TypeParameter { parameter } => owner_edge(
-                edges,
-                source,
-                RelationKind::TypeParameterUse,
-                package,
-                OwnerKey::TypeParameter(*parameter),
-            ),
-            TypeForm::Named { declaration } => exact_edge(
-                edges,
-                source,
-                RelationKind::NamedTypeUse,
-                declaration.package,
-                OwnerKey::Declaration(declaration.declaration),
-            ),
+            TypeForm::TypeParameter { parameter } => {
+                owner_edge(
+                    edges,
+                    source,
+                    RelationKind::TypeParameterUse,
+                    package,
+                    OwnerKey::TypeParameter(*parameter),
+                )?;
+            }
+            TypeForm::Named { declaration } => {
+                exact_edge(
+                    edges,
+                    source,
+                    RelationKind::NamedTypeUse,
+                    declaration.package,
+                    OwnerKey::Declaration(declaration.declaration),
+                )?;
+            }
             _ => pending.extend(object.child_types()),
         }
     }
@@ -730,27 +761,63 @@ fn exact(package: PackageId, owner: OwnerKey) -> ExactOwnerKey {
 }
 
 fn owner_edge(
-    edges: &mut BTreeSet<RelationEdge>,
+    edges: &mut RelationCollector,
     source: ExactOwnerKey,
     kind: RelationKind,
     package: PackageId,
     owner: OwnerKey,
-) {
-    exact_edge(edges, source, kind, package, owner);
+) -> Result<(), Diagnostic> {
+    exact_edge(edges, source, kind, package, owner)
 }
 
 fn exact_edge(
-    edges: &mut BTreeSet<RelationEdge>,
+    edges: &mut RelationCollector,
     source: ExactOwnerKey,
     kind: RelationKind,
     package: PackageId,
     owner: OwnerKey,
-) {
+) -> Result<(), Diagnostic> {
     edges.insert(RelationEdge {
         source: RelationEndpoint::Owner(source),
         kind,
         target: RelationEndpoint::Owner(exact(package, owner)),
-    });
+    })
+}
+
+struct RelationCollector {
+    edges: BTreeSet<RelationEdge>,
+    examined: u64,
+    maximum: u64,
+}
+
+impl RelationCollector {
+    fn new(maximum: usize) -> Self {
+        Self {
+            edges: BTreeSet::new(),
+            examined: 0,
+            maximum: u64::try_from(maximum).unwrap_or(u64::MAX),
+        }
+    }
+
+    fn insert(&mut self, edge: RelationEdge) -> Result<(), Diagnostic> {
+        if self.examined >= self.maximum {
+            return Err(Diagnostic::new(
+                DiagnosticClass::Resource,
+                "kernel_relation_edge_budget",
+                format!(
+                    "relation extraction exceeds the declared {}-edge budget",
+                    self.maximum
+                ),
+            ));
+        }
+        self.examined = self.examined.saturating_add(1);
+        self.edges.insert(edge);
+        Ok(())
+    }
+
+    fn into_edges(self) -> Vec<RelationEdge> {
+        self.edges.into_iter().collect()
+    }
 }
 
 fn consume_work(work: &mut usize) -> Result<(), Diagnostic> {

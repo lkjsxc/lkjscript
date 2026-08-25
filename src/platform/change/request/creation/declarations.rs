@@ -109,7 +109,7 @@ pub enum AuthoredAnnotationValue {
 pub(in crate::platform::change::request) fn collect_record_symbols(
     symbol: &str,
     fields: &[AuthoredField],
-    definitions: &mut BTreeMap<String, SymbolKind>,
+    definitions: &mut SymbolDefinitions,
 ) -> Result<(), Diagnostic> {
     define_symbol(definitions, symbol, SymbolKind::Declaration)?;
     for field in fields {
@@ -121,7 +121,7 @@ pub(in crate::platform::change::request) fn collect_record_symbols(
 pub(in crate::platform::change::request) fn collect_variant_symbols(
     symbol: &str,
     cases: &[AuthoredCase],
-    definitions: &mut BTreeMap<String, SymbolKind>,
+    definitions: &mut SymbolDefinitions,
 ) -> Result<(), Diagnostic> {
     define_symbol(definitions, symbol, SymbolKind::Declaration)?;
     for case in cases {
@@ -133,7 +133,7 @@ pub(in crate::platform::change::request) fn collect_variant_symbols(
 pub(in crate::platform::change::request) fn collect_interface_symbols(
     symbol: &str,
     operations: &[AuthoredOperation],
-    definitions: &mut BTreeMap<String, SymbolKind>,
+    definitions: &mut SymbolDefinitions,
 ) -> Result<(), Diagnostic> {
     define_symbol(definitions, symbol, SymbolKind::Declaration)?;
     for operation in operations {
@@ -153,7 +153,7 @@ pub(in crate::platform::change::request) fn collect_external_symbols(
     symbol: &str,
     type_parameters: &[AuthoredTypeParameter],
     parameters: &[AuthoredParameter],
-    definitions: &mut BTreeMap<String, SymbolKind>,
+    definitions: &mut SymbolDefinitions,
 ) -> Result<(), Diagnostic> {
     define_symbol(definitions, symbol, SymbolKind::Declaration)?;
     for parameter in type_parameters {
@@ -172,7 +172,7 @@ pub(in crate::platform::change::request) fn collect_external_symbols(
 pub(in crate::platform::change::request) fn collect_constant_symbols(
     symbol: &str,
     value: &AuthoredExpression,
-    definitions: &mut BTreeMap<String, SymbolKind>,
+    definitions: &mut SymbolDefinitions,
 ) -> Result<(), Diagnostic> {
     define_symbol(definitions, symbol, SymbolKind::Declaration)?;
     collect_expression_symbols(value, definitions)
@@ -182,7 +182,7 @@ pub(in crate::platform::change::request) fn collect_component_symbols(
     symbol: &str,
     requirements: &[AuthoredRequirement],
     ports: &[AuthoredPort],
-    definitions: &mut BTreeMap<String, SymbolKind>,
+    definitions: &mut SymbolDefinitions,
 ) -> Result<(), Diagnostic> {
     define_symbol(definitions, symbol, SymbolKind::Declaration)?;
     for requirement in requirements {
@@ -199,21 +199,21 @@ pub(in crate::platform::change::request) fn collect_component_symbols(
 
 pub(in crate::platform::change::request) fn collect_target_symbols(
     symbol: &str,
-    definitions: &mut BTreeMap<String, SymbolKind>,
+    definitions: &mut SymbolDefinitions,
 ) -> Result<(), Diagnostic> {
     define_symbol(definitions, symbol, SymbolKind::Target)
 }
 
 pub(in crate::platform::change::request) fn collect_documentation_symbols(
     symbol: &str,
-    definitions: &mut BTreeMap<String, SymbolKind>,
+    definitions: &mut SymbolDefinitions,
 ) -> Result<(), Diagnostic> {
     define_symbol(definitions, symbol, SymbolKind::Documentation)
 }
 
 pub(in crate::platform::change::request) fn collect_annotation_symbols(
     symbol: &str,
-    definitions: &mut BTreeMap<String, SymbolKind>,
+    definitions: &mut SymbolDefinitions,
 ) -> Result<(), Diagnostic> {
     define_symbol(definitions, symbol, SymbolKind::Annotation)
 }

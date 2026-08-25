@@ -3,8 +3,8 @@
 use super::catalog::ObjectCatalog;
 use super::contract;
 use super::object::{
-    ImmutableObjectStore, ObjectKey, StageOutcome, StoreError, StoreErrorClass, StoreWork,
-    stage_into_map,
+    ImmutableObjectStore, ObjectKey, StageOutcome, StoreError, StoreErrorClass, StoreReadAdmission,
+    StoreWork, stage_into_map,
 };
 use super::pack::{PackBuilder, PackId, PackMetadata, SealedPack};
 use std::collections::BTreeMap;
@@ -117,6 +117,18 @@ impl ImmutableObjectStore for MemoryPackedStore {
         maximum_bytes: usize,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
+        let mut admission = StoreReadAdmission::unbounded();
+        self.read_admitted(key, maximum_bytes, &mut admission, work)
+    }
+
+    fn read_admitted(
+        &self,
+        key: ObjectKey,
+        maximum_bytes: usize,
+        admission: &mut StoreReadAdmission,
+        work: &mut StoreWork,
+    ) -> Result<Option<Vec<u8>>, StoreError> {
+        admission.admit_catalog_lookup()?;
         work.catalog_lookups = work.catalog_lookups.saturating_add(1);
         if let Some(bytes) = self.staged.get(&key) {
             if bytes.len() > maximum_bytes {
@@ -126,6 +138,7 @@ impl ImmutableObjectStore for MemoryPackedStore {
                     "staged object exceeds the caller read bound",
                 ));
             }
+            admission.admit_object(bytes.len())?;
             key.verify(bytes)?;
             work.objects_read = work.objects_read.saturating_add(1);
             work.bytes_read = work.bytes_read.saturating_add(bytes.len() as u64);
@@ -134,18 +147,45 @@ impl ImmutableObjectStore for MemoryPackedStore {
         let Some(location) = self.catalog.get(key) else {
             return Ok(None);
         };
-        let bytes = self.packs.get(&location.pack).ok_or_else(|| {
-            store_error(
+        if !self.packs.contains_key(&location.pack) {
+            return Err(store_error(
                 StoreErrorClass::Corrupt,
                 "memory_pack_missing",
                 "catalog names a missing immutable pack",
-            )
-        })?;
+            ));
+        }
         let metadata = self.metadata.get(&location.pack).ok_or_else(|| {
             store_error(
                 StoreErrorClass::Corrupt,
                 "memory_pack_metadata_missing",
                 "catalog names a pack without verified metadata",
+            )
+        })?;
+        let (entry, _) = metadata
+            .bounded_read_entry(key, maximum_bytes)?
+            .ok_or_else(|| {
+                store_error(
+                    StoreErrorClass::Corrupt,
+                    "memory_catalog_entry",
+                    "catalog names an object absent from the pack footer",
+                )
+            })?;
+        if entry.offset != location.offset
+            || entry.encoded_length != location.length
+            || entry.checksum != location.checksum
+        {
+            return Err(store_error(
+                StoreErrorClass::Corrupt,
+                "memory_catalog_location",
+                "catalog coordinates disagree with the immutable pack footer",
+            ));
+        }
+        admission.admit_object_bytes(entry.encoded_length)?;
+        let bytes = self.packs.get(&location.pack).ok_or_else(|| {
+            store_error(
+                StoreErrorClass::Corrupt,
+                "memory_pack_missing",
+                "catalog names a missing immutable pack",
             )
         })?;
         work.packs_opened = work.packs_opened.saturating_add(1);
@@ -158,6 +198,17 @@ impl ImmutableObjectStore for MemoryPackedStore {
     }
 
     fn contains(&self, key: ObjectKey, work: &mut StoreWork) -> Result<bool, StoreError> {
+        let mut admission = StoreReadAdmission::unbounded();
+        self.contains_admitted(key, &mut admission, work)
+    }
+
+    fn contains_admitted(
+        &self,
+        key: ObjectKey,
+        admission: &mut StoreReadAdmission,
+        work: &mut StoreWork,
+    ) -> Result<bool, StoreError> {
+        admission.admit_catalog_lookup()?;
         work.catalog_lookups = work.catalog_lookups.saturating_add(1);
         Ok(self.staged.contains_key(&key) || self.catalog.get(key).is_some())
     }
@@ -168,8 +219,21 @@ impl ImmutableObjectStore for MemoryPackedStore {
         bytes: &[u8],
         work: &mut StoreWork,
     ) -> Result<StageOutcome, StoreError> {
+        let mut admission = StoreReadAdmission::unbounded();
+        self.stage_admitted(key, bytes, &mut admission, work)
+    }
+
+    fn stage_admitted(
+        &mut self,
+        key: ObjectKey,
+        bytes: &[u8],
+        admission: &mut StoreReadAdmission,
+        work: &mut StoreWork,
+    ) -> Result<StageOutcome, StoreError> {
         key.verify(bytes)?;
-        if let Some(existing) = self.read(key, key.domain.maximum_bytes(), work)? {
+        if let Some(existing) =
+            self.read_admitted(key, key.domain.maximum_bytes(), admission, work)?
+        {
             if existing == bytes {
                 work.objects_reused = work.objects_reused.saturating_add(1);
                 return Ok(StageOutcome::Reused);

@@ -1642,6 +1642,7 @@ fn repository_path_copies_witness_maps_from_packed_base_pages() {
             &analysis.derived,
             &analysis.summaries.final_delta,
             &analysis.tests,
+            crate::platform::change::WitnessMapAdmission::unbounded(),
         )
         .expect("repository-backed witness update");
     assert_eq!(repository.revision, created.current.head.revision);
@@ -2667,10 +2668,13 @@ fn authored_preconditions_are_exact_base_point_reads_and_publish_once() {
     assert_eq!(prepared.lowering_work.operations_lowered, 1);
     assert_eq!(prepared.lowering_work.preconditions_checked, 9);
     assert_eq!(prepared.publication.budget_work.preconditions_checked, 9);
-    assert!(
-        prepared.publication.budget_work.consumed <= request.budget.maximum_work,
-        "accepted preparation must retain work within its declared budget"
-    );
+    request
+        .budget
+        .check_observed(
+            prepared.publication.budget_work,
+            "accepted preparation test",
+        )
+        .expect("accepted preparation must retain every independent budget");
     assert_eq!(
         prepared.publication.expected_base,
         Some(created.current.head)
@@ -2834,10 +2838,8 @@ fn authored_budget_rejects_invalid_and_exhausted_work_before_publication() {
         name: Name::new("budgeted_callee").unwrap(),
     };
 
-    let invalid_budget = ChangeBudget {
-        maximum_work: 0,
-        ..ChangeBudget::default()
-    };
+    let mut invalid_budget = ChangeBudget::default();
+    invalid_budget.authored.maximum_operations = 0;
     let invalid = AuthoredChangeSet {
         base,
         preconditions: Vec::new(),
@@ -2848,15 +2850,13 @@ fn authored_budget_rejects_invalid_and_exhausted_work_before_publication() {
         created
             .repository
             .prepare_authored_change(&invalid, PublicationOptions::default())
-            .expect_err("zero work budget must reject")[0]
+            .expect_err("zero operation budget must reject")[0]
             .code,
-        "change_budget_invalid"
+        "change_budget_invalid_operations"
     );
 
-    let operation_budget = ChangeBudget {
-        maximum_operations: 1,
-        ..ChangeBudget::default()
-    };
+    let mut operation_budget = ChangeBudget::default();
+    operation_budget.authored.maximum_operations = 1;
     let too_many_operations = AuthoredChangeSet {
         base,
         preconditions: Vec::new(),
@@ -2878,7 +2878,11 @@ fn authored_budget_rejects_invalid_and_exhausted_work_before_publication() {
             AuthoredPrecondition::OwnerExists { owner: callee },
             AuthoredPrecondition::OwnerExists { owner: callee },
         ],
-        budget: operation_budget,
+        budget: {
+            let mut budget = operation_budget;
+            budget.authored.maximum_preconditions = 1;
+            budget
+        },
         changes: vec![rename()],
     };
     assert_eq!(
@@ -2890,10 +2894,8 @@ fn authored_budget_rejects_invalid_and_exhausted_work_before_publication() {
         "change_budget_preconditions"
     );
 
-    let work_budget = ChangeBudget {
-        maximum_work: 1,
-        ..ChangeBudget::default()
-    };
+    let mut work_budget = ChangeBudget::default();
+    work_budget.canonical_reads.maximum_point_reads = 0;
     let exhausted_work = AuthoredChangeSet {
         base,
         preconditions: Vec::new(),
@@ -2904,16 +2906,14 @@ fn authored_budget_rejects_invalid_and_exhausted_work_before_publication() {
         created
             .repository
             .prepare_authored_change(&exhausted_work, PublicationOptions::default())
-            .expect_err("semantic work budget must reject")[0]
+            .expect_err("canonical point-read budget must reject")[0]
             .code,
-        "change_budget_work"
+        "change_budget_canonical_point_reads"
     );
 
-    let affected_budget = ChangeBudget {
-        maximum_operations: 2,
-        maximum_affected_owners: 1,
-        ..ChangeBudget::default()
-    };
+    let mut affected_budget = ChangeBudget::default();
+    affected_budget.authored.maximum_operations = 2;
+    affected_budget.impact.maximum_affected_owners = 1;
     let exhausted_owners = AuthoredChangeSet {
         base,
         preconditions: Vec::new(),
@@ -2935,13 +2935,11 @@ fn authored_budget_rejects_invalid_and_exhausted_work_before_publication() {
             .prepare_authored_change(&exhausted_owners, PublicationOptions::default())
             .expect_err("affected-owner budget must reject")[0]
             .code,
-        "change_budget_affected_owners"
+        "change_budget_affected_frontier_owners"
     );
 
-    let relation_budget = ChangeBudget {
-        maximum_relation_edges: 1,
-        ..ChangeBudget::default()
-    };
+    let mut relation_budget = ChangeBudget::default();
+    relation_budget.impact.maximum_relation_edges = 1;
     let exhausted_relations = AuthoredChangeSet {
         base,
         preconditions: Vec::new(),
@@ -2963,6 +2961,349 @@ fn authored_budget_rejects_invalid_and_exhausted_work_before_publication() {
         "change_budget_relation_edges"
     );
     assert_eq!(created.repository.current().unwrap().head.revision, base);
+}
+
+#[test]
+fn authored_budget_dimensions_exhaust_independently_without_advancing_head() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let base = created.current.head.revision;
+    let callee = owner_named(&created.initial.snapshot, "callee");
+    let rename = AuthoredChange::RenameOwner {
+        owner: OwnerSelector::Exact { owner: callee },
+        name: Name::new("dimensioned_callee").unwrap(),
+    };
+    let default_request = |changes: Vec<AuthoredChange>, budget: ChangeBudget| AuthoredChangeSet {
+        base,
+        preconditions: Vec::new(),
+        budget,
+        changes,
+    };
+    let baseline = created
+        .repository
+        .prepare_authored_change(
+            &default_request(vec![rename.clone()], ChangeBudget::default()),
+            PublicationOptions::default(),
+        )
+        .expect("baseline rename preparation");
+    let work = baseline.publication.budget_work;
+    let reject = |budget: ChangeBudget, changes: Vec<AuthoredChange>, expected: &str| {
+        let diagnostics = created
+            .repository
+            .prepare_authored_change(
+                &default_request(changes, budget),
+                PublicationOptions::default(),
+            )
+            .expect_err("exhausted independent dimension must reject preparation");
+        assert_eq!(diagnostics[0].code, expected);
+        assert_eq!(created.repository.current().unwrap().head.revision, base);
+    };
+
+    type SetLimit = fn(&mut ChangeBudget, u64);
+    let rename_dimensions: &[(SetLimit, u64, &str)] = &[
+        (
+            |budget, value| budget.canonical_edits.maximum_owner_edits = value,
+            work.canonical_edits.owner_edits,
+            "change_budget_canonical_owner_edits",
+        ),
+        (
+            |budget, value| budget.canonical_reads.maximum_point_reads = value,
+            work.canonical_reads.point_reads,
+            "change_budget_canonical_point_reads",
+        ),
+        (
+            |budget, value| budget.canonical_reads.maximum_map_pages = value,
+            work.canonical_reads.map_pages_read,
+            "change_budget_canonical_map_pages",
+        ),
+        (
+            |budget, value| budget.canonical_reads.maximum_map_entries = value,
+            work.canonical_reads.map_entries_visited,
+            "change_budget_canonical_map_entries",
+        ),
+        (
+            |budget, value| budget.canonical_reads.maximum_catalog_lookups = value,
+            work.canonical_reads.catalog_lookups,
+            "change_budget_canonical_catalog_lookups",
+        ),
+        (
+            |budget, value| budget.canonical_reads.maximum_objects = value,
+            work.canonical_reads.objects_read,
+            "change_budget_canonical_objects",
+        ),
+        (
+            |budget, value| budget.canonical_reads.maximum_bytes = value,
+            work.canonical_reads.bytes_read,
+            "change_budget_canonical_bytes",
+        ),
+        (
+            |budget, value| budget.canonical_reads.maximum_decoded_records = value,
+            work.canonical_reads.canonical_records_decoded,
+            "change_budget_canonical_decoded_records",
+        ),
+        (
+            |budget, value| budget.canonical_map_update.maximum_pages_encoded = value,
+            work.canonical_map_update.pages_encoded,
+            "change_budget_canonical_map_pages_encoded",
+        ),
+        (
+            |budget, value| budget.canonical_map_update.maximum_bytes_encoded = value,
+            work.canonical_map_update.bytes_encoded,
+            "change_budget_canonical_map_bytes_encoded",
+        ),
+        (
+            |budget, value| budget.witness_reads.maximum_point_reads = value,
+            work.witness_reads.point_reads,
+            "change_budget_witness_point_reads",
+        ),
+        (
+            |budget, value| budget.witness_reads.maximum_map_pages = value,
+            work.witness_reads.map_pages_read,
+            "change_budget_witness_map_pages",
+        ),
+        (
+            |budget, value| budget.witness_reads.maximum_map_entries = value,
+            work.witness_reads.map_entries_visited,
+            "change_budget_witness_map_entries",
+        ),
+        (
+            |budget, value| budget.witness_reads.maximum_catalog_lookups = value,
+            work.witness_reads.catalog_lookups,
+            "change_budget_witness_catalog_lookups",
+        ),
+        (
+            |budget, value| budget.witness_reads.maximum_objects = value,
+            work.witness_reads.objects_read,
+            "change_budget_witness_objects",
+        ),
+        (
+            |budget, value| budget.witness_reads.maximum_bytes = value,
+            work.witness_reads.bytes_read,
+            "change_budget_witness_bytes",
+        ),
+        (
+            |budget, value| budget.witness_reads.maximum_decoded_records = value,
+            work.witness_reads.witness_records_decoded,
+            "change_budget_witness_decoded_records",
+        ),
+        (
+            |budget, value| budget.impact.maximum_affected_owners = value,
+            work.affected_frontier_owners,
+            "change_budget_affected_frontier_owners",
+        ),
+        (
+            |budget, value| budget.impact.maximum_summary_owners = value,
+            work.impact_summary_owners,
+            "change_budget_impact_summary_owners",
+        ),
+        (
+            |budget, value| budget.impact.maximum_summary_edits = value,
+            work.impact_summary_edits,
+            "change_budget_impact_summary_edits",
+        ),
+        (
+            |budget, value| budget.impact.maximum_ownership_steps = value,
+            work.impact_ownership_steps,
+            "change_budget_impact_ownership_steps",
+        ),
+        (
+            |budget, value| budget.impact.maximum_relation_edges = value,
+            work.relation_edges,
+            "change_budget_relation_edges",
+        ),
+        (
+            |budget, value| budget.validation.maximum_owner_records = value,
+            work.validation.owner_records,
+            "change_budget_validation_owner_records",
+        ),
+        (
+            |budget, value| budget.validation.maximum_ownership_entries = value,
+            work.validation.ownership_entries,
+            "change_budget_validation_ownership_entries",
+        ),
+        (
+            |budget, value| budget.validation.maximum_type_objects = value,
+            work.validation.type_objects,
+            "change_budget_validation_type_objects",
+        ),
+        (
+            |budget, value| budget.tests.maximum_ownership_steps = value,
+            work.tests.ownership_steps,
+            "change_budget_test_ownership_steps",
+        ),
+        (
+            |budget, value| budget.witness_update.maximum_edits = value,
+            work.witness_update.edits,
+            "change_budget_witness_edits",
+        ),
+        (
+            |budget, value| budget.witness_update.maximum_pages_encoded = value,
+            work.witness_update.pages_encoded,
+            "change_budget_witness_map_pages_encoded",
+        ),
+        (
+            |budget, value| budget.witness_update.maximum_bytes_encoded = value,
+            work.witness_update.bytes_encoded,
+            "change_budget_witness_map_bytes_encoded",
+        ),
+        (
+            |budget, value| budget.staging.maximum_objects = value,
+            work.staging.objects,
+            "change_budget_staged_objects",
+        ),
+        (
+            |budget, value| budget.staging.maximum_bytes = value,
+            work.staging.bytes,
+            "change_budget_staged_bytes",
+        ),
+        (
+            |budget, value| budget.staging.maximum_pages = value,
+            work.staging.pages,
+            "change_budget_staged_pages",
+        ),
+    ];
+    for (set_limit, observed, expected) in rename_dimensions {
+        assert!(*observed > 0, "baseline must exercise {expected}");
+        let mut budget = ChangeBudget::default();
+        set_limit(&mut budget, observed - 1);
+        reject(budget, vec![rename.clone()], expected);
+    }
+
+    let mut identity_budget = ChangeBudget::default();
+    identity_budget.authored.maximum_allocated_identities = 0;
+    reject(
+        identity_budget,
+        vec![AuthoredChange::CreateModule {
+            symbol: "$identity_budget".to_owned(),
+            name: Name::new("identity_budget").unwrap(),
+        }],
+        "change_budget_allocated_identities",
+    );
+
+    let mut anonymous_identity_budget = ChangeBudget::default();
+    anonymous_identity_budget
+        .authored
+        .maximum_allocated_identities = 1;
+    reject(
+        anonymous_identity_budget,
+        vec![AuthoredChange::CreateFunction {
+            symbol: "$anonymous_identity_budget".to_owned(),
+            module: ModuleSelector::Name {
+                name: Name::new("unreached_module").unwrap(),
+            },
+            name: Name::new("anonymous_identity_budget").unwrap(),
+            visibility: DeclarationVisibility::Private,
+            type_parameters: Vec::new(),
+            parameters: Vec::new(),
+            result: AuthoredType::Unit {},
+            effect: AuthoredFunctionEffect::Pure {},
+            body: AuthoredExpression {
+                symbol: None,
+                operation: AuthoredExpressionOperation::Unit {},
+            },
+        }],
+        "change_budget_allocated_identities",
+    );
+
+    let create_with_unit = AuthoredChange::CreateFunction {
+        symbol: "$existing_type_budget".to_owned(),
+        module: ModuleSelector::Name {
+            name: Name::new("first").unwrap(),
+        },
+        name: Name::new("existing_type_budget").unwrap(),
+        visibility: DeclarationVisibility::Private,
+        type_parameters: Vec::new(),
+        parameters: Vec::new(),
+        result: AuthoredType::Unit {},
+        effect: AuthoredFunctionEffect::Pure {},
+        body: AuthoredExpression {
+            symbol: None,
+            operation: AuthoredExpressionOperation::Unit {},
+        },
+    };
+    let mut existing_type_budget = ChangeBudget::default();
+    existing_type_budget.canonical_edits.maximum_type_edits = 0;
+    let existing_type = created
+        .repository
+        .prepare_authored_change(
+            &default_request(vec![create_with_unit], existing_type_budget),
+            PublicationOptions::default(),
+        )
+        .expect("accepted unit type must not consume a canonical type-edit admission");
+    assert_eq!(
+        existing_type
+            .publication
+            .budget_work
+            .canonical_edits
+            .type_edits,
+        0
+    );
+    assert_eq!(existing_type.publication.budget_work.authored_type_nodes, 1);
+
+    let mut authored_type_budget = ChangeBudget::default();
+    authored_type_budget.authored.maximum_type_nodes = 0;
+    reject(
+        authored_type_budget,
+        vec![AuthoredChange::CreateFunction {
+            symbol: "$type_node_budget".to_owned(),
+            module: ModuleSelector::Name {
+                name: Name::new("first").unwrap(),
+            },
+            name: Name::new("type_node_budget").unwrap(),
+            visibility: DeclarationVisibility::Private,
+            type_parameters: Vec::new(),
+            parameters: Vec::new(),
+            result: AuthoredType::Unit {},
+            effect: AuthoredFunctionEffect::Pure {},
+            body: AuthoredExpression {
+                symbol: None,
+                operation: AuthoredExpressionOperation::Unit {},
+            },
+        }],
+        "change_budget_authored_type_nodes",
+    );
+
+    let expression = match test_actual(&created.initial.snapshot, "caller_test") {
+        OwnerKey::Expression(expression) => expression,
+        _ => panic!("test actual must be an expression"),
+    };
+    let replace = AuthoredChange::ReplaceExpression {
+        expression,
+        operation: ExpressionOperation::Unit {},
+    };
+    let expression_baseline = created
+        .repository
+        .prepare_authored_change(
+            &default_request(vec![replace.clone()], ChangeBudget::default()),
+            PublicationOptions::default(),
+        )
+        .expect("baseline expression preparation");
+    let expression_work = expression_baseline.publication.budget_work;
+    let expression_dimensions: &[(SetLimit, u64, &str)] = &[
+        (
+            |budget, value| budget.validation.maximum_expression_steps = value,
+            expression_work.validation.expression_steps,
+            "change_budget_validation_expression_steps",
+        ),
+        (
+            |budget, value| budget.tests.maximum_selected = value,
+            expression_work.tests.selected,
+            "change_budget_tests_selected",
+        ),
+        (
+            |budget, value| budget.tests.maximum_owners_visited = value,
+            expression_work.tests.owners_visited,
+            "change_budget_test_owners_visited",
+        ),
+    ];
+    for (set_limit, observed, expected) in expression_dimensions {
+        assert!(*observed > 0, "baseline must exercise {expected}");
+        let mut budget = ChangeBudget::default();
+        set_limit(&mut budget, observed - 1);
+        reject(budget, vec![replace.clone()], expected);
+    }
 }
 
 #[test]
@@ -3558,7 +3899,9 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
         prepared.publication.receipt.validation.full_oracle,
         FullOracleStatus::NotRun
     );
-    assert_eq!(prepared.lowering_work.canonical.point_reads, 0);
+    // Reusing accepted type objects performs exact point reads without adding duplicate type
+    // objects to the candidate authority.
+    assert_eq!(prepared.lowering_work.canonical.point_reads, 4);
     assert!(matches!(
         created
             .repository

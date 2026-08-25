@@ -18,7 +18,7 @@ pub(super) use mutation::{collect_mutation_symbols, lower_mutation};
 
 use super::{
     AuthoredLowerer, DeclarationSelector, ModuleSelector, OwnerSelector, ParameterParentSelector,
-    SymbolKind, define_symbol, request_error,
+    SymbolDefinitions, SymbolKind, define_symbol, request_error,
 };
 use crate::platform::change::{CanonicalBaseRead, WitnessBaseRead};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
@@ -37,7 +37,6 @@ use crate::platform::semantic_id::{
 use bincode::{Decode, Encode};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
 #[schemars(rename = "lkjscript.Graph5AuthoredTypeParameterV1")]
@@ -373,7 +372,7 @@ pub(super) fn collect_function_symbols(
     type_parameters: &[AuthoredTypeParameter],
     parameters: &[AuthoredParameter],
     body: &AuthoredExpression,
-    definitions: &mut BTreeMap<String, SymbolKind>,
+    definitions: &mut SymbolDefinitions,
 ) -> Result<(), Diagnostic> {
     define_symbol(definitions, symbol, SymbolKind::Declaration)?;
     for parameter in type_parameters {
@@ -393,7 +392,7 @@ pub(super) fn collect_test_symbols(
     symbol: &str,
     actual: &AuthoredExpression,
     expected: &AuthoredExpression,
-    definitions: &mut BTreeMap<String, SymbolKind>,
+    definitions: &mut SymbolDefinitions,
 ) -> Result<(), Diagnostic> {
     define_symbol(definitions, symbol, SymbolKind::Declaration)?;
     collect_expression_symbols(actual, definitions)?;
@@ -402,10 +401,12 @@ pub(super) fn collect_test_symbols(
 
 fn collect_expression_symbols(
     expression: &AuthoredExpression,
-    definitions: &mut BTreeMap<String, SymbolKind>,
+    definitions: &mut SymbolDefinitions,
 ) -> Result<(), Diagnostic> {
     if let Some(symbol) = &expression.symbol {
         define_symbol(definitions, symbol, SymbolKind::Expression)?;
+    } else {
+        definitions.define_anonymous_identity()?;
     }
     match &expression.operation {
         AuthoredExpressionOperation::If {
@@ -489,7 +490,7 @@ fn collect_expression_symbols(
 
 fn collect_many_expression_symbols(
     expressions: &[AuthoredExpression],
-    definitions: &mut BTreeMap<String, SymbolKind>,
+    definitions: &mut SymbolDefinitions,
 ) -> Result<(), Diagnostic> {
     for expression in expressions {
         collect_expression_symbols(expression, definitions)?;
@@ -644,7 +645,58 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 }
             }
         };
-        self.types.intern(form)
+        let digest = self.types.intern(form).map_err(|diagnostic| {
+            if diagnostic.code == "kernel_type_interner_exhausted" {
+                request_error(
+                    DiagnosticClass::Resource,
+                    "change_budget_authored_type_nodes",
+                    diagnostic.message,
+                )
+            } else {
+                diagnostic
+            }
+        })?;
+        self.work.type_nodes_interned = u64::try_from(self.types.len()).unwrap_or(u64::MAX);
+        self.classify_interned_type(digest)?;
+        Ok(digest)
+    }
+
+    fn classify_interned_type(&mut self, digest: TypeObjectDigest) -> Result<(), Diagnostic> {
+        if !self.base_types.contains_key(&digest) {
+            let read = self.base.read_type_object(digest)?;
+            self.work.canonical.add(read.work);
+            self.base_types.insert(digest, read.value);
+            self.check_budget("authored type base read")?;
+        }
+        let object = self.types.get(digest).ok_or_else(|| {
+            request_error(
+                DiagnosticClass::Corrupt,
+                "change_authored_type_interner",
+                "request-local type interner lost an exact type object",
+            )
+        })?;
+        if let Some(base) = self.base_types.get(&digest).and_then(Option::as_ref) {
+            if base != object {
+                return Err(request_error(
+                    DiagnosticClass::Corrupt,
+                    "change_authored_type_collision",
+                    "accepted authority binds one type digest to different canonical meaning",
+                ));
+            }
+            return Ok(());
+        }
+        if self.type_additions.contains(&digest) {
+            return Ok(());
+        }
+        self.budget.check_canonical_edit_counts(
+            u64::try_from(self.owner_edits.len()).unwrap_or(u64::MAX),
+            u64::try_from(self.type_additions.len().saturating_add(1)).unwrap_or(u64::MAX),
+            u64::try_from(self.dependency_edits.len()).unwrap_or(u64::MAX),
+            u64::try_from(self.retirement_edits.len()).unwrap_or(u64::MAX),
+            "authored canonical type edit admission",
+        )?;
+        self.type_additions.insert(digest);
+        Ok(())
     }
 
     fn lower_effect(

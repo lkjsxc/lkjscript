@@ -11,8 +11,15 @@ use crate::platform::witness::{
     FullWitness, MAXIMUM_RELATION_PREFIX_ITEMS, MAXIMUM_TEST_DEPENDENCY_PREFIX_ITEMS, NamespaceKey,
     OwnerSummary, OwnerSummaryDigest, OwnershipEntry, TestDependency, ValidationWitnessManifest,
 };
+use bincode::{Decode, Encode};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(
+    Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize,
+)]
+#[schemars(rename = "lkjscript.CanonicalReadWorkV1")]
+#[serde(deny_unknown_fields)]
 pub struct CanonicalReadWork {
     pub point_reads: u64,
     pub map_pages_read: u64,
@@ -57,7 +64,11 @@ impl<T> CanonicalRead<T> {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(
+    Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize,
+)]
+#[schemars(rename = "lkjscript.WitnessReadWorkV1")]
+#[serde(deny_unknown_fields)]
 pub struct WitnessReadWork {
     pub point_reads: u64,
     pub map_pages_read: u64,
@@ -425,6 +436,7 @@ impl WitnessBaseRead for FullWitness {
                 )
             })
             .copied()
+            .take(maximum_items.saturating_add(1))
             .collect::<Vec<_>>();
         let returned = available.len().min(maximum_items);
         Ok(WitnessRead::memory_records(
@@ -459,7 +471,13 @@ impl WitnessBaseRead for FullWitness {
             .entries
             .test_dependencies_by_test
             .get(&test)
-            .map(|entries| entries.iter().copied().collect::<Vec<_>>())
+            .map(|entries| {
+                entries
+                    .iter()
+                    .copied()
+                    .take(maximum_items.saturating_add(1))
+                    .collect::<Vec<_>>()
+            })
             .unwrap_or_default();
         let returned = dependencies.len().min(maximum_items);
         Ok(WitnessRead::memory_records(

@@ -3,8 +3,8 @@
 use super::catalog::{DuplicateObject, ObjectCatalog};
 use super::contract;
 use super::object::{
-    ImmutableObjectStore, ObjectKey, StageOutcome, StoreError, StoreErrorClass, StoreWork,
-    stage_into_map,
+    ImmutableObjectStore, ObjectKey, StageOutcome, StoreError, StoreErrorClass, StoreReadAdmission,
+    StoreWork, stage_into_map,
 };
 use super::pack::{PackBuilder, PackId, PackMetadata, SealedPack};
 use rustix::fs::{AtFlags, Dir, Mode, OFlags};
@@ -370,6 +370,18 @@ impl ImmutableObjectStore for PackDirectoryStore {
         maximum_bytes: usize,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
+        let mut admission = StoreReadAdmission::unbounded();
+        self.read_admitted(key, maximum_bytes, &mut admission, work)
+    }
+
+    fn read_admitted(
+        &self,
+        key: ObjectKey,
+        maximum_bytes: usize,
+        admission: &mut StoreReadAdmission,
+        work: &mut StoreWork,
+    ) -> Result<Option<Vec<u8>>, StoreError> {
+        admission.admit_catalog_lookup()?;
         work.catalog_lookups = work.catalog_lookups.saturating_add(1);
         if let Some(bytes) = self.staged.get(&key) {
             if bytes.len() > maximum_bytes {
@@ -378,6 +390,7 @@ impl ImmutableObjectStore for PackDirectoryStore {
                     "staged object exceeds the caller read bound",
                 ));
             }
+            admission.admit_object(bytes.len())?;
             key.verify(bytes)?;
             work.objects_read = work.objects_read.saturating_add(1);
             work.bytes_read = work.bytes_read.saturating_add(bytes.len() as u64);
@@ -392,12 +405,14 @@ impl ImmutableObjectStore for PackDirectoryStore {
                 "catalog names a pack without scanned metadata",
             )
         })?;
-        let entry = metadata.find(key).ok_or_else(|| {
-            corrupt(
-                "pack_catalog_entry",
-                "catalog names an object absent from the pack footer",
-            )
-        })?;
+        let (entry, _) = metadata
+            .bounded_read_entry(key, maximum_bytes)?
+            .ok_or_else(|| {
+                corrupt(
+                    "pack_catalog_entry",
+                    "catalog names an object absent from the pack footer",
+                )
+            })?;
         if entry.offset != location.offset
             || entry.encoded_length != location.length
             || entry.checksum != location.checksum
@@ -407,6 +422,7 @@ impl ImmutableObjectStore for PackDirectoryStore {
                 "catalog coordinates disagree with the immutable pack footer",
             ));
         }
+        admission.admit_object_bytes(entry.encoded_length)?;
         let mut file = open_regular_file_at(
             &self.packs_directory,
             &location.pack.file_name(),
@@ -432,6 +448,17 @@ impl ImmutableObjectStore for PackDirectoryStore {
     }
 
     fn contains(&self, key: ObjectKey, work: &mut StoreWork) -> Result<bool, StoreError> {
+        let mut admission = StoreReadAdmission::unbounded();
+        self.contains_admitted(key, &mut admission, work)
+    }
+
+    fn contains_admitted(
+        &self,
+        key: ObjectKey,
+        admission: &mut StoreReadAdmission,
+        work: &mut StoreWork,
+    ) -> Result<bool, StoreError> {
+        admission.admit_catalog_lookup()?;
         work.catalog_lookups = work.catalog_lookups.saturating_add(1);
         Ok(self.staged.contains_key(&key) || self.catalog.get(key).is_some())
     }
@@ -442,8 +469,21 @@ impl ImmutableObjectStore for PackDirectoryStore {
         bytes: &[u8],
         work: &mut StoreWork,
     ) -> Result<StageOutcome, StoreError> {
+        let mut admission = StoreReadAdmission::unbounded();
+        self.stage_admitted(key, bytes, &mut admission, work)
+    }
+
+    fn stage_admitted(
+        &mut self,
+        key: ObjectKey,
+        bytes: &[u8],
+        admission: &mut StoreReadAdmission,
+        work: &mut StoreWork,
+    ) -> Result<StageOutcome, StoreError> {
         key.verify(bytes)?;
-        if let Some(existing) = self.read(key, key.domain.maximum_bytes(), work)? {
+        if let Some(existing) =
+            self.read_admitted(key, key.domain.maximum_bytes(), admission, work)?
+        {
             if existing == bytes {
                 work.objects_reused = work.objects_reused.saturating_add(1);
                 return Ok(StageOutcome::Reused);

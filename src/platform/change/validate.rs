@@ -2,12 +2,12 @@
 
 use super::{
     CanonicalBaseRead, CanonicalDelta, DerivedDelta, ImpactPlan, KernelOverlay, SummaryDelta,
-    WitnessBaseRead, WitnessReadWork,
+    ValidationAdmission, WitnessBaseRead, WitnessReadWork,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    ExpressionRead, OwnerKey, OwnerRecord, PackageId, TypeObject, TypeObjectDigest,
-    validate_expression_roots,
+    ExpressionRead, ExpressionValidationExhaustion, ExpressionValidationLimits, OwnerKey,
+    OwnerRecord, PackageId, TypeObject, TypeObjectDigest, validate_expression_roots_with_limits,
 };
 use crate::platform::witness::{OwnershipEntry, OwnershipParent, aggregation_children};
 use std::collections::{BTreeMap, BTreeSet};
@@ -46,6 +46,25 @@ pub fn validate_structural_frontier<B: CanonicalBaseRead + ?Sized, W: WitnessBas
     derived: &DerivedDelta,
     base_witness: &W,
 ) -> Result<StructuralValidationReport, Vec<Diagnostic>> {
+    validate_structural_frontier_with_admission(
+        overlay,
+        canonical,
+        derived,
+        base_witness,
+        ValidationAdmission::default(),
+    )
+}
+
+pub(crate) fn validate_structural_frontier_with_admission<
+    B: CanonicalBaseRead + ?Sized,
+    W: WitnessBaseRead + ?Sized,
+>(
+    overlay: &KernelOverlay<'_, B>,
+    canonical: &CanonicalDelta,
+    derived: &DerivedDelta,
+    base_witness: &W,
+    admission: ValidationAdmission,
+) -> Result<StructuralValidationReport, Vec<Diagnostic>> {
     let mut validator = IncrementalValidator {
         overlay,
         canonical,
@@ -59,8 +78,13 @@ pub fn validate_structural_frontier<B: CanonicalBaseRead + ?Sized, W: WitnessBas
             .map(|edit| (edit.key, edit.after))
             .collect(),
         ownership_cache: BTreeMap::new(),
+        admission,
+        budget_error: None,
     };
     validator.validate_structural();
+    if let Some(error) = validator.budget_error {
+        return Err(vec![error]);
+    }
     if validator.diagnostics.is_empty() {
         Ok(StructuralValidationReport {
             structurally_checked: canonical.owners.keys().copied().collect(),
@@ -77,7 +101,34 @@ pub fn validate_incremental_frontier<B: CanonicalBaseRead + ?Sized, W: WitnessBa
     impact: &ImpactPlan,
     summaries: &SummaryDelta,
     base_witness: &W,
+    structural: StructuralValidationReport,
+) -> Result<IncrementalValidationReport, Vec<Diagnostic>> {
+    validate_incremental_frontier_with_admission(
+        overlay,
+        canonical,
+        impact,
+        summaries,
+        base_witness,
+        structural,
+        ValidationAdmission::default(),
+    )
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    reason = "incremental validation binds one exact candidate and its independent admissions"
+)]
+pub(crate) fn validate_incremental_frontier_with_admission<
+    B: CanonicalBaseRead + ?Sized,
+    W: WitnessBaseRead + ?Sized,
+>(
+    overlay: &KernelOverlay<'_, B>,
+    canonical: &CanonicalDelta,
+    impact: &ImpactPlan,
+    summaries: &SummaryDelta,
+    base_witness: &W,
     mut structural: StructuralValidationReport,
+    admission: ValidationAdmission,
 ) -> Result<IncrementalValidationReport, Vec<Diagnostic>> {
     let mut diagnostics = Vec::new();
     let mut work = 0_usize;
@@ -86,17 +137,51 @@ pub fn validate_incremental_frontier<B: CanonicalBaseRead + ?Sized, W: WitnessBa
         match overlay.owner(*owner) {
             Ok(Some(_)) => live_semantic_roots.push(*owner),
             Ok(None) => {}
-            Err(diagnostic) => diagnostics.push(diagnostic),
+            Err(diagnostic) => push_bounded_diagnostic(&mut diagnostics, diagnostic, admission)?,
         }
     }
-    validate_expression_roots(overlay, live_semantic_roots, &mut diagnostics, &mut work);
-    structural.work.expression_work = work as u64;
+    let exhaustion = validate_expression_roots_with_limits(
+        overlay,
+        live_semantic_roots,
+        &mut diagnostics,
+        &mut work,
+        ExpressionValidationLimits {
+            maximum_steps: usize::try_from(admission.maximum_expression_steps)
+                .unwrap_or(usize::MAX),
+            maximum_diagnostics: usize::try_from(admission.maximum_diagnostics)
+                .unwrap_or(usize::MAX),
+        },
+    );
+    structural.work.expression_work = u64::try_from(work).unwrap_or(u64::MAX);
+    if let Err(exhaustion) = exhaustion {
+        let (code, message) = match exhaustion {
+            ExpressionValidationExhaustion::Steps => (
+                "change_budget_validation_expression_steps",
+                format!(
+                    "semantic validation exceeds the declared {}-expression-step budget",
+                    admission.maximum_expression_steps
+                ),
+            ),
+            ExpressionValidationExhaustion::Diagnostics => (
+                "change_budget_validation_diagnostics",
+                format!(
+                    "semantic validation exceeds the declared {}-diagnostic budget",
+                    admission.maximum_diagnostics
+                ),
+            ),
+        };
+        return Err(vec![validation_budget_error(code, message)]);
+    }
     if summaries.selected != impact.summary_owners {
-        diagnostics.push(validation_error(
-            DiagnosticClass::Corrupt,
-            "change_validate_summary_selection",
-            "validation summary selection disagrees with the exact impact plan",
-        ));
+        push_bounded_diagnostic(
+            &mut diagnostics,
+            validation_error(
+                DiagnosticClass::Corrupt,
+                "change_validate_summary_selection",
+                "validation summary selection disagrees with the exact impact plan",
+            ),
+            admission,
+        )?;
     }
     let summaries_reused = base_witness
         .owner_summary_count()
@@ -132,32 +217,57 @@ struct IncrementalValidator<'a, B: ?Sized, W: ?Sized> {
     work: IncrementalValidationWork,
     ownership_edits: BTreeMap<OwnerKey, Option<OwnershipEntry>>,
     ownership_cache: BTreeMap<OwnerKey, Option<OwnershipEntry>>,
+    admission: ValidationAdmission,
+    budget_error: Option<Diagnostic>,
 }
 
 impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> IncrementalValidator<'_, B, W> {
     fn validate_structural(&mut self) {
         self.validate_changed_records();
+        if self.budget_error.is_some() {
+            return;
+        }
         self.validate_ownership_frontier();
+        if self.budget_error.is_some() {
+            return;
+        }
         self.validate_type_frontier();
     }
 
     fn validate_changed_records(&mut self) {
         for (owner, edit) in &self.canonical.owners {
-            self.work.owner_records_checked = self.work.owner_records_checked.saturating_add(1);
+            if self.budget_error.is_some() {
+                return;
+            }
+            if !self.charge_owner_record() {
+                return;
+            }
             if let Some((_, record)) = &edit.after {
                 self.capture(record.validate_local());
+                if self.budget_error.is_some() {
+                    return;
+                }
                 if record.owner() != *owner {
                     self.error(
                         "change_validate_owner_key",
                         format!("candidate owner key {owner:?} disagrees with its record"),
                     );
+                    if self.budget_error.is_some() {
+                        return;
+                    }
                 }
                 self.capture(crate::platform::kernel::encode_owner(record).map(|_| ()));
             }
         }
         for (package, edit) in &self.canonical.dependencies {
+            if self.budget_error.is_some() {
+                return;
+            }
             if let Some((_, dependency)) = &edit.after {
                 self.capture(dependency.validate_local());
+                if self.budget_error.is_some() {
+                    return;
+                }
                 if dependency.package != *package || dependency.package == self.overlay.package_id()
                 {
                     self.error(
@@ -168,12 +278,18 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> IncrementalVali
             }
         }
         for (owner, edit) in &self.canonical.retirements {
+            if self.budget_error.is_some() {
+                return;
+            }
             if let Some((_, retirement)) = &edit.after {
                 self.capture(retirement.validate_local());
+                if self.budget_error.is_some() {
+                    return;
+                }
                 let remains_live = match self.overlay.owner(*owner) {
                     Ok(record) => record.is_some(),
                     Err(diagnostic) => {
-                        self.diagnostics.push(diagnostic);
+                        self.push_diagnostic(diagnostic);
                         continue;
                     }
                 };
@@ -198,19 +314,23 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> IncrementalVali
         }
         let changed_owners = self.canonical.owners.keys().copied().collect::<Vec<_>>();
         for owner in &changed_owners {
-            self.work.ownership_entries_checked =
-                self.work.ownership_entries_checked.saturating_add(1);
+            if self.budget_error.is_some() {
+                return;
+            }
+            if !self.charge_ownership_entry() {
+                return;
+            }
             let candidate_ownership = match self.ownership(*owner) {
                 Ok(entry) => entry,
                 Err(diagnostic) => {
-                    self.diagnostics.push(diagnostic);
+                    self.push_diagnostic(diagnostic);
                     continue;
                 }
             };
             let candidate_record = match self.overlay.owner(*owner) {
                 Ok(record) => record,
                 Err(diagnostic) => {
-                    self.diagnostics.push(diagnostic);
+                    self.push_diagnostic(diagnostic);
                     continue;
                 }
             };
@@ -227,27 +347,34 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> IncrementalVali
             }
         }
         for parent in parents {
+            if self.budget_error.is_some() {
+                return;
+            }
             let record = match self.overlay.owner(parent) {
                 Ok(Some(record)) => record,
                 Ok(None) => continue,
                 Err(diagnostic) => {
-                    self.diagnostics.push(diagnostic);
+                    self.push_diagnostic(diagnostic);
                     continue;
                 }
             };
             let children = match aggregation_children(&record) {
                 Ok(children) => children,
                 Err(diagnostic) => {
-                    self.diagnostics.push(diagnostic);
+                    self.push_diagnostic(diagnostic);
                     continue;
                 }
             };
             for (role, child) in children {
+                if self.budget_error.is_some() {
+                    return;
+                }
                 if !role.aggregates_into_parent() {
                     continue;
                 }
-                self.work.ownership_entries_checked =
-                    self.work.ownership_entries_checked.saturating_add(1);
+                if !self.charge_ownership_entry() {
+                    return;
+                }
                 let expected = OwnershipEntry::new(OwnershipParent::Owner(parent), role);
                 match self.ownership(child) {
                     Ok(Some(actual)) if actual == expected => {}
@@ -255,19 +382,25 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> IncrementalVali
                         "change_validate_ownership_child",
                         format!("candidate parent {parent:?} and child {child:?} disagree"),
                     ),
-                    Err(diagnostic) => self.diagnostics.push(diagnostic),
+                    Err(diagnostic) => self.push_diagnostic(diagnostic),
                 }
             }
         }
         let mut parent_entries = Vec::new();
         for owner in changed_owners {
+            if self.budget_error.is_some() {
+                return;
+            }
             match self.ownership(owner) {
                 Ok(Some(entry)) => parent_entries.push((owner, entry)),
                 Ok(None) => {}
-                Err(diagnostic) => self.diagnostics.push(diagnostic),
+                Err(diagnostic) => self.push_diagnostic(diagnostic),
             }
         }
         for (owner, entry) in parent_entries {
+            if self.budget_error.is_some() {
+                return;
+            }
             if let OwnershipParent::Owner(parent) = entry.parent {
                 match self.overlay.owner(parent) {
                     Ok(Some(_)) => {}
@@ -275,7 +408,7 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> IncrementalVali
                         "change_validate_parent_missing",
                         format!("candidate owner {owner:?} has missing parent {parent:?}"),
                     ),
-                    Err(diagnostic) => self.diagnostics.push(diagnostic),
+                    Err(diagnostic) => self.push_diagnostic(diagnostic),
                 }
             }
         }
@@ -292,10 +425,15 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> IncrementalVali
             .collect::<Vec<_>>();
         let mut visited = BTreeSet::new();
         while let Some((digest, depth)) = pending.pop() {
+            if self.budget_error.is_some() {
+                return;
+            }
             if !visited.insert(digest) {
                 continue;
             }
-            self.work.type_objects_checked = self.work.type_objects_checked.saturating_add(1);
+            if !self.charge_type_object() {
+                return;
+            }
             if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
                 self.error(
                     "change_validate_type_depth",
@@ -313,18 +451,21 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> IncrementalVali
                     continue;
                 }
                 Err(diagnostic) => {
-                    self.diagnostics.push(diagnostic);
+                    self.push_diagnostic(diagnostic);
                     continue;
                 }
             };
             self.capture(object.validate_local());
+            if self.budget_error.is_some() {
+                return;
+            }
             match crate::platform::kernel::encode_type_object(&object) {
                 Ok((actual, _)) if actual == digest => {}
                 Ok(_) => self.error(
                     "change_validate_type_digest",
                     "candidate type object is bound under a foreign digest",
                 ),
-                Err(diagnostic) => self.diagnostics.push(diagnostic),
+                Err(diagnostic) => self.push_diagnostic(diagnostic),
             }
             pending.extend(
                 object
@@ -334,6 +475,9 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> IncrementalVali
             );
         }
         for digest in self.canonical.type_additions.keys() {
+            if self.budget_error.is_some() {
+                return;
+            }
             if !visited.contains(digest) {
                 self.error(
                     "change_validate_type_unreachable",
@@ -360,13 +504,73 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> IncrementalVali
 
     fn capture(&mut self, result: Result<(), Diagnostic>) {
         if let Err(diagnostic) = result {
-            self.diagnostics.push(diagnostic);
+            self.push_diagnostic(diagnostic);
         }
     }
 
     fn error(&mut self, code: &'static str, message: impl Into<String>) {
-        self.diagnostics
-            .push(Diagnostic::new(DiagnosticClass::Semantic, code, message));
+        self.push_diagnostic(Diagnostic::new(DiagnosticClass::Semantic, code, message));
+    }
+
+    fn charge_owner_record(&mut self) -> bool {
+        if self.work.owner_records_checked >= self.admission.maximum_owner_records {
+            self.budget_error = Some(validation_budget_error(
+                "change_budget_validation_owner_records",
+                format!(
+                    "structural validation exceeds the declared {}-owner-record budget",
+                    self.admission.maximum_owner_records
+                ),
+            ));
+            return false;
+        }
+        self.work.owner_records_checked = self.work.owner_records_checked.saturating_add(1);
+        true
+    }
+
+    fn charge_ownership_entry(&mut self) -> bool {
+        if self.work.ownership_entries_checked >= self.admission.maximum_ownership_entries {
+            self.budget_error = Some(validation_budget_error(
+                "change_budget_validation_ownership_entries",
+                format!(
+                    "structural validation exceeds the declared {}-ownership-entry budget",
+                    self.admission.maximum_ownership_entries
+                ),
+            ));
+            return false;
+        }
+        self.work.ownership_entries_checked = self.work.ownership_entries_checked.saturating_add(1);
+        true
+    }
+
+    fn charge_type_object(&mut self) -> bool {
+        if self.work.type_objects_checked >= self.admission.maximum_type_objects {
+            self.budget_error = Some(validation_budget_error(
+                "change_budget_validation_type_objects",
+                format!(
+                    "structural validation exceeds the declared {}-type-object budget",
+                    self.admission.maximum_type_objects
+                ),
+            ));
+            return false;
+        }
+        self.work.type_objects_checked = self.work.type_objects_checked.saturating_add(1);
+        true
+    }
+
+    fn push_diagnostic(&mut self, diagnostic: Diagnostic) {
+        if u64::try_from(self.diagnostics.len()).unwrap_or(u64::MAX)
+            >= self.admission.maximum_diagnostics
+        {
+            self.budget_error = Some(validation_budget_error(
+                "change_budget_validation_diagnostics",
+                format!(
+                    "structural validation exceeds the declared {}-diagnostic budget",
+                    self.admission.maximum_diagnostics
+                ),
+            ));
+            return;
+        }
+        self.diagnostics.push(diagnostic);
     }
 }
 
@@ -376,6 +580,28 @@ fn validation_error(
     message: impl Into<String>,
 ) -> Diagnostic {
     Diagnostic::new(class, code, message)
+}
+
+fn push_bounded_diagnostic(
+    diagnostics: &mut Vec<Diagnostic>,
+    diagnostic: Diagnostic,
+    admission: ValidationAdmission,
+) -> Result<(), Vec<Diagnostic>> {
+    if u64::try_from(diagnostics.len()).unwrap_or(u64::MAX) >= admission.maximum_diagnostics {
+        return Err(vec![validation_budget_error(
+            "change_budget_validation_diagnostics",
+            format!(
+                "semantic validation exceeds the declared {}-diagnostic budget",
+                admission.maximum_diagnostics
+            ),
+        )]);
+    }
+    diagnostics.push(diagnostic);
+    Ok(())
+}
+
+fn validation_budget_error(code: &'static str, message: impl Into<String>) -> Diagnostic {
+    Diagnostic::new(DiagnosticClass::Resource, code, message)
 }
 
 impl<B: CanonicalBaseRead + ?Sized> ExpressionRead for KernelOverlay<'_, B> {

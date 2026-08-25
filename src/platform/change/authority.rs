@@ -13,7 +13,7 @@ use crate::platform::kernel::{
 };
 use crate::platform::package_transport::validate_package_revision_closure;
 use crate::platform::persistent_map::{
-    BatchOutcome, MapEdit, MapError, MapErrorClass, MapWork, PageStore, PersistentMap,
+    BatchOutcome, MapAdmission, MapEdit, MapError, MapErrorClass, MapWork, PageStore, PersistentMap,
 };
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, ObjectStage, StageOutcome, StoreError,
@@ -77,6 +77,7 @@ pub fn stage_prepared_authority<
     base_witness: &W,
     prepared: &PreparedChangeAnalysis,
     store: &mut ObjectStage<'_, S>,
+    map_admission: MapAdmission,
 ) -> Result<PreparedAuthority, Vec<Diagnostic>> {
     let base_root = base.semantic_root();
     let base_manifest = base_witness.witness_manifest();
@@ -93,8 +94,14 @@ pub fn stage_prepared_authority<
     }
 
     let mut store_work = StoreWork::default();
-    let semantic = stage_semantic_delta(base, &prepared.canonical, store, &mut store_work)
-        .map_err(|error| vec![error])?;
+    let semantic = stage_semantic_delta(
+        base,
+        &prepared.canonical,
+        store,
+        &mut store_work,
+        map_admission,
+    )
+    .map_err(|error| vec![error])?;
     stage_incremental_witness_objects(prepared, store, &mut store_work)
         .map_err(|error| vec![error])?;
     let (manifest, digest, bytes) = bind_witness_manifest(
@@ -158,9 +165,10 @@ fn stage_semantic_delta<B: CanonicalBaseRead + ?Sized, S: ImmutableObjectStore +
     delta: &CanonicalDelta,
     store: &mut S,
     store_work: &mut StoreWork,
+    map_admission: MapAdmission,
 ) -> Result<SemanticAuthority, Diagnostic> {
     stage_delta_objects(delta, store, store_work)?;
-    let mut map_work = MapWork::default();
+    let mut map_work = MapWork::with_admission(map_admission);
     let mut counts = CanonicalMapEditCounts::default();
     let mut canonical_read_work = CanonicalReadWork::default();
     let root = base.semantic_root();
@@ -597,6 +605,7 @@ fn merge_store_work(total: &mut StoreWork, update: StoreWork) {
     total.objects_reused = total.objects_reused.saturating_add(update.objects_reused);
     total.bytes_read = total.bytes_read.saturating_add(update.bytes_read);
     total.bytes_staged = total.bytes_staged.saturating_add(update.bytes_staged);
+    total.pages_staged = total.pages_staged.saturating_add(update.pages_staged);
     total.packs_sealed = total.packs_sealed.saturating_add(update.packs_sealed);
 }
 
@@ -607,7 +616,18 @@ fn map_diagnostic(error: MapError) -> Diagnostic {
         MapErrorClass::Corrupt => DiagnosticClass::Corrupt,
         MapErrorClass::Store => DiagnosticClass::Infrastructure,
     };
-    Diagnostic::new(class, error.code, error.message)
+    let code = match error.code {
+        "persistent_map_admission_pages_read" => "change_budget_canonical_map_pages",
+        "persistent_map_admission_bytes_read" => "change_budget_canonical_bytes",
+        "persistent_map_admission_entries_visited" => "change_budget_canonical_map_entries",
+        "persistent_map_admission_pages_encoded" => "change_budget_canonical_map_pages_encoded",
+        "persistent_map_admission_bytes_encoded" => "change_budget_canonical_map_bytes_encoded",
+        "object_read_catalog_lookups_exhausted" => "change_budget_canonical_catalog_lookups",
+        "object_read_objects_exhausted" => "change_budget_canonical_objects",
+        "object_read_bytes_exhausted" => "change_budget_canonical_bytes",
+        code => code,
+    };
+    Diagnostic::new(class, code, error.message)
 }
 
 fn store_diagnostic(error: StoreError) -> Diagnostic {
@@ -617,7 +637,13 @@ fn store_diagnostic(error: StoreError) -> Diagnostic {
         StoreErrorClass::Corrupt => DiagnosticClass::Corrupt,
         StoreErrorClass::Io => DiagnosticClass::Infrastructure,
     };
-    Diagnostic::new(class, error.code, error.message)
+    let code = match error.code {
+        "object_read_catalog_lookups_exhausted" => "change_budget_canonical_catalog_lookups",
+        "object_read_objects_exhausted" => "change_budget_canonical_objects",
+        "object_read_bytes_exhausted" => "change_budget_canonical_bytes",
+        code => code,
+    };
+    Diagnostic::new(class, code, error.message)
 }
 
 fn authority_error(class: DiagnosticClass, code: &str, message: impl Into<String>) -> Diagnostic {

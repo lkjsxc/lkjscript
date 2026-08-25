@@ -51,6 +51,22 @@ pub(crate) trait ExpressionRead {
     fn has_dependency(&self, package: PackageId) -> Result<bool, Diagnostic>;
 }
 
+/// Request-local deterministic admissions owned by expression validation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct ExpressionValidationLimits {
+    /// Maximum inference and substitution steps.
+    pub maximum_steps: usize,
+    /// Maximum semantic diagnostics inserted into the caller's bounded sink.
+    pub maximum_diagnostics: usize,
+}
+
+/// Exact request-local admission exhausted before its next unit could be consumed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ExpressionValidationExhaustion {
+    Steps,
+    Diagnostics,
+}
+
 impl ExpressionRead for KernelSnapshot {
     fn package_id(&self) -> PackageId {
         self.root.package_id
@@ -103,19 +119,49 @@ pub(crate) fn validate_expression_roots<R: ExpressionRead>(
     diagnostics: &mut Vec<Diagnostic>,
     work: &mut usize,
 ) {
+    if validate_expression_roots_with_limits(
+        read,
+        roots,
+        diagnostics,
+        work,
+        ExpressionValidationLimits {
+            maximum_steps: MAXIMUM_VALIDATION_WORK,
+            maximum_diagnostics: usize::MAX,
+        },
+    ) == Err(ExpressionValidationExhaustion::Steps)
+    {
+        diagnostics.push(type_error(
+            "kernel_type_work",
+            "expression type validation exhausted its explicit work budget",
+        ));
+    }
+}
+
+pub(crate) fn validate_expression_roots_with_limits<R: ExpressionRead>(
+    read: &R,
+    roots: impl IntoIterator<Item = OwnerKey>,
+    diagnostics: &mut Vec<Diagnostic>,
+    work: &mut usize,
+    limits: ExpressionValidationLimits,
+) -> Result<(), ExpressionValidationExhaustion> {
     let mut validator = ExpressionValidator {
         read,
         diagnostics,
         work,
+        limits,
+        exhaustion: None,
         ephemeral_types: BTreeMap::new(),
     };
     validator.validate_roots(roots);
+    validator.exhaustion.map_or(Ok(()), Err)
 }
 
 struct ExpressionValidator<'a, 'b, R> {
     read: &'a R,
     diagnostics: &'b mut Vec<Diagnostic>,
     work: &'b mut usize,
+    limits: ExpressionValidationLimits,
+    exhaustion: Option<ExpressionValidationExhaustion>,
     ephemeral_types: BTreeMap<TypeObjectDigest, TypeObject>,
 }
 
@@ -135,7 +181,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     continue;
                 }
                 Err(diagnostic) => {
-                    self.diagnostics.push(diagnostic);
+                    self.push_diagnostic(diagnostic);
                     continue;
                 }
             };
@@ -147,7 +193,10 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             FunctionEffect::Task { requirements } => {
                                 for requirement in &requirements {
                                     if let Err(diagnostic) = self.requirement_record(*requirement) {
-                                        self.diagnostics.push(diagnostic);
+                                        self.push_diagnostic(diagnostic);
+                                        if self.exhausted() {
+                                            return;
+                                        }
                                     }
                                 }
                                 (false, requirements.into_iter().collect())
@@ -188,11 +237,11 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                                 );
                             }
                             (Err(diagnostic), Ok(_)) | (Ok(_), Err(diagnostic)) => {
-                                self.diagnostics.push(diagnostic);
+                                self.push_diagnostic(diagnostic);
                             }
                             (Err(actual), Err(expected)) => {
-                                self.diagnostics.push(actual);
-                                self.diagnostics.push(expected);
+                                self.push_diagnostic(actual);
+                                self.push_diagnostic(expected);
                             }
                             (Ok(_), Ok(_)) => {}
                         }
@@ -203,7 +252,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     let requirements = match self.component_requirements(port.declaration) {
                         Ok(requirements) => requirements,
                         Err(diagnostic) => {
-                            self.diagnostics.push(diagnostic);
+                            self.push_diagnostic(diagnostic);
                             continue;
                         }
                     };
@@ -228,9 +277,9 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                                         "kernel_type_port_function",
                                         "port function type disagrees with its exact declaration",
                                     ),
-                                    Err(diagnostic) => self.diagnostics.push(diagnostic),
+                                    Err(diagnostic) => self.push_diagnostic(diagnostic),
                                 },
-                                Err(diagnostic) => self.diagnostics.push(diagnostic),
+                                Err(diagnostic) => self.push_diagnostic(diagnostic),
                             }
                         }
                     }
@@ -253,7 +302,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 "kernel_type_root",
                 format!("{label} expects type {expected} but its root has type {actual}"),
             ),
-            Err(diagnostic) => self.diagnostics.push(diagnostic),
+            Err(diagnostic) => self.push_diagnostic(diagnostic),
         }
     }
 
@@ -1369,22 +1418,40 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
     }
 
     fn consume_work(&mut self) -> Result<(), Diagnostic> {
-        *self.work = self.work.saturating_add(1);
-        if *self.work > MAXIMUM_VALIDATION_WORK {
+        if self.exhaustion.is_some() {
+            return Err(type_error(
+                "kernel_type_work",
+                "expression type validation stopped after exhausting an admission",
+            ));
+        }
+        if *self.work >= self.limits.maximum_steps {
+            self.exhaustion = Some(ExpressionValidationExhaustion::Steps);
             return Err(type_error(
                 "kernel_type_work",
                 "expression type validation exhausted its explicit work budget",
             ));
         }
+        *self.work = self.work.saturating_add(1);
         Ok(())
     }
 
     fn exhausted(&self) -> bool {
-        *self.work > MAXIMUM_VALIDATION_WORK
+        self.exhaustion.is_some()
     }
 
     fn error(&mut self, code: &str, message: impl Into<String>) {
-        self.diagnostics.push(type_error(code, message));
+        self.push_diagnostic(type_error(code, message));
+    }
+
+    fn push_diagnostic(&mut self, diagnostic: Diagnostic) {
+        if self.exhaustion.is_some() {
+            return;
+        }
+        if self.diagnostics.len() >= self.limits.maximum_diagnostics {
+            self.exhaustion = Some(ExpressionValidationExhaustion::Diagnostics);
+            return;
+        }
+        self.diagnostics.push(diagnostic);
     }
 }
 
@@ -1414,4 +1481,99 @@ fn require_same(
 
 fn type_error(code: &str, message: impl Into<String>) -> Diagnostic {
     Diagnostic::new(DiagnosticClass::Semantic, code, message)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::platform::semantic_id::ModuleId;
+
+    #[test]
+    fn expression_step_admission_stops_before_limits_zero_and_one_are_exceeded() {
+        let snapshot = super::super::tests::witness_snapshot();
+        let constant = snapshot
+            .owners
+            .iter()
+            .find_map(|(owner, record)| match record {
+                OwnerRecord::Declaration(declaration)
+                    if declaration.name.as_str() == "unit_constant" =>
+                {
+                    Some(*owner)
+                }
+                _ => None,
+            })
+            .expect("unit constant declaration");
+
+        let mut diagnostics = Vec::new();
+        let mut work = 0;
+        let exhausted = validate_expression_roots_with_limits(
+            &snapshot,
+            [constant],
+            &mut diagnostics,
+            &mut work,
+            ExpressionValidationLimits {
+                maximum_steps: 0,
+                maximum_diagnostics: 1,
+            },
+        );
+        assert_eq!(exhausted, Err(ExpressionValidationExhaustion::Steps));
+        assert_eq!(work, 0);
+        assert!(diagnostics.is_empty());
+
+        let mut diagnostics = Vec::new();
+        let mut work = 0;
+        validate_expression_roots_with_limits(
+            &snapshot,
+            [constant],
+            &mut diagnostics,
+            &mut work,
+            ExpressionValidationLimits {
+                maximum_steps: 1,
+                maximum_diagnostics: 1,
+            },
+        )
+        .expect("one expression step fits an exact one-step admission");
+        assert_eq!(work, 1);
+        assert!(diagnostics.is_empty());
+    }
+
+    #[test]
+    fn diagnostic_admission_stops_before_limits_zero_and_one_are_exceeded() {
+        let snapshot = super::super::tests::witness_snapshot();
+        let missing_a = OwnerKey::Module(ModuleId::migrate(b"expression-budget", 1));
+        let missing_b = OwnerKey::Module(ModuleId::migrate(b"expression-budget", 2));
+
+        let mut diagnostics = Vec::new();
+        let mut work = 0;
+        let exhausted = validate_expression_roots_with_limits(
+            &snapshot,
+            [missing_a],
+            &mut diagnostics,
+            &mut work,
+            ExpressionValidationLimits {
+                maximum_steps: 1,
+                maximum_diagnostics: 0,
+            },
+        );
+        assert_eq!(exhausted, Err(ExpressionValidationExhaustion::Diagnostics));
+        assert_eq!(work, 0);
+        assert!(diagnostics.is_empty());
+
+        let mut diagnostics = Vec::new();
+        let mut work = 0;
+        let exhausted = validate_expression_roots_with_limits(
+            &snapshot,
+            [missing_a, missing_b],
+            &mut diagnostics,
+            &mut work,
+            ExpressionValidationLimits {
+                maximum_steps: 1,
+                maximum_diagnostics: 1,
+            },
+        );
+        assert_eq!(exhausted, Err(ExpressionValidationExhaustion::Diagnostics));
+        assert_eq!(work, 0);
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].code, "kernel_type_frontier_owner_missing");
+    }
 }

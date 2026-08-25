@@ -25,10 +25,10 @@ use crate::platform::kernel::{
     KernelSnapshot, OwnerKey, OwnerObjectDigest, OwnerRecord, encode_owner, encode_root,
     semantic_state_digest_from_root,
 };
-use crate::platform::persistent_map::{MapRoot, MapWork};
+use crate::platform::persistent_map::{MapAdmission, MapRoot, MapWork};
 use crate::platform::storage::object::{
-    ImmutableObjectStore, ObjectDomain, ObjectKey, ObjectStage, StoreError, StoreErrorClass,
-    StoreWork,
+    ImmutableObjectStore, ObjectDomain, ObjectKey, ObjectStage, ObjectStageLimits, StoreError,
+    StoreErrorClass, StoreWork,
 };
 use crate::platform::storage::page_store::ObjectPageStore;
 use crate::platform::witness::{FullWitness, encode_witness_manifest};
@@ -132,6 +132,8 @@ pub fn prepare_initial_publication<S: ImmutableObjectStore + ?Sized>(
             intent,
             ..PublicationOptions::default()
         },
+        None,
+        MapAdmission::unbounded(),
         &mut stage,
     )?;
     let publication = finish_prepared(bound, stage);
@@ -162,9 +164,30 @@ pub fn prepare_change_publication<
             "empty normalized change publishes no revision",
         )]);
     }
-    let mut stage = ObjectStage::new(store);
-    let mut authority =
-        stage_prepared_authority(base_snapshot, base_witness, analysis, &mut stage)?;
+    let read_admission = analysis
+        .budget
+        .canonical_store_read_admission(analysis.budget_work, "publication object reads")
+        .map_err(single)?;
+    let map_admission = analysis
+        .budget
+        .canonical_map_admission(analysis.budget_work, "semantic map update")
+        .map_err(single)?;
+    let mut stage = ObjectStage::with_limits_and_read_admission(
+        store,
+        ObjectStageLimits {
+            maximum_objects: analysis.budget.staging.maximum_objects,
+            maximum_bytes: analysis.budget.staging.maximum_bytes,
+            maximum_pages: analysis.budget.staging.maximum_pages,
+        },
+        read_admission,
+    );
+    let mut authority = stage_prepared_authority(
+        base_snapshot,
+        base_witness,
+        analysis,
+        &mut stage,
+        map_admission,
+    )?;
     if authority.semantic.state == base.semantic_state {
         return Err(vec![publication_error(
             DiagnosticClass::Semantic,
@@ -176,9 +199,49 @@ pub fn prepare_change_publication<
     let (semantic_diff, diff_read_work) =
         diff_for_change(base, base_snapshot, &authority, analysis)?;
     authority.semantic.canonical_read_work.add(diff_read_work);
+    let mut budget_work = analysis.budget_work;
+    budget_work
+        .canonical_reads
+        .add(authority.semantic.canonical_read_work);
+    budget_work.canonical_reads.map_pages_read = budget_work
+        .canonical_reads
+        .map_pages_read
+        .saturating_add(authority.semantic.map_work.pages_read);
+    budget_work.canonical_reads.map_entries_visited = budget_work
+        .canonical_reads
+        .map_entries_visited
+        .saturating_add(authority.semantic.map_work.entries_visited);
+    budget_work.canonical_map_update.pages_encoded = budget_work
+        .canonical_map_update
+        .pages_encoded
+        .saturating_add(authority.semantic.map_work.pages_encoded);
+    budget_work.canonical_map_update.bytes_encoded = budget_work
+        .canonical_map_update
+        .bytes_encoded
+        .saturating_add(authority.semantic.map_work.bytes_encoded);
+    budget_work.canonical_reads.catalog_lookups = budget_work
+        .canonical_reads
+        .catalog_lookups
+        .saturating_add(authority.store_work.catalog_lookups);
+    budget_work.canonical_reads.objects_read = budget_work
+        .canonical_reads
+        .objects_read
+        .saturating_add(authority.store_work.objects_read);
+    budget_work.canonical_reads.bytes_read = budget_work
+        .canonical_reads
+        .bytes_read
+        .saturating_add(authority.store_work.bytes_read);
+    analysis
+        .budget
+        .check_observed(budget_work, "publication authority staging")
+        .map_err(single)?;
     let counts = change_counts(analysis);
     let validation = change_validation(analysis);
-    let work = change_work(&authority, analysis);
+    let work = change_work(&authority, analysis, budget_work);
+    let history_map_admission = analysis
+        .budget
+        .canonical_map_admission(budget_work, "publication history map update")
+        .map_err(single)?;
     let bound = bind_history(
         Some(base),
         PublicationStatus::AcceptedChange,
@@ -189,11 +252,31 @@ pub fn prepare_change_publication<
         validation,
         work,
         options,
+        Some(analysis.budget),
+        history_map_admission,
         &mut stage,
     )?;
+    budget_work.canonical_reads.add(bound.history_read_work);
+    budget_work.canonical_map_update.pages_encoded = budget_work
+        .canonical_map_update
+        .pages_encoded
+        .saturating_add(bound.history_map_work.pages_encoded);
+    budget_work.canonical_map_update.bytes_encoded = budget_work
+        .canonical_map_update
+        .bytes_encoded
+        .saturating_add(bound.history_map_work.bytes_encoded);
+    budget_work.staging = crate::platform::change::StagingBudgetWork {
+        objects: u64::try_from(stage.len()).unwrap_or(u64::MAX),
+        bytes: stage.staged_byte_count(),
+        pages: stage.staged_page_count(),
+    };
+    analysis
+        .budget
+        .check_observed(budget_work, "publication object staging")
+        .map_err(single)?;
     let mut prepared = finish_prepared(bound, stage);
     prepared.compiler_units = analysis.summaries.plan.compiler_units.clone();
-    prepared.budget_work = analysis.budget_work;
+    prepared.budget_work = budget_work;
     Ok(prepared)
 }
 
@@ -216,6 +299,8 @@ struct BoundHistory {
     head_bytes: Vec<u8>,
     accepted: AcceptedBinding,
     store_work: StoreWork,
+    history_read_work: CanonicalReadWork,
+    history_map_work: MapWork,
 }
 
 #[allow(
@@ -232,6 +317,8 @@ fn bind_history<S: ImmutableObjectStore + ?Sized>(
     validation: ValidationEvidence,
     mut work: WorkObservation,
     options: PublicationOptions,
+    budget: Option<crate::platform::change::ChangeBudget>,
+    history_map_admission: MapAdmission,
     stage: &mut ObjectStage<'_, S>,
 ) -> Result<BoundHistory, Vec<Diagnostic>> {
     let repository_id = authority.semantic.root.repository_id;
@@ -267,7 +354,7 @@ fn bind_history<S: ImmutableObjectStore + ?Sized>(
     )?;
 
     let (idempotency_receipts, idempotency_map_work) =
-        prepare_idempotency_history(base, stage, &mut store_work)?;
+        prepare_idempotency_history(base, stage, &mut store_work, history_map_admission)?;
     work.map_pages_read = work
         .map_pages_read
         .saturating_add(idempotency_map_work.pages_read);
@@ -292,6 +379,7 @@ fn bind_history<S: ImmutableObjectStore + ?Sized>(
     };
     let revision_id = core.revision_id().map_err(single)?;
     work.objects_staged = store_work.objects_staged;
+    work.pages_staged = store_work.pages_staged;
     work.objects_read = work.objects_read.saturating_add(
         store_work
             .objects_read
@@ -303,6 +391,42 @@ fn bind_history<S: ImmutableObjectStore + ?Sized>(
             .bytes_read
             .saturating_sub(authority_store_work.bytes_read),
     );
+    let history_read_work = CanonicalReadWork {
+        point_reads: u64::from(base.is_some()),
+        map_pages_read: idempotency_map_work.pages_read,
+        map_entries_visited: idempotency_map_work.entries_visited,
+        catalog_lookups: store_work
+            .catalog_lookups
+            .saturating_sub(authority_store_work.catalog_lookups),
+        objects_read: store_work
+            .objects_read
+            .saturating_sub(authority_store_work.objects_read),
+        bytes_read: store_work
+            .bytes_read
+            .saturating_sub(authority_store_work.bytes_read),
+        canonical_records_decoded: u64::from(base.is_some()),
+    };
+    work.budget.canonical_reads.add(history_read_work);
+    work.budget.canonical_map_update.pages_encoded = work
+        .budget
+        .canonical_map_update
+        .pages_encoded
+        .saturating_add(idempotency_map_work.pages_encoded);
+    work.budget.canonical_map_update.bytes_encoded = work
+        .budget
+        .canonical_map_update
+        .bytes_encoded
+        .saturating_add(idempotency_map_work.bytes_encoded);
+    work.budget.staging = crate::platform::change::StagingBudgetWork {
+        objects: u64::try_from(stage.len()).unwrap_or(u64::MAX),
+        bytes: stage.staged_byte_count(),
+        pages: stage.staged_page_count(),
+    };
+    if let Some(budget) = budget {
+        budget
+            .check_observed(work.budget, "publication receipt observation")
+            .map_err(single)?;
+    }
     let bases = core.parents.clone();
     let receipt = PublicationReceipt {
         contract_version: RECEIPT_CONTRACT_VERSION,
@@ -385,6 +509,8 @@ fn bind_history<S: ImmutableObjectStore + ?Sized>(
         head_bytes,
         accepted,
         store_work,
+        history_read_work,
+        history_map_work: idempotency_map_work,
     })
 }
 
@@ -392,6 +518,7 @@ fn prepare_idempotency_history<S: ImmutableObjectStore + ?Sized>(
     base: Option<AcceptedBinding>,
     stage: &mut ObjectStage<'_, S>,
     store_work: &mut StoreWork,
+    map_admission: MapAdmission,
 ) -> Result<(MapRoot, MapWork), Vec<Diagnostic>> {
     let binding = match base {
         Some(base) => {
@@ -414,7 +541,7 @@ fn prepare_idempotency_history<S: ImmutableObjectStore + ?Sized>(
         }
         None => None,
     };
-    let mut map_work = MapWork::default();
+    let mut map_work = MapWork::with_admission(map_admission);
     let mut page_store = ObjectPageStore::new(&mut *stage);
     let root = match base {
         Some(base) => advance_idempotency_history(
@@ -873,6 +1000,7 @@ fn change_validation(analysis: &PreparedChangeAnalysis) -> ValidationEvidence {
 fn change_work(
     authority: &PreparedAuthority,
     analysis: &PreparedChangeAnalysis,
+    budget: crate::platform::change::ChangeBudgetWork,
 ) -> WorkObservation {
     let validation_work = analysis
         .validation
@@ -889,6 +1017,7 @@ fn change_work(
     witness_reads.add(analysis.tests.work.witness_reads);
     witness_reads.add(analysis.validation.work.witness_reads);
     WorkObservation {
+        budget,
         validation_work,
         map_pages_read: authority
             .semantic
@@ -907,12 +1036,7 @@ fn change_work(
         ownership_entries_checked: analysis.validation.work.ownership_entries_checked,
         type_objects_checked: analysis.validation.work.type_objects_checked,
         expression_work: analysis.validation.work.expression_work,
-        relation_edges_visited: analysis
-            .summaries
-            .plan
-            .work
-            .reverse_edges_visited
-            .saturating_add(analysis.tests.work.relation_edges_visited),
+        relation_edges_visited: budget.relation_edges,
         objects_read: authority
             .store_work
             .objects_read
@@ -920,6 +1044,7 @@ fn change_work(
             .saturating_add(analysis.canonical_read_work.objects_read)
             .saturating_add(authority.semantic.canonical_read_work.objects_read),
         objects_staged: authority.store_work.objects_staged,
+        pages_staged: authority.store_work.pages_staged,
         bytes_read: authority
             .store_work
             .bytes_read
@@ -979,7 +1104,13 @@ fn store_diagnostic(error: StoreError) -> Diagnostic {
         StoreErrorClass::Corrupt => DiagnosticClass::Corrupt,
         StoreErrorClass::Io => DiagnosticClass::Infrastructure,
     };
-    Diagnostic::new(class, error.code, error.message)
+    let code = match error.code {
+        "object_read_catalog_lookups_exhausted" => "change_budget_canonical_catalog_lookups",
+        "object_read_objects_exhausted" => "change_budget_canonical_objects",
+        "object_read_bytes_exhausted" => "change_budget_canonical_bytes",
+        code => code,
+    };
+    Diagnostic::new(class, code, error.message)
 }
 
 fn single(error: Diagnostic) -> Vec<Diagnostic> {

@@ -135,6 +135,22 @@ fn incremental_publication_is_deterministic_parent_bound_and_isolated() {
     );
     assert_eq!(prepared.receipt.counts.owners_updated, 1);
     assert_eq!(
+        prepared.receipt.work.budget.canonical_edits.owner_edits, 1,
+        "the durable receipt must retain the exact canonical edit observation"
+    );
+    assert!(
+        prepared.receipt.work.budget.canonical_reads.point_reads > 0,
+        "the durable receipt must retain publication reads"
+    );
+    assert!(
+        prepared.receipt.work.budget.staging.objects > 0,
+        "the durable receipt must retain non-self-referential staging work"
+    );
+    assert!(
+        prepared.receipt.work.budget.staging.objects <= prepared.budget_work.staging.objects,
+        "the prepared result may additionally observe the enclosing receipt and revision"
+    );
+    assert_eq!(
         prepared.receipt.work.validation_work,
         prepared
             .receipt
@@ -218,6 +234,18 @@ fn history_codecs_reject_predecessor_magic_and_inconsistent_evidence() {
             RevisionObjectDigest::of(&predecessor_revision),
         )
         .expect_err("predecessor revision must reject")
+        .code,
+        "packed_contract"
+    );
+
+    let mut predecessor_receipt = initial.publication.receipt_bytes.clone();
+    predecessor_receipt[..8].copy_from_slice(b"LKJRCPT4");
+    assert_eq!(
+        PublicationReceipt::decode(
+            &predecessor_receipt,
+            ReceiptObjectDigest::of(&predecessor_receipt),
+        )
+        .expect_err("predecessor receipt must reject")
         .code,
         "packed_contract"
     );
