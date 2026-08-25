@@ -1,4 +1,4 @@
-//! Immutable Graph 5 revisions, exact witness bindings, and atomic HEAD records.
+//! Immutable Graph 5 revisions, separate acceptance bindings, and atomic HEAD records.
 
 use super::contract::{
     HEAD_ENVELOPE_DOMAIN, HEAD_MAGIC, MAXIMUM_HEAD_BYTES, MAXIMUM_REVISION_BYTES,
@@ -9,7 +9,7 @@ use super::digest::{
     ReceiptObjectDigest, RevisionObjectDigest, SemanticDiffDigest, TransactionDigest,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
-use crate::platform::kernel::SemanticRootDigest;
+use crate::platform::kernel::{SemanticRootDigest, SemanticStateDigest};
 use crate::platform::persistent_map::MapRoot;
 use crate::platform::semantic_id::{RepositoryId, RevisionId};
 use crate::platform::witness::{
@@ -33,16 +33,9 @@ pub struct ParentRevision {
 pub struct RevisionCore {
     pub contract_version: u16,
     pub graph_contract_version: u16,
-    pub witness_contract_version: u16,
     pub repository_id: RepositoryId,
-    pub parents: Vec<ParentRevision>,
-    pub semantic_root: SemanticRootDigest,
-    pub validation_witness: ValidationWitnessDigest,
-    pub validation_certificate: ValidationCertificateDigest,
-    pub validator_contract: ValidatorContractDigest,
-    pub idempotency_receipts: MapRoot,
-    pub transaction: TransactionDigest,
-    pub semantic_diff: SemanticDiffDigest,
+    pub parents: Vec<RevisionId>,
+    pub semantic_state: SemanticStateDigest,
 }
 
 impl RevisionCore {
@@ -76,21 +69,14 @@ impl RevisionCore {
         if self.contract_version != REVISION_CONTRACT_VERSION
             || self.graph_contract_version
                 != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
-            || self.witness_contract_version
-                != crate::platform::witness::contract::WITNESS_CONTRACT_VERSION
         {
             return Err(revision_error(
                 DiagnosticClass::Source,
                 "publication_revision_contract",
-                "revision uses a predecessor or foreign graph, witness, or history contract",
+                "revision uses a predecessor or foreign graph or history contract",
             ));
         }
-        if self.parents.len() > 2
-            || self
-                .parents
-                .windows(2)
-                .any(|pair| pair[0].revision >= pair[1].revision)
-        {
+        if self.parents.len() > 2 || self.parents.windows(2).any(|pair| pair[0] >= pair[1]) {
             return Err(revision_error(
                 DiagnosticClass::Corrupt,
                 "publication_revision_parents",
@@ -101,22 +87,79 @@ impl RevisionCore {
     }
 }
 
+#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ValidationEvidenceBinding {
+    pub semantic_state: SemanticStateDigest,
+    pub witness_contract_version: u16,
+    pub witness: ValidationWitnessDigest,
+    pub certificate: ValidationCertificateDigest,
+    pub validator_contract: ValidatorContractDigest,
+}
+
+impl ValidationEvidenceBinding {
+    fn verify(
+        self,
+        core: &RevisionCore,
+        semantic_root: SemanticRootDigest,
+        witness_digest: ValidationWitnessDigest,
+        witness: &ValidationWitnessManifest,
+    ) -> Result<(), Diagnostic> {
+        if self.semantic_state != core.semantic_state
+            || self.witness_contract_version != witness.contract_version
+            || self.witness != witness_digest
+            || self.certificate != witness.certificate
+            || self.validator_contract != witness.validator_contract
+            || semantic_root != witness.semantic_root
+            || core.repository_id != witness.repository_id
+        {
+            return Err(revision_error(
+                DiagnosticClass::Corrupt,
+                "publication_validation_evidence_binding",
+                "revision meaning and validation evidence do not form one exact acceptance binding",
+            ));
+        }
+        if !witness.contract_is_current() {
+            return Err(revision_error(
+                DiagnosticClass::Source,
+                "publication_current_witness_contract",
+                "accepted witness uses a predecessor or foreign contract",
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PublicationBinding {
+    pub parents: Vec<ParentRevision>,
+    pub semantic_root: SemanticRootDigest,
+    pub validation: ValidationEvidenceBinding,
+    pub idempotency_receipts: MapRoot,
+    pub transaction: TransactionDigest,
+    pub semantic_diff: SemanticDiffDigest,
+    pub receipt: ReceiptObjectDigest,
+}
+
 #[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct RevisionRecord {
     pub revision: RevisionId,
     pub core: RevisionCore,
-    pub receipt: ReceiptObjectDigest,
+    pub publication: PublicationBinding,
 }
 
 impl RevisionRecord {
-    pub fn new(core: RevisionCore, receipt: ReceiptObjectDigest) -> Result<Self, Diagnostic> {
+    pub fn new(core: RevisionCore, publication: PublicationBinding) -> Result<Self, Diagnostic> {
         let revision = core.revision_id()?;
-        Ok(Self {
+        let record = Self {
             revision,
             core,
-            receipt,
-        })
+            publication,
+        };
+        record.validate()?;
+        Ok(record)
     }
 
     pub fn encode(&self) -> Result<(RevisionObjectDigest, Vec<u8>), Diagnostic> {
@@ -161,6 +204,27 @@ impl RevisionRecord {
                 DiagnosticClass::Corrupt,
                 "publication_revision_identity",
                 "revision identity disagrees with its exact core",
+            ));
+        }
+        if self.publication.parents.len() != self.core.parents.len()
+            || self
+                .publication
+                .parents
+                .iter()
+                .zip(&self.core.parents)
+                .any(|(binding, revision)| binding.revision != *revision)
+        {
+            return Err(revision_error(
+                DiagnosticClass::Corrupt,
+                "publication_revision_parent_binding",
+                "publication parent records do not bind the revision's exact semantic parents",
+            ));
+        }
+        if self.publication.validation.semantic_state != self.core.semantic_state {
+            return Err(revision_error(
+                DiagnosticClass::Corrupt,
+                "publication_revision_state_binding",
+                "publication evidence does not bind the revision's exact semantic state",
             ));
         }
         Ok(())
@@ -219,6 +283,7 @@ impl HeadRecord {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AcceptedBinding {
     pub head: HeadRecord,
+    pub semantic_state: SemanticStateDigest,
     pub semantic_root: SemanticRootDigest,
     pub validation_witness: ValidationWitnessDigest,
     pub validation_certificate: ValidationCertificateDigest,
@@ -239,33 +304,28 @@ impl AcceptedBinding {
         if head.repository_id != record.core.repository_id
             || head.revision != record.revision
             || head.record != record_digest
-            || record.core.validation_witness != witness_digest
-            || record.core.semantic_root != witness.semantic_root
-            || record.core.validation_certificate != witness.certificate
-            || record.core.validator_contract != witness.validator_contract
-            || record.core.repository_id != witness.repository_id
         {
             return Err(revision_error(
                 DiagnosticClass::Corrupt,
                 "publication_current_binding",
-                "HEAD, revision, semantic root, and validation witness do not form one exact binding",
+                "HEAD and the exact publication record do not form one current binding",
             ));
         }
-        if !witness.contract_is_current() {
-            return Err(revision_error(
-                DiagnosticClass::Source,
-                "publication_current_witness_contract",
-                "accepted witness uses a predecessor or foreign contract",
-            ));
-        }
+        record.publication.validation.verify(
+            &record.core,
+            record.publication.semantic_root,
+            witness_digest,
+            witness,
+        )?;
         Ok(Self {
             head,
-            semantic_root: record.core.semantic_root,
+            semantic_state: record.core.semantic_state,
+            semantic_root: record.publication.semantic_root,
             validation_witness: witness_digest,
             validation_certificate: witness.certificate,
             validator_contract: witness.validator_contract,
-            idempotency_receipts: record.core.idempotency_receipts,
-            receipt: record.receipt,
+            idempotency_receipts: record.publication.idempotency_receipts,
+            receipt: record.publication.receipt,
         })
     }
 

@@ -639,7 +639,7 @@ fn validate_incremental_base(
             "initial publication requires a clean normalized compilation",
         ));
     };
-    let parents = &current.current().revision.core.parents;
+    let parents = &current.current().revision.publication.parents;
     if parents.len() != 1
         || parents[0].revision != base.revision
         || parents[0].revision != expected_base.revision
@@ -697,8 +697,8 @@ fn validate_incremental_base(
     let parent = RevisionRecord::decode(&parent_bytes, expected_base.record)?;
     if parent.revision != expected_base.revision
         || parent.core.repository_id != base.repository_id
-        || parent.core.semantic_root != base.semantic_root
-        || parent.core.validation_certificate != base.validation_certificate
+        || parent.publication.semantic_root != base.semantic_root
+        || parent.publication.validation.certificate != base.validation_certificate
     {
         return Err(cache_error(
             DiagnosticClass::Corrupt,

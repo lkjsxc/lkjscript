@@ -22,6 +22,7 @@ mod owner;
 mod reference;
 mod relation;
 mod root;
+mod state;
 mod type_object;
 mod validate;
 
@@ -34,7 +35,8 @@ pub use codec::{
 };
 pub use digest::{
     BlobObjectDigest, ChangeDigest, DependencyObjectDigest, OwnerObjectDigest, PackageObjectDigest,
-    RetirementObjectDigest, SemanticRootDigest, SequenceObjectDigest, TypeObjectDigest,
+    RetirementObjectDigest, SemanticRootDigest, SemanticStateDigest, SequenceObjectDigest,
+    TypeObjectDigest,
 };
 pub use expression::*;
 pub use id::{EncodedOwnerKey, ExactOwnerKey, OwnerHeader, OwnerKey, OwnerKind, PackageId};
@@ -49,6 +51,7 @@ pub use relation::{
     extract_relations,
 };
 pub use root::*;
+pub use state::{semantic_state_digest, semantic_state_digest_from_root};
 pub use type_object::*;
 pub use validate::{FullValidationReport, KernelSnapshot, validate_full};
 

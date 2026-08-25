@@ -10,22 +10,28 @@
 //! intentionally narrower than the repository store: it supports later staging, packing, and
 //! publication without exposing physical coordinates as map identity.
 
+use bincode::de::Decoder as BincodeDecoder;
+use bincode::enc::Encoder as BincodeEncoder;
+use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use super::contract::registry::{
+    MAP_CONTENT_DIGEST_DOMAIN as CONTENT_DIGEST_DOMAIN,
     MAP_PAGE_CHECKSUM_DOMAIN as PAGE_CHECKSUM_DOMAIN,
     MAP_PAGE_CONTRACT_VERSION as PAGE_CONTRACT_VERSION,
     MAP_PAGE_DIGEST_DOMAIN as PAGE_DIGEST_DOMAIN, MAP_PAGE_MAGIC as PAGE_MAGIC,
 };
 const PAGE_HEADER_BYTES: usize = 8 + 2 + 1 + 1 + 8;
 const PAGE_CHECKSUM_BYTES: usize = 32;
-const PAGE_COMMON_PAYLOAD_BYTES: usize = 2 + 8 + 8;
+const CONTENT_DIGEST_TAG: u8 = 1;
+const CONTENT_DIGEST_BYTES: usize = 1 + 32;
+const PAGE_COMMON_PAYLOAD_BYTES: usize = 2 + 8 + 8 + CONTENT_DIGEST_BYTES;
 const LEAF_COUNT_BYTES: usize = 4;
 const LEAF_ENTRY_OVERHEAD_BYTES: usize = 2 + 4;
-const BRANCH_CHILD_BYTES: usize = 1 + 32 + 8 + 8;
+const BRANCH_CHILD_BYTES: usize = 1 + 32 + 8 + 8 + CONTENT_DIGEST_BYTES;
 
 /// Key bytes are deliberately bounded at the storage boundary. Current semantic names and typed
 /// stable IDs fit well below this value.
@@ -68,16 +74,108 @@ impl fmt::Display for PageDigest {
     }
 }
 
+/// Storage-independent commitment to the sorted logical key/value content of a map.
+///
+/// Unlike [`PageDigest`], this digest excludes page envelopes, checksums, split thresholds, and
+/// physical child coordinates. Its contract is the canonical path-compressed logical radix tree
+/// defined by this module.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+pub struct MapContentDigest([u8; 32]);
+
+impl MapContentDigest {
+    fn of(bytes: &[u8]) -> Self {
+        Self(domain_digest(CONTENT_DIGEST_DOMAIN, bytes))
+    }
+
+    pub const fn from_bytes(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    pub const fn bytes(self) -> [u8; 32] {
+        self.0
+    }
+}
+
+impl Encode for MapContentDigest {
+    fn encode<E: BincodeEncoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        CONTENT_DIGEST_TAG.encode(encoder)?;
+        self.0.encode(encoder)
+    }
+}
+
+impl<Context> Decode<Context> for MapContentDigest {
+    fn decode<D: BincodeDecoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let tag = u8::decode(decoder)?;
+        if tag != CONTENT_DIGEST_TAG {
+            return Err(DecodeError::OtherString(format!(
+                "foreign persistent-map content digest tag {tag}; expected {CONTENT_DIGEST_TAG}"
+            )));
+        }
+        Ok(Self(<[u8; 32]>::decode(decoder)?))
+    }
+}
+
+bincode::impl_borrow_decode!(MapContentDigest);
+
+impl fmt::Display for MapContentDigest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("map_content_")?;
+        for byte in self.0 {
+            write!(formatter, "{byte:02x}")?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct MapContentRoot {
+    digest: MapContentDigest,
+    entries: u64,
+}
+
+impl MapContentRoot {
+    pub const fn from_parts(digest: MapContentDigest, entries: u64) -> Self {
+        Self { digest, entries }
+    }
+
+    pub const fn digest(self) -> MapContentDigest {
+        self.digest
+    }
+
+    pub const fn entries(self) -> u64 {
+        self.entries
+    }
+
+    /// Independently reconstructs the logical commitment from complete sorted map entries.
+    /// This deliberately does not build, encode, or inspect physical pages.
+    pub fn from_sorted<I>(entries: I) -> Result<Self, MapError>
+    where
+        I: IntoIterator<Item = (Vec<u8>, Vec<u8>)>,
+    {
+        let entries = collect_sorted_entries(entries)?;
+        Ok(Self {
+            digest: oracle_content_digest(&entries)?,
+            entries: usize_to_u64(entries.len(), "persistent_map_content_count")?,
+        })
+    }
+}
+
 #[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MapRoot {
     page: PageDigest,
     entries: u64,
+    content: MapContentDigest,
 }
 
 impl MapRoot {
-    pub const fn from_parts(page: PageDigest, entries: u64) -> Self {
-        Self { page, entries }
+    pub const fn from_parts(page: PageDigest, entries: u64, content: MapContentDigest) -> Self {
+        Self {
+            page,
+            entries,
+            content,
+        }
     }
 
     pub const fn page(self) -> PageDigest {
@@ -86,6 +184,14 @@ impl MapRoot {
 
     pub const fn entries(self) -> u64 {
         self.entries
+    }
+
+    pub const fn content(self) -> MapContentDigest {
+        self.content
+    }
+
+    pub const fn content_root(self) -> MapContentRoot {
+        MapContentRoot::from_parts(self.content, self.entries)
     }
 }
 
@@ -270,12 +376,221 @@ struct Entry {
     value: Vec<u8>,
 }
 
+fn collect_sorted_entries<I>(entries: I) -> Result<Vec<Entry>, MapError>
+where
+    I: IntoIterator<Item = (Vec<u8>, Vec<u8>)>,
+{
+    let mut canonical = Vec::new();
+    for (key, value) in entries {
+        validate_key(&key)?;
+        validate_value(&value)?;
+        if canonical
+            .last()
+            .is_some_and(|previous: &Entry| previous.key >= key)
+        {
+            return Err(map_error(
+                MapErrorClass::Input,
+                "persistent_map_input_order",
+                "map entries must be strictly ordered by key",
+            ));
+        }
+        canonical.push(Entry { key, value });
+    }
+    Ok(canonical)
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ContentChild {
+    edge: u8,
+    count: u64,
+    digest: MapContentDigest,
+}
+
+fn content_empty_digest() -> MapContentDigest {
+    MapContentDigest::of(&[0])
+}
+
+fn content_leaf_digest(entry: &Entry) -> Result<MapContentDigest, MapError> {
+    let mut bytes = Vec::with_capacity(
+        1usize
+            .saturating_add(2)
+            .saturating_add(entry.key.len())
+            .saturating_add(4)
+            .saturating_add(entry.value.len()),
+    );
+    bytes.push(1);
+    push_u16(&mut bytes, entry.key.len(), "persistent_map_content_key")?;
+    bytes.extend_from_slice(&entry.key);
+    push_u32(
+        &mut bytes,
+        entry.value.len(),
+        "persistent_map_content_value",
+    )?;
+    bytes.extend_from_slice(&entry.value);
+    Ok(MapContentDigest::of(&bytes))
+}
+
+fn content_branch_digest(
+    prefix: &[u8],
+    terminal: Option<&[u8]>,
+    children: &[ContentChild],
+) -> Result<MapContentDigest, MapError> {
+    if children.is_empty() || (terminal.is_none() && children.len() < 2) || children.len() > 256 {
+        return Err(map_error(
+            MapErrorClass::Corrupt,
+            "persistent_map_content_branch",
+            "logical radix branch is empty, unary, or exceeds its radix bound",
+        ));
+    }
+    let mut bytes = Vec::new();
+    bytes.push(2);
+    push_u16(&mut bytes, prefix.len(), "persistent_map_content_prefix")?;
+    bytes.extend_from_slice(prefix);
+    match terminal {
+        Some(value) => {
+            bytes.push(1);
+            push_u32(&mut bytes, value.len(), "persistent_map_content_terminal")?;
+            bytes.extend_from_slice(value);
+        }
+        None => bytes.push(0),
+    }
+    push_u16(
+        &mut bytes,
+        children.len(),
+        "persistent_map_content_children",
+    )?;
+    for (index, child) in children.iter().enumerate() {
+        if child.count == 0 || (index > 0 && children[index - 1].edge >= child.edge) {
+            return Err(map_error(
+                MapErrorClass::Corrupt,
+                "persistent_map_content_child",
+                "logical radix children are empty, duplicated, or unordered",
+            ));
+        }
+        bytes.push(child.edge);
+        push_u64(&mut bytes, child.count);
+        push_content_digest(&mut bytes, child.digest);
+    }
+    Ok(MapContentDigest::of(&bytes))
+}
+
+/// Incremental page-summary implementation. Multi-entry physical leaves are expanded into the
+/// same virtual radix tree used by physical branches, so the result does not depend on the page
+/// split threshold.
+fn summarized_content_digest(entries: &[Entry]) -> Result<MapContentDigest, MapError> {
+    match entries {
+        [] => return Ok(content_empty_digest()),
+        [entry] => return content_leaf_digest(entry),
+        _ => {}
+    }
+    let prefix = longest_common_prefix(entries);
+    let mut position = 0;
+    let terminal = if entries[0].key.len() == prefix.len() {
+        position = 1;
+        Some(entries[0].value.as_slice())
+    } else {
+        None
+    };
+    let mut children = Vec::new();
+    while position < entries.len() {
+        let edge = entries[position].key[prefix.len()];
+        let start = position;
+        let mut end = start + 1;
+        while end < entries.len() && entries[end].key.get(prefix.len()) == Some(&edge) {
+            end += 1;
+        }
+        position = end;
+        children.push(ContentChild {
+            edge,
+            count: usize_to_u64(end - start, "persistent_map_content_child_count")?,
+            digest: summarized_content_digest(&entries[start..end])?,
+        });
+    }
+    content_branch_digest(&prefix, terminal, &children)
+}
+
+/// Full-oracle implementation over complete sorted logical entries. It deliberately reconstructs
+/// canonical radix nodes without using pages, child summaries, or the incremental helper above.
+fn oracle_content_digest(entries: &[Entry]) -> Result<MapContentDigest, MapError> {
+    if entries.is_empty() {
+        return Ok(MapContentDigest::of(&[0]));
+    }
+    if entries.len() == 1 {
+        let entry = &entries[0];
+        let mut canonical = Vec::new();
+        canonical.push(1);
+        push_u16(&mut canonical, entry.key.len(), "persistent_map_oracle_key")?;
+        canonical.extend_from_slice(&entry.key);
+        push_u32(
+            &mut canonical,
+            entry.value.len(),
+            "persistent_map_oracle_value",
+        )?;
+        canonical.extend_from_slice(&entry.value);
+        return Ok(MapContentDigest::of(&canonical));
+    }
+
+    let first = &entries[0].key;
+    let last = &entries[entries.len() - 1].key;
+    let prefix_length = first
+        .iter()
+        .zip(last)
+        .take_while(|(left, right)| left == right)
+        .count();
+    let prefix = &first[..prefix_length];
+    let mut canonical = Vec::new();
+    canonical.push(2);
+    push_u16(&mut canonical, prefix.len(), "persistent_map_oracle_prefix")?;
+    canonical.extend_from_slice(prefix);
+
+    let mut position = 0;
+    if entries[0].key.len() == prefix_length {
+        canonical.push(1);
+        push_u32(
+            &mut canonical,
+            entries[0].value.len(),
+            "persistent_map_oracle_terminal",
+        )?;
+        canonical.extend_from_slice(&entries[0].value);
+        position = 1;
+    } else {
+        canonical.push(0);
+    }
+
+    let mut ranges = Vec::new();
+    while position < entries.len() {
+        let edge = entries[position].key[prefix_length];
+        let start = position;
+        let mut end = start + 1;
+        while end < entries.len() && entries[end].key.get(prefix_length).copied() == Some(edge) {
+            end += 1;
+        }
+        position = end;
+        ranges.push((edge, start, end));
+    }
+    push_u16(
+        &mut canonical,
+        ranges.len(),
+        "persistent_map_oracle_children",
+    )?;
+    for (edge, start, end) in ranges {
+        canonical.push(edge);
+        push_u64(
+            &mut canonical,
+            usize_to_u64(end - start, "persistent_map_oracle_child_count")?,
+        );
+        push_content_digest(&mut canonical, oracle_content_digest(&entries[start..end])?);
+    }
+    Ok(MapContentDigest::of(&canonical))
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ChildRef {
     edge: u8,
     digest: PageDigest,
     count: u64,
     logical_bytes: u64,
+    content: MapContentDigest,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -313,6 +628,28 @@ impl Page {
             Self::Leaf { logical_bytes, .. } | Self::Branch { logical_bytes, .. } => *logical_bytes,
         }
     }
+
+    fn content(&self) -> Result<MapContentDigest, MapError> {
+        match self {
+            Self::Leaf { entries, .. } => summarized_content_digest(entries),
+            Self::Branch {
+                prefix,
+                terminal,
+                children,
+                ..
+            } => {
+                let children = children
+                    .iter()
+                    .map(|child| ContentChild {
+                        edge: child.edge,
+                        count: child.count,
+                        digest: child.content,
+                    })
+                    .collect::<Vec<_>>();
+                content_branch_digest(prefix, terminal.as_deref(), &children)
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -320,15 +657,17 @@ struct NodeRef {
     digest: PageDigest,
     count: u64,
     logical_bytes: u64,
+    content: MapContentDigest,
 }
 
 impl NodeRef {
-    fn from_page(digest: PageDigest, page: &Page) -> Self {
-        Self {
+    fn from_page(digest: PageDigest, page: &Page) -> Result<Self, MapError> {
+        Ok(Self {
             digest,
             count: page.count(),
             logical_bytes: page.logical_bytes(),
-        }
+            content: page.content()?,
+        })
     }
 
     fn child(&self, edge: u8) -> ChildRef {
@@ -337,6 +676,7 @@ impl NodeRef {
             digest: self.digest,
             count: self.count,
             logical_bytes: self.logical_bytes,
+            content: self.content,
         }
     }
 }
@@ -514,6 +854,11 @@ fn push_u64(bytes: &mut Vec<u8>, value: u64) {
     bytes.extend_from_slice(&value.to_le_bytes());
 }
 
+fn push_content_digest(bytes: &mut Vec<u8>, digest: MapContentDigest) {
+    bytes.push(CONTENT_DIGEST_TAG);
+    bytes.extend_from_slice(&digest.bytes());
+}
+
 struct Decoder<'a> {
     bytes: &'a [u8],
     position: usize,
@@ -563,6 +908,22 @@ impl<'a> Decoder<'a> {
         let mut bytes = [0_u8; 8];
         bytes.copy_from_slice(self.take(8)?);
         Ok(u64::from_le_bytes(bytes))
+    }
+
+    fn content_digest(&mut self) -> Result<MapContentDigest, MapError> {
+        let tag = self.u8()?;
+        if tag != CONTENT_DIGEST_TAG {
+            return Err(map_error(
+                MapErrorClass::Corrupt,
+                "persistent_map_content_domain",
+                format!(
+                    "logical-content digest uses foreign domain tag {tag}; expected {CONTENT_DIGEST_TAG}"
+                ),
+            ));
+        }
+        let mut bytes = [0_u8; 32];
+        bytes.copy_from_slice(self.take(32)?);
+        Ok(MapContentDigest::from_bytes(bytes))
     }
 
     fn finish(self) -> Result<(), MapError> {
@@ -838,6 +1199,7 @@ fn validate_page_local(page: &Page) -> Result<(), MapError> {
 
 fn encode_page(page: &Page) -> Result<Vec<u8>, MapError> {
     validate_page_local(page)?;
+    let content = page.content()?;
     let mut payload = Vec::new();
     push_u16(
         &mut payload,
@@ -847,6 +1209,7 @@ fn encode_page(page: &Page) -> Result<Vec<u8>, MapError> {
     payload.extend_from_slice(page.prefix());
     push_u64(&mut payload, page.count());
     push_u64(&mut payload, page.logical_bytes());
+    push_content_digest(&mut payload, content);
     let kind = match page {
         Page::Leaf {
             prefix, entries, ..
@@ -882,6 +1245,7 @@ fn encode_page(page: &Page) -> Result<Vec<u8>, MapError> {
                 payload.extend_from_slice(&child.digest.bytes());
                 push_u64(&mut payload, child.count);
                 push_u64(&mut payload, child.logical_bytes);
+                push_content_digest(&mut payload, child.content);
             }
             1_u8
         }
@@ -1000,6 +1364,7 @@ fn decode_page(bytes: &[u8]) -> Result<Page, MapError> {
     let prefix = decoder.take(prefix_length)?.to_vec();
     let count = decoder.u64()?;
     let logical_bytes = decoder.u64()?;
+    let declared_content = decoder.content_digest()?;
     let page = if kind == 0 {
         let entry_count = usize::try_from(decoder.u32()?).map_err(|_| {
             map_error(
@@ -1114,11 +1479,15 @@ fn decode_page(bytes: &[u8]) -> Result<Page, MapError> {
             let edge = decoder.u8()?;
             let mut digest = [0_u8; 32];
             digest.copy_from_slice(decoder.take(32)?);
+            let count = decoder.u64()?;
+            let logical_bytes = decoder.u64()?;
+            let content = decoder.content_digest()?;
             children.push(ChildRef {
                 edge,
                 digest: PageDigest::from_bytes(digest),
-                count: decoder.u64()?,
-                logical_bytes: decoder.u64()?,
+                count,
+                logical_bytes,
+                content,
             });
         }
         Page::Branch {
@@ -1131,6 +1500,13 @@ fn decode_page(bytes: &[u8]) -> Result<Page, MapError> {
     };
     decoder.finish()?;
     validate_page_local(&page)?;
+    if page.content()? != declared_content {
+        return Err(map_error(
+            MapErrorClass::Corrupt,
+            "persistent_map_page_content",
+            "page logical-content commitment disagrees with its canonical entries or children",
+        ));
+    }
     if encode_page(&page)? != bytes {
         return Err(map_error(
             MapErrorClass::Corrupt,
@@ -1218,15 +1594,15 @@ fn write_page<S: PageStore + ?Sized>(
             "persistent_map_work_pages_reused",
         )?,
     }
-    Ok(NodeRef::from_page(digest, page))
+    NodeRef::from_page(digest, page)
 }
 
 fn verify_root(root: MapRoot, page: &Page) -> Result<(), MapError> {
-    if root.entries != page.count() {
+    if root.entries != page.count() || root.content != page.content()? {
         return Err(map_error(
             MapErrorClass::Corrupt,
-            "persistent_map_root_count",
-            "map root entry count disagrees with its root page",
+            "persistent_map_root_summary",
+            "map root entry count or logical commitment disagrees with its root page",
         ));
     }
     Ok(())
@@ -1237,7 +1613,11 @@ fn verify_child_link(
     reference: &ChildRef,
     child: &Page,
 ) -> Result<(), MapError> {
-    verify_child_summary(parent_prefix, reference, &PageLinkSummary::from_page(child))
+    verify_child_summary(
+        parent_prefix,
+        reference,
+        &PageLinkSummary::from_page(child)?,
+    )
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1245,15 +1625,17 @@ struct PageLinkSummary {
     prefix: Vec<u8>,
     count: u64,
     logical_bytes: u64,
+    content: MapContentDigest,
 }
 
 impl PageLinkSummary {
-    fn from_page(page: &Page) -> Self {
-        Self {
+    fn from_page(page: &Page) -> Result<Self, MapError> {
+        Ok(Self {
             prefix: page.prefix().to_vec(),
             count: page.count(),
             logical_bytes: page.logical_bytes(),
-        }
+            content: page.content()?,
+        })
     }
 }
 
@@ -1262,7 +1644,10 @@ fn verify_child_summary(
     reference: &ChildRef,
     child: &PageLinkSummary,
 ) -> Result<(), MapError> {
-    if child.count != reference.count || child.logical_bytes != reference.logical_bytes {
+    if child.count != reference.count
+        || child.logical_bytes != reference.logical_bytes
+        || child.content != reference.content
+    {
         return Err(map_error(
             MapErrorClass::Corrupt,
             "persistent_map_child_summary",
@@ -1673,7 +2058,7 @@ fn normalize_branch<S: PageStore + ?Sized>(
         let child = &children[0];
         let page = load_page(store, child.digest, work)?;
         verify_child_link(&prefix, child, &page)?;
-        return Ok(Some(NodeRef::from_page(child.digest, &page)));
+        return Ok(Some(NodeRef::from_page(child.digest, &page)?));
     }
     if count == 1 {
         let value = terminal.ok_or_else(|| {
@@ -1724,7 +2109,7 @@ fn insert_loaded<S: PageStore + ?Sized>(
     work: &mut MapWork,
 ) -> Result<(NodeRef, Option<Vec<u8>>, bool), MapError> {
     ensure_depth(depth)?;
-    let original = NodeRef::from_page(digest, &page);
+    let original = NodeRef::from_page(digest, &page)?;
     match page {
         Page::Leaf { mut entries, .. } => {
             let (previous, changed) = match search_entries(&entries, key, work)? {
@@ -1928,7 +2313,7 @@ fn merge_leaf_edits<S: PageStore + ?Sized>(
     depth: usize,
     work: &mut MapWork,
 ) -> Result<BatchResult, MapError> {
-    let original = NodeRef::from_page(digest, page);
+    let original = NodeRef::from_page(digest, page)?;
     let mut merged = Vec::with_capacity(entries.len().saturating_add(edits.len()));
     let mut entry_index = 0usize;
     let mut edit_index = 0usize;
@@ -2041,7 +2426,7 @@ fn apply_batch_loaded<S: PageStore + ?Sized>(
     ensure_depth(depth)?;
     if edits.is_empty() {
         return Ok(BatchResult {
-            replacement: Some(NodeRef::from_page(digest, &page)),
+            replacement: Some(NodeRef::from_page(digest, &page)?),
             changed: false,
         });
     }
@@ -2066,7 +2451,7 @@ fn apply_batch_loaded<S: PageStore + ?Sized>(
         terminal: terminal.clone(),
         children: children.clone(),
     };
-    let original = NodeRef::from_page(digest, &original_page);
+    let original = NodeRef::from_page(digest, &original_page)?;
 
     let mut inside = Vec::new();
     let mut outside = Vec::new();
@@ -2217,7 +2602,7 @@ fn remove_loaded<S: PageStore + ?Sized>(
     work: &mut MapWork,
 ) -> Result<RemoveResult, MapError> {
     ensure_depth(depth)?;
-    let original = NodeRef::from_page(digest, &page);
+    let original = NodeRef::from_page(digest, &page)?;
     match page {
         Page::Leaf { mut entries, .. } => {
             let Ok(index) = search_entries(&entries, key, work)? else {
@@ -2341,6 +2726,7 @@ impl PersistentMap {
             root: MapRoot {
                 page: root.digest,
                 entries: root.count,
+                content: root.content,
             },
         })
     }
@@ -2354,6 +2740,7 @@ impl PersistentMap {
             root: MapRoot {
                 page: root.digest,
                 entries: 0,
+                content: root.content,
             },
         })
     }
@@ -2407,6 +2794,7 @@ impl PersistentMap {
                 root: MapRoot {
                     page: replacement.digest,
                     entries: replacement.count,
+                    content: replacement.content,
                 },
             },
             outcome,
@@ -2542,6 +2930,7 @@ impl PersistentMap {
                 root: MapRoot {
                     page: replacement.digest,
                     entries: replacement.count,
+                    content: replacement.content,
                 },
             },
             outcome,
@@ -2577,6 +2966,7 @@ impl PersistentMap {
                 root: MapRoot {
                     page: replacement.digest,
                     entries: replacement.count,
+                    content: replacement.content,
                 },
             },
             RemoveOutcome::Removed { previous },
@@ -2598,11 +2988,11 @@ impl PersistentMap {
     {
         let mut seen = BTreeMap::new();
         let summary = copy_reachable_page(source, destination, self.root.page, 0, &mut seen, work)?;
-        if summary.count != self.root.entries {
+        if summary.count != self.root.entries || summary.content != self.root.content {
             return Err(map_error(
                 MapErrorClass::Corrupt,
-                "persistent_map_copy_count",
-                "copied page summaries disagree with the map root entry count",
+                "persistent_map_copy_summary",
+                "copied page summaries disagree with the map root",
             ));
         }
         u64::try_from(seen.len()).map_err(|_| {
@@ -2636,6 +3026,7 @@ impl PersistentMap {
             destination,
             self.root.page,
             self.root.entries,
+            Some(self.root.content),
             None,
             0,
             &mut seen,
@@ -2660,6 +3051,7 @@ fn copy_staged_reachable_page<D>(
     destination: &mut D,
     digest: PageDigest,
     expected_count: u64,
+    expected_content: Option<MapContentDigest>,
     parent_link: Option<(&[u8], &ChildRef)>,
     depth: usize,
     seen: &mut BTreeMap<PageDigest, PageLinkSummary>,
@@ -2670,7 +3062,9 @@ where
 {
     ensure_depth(depth)?;
     if let Some(summary) = seen.get(&digest) {
-        if summary.count != expected_count {
+        if summary.count != expected_count
+            || expected_content.is_some_and(|expected| summary.content != expected)
+        {
             return Err(map_error(
                 MapErrorClass::Corrupt,
                 "persistent_map_staged_summary",
@@ -2687,7 +3081,10 @@ where
     }
 
     let page = load_page(staged, digest, work)?;
-    if page.count() != expected_count {
+    let page_content = page.content()?;
+    if page.count() != expected_count
+        || expected_content.is_some_and(|expected| page_content != expected)
+    {
         return Err(map_error(
             MapErrorClass::Corrupt,
             "persistent_map_staged_summary",
@@ -2705,7 +3102,7 @@ where
             "copied staged page changed its canonical digest",
         ));
     }
-    seen.insert(digest, PageLinkSummary::from_page(&page));
+    seen.insert(digest, PageLinkSummary::from_page(&page)?);
     if let Page::Branch {
         prefix, children, ..
     } = &page
@@ -2716,6 +3113,7 @@ where
                 destination,
                 child.digest,
                 child.count,
+                None,
                 Some((prefix, child)),
                 depth + 1,
                 seen,
@@ -2751,7 +3149,7 @@ where
             "copied canonical page changed its digest",
         ));
     }
-    let summary = PageLinkSummary::from_page(&page);
+    let summary = PageLinkSummary::from_page(&page)?;
     seen.insert(digest, summary.clone());
     if let Page::Branch {
         prefix,
@@ -2844,6 +3242,55 @@ mod tests {
         bytes[checksum_start..].copy_from_slice(&checksum);
     }
 
+    fn content_through_physical_partition(
+        entries: &[Entry],
+        target_leaf_bytes: usize,
+    ) -> Result<(MapContentDigest, u64), MapError> {
+        if entries.len() <= 1 {
+            return Ok((summarized_content_digest(entries)?, 1));
+        }
+        let prefix = longest_common_prefix(entries);
+        let count = usize_to_u64(entries.len(), "persistent_map_test_partition_count")?;
+        let logical_bytes = entry_logical_bytes(entries)?;
+        if leaf_encoded_length(prefix.len(), count, logical_bytes)? <= target_leaf_bytes {
+            return Ok((summarized_content_digest(entries)?, 1));
+        }
+
+        let mut position = 0;
+        let terminal = if entries[0].key.len() == prefix.len() {
+            position = 1;
+            Some(entries[0].value.as_slice())
+        } else {
+            None
+        };
+        let mut pages = 1_u64;
+        let mut children = Vec::new();
+        while position < entries.len() {
+            let edge = entries[position].key[prefix.len()];
+            let start = position;
+            let mut end = start + 1;
+            while end < entries.len() && entries[end].key.get(prefix.len()) == Some(&edge) {
+                end += 1;
+            }
+            position = end;
+            let (digest, child_pages) =
+                content_through_physical_partition(&entries[start..end], target_leaf_bytes)?;
+            pages = pages.checked_add(child_pages).ok_or_else(|| {
+                map_error(
+                    MapErrorClass::Resource,
+                    "persistent_map_test_partition_pages",
+                    "test physical page count overflowed",
+                )
+            })?;
+            children.push(ContentChild {
+                edge,
+                count: usize_to_u64(end - start, "persistent_map_test_partition_child_count")?,
+                digest,
+            });
+        }
+        Ok((content_branch_digest(&prefix, terminal, &children)?, pages))
+    }
+
     #[test]
     fn small_map_is_one_leaf_and_iterates_in_key_order() {
         let (mut store, mut map) = empty();
@@ -2923,6 +3370,62 @@ mod tests {
             .code,
             "persistent_map_input_order"
         );
+    }
+
+    #[test]
+    fn logical_content_is_independent_of_page_splits_and_matches_full_oracle() {
+        let entries = collect_sorted_entries((0..2_000_u32).map(|number| {
+            let (key, value) = numbered_entry(number);
+            (key.to_vec(), value)
+        }))
+        .expect("ordered logical entries");
+        let oracle = MapContentRoot::from_sorted(
+            entries
+                .iter()
+                .map(|entry| (entry.key.clone(), entry.value.clone())),
+        )
+        .expect("full logical oracle");
+        let (small, small_pages) =
+            content_through_physical_partition(&entries, 512).expect("small physical pages");
+        let (large, large_pages) =
+            content_through_physical_partition(&entries, 32 * 1024).expect("large physical pages");
+        assert_ne!(small_pages, large_pages);
+        assert_eq!(small, oracle.digest());
+        assert_eq!(large, oracle.digest());
+
+        let mut store = MemoryPageStore::default();
+        let map = PersistentMap::from_sorted(
+            &mut store,
+            entries
+                .iter()
+                .map(|entry| (entry.key.clone(), entry.value.clone())),
+            &mut MapWork::default(),
+        )
+        .expect("physical map");
+        assert_eq!(map.root().content_root(), oracle);
+    }
+
+    #[test]
+    fn logical_content_groups_every_entry_with_the_same_radix_edge() {
+        let entries = collect_sorted_entries([
+            (vec![b'a', 0, 0], vec![1]),
+            (vec![b'a', 0, 1], vec![2]),
+            (vec![b'a', 0, 2], vec![3]),
+            (vec![b'a', 1, 0], vec![4]),
+        ])
+        .expect("same-edge fixture is ordered");
+        let summarized = summarized_content_digest(&entries).expect("incremental summary");
+        let oracle = oracle_content_digest(&entries).expect("complete oracle");
+        assert_eq!(summarized, oracle);
+
+        let root = MapContentRoot::from_sorted(
+            entries
+                .iter()
+                .map(|entry| (entry.key.clone(), entry.value.clone())),
+        )
+        .expect("public complete oracle");
+        assert_eq!(root.digest(), summarized);
+        assert_eq!(root.entries(), 4);
     }
 
     #[test]
@@ -3106,6 +3609,15 @@ mod tests {
                         .expect("random lookup must succeed"),
                     oracle.get(&key).cloned()
                 );
+            }
+            if step % 97 == 0 {
+                let full = MapContentRoot::from_sorted(
+                    oracle
+                        .iter()
+                        .map(|(key, value)| (key.clone(), value.clone())),
+                )
+                .expect("random logical-content oracle");
+                assert_eq!(map.root().content_root(), full, "step {step}");
             }
         }
 
@@ -3346,6 +3858,13 @@ mod tests {
             )
             .expect("random full oracle");
             assert_eq!(map.root(), full.root(), "round {round}");
+            let logical = MapContentRoot::from_sorted(
+                oracle
+                    .iter()
+                    .map(|(key, value)| (key.clone(), value.clone())),
+            )
+            .expect("random batch logical-content oracle");
+            assert_eq!(map.root().content_root(), logical, "round {round}");
         }
         assert_eq!(collect(&store, map), oracle.into_iter().collect::<Vec<_>>());
     }
@@ -3381,6 +3900,45 @@ mod tests {
             "persistent_map_page_length"
         );
 
+        let prefix_length = u16::from_le_bytes([valid[20], valid[21]]) as usize;
+        let content_tag_offset = 22 + prefix_length + 8 + 8;
+        let mut foreign_content = valid.clone();
+        foreign_content[content_tag_offset] = CONTENT_DIGEST_TAG.wrapping_add(1);
+        reseal(&mut foreign_content);
+        assert_eq!(
+            decode_page(&foreign_content)
+                .expect_err("foreign content domain must reject")
+                .code,
+            "persistent_map_content_domain"
+        );
+
+        let mut false_content = valid.clone();
+        false_content[content_tag_offset + 1] ^= 1;
+        reseal(&mut false_content);
+        assert_eq!(
+            decode_page(&false_content)
+                .expect_err("false logical content must reject")
+                .code,
+            "persistent_map_page_content"
+        );
+
+        let configuration = bincode::config::standard();
+        let encoded_page_digest =
+            bincode::encode_to_vec(map.root().page(), configuration).expect("page digest encoding");
+        assert!(
+            bincode::decode_from_slice::<MapContentDigest, _>(&encoded_page_digest, configuration)
+                .is_err(),
+            "an equal-shaped page digest must not decode as logical content"
+        );
+        let mut encoded_content = bincode::encode_to_vec(map.root().content(), configuration)
+            .expect("content digest encoding");
+        encoded_content[0] = CONTENT_DIGEST_TAG.wrapping_add(1);
+        assert!(
+            bincode::decode_from_slice::<MapContentDigest, _>(&encoded_content, configuration)
+                .is_err(),
+            "bincode content digest must reject a foreign domain tag"
+        );
+
         let mut bad_count = valid.clone();
         let prefix_length = u16::from_le_bytes([bad_count[20], bad_count[21]]) as usize;
         let count_offset = 22 + prefix_length;
@@ -3406,12 +3964,14 @@ mod tests {
         let corrupt_root_bytes =
             encode_page(&root_page).expect("locally coherent root must encode");
         let corrupt_digest = PageDigest::of(&corrupt_root_bytes);
+        let corrupt_content = root_page.content().expect("corrupt content summary");
         branched_store
             .write_page(corrupt_digest, &corrupt_root_bytes)
             .expect("corrupt test root must be stored");
         let corrupt = PersistentMap::from_root(MapRoot::from_parts(
             corrupt_digest,
             branched.root().entries() + 1,
+            corrupt_content,
         ));
         assert_eq!(
             corrupt
@@ -3653,11 +4213,15 @@ mod tests {
         child.edge += 1;
         let corrupt_bytes = encode_page(&root_page).expect("locally valid corrupt root page");
         let corrupt_digest = PageDigest::of(&corrupt_bytes);
+        let corrupt_content = root_page.content().expect("corrupt content summary");
         source
             .write_page(corrupt_digest, &corrupt_bytes)
             .expect("install corrupt parent fixture");
-        let corrupt =
-            PersistentMap::from_root(MapRoot::from_parts(corrupt_digest, map.root().entries()));
+        let corrupt = PersistentMap::from_root(MapRoot::from_parts(
+            corrupt_digest,
+            map.root().entries(),
+            corrupt_content,
+        ));
 
         let mut exhaustive_destination = MemoryPageStore::default();
         assert_eq!(

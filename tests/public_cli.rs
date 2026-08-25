@@ -4,6 +4,8 @@
     reason = "the black-box test harness uses panic-on-failure assertions"
 )]
 
+use lkjscript::platform::control::{CompactRecord, parse_records};
+use lkjscript::platform::{ProjectCreationReceipt, ProjectTemplate, create_project};
 use serde_json::Value;
 use std::fs::{File, OpenOptions};
 use std::io;
@@ -80,6 +82,68 @@ fn success_output(output: Output) -> Value {
     value
 }
 
+fn compact_success(arguments: &[&str]) -> Vec<CompactRecord> {
+    compact_success_output(command(arguments))
+}
+
+fn compact_success_at(
+    executable: &Path,
+    directory: &Path,
+    arguments: &[&str],
+) -> Vec<CompactRecord> {
+    compact_success_output(command_at(executable, directory, arguments))
+}
+
+fn compact_success_output(output: Output) -> Vec<CompactRecord> {
+    assert!(
+        output.status.success(),
+        "command failed: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    assert!(output.stderr.is_empty());
+    assert!(
+        output.stdout.len() < 64 * 1024,
+        "compact success output is excessive"
+    );
+    let records = parse_records("stdout", &output.stdout).expect("compact records");
+    assert_eq!(compact_field(&records[0], "status"), Some("success"));
+    records
+}
+
+fn compact_field<'a>(record: &'a CompactRecord, name: &str) -> Option<&'a str> {
+    record
+        .fields
+        .iter()
+        .find(|field| field.name == name)
+        .map(|field| field.value.as_str())
+}
+
+fn compact_record<'a>(records: &'a [CompactRecord], operation: &str) -> &'a CompactRecord {
+    records
+        .iter()
+        .find(|record| record.operation == operation)
+        .expect("compact record")
+}
+
+fn compact_failure_output(output: Output) -> Vec<CompactRecord> {
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stderr.is_empty());
+    assert!(output.stdout.len() < 16 * 1024);
+    let records = parse_records("stdout", &output.stdout).expect("compact failure records");
+    assert_eq!(compact_field(&records[0], "status"), Some("failure"));
+    records
+}
+
+fn predecessor_project(
+    destination: &Path,
+    name: &str,
+    template: ProjectTemplate,
+) -> ProjectCreationReceipt {
+    // Test-only setup for public operations that have not crossed to normalized authority yet.
+    // Delete this fixture boundary when those operations cut over.
+    create_project(destination, name, template).expect("predecessor fixture bootstrap")
+}
+
 fn failure(arguments: &[&str]) -> Value {
     let output = command(arguments);
     assert_eq!(output.status.code(), Some(2));
@@ -92,11 +156,15 @@ fn failure(arguments: &[&str]) -> Value {
 }
 
 #[test]
-fn direct_cli_discovery_query_check_build_and_inspection_are_compact() {
-    let capabilities = success(&["capabilities"]);
+fn capabilities_discovery_is_compact_focused_and_exportable() {
+    let capabilities = compact_success(&["capabilities"]);
     assert_eq!(
-        capabilities["result"]["operations"],
-        serde_json::json!([
+        capabilities
+            .iter()
+            .filter(|record| record.operation == "command")
+            .filter_map(|record| compact_field(record, "name"))
+            .collect::<Vec<_>>(),
+        vec![
             "capabilities",
             "new",
             "inspect",
@@ -114,79 +182,135 @@ fn direct_cli_discovery_query_check_build_and_inspection_are_compact() {
             "backup",
             "restore",
             "doctor"
-        ])
+        ]
     );
-    let schema = capabilities["result"]["schema_digest"]
-        .as_str()
-        .expect("schema digest");
-    let cached = success(&["capabilities", "--known-schema", schema]);
-    assert_eq!(cached["result"]["unchanged"], true);
-    let implicit = success_output(command(&[]));
-    assert_eq!(implicit["result"]["schema_digest"], schema);
-
-    let type_section = success(&["capabilities", "--section", "type"]);
-    assert!(
-        type_section["result"]["value"]["forms"]
-            .as_array()
-            .expect("type forms")
-            .contains(&serde_json::json!("parameter"))
-    );
-
-    let owner_section = success(&["capabilities", "--section", "owners"]);
-    assert!(
-        owner_section["result"]["value"]["kinds"]
-            .as_array()
-            .expect("owner kinds")
-            .contains(&serde_json::json!("type_parameter"))
-    );
-
-    let expression_section = success(&["capabilities", "--section", "expression"]);
-    assert!(
-        expression_section["result"]["value"]["forms"]
-            .as_array()
-            .expect("expression forms")
-            .contains(&serde_json::json!("invoke"))
-    );
-    assert!(
-        expression_section["result"]["value"]["forms"]
-            .as_array()
-            .expect("expression forms")
-            .contains(&serde_json::json!("constant"))
-    );
-
-    let change_section = success(&["capabilities", "--section", "change"]);
+    let registry = compact_record(&capabilities, "registry");
+    let registry_digest = compact_field(registry, "digest").expect("registry digest");
+    let cached = compact_success(&["capabilities", "--known-registry", registry_digest]);
+    assert_eq!(compact_field(&cached[0], "unchanged"), Some("true"));
+    assert_eq!(cached.len(), 2);
+    let implicit = compact_success_output(command(&[]));
     assert_eq!(
-        change_section["result"]["value"]["reference_forms"],
-        serde_json::json!([
-            "request_local_symbol",
-            "local_declaration_id",
-            "exact_package_module_declaration"
-        ])
+        compact_field(compact_record(&implicit, "registry"), "digest"),
+        Some(registry_digest)
     );
+    let project_scoped = compact_success(&[
+        "--project",
+        APPLICATION,
+        "capabilities",
+        "--known-registry",
+        registry_digest,
+    ]);
+    assert_eq!(compact_field(&project_scoped[0], "unchanged"), Some("true"));
+
+    let type_section = compact_success(&["capabilities", "--section", "type"]);
+    assert!(type_section.iter().any(|record| {
+        record.operation == "type.form" && compact_field(record, "name") == Some("parameter")
+    }));
+
+    let owner_section = compact_success(&["capabilities", "--section", "owners"]);
+    assert!(owner_section.iter().any(|record| {
+        record.operation == "owner.kind" && compact_field(record, "name") == Some("type_parameter")
+    }));
+
+    let expression_section = compact_success(&["capabilities", "--section", "expression"]);
+    for expected in ["invoke", "constant"] {
+        assert!(expression_section.iter().any(|record| {
+            record.operation == "expression.form" && compact_field(record, "name") == Some(expected)
+        }));
+    }
+
+    let change_section = compact_success(&["capabilities", "--section", "change"]);
+    let references = change_section
+        .iter()
+        .filter(|record| record.operation == "change.reference")
+        .collect::<Vec<_>>();
+    assert_eq!(references.len(), 3);
+    let exact_reference = references
+        .iter()
+        .find(|record| compact_field(record, "name") == Some("exact_package_module_declaration"))
+        .expect("exact reference form");
     assert_eq!(
-        change_section["result"]["value"]["reference_syntax"]["exact_package_module_declaration"],
-        "exact:PACKAGE_HEX/mod_HEX/decl_HEX"
+        compact_field(exact_reference, "syntax"),
+        Some("exact:PACKAGE_HEX/mod_HEX/decl_HEX")
     );
-    let known_type_digest = type_section["result"]["section_digest"]
-        .as_str()
+    let known_type_digest = compact_field(compact_record(&type_section, "section"), "digest")
         .expect("type section digest");
     let known_type = format!("type={known_type_digest}");
-    let unchanged_type = success(&["capabilities", "--known-section", &known_type]);
+    let unchanged_type = compact_success(&["capabilities", "--known-section", &known_type]);
+    assert_eq!(compact_field(&unchanged_type[0], "unchanged"), Some("true"));
     assert_eq!(
-        unchanged_type["result"]["changed_sections"],
-        serde_json::json!({})
+        compact_field(compact_record(&unchanged_type, "section"), "changed"),
+        Some("false")
     );
-    assert_eq!(unchanged_type["result"]["unchanged"], true);
 
-    let change_help = success(&["capabilities", "change"]);
-    assert_eq!(change_help["result"]["name"], "change");
+    let change_help = compact_success(&["capabilities", "change"]);
+    let change_operation = compact_record(&change_help, "operation");
+    assert_eq!(compact_field(change_operation, "name"), Some("change"));
     assert!(
-        change_help["result"]["usage"]
-            .as_str()
+        compact_field(change_operation, "usage")
             .expect("usage")
             .contains("--commit")
     );
 
+    let new_help = compact_success(&["capabilities", "new"]);
+    let new_operation = compact_record(&new_help, "operation");
+    assert_eq!(
+        compact_field(new_operation, "response-model"),
+        Some("new_result")
+    );
+    assert_eq!(
+        compact_field(new_operation, "usage"),
+        Some("new DEST [--template minimal] [--name NAME]")
+    );
+    let templates = compact_success(&["capabilities", "--section", "templates"]);
+    assert_eq!(
+        templates
+            .iter()
+            .filter(|record| record.operation == "template")
+            .filter_map(|record| compact_field(record, "name"))
+            .collect::<Vec<_>>(),
+        vec!["minimal"]
+    );
+
+    let temporary_capabilities = tempfile::TempDir::new().expect("capabilities output");
+    let registry_path = temporary_capabilities.path().join("registry.lkjc");
+    let registry_path_text = path(&registry_path);
+    let exported = compact_success(&["capabilities", "--output", registry_path_text]);
+    let file = compact_record(&exported, "file");
+    assert_eq!(compact_field(file, "kind"), Some("registry"));
+    assert_eq!(compact_field(file, "digest"), Some(registry_digest));
+    let exported_bytes = std::fs::read(&registry_path).expect("compact registry export");
+    let exported_records = parse_records("registry.lkjc", &exported_bytes).expect("export records");
+    assert!(exported_records.len() > capabilities.len());
+    assert_ne!(exported_bytes.first(), Some(&b'{'));
+
+    let verified = compact_success(&["capabilities", "--verify-generated", "docs/generated"]);
+    assert_eq!(
+        verified
+            .iter()
+            .filter(|record| record.operation == "file")
+            .count(),
+        3
+    );
+
+    let rejected_schema = command(&["capabilities", "--known-schema", registry_digest]);
+    assert_eq!(rejected_schema.status.code(), Some(2));
+    assert!(serde_json::from_slice::<Value>(&rejected_schema.stdout).is_err());
+    let rejected_records =
+        parse_records("stdout", &rejected_schema.stdout).expect("compact failure records");
+    assert_eq!(
+        compact_field(&rejected_records[0], "status"),
+        Some("failure")
+    );
+    assert_eq!(
+        compact_field(compact_record(&rejected_records, "diagnostic"), "code"),
+        Some("cli_usage")
+    );
+}
+
+#[test]
+fn direct_cli_query_check_build_and_inspection_are_bounded() {
     let project = success(&[
         "--project",
         APPLICATION,
@@ -262,12 +386,12 @@ fn direct_cli_discovery_query_check_build_and_inspection_are_compact() {
 }
 
 #[test]
-fn copied_binary_creates_runs_backs_up_and_restores_a_command_project() {
+fn copied_binary_rejects_the_predecessor_template_and_runs_a_predecessor_fixture() {
     let temporary = tempfile::TempDir::new().expect("isolated binary workspace");
     let copied_binary = temporary.path().join("lkjscript");
     copy_executable(&binary(), &copied_binary);
     let project = temporary.path().join("app");
-    let created = success_at(
+    let rejected = compact_failure_output(command_at(
         &copied_binary,
         temporary.path(),
         &[
@@ -278,34 +402,36 @@ fn copied_binary_creates_runs_backs_up_and_restores_a_command_project() {
             "--name",
             "sample",
         ],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&rejected, "diagnostic"), "code"),
+        Some("predecessor_contract")
     );
-    assert_eq!(created["result"]["template"], "command");
+    assert!(!project.exists());
+
+    let created = predecessor_project(&project, "sample", ProjectTemplate::Command);
+    assert_eq!(created.template, ProjectTemplate::Command);
+    assert!(created.repository_id.to_string().starts_with("repo_"));
     assert!(
-        created["result"]["repository_id"]
-            .as_str()
-            .unwrap()
-            .starts_with("repo_")
-    );
-    assert!(
-        created["result"]["builtin_dependency"]["artifact"]
-            .as_str()
-            .unwrap()
+        created
+            .builtin_dependency
+            .as_ref()
+            .expect("command template dependency")
+            .artifact
+            .to_string()
             .starts_with("artifact_")
     );
-    assert_eq!(
-        created["result"]["allocated_identities"]
-            .as_object()
-            .unwrap()
-            .len(),
-        5
-    );
+    assert_eq!(created.allocated_identities.len(), 5);
 
     let status = success_at(
         &copied_binary,
         temporary.path(),
         &["--project", path(&project), "inspect", "status"],
     );
-    assert_eq!(status["result"]["revision"], created["result"]["revision"]);
+    assert_eq!(
+        status["result"]["revision"],
+        Value::String(created.revision.to_string())
+    );
     let checked = success_at(
         &copied_binary,
         temporary.path(),
@@ -553,7 +679,7 @@ fn copied_binary_creates_runs_backs_up_and_restores_a_command_project() {
 fn one_public_change_allocates_a_connected_subgraph_and_reuses_dry_run_lowering() {
     let temporary = tempfile::TempDir::new().expect("temporary graph authority");
     let project = temporary.path().join("project");
-    success(&["new", path(&project), "--template", "minimal"]);
+    predecessor_project(&project, "project", ProjectTemplate::Minimal);
     let before = success(&["--project", path(&project), "inspect", "status"]);
     let request = serde_json::json!({
         "contract_version": 3,
@@ -662,7 +788,7 @@ fn one_public_change_allocates_a_connected_subgraph_and_reuses_dry_run_lowering(
 fn broad_change_results_are_bounded_and_expandable() {
     let temporary = tempfile::TempDir::new().expect("temporary graph authority");
     let project = temporary.path().join("project");
-    success(&["new", path(&project), "--template", "minimal"]);
+    predecessor_project(&project, "project", ProjectTemplate::Minimal);
     let changes = (1..=100)
         .map(|ordinal| {
             serde_json::json!({
@@ -743,33 +869,170 @@ fn removed_commands_and_predecessor_source_authority_reject_exactly() {
 }
 
 #[test]
-fn bootstrap_rejects_conflicts_and_builtin_bytes_reproduce_maintained_authority() {
-    let temporary = tempfile::TempDir::new().expect("temporary bootstrap parent");
-    let project = temporary.path().join("app");
-    std::fs::create_dir(&project).expect("destination");
-    std::fs::write(project.join("owned.txt"), b"preserve\n").expect("owned file");
-    let rejected = command(&["new", path(&project), "--template", "minimal"]);
-    assert_eq!(rejected.status.code(), Some(2));
+fn copied_binary_creates_normalized_minimal_projects_and_rejects_unsafe_destinations() {
+    let temporary = tempfile::TempDir::new().expect("temporary normalized bootstrap parent");
+    let copied_binary = temporary.path().join("lkjscript");
+    copy_executable(&binary(), &copied_binary);
+
+    let first = temporary.path().join("first");
+    let first_receipt = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["new", path(&first), "--template", "minimal"],
+    );
+    assert_eq!(compact_field(&first_receipt[0], "command"), Some("new"));
     assert_eq!(
-        std::fs::read(project.join("owned.txt")).unwrap(),
+        compact_field(compact_record(&first_receipt, "project"), "template"),
+        Some("minimal")
+    );
+    assert_eq!(
+        compact_field(compact_record(&first_receipt, "project"), "name"),
+        Some("first")
+    );
+    let first_repository = compact_field(compact_record(&first_receipt, "repository"), "id")
+        .expect("repository identity");
+    let first_package =
+        compact_field(compact_record(&first_receipt, "package"), "id").expect("package identity");
+    assert!(first_repository.starts_with("repo_"));
+    assert!(first_package.starts_with("pkg_"));
+    assert!(
+        compact_field(compact_record(&first_receipt, "revision"), "id")
+            .expect("revision identity")
+            .starts_with("rev_")
+    );
+    assert!(
+        compact_field(compact_record(&first_receipt, "state"), "digest")
+            .expect("semantic state")
+            .starts_with("semantic_state_")
+    );
+    assert!(
+        compact_field(compact_record(&first_receipt, "root"), "digest")
+            .expect("semantic root")
+            .starts_with("semantic_root_")
+    );
+    let receipt = compact_record(&first_receipt, "receipt");
+    assert!(
+        compact_field(receipt, "digest")
+            .expect("receipt digest")
+            .starts_with("receipt_object_")
+    );
+    assert!(
+        compact_field(receipt, "revision-record")
+            .expect("revision record")
+            .starts_with("revision_object_")
+    );
+    assert!(first.join("HEAD").is_file());
+    assert!(first.join("LOCK").is_file());
+    assert!(!first.join(".lkjscript").exists());
+
+    let second = temporary.path().join("second");
+    std::fs::create_dir(&second).expect("existing empty destination");
+    let second_receipt = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["new", path(&second), "--name", "second_project"],
+    );
+    assert_ne!(
+        first_repository,
+        compact_field(compact_record(&second_receipt, "repository"), "id").unwrap()
+    );
+    assert_ne!(
+        first_package,
+        compact_field(compact_record(&second_receipt, "package"), "id").unwrap()
+    );
+    assert!(second.join("HEAD").is_file());
+
+    let repeated = compact_failure_output(command_at(
+        &copied_binary,
+        temporary.path(),
+        &["new", path(&first)],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&repeated, "diagnostic"), "code"),
+        Some("new_destination_not_empty")
+    );
+
+    let nonempty = temporary.path().join("nonempty");
+    std::fs::create_dir(&nonempty).expect("nonempty destination");
+    std::fs::write(nonempty.join("owned.txt"), b"preserve\n").expect("owned file");
+    let rejected = compact_failure_output(command_at(
+        &copied_binary,
+        temporary.path(),
+        &["new", path(&nonempty)],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&rejected, "diagnostic"), "code"),
+        Some("new_destination_not_empty")
+    );
+    assert_eq!(
+        std::fs::read(nonempty.join("owned.txt")).unwrap(),
         b"preserve\n"
     );
 
-    let first = temporary.path().join("first");
-    let second = temporary.path().join("second");
-    let first_receipt = success(&["new", path(&first), "--template", "minimal"]);
-    let second_receipt = success(&["new", path(&second), "--template", "minimal"]);
-    assert_ne!(
-        first_receipt["result"]["repository_id"],
-        second_receipt["result"]["repository_id"]
+    let file = temporary.path().join("destination-file");
+    std::fs::write(&file, b"preserve\n").expect("destination file");
+    let rejected = compact_failure_output(command_at(
+        &copied_binary,
+        temporary.path(),
+        &["new", path(&file)],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&rejected, "diagnostic"), "code"),
+        Some("new_destination_type")
     );
-    assert_ne!(
-        first_receipt["result"]["package_id"],
-        second_receipt["result"]["package_id"]
-    );
-    let repeated = command(&["new", path(&first), "--template", "minimal"]);
-    assert_eq!(repeated.status.code(), Some(2));
+    assert_eq!(std::fs::read(&file).unwrap(), b"preserve\n");
 
+    let invalid = temporary.path().join("9invalid");
+    let rejected = compact_failure_output(command_at(
+        &copied_binary,
+        temporary.path(),
+        &["new", path(&invalid)],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&rejected, "diagnostic"), "code"),
+        Some("kernel_name")
+    );
+    assert!(!invalid.exists());
+
+    let predecessor = temporary.path().join("predecessor");
+    std::fs::create_dir(&predecessor).expect("predecessor destination");
+    std::fs::create_dir(predecessor.join(".lkjscript")).expect("predecessor marker");
+    let rejected = compact_failure_output(command_at(
+        &copied_binary,
+        temporary.path(),
+        &["new", path(&predecessor)],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&rejected, "diagnostic"), "code"),
+        Some("predecessor_contract")
+    );
+    assert!(predecessor.join(".lkjscript").is_dir());
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::symlink;
+
+        let actual_parent = temporary.path().join("actual-parent");
+        let linked_parent = temporary.path().join("linked-parent");
+        std::fs::create_dir(&actual_parent).expect("actual parent");
+        symlink(&actual_parent, &linked_parent).expect("parent symlink");
+        let linked_destination = linked_parent.join("project");
+        let rejected = compact_failure_output(command_at(
+            &copied_binary,
+            temporary.path(),
+            &["new", path(&linked_destination)],
+        ));
+        assert_eq!(
+            compact_field(compact_record(&rejected, "diagnostic"), "code"),
+            Some("new_destination_symlink")
+        );
+        assert!(!actual_parent.join("project").exists());
+    }
+}
+
+#[test]
+fn builtin_bytes_reproduce_maintained_authority() {
+    let temporary = tempfile::TempDir::new().expect("temporary built-in export");
     let builtin = success(&["package", "builtin", "inspect"]);
     let exported = temporary.path().join("standard.lkja");
     let export = success(&["package", "builtin", "export", "--output", path(&exported)]);
@@ -788,7 +1051,7 @@ fn bootstrap_rejects_conflicts_and_builtin_bytes_reproduce_maintained_authority(
 fn exact_dependency_stage_and_change_use_the_public_protocol() {
     let temporary = tempfile::TempDir::new().expect("temporary dependency workflow");
     let project = temporary.path().join("project");
-    success(&["new", path(&project), "--template", "minimal"]);
+    predecessor_project(&project, "project", ProjectTemplate::Minimal);
     let status = success(&["--project", path(&project), "inspect", "status"]);
     let builtin = success(&["package", "builtin", "inspect"]);
     let artifact = temporary.path().join("standard.lkja");

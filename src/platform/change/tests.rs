@@ -576,14 +576,17 @@ fn full_authority_root_is_independent_of_placeholder_roots_and_reopens_from_pack
     altered.root.owners = crate::platform::persistent_map::MapRoot::from_parts(
         crate::platform::persistent_map::PageDigest::from_bytes([91; 32]),
         altered.owners.len() as u64,
+        altered.root.owners.content(),
     );
     altered.root.dependencies = crate::platform::persistent_map::MapRoot::from_parts(
         crate::platform::persistent_map::PageDigest::from_bytes([92; 32]),
         altered.dependencies.len() as u64,
+        altered.root.dependencies.content(),
     );
     altered.root.retirements = crate::platform::persistent_map::MapRoot::from_parts(
         crate::platform::persistent_map::PageDigest::from_bytes([93; 32]),
         altered.retirements.len() as u64,
+        altered.root.retirements.content(),
     );
 
     let mut first_store = MemoryPackedStore::default();

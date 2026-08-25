@@ -105,7 +105,11 @@ fn prepare_repository(
 }
 
 fn empty_normalized_snapshot(seed: &[u8]) -> crate::platform::kernel::KernelSnapshot {
-    let empty = MapRoot::from_parts(PageDigest::from_bytes([0; 32]), 0);
+    let empty = MapRoot::from_parts(
+        PageDigest::from_bytes([0; 32]),
+        0,
+        crate::platform::persistent_map::MapContentDigest::from_bytes([0; 32]),
+    );
     crate::platform::kernel::KernelSnapshot {
         root: crate::platform::kernel::SemanticRoot {
             graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
@@ -387,6 +391,7 @@ fn pure_command_snapshot() -> crate::platform::kernel::KernelSnapshot {
     snapshot.root.owners = crate::platform::persistent_map::MapRoot::from_parts(
         snapshot.root.owners.page(),
         snapshot.owners.len() as u64,
+        snapshot.root.owners.content(),
     );
     snapshot
 }
@@ -487,6 +492,7 @@ fn normalized_worker_snapshot() -> crate::platform::kernel::KernelSnapshot {
     snapshot.root.owners = crate::platform::persistent_map::MapRoot::from_parts(
         snapshot.root.owners.page(),
         snapshot.owners.len() as u64,
+        snapshot.root.owners.content(),
     );
     snapshot
 }
@@ -815,6 +821,7 @@ fn byte_stream_command_snapshot() -> crate::platform::kernel::KernelSnapshot {
     snapshot.root.owners = crate::platform::persistent_map::MapRoot::from_parts(
         snapshot.root.owners.page(),
         snapshot.owners.len() as u64,
+        snapshot.root.owners.content(),
     );
     snapshot
 }
@@ -1115,6 +1122,7 @@ fn normalized_http_snapshot() -> crate::platform::kernel::KernelSnapshot {
     snapshot.root.owners = crate::platform::persistent_map::MapRoot::from_parts(
         snapshot.root.owners.page(),
         snapshot.owners.len() as u64,
+        snapshot.root.owners.content(),
     );
     snapshot
 }

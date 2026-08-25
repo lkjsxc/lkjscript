@@ -49,6 +49,7 @@ pub(crate) mod package_interface;
 pub(crate) mod package_object;
 pub(crate) mod packed;
 pub mod persistent_map;
+pub(crate) mod project_creation;
 #[allow(
     dead_code,
     reason = "Graph 5 publication remains private until repository cutover"
@@ -95,7 +96,7 @@ pub use bootstrap::{
     BOOTSTRAP_CONTRACT_VERSION, BuiltinPackageInfo, ProjectCreationReceipt, ProjectTemplate,
     builtin_package_info, create_project, export_builtin_standard,
 };
-pub use cli::{CliSuccess, execute as execute_cli};
+pub use cli::{CliSuccess, execute as execute_cli, execute_capabilities, execute_new};
 pub use configuration::{
     CONFIGURATION_ADAPTER_CONTRACT_VERSION, ConfigurationAdapter, ConfigurationObservation,
     ConfigurationValue,

@@ -265,5 +265,5 @@ fn apply_exact_edits<K: Copy + Ord, D, V: Clone>(
 }
 
 fn count_root(root: MapRoot, entries: usize) -> MapRoot {
-    MapRoot::from_parts(root.page(), entries as u64)
+    MapRoot::from_parts(root.page(), entries as u64, root.content())
 }

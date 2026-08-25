@@ -121,6 +121,7 @@ fn structurally_empty_snapshot(seed: &[u8]) -> crate::platform::kernel::KernelSn
         MapRoot::from_parts(
             crate::platform::persistent_map::PageDigest::from_bytes([marker; 32]),
             0,
+            crate::platform::persistent_map::MapContentDigest::from_bytes([marker; 32]),
         )
     };
     crate::platform::kernel::KernelSnapshot {
@@ -429,8 +430,11 @@ pub(crate) fn complete_expression_snapshot() -> crate::platform::kernel::KernelS
             transaction,
         ],
     );
-    snapshot.root.owners =
-        MapRoot::from_parts(snapshot.root.owners.page(), snapshot.owners.len() as u64);
+    snapshot.root.owners = MapRoot::from_parts(
+        snapshot.root.owners.page(),
+        snapshot.owners.len() as u64,
+        snapshot.root.owners.content(),
+    );
     snapshot
 }
 

@@ -15,7 +15,9 @@ use super::{
 };
 use crate::platform::change::{AuthoredChangeSet, PrimitiveEdit};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
-use crate::platform::kernel::{KernelSnapshot, SemanticRoot, decode_root, encode_root};
+use crate::platform::kernel::{
+    KernelSnapshot, SemanticRoot, decode_root, encode_root, semantic_state_digest_from_root,
+};
 use crate::platform::package_object::{
     PackageObject, validate_package_object_closure, validate_package_object_closure_with_interface,
 };
@@ -626,7 +628,7 @@ impl GraphRepository {
                 let mut transition_work = StoreWork::default();
                 validate_candidate_idempotency_transition(
                     &store,
-                    prepared.revision.core.idempotency_receipts,
+                    prepared.revision.publication.idempotency_receipts,
                     current.as_ref().map(|value| value.accepted),
                     &prepared.objects,
                     &mut transition_work,
@@ -699,7 +701,7 @@ impl GraphRepository {
         let mut store_work = StoreWork::default();
         validate_candidate_idempotency_transition(
             &store,
-            prepared.revision.core.idempotency_receipts,
+            prepared.revision.publication.idempotency_receipts,
             current.as_ref().map(|value| value.accepted),
             &prepared.objects,
             &mut store_work,
@@ -830,7 +832,7 @@ fn classify_publication(
             let reader = ObjectPageReader::new(store);
             let mut map_work = MapWork::default();
             let binding = lookup_idempotency_history(
-                current.revision.core.idempotency_receipts,
+                current.revision.publication.idempotency_receipts,
                 key,
                 &reader,
                 &mut map_work,
@@ -905,41 +907,49 @@ fn read_publication(
     let receipt_bytes = read_required(
         store,
         ObjectDomain::Receipt,
-        revision.receipt.bytes(),
+        revision.publication.receipt.bytes(),
         &mut store_work,
     )?;
-    let receipt = PublicationReceipt::decode(&receipt_bytes, revision.receipt)?;
+    let receipt = PublicationReceipt::decode(&receipt_bytes, revision.publication.receipt)?;
     let transaction_bytes = read_required(
         store,
         ObjectDomain::Transaction,
-        revision.core.transaction.bytes(),
+        revision.publication.transaction.bytes(),
         &mut store_work,
     )?;
-    let transaction = NormalizedTransaction::decode(&transaction_bytes, revision.core.transaction)?;
+    let transaction =
+        NormalizedTransaction::decode(&transaction_bytes, revision.publication.transaction)?;
     let diff_bytes = read_required(
         store,
         ObjectDomain::SemanticDiff,
-        revision.core.semantic_diff.bytes(),
+        revision.publication.semantic_diff.bytes(),
         &mut store_work,
     )?;
-    let semantic_diff = SemanticDiff::decode(&diff_bytes, revision.core.semantic_diff)?;
+    let semantic_diff = SemanticDiff::decode(&diff_bytes, revision.publication.semantic_diff)?;
     let root_bytes = read_required(
         store,
         ObjectDomain::SemanticRoot,
-        revision.core.semantic_root.bytes(),
+        revision.publication.semantic_root.bytes(),
         &mut store_work,
     )?;
-    let semantic_root = decode_root(&root_bytes, revision.core.semantic_root)?;
+    let semantic_root = decode_root(&root_bytes, revision.publication.semantic_root)?;
+    let semantic_state = semantic_state_digest_from_root(&semantic_root)?;
     let witness_bytes = read_required(
         store,
         ObjectDomain::ValidationWitness,
-        revision.core.validation_witness.bytes(),
+        revision.publication.validation.witness.bytes(),
         &mut store_work,
     )?;
-    let witness = decode_witness_manifest(&witness_bytes, revision.core.validation_witness)?;
-    let accepted =
-        AcceptedBinding::verify(head, &revision, revision.core.validation_witness, &witness)?;
-    if semantic_root.repository_id != head.repository_id
+    let witness = decode_witness_manifest(&witness_bytes, revision.publication.validation.witness)?;
+    let accepted = AcceptedBinding::verify(
+        head,
+        &revision,
+        revision.publication.validation.witness,
+        &witness,
+    )?;
+    if semantic_state != revision.core.semantic_state
+        || semantic_state != accepted.semantic_state
+        || semantic_root.repository_id != head.repository_id
         || semantic_root.package_id != witness.package_id
     {
         return Err(repository_error(
@@ -950,19 +960,13 @@ fn read_publication(
     }
     if receipt.repository_id != head.repository_id
         || receipt.result != revision.revision
-        || receipt.transaction != revision.core.transaction
-        || receipt.semantic_diff != revision.core.semantic_diff
-        || receipt.bases
-            != revision
-                .core
-                .parents
-                .iter()
-                .map(|parent| parent.revision)
-                .collect::<Vec<_>>()
+        || receipt.transaction != revision.publication.transaction
+        || receipt.semantic_diff != revision.publication.semantic_diff
+        || receipt.bases != revision.core.parents
         || transaction.repository_id != head.repository_id
         || semantic_diff.repository_id != head.repository_id
-        || transaction.result_root() != revision.core.semantic_root
-        || semantic_diff.result_root() != revision.core.semantic_root
+        || transaction.result_root() != revision.publication.semantic_root
+        || semantic_diff.result_root() != revision.publication.semantic_root
     {
         return Err(repository_error(
             DiagnosticClass::Corrupt,
@@ -970,7 +974,7 @@ fn read_publication(
             "revision, receipt, and exact parent identities do not form one accepted record",
         ));
     }
-    let base = match revision.core.parents.as_slice() {
+    let base = match revision.publication.parents.as_slice() {
         [] => None,
         [parent] => Some(load_parent_binding(
             store,
@@ -990,7 +994,7 @@ fn read_publication(
     validate_history_base(base, receipt.status, &transaction, &semantic_diff)?;
     validate_idempotency_transition(
         store,
-        revision.core.idempotency_receipts,
+        revision.publication.idempotency_receipts,
         base,
         &mut store_work,
     )?;
@@ -1025,18 +1029,22 @@ fn load_parent_binding(
     let root_bytes = read_required(
         store,
         ObjectDomain::SemanticRoot,
-        revision.core.semantic_root.bytes(),
+        revision.publication.semantic_root.bytes(),
         work,
     )?;
-    let root = decode_root(&root_bytes, revision.core.semantic_root)?;
+    let root = decode_root(&root_bytes, revision.publication.semantic_root)?;
+    let semantic_state = semantic_state_digest_from_root(&root)?;
     let witness_bytes = read_required(
         store,
         ObjectDomain::ValidationWitness,
-        revision.core.validation_witness.bytes(),
+        revision.publication.validation.witness.bytes(),
         work,
     )?;
-    let witness = decode_witness_manifest(&witness_bytes, revision.core.validation_witness)?;
-    if root.repository_id != repository_id || root.package_id != witness.package_id {
+    let witness = decode_witness_manifest(&witness_bytes, revision.publication.validation.witness)?;
+    if semantic_state != revision.core.semantic_state
+        || root.repository_id != repository_id
+        || root.package_id != witness.package_id
+    {
         return Err(repository_error(
             DiagnosticClass::Corrupt,
             "publication_repository_parent_root",
@@ -1052,7 +1060,7 @@ fn load_parent_binding(
             record: parent.record,
         },
         &revision,
-        revision.core.validation_witness,
+        revision.publication.validation.witness,
         &witness,
     )
 }
@@ -1181,7 +1189,7 @@ fn validate_idempotency_result(
     accepted: &CurrentPublication,
 ) -> Result<(), Diagnostic> {
     if accepted.head != binding.result
-        || accepted.revision.receipt != binding.receipt
+        || accepted.revision.publication.receipt != binding.receipt
         || accepted.receipt.repository_id != binding.repository_id
         || accepted.receipt.idempotency_key.as_deref() != Some(binding.key.as_str())
         || accepted.receipt.bases.as_slice() != [binding.base]
@@ -1214,7 +1222,10 @@ fn validate_prepared_repository(prepared: &PreparedPublication) -> Result<(), Di
     if prepared.head_bytes != prepared.head.encode()?
         || accepted != prepared.accepted
         || prepared.head.repository_id != prepared.authority.semantic.root.repository_id
+        || prepared.authority.semantic.state != prepared.accepted.semantic_state
         || prepared.authority.semantic.digest != prepared.accepted.semantic_root
+        || prepared.revision.core.semantic_state != prepared.authority.semantic.state
+        || prepared.revision.publication.semantic_root != prepared.authority.semantic.digest
         || prepared.authority.witness.digest != prepared.accepted.validation_witness
         || (semantic_root_digest, semantic_root_bytes.as_slice())
             != (
@@ -1242,8 +1253,11 @@ fn validate_prepared_repository(prepared: &PreparedPublication) -> Result<(), Di
             != (prepared.revision_digest, prepared.revision_bytes.as_slice())
         || prepared.receipt.repository_id != prepared.head.repository_id
         || prepared.receipt.result != prepared.revision.revision
-        || prepared.receipt.transaction != prepared.revision.core.transaction
-        || prepared.receipt.semantic_diff != prepared.revision.core.semantic_diff
+        || prepared.revision.publication.transaction != prepared.transaction_digest
+        || prepared.revision.publication.semantic_diff != prepared.semantic_diff_digest
+        || prepared.revision.publication.receipt != prepared.receipt_digest
+        || prepared.receipt.transaction != prepared.revision.publication.transaction
+        || prepared.receipt.semantic_diff != prepared.revision.publication.semantic_diff
     {
         return Err(repository_error(
             DiagnosticClass::Corrupt,
@@ -1315,7 +1329,7 @@ fn verify_prepared_closure(
     let reader = ObjectPageReader::new(store);
     let mut map_work = MapWork::default();
     let _ = lookup_idempotency_history(
-        prepared.revision.core.idempotency_receipts,
+        prepared.revision.publication.idempotency_receipts,
         "lkjscript-integrity-probe",
         &reader,
         &mut map_work,

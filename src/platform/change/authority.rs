@@ -6,9 +6,10 @@ use super::{
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     DependencyBinding, KernelSnapshot, OwnerBinding, RetirementBinding, SemanticRoot,
-    SemanticRootDigest, dependency_map_key, encode_dependency, encode_dependency_binding,
-    encode_owner, encode_owner_binding, encode_retirement, encode_retirement_binding, encode_root,
-    encode_type_object, owner_map_key, retirement_map_key,
+    SemanticRootDigest, SemanticStateDigest, dependency_map_key, encode_dependency,
+    encode_dependency_binding, encode_owner, encode_owner_binding, encode_retirement,
+    encode_retirement_binding, encode_root, encode_type_object, owner_map_key, retirement_map_key,
+    semantic_state_digest, semantic_state_digest_from_root,
 };
 use crate::platform::package_object::validate_package_object_closure;
 use crate::platform::persistent_map::{
@@ -36,6 +37,7 @@ pub struct CanonicalMapEditCounts {
 pub struct SemanticAuthority {
     pub root: SemanticRoot,
     pub digest: SemanticRootDigest,
+    pub state: SemanticStateDigest,
     pub bytes: Vec<u8>,
     pub map_work: MapWork,
     pub map_edits: CanonicalMapEditCounts,
@@ -199,6 +201,7 @@ fn stage_semantic_delta<B: CanonicalBaseRead + ?Sized, S: ImmutableObjectStore +
         retirements,
     };
     let (digest, bytes) = encode_root(&root)?;
+    let state = semantic_state_digest_from_root(&root)?;
     stage_typed(
         store,
         ObjectDomain::SemanticRoot,
@@ -209,6 +212,7 @@ fn stage_semantic_delta<B: CanonicalBaseRead + ?Sized, S: ImmutableObjectStore +
     Ok(SemanticAuthority {
         root,
         digest,
+        state,
         bytes,
         map_work,
         map_edits: counts,
@@ -327,6 +331,15 @@ fn stage_full_semantic<S: ImmutableObjectStore + ?Sized>(
         retirements,
     };
     let (digest, bytes) = encode_root(&root)?;
+    let state = semantic_state_digest_from_root(&root)?;
+    let oracle = semantic_state_digest(logical)?;
+    if state != oracle {
+        return Err(authority_error(
+            DiagnosticClass::Corrupt,
+            "change_authority_semantic_state",
+            "staged sparse semantic-state commitment disagrees with the independent full reconstruction",
+        ));
+    }
     stage_typed(
         store,
         ObjectDomain::SemanticRoot,
@@ -337,6 +350,7 @@ fn stage_full_semantic<S: ImmutableObjectStore + ?Sized>(
     Ok(SemanticAuthority {
         root,
         digest,
+        state,
         bytes,
         map_work,
         map_edits: CanonicalMapEditCounts {

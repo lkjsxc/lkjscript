@@ -1,21 +1,20 @@
 //! Strict, bounded public graph-native command projection.
 
 use super::artifact::{MAXIMUM_ARTIFACT_BYTES, load_artifact};
-use super::bootstrap::{
-    ProjectTemplate, builtin_package_info, create_project, export_builtin_standard,
-};
+use super::bootstrap::{builtin_package_info, export_builtin_standard};
 use super::contract::{
     CLI_CONTRACT_VERSION, MAXIMUM_CLI_RESPONSE_BYTES, MAXIMUM_TRANSACTION_REQUEST_BYTES,
-    PublicOperation, REGISTRY_CONTRACT_IDENTITY, RegistrySection, generated_documents,
-    limit_descriptors, nonclaims, operation_descriptors, outcome_exit_status,
-    protocol_schema_bytes, protocol_schema_digest, registry_snapshot,
+    PublicOperation, RegistrySection, RegistrySnapshot, generated_documents, operation_descriptors,
+    operation_record, outcome_exit_status, registry_snapshot,
 };
+use super::control::render_record;
 use super::deployment::{MAXIMUM_DEPLOYMENT_BYTES, decode_deployment};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::execution::{PreparedProgram, ReferenceInterpreter, RunPolicy, Vm};
 use super::json::{JsonLimits, decode_strict, decode_typed, encode_typed};
-use super::meaning::{GRAPH_CONTRACT_IDENTITY, RelationRole};
+use super::meaning::RelationRole;
 use super::package::RunnerKind;
+use super::project_creation::create_minimal_project;
 use super::repository::SemanticRepository;
 use super::revision::{AffectedOwner, TransactionReceipt, ValidationFacts};
 use super::semantic_change::{ChangeRequest, execute_change};
@@ -62,7 +61,9 @@ impl CliSuccess {
 pub fn execute(arguments: Vec<String>) -> Result<CliSuccess, Diagnostic> {
     let (arguments, project) = extract_global_project(arguments)?;
     if arguments.is_empty() {
-        return capabilities_command(&[]);
+        return Err(usage_error(
+            "capabilities uses the compact executable process boundary",
+        ));
     }
     let command = PublicOperation::parse(&arguments[0]).ok_or_else(|| {
         usage_error(format!(
@@ -71,8 +72,12 @@ pub fn execute(arguments: Vec<String>) -> Result<CliSuccess, Diagnostic> {
         ))
     })?;
     match command {
-        PublicOperation::Capabilities => capabilities_command(&arguments[1..]),
-        PublicOperation::New => new_project_command(&arguments[1..]),
+        PublicOperation::Capabilities => Err(usage_error(
+            "capabilities uses the compact executable process boundary",
+        )),
+        PublicOperation::New => Err(usage_error(
+            "new uses the compact executable process boundary",
+        )),
         PublicOperation::Inspect => inspect_command(&arguments[1..], project.as_deref()),
         PublicOperation::Query => public_query_command(&arguments[1..], project.as_deref()),
         PublicOperation::Change => change_command(&arguments[1..], project.as_deref()),
@@ -99,28 +104,108 @@ pub fn execute(arguments: Vec<String>) -> Result<CliSuccess, Diagnostic> {
     }
 }
 
-fn new_project_command(arguments: &[String]) -> Result<CliSuccess, Diagnostic> {
+pub fn execute_new(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
     let destination = arguments
         .first()
         .filter(|value| !value.starts_with("--"))
         .ok_or_else(|| usage_error("new requires one destination directory"))?;
     ensure_options(&arguments[1..], &["--template", "--name"], &[])?;
-    let template = ProjectTemplate::parse(
-        option_value(&arguments[1..], "--template")?
-            .as_deref()
-            .unwrap_or("minimal"),
-    )?;
+    let template =
+        option_value(&arguments[1..], "--template")?.unwrap_or_else(|| "minimal".to_owned());
+    if template == "command" {
+        return Err(Diagnostic::new(
+            DiagnosticClass::Source,
+            "predecessor_contract",
+            "the command template belongs to predecessor authority; normalized standard-package and command-target bootstrap are not available yet",
+        ));
+    }
+    if template != "minimal" {
+        return Err(usage_error(format!(
+            "unknown normalized project template '{template}'; expected minimal"
+        )));
+    }
     let package_name = option_value(&arguments[1..], "--name")?.unwrap_or_else(|| {
         Path::new(destination)
             .file_name()
             .and_then(|value| value.to_str())
-            .unwrap_or("app")
+            .unwrap_or("")
             .to_owned()
     });
-    serialized(
-        "new",
-        &create_project(Path::new(destination), &package_name, template)?,
-    )
+    if package_name.is_empty() {
+        return Err(usage_error(
+            "new requires --name when the destination name is not valid UTF-8",
+        ));
+    }
+    let created = create_minimal_project(Path::new(destination), &package_name)?;
+    let mut output = String::new();
+    append_compact_record(
+        &mut output,
+        "result",
+        &[
+            ("status", "success".to_owned()),
+            ("command", "new".to_owned()),
+        ],
+    )?;
+    append_compact_record(
+        &mut output,
+        "project",
+        &[
+            ("path", created.project.display().to_string()),
+            ("template", "minimal".to_owned()),
+            ("name", created.package_name.as_str().to_owned()),
+        ],
+    )?;
+    append_compact_record(
+        &mut output,
+        "repository",
+        &[("id", created.repository.to_string())],
+    )?;
+    append_compact_record(
+        &mut output,
+        "package",
+        &[("id", created.package.to_string())],
+    )?;
+    append_compact_record(
+        &mut output,
+        "revision",
+        &[("id", created.revision.to_string())],
+    )?;
+    append_compact_record(
+        &mut output,
+        "state",
+        &[("digest", created.semantic_state.to_string())],
+    )?;
+    append_compact_record(
+        &mut output,
+        "root",
+        &[("digest", created.semantic_root.to_string())],
+    )?;
+    append_compact_record(
+        &mut output,
+        "receipt",
+        &[
+            ("digest", created.receipt.to_string()),
+            ("revision-record", created.revision_record.to_string()),
+        ],
+    )?;
+    append_compact_record(
+        &mut output,
+        "summary",
+        &[
+            ("owners", "0".to_owned()),
+            ("dependencies", "0".to_owned()),
+            ("retirements", "0".to_owned()),
+        ],
+    )?;
+    append_compact_record(
+        &mut output,
+        "next",
+        &[
+            ("kind", "discovery".to_owned()),
+            ("command", "lkjscript capabilities inspect".to_owned()),
+        ],
+    )?;
+    finish_compact_response("new", output)
 }
 
 fn builtin_command(arguments: &[String]) -> Result<CliSuccess, Diagnostic> {
@@ -391,34 +476,35 @@ fn change_command(arguments: &[String], project: Option<&Path>) -> Result<CliSuc
     Ok(output)
 }
 
-fn capabilities_command(arguments: &[String]) -> Result<CliSuccess, Diagnostic> {
+pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
+    let snapshot = registry_snapshot().map_err(contract_registry_error)?;
     let command = arguments.first().filter(|value| !value.starts_with("--"));
     if let Some(command) = command {
         exact_arguments(arguments, 1, "capabilities COMMAND")?;
         let operation = PublicOperation::parse(command)
             .ok_or_else(|| usage_error(format!("unknown public command '{command}'")))?;
-        let entry = operation_descriptors()
+        let descriptor = operation_descriptors()
             .iter()
-            .find(|entry| entry.operation == operation)
+            .find(|descriptor| descriptor.operation == operation)
             .ok_or_else(|| internal_error("registered public operation has no descriptor"))?;
-        return success(
-            "capabilities.command",
-            json!({
-                "name": entry.operation.name(),
-                "purpose": entry.purpose,
-                "usage": entry.usage,
-                "request_schema": entry.request_schema.name(),
-                "response_schema": entry.response_schema.name(),
-                "project_requirement": entry.project_requirement,
-                "authority_effect": entry.authority_effect,
-                "default_budget": entry.default_budget,
-            }),
-        );
+        let mut output = String::new();
+        append_capability_record(
+            &mut output,
+            "result",
+            &[
+                ("status", "success".to_owned()),
+                ("command", "capabilities.command".to_owned()),
+            ],
+        )?;
+        append_registry_summary(&mut output, &snapshot)?;
+        output.push_str(&operation_record(descriptor).map_err(contract_registry_error)?);
+        return finish_capabilities(output);
     }
+
     ensure_options(
         arguments,
         &[
-            "--known-schema",
+            "--known-registry",
             "--known-section",
             "--section",
             "--output",
@@ -427,20 +513,22 @@ fn capabilities_command(arguments: &[String]) -> Result<CliSuccess, Diagnostic> 
         ],
         &[],
     )?;
-    let protocol_digest = protocol_schema_digest().map_err(contract_registry_error)?;
-    let snapshot = registry_snapshot(&protocol_digest).map_err(contract_registry_error)?;
     let selected_section = option_value(arguments, "--section")?
         .map(|value| {
             RegistrySection::parse(&value)
                 .ok_or_else(|| usage_error(format!("unknown registry section '{value}'")))
         })
         .transpose()?;
+    let known_registry = option_value(arguments, "--known-registry")?;
+    if let Some(digest) = &known_registry {
+        validate_capability_digest(digest, "--known-registry")?;
+    }
     let known_sections = parse_known_sections(&option_values(arguments, "--known-section")?)?;
-    let output = option_value(arguments, "--output")?;
+    let output_path = option_value(arguments, "--output")?;
     let generated_directory = option_value(arguments, "--generate-docs")?;
     let verify_directory = option_value(arguments, "--verify-generated")?;
     if [
-        output.is_some(),
+        output_path.is_some(),
         generated_directory.is_some(),
         verify_directory.is_some(),
     ]
@@ -453,41 +541,71 @@ fn capabilities_command(arguments: &[String]) -> Result<CliSuccess, Diagnostic> 
             "--output, --generate-docs, and --verify-generated are mutually exclusive",
         ));
     }
+    if selected_section.is_some() && !known_sections.is_empty() {
+        return Err(usage_error(
+            "--section and --known-section are mutually exclusive",
+        ));
+    }
+    if (generated_directory.is_some() || verify_directory.is_some())
+        && (selected_section.is_some() || !known_sections.is_empty() || known_registry.is_some())
+    {
+        return Err(usage_error(
+            "generated-document operations do not accept registry selection or digest options",
+        ));
+    }
+
     if let Some(directory) = generated_directory {
         let documents = generated_documents().map_err(contract_registry_error)?;
         let directory = PathBuf::from(directory);
-        let mut files = Vec::new();
+        let mut output = String::new();
+        append_capability_record(
+            &mut output,
+            "result",
+            &[
+                ("status", "success".to_owned()),
+                ("command", "capabilities.generate-docs".to_owned()),
+            ],
+        )?;
+        append_registry_summary(&mut output, &snapshot)?;
         for document in documents {
+            ensure_capability_export_bound(&document.bytes)?;
             let path = directory.join(document.relative_path);
             let status = write_derived_output(
                 &path,
                 &document.bytes,
-                MAXIMUM_CLI_RESPONSE_BYTES.saturating_mul(8),
+                MAXIMUM_CLI_RESPONSE_BYTES,
                 "generated contract document",
             )?;
-            files.push(json!({
-                "path": path,
-                "bytes": document.bytes.len(),
-                "status": status,
-            }));
+            append_file_record(
+                &mut output,
+                "markdown",
+                &path,
+                &document.bytes,
+                &generated_document_digest(&document.bytes),
+                status,
+            )?;
         }
-        return success(
-            "capabilities.generate_docs",
-            json!({
-                "registry_digest": snapshot.digest,
-                "schema_digest": protocol_digest,
-                "files": files,
-            }),
-        );
+        return finish_capabilities(output);
     }
+
     if let Some(directory) = verify_directory {
         let documents = generated_documents().map_err(contract_registry_error)?;
         let directory = PathBuf::from(directory);
+        let mut output = String::new();
+        append_capability_record(
+            &mut output,
+            "result",
+            &[
+                ("status", "success".to_owned()),
+                ("command", "capabilities.verify-generated".to_owned()),
+            ],
+        )?;
+        append_registry_summary(&mut output, &snapshot)?;
         for document in &documents {
             let path = directory.join(document.relative_path);
             let observed = read_bounded(
                 &path,
-                MAXIMUM_CLI_RESPONSE_BYTES.saturating_mul(8),
+                MAXIMUM_CLI_RESPONSE_BYTES,
                 "generated contract document",
             )?;
             if observed != document.bytes {
@@ -501,138 +619,291 @@ fn capabilities_command(arguments: &[String]) -> Result<CliSuccess, Diagnostic> 
                     ),
                 ));
             }
+            append_file_record(
+                &mut output,
+                "markdown",
+                &path,
+                &document.bytes,
+                &generated_document_digest(&document.bytes),
+                "current",
+            )?;
         }
-        return success(
-            "capabilities.verify_generated",
-            json!({
-                "registry_digest": snapshot.digest,
-                "schema_digest": protocol_digest,
-                "directory": directory,
-                "documents": documents.len(),
-                "status": "current",
-            }),
-        );
+        return finish_capabilities(output);
     }
-    if let Some(path) = output {
-        let (bytes, digest, projection) = if let Some(section) = selected_section {
-            let value = snapshot
-                .section_values
-                .get(&section)
-                .ok_or_else(|| internal_error("registered section has no value"))?;
-            let mut bytes = serde_json::to_vec_pretty(value).map_err(internal_json)?;
-            bytes.push(b'\n');
-            let digest = snapshot
-                .manifest
-                .sections
-                .get(section.name())
-                .cloned()
-                .ok_or_else(|| internal_error("registered section has no digest"))?;
-            (bytes, digest, section.name())
-        } else {
-            (
-                protocol_schema_bytes().map_err(contract_registry_error)?,
-                protocol_digest.clone(),
-                "protocol_schema",
-            )
+
+    if let Some(path) = output_path {
+        let (kind, bytes, digest) = match selected_section {
+            Some(section) => {
+                let section = snapshot
+                    .section(section)
+                    .ok_or_else(|| internal_error("registered section is missing"))?;
+                (
+                    section.section.name(),
+                    section.bytes.as_slice(),
+                    section.digest.as_str(),
+                )
+            }
+            None => (
+                "registry",
+                snapshot.bytes.as_slice(),
+                snapshot.digest.as_str(),
+            ),
         };
+        ensure_capability_export_bound(bytes)?;
         let path = PathBuf::from(path);
         let status = write_derived_output(
             &path,
-            &bytes,
-            MAXIMUM_CLI_RESPONSE_BYTES.saturating_mul(8),
-            "contract schema output",
+            bytes,
+            MAXIMUM_CLI_RESPONSE_BYTES,
+            "compact registry output",
         )?;
-        return success(
-            "capabilities.output",
-            json!({
-                "projection": projection,
-                "digest": digest,
-                "output": path,
-                "bytes": bytes.len(),
-                "status": status,
-            }),
-        );
+        let mut output = String::new();
+        append_capability_record(
+            &mut output,
+            "result",
+            &[
+                ("status", "success".to_owned()),
+                ("command", "capabilities.output".to_owned()),
+            ],
+        )?;
+        append_registry_summary(&mut output, &snapshot)?;
+        append_file_record(&mut output, kind, &path, bytes, digest, status)?;
+        return finish_capabilities(output);
     }
+
     if let Some(section) = selected_section {
-        let value = snapshot
-            .section_values
-            .get(&section)
-            .ok_or_else(|| internal_error("registered section has no value"))?;
-        return success(
-            "capabilities.section",
-            json!({
-                "registry_digest": snapshot.digest,
-                "schema_digest": protocol_digest,
-                "section": section.name(),
-                "section_digest": snapshot.manifest.sections.get(section.name()),
-                "value": value,
-            }),
-        );
+        let mut output = String::new();
+        append_capability_record(
+            &mut output,
+            "result",
+            &[
+                ("status", "success".to_owned()),
+                ("command", "capabilities.section".to_owned()),
+            ],
+        )?;
+        append_registry_summary(&mut output, &snapshot)?;
+        append_section(&mut output, &snapshot, section, true, None)?;
+        return finish_capabilities(output);
     }
+
     if !known_sections.is_empty() {
-        let mut changed = serde_json::Map::new();
-        for (section, known_digest) in known_sections {
-            let current_digest = snapshot
-                .manifest
-                .sections
-                .get(section.name())
-                .ok_or_else(|| internal_error("registered section has no digest"))?;
-            if current_digest != &known_digest {
-                changed.insert(
-                    section.name().to_owned(),
-                    json!({
-                        "digest": current_digest,
-                        "value": snapshot.section_values.get(&section),
-                    }),
-                );
-            }
+        let unchanged = known_sections.iter().all(|(section, known)| {
+            snapshot
+                .section(*section)
+                .is_some_and(|current| current.digest == *known)
+        });
+        let mut output = String::new();
+        append_capability_record(
+            &mut output,
+            "result",
+            &[
+                ("status", "success".to_owned()),
+                ("command", "capabilities.changed-sections".to_owned()),
+                ("unchanged", unchanged.to_string()),
+            ],
+        )?;
+        append_registry_summary(&mut output, &snapshot)?;
+        for (section, known) in known_sections {
+            let changed = snapshot
+                .section(section)
+                .is_some_and(|current| current.digest != known);
+            append_section(&mut output, &snapshot, section, changed, Some(changed))?;
         }
-        return success(
-            "capabilities.changed_sections",
-            json!({
-                "registry_digest": snapshot.digest,
-                "schema_digest": protocol_digest,
-                "unchanged": changed.is_empty(),
-                "changed_sections": changed,
-            }),
-        );
+        return finish_capabilities(output);
     }
-    if option_value(arguments, "--known-schema")?.as_deref() == Some(snapshot.digest.as_str()) {
-        return success(
-            "capabilities",
-            json!({
-                "protocol": REGISTRY_CONTRACT_IDENTITY,
-                "schema_digest": snapshot.digest,
-                "unchanged": true,
-            }),
-        );
+
+    if known_registry.as_deref() == Some(snapshot.digest.as_str()) {
+        let mut output = String::new();
+        append_capability_record(
+            &mut output,
+            "result",
+            &[
+                ("status", "success".to_owned()),
+                ("command", "capabilities".to_owned()),
+                ("unchanged", "true".to_owned()),
+            ],
+        )?;
+        append_registry_summary(&mut output, &snapshot)?;
+        return finish_capabilities(output);
     }
-    success(
-        "capabilities",
-        json!({
-            "usage": "lkjscript [--project PATH] COMMAND [options]",
-            "graph_contract": GRAPH_CONTRACT_IDENTITY,
-            "cli_contract_version": CLI_CONTRACT_VERSION,
-            "schema_digest": snapshot.digest,
-            "protocol_schema_digest": protocol_digest,
-            "section_digests": snapshot.manifest.sections,
-            "operations": operation_descriptors()
-                .iter()
-                .map(|entry| entry.operation.name())
-                .collect::<Vec<_>>(),
-            "limits": {
-                "count": limit_descriptors().len(),
-                "response_bytes": MAXIMUM_CLI_RESPONSE_BYTES,
-                "change_request_bytes": MAXIMUM_TRANSACTION_REQUEST_BYTES,
-            },
-            "nonclaims": nonclaims(),
-            "expand": {
-                "operation": "lkjscript capabilities COMMAND",
-                "section": "lkjscript capabilities --section SECTION",
-                "schema": "lkjscript capabilities --output schema.json",
-            },
-        }),
+
+    let mut output = String::new();
+    append_capability_record(
+        &mut output,
+        "result",
+        &[
+            ("status", "success".to_owned()),
+            ("command", "capabilities".to_owned()),
+            ("unchanged", "false".to_owned()),
+        ],
+    )?;
+    append_registry_summary(&mut output, &snapshot)?;
+    append_capability_record(
+        &mut output,
+        "summary",
+        &[
+            ("operations", operation_descriptors().len().to_string()),
+            ("sections", RegistrySection::ALL.len().to_string()),
+        ],
+    )?;
+    for section in RegistrySection::ALL {
+        append_section(&mut output, &snapshot, section, false, None)?;
+    }
+    for descriptor in operation_descriptors() {
+        append_capability_record(
+            &mut output,
+            "command",
+            &[("name", descriptor.operation.name().to_owned())],
+        )?;
+    }
+    for (kind, command) in [
+        ("command", "lkjscript capabilities COMMAND"),
+        ("section", "lkjscript capabilities --section SECTION"),
+        ("export", "lkjscript capabilities --output PATH"),
+    ] {
+        append_capability_record(
+            &mut output,
+            "next",
+            &[("kind", kind.to_owned()), ("command", command.to_owned())],
+        )?;
+    }
+    finish_capabilities(output)
+}
+
+fn append_registry_summary(
+    output: &mut String,
+    snapshot: &RegistrySnapshot,
+) -> Result<(), Diagnostic> {
+    append_capability_record(
+        output,
+        "registry",
+        &[
+            ("contract", snapshot.contract.to_owned()),
+            ("version", snapshot.version.to_string()),
+            ("digest", snapshot.digest.clone()),
+            ("graph", snapshot.graph_contract.to_owned()),
+            ("cli", snapshot.cli_contract_version.to_string()),
+        ],
     )
+}
+
+fn append_section(
+    output: &mut String,
+    registry: &RegistrySnapshot,
+    section: RegistrySection,
+    include_records: bool,
+    changed: Option<bool>,
+) -> Result<(), Diagnostic> {
+    let snapshot = registry
+        .section(section)
+        .ok_or_else(|| internal_error("registered section is missing"))?;
+    let mut fields = vec![
+        ("name", section.name().to_owned()),
+        ("digest", snapshot.digest.clone()),
+        ("records", snapshot.records.to_string()),
+        ("bytes", snapshot.bytes.len().to_string()),
+    ];
+    if let Some(changed) = changed {
+        fields.push(("changed", changed.to_string()));
+    }
+    append_capability_record(output, "section", &fields)?;
+    if include_records {
+        output.push_str(
+            std::str::from_utf8(&snapshot.bytes)
+                .map_err(|_| internal_error("compact registry section was not valid UTF-8"))?,
+        );
+    }
+    Ok(())
+}
+
+fn append_file_record(
+    output: &mut String,
+    kind: &str,
+    path: &Path,
+    bytes: &[u8],
+    digest: &str,
+    status: &str,
+) -> Result<(), Diagnostic> {
+    append_capability_record(
+        output,
+        "file",
+        &[
+            ("kind", kind.to_owned()),
+            ("path", path.display().to_string()),
+            ("bytes", bytes.len().to_string()),
+            ("digest", digest.to_owned()),
+            ("status", status.to_owned()),
+        ],
+    )
+}
+
+fn append_capability_record(
+    output: &mut String,
+    operation: &str,
+    fields: &[(&str, String)],
+) -> Result<(), Diagnostic> {
+    append_compact_record(output, operation, fields)
+}
+
+fn append_compact_record(
+    output: &mut String,
+    operation: &str,
+    fields: &[(&str, String)],
+) -> Result<(), Diagnostic> {
+    let borrowed = fields
+        .iter()
+        .map(|(name, value)| (*name, value.as_str()))
+        .collect::<Vec<_>>();
+    output.push_str(&render_record(operation, &borrowed)?);
+    Ok(())
+}
+
+fn finish_capabilities(output: String) -> Result<Vec<u8>, Diagnostic> {
+    finish_compact_response("capabilities", output)
+}
+
+fn finish_compact_response(command: &str, output: String) -> Result<Vec<u8>, Diagnostic> {
+    if output.len() > MAXIMUM_CLI_RESPONSE_BYTES {
+        return Err(Diagnostic::new(
+            DiagnosticClass::Resource,
+            "cli_output_budget",
+            format!("{command} response exceeds the hard {MAXIMUM_CLI_RESPONSE_BYTES}-byte bound"),
+        ));
+    }
+    Ok(output.into_bytes())
+}
+
+fn ensure_capability_export_bound(bytes: &[u8]) -> Result<(), Diagnostic> {
+    if bytes.len() > MAXIMUM_CLI_RESPONSE_BYTES {
+        return Err(Diagnostic::new(
+            DiagnosticClass::Resource,
+            "contract_output_budget",
+            format!(
+                "compact registry output exceeds the hard {MAXIMUM_CLI_RESPONSE_BYTES}-byte bound"
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_capability_digest(value: &str, option: &str) -> Result<(), Diagnostic> {
+    if value.len() != 64
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(usage_error(format!(
+            "{option} digest must be 64 lowercase hexadecimal characters"
+        )));
+    }
+    Ok(())
+}
+
+fn generated_document_digest(bytes: &[u8]) -> String {
+    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.generated-document.v1");
+    hasher.update(&(bytes.len() as u64).to_be_bytes());
+    hasher.update(bytes);
+    hasher.finalize().to_hex().to_string()
 }
 
 fn parse_known_sections(
@@ -645,15 +916,7 @@ fn parse_known_sections(
             .ok_or_else(|| usage_error("--known-section requires the exact SECTION=DIGEST form"))?;
         let section = RegistrySection::parse(name)
             .ok_or_else(|| usage_error(format!("unknown registry section '{name}'")))?;
-        if digest.len() != 64
-            || !digest
-                .bytes()
-                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-        {
-            return Err(usage_error(
-                "--known-section digest must be 64 lowercase hexadecimal characters",
-            ));
-        }
+        validate_capability_digest(digest, "--known-section")?;
         if output.insert(section, digest.to_owned()).is_some() {
             return Err(usage_error(format!(
                 "known section '{}' may be supplied only once",
@@ -2059,6 +2322,12 @@ mod tests {
             .map(|entry| entry.operation.name())
             .collect::<BTreeSet<_>>();
         assert_eq!(commands.len(), names.len());
-        assert_eq!(protocol_schema_digest().expect("schema digest").len(), 64);
+        let registry = registry_snapshot().expect("compact registry");
+        assert_eq!(registry.digest.len(), 64);
+        assert!(
+            std::str::from_utf8(&registry.bytes)
+                .expect("UTF-8 registry")
+                .contains("operation name=change")
+        );
     }
 }

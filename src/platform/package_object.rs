@@ -24,10 +24,10 @@ use crate::platform::witness::{
 use bincode::{Decode, Encode};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-pub const PACKAGE_OBJECT_CONTRACT_IDENTITY: &str = "lkjscript-package-object-7";
-pub const PACKAGE_OBJECT_CONTRACT_VERSION: u16 = 7;
-pub const PACKAGE_OBJECT_MAGIC: [u8; 8] = *b"LKJPKG07";
-pub const PACKAGE_OBJECT_ENVELOPE_DOMAIN: &str = "lkjscript.package-object-envelope.v7";
+pub const PACKAGE_OBJECT_CONTRACT_IDENTITY: &str = "lkjscript-package-object-8";
+pub const PACKAGE_OBJECT_CONTRACT_VERSION: u16 = 8;
+pub const PACKAGE_OBJECT_MAGIC: [u8; 8] = *b"LKJPKG08";
+pub const PACKAGE_OBJECT_ENVELOPE_DOMAIN: &str = "lkjscript.package-object-envelope.v8";
 pub const MAXIMUM_PACKAGE_OBJECT_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_PACKAGE_OBJECT_DEPENDENCIES: usize = 10_000;
 pub const MAXIMUM_PACKAGE_OBJECT_CLOSURE: usize = 10_000;
@@ -598,7 +598,11 @@ mod tests {
         BTreeMap<ObjectKey, Vec<u8>>,
     ) {
         let package = PackageId::migrate(b"package-object-test", u64::from(seed));
-        let empty = MapRoot::from_parts(PageDigest::from_bytes([seed; 32]), 0);
+        let empty = MapRoot::from_parts(
+            PageDigest::from_bytes([seed; 32]),
+            0,
+            crate::platform::persistent_map::MapContentDigest::from_bytes([seed; 32]),
+        );
         let snapshot = KernelSnapshot {
             root: SemanticRoot {
                 graph_contract_version: GRAPH_CONTRACT_VERSION,

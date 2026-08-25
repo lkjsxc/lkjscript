@@ -3,20 +3,20 @@
 use super::ValidatorContractDigest;
 use crate::platform::kernel::{NamespaceClass, OwnerKind, RelationKind};
 
-pub const WITNESS_CONTRACT_IDENTITY: &str = "lkjscript-validation-witness-1";
-pub const WITNESS_CONTRACT_VERSION: u16 = 1;
+pub const WITNESS_CONTRACT_IDENTITY: &str = "lkjscript-validation-witness-2";
+pub const WITNESS_CONTRACT_VERSION: u16 = 2;
 pub const OWNER_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-owner-summary-1";
 pub const OWNER_SUMMARY_CONTRACT_VERSION: u16 = 1;
 pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-5";
 
-pub const WITNESS_MAGIC: [u8; 8] = *b"LKJWIT05";
+pub const WITNESS_MAGIC: [u8; 8] = *b"LKJWIT02";
 pub const OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUM05";
-pub const WITNESS_ENVELOPE_DOMAIN: &str = "lkjscript.witness.envelope.v1";
+pub const WITNESS_ENVELOPE_DOMAIN: &str = "lkjscript.witness.envelope.v2";
 pub const OWNER_SUMMARY_ENVELOPE_DOMAIN: &str = "lkjscript.owner-summary.envelope.v1";
 
-pub const VALIDATION_WITNESS_DIGEST_DOMAIN: &str = "lkjscript.validation-witness.v1";
+pub const VALIDATION_WITNESS_DIGEST_DOMAIN: &str = "lkjscript.validation-witness.v2";
 pub const OWNER_SUMMARY_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.v1";
-pub const VALIDATION_CERTIFICATE_DIGEST_DOMAIN: &str = "lkjscript.validation-certificate.v1";
+pub const VALIDATION_CERTIFICATE_DIGEST_DOMAIN: &str = "lkjscript.validation-certificate.v2";
 pub const VALIDATOR_CONTRACT_DIGEST_DOMAIN: &str = "lkjscript.validator-contract.v5";
 
 pub const INTERFACE_DIGEST_DOMAIN: &str = "lkjscript.owner-summary.interface.v1";
@@ -78,8 +78,8 @@ pub const VALIDATOR_FEATURES: [ValidatorFeatureDescriptor; 16] = [
         version: 1,
     },
     ValidatorFeatureDescriptor {
-        name: "canonical_persistent_map_v1",
-        version: 1,
+        name: "canonical_persistent_map_v2",
+        version: 2,
     },
     ValidatorFeatureDescriptor {
         name: "full_witness_rebuild",

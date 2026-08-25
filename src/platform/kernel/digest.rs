@@ -172,6 +172,12 @@ kernel_digest!(
     8u8
 );
 kernel_digest!(ChangeDigest, "change_", contract::CHANGE_DIGEST_DOMAIN, 9u8);
+kernel_digest!(
+    SemanticStateDigest,
+    "semantic_state_",
+    contract::SEMANTIC_STATE_DIGEST_DOMAIN,
+    10u8
+);
 
 fn decode_digest(value: &str) -> Result<[u8; DIGEST_BYTES], Diagnostic> {
     if value.len() != DIGEST_BYTES * 2 {

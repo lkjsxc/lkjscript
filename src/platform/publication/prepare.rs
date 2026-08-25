@@ -10,9 +10,10 @@ use super::idempotency::{
 use super::{
     AcceptedBinding, ChangeCounts, DependencyDiffEntry, DependencyTransactionEdit, DigestEdit,
     FullOracleStatus, HeadRecord, NormalizedTransaction, OwnerChangeClass, OwnerDiffEntry,
-    OwnerTransactionEdit, PublicationReceipt, PublicationStatus, RetirementDiffEntry,
-    RetirementTransactionEdit, RevisionCore, RevisionRecord, SemanticDiff, SemanticDiffBody,
-    SummaryDimensions, TransactionBody, ValidationEvidence, ValidationProfile, WorkObservation,
+    OwnerTransactionEdit, PublicationBinding, PublicationReceipt, PublicationStatus,
+    RetirementDiffEntry, RetirementTransactionEdit, RevisionCore, RevisionRecord, SemanticDiff,
+    SemanticDiffBody, SummaryDimensions, TransactionBody, ValidationEvidence,
+    ValidationEvidenceBinding, ValidationProfile, WorkObservation,
 };
 use crate::platform::change::{
     CanonicalBaseRead, CanonicalDelta, CanonicalReadWork, PreparedAuthority,
@@ -22,6 +23,7 @@ use crate::platform::change::{
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     KernelSnapshot, OwnerKey, OwnerObjectDigest, OwnerRecord, encode_owner, encode_root,
+    semantic_state_digest_from_root,
 };
 use crate::platform::persistent_map::{MapRoot, MapWork};
 use crate::platform::storage::object::{
@@ -163,11 +165,11 @@ pub fn prepare_change_publication<
     let mut stage = ObjectStage::new(store);
     let mut authority =
         stage_prepared_authority(base_snapshot, base_witness, analysis, &mut stage)?;
-    if authority.semantic.digest == base.semantic_root {
+    if authority.semantic.state == base.semantic_state {
         return Err(vec![publication_error(
             DiagnosticClass::Semantic,
             "publication_semantic_no_change",
-            "candidate semantic root equals the exact base and publishes no revision",
+            "candidate semantic state equals the exact base and publishes no revision",
         )]);
     }
     let transaction = transaction_for_change(base, &authority, &analysis.canonical);
@@ -273,20 +275,20 @@ fn bind_history<S: ImmutableObjectStore + ?Sized>(
         .map_pages_written
         .saturating_add(idempotency_map_work.pages_written);
 
-    let parents = base.into_iter().map(AcceptedBinding::parent).collect();
+    let parent_bindings = base
+        .into_iter()
+        .map(AcceptedBinding::parent)
+        .collect::<Vec<_>>();
+    let parents = parent_bindings
+        .iter()
+        .map(|parent| parent.revision)
+        .collect();
     let core = RevisionCore {
         contract_version: REVISION_CONTRACT_VERSION,
         graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-        witness_contract_version: crate::platform::witness::contract::WITNESS_CONTRACT_VERSION,
         repository_id,
         parents,
-        semantic_root: authority.semantic.digest,
-        validation_witness: authority.witness.digest,
-        validation_certificate: authority.witness.manifest.certificate,
-        validator_contract: authority.witness.manifest.validator_contract,
-        idempotency_receipts,
-        transaction: transaction_digest,
-        semantic_diff: semantic_diff_digest,
+        semantic_state: authority.semantic.state,
     };
     let revision_id = core.revision_id().map_err(single)?;
     work.objects_staged = store_work.objects_staged;
@@ -301,10 +303,7 @@ fn bind_history<S: ImmutableObjectStore + ?Sized>(
             .bytes_read
             .saturating_sub(authority_store_work.bytes_read),
     );
-    let bases = base
-        .into_iter()
-        .map(|binding| binding.head.revision)
-        .collect();
+    let bases = core.parents.clone();
     let receipt = PublicationReceipt {
         contract_version: RECEIPT_CONTRACT_VERSION,
         graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
@@ -321,7 +320,22 @@ fn bind_history<S: ImmutableObjectStore + ?Sized>(
         intent: options.intent,
     };
     let (receipt_digest, receipt_bytes) = receipt.encode().map_err(single)?;
-    let revision = RevisionRecord::new(core, receipt_digest).map_err(single)?;
+    let publication = PublicationBinding {
+        parents: parent_bindings,
+        semantic_root: authority.semantic.digest,
+        validation: ValidationEvidenceBinding {
+            semantic_state: authority.semantic.state,
+            witness_contract_version: authority.witness.manifest.contract_version,
+            witness: authority.witness.digest,
+            certificate: authority.witness.manifest.certificate,
+            validator_contract: authority.witness.manifest.validator_contract,
+        },
+        idempotency_receipts,
+        transaction: transaction_digest,
+        semantic_diff: semantic_diff_digest,
+        receipt: receipt_digest,
+    };
+    let revision = RevisionRecord::new(core, publication).map_err(single)?;
     let (revision_digest, revision_bytes) = revision.encode().map_err(single)?;
     stage_object(
         stage,
@@ -527,9 +541,11 @@ fn validate_base<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     let root = snapshot.semantic_root();
     let manifest = witness.witness_manifest();
     let (semantic_root, _) = encode_root(root).map_err(single)?;
+    let semantic_state = semantic_state_digest_from_root(root).map_err(single)?;
     let (witness_digest, _) = encode_witness_manifest(manifest).map_err(single)?;
     if accepted.head.repository_id != root.repository_id
         || accepted.semantic_root != semantic_root
+        || accepted.semantic_state != semantic_state
         || snapshot
             .exact_revision()
             .is_some_and(|revision| revision != accepted.head.revision)

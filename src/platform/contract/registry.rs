@@ -1,6 +1,7 @@
 use super::super::artifact::{ARTIFACT_CONTRACT_VERSION, PACKAGE_ARTIFACT_CONTRACT_VERSION};
-use super::super::bootstrap::{BOOTSTRAP_CONTRACT_VERSION, ProjectTemplate};
+use super::super::bootstrap::BOOTSTRAP_CONTRACT_VERSION;
 use super::super::configuration::CONFIGURATION_ADAPTER_CONTRACT_VERSION;
+use super::super::control::render_record;
 use super::super::database::POSTGRES_ADAPTER_CONTRACT_VERSION;
 use super::super::deployment::DEPLOYMENT_CONTRACT_VERSION;
 use super::super::diagnostic::DiagnosticClass;
@@ -45,20 +46,17 @@ use super::super::semantic_transaction::{
 use super::super::stream::STREAM_CONTRACT_VERSION;
 use super::super::worker::WORKER_RUNNER_CONTRACT_VERSION;
 use super::super::workspace::WORKSPACE_CONTRACT_VERSION;
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-1";
-pub const REGISTRY_CONTRACT_VERSION: u16 = 1;
+pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-2";
+pub const REGISTRY_CONTRACT_VERSION: u16 = 2;
 pub const CLI_CONTRACT_VERSION: u16 = 4;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
 
-const REGISTRY_DIGEST_DOMAIN: &str = "lkjscript.contract-registry.v1";
-const REGISTRY_SECTION_DIGEST_DOMAIN: &str = "lkjscript.contract-registry-section.v1";
-pub(crate) const PROTOCOL_SCHEMA_DIGEST_DOMAIN: &str = "lkjscript.protocol-schema.v1";
+const REGISTRY_DIGEST_DOMAIN: &str = "lkjscript.contract-registry.v2";
+const REGISTRY_SECTION_DIGEST_DOMAIN: &str = "lkjscript.contract-registry-section.v2";
 
 pub(crate) const MODULE_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.module-object.v2";
 pub(crate) const ROOT_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.root-object.v2";
@@ -99,17 +97,18 @@ pub(crate) const PACKAGE_ARTIFACT_DOMAIN: &str = "lkjscript.graph-package-artifa
 const LOGICAL_ROOT_MAGIC_TEXT: &str = "LKJGRF04";
 pub(crate) const LOGICAL_ROOT_MAGIC: [u8; 8] = magic_bytes(LOGICAL_ROOT_MAGIC_TEXT);
 pub(crate) const LOGICAL_ROOT_DIGEST_DOMAIN: &str = "lkjscript.logical-graph-root.v4";
-const STORED_ROOT_MAGIC_TEXT: &str = "LKJROOT3";
+const STORED_ROOT_MAGIC_TEXT: &str = "LKJROOT4";
 pub(crate) const STORED_ROOT_MAGIC: [u8; 8] = magic_bytes(STORED_ROOT_MAGIC_TEXT);
-pub(crate) const STORED_ROOT_DIGEST_DOMAIN: &str = "lkjscript.persistent-root-object.v2";
+pub(crate) const STORED_ROOT_DIGEST_DOMAIN: &str = "lkjscript.persistent-root-object.v3";
 const MODULE_MAGIC_TEXT: &str = "LKJMOD04";
 pub(crate) const MODULE_MAGIC: [u8; 8] = magic_bytes(MODULE_MAGIC_TEXT);
 pub(crate) const MODULE_DIGEST_DOMAIN: &str = "lkjscript.semantic-module-object.v4";
-const MAP_PAGE_MAGIC_TEXT: &str = "LKJPMAP1";
+const MAP_PAGE_MAGIC_TEXT: &str = "LKJPMAP2";
 pub(crate) const MAP_PAGE_MAGIC: [u8; 8] = magic_bytes(MAP_PAGE_MAGIC_TEXT);
-pub(crate) const MAP_PAGE_CONTRACT_VERSION: u16 = 1;
-pub(crate) const MAP_PAGE_DIGEST_DOMAIN: &str = "lkjscript.persistent-map-page.v1";
-pub(crate) const MAP_PAGE_CHECKSUM_DOMAIN: &str = "lkjscript.persistent-map-checksum.v1";
+pub(crate) const MAP_PAGE_CONTRACT_VERSION: u16 = 2;
+pub(crate) const MAP_PAGE_DIGEST_DOMAIN: &str = "lkjscript.persistent-map-page.v2";
+pub(crate) const MAP_PAGE_CHECKSUM_DOMAIN: &str = "lkjscript.persistent-map-checksum.v2";
+pub(crate) const MAP_CONTENT_DIGEST_DOMAIN: &str = "lkjscript.persistent-map-content.v1";
 const REVISION_MAGIC_TEXT: &str = "LKJREV04";
 pub(crate) const REVISION_MAGIC: [u8; 8] = magic_bytes(REVISION_MAGIC_TEXT);
 pub(crate) const REVISION_DOMAIN: &str = "lkjscript.revision-record-envelope.v4";
@@ -208,10 +207,64 @@ pub enum ContractKey {
     Workspace,
 }
 
+impl ContractKey {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Registry => "registry",
+            Self::Cli => "cli",
+            Self::MeaningGraph => "meaning_graph",
+            Self::PersistentRoot => "persistent_root",
+            Self::Revision => "revision",
+            Self::Receipt => "receipt",
+            Self::SemanticSummary => "semantic_summary",
+            Self::SemanticFacts => "semantic_facts",
+            Self::SemanticValidator => "semantic_validator",
+            Self::Change => "change",
+            Self::Transaction => "transaction",
+            Self::Query => "query",
+            Self::QueryIndex => "query_index",
+            Self::LocalQueryIndex => "local_query_index",
+            Self::Draft => "draft",
+            Self::Diff => "diff",
+            Self::Merge => "merge",
+            Self::ReviewProjection => "review_projection",
+            Self::Artifact => "artifact",
+            Self::PackageArtifact => "package_artifact",
+            Self::Backup => "backup",
+            Self::Bootstrap => "bootstrap",
+            Self::Retention => "retention",
+            Self::PackageDescriptor => "package_descriptor",
+            Self::Deployment => "deployment",
+            Self::ConfigurationAdapter => "configuration_adapter",
+            Self::PostgresAdapter => "postgres_adapter",
+            Self::CapabilityGrant => "capability_grant",
+            Self::HttpAdapter => "http_adapter",
+            Self::Json => "json",
+            Self::ObjectAdapter => "object_adapter",
+            Self::QueueAdapter => "queue_adapter",
+            Self::ResidentRuntime => "resident_runtime",
+            Self::SecretCatalog => "secret_catalog",
+            Self::SecretVerifier => "secret_verifier",
+            Self::SecurityAdapter => "security_adapter",
+            Self::Stream => "stream",
+            Self::WorkerRunner => "worker_runner",
+            Self::Workspace => "workspace",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ContractStability {
     Current,
+}
+
+impl ContractStability {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Current => "current",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -227,11 +280,35 @@ pub enum ContractAuthority {
     Runtime,
 }
 
+impl ContractAuthority {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::CanonicalMeaning => "canonical_meaning",
+            Self::AcceptedHistory => "accepted_history",
+            Self::RequiredWitness => "required_witness",
+            Self::DerivedDisposable => "derived_disposable",
+            Self::PublicProtocol => "public_protocol",
+            Self::Operational => "operational",
+            Self::Deployment => "deployment",
+            Self::Runtime => "runtime",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PredecessorPolicy {
     Reject,
     NotApplicable,
+}
+
+impl PredecessorPolicy {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Reject => "reject",
+            Self::NotApplicable => "not_applicable",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -248,21 +325,6 @@ pub struct ContractDescriptor {
     pub digest_domains: &'static [&'static str],
 }
 
-#[derive(Clone, Debug, JsonSchema, Serialize)]
-#[schemars(rename = "lkjscript.ContractDescriptorV1")]
-#[serde(deny_unknown_fields)]
-pub struct ContractManifestEntry {
-    pub key: String,
-    pub name: String,
-    pub identity: String,
-    pub version: u16,
-    pub stability: String,
-    pub authority: String,
-    pub predecessor_policy: String,
-    pub magic_values: Vec<String>,
-    pub digest_domains: Vec<String>,
-}
-
 pub fn contract_descriptors() -> &'static [ContractDescriptor] {
     const CURRENT: ContractStability = ContractStability::Current;
     const REJECT: PredecessorPolicy = PredecessorPolicy::Reject;
@@ -277,11 +339,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             authority: ContractAuthority::PublicProtocol,
             predecessor_policy: PredecessorPolicy::NotApplicable,
             magic_values: NONE,
-            digest_domains: &[
-                REGISTRY_DIGEST_DOMAIN,
-                REGISTRY_SECTION_DIGEST_DOMAIN,
-                PROTOCOL_SCHEMA_DIGEST_DOMAIN,
-            ],
+            digest_domains: &[REGISTRY_DIGEST_DOMAIN, REGISTRY_SECTION_DIGEST_DOMAIN],
         },
         ContractDescriptor {
             key: ContractKey::Cli,
@@ -325,6 +383,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
                 ROOT_OBJECT_DIGEST_DOMAIN,
                 MAP_PAGE_DIGEST_DOMAIN,
                 MAP_PAGE_CHECKSUM_DOMAIN,
+                MAP_CONTENT_DIGEST_DOMAIN,
             ],
         },
         ContractDescriptor {
@@ -724,10 +783,7 @@ const fn simple_contract_with_domains(
     }
 }
 
-#[derive(
-    Clone, Copy, Debug, Deserialize, Eq, JsonSchema, Ord, PartialEq, PartialOrd, Serialize,
-)]
-#[schemars(rename = "lkjscript.PublicOperationV1")]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PublicOperation {
     Capabilities,
@@ -799,8 +855,7 @@ impl PublicOperation {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.AuthorityEffectV1")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AuthorityEffect {
     None,
@@ -814,8 +869,23 @@ pub enum AuthorityEffect {
     OptionalExternalOutput,
 }
 
-#[derive(Clone, Copy, Debug, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.ProjectRequirementV1")]
+impl AuthorityEffect {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Accepted => "accepted",
+            Self::AcceptedOnCommit => "accepted_on_commit",
+            Self::DraftOrAccepted => "draft_or_accepted",
+            Self::Operational => "operational",
+            Self::ExternalOutput => "external_output",
+            Self::ExternalRuntime => "external_runtime",
+            Self::OperationalIndexesOnly => "operational_indexes_only",
+            Self::OptionalExternalOutput => "optional_external_output",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProjectRequirement {
     None,
@@ -826,8 +896,20 @@ pub enum ProjectRequirement {
     DescriptorBound,
 }
 
-#[derive(Clone, Copy, Debug, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.BudgetProfileV1")]
+impl ProjectRequirement {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Destination => "destination",
+            Self::Required => "required",
+            Self::RequiredByAction => "required_by_action",
+            Self::RequiredForStage => "required_for_stage",
+            Self::DescriptorBound => "descriptor_bound",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BudgetProfile {
     Discovery,
@@ -838,12 +920,26 @@ pub enum BudgetProfile {
     Maintenance,
 }
 
-#[derive(Clone, Copy, Debug, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.SchemaIdV1")]
+impl BudgetProfile {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Discovery => "discovery",
+            Self::BoundedRead => "bounded_read",
+            Self::SemanticChange => "semantic_change",
+            Self::Build => "build",
+            Self::Runtime => "runtime",
+            Self::Maintenance => "maintenance",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum SchemaId {
+pub enum ControlModel {
     CapabilitiesRequest,
+    CapabilitiesResult,
     NewRequest,
+    NewResult,
     InspectRequest,
     QueryRequest,
     ChangeRequest,
@@ -863,11 +959,13 @@ pub enum SchemaId {
     RuntimeEvent,
 }
 
-impl SchemaId {
+impl ControlModel {
     pub const fn name(self) -> &'static str {
         match self {
             Self::CapabilitiesRequest => "capabilities_request",
+            Self::CapabilitiesResult => "capabilities_result",
             Self::NewRequest => "new_request",
+            Self::NewResult => "new_result",
             Self::InspectRequest => "inspect_request",
             Self::QueryRequest => "query_request",
             Self::ChangeRequest => "change_request",
@@ -895,22 +993,8 @@ pub struct OperationDescriptor {
     pub operation: PublicOperation,
     pub purpose: &'static str,
     pub usage: &'static str,
-    pub request_schema: SchemaId,
-    pub response_schema: SchemaId,
-    pub authority_effect: AuthorityEffect,
-    pub project_requirement: ProjectRequirement,
-    pub default_budget: BudgetProfile,
-}
-
-#[derive(Clone, Debug, JsonSchema, Serialize)]
-#[schemars(rename = "lkjscript.OperationDescriptorV1")]
-#[serde(deny_unknown_fields)]
-pub struct OperationManifestEntry {
-    pub name: String,
-    pub purpose: String,
-    pub usage: String,
-    pub request_schema: String,
-    pub response_schema: String,
+    pub request_model: ControlModel,
+    pub response_model: ControlModel,
     pub authority_effect: AuthorityEffect,
     pub project_requirement: ProjectRequirement,
     pub default_budget: BudgetProfile,
@@ -918,29 +1002,19 @@ pub struct OperationManifestEntry {
 
 pub fn operation_descriptors() -> &'static [OperationDescriptor] {
     const OPERATIONS: &[OperationDescriptor] = &[
-        operation(
-            PublicOperation::Capabilities,
-            "Discover exact executable contracts and changed schema sections.",
-            "capabilities [COMMAND] [--known-schema DIGEST] [--section SECTION] [--known-section SECTION=DIGEST] [--output PATH] [--generate-docs DIR] [--verify-generated DIR]",
-            SchemaId::CapabilitiesRequest,
-            AuthorityEffect::OptionalExternalOutput,
-            ProjectRequirement::None,
-            BudgetProfile::Discovery,
+        capabilities_operation(
+            "Discover exact executable contracts and changed registry sections.",
+            "capabilities [COMMAND] [--known-registry DIGEST] [--section SECTION] [--known-section SECTION=DIGEST] [--output PATH] [--generate-docs DIR] [--verify-generated DIR]",
         ),
-        operation(
-            PublicOperation::New,
-            "Create fresh canonical authority in an empty destination.",
-            "new DEST [--template minimal|command] [--name NAME]",
-            SchemaId::NewRequest,
-            AuthorityEffect::Accepted,
-            ProjectRequirement::Destination,
-            BudgetProfile::SemanticChange,
+        new_operation(
+            "Create fresh normalized semantic authority atomically in an absent or empty safe destination.",
+            "new DEST [--template minimal] [--name NAME]",
         ),
         operation(
             PublicOperation::Inspect,
             "Inspect project, owner, target, revision, artifact, or deployment state.",
             "inspect status|project|owner|targets|revision|artifact|deployment ...",
-            SchemaId::InspectRequest,
+            ControlModel::InspectRequest,
             AuthorityEffect::None,
             ProjectRequirement::RequiredByAction,
             BudgetProfile::BoundedRead,
@@ -949,7 +1023,7 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
             PublicOperation::Query,
             "Select bounded owners, relations, context, and impact.",
             "query owners|find|relations|callers|callees|types|capabilities|context|impact|request ...",
-            SchemaId::QueryRequest,
+            ControlModel::QueryRequest,
             AuthorityEffect::None,
             ProjectRequirement::Required,
             BudgetProfile::BoundedRead,
@@ -958,7 +1032,7 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
             PublicOperation::Change,
             "Normalize and validate or atomically commit one semantic change.",
             "change (--request JSON | --request-file PATH) [--dry-run|--commit]",
-            SchemaId::ChangeRequest,
+            ControlModel::ChangeRequest,
             AuthorityEffect::AcceptedOnCommit,
             ProjectRequirement::Required,
             BudgetProfile::SemanticChange,
@@ -967,7 +1041,7 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
             PublicOperation::Draft,
             "Create, inspect, append, rebase, publish, or drop non-executable work.",
             "draft create|status|append|rebase|publish|drop ...",
-            SchemaId::DraftRequest,
+            ControlModel::DraftRequest,
             AuthorityEffect::DraftOrAccepted,
             ProjectRequirement::Required,
             BudgetProfile::SemanticChange,
@@ -976,7 +1050,7 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
             PublicOperation::History,
             "List, inspect, diff, or merge exact revisions.",
             "history list|show|diff|merge ...",
-            SchemaId::HistoryRequest,
+            ControlModel::HistoryRequest,
             AuthorityEffect::AcceptedOnCommit,
             ProjectRequirement::Required,
             BudgetProfile::BoundedRead,
@@ -985,7 +1059,7 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
             PublicOperation::Package,
             "Stage an exact dependency or inspect/export a built-in package.",
             "package stage PATH | package builtin inspect|export ...",
-            SchemaId::PackageRequest,
+            ControlModel::PackageRequest,
             AuthorityEffect::Operational,
             ProjectRequirement::RequiredForStage,
             BudgetProfile::Maintenance,
@@ -994,7 +1068,7 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
             PublicOperation::Check,
             "Run graph-owned tests through production and independent execution.",
             "check",
-            SchemaId::CheckRequest,
+            ControlModel::CheckRequest,
             AuthorityEffect::None,
             ProjectRequirement::Required,
             BudgetProfile::Runtime,
@@ -1003,7 +1077,7 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
             PublicOperation::Build,
             "Build a deterministic graph-native artifact.",
             "build [--output PATH]",
-            SchemaId::BuildRequest,
+            ControlModel::BuildRequest,
             AuthorityEffect::ExternalOutput,
             ProjectRequirement::Required,
             BudgetProfile::Build,
@@ -1012,7 +1086,7 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
             PublicOperation::Run,
             "Run a pure command, batch, or test target through both execution tiers.",
             "run TARGET [--arguments JSON]",
-            SchemaId::RunRequest,
+            ControlModel::RunRequest,
             AuthorityEffect::None,
             ProjectRequirement::Required,
             BudgetProfile::Runtime,
@@ -1021,19 +1095,19 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
             PublicOperation::Serve,
             "Run one plaintext HTTP deployment with bounded shutdown.",
             "serve --deployment DESCRIPTOR",
-            SchemaId::ServeRequest,
+            ControlModel::ServeRequest,
         ),
         runtime_operation(
             PublicOperation::Worker,
             "Run one bounded worker deployment.",
             "worker --deployment DESCRIPTOR",
-            SchemaId::WorkerRequest,
+            ControlModel::WorkerRequest,
         ),
         operation(
             PublicOperation::Review,
             "Write a deterministic non-authoritative review projection.",
             "review [--revision REV] [--output PATH]",
-            SchemaId::ReviewRequest,
+            ControlModel::ReviewRequest,
             AuthorityEffect::ExternalOutput,
             ProjectRequirement::Required,
             BudgetProfile::BoundedRead,
@@ -1042,7 +1116,7 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
             PublicOperation::Backup,
             "Capture one exact reachable canonical authority bundle.",
             "backup [--output PATH]",
-            SchemaId::BackupRequest,
+            ControlModel::BackupRequest,
             AuthorityEffect::ExternalOutput,
             ProjectRequirement::Required,
             BudgetProfile::Maintenance,
@@ -1051,7 +1125,7 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
             PublicOperation::Restore,
             "Verify and atomically restore a canonical authority bundle.",
             "restore --backup PATH (--output PROJECT | --project PROJECT)",
-            SchemaId::RestoreRequest,
+            ControlModel::RestoreRequest,
             AuthorityEffect::Accepted,
             ProjectRequirement::Destination,
             BudgetProfile::Maintenance,
@@ -1060,7 +1134,7 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
             PublicOperation::Doctor,
             "Validate authority or preview exact retained/reclaimable storage.",
             "doctor [--deep] | doctor cleanup",
-            SchemaId::DoctorRequest,
+            ControlModel::DoctorRequest,
             AuthorityEffect::OperationalIndexesOnly,
             ProjectRequirement::Required,
             BudgetProfile::Maintenance,
@@ -1073,7 +1147,7 @@ const fn operation(
     operation: PublicOperation,
     purpose: &'static str,
     usage: &'static str,
-    request_schema: SchemaId,
+    request_model: ControlModel,
     authority_effect: AuthorityEffect,
     project_requirement: ProjectRequirement,
     default_budget: BudgetProfile,
@@ -1082,11 +1156,37 @@ const fn operation(
         operation,
         purpose,
         usage,
-        request_schema,
-        response_schema: SchemaId::CliSuccess,
+        request_model,
+        response_model: ControlModel::CliSuccess,
         authority_effect,
         project_requirement,
         default_budget,
+    }
+}
+
+const fn capabilities_operation(purpose: &'static str, usage: &'static str) -> OperationDescriptor {
+    OperationDescriptor {
+        operation: PublicOperation::Capabilities,
+        purpose,
+        usage,
+        request_model: ControlModel::CapabilitiesRequest,
+        response_model: ControlModel::CapabilitiesResult,
+        authority_effect: AuthorityEffect::OptionalExternalOutput,
+        project_requirement: ProjectRequirement::None,
+        default_budget: BudgetProfile::Discovery,
+    }
+}
+
+const fn new_operation(purpose: &'static str, usage: &'static str) -> OperationDescriptor {
+    OperationDescriptor {
+        operation: PublicOperation::New,
+        purpose,
+        usage,
+        request_model: ControlModel::NewRequest,
+        response_model: ControlModel::NewResult,
+        authority_effect: AuthorityEffect::Accepted,
+        project_requirement: ProjectRequirement::Destination,
+        default_budget: BudgetProfile::SemanticChange,
     }
 }
 
@@ -1094,22 +1194,21 @@ const fn runtime_operation(
     operation: PublicOperation,
     purpose: &'static str,
     usage: &'static str,
-    request_schema: SchemaId,
+    request_model: ControlModel,
 ) -> OperationDescriptor {
     OperationDescriptor {
         operation,
         purpose,
         usage,
-        request_schema,
-        response_schema: SchemaId::RuntimeEvent,
+        request_model,
+        response_model: ControlModel::RuntimeEvent,
         authority_effect: AuthorityEffect::ExternalRuntime,
         project_requirement: ProjectRequirement::DescriptorBound,
         default_budget: BudgetProfile::Runtime,
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.LimitClassV1")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LimitClass {
     HostileDecoderSafety,
@@ -1119,8 +1218,19 @@ pub enum LimitClass {
     DeploymentResourcePolicy,
 }
 
-#[derive(Clone, Copy, Debug, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.LimitUnitV1")]
+impl LimitClass {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::HostileDecoderSafety => "hostile_decoder_safety",
+            Self::ExplicitRequestBudget => "explicit_request_budget",
+            Self::DefaultPagination => "default_pagination",
+            Self::ImplementationLimitation => "implementation_limitation",
+            Self::DeploymentResourcePolicy => "deployment_resource_policy",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LimitUnit {
     Bytes,
@@ -1129,8 +1239,18 @@ pub enum LimitUnit {
     Depth,
 }
 
-#[derive(Clone, Copy, Debug, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.OverridePolicyV1")]
+impl LimitUnit {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Bytes => "bytes",
+            Self::Items => "items",
+            Self::Work => "work",
+            Self::Depth => "depth",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OverridePolicy {
     Fixed,
@@ -1138,8 +1258,17 @@ pub enum OverridePolicy {
     DeploymentUpToMaximum,
 }
 
-#[derive(Clone, Copy, Debug, JsonSchema, Serialize)]
-#[schemars(rename = "lkjscript.LimitDescriptorV1")]
+impl OverridePolicy {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Fixed => "fixed",
+            Self::RequestUpToMaximum => "request_up_to_maximum",
+            Self::DeploymentUpToMaximum => "deployment_up_to_maximum",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct LimitDescriptor {
     pub name: &'static str,
@@ -1387,18 +1516,11 @@ pub struct TemplateDescriptor {
 }
 
 pub fn template_descriptors() -> &'static [TemplateDescriptor] {
-    const TEMPLATES: &[TemplateDescriptor] = &[
-        TemplateDescriptor {
-            name: "minimal",
-            purpose: "Create the smallest accepted project authority.",
-            creates_command_target: false,
-        },
-        TemplateDescriptor {
-            name: "command",
-            purpose: "Create one offline command target and graph-owned test.",
-            creates_command_target: true,
-        },
-    ];
+    const TEMPLATES: &[TemplateDescriptor] = &[TemplateDescriptor {
+        name: "minimal",
+        purpose: "Create the smallest normalized accepted project authority.",
+        creates_command_target: false,
+    }];
     TEMPLATES
 }
 
@@ -1413,10 +1535,7 @@ pub fn nonclaims() -> &'static [&'static str] {
     ]
 }
 
-#[derive(
-    Clone, Copy, Debug, Deserialize, Eq, JsonSchema, Ord, PartialEq, PartialOrd, Serialize,
-)]
-#[schemars(rename = "lkjscript.RegistrySectionV1")]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RegistrySection {
     Contracts,
@@ -1473,143 +1592,317 @@ impl RegistrySection {
     }
 }
 
-#[derive(Clone, Debug, JsonSchema, Serialize)]
-#[schemars(rename = "lkjscript.RegistryManifestV1")]
-#[serde(deny_unknown_fields)]
-pub struct RegistryManifest {
-    pub contract: String,
-    pub version: u16,
-    pub graph_contract: String,
-    pub cli_contract_version: u16,
-    pub contracts: Vec<ContractManifestEntry>,
-    pub operations: Vec<OperationManifestEntry>,
-    pub sections: BTreeMap<String, String>,
-    pub schema_digest: String,
-}
-
-#[derive(Clone, Debug)]
-pub struct RegistrySnapshot {
-    pub manifest: RegistryManifest,
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RegistrySectionSnapshot {
+    pub section: RegistrySection,
     pub digest: String,
-    pub section_values: BTreeMap<RegistrySection, Value>,
+    pub records: usize,
+    pub bytes: Vec<u8>,
 }
 
-pub fn registry_snapshot(schema_digest: &str) -> Result<RegistrySnapshot, String> {
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RegistrySnapshot {
+    pub contract: &'static str,
+    pub version: u16,
+    pub graph_contract: &'static str,
+    pub cli_contract_version: u16,
+    pub digest: String,
+    pub bytes: Vec<u8>,
+    pub sections: BTreeMap<RegistrySection, RegistrySectionSnapshot>,
+}
+
+impl RegistrySnapshot {
+    pub fn section(&self, section: RegistrySection) -> Option<&RegistrySectionSnapshot> {
+        self.sections.get(&section)
+    }
+}
+
+pub fn registry_snapshot() -> Result<RegistrySnapshot, String> {
     validate_registry()?;
-    let section_values = RegistrySection::ALL
-        .into_iter()
-        .map(|section| (section, section_value(section)))
-        .collect::<BTreeMap<_, _>>();
-    let section_digests = section_values
-        .iter()
-        .map(|(section, value)| {
-            canonical_json(value)
-                .map(|bytes| (section.name().to_owned(), section_digest(*section, &bytes)))
-        })
-        .collect::<Result<BTreeMap<_, _>, _>>()?;
-    let manifest = RegistryManifest {
-        contract: REGISTRY_CONTRACT_IDENTITY.to_owned(),
-        version: REGISTRY_CONTRACT_VERSION,
-        graph_contract: GRAPH_CONTRACT_IDENTITY.to_owned(),
-        cli_contract_version: CLI_CONTRACT_VERSION,
-        contracts: contract_descriptors()
-            .iter()
-            .map(contract_manifest_entry)
-            .collect(),
-        operations: operation_descriptors()
-            .iter()
-            .map(operation_manifest_entry)
-            .collect(),
-        sections: section_digests,
-        schema_digest: schema_digest.to_owned(),
-    };
-    let bytes = canonical_json(&manifest)?;
+    let mut sections = BTreeMap::new();
+    for section in RegistrySection::ALL {
+        let records = section_records(section)?;
+        let bytes = records.concat().into_bytes();
+        let snapshot = RegistrySectionSnapshot {
+            section,
+            digest: section_digest(section, &bytes),
+            records: records.len(),
+            bytes,
+        };
+        sections.insert(section, snapshot);
+    }
+
+    let mut bytes = compact_record(
+        "registry",
+        &[
+            ("contract", REGISTRY_CONTRACT_IDENTITY.to_owned()),
+            ("version", REGISTRY_CONTRACT_VERSION.to_string()),
+            ("graph", GRAPH_CONTRACT_IDENTITY.to_owned()),
+            ("cli", CLI_CONTRACT_VERSION.to_string()),
+        ],
+    )?
+    .into_bytes();
+    for section in RegistrySection::ALL {
+        let snapshot = sections
+            .get(&section)
+            .ok_or_else(|| format!("registry section '{}' is missing", section.name()))?;
+        bytes.extend_from_slice(
+            compact_record(
+                "section",
+                &[
+                    ("name", section.name().to_owned()),
+                    ("digest", snapshot.digest.clone()),
+                    ("records", snapshot.records.to_string()),
+                    ("bytes", snapshot.bytes.len().to_string()),
+                ],
+            )?
+            .as_bytes(),
+        );
+        bytes.extend_from_slice(&snapshot.bytes);
+    }
     let digest = digest(REGISTRY_DIGEST_DOMAIN, &bytes);
     Ok(RegistrySnapshot {
-        manifest,
+        contract: REGISTRY_CONTRACT_IDENTITY,
+        version: REGISTRY_CONTRACT_VERSION,
+        graph_contract: GRAPH_CONTRACT_IDENTITY,
+        cli_contract_version: CLI_CONTRACT_VERSION,
         digest,
-        section_values,
+        bytes,
+        sections,
     })
 }
 
-fn contract_manifest_entry(descriptor: &ContractDescriptor) -> ContractManifestEntry {
-    ContractManifestEntry {
-        key: serde_json::to_value(descriptor.key)
-            .ok()
-            .and_then(|value| value.as_str().map(str::to_owned))
-            .unwrap_or_default(),
-        name: descriptor.name.to_owned(),
-        identity: descriptor.identity.to_owned(),
-        version: descriptor.version,
-        stability: enum_name(descriptor.stability),
-        authority: enum_name(descriptor.authority),
-        predecessor_policy: enum_name(descriptor.predecessor_policy),
-        magic_values: descriptor
-            .magic_values
-            .iter()
-            .map(|value| (*value).to_owned())
-            .collect(),
-        digest_domains: descriptor
-            .digest_domains
-            .iter()
-            .map(|value| (*value).to_owned())
-            .collect(),
-    }
-}
-
-fn operation_manifest_entry(descriptor: &OperationDescriptor) -> OperationManifestEntry {
-    OperationManifestEntry {
-        name: descriptor.operation.name().to_owned(),
-        purpose: descriptor.purpose.to_owned(),
-        usage: descriptor.usage.to_owned(),
-        request_schema: descriptor.request_schema.name().to_owned(),
-        response_schema: descriptor.response_schema.name().to_owned(),
-        authority_effect: descriptor.authority_effect,
-        project_requirement: descriptor.project_requirement,
-        default_budget: descriptor.default_budget,
-    }
-}
-
-pub(crate) fn enum_name(value: impl Serialize) -> String {
-    serde_json::to_value(value)
-        .ok()
-        .and_then(|value| value.as_str().map(str::to_owned))
-        .unwrap_or_default()
-}
-
-fn section_value(section: RegistrySection) -> Value {
+fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
+    let mut records = Vec::new();
     match section {
-        RegistrySection::Contracts => json!(contract_descriptors()),
-        RegistrySection::Operations => json!(operation_descriptors()),
-        RegistrySection::Change => json!({
-            "contract": format!("lkjscript-change-{CHANGE_CONTRACT_VERSION}"),
-            "forms": ChangeKind::ALL.map(ChangeKind::name),
-            "request_schema": SchemaId::ChangeRequest.name(),
-            "reference_forms": [
-                "request_local_symbol",
-                "local_declaration_id",
-                "exact_package_module_declaration"
-            ],
-            "reference_syntax": {
-                "request_local_symbol": "$NAME",
-                "local_declaration_id": "decl_HEX",
-                "exact_package_module_declaration": "exact:PACKAGE_HEX/mod_HEX/decl_HEX"
+        RegistrySection::Contracts => {
+            for descriptor in contract_descriptors() {
+                records.push(compact_record(
+                    "contract",
+                    &[
+                        ("key", descriptor.key.name().to_owned()),
+                        ("name", descriptor.name.to_owned()),
+                        ("identity", descriptor.identity.to_owned()),
+                        ("version", descriptor.version.to_string()),
+                        ("stability", descriptor.stability.name().to_owned()),
+                        ("authority", descriptor.authority.name().to_owned()),
+                        (
+                            "predecessor",
+                            descriptor.predecessor_policy.name().to_owned(),
+                        ),
+                        ("magic-count", descriptor.magic_values.len().to_string()),
+                        ("digest-count", descriptor.digest_domains.len().to_string()),
+                    ],
+                )?);
+                for magic in descriptor.magic_values {
+                    records.push(compact_record(
+                        "contract.magic",
+                        &[
+                            ("contract", descriptor.identity.to_owned()),
+                            ("value", (*magic).to_owned()),
+                        ],
+                    )?);
+                }
+                for domain in descriptor.digest_domains {
+                    records.push(compact_record(
+                        "contract.digest",
+                        &[
+                            ("contract", descriptor.identity.to_owned()),
+                            ("domain", (*domain).to_owned()),
+                        ],
+                    )?);
+                }
             }
-        }),
-        RegistrySection::Type => json!({"forms": TypeFormKind::ALL.map(TypeFormKind::name)}),
-        RegistrySection::Expression => {
-            json!({"forms": ExpressionFormKind::ALL.map(ExpressionFormKind::name)})
         }
-        RegistrySection::Owners => json!({"kinds": OwnerKind::ALL.map(OwnerKind::name)}),
-        RegistrySection::Relations => json!({"roles": RelationRole::ALL.map(RelationRole::name)}),
-        RegistrySection::Limits => json!(limit_descriptors()),
-        RegistrySection::Diagnostics => json!({
-            "codes": diagnostic_descriptors(),
-            "exit_statuses": exit_status_descriptors()
-        }),
-        RegistrySection::Templates => json!(template_descriptors()),
-        RegistrySection::Runners => json!({"kinds": RunnerKind::ALL.map(RunnerKind::name)}),
-        RegistrySection::Security => json!({"nonclaims": nonclaims()}),
+        RegistrySection::Operations => {
+            for descriptor in operation_descriptors() {
+                records.push(operation_record(descriptor)?);
+            }
+        }
+        RegistrySection::Change => {
+            records.push(compact_record(
+                "change",
+                &[
+                    (
+                        "contract",
+                        format!("lkjscript-change-{CHANGE_CONTRACT_VERSION}"),
+                    ),
+                    (
+                        "request-model",
+                        ControlModel::ChangeRequest.name().to_owned(),
+                    ),
+                ],
+            )?);
+            for form in ChangeKind::ALL {
+                records.push(compact_record(
+                    "change.form",
+                    &[("name", form.name().to_owned())],
+                )?);
+            }
+            for (name, syntax) in [
+                ("request_local_symbol", "$NAME"),
+                ("local_declaration_id", "decl_HEX"),
+                (
+                    "exact_package_module_declaration",
+                    "exact:PACKAGE_HEX/mod_HEX/decl_HEX",
+                ),
+            ] {
+                records.push(compact_record(
+                    "change.reference",
+                    &[("name", name.to_owned()), ("syntax", syntax.to_owned())],
+                )?);
+            }
+        }
+        RegistrySection::Type => {
+            for form in TypeFormKind::ALL {
+                records.push(compact_record(
+                    "type.form",
+                    &[("name", form.name().to_owned())],
+                )?);
+            }
+        }
+        RegistrySection::Expression => {
+            for form in ExpressionFormKind::ALL {
+                records.push(compact_record(
+                    "expression.form",
+                    &[("name", form.name().to_owned())],
+                )?);
+            }
+        }
+        RegistrySection::Owners => {
+            for kind in OwnerKind::ALL {
+                records.push(compact_record(
+                    "owner.kind",
+                    &[("name", kind.name().to_owned())],
+                )?);
+            }
+        }
+        RegistrySection::Relations => {
+            for role in RelationRole::ALL {
+                records.push(compact_record(
+                    "relation.role",
+                    &[("name", role.name().to_owned())],
+                )?);
+            }
+        }
+        RegistrySection::Limits => {
+            for descriptor in limit_descriptors() {
+                records.push(compact_record(
+                    "limit",
+                    &[
+                        ("name", descriptor.name.to_owned()),
+                        ("value", descriptor.value.to_string()),
+                        ("class", descriptor.class.name().to_owned()),
+                        ("unit", descriptor.unit.name().to_owned()),
+                        ("override", descriptor.override_policy.name().to_owned()),
+                    ],
+                )?);
+            }
+        }
+        RegistrySection::Diagnostics => {
+            for descriptor in diagnostic_descriptors() {
+                records.push(compact_record(
+                    "diagnostic",
+                    &[
+                        ("code", descriptor.code.to_owned()),
+                        ("class", diagnostic_class_name(descriptor.class).to_owned()),
+                        ("meaning", descriptor.meaning.to_owned()),
+                        ("retry", descriptor.retry.to_owned()),
+                    ],
+                )?);
+            }
+            for descriptor in exit_status_descriptors() {
+                records.push(compact_record(
+                    "exit-status",
+                    &[
+                        ("status", descriptor.status.to_string()),
+                        ("meaning", descriptor.meaning.to_owned()),
+                    ],
+                )?);
+            }
+        }
+        RegistrySection::Templates => {
+            for descriptor in template_descriptors() {
+                records.push(compact_record(
+                    "template",
+                    &[
+                        ("name", descriptor.name.to_owned()),
+                        ("purpose", descriptor.purpose.to_owned()),
+                        (
+                            "command-target",
+                            descriptor.creates_command_target.to_string(),
+                        ),
+                    ],
+                )?);
+            }
+        }
+        RegistrySection::Runners => {
+            for kind in RunnerKind::ALL {
+                records.push(compact_record(
+                    "runner.kind",
+                    &[("name", kind.name().to_owned())],
+                )?);
+            }
+        }
+        RegistrySection::Security => {
+            for (index, statement) in nonclaims().iter().enumerate() {
+                records.push(compact_record(
+                    "security.nonclaim",
+                    &[
+                        ("ordinal", index.saturating_add(1).to_string()),
+                        ("statement", (*statement).to_owned()),
+                    ],
+                )?);
+            }
+        }
+    }
+    Ok(records)
+}
+
+pub fn operation_record(descriptor: &OperationDescriptor) -> Result<String, String> {
+    compact_record(
+        "operation",
+        &[
+            ("name", descriptor.operation.name().to_owned()),
+            ("purpose", descriptor.purpose.to_owned()),
+            ("usage", descriptor.usage.to_owned()),
+            ("request-model", descriptor.request_model.name().to_owned()),
+            (
+                "response-model",
+                descriptor.response_model.name().to_owned(),
+            ),
+            (
+                "authority-effect",
+                descriptor.authority_effect.name().to_owned(),
+            ),
+            ("project", descriptor.project_requirement.name().to_owned()),
+            ("budget", descriptor.default_budget.name().to_owned()),
+        ],
+    )
+}
+
+fn compact_record(operation: &str, fields: &[(&str, String)]) -> Result<String, String> {
+    let borrowed = fields
+        .iter()
+        .map(|(name, value)| (*name, value.as_str()))
+        .collect::<Vec<_>>();
+    render_record(operation, &borrowed).map_err(|error| {
+        format!(
+            "compact registry rendering failed: {}: {}",
+            error.code, error.message
+        )
+    })
+}
+
+pub const fn diagnostic_class_name(class: DiagnosticClass) -> &'static str {
+    match class {
+        DiagnosticClass::Source => "source",
+        DiagnosticClass::Semantic => "semantic",
+        DiagnosticClass::Capability => "capability",
+        DiagnosticClass::Resource => "resource",
+        DiagnosticClass::Cancelled => "cancelled",
+        DiagnosticClass::Corrupt => "corrupt",
+        DiagnosticClass::Infrastructure => "infrastructure",
     }
 }
 
@@ -1648,9 +1941,6 @@ fn validate_registry() -> Result<(), String> {
     if operation_descriptors().len() != PublicOperation::ALL.len() {
         return Err("every public operation must have exactly one descriptor".to_owned());
     }
-    if template_descriptors().len() != ProjectTemplate::ALL.len() {
-        return Err("every project template must have exactly one descriptor".to_owned());
-    }
     Ok(())
 }
 
@@ -1662,10 +1952,6 @@ fn unique<'a>(values: impl Iterator<Item = &'a str>, label: &str) -> Result<(), 
         }
     }
     Ok(())
-}
-
-fn canonical_json(value: &impl Serialize) -> Result<Vec<u8>, String> {
-    serde_json::to_vec(value).map_err(|error| format!("registry JSON encoding failed: {error}"))
 }
 
 fn section_digest(section: RegistrySection, bytes: &[u8]) -> String {
@@ -1690,12 +1976,15 @@ mod tests {
 
     #[test]
     fn registry_is_unique_complete_and_deterministic() {
-        let first = registry_snapshot("schema").expect("valid registry");
-        let second = registry_snapshot("schema").expect("valid registry");
+        let first = registry_snapshot().expect("valid registry");
+        let second = registry_snapshot().expect("valid registry");
         assert_eq!(first.digest, second.digest);
-        assert_eq!(first.manifest.sections, second.manifest.sections);
+        assert_eq!(first.bytes, second.bytes);
+        assert_eq!(first.sections, second.sections);
         assert_eq!(operation_descriptors().len(), PublicOperation::ALL.len());
-        assert_eq!(RegistrySection::ALL.len(), first.section_values.len());
+        assert_eq!(RegistrySection::ALL.len(), first.sections.len());
+        assert!(first.bytes.starts_with(b"registry "));
+        assert!(!first.bytes.starts_with(b"{"));
     }
 
     #[test]

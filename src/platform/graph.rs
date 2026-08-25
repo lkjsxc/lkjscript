@@ -23,8 +23,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub const MAXIMUM_ROOT_BYTES: usize = 16 * 1_048_576;
-pub const ROOT_STORAGE_CONTRACT_VERSION: u16 = 2;
-pub const ROOT_STORAGE_CONTRACT_IDENTITY: &str = "lkjscript-persistent-root-2";
+pub const ROOT_STORAGE_CONTRACT_VERSION: u16 = 3;
+pub const ROOT_STORAGE_CONTRACT_IDENTITY: &str = "lkjscript-persistent-root-3";
 pub const MAXIMUM_STORED_ROOT_BYTES: usize = 64 * 1024;
 const ROOT_VALUE_LIMIT: usize = 64 * 1024;
 

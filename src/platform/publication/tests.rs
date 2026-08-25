@@ -35,11 +35,15 @@ fn initial_history_binds_every_layer_and_reopens_from_packs() {
     );
     assert_eq!(publication.receipt.work.expression_work, 0);
     assert_eq!(
-        publication.revision.core.semantic_root,
+        publication.revision.core.semantic_state,
+        publication.authority.semantic.state
+    );
+    assert_eq!(
+        publication.revision.publication.semantic_root,
         publication.authority.semantic.digest
     );
     assert_eq!(
-        publication.revision.core.validation_witness,
+        publication.revision.publication.validation.witness,
         publication.authority.witness.digest
     );
     assert_eq!(publication.accepted.head, publication.head);
@@ -118,7 +122,8 @@ fn incremental_publication_is_deterministic_parent_bound_and_isolated() {
     .expect("incremental publication prepares");
 
     assert_eq!(prepared.expected_base, Some(base.head));
-    assert_eq!(prepared.revision.core.parents, vec![base.parent()]);
+    assert_eq!(prepared.revision.core.parents, vec![base.head.revision]);
+    assert_eq!(prepared.revision.publication.parents, vec![base.parent()]);
     assert_eq!(prepared.receipt.bases, vec![base.head.revision]);
     assert_eq!(
         prepared.receipt.validation.profile,
@@ -201,12 +206,12 @@ fn history_codecs_reject_predecessor_magic_and_inconsistent_evidence() {
     let initial = prepare_initial_publication(&logical, &store, None).expect("initial publication");
 
     let mut predecessor_head = initial.publication.head_bytes.clone();
-    predecessor_head[..8].copy_from_slice(b"LKJHEAD5");
+    predecessor_head[..8].copy_from_slice(b"LKJHEAD6");
     let error = HeadRecord::decode(&predecessor_head).expect_err("predecessor HEAD must reject");
     assert_eq!(error.code, "packed_contract");
 
     let mut predecessor_revision = initial.publication.revision_bytes.clone();
-    predecessor_revision[..8].copy_from_slice(b"LKJREV05");
+    predecessor_revision[..8].copy_from_slice(b"LKJREV06");
     assert_eq!(
         RevisionRecord::decode(
             &predecessor_revision,
@@ -266,25 +271,95 @@ fn history_codecs_reject_predecessor_magic_and_inconsistent_evidence() {
     );
 
     let mut duplicate_parent_core = initial.publication.revision.core.clone();
-    let parent = ParentRevision {
-        revision: initial.publication.revision.revision,
-        record: initial.publication.revision_digest,
-    };
-    let mut foreign_record = initial.publication.revision_digest.bytes();
-    foreign_record[0] ^= 1;
-    duplicate_parent_core.parents = vec![
-        parent,
-        ParentRevision {
-            revision: parent.revision,
-            record: RevisionObjectDigest::from_bytes(foreign_record),
-        },
-    ];
+    let parent = initial.publication.revision.revision;
+    duplicate_parent_core.parents = vec![parent, parent];
     assert_eq!(
         duplicate_parent_core
             .revision_id()
             .expect_err("one logical parent cannot appear through two receipt records")
             .code,
         "publication_revision_parents"
+    );
+}
+
+#[test]
+fn revision_identity_excludes_acceptance_evidence_and_operational_bindings() {
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let store = MemoryPackedStore::default();
+    let initial = prepare_initial_publication(&logical, &store, None).expect("initial publication");
+    let original = &initial.publication.revision;
+    let original_digest = original.core.revision_id().expect("revision identity");
+    let original_record_digest = original.encode().expect("revision record").0;
+
+    let mut publication = original.publication.clone();
+    let mut semantic_root = publication.semantic_root.bytes();
+    semantic_root[0] ^= 1;
+    publication.semantic_root =
+        crate::platform::kernel::SemanticRootDigest::from_bytes(semantic_root);
+    publication.validation.witness_contract_version = publication
+        .validation
+        .witness_contract_version
+        .saturating_add(1);
+    let mut witness = publication.validation.witness.bytes();
+    witness[0] ^= 1;
+    publication.validation.witness =
+        crate::platform::witness::ValidationWitnessDigest::from_bytes(witness);
+    let mut certificate = publication.validation.certificate.bytes();
+    certificate[0] ^= 1;
+    publication.validation.certificate =
+        crate::platform::witness::ValidationCertificateDigest::from_bytes(certificate);
+    let mut validator = publication.validation.validator_contract.bytes();
+    validator[0] ^= 1;
+    publication.validation.validator_contract =
+        crate::platform::witness::ValidatorContractDigest::from_bytes(validator);
+    publication.idempotency_receipts = initial.publication.authority.semantic.root.owners;
+    let mut transaction = publication.transaction.bytes();
+    transaction[0] ^= 1;
+    publication.transaction = TransactionDigest::from_bytes(transaction);
+    let mut semantic_diff = publication.semantic_diff.bytes();
+    semantic_diff[0] ^= 1;
+    publication.semantic_diff = SemanticDiffDigest::from_bytes(semantic_diff);
+    let mut receipt = publication.receipt.bytes();
+    receipt[0] ^= 1;
+    publication.receipt = ReceiptObjectDigest::from_bytes(receipt);
+
+    let rebound = RevisionRecord::new(original.core.clone(), publication)
+        .expect("operational rebinding preserves revision identity");
+    let rebound_record_digest = rebound.encode().expect("rebound revision record").0;
+    assert_eq!(rebound.revision, original_digest);
+    assert_ne!(rebound_record_digest, original_record_digest);
+}
+
+#[test]
+fn acceptance_verification_rejects_wrong_validation_evidence_binding() {
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let store = MemoryPackedStore::default();
+    let initial = prepare_initial_publication(&logical, &store, None).expect("initial publication");
+    let publication = &initial.publication;
+    let mut record = publication.revision.clone();
+    let mut certificate = record.publication.validation.certificate.bytes();
+    certificate[0] ^= 1;
+    record.publication.validation.certificate =
+        crate::platform::witness::ValidationCertificateDigest::from_bytes(certificate);
+    let record_digest = record
+        .encode()
+        .expect("wrong evidence remains a typed record")
+        .0;
+    let head = HeadRecord {
+        record: record_digest,
+        ..publication.head
+    };
+
+    assert_eq!(
+        AcceptedBinding::verify(
+            head,
+            &record,
+            publication.authority.witness.digest,
+            &publication.authority.witness.manifest,
+        )
+        .expect_err("wrong evidence must not authorize accepted meaning")
+        .code,
+        "publication_validation_evidence_binding"
     );
 }
 

@@ -50,7 +50,10 @@ pub use repository::{
     PublicationOutcome, PublicationPoint, ReconciliationResult, ReconciliationStatus,
     ReconciliationWork,
 };
-pub use revision::{AcceptedBinding, HeadRecord, ParentRevision, RevisionCore, RevisionRecord};
+pub use revision::{
+    AcceptedBinding, HeadRecord, ParentRevision, PublicationBinding, RevisionCore, RevisionRecord,
+    ValidationEvidenceBinding,
+};
 pub use transaction::{
     DependencyTransactionEdit, DigestEdit, NormalizedTransaction, OwnerTransactionEdit,
     RetirementTransactionEdit, TransactionBody,

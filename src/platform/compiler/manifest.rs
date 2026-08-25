@@ -15,11 +15,11 @@ use crate::platform::witness::ValidationCertificateDigest;
 use bincode::{Decode, Encode};
 use std::fmt;
 
-pub const COMPILATION_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-compilation-manifest-1";
-pub const COMPILATION_MANIFEST_CONTRACT_VERSION: u16 = 1;
-pub(crate) const COMPILATION_MANIFEST_MAGIC: [u8; 8] = *b"LKJCMF01";
+pub const COMPILATION_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-compilation-manifest-2";
+pub const COMPILATION_MANIFEST_CONTRACT_VERSION: u16 = 2;
+pub(crate) const COMPILATION_MANIFEST_MAGIC: [u8; 8] = *b"LKJCMF02";
 pub(crate) const COMPILATION_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.compilation-manifest-envelope.v1";
+    "lkjscript.compilation-manifest-envelope.v2";
 pub(crate) const MAXIMUM_COMPILATION_MANIFEST_BYTES: usize = 64 * 1024;
 pub(crate) const MAXIMUM_COMPILATION_UNITS: u64 = 10_000_000;
 

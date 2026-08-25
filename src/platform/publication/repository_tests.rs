@@ -4385,10 +4385,15 @@ fn locked_publication_accepts_once_reconciles_exact_retry_and_rejects_stale() {
     );
 
     let mut forged = prepared.clone();
-    forged.revision.core.idempotency_receipts = created.current.semantic_root.owners;
+    forged.revision.publication.idempotency_receipts = created.current.semantic_root.owners;
     forged.receipt.result = forged.revision.core.revision_id().unwrap();
     let (receipt_digest, receipt_bytes) = forged.receipt.encode().unwrap();
-    forged.revision = RevisionRecord::new(forged.revision.core.clone(), receipt_digest).unwrap();
+    forged.revision.publication.receipt = receipt_digest;
+    forged.revision = RevisionRecord::new(
+        forged.revision.core.clone(),
+        forged.revision.publication.clone(),
+    )
+    .unwrap();
     let (revision_digest, revision_bytes) = forged.revision.encode().unwrap();
     forged.head = HeadRecord {
         contract_version: contract::REVISION_CONTRACT_VERSION,
@@ -4610,7 +4615,11 @@ fn idempotency_reconciliation_survives_later_revisions_and_restart() {
         panic!("first idempotent publication must advance HEAD")
     };
     assert_eq!(
-        first_current.revision.core.idempotency_receipts.entries(),
+        first_current
+            .revision
+            .publication
+            .idempotency_receipts
+            .entries(),
         0,
         "a revision excludes its own receipt from its ancestor index"
     );
@@ -4620,7 +4629,12 @@ fn idempotency_reconciliation_survives_later_revisions_and_restart() {
     let mut missing_idempotency_page = second.clone();
     let idempotency_root_page = ObjectKey::from_digest(
         ObjectDomain::MapPage,
-        second.revision.core.idempotency_receipts.page().bytes(),
+        second
+            .revision
+            .publication
+            .idempotency_receipts
+            .page()
+            .bytes(),
     );
     assert!(
         missing_idempotency_page
@@ -4649,7 +4663,11 @@ fn idempotency_reconciliation_survives_later_revisions_and_restart() {
         panic!("second idempotent publication must advance HEAD")
     };
     assert_eq!(
-        second_current.revision.core.idempotency_receipts.entries(),
+        second_current
+            .revision
+            .publication
+            .idempotency_receipts
+            .entries(),
         1
     );
 
@@ -4665,7 +4683,11 @@ fn idempotency_reconciliation_survives_later_revisions_and_restart() {
         panic!("later publication must advance HEAD")
     };
     assert_eq!(
-        third_current.revision.core.idempotency_receipts.entries(),
+        third_current
+            .revision
+            .publication
+            .idempotency_receipts
+            .entries(),
         2
     );
 
@@ -4902,7 +4924,7 @@ fn repository_rejects_predecessor_head_and_missing_accepted_pack() {
     let logical = crate::platform::kernel::tests::witness_snapshot();
     let _ = GraphRepository::create(&predecessor, &logical, None).expect("create repository");
     let mut head = std::fs::read(predecessor.join("HEAD")).expect("HEAD bytes");
-    head[..8].copy_from_slice(b"LKJHEAD5");
+    head[..8].copy_from_slice(b"LKJHEAD6");
     std::fs::write(predecessor.join("HEAD"), head).expect("replace test HEAD");
     assert_eq!(
         GraphRepository::open(&predecessor)
@@ -5057,7 +5079,11 @@ fn prepare_publication(
 }
 
 fn empty_snapshot(seed: &[u8]) -> crate::platform::kernel::KernelSnapshot {
-    let empty = MapRoot::from_parts(PageDigest::from_bytes([0; 32]), 0);
+    let empty = MapRoot::from_parts(
+        PageDigest::from_bytes([0; 32]),
+        0,
+        crate::platform::persistent_map::MapContentDigest::from_bytes([0; 32]),
+    );
     crate::platform::kernel::KernelSnapshot {
         root: SemanticRoot {
             graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,

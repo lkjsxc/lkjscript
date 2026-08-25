@@ -6,8 +6,10 @@
 )]
 
 use lkjscript::platform::contract::exit_status_for;
+use lkjscript::platform::control::render_record;
 use lkjscript::platform::{
-    CLI_CONTRACT_VERSION, Diagnostic, PreparedDeployment, PublicOperation, execute_cli,
+    CLI_CONTRACT_VERSION, Diagnostic, PreparedDeployment, PublicOperation, execute_capabilities,
+    execute_cli, execute_new,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -19,6 +21,12 @@ use tokio::net::TcpListener;
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> ExitCode {
     let arguments = std::env::args().skip(1).collect::<Vec<_>>();
+    if let Some(capability_arguments) = compact_capability_arguments(&arguments) {
+        return compact_capabilities(&capability_arguments);
+    }
+    if let Some(new_arguments) = compact_new_arguments(&arguments) {
+        return compact_new(&new_arguments);
+    }
     let operation = arguments
         .first()
         .and_then(|value| PublicOperation::parse(value));
@@ -36,6 +44,67 @@ async fn main() -> ExitCode {
     match outcome {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => write_failure(&error, 1),
+    }
+}
+
+fn compact_capability_arguments(arguments: &[String]) -> Option<Vec<String>> {
+    let mut filtered = Vec::new();
+    let mut index = 0;
+    while index < arguments.len() {
+        if arguments[index] == "--project" {
+            arguments.get(index + 1)?;
+            index += 2;
+        } else {
+            filtered.push(arguments[index].clone());
+            index += 1;
+        }
+    }
+    if filtered.is_empty() {
+        Some(Vec::new())
+    } else if filtered.first().map(String::as_str) == Some("capabilities") {
+        Some(filtered.into_iter().skip(1).collect())
+    } else {
+        None
+    }
+}
+
+fn compact_capabilities(arguments: &[String]) -> ExitCode {
+    match execute_capabilities(arguments) {
+        Ok(bytes) => match write_bytes(&bytes) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(_) => ExitCode::from(exit_status_for(
+                lkjscript::platform::DiagnosticClass::Infrastructure,
+            )),
+        },
+        Err(error) => write_compact_failure("capabilities", &error),
+    }
+}
+
+fn compact_new_arguments(arguments: &[String]) -> Option<Vec<String>> {
+    let mut filtered = Vec::new();
+    let mut index = 0;
+    while index < arguments.len() {
+        if arguments[index] == "--project" {
+            arguments.get(index + 1)?;
+            index += 2;
+        } else {
+            filtered.push(arguments[index].clone());
+            index += 1;
+        }
+    }
+    (filtered.first().map(String::as_str) == Some("new"))
+        .then(|| filtered.into_iter().skip(1).collect())
+}
+
+fn compact_new(arguments: &[String]) -> ExitCode {
+    match execute_new(arguments) {
+        Ok(bytes) => match write_bytes(&bytes) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(_) => ExitCode::from(exit_status_for(
+                lkjscript::platform::DiagnosticClass::Infrastructure,
+            )),
+        },
+        Err(error) => write_compact_failure("new", &error),
     }
 }
 
@@ -63,6 +132,39 @@ fn write_failure(error: &Diagnostic, contract_version: u16) -> ExitCode {
         "error": error,
     });
     if write_json(&failure).is_err() {
+        ExitCode::from(exit_status_for(
+            lkjscript::platform::DiagnosticClass::Infrastructure,
+        ))
+    } else {
+        ExitCode::from(exit)
+    }
+}
+
+fn write_compact_failure(command: &str, error: &Diagnostic) -> ExitCode {
+    let exit = exit_for(error);
+    let class = match error.class {
+        lkjscript::platform::DiagnosticClass::Source => "source",
+        lkjscript::platform::DiagnosticClass::Semantic => "semantic",
+        lkjscript::platform::DiagnosticClass::Capability => "capability",
+        lkjscript::platform::DiagnosticClass::Resource => "resource",
+        lkjscript::platform::DiagnosticClass::Cancelled => "cancelled",
+        lkjscript::platform::DiagnosticClass::Corrupt => "corrupt",
+        lkjscript::platform::DiagnosticClass::Infrastructure => "infrastructure",
+    };
+    let result = render_record("result", &[("status", "failure"), ("command", command)])
+        .and_then(|mut output| {
+            output.push_str(&render_record(
+                "diagnostic",
+                &[
+                    ("class", class),
+                    ("code", &error.code),
+                    ("message", &error.message),
+                ],
+            )?);
+            Ok(output)
+        })
+        .and_then(|output| write_bytes(output.as_bytes()));
+    if result.is_err() {
         ExitCode::from(exit_status_for(
             lkjscript::platform::DiagnosticClass::Infrastructure,
         ))
@@ -154,7 +256,11 @@ fn write_json(value: &impl Serialize) -> Result<(), Diagnostic> {
         )
     })?;
     bytes.push(b'\n');
-    std::io::stdout().lock().write_all(&bytes).map_err(|error| {
+    write_bytes(&bytes)
+}
+
+fn write_bytes(bytes: &[u8]) -> Result<(), Diagnostic> {
+    std::io::stdout().lock().write_all(bytes).map_err(|error| {
         Diagnostic::new(
             lkjscript::platform::DiagnosticClass::Infrastructure,
             "cli_output",

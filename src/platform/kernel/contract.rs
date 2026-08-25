@@ -2,16 +2,17 @@
 
 pub const GRAPH_CONTRACT_IDENTITY: &str = "lkjscript-meaning-graph-5";
 pub const GRAPH_CONTRACT_VERSION: u16 = 5;
+pub const SEMANTIC_STATE_CONTRACT_VERSION: u16 = 1;
 
 pub const OWNER_MAGIC: [u8; 8] = *b"LKJOWN05";
 pub const TYPE_OBJECT_MAGIC: [u8; 8] = *b"LKJTYP05";
-pub const ROOT_MAGIC: [u8; 8] = *b"LKJGRF05";
+pub const ROOT_MAGIC: [u8; 8] = *b"LKJSMR01";
 pub const DEPENDENCY_MAGIC: [u8; 8] = *b"LKJDEP05";
 pub const RETIREMENT_MAGIC: [u8; 8] = *b"LKJRET05";
 
 pub const OWNER_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.owner-envelope.v5";
 pub const TYPE_OBJECT_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.type-envelope.v5";
-pub const ROOT_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.root-envelope.v5";
+pub const ROOT_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.root-envelope.v6";
 pub const DEPENDENCY_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.dependency-envelope.v5";
 pub const RETIREMENT_ENVELOPE_DOMAIN: &str = "lkjscript.kernel.retirement-envelope.v5";
 
@@ -19,10 +20,11 @@ pub const OWNER_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.kernel.owner-object.v5";
 pub const TYPE_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.kernel.type-object.v5";
 pub const BLOB_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.kernel.blob-object.v5";
 pub const SEQUENCE_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.kernel.sequence-object.v5";
-pub const SEMANTIC_ROOT_DIGEST_DOMAIN: &str = "lkjscript.kernel.semantic-root.v5";
+pub const SEMANTIC_ROOT_DIGEST_DOMAIN: &str = "lkjscript.kernel.semantic-root.v6";
+pub const SEMANTIC_STATE_DIGEST_DOMAIN: &str = "lkjscript.kernel.semantic-state.v1";
 pub const DEPENDENCY_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.kernel.dependency-object.v5";
 pub const RETIREMENT_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.kernel.retirement-object.v5";
-pub const PACKAGE_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.kernel.package-object.v7";
+pub const PACKAGE_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.kernel.package-object.v8";
 pub const CHANGE_DIGEST_DOMAIN: &str = "lkjscript.kernel.change.v5";
 pub const PACKAGE_ID_MIGRATION_DOMAIN: &str = "lkjscript.kernel.package-identity-migration.v5";
 

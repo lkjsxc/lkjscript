@@ -39,7 +39,11 @@ fn name(value: &str) -> Name {
 }
 
 fn map_root(entries: usize, marker: u8) -> MapRoot {
-    MapRoot::from_parts(PageDigest::from_bytes([marker; 32]), entries as u64)
+    MapRoot::from_parts(
+        PageDigest::from_bytes([marker; 32]),
+        entries as u64,
+        crate::platform::persistent_map::MapContentDigest::from_bytes([marker; 32]),
+    )
 }
 
 fn insert(owners: &mut BTreeMap<OwnerKey, OwnerRecord>, record: OwnerRecord) {
@@ -950,7 +954,7 @@ fn canonical_kernel_codec_manifest_is_frozen() {
     hasher.update(&root);
     assert_eq!(
         crate::platform::semantic_id::encode_hex(hasher.finalize().as_bytes()),
-        "e96c22c854c87bc691064b620c1977a03dbd18f11055cec7090120d1aeb36a38"
+        "af82a19f63d597907f81070cab6ff78290b9bfa2c52cb6e9af35cafb378df767"
     );
 }
 
