@@ -113,20 +113,32 @@ Missing or corrupt state rebuilds from canonical authority.
 
 ## Public change protocol
 
-`change plan (--input RECORDS | --input-file PATH)` and `change apply ... --plan DIGEST` accept
-flat UTF-8 records under contract `lkjscript-change-records-3`. A request begins with exactly one
+`change plan (--input RECORDS | --input-file PATH)` and `change apply ... --plan DIGEST` accept flat
+UTF-8 records under contract `lkjscript-change-records-3`. A request begins with exactly one
 `request base=REVISION` record and may add bounded `idempotency` and nonsemantic `intent` fields.
 Every later record is a closed semantic precondition, operation, type fragment, expression
 fragment, or indexed edge. There is no indentation meaning, implicit scalar typing, duplicate
 field, macro, include, or JSON fallback.
 
+The same public command also provides one direct single-operation adapter:
+
+```text
+change plan rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT]
+change apply rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT] --plan PLAN
+```
+
+Direct `OWNER` is one exact typed owner identity. It is not a request-local symbol or name lookup.
+Direct flags construct the same typed authored request and publication options as an equivalent
+`request` plus `rename.owner` record pair; they do not synthesize or reparse compact text.
+
 `plan` parses, resolves fragments, lowers to the typed authored model, allocates request-local
 identities, performs impact analysis and validation, and returns a `plan_` digest plus the predicted
 revision, semantic diff, compact counts, validation work, allocation map, and predicted receipt and
 revision-record identities. It publishes nothing and reports no durable receipt path. `apply`
-reparses and reprepares the input through the same path, rejects a mismatched reviewed digest before
-repository access, and then atomically publishes or reports a stale base without partial visibility.
-Both actions require an explicit exact base.
+renormalizes and reprepares the input through the same path, rejects a mismatched reviewed digest
+before project discovery or repository access, and then atomically publishes or reports a stale
+base without partial visibility. Both transports require an explicit exact base, and direct and
+record inputs converge before plan comparison, preparation, response rendering, or publication.
 
 The executable sections `capabilities --section change`, `type`, and `expression` are the only
 public vocabulary owner. The current compact subset includes module, record, variant, pure
@@ -138,11 +150,14 @@ and function forms. Expressions include unit, boolean, integer, text, local/cons
 conditional, sequence, and direct call. Broader typed engine operations remain private until their
 compact workflows are complete.
 
-`change.operation-field` discovery records expose a registered field's operation, name, required
-status, and typed form. The registry exposes the complete `delete.owner` grammar as required
-`owner=exact_owner` and `policy=delete_policy` fields without requiring repository source.
+`change.operation-field` discovery records expose every registered field's operation, name,
+required status, and typed form for all 13 public operations. `change.field-form` records resolve
+each emitted form token to its syntax; focused discovery also enumerates visibility, function
+effect, deletion policy, and selector/reference values. `change.direct-operation` reports
+`rename.owner` as the sole direct adapter and gives its exact plan and apply usage.
 `change.precondition` and `change.precondition-field` records likewise expose the complete current
-precondition set and field forms.
+precondition set and field forms. The operation descriptor inventory is the sole field-set and
+required/optional authority used by both decoding and discovery.
 
 The current preconditions are exact owner existence, absence, name, and semantic parent; namespace
 absence and exact owner binding; and an exact dependency binding containing package identity,
@@ -166,8 +181,8 @@ allocated identities. Plan and apply return equal complete symbol maps. Function
 retires the exact old expression/binding ownership closure in the same semantic change. Raw JSON,
 the former `--request`/`--request-file` grammar, and `--dry-run`/`--commit` are rejected before
 publication. Owned-closure deletion remains unavailable until an exported typed impact plan lists
-and binds every removed owner and relation. Large external value files, direct single-operation
-flags, and broad result export are not yet exposed by this compact subset.
+and binds every removed owner and relation. Large external value files, direct forms for the other
+12 operations, and broad result export are not yet exposed by this subset.
 
 ## Drafts, history, and packages
 

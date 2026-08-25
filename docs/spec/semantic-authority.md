@@ -126,11 +126,14 @@ publish are:
 restore, package, check, build, run, review, service, worker, and doctor still target predecessor
 authority and cannot mutate a normalized repository; their normalized cutover remains required.
 
-A compact request carries an exact base, optional idempotency key, ordered high-level changes, and
-bounded nonsemantic intent. The public vocabulary and current subset are executable-derived from
-`capabilities --section change`, `type`, and `expression`. The typed engine retains additional
-private operations and explicit multidimensional work budgets, but those are not public grammar
-until their complete compact workflows exist.
+A compact-record request carries an exact base, optional idempotency key, ordered high-level
+changes, and bounded nonsemantic intent. Direct `rename.owner` flags carry the equivalent exact
+base, exact typed owner, name, and optional controls. Both adapters construct one transport-neutral
+`AuthoredChangeSet` plus publication options before reviewed-plan comparison or repository access.
+The public vocabulary and current subset are executable-derived from `capabilities --section
+change`, `type`, and `expression`. The typed engine retains additional private operations and
+explicit multidimensional work budgets, but those are not public grammar until their complete
+public workflows exist.
 
 Plan and apply use the same parser, typed lowering, impact analysis, validation, predicted revision,
 semantic diff, and allocation path. Apply reparses and reprepares the request and requires the exact

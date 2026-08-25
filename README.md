@@ -75,13 +75,27 @@ lkjscript --project ./hello change plan --input-file change.lkjc
 lkjscript --project ./hello change apply --input-file change.lkjc --plan plan_...
 ```
 
+For a common single-owner edit, the direct adapter constructs the same typed request without a
+record file. Replace the placeholders with the exact accepted revision and exact typed owner ID:
+
+```sh
+lkjscript --project ./hello change plan rename.owner \
+  --base rev_... --owner mod_... --name renamed
+lkjscript --project ./hello change apply rename.owner \
+  --base rev_... --owner mod_... --name renamed --plan plan_...
+```
+
+Direct `--owner` is an exact `OwnerKey`; it does not accept a name or request-local symbol. Add
+equal `--idempotency KEY` and `--intent TEXT` values to both commands when those controls are used.
+
 `change plan` parses, normalizes, allocates, analyzes, and validates without publication.
 `change apply` reparses and reprepares the same typed request, requires the exact returned `plan_`
 digest, and publishes only after rechecking its explicit base. Raw JSON change requests and the
 former `--request`, `--dry-run`, and `--commit` grammar are rejected. The currently exposed compact
 operation/type/expression subset is discoverable from `capabilities --section change`, `type`, and
-`expression`; the broader typed engine remains private until each form has a complete compact
-workflow.
+`expression`; change discovery reports all 13 operations, all 49 operation fields and their forms,
+and the sole direct operation's exact usage. The broader typed engine remains private until each
+form has a complete public workflow.
 
 Pure functions support explicit rank-1 type parameters. Calls and named function values provide
 their type arguments explicitly; `invoke` applies a named function value. The graph stores stable

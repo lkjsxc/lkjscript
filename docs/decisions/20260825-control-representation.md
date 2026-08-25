@@ -4,11 +4,12 @@ Date: 2026-08-25 UTC.
 
 ## Status
 
-Partially implemented. Flat records, focused discovery, normalized plan/apply, connected creation,
-flat expression edges, exact body replacement, compact output, predecessor JSON rejection, an
-explicit normalized request codec, and label-independent allocation are public. Complete operation
-coverage, external large-value inputs, direct common flags, and complete workflow measurements
-remain required before the grammar is frozen.
+Partially implemented. Flat records, complete field discovery for the 13-operation public subset,
+normalized plan/apply, connected creation, flat expression edges, exact body replacement, compact
+output, predecessor JSON rejection, an explicit normalized request codec, label-independent
+allocation, and direct `rename.owner` flags are public. Broader authored-operation coverage,
+external large-value inputs, direct forms selected by maintained workflows, and complete workflow
+measurements remain required before the grammar is frozen.
 
 ## Problem
 
@@ -62,6 +63,10 @@ program authority.
   parent, and dependency bindings.
 - Completed: replace the scalar change-work maximum with independent typed budgets and
   observations.
+- Completed: make one exhaustive operation descriptor inventory own operation names, ordered field
+  names, required/optional status, typed forms, and direct-form discovery for the public subset.
+- Completed: expose direct `rename.owner` as a sibling adapter to the compact record decoder; both
+  construct the same typed request and publication options before planning or repository access.
 - Author connected expression subtrees through flat fragments rather than a low-level single-node
   replacement field.
 
@@ -109,7 +114,11 @@ one explicit normalized request view and a new allocation-seed contract domain.
   malformed-record locations, cycles, unused/shared expression rejection, and JSON rejection.
 - Black-box copied-binary tests cover plan/apply allocation equality, reviewed-plan mismatch,
   connected module/record/function creation, 100-module bounded output, predecessor JSON rejection
-  without HEAD movement, and complete old-body ownership retirement.
+  without HEAD movement, complete old-body ownership retirement, and direct exact-owner rename
+  from plan through inspection without repository source or a Rust toolchain.
+- Direct/record differential tests cover identical canonical authored bytes and byte-identical plan
+  responses with omitted or equal idempotency and intent. Direct malformed, absent-owner, stale,
+  and wrong-plan cases retain HEAD; wrong-plan rejection precedes project discovery.
 - Codec tests retain a golden authored-intent digest, prove label-renaming equality, budget
   separation, semantic-field and list-order sensitivity, undefined-symbol rejection, and depth
   exhaustion. Repository tests prove equal semantic roots and allocated identities across local

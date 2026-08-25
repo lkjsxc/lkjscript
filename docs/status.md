@@ -7,10 +7,14 @@ from predecessor contracts are historical and remain in `docs/performance.md`.
 
 | Authority | Current inspected identity |
 |---|---|
-| `packages/standard` | repository `repo_c1358d64c351873b51c954b69d1ac988`; revision `rev_1af582dbebc01b43cd1050349f208b7c71c92ca4efd3f6b65624745f7d9c988e`; root `root_object_61f185e6332b885353acf6312c779369bcca9ca82acc5141b9beb4bcc2e1aeeb`; 12 modules |
-| `applications/lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; revision `rev_eb60847c2ebc2098c65a3e425398fb63ae74e08f47cdda3067069acacea7fa90`; root `root_object_f67b6e91af36e61f306ca80b315a82e1ffdceb36227be21bb554df6903d786f1`; 3 modules; 2 targets |
-| embedded standard package | semantic revision `rev_1af582dbebc01b43cd1050349f208b7c71c92ca4efd3f6b65624745f7d9c988e`; package artifact `artifact_6ea73654d153ac4410ff4aaad329373dce27a58bb0d8c61eaa31cd6d66bcb3f6`; bundle digest `artifact_3648f87daea0164ef6e94ea6e731dd687db590b8889583f63cac6587f5e7a4d1`; 22,264 bytes |
-| current lkjournal build | root package artifact `artifact_55c3b229f8cbdd53fb153e0859375404df5e31f66f6128736f5d8f95f71dfe98`; bundle digest `artifact_fd1b07fbf5caafc92499eead7077f2ffe638bbf1a8c48f154eb9a09fcc3bf78d`; 178,766 bytes; exact 2-package closure |
+| `packages/standard` | repository `repo_c1358d64c351873b51c954b69d1ac988`; revision `rev_1eb0b76b547ea3a8e2fc02e4f3751da10c2994ec04645d04787894e5b1cffd64`; 12 modules |
+| `applications/lkjournal` | repository `repo_95f988c5423fe3eb823c329ef0832d51`; revision `rev_e9cb9134841abe4505cbfc3cf5acd0a240fc1bd02477ea9d7ca9b7d389107ea2`; 3 modules; 2 targets |
+| embedded standard package | semantic revision `rev_1eb0b76b547ea3a8e2fc02e4f3751da10c2994ec04645d04787894e5b1cffd64`; package artifact `artifact_45b945d9cab4250bdf4307ddca15d79e17336ff42f5db525a272c088411ca623`; bundle digest `artifact_63056fbb11375ffbd8192878fe09a5bc34c203ec0e58489336b2e39709a01694`; 22,276 bytes |
+| current lkjournal build | root package artifact `artifact_7f0f4535e674484aaa80d8d0b899415eb9135d6719b2d09d2af6bde7abcea941`; bundle digest `artifact_81b49bf22d88839e854a85c5a9a8f261f69f4b6060ebc0e44b2eb6882125370a`; 178,791 bytes; exact 2-package closure |
+
+These identities were inspected through the current release executable's `review`, `check`,
+`package builtin inspect`, and `build` workflows. The table omits physical root-object identities
+because those maintained public workflows do not emit them.
 
 The standard package has 7 graph tests. The `lkjournal` root package has 5 graph tests and its
 exact two-package closure runs 12; current direct `check` observations report
@@ -51,8 +55,9 @@ bounded unchanged response.
 Normalized `new DEST --template minimal` creates current semantic authority in an absent or empty
 safe directory using a private sibling stage and one visibility rename. It rejects the predecessor
 command template. A copied executable can discover contracts, create a minimal normalized project,
-read status, inspect one exact coarse owner, and plan/apply the currently exposed compact semantic
-changes without a repository checkout, Rust toolchain, network, or external bootstrap artifact.
+read status, create meaning through compact records, plan/apply direct `rename.owner`, and inspect
+the renamed exact owner without a repository checkout, Rust toolchain, network, or external
+bootstrap artifact.
 Check, build, run, service, worker, package, history, draft, review, backup, restore, and doctor
 still use predecessor authority and cannot consume that new project yet.
 
@@ -66,7 +71,12 @@ registered-backup-root authority; it never deletes data.
 Compact change contract `lkjscript-change-records-3` is the released change boundary. `change
 plan` and `change apply --plan DIGEST` share the normalized typed lowering and publication path,
 require an explicit revision, and return deterministic bounded records. The exposed subset has 13
-semantic operations, 15 type forms, and 10 expression forms listed by focused capabilities.
+semantic operations, 49 operation fields, 15 type forms, and 10 expression forms listed by focused
+capabilities. One exhaustive typed descriptor inventory owns every operation's ordered fields,
+required/optional classification, form token, and direct-form marker; decoding and registry
+projection derive from it. Sixteen `change.field-form` records resolve all field form tokens, and
+focused discovery enumerates the current visibility, function-effect, deletion-policy, selector,
+and reference syntax.
 Connected creation and flat expression edges allocate identities in one request; complete function
 body replacement retires the prior expression/binding closure. The private authored JSON adapter
 and generated schema were deleted, and predecessor JSON change requests reject without advancing
@@ -75,6 +85,12 @@ identities owns normalized request hashing. Request-local label spelling, operat
 idempotency keys, and intent do not perturb durable allocations; the reviewed plan separately binds
 the exact budget and operational options. Authored operation and list order remains
 allocation-significant even when lowering stores a collection as keyed graph relations.
+`change plan rename.owner --base REVISION --owner OWNER --name NAME` and the corresponding apply
+form with the exact reviewed `--plan` accept one exact typed owner plus optional idempotency and
+intent. This direct adapter and its equivalent compact record request converge to the same
+transport-neutral typed request and publication options before plan comparison, repository access,
+preparation, response rendering, or publication. The other 12 public operations remain
+record-only.
 Exact leaf-owner deletion requires `policy=reject`; it never infers an ownership closure. Reviewed
 owned-closure deletion remains unsupported until impact output binds every removed owner and
 relation. The executable registry publishes its exact required field forms. A leaf with live
