@@ -24,10 +24,10 @@ use super::{
 use crate::platform::contract::registry::CHANGE_ALLOCATION_SEED_DOMAIN;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    ChangeDigest, DependencyObjectDigest, DependencyRecord, ExpressionOperation, ExpressionRecord,
-    ModuleRecord, Name, NamespaceClass, OwnerHeader, OwnerKey, OwnerKind, OwnerRecord, PackageId,
-    PackageRevisionDigest, RetirementRecord, TypeObject, TypeObjectDigest, TypeObjectInterner,
-    encode_dependency, encode_owner,
+    ChangeDigest, DependencyObjectDigest, DependencyRecord, ModuleRecord, Name, NamespaceClass,
+    OwnerHeader, OwnerKey, OwnerKind, OwnerRecord, PackageId, PackageRevisionDigest,
+    RetirementRecord, TypeObject, TypeObjectDigest, TypeObjectInterner, encode_dependency,
+    encode_owner,
 };
 use crate::platform::semantic_id::{
     AnnotationId, BindingId, CaseId, DeclarationId, DocumentationId, ExpressionId, FieldId,
@@ -242,10 +242,6 @@ pub enum AuthoredChange {
     ReplaceFunctionBody {
         function: DeclarationSelector,
         body: AuthoredExpression,
-    },
-    ReplaceExpression {
-        expression: ExpressionId,
-        operation: ExpressionOperation,
     },
 }
 
@@ -747,22 +743,6 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
                 function.body = body;
                 deletion::retire_replaced_expression_tree(&mut lowerer, previous_body)?;
             }
-            AuthoredChange::ReplaceExpression {
-                expression,
-                operation,
-            } => {
-                let owner = OwnerKey::Expression(*expression);
-                let candidate = lowerer.candidate_mut(owner)?;
-                let OwnerRecord::Expression(_) = candidate else {
-                    return Err(request_error(
-                        DiagnosticClass::Semantic,
-                        "change_authored_expression_kind",
-                        "expression selector does not name an expression owner",
-                    ));
-                };
-                *candidate =
-                    OwnerRecord::Expression(ExpressionRecord::new(*expression, operation.clone())?);
-            }
         }
         lowerer.check_budget("authored mutation lowering")?;
     }
@@ -869,8 +849,7 @@ fn collect_symbol_definitions(
             | AuthoredChange::DeleteDependency { .. } => {}
             AuthoredChange::DeleteOwner { .. }
             | AuthoredChange::RenameOwner { .. }
-            | AuthoredChange::MoveDeclaration { .. }
-            | AuthoredChange::ReplaceExpression { .. } => {}
+            | AuthoredChange::MoveDeclaration { .. } => {}
             AuthoredChange::ReplaceFunctionBody { body, .. } => {
                 creation::collect_expression_symbols(body, &mut definitions)?
             }

@@ -584,6 +584,9 @@ fn extract_candidate_relations<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead
             format!("untouched owner {owner:?} retains a live incoming reference"),
         ));
     };
+    if working.deleted {
+        return Ok(Vec::new());
+    }
     let record = working.record.clone();
     let package = lowerer.base.package_id();
     let mut case_parents = BTreeMap::new();

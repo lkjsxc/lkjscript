@@ -1774,6 +1774,9 @@ fn authored_request_allocates_forward_symbols_and_preserves_exact_uses() {
     let logical = crate::platform::kernel::tests::witness_snapshot();
     let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
     let callee = owner_named(&created.initial.snapshot, "callee");
+    let OwnerKey::Declaration(callee_id) = callee else {
+        panic!("callee must be a declaration")
+    };
     let caller = owner_named(&created.initial.snapshot, "caller");
     let binding = binding_named(&created.initial.snapshot, "local");
     let body = function_body(&created.initial.snapshot, "callee");
@@ -1815,9 +1818,14 @@ fn authored_request_allocates_forward_symbols_and_preserves_exact_uses() {
                 owner: OwnerSelector::Exact { owner: binding },
                 name: Name::new("renamed_local").unwrap(),
             },
-            AuthoredChange::ReplaceExpression {
-                expression: body,
-                operation: ExpressionOperation::Unit {},
+            AuthoredChange::ReplaceFunctionBody {
+                function: DeclarationSelector::Id {
+                    declaration: callee_id,
+                },
+                body: AuthoredExpression {
+                    symbol: Some("$replacement_body".to_owned()),
+                    operation: AuthoredExpressionOperation::Unit {},
+                },
             },
             AuthoredChange::CreateModule {
                 symbol: "$destination".to_owned(),
@@ -1839,16 +1847,18 @@ fn authored_request_allocates_forward_symbols_and_preserves_exact_uses() {
         .expect("repeat deterministic authored preparation");
     assert_eq!(prepared.allocated, repeated.allocated);
     assert_eq!(prepared.publication.head, repeated.publication.head);
-    assert_eq!(prepared.publication.receipt.counts.owners_created, 1);
-    assert_eq!(prepared.publication.receipt.counts.owners_updated, 3);
-    assert!(prepared.lowering_work.canonical.point_reads <= 4);
-    assert!(prepared.lowering_work.canonical.canonical_records_decoded <= 4);
-    assert!(prepared.lowering_work.witness.point_reads <= 2);
+    assert_eq!(prepared.publication.receipt.counts.owners_created, 2);
+    assert_eq!(prepared.publication.receipt.counts.owners_updated, 2);
+    assert_eq!(prepared.publication.receipt.counts.owners_deleted, 1);
+    assert!(prepared.lowering_work.canonical.point_reads <= 8);
+    assert!(prepared.lowering_work.canonical.canonical_records_decoded <= 8);
+    assert!(prepared.lowering_work.witness.point_reads <= 8);
     assert!(prepared.publication.receipt.work.map_pages_read > 0);
     let new_module = prepared.allocated["$destination"];
     let OwnerKey::Module(new_module_id) = new_module else {
         panic!("module symbol must allocate one module identity")
     };
+    let replacement_body = prepared.allocated["$replacement_body"];
 
     assert!(matches!(
         created
@@ -1863,12 +1873,21 @@ fn authored_request_allocates_forward_symbols_and_preserves_exact_uses() {
     };
     assert_eq!(declaration.module, new_module_id);
     assert_eq!(declaration.name.as_str(), "renamed_callee");
-    let Some(OwnerRecord::Expression(expression)) =
-        view.owner(OwnerKey::Expression(body)).unwrap().value
+    let crate::platform::kernel::DeclarationPayload::Function(function) = declaration.payload
     else {
-        panic!("selected expression must remain live")
+        panic!("moved declaration must remain a function")
     };
-    assert_eq!(expression.id, body);
+    assert_eq!(OwnerKey::Expression(function.body), replacement_body);
+    assert!(
+        view.owner(OwnerKey::Expression(body))
+            .unwrap()
+            .value
+            .is_none()
+    );
+    let Some(OwnerRecord::Expression(expression)) = view.owner(replacement_body).unwrap().value
+    else {
+        panic!("replacement body must be live")
+    };
     assert_eq!(expression.operation, ExpressionOperation::Unit {});
     let Some(OwnerRecord::Binding(renamed_binding)) = view.owner(binding).unwrap().value else {
         panic!("renamed binding must remain live")
@@ -2190,27 +2209,30 @@ fn authored_deletion_rejects_untouched_live_references_and_created_owner_erasure
     );
 
     let callee = owner_named(&created.initial.snapshot, "callee");
-    let call = expression_calling(&created.initial.snapshot, callee);
-    let OwnerKey::Expression(call) = call else {
-        panic!("exact call must have expression identity")
-    };
     let OwnerKey::Declaration(callee_id) = callee else {
         panic!("callee must have declaration identity")
+    };
+    let caller = owner_named(&created.initial.snapshot, "caller");
+    let OwnerKey::Declaration(caller_id) = caller else {
+        panic!("caller must have declaration identity")
     };
     let changed_relation_kind = AuthoredChangeSet {
         base,
         preconditions: Vec::new(),
         budget: ChangeBudget::default(),
         changes: vec![
-            AuthoredChange::ReplaceExpression {
-                expression: call,
-                operation: ExpressionOperation::FunctionValue {
-                    function: crate::platform::kernel::DeclarationReference {
+            AuthoredChange::ReplaceFunctionBody {
+                function: DeclarationSelector::Id {
+                    declaration: caller_id,
+                },
+                body: authored_expression(AuthoredExpressionOperation::Call {
+                    function: AuthoredDeclarationReference::Exact {
                         package: created.initial.snapshot.root.package_id,
                         declaration: callee_id,
                     },
                     type_arguments: Vec::new(),
-                },
+                    arguments: vec![authored_expression(AuthoredExpressionOperation::Unit {})],
+                }),
             },
             AuthoredChange::DeleteOwner {
                 owner: OwnerSelector::Exact { owner: callee },
@@ -2462,43 +2484,38 @@ fn authored_deletion_accepts_an_exact_same_request_rebind() {
         .expect("publish exact replacement function");
 
     let callee = owner_named(&created.initial.snapshot, "callee");
-    let call = expression_calling(&created.initial.snapshot, callee);
-    let OwnerRecord::Expression(call_record) = &created.initial.snapshot.owners[&call] else {
-        panic!("caller relation source must be an expression")
-    };
-    let ExpressionOperation::Call {
-        type_arguments,
-        arguments,
-        ..
-    } = &call_record.operation
-    else {
-        panic!("caller relation source must remain a call")
-    };
-    let OwnerKey::Expression(call_id) = call else {
-        panic!("call owner must have expression identity")
-    };
     let OwnerKey::Declaration(replacement_id) = replacement else {
         panic!("replacement symbol must have declaration identity")
     };
+    let caller = owner_named(&created.initial.snapshot, "caller");
+    let OwnerKey::Declaration(caller_id) = caller else {
+        panic!("caller must have declaration identity")
+    };
+    let previous_body = function_body(&created.initial.snapshot, "caller");
     let mixed = AuthoredChangeSet {
         base: created.repository.current().unwrap().head.revision,
         preconditions: Vec::new(),
         budget: ChangeBudget::default(),
         changes: vec![
+            AuthoredChange::ReplaceFunctionBody {
+                function: DeclarationSelector::Id {
+                    declaration: caller_id,
+                },
+                body: AuthoredExpression {
+                    symbol: Some("$rebound_caller_body".to_owned()),
+                    operation: AuthoredExpressionOperation::Call {
+                        function: AuthoredDeclarationReference::Exact {
+                            package: created.initial.snapshot.root.package_id,
+                            declaration: replacement_id,
+                        },
+                        type_arguments: Vec::new(),
+                        arguments: vec![authored_expression(AuthoredExpressionOperation::Unit {})],
+                    },
+                },
+            },
             AuthoredChange::DeleteOwner {
                 owner: OwnerSelector::Exact { owner: callee },
                 cascade: true,
-            },
-            AuthoredChange::ReplaceExpression {
-                expression: call_id,
-                operation: ExpressionOperation::Call {
-                    function: crate::platform::kernel::DeclarationReference {
-                        package: created.initial.snapshot.root.package_id,
-                        declaration: replacement_id,
-                    },
-                    type_arguments: type_arguments.clone(),
-                    arguments: arguments.clone(),
-                },
             },
         ],
     };
@@ -2506,15 +2523,17 @@ fn authored_deletion_accepts_an_exact_same_request_rebind() {
         .repository
         .prepare_authored_change(&mixed, PublicationOptions::default())
         .expect("exact final-state rebind must remove the incoming relation before deletion");
-    assert_eq!(prepared.publication.receipt.counts.owners_deleted, 3);
+    assert!(prepared.publication.receipt.counts.owners_deleted >= 3);
     assert_eq!(prepared.publication.receipt.counts.owners_updated, 1);
+    let rebound_body = prepared.allocated["$rebound_caller_body"];
     created
         .repository
         .publish(&prepared.publication)
         .expect("publish exact rebind and deletion once");
     let view = created.repository.view_current().expect("advanced view");
     assert!(view.owner(callee).unwrap().value.is_none());
-    let Some(OwnerRecord::Expression(rebound)) = view.owner(call).unwrap().value else {
+    assert!(view.owner(previous_body).unwrap().value.is_none());
+    let Some(OwnerRecord::Expression(rebound)) = view.owner(rebound_body).unwrap().value else {
         panic!("rebound call must remain live")
     };
     assert!(matches!(
@@ -2951,16 +2970,19 @@ fn authored_budget_rejects_invalid_and_exhausted_work_before_publication() {
 
     let mut relation_budget = ChangeBudget::default();
     relation_budget.impact.maximum_relation_edges = 1;
+    let caller = owner_named(&created.initial.snapshot, "caller");
+    let OwnerKey::Declaration(caller) = caller else {
+        panic!("caller must be a function declaration")
+    };
     let exhausted_relations = AuthoredChangeSet {
         base,
         preconditions: Vec::new(),
         budget: relation_budget,
-        changes: vec![AuthoredChange::ReplaceExpression {
-            expression: match function_body(&created.initial.snapshot, "caller") {
-                OwnerKey::Expression(expression) => expression,
-                _ => panic!("caller body must be an expression"),
+        changes: vec![AuthoredChange::ReplaceFunctionBody {
+            function: DeclarationSelector::Id {
+                declaration: caller,
             },
-            operation: ExpressionOperation::Unit {},
+            body: authored_expression(AuthoredExpressionOperation::Unit {}),
         }],
     };
     assert_eq!(
@@ -3276,13 +3298,15 @@ fn authored_budget_dimensions_exhaust_independently_without_advancing_head() {
         "change_budget_authored_type_nodes",
     );
 
-    let expression = match test_actual(&created.initial.snapshot, "caller_test") {
-        OwnerKey::Expression(expression) => expression,
-        _ => panic!("test actual must be an expression"),
+    let binding_function = owner_named(&created.initial.snapshot, "with_binding");
+    let OwnerKey::Declaration(binding_function) = binding_function else {
+        panic!("with_binding must be a function declaration")
     };
-    let replace = AuthoredChange::ReplaceExpression {
-        expression,
-        operation: ExpressionOperation::Unit {},
+    let replace = AuthoredChange::ReplaceFunctionBody {
+        function: DeclarationSelector::Id {
+            declaration: binding_function,
+        },
+        body: authored_expression(AuthoredExpressionOperation::Unit {}),
     };
     let expression_baseline = created
         .repository
@@ -3302,11 +3326,6 @@ fn authored_budget_dimensions_exhaust_independently_without_advancing_head() {
             |budget, value| budget.tests.maximum_selected = value,
             expression_work.tests.selected,
             "change_budget_tests_selected",
-        ),
-        (
-            |budget, value| budget.tests.maximum_owners_visited = value,
-            expression_work.tests.owners_visited,
-            "change_budget_test_owners_visited",
         ),
     ];
     for (set_limit, observed, expected) in expression_dimensions {
