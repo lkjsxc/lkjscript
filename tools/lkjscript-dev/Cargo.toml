@@ -1,0 +1,26 @@
+[package]
+name = "lkjscript-dev"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+blake3 = "1.8.2"
+fs2 = "0.4.3"
+rustix = { version = "1.1.4", default-features = false, features = ["process", "std"] }
+serde = { version = "1.0.228", default-features = false, features = ["derive", "std"] }
+serde_json = { version = "1.0.149", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+tempfile = "3.23.0"
+
+[lints.clippy]
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+unwrap_used = "deny"
+
+[lints.rust]
+unsafe_code = "forbid"

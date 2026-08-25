@@ -1049,6 +1049,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "lkjscript-dev"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "fs2",
+ "rustix",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "lock_api"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
