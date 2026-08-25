@@ -19,6 +19,7 @@ pub mod cli;
 pub(crate) mod compiler;
 pub mod configuration;
 pub mod contract;
+pub mod control;
 pub mod database;
 pub mod deployment;
 pub mod diagnostic;
