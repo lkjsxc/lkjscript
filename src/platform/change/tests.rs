@@ -697,11 +697,14 @@ fn prepared_authority_path_copies_semantic_and_witness_roots_through_one_object_
     let overlay = KernelOverlay::new(&base, &delta);
     let analysis =
         prepare_change_analysis(&base, &base_witness, delta.clone()).expect("generic preparation");
+    let owner_map_edits =
+        prepare_owner_map_edits(&base, &delta).expect("prepare exact owner map edits");
     let mut stage = ObjectStage::new(&store);
     let authority = stage_prepared_authority(
-        &base,
+        base.semantic_root(),
         &base_witness,
         &analysis,
+        &owner_map_edits,
         &mut stage,
         crate::platform::persistent_map::MapAdmission::unbounded(),
     )

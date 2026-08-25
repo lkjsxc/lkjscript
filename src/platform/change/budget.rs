@@ -148,6 +148,77 @@ impl Default for CanonicalReadAdmission {
     }
 }
 
+impl CanonicalReadAdmission {
+    /// Internal adapter for oracle and test readers that do not own a request budget.
+    pub(crate) const fn unbounded() -> Self {
+        Self {
+            maximum_point_reads: u64::MAX,
+            maximum_map_pages: u64::MAX,
+            maximum_map_entries: u64::MAX,
+            maximum_catalog_lookups: u64::MAX,
+            maximum_objects: u64::MAX,
+            maximum_bytes: u64::MAX,
+            maximum_decoded_records: u64::MAX,
+        }
+    }
+
+    pub(crate) fn check_work(self, work: CanonicalReadWork, phase: &str) -> Result<(), Diagnostic> {
+        check_canonical_reads(phase, work, self)
+    }
+
+    pub(crate) fn remaining_after(
+        self,
+        work: CanonicalReadWork,
+        phase: &str,
+    ) -> Result<Self, Diagnostic> {
+        self.check_work(work, phase)?;
+        Ok(Self {
+            maximum_point_reads: remaining_dimension(
+                phase,
+                "canonical_point_reads",
+                work.point_reads,
+                self.maximum_point_reads,
+            )?,
+            maximum_map_pages: remaining_dimension(
+                phase,
+                "canonical_map_pages",
+                work.map_pages_read,
+                self.maximum_map_pages,
+            )?,
+            maximum_map_entries: remaining_dimension(
+                phase,
+                "canonical_map_entries",
+                work.map_entries_visited,
+                self.maximum_map_entries,
+            )?,
+            maximum_catalog_lookups: remaining_dimension(
+                phase,
+                "canonical_catalog_lookups",
+                work.catalog_lookups,
+                self.maximum_catalog_lookups,
+            )?,
+            maximum_objects: remaining_dimension(
+                phase,
+                "canonical_objects",
+                work.objects_read,
+                self.maximum_objects,
+            )?,
+            maximum_bytes: remaining_dimension(
+                phase,
+                "canonical_bytes",
+                work.bytes_read,
+                self.maximum_bytes,
+            )?,
+            maximum_decoded_records: remaining_dimension(
+                phase,
+                "canonical_decoded_records",
+                work.canonical_records_decoded,
+                self.maximum_decoded_records,
+            )?,
+        })
+    }
+}
+
 #[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
 #[schemars(rename = "lkjscript.CanonicalMapUpdateAdmissionV1")]
 #[serde(deny_unknown_fields)]
@@ -198,6 +269,77 @@ impl Default for WitnessReadAdmission {
             maximum_bytes: 256 * 1_048_576,
             maximum_decoded_records: 1_000_000,
         }
+    }
+}
+
+impl WitnessReadAdmission {
+    /// Internal adapter for oracle and test readers that do not own a request budget.
+    pub(crate) const fn unbounded() -> Self {
+        Self {
+            maximum_point_reads: u64::MAX,
+            maximum_map_pages: u64::MAX,
+            maximum_map_entries: u64::MAX,
+            maximum_catalog_lookups: u64::MAX,
+            maximum_objects: u64::MAX,
+            maximum_bytes: u64::MAX,
+            maximum_decoded_records: u64::MAX,
+        }
+    }
+
+    pub(crate) fn check_work(self, work: WitnessReadWork, phase: &str) -> Result<(), Diagnostic> {
+        check_witness_reads(phase, work, self)
+    }
+
+    pub(crate) fn remaining_after(
+        self,
+        work: WitnessReadWork,
+        phase: &str,
+    ) -> Result<Self, Diagnostic> {
+        self.check_work(work, phase)?;
+        Ok(Self {
+            maximum_point_reads: remaining_dimension(
+                phase,
+                "witness_point_reads",
+                work.point_reads,
+                self.maximum_point_reads,
+            )?,
+            maximum_map_pages: remaining_dimension(
+                phase,
+                "witness_map_pages",
+                work.map_pages_read,
+                self.maximum_map_pages,
+            )?,
+            maximum_map_entries: remaining_dimension(
+                phase,
+                "witness_map_entries",
+                work.map_entries_visited,
+                self.maximum_map_entries,
+            )?,
+            maximum_catalog_lookups: remaining_dimension(
+                phase,
+                "witness_catalog_lookups",
+                work.catalog_lookups,
+                self.maximum_catalog_lookups,
+            )?,
+            maximum_objects: remaining_dimension(
+                phase,
+                "witness_objects",
+                work.objects_read,
+                self.maximum_objects,
+            )?,
+            maximum_bytes: remaining_dimension(
+                phase,
+                "witness_bytes",
+                work.bytes_read,
+                self.maximum_bytes,
+            )?,
+            maximum_decoded_records: remaining_dimension(
+                phase,
+                "witness_decoded_records",
+                work.witness_records_decoded,
+                self.maximum_decoded_records,
+            )?,
+        })
     }
 }
 

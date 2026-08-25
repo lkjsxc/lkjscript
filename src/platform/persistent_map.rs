@@ -308,6 +308,33 @@ impl MapWork {
         }
     }
 
+    /// Returns the exact admission still available after the work already observed by this map
+    /// operation. This lets a caller carry one request allowance across consecutive map paths.
+    pub const fn remaining_admission(&self) -> MapAdmission {
+        MapAdmission {
+            maximum_pages_read: self
+                .admission
+                .maximum_pages_read
+                .saturating_sub(self.pages_read),
+            maximum_bytes_read: self
+                .admission
+                .maximum_bytes_read
+                .saturating_sub(self.bytes_read),
+            maximum_entries_visited: self
+                .admission
+                .maximum_entries_visited
+                .saturating_sub(self.entries_visited),
+            maximum_pages_encoded: self
+                .admission
+                .maximum_pages_encoded
+                .saturating_sub(self.pages_encoded),
+            maximum_bytes_encoded: self
+                .admission
+                .maximum_bytes_encoded
+                .saturating_sub(self.bytes_encoded),
+        }
+    }
+
     fn admit_page_read(&mut self) -> Result<(), MapError> {
         let observed = admitted_total(
             self.pages_read,

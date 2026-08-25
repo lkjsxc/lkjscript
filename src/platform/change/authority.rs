@@ -5,8 +5,8 @@ use super::{
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    DependencyBinding, KernelSnapshot, OwnerBinding, RetirementBinding, SemanticRoot,
-    SemanticRootDigest, SemanticStateDigest, dependency_map_key, encode_dependency,
+    DependencyBinding, KernelSnapshot, OwnerBinding, OwnerKey, OwnerRecord, RetirementBinding,
+    SemanticRoot, SemanticRootDigest, SemanticStateDigest, dependency_map_key, encode_dependency,
     encode_dependency_binding, encode_owner, encode_owner_binding, encode_retirement,
     encode_retirement_binding, encode_root, encode_type_object, owner_map_key, retirement_map_key,
     semantic_state_digest, semantic_state_digest_from_root,
@@ -24,6 +24,7 @@ use crate::platform::witness::{
     FullWitness, ValidationWitnessDigest, ValidationWitnessManifest, bind_witness_manifest,
     rebuild_full_witness,
 };
+use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct CanonicalMapEditCounts {
@@ -59,6 +60,13 @@ pub struct PreparedAuthority {
 }
 
 #[derive(Clone, Debug)]
+pub(crate) struct PreparedOwnerMapEdits {
+    map_edits: Vec<MapEdit>,
+    pub(crate) before_records: BTreeMap<OwnerKey, OwnerRecord>,
+    pub(crate) read_work: CanonicalReadWork,
+}
+
+#[derive(Clone, Debug)]
 pub struct FullStagedAuthority {
     pub binding: PreparedAuthority,
     pub snapshot: KernelSnapshot,
@@ -67,19 +75,19 @@ pub struct FullStagedAuthority {
 
 /// Stages one already validated normalized delta without changing accepted storage visibility.
 /// The supplied store is normally an [`crate::platform::storage::object::ObjectStage`] over the
-/// exact accepted pack set.
-pub fn stage_prepared_authority<
-    B: CanonicalBaseRead + ?Sized,
+/// exact accepted pack set. Exact base owner records are prepared first so their read work can be
+/// deducted before the stage receives the remaining object and map admissions.
+pub(crate) fn stage_prepared_authority<
     W: WitnessBaseRead + ?Sized,
     S: ImmutableObjectStore + ?Sized,
 >(
-    base: &B,
+    base_root: &SemanticRoot,
     base_witness: &W,
     prepared: &PreparedChangeAnalysis,
+    owner_map_edits: &PreparedOwnerMapEdits,
     store: &mut ObjectStage<'_, S>,
     map_admission: MapAdmission,
 ) -> Result<PreparedAuthority, Vec<Diagnostic>> {
-    let base_root = base.semantic_root();
     let base_manifest = base_witness.witness_manifest();
     let (base_digest, _) = encode_root(base_root).map_err(|error| vec![error])?;
     if base_manifest.semantic_root != base_digest
@@ -95,8 +103,9 @@ pub fn stage_prepared_authority<
 
     let mut store_work = StoreWork::default();
     let semantic = stage_semantic_delta(
-        base,
+        base_root,
         &prepared.canonical,
+        owner_map_edits,
         store,
         &mut store_work,
         map_admission,
@@ -160,9 +169,10 @@ pub fn stage_full_authority<S: ImmutableObjectStore + ?Sized>(
     })
 }
 
-fn stage_semantic_delta<B: CanonicalBaseRead + ?Sized, S: ImmutableObjectStore + ?Sized>(
-    base: &B,
+fn stage_semantic_delta<S: ImmutableObjectStore + ?Sized>(
+    base_root: &SemanticRoot,
     delta: &CanonicalDelta,
+    owner_map_edits: &PreparedOwnerMapEdits,
     store: &mut S,
     store_work: &mut StoreWork,
     map_admission: MapAdmission,
@@ -170,27 +180,28 @@ fn stage_semantic_delta<B: CanonicalBaseRead + ?Sized, S: ImmutableObjectStore +
     stage_delta_objects(delta, store, store_work)?;
     let mut map_work = MapWork::with_admission(map_admission);
     let mut counts = CanonicalMapEditCounts::default();
-    let mut canonical_read_work = CanonicalReadWork::default();
-    let root = base.semantic_root();
+    let root = base_root;
+    let dependency_map_edits = dependency_edits(delta);
+    let retirement_map_edits = retirement_edits(delta);
     let (owners, dependencies, retirements, page_store_work) = {
         let mut page_store = ObjectPageStore::new(&mut *store);
         let owners = apply_map(
             root.owners,
-            owner_edits(base, delta, &mut canonical_read_work)?,
+            &owner_map_edits.map_edits,
             &mut page_store,
             &mut map_work,
             &mut counts,
         )?;
         let dependencies = apply_map(
             root.dependencies,
-            dependency_edits(delta),
+            &dependency_map_edits,
             &mut page_store,
             &mut map_work,
             &mut counts,
         )?;
         let retirements = apply_map(
             root.retirements,
-            retirement_edits(delta),
+            &retirement_map_edits,
             &mut page_store,
             &mut map_work,
             &mut counts,
@@ -224,7 +235,7 @@ fn stage_semantic_delta<B: CanonicalBaseRead + ?Sized, S: ImmutableObjectStore +
         bytes,
         map_work,
         map_edits: counts,
-        canonical_read_work,
+        canonical_read_work: owner_map_edits.read_work,
     })
 }
 
@@ -424,54 +435,56 @@ fn stage_delta_objects<S: ImmutableObjectStore + ?Sized>(
     Ok(())
 }
 
-fn owner_edits<B: CanonicalBaseRead + ?Sized>(
+pub(crate) fn prepare_owner_map_edits<B: CanonicalBaseRead + ?Sized>(
     base: &B,
     delta: &CanonicalDelta,
-    work: &mut CanonicalReadWork,
-) -> Result<Vec<MapEdit>, Diagnostic> {
-    delta
-        .owners
-        .iter()
-        .map(|(owner, edit)| {
-            let before = match edit.before {
-                Some(object) => {
-                    let read = base.read_owner(*owner)?;
-                    work.add(read.work);
-                    let record = read.value.ok_or_else(|| {
-                        authority_error(
-                            DiagnosticClass::Corrupt,
-                            "change_authority_owner_before",
-                            "owner delta names a missing exact base record",
-                        )
-                    })?;
-                    let (actual, _) = encode_owner(&record)?;
-                    if actual != object {
-                        return Err(authority_error(
-                            DiagnosticClass::Corrupt,
-                            "change_authority_owner_before_digest",
-                            "owner delta before digest disagrees with exact base authority",
-                        ));
-                    }
-                    Some(encode_owner_binding(&OwnerBinding {
-                        kind: record.kind(),
-                        object,
-                    }))
+) -> Result<PreparedOwnerMapEdits, Diagnostic> {
+    let mut map_edits = Vec::with_capacity(delta.owners.len());
+    let mut before_records = BTreeMap::new();
+    let mut read_work = CanonicalReadWork::default();
+    for (owner, edit) in &delta.owners {
+        let before = match edit.before {
+            Some(object) => {
+                let read = base.read_owner(*owner)?;
+                read_work.add(read.work);
+                let record = read.value.ok_or_else(|| {
+                    authority_error(
+                        DiagnosticClass::Corrupt,
+                        "change_authority_owner_before",
+                        "owner delta names a missing exact base record",
+                    )
+                })?;
+                let (actual, _) = encode_owner(&record)?;
+                if actual != object {
+                    return Err(authority_error(
+                        DiagnosticClass::Corrupt,
+                        "change_authority_owner_before_digest",
+                        "owner delta before digest disagrees with exact base authority",
+                    ));
                 }
-                None => None,
-            };
-            let after = edit.after.as_ref().map(|(object, record)| {
-                encode_owner_binding(&OwnerBinding {
-                    kind: record.kind(),
-                    object: *object,
-                })
-            });
-            Ok(MapEdit {
-                key: owner_map_key(*owner).to_vec(),
-                before,
-                after,
+                let kind = record.kind();
+                before_records.insert(*owner, record);
+                Some(encode_owner_binding(&OwnerBinding { kind, object }))
+            }
+            None => None,
+        };
+        let after = edit.after.as_ref().map(|(object, record)| {
+            encode_owner_binding(&OwnerBinding {
+                kind: record.kind(),
+                object: *object,
             })
-        })
-        .collect()
+        });
+        map_edits.push(MapEdit {
+            key: owner_map_key(*owner).to_vec(),
+            before,
+            after,
+        });
+    }
+    Ok(PreparedOwnerMapEdits {
+        map_edits,
+        before_records,
+        read_work,
+    })
 }
 
 fn dependency_edits(delta: &CanonicalDelta) -> Vec<MapEdit> {
@@ -508,13 +521,13 @@ fn retirement_edits(delta: &CanonicalDelta) -> Vec<MapEdit> {
 
 fn apply_map<S: PageStore + ?Sized>(
     root: crate::platform::persistent_map::MapRoot,
-    edits: Vec<MapEdit>,
+    edits: &[MapEdit],
     store: &mut S,
     work: &mut MapWork,
     counts: &mut CanonicalMapEditCounts,
 ) -> Result<crate::platform::persistent_map::MapRoot, Diagnostic> {
     let (map, outcome) = PersistentMap::from_root(root)
-        .apply_sorted_edits(store, &edits, work)
+        .apply_sorted_edits(store, edits, work)
         .map_err(map_diagnostic)?;
     add_map_counts(counts, outcome);
     Ok(map.root())

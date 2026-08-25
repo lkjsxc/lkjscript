@@ -12,8 +12,8 @@ use crate::platform::kernel::{
     ParameterParent, TypeForm, TypeObject, TypeObjectDigest, decode_type_object, encode_owner,
 };
 use crate::platform::persistent_map::{
-    MapContentRoot, MapError, MapErrorClass, MapRoot, MapWork, MemoryPageStore, PageDigest,
-    PageStore, PageWrite, PersistentMap,
+    MapAdmission, MapContentRoot, MapError, MapErrorClass, MapRoot, MapWork, MemoryPageStore,
+    PageDigest, PageStore, PageWrite, PersistentMap,
 };
 use crate::platform::semantic_id::{
     CaseId, DeclarationId, FieldId, OperationId, ParameterId, PortId, RequirementId,
@@ -27,6 +27,7 @@ use crate::platform::storage::object::{
 use crate::platform::storage::page_store::{ObjectPageReader, ObjectPageStore};
 use crate::platform::witness::OwnerSummary;
 use bincode::{Decode, Encode};
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
@@ -488,6 +489,16 @@ pub fn validate_package_interface<S: ImmutableObjectStore + ?Sized>(
     store: &S,
     work: &mut StoreWork,
 ) -> Result<PackageInterfaceValidation, Diagnostic> {
+    validate_package_interface_admitted(package, root, store, work, &mut MapAdmission::unbounded())
+}
+
+pub(crate) fn validate_package_interface_admitted<S: ImmutableObjectStore + ?Sized>(
+    package: PackageId,
+    root: MapRoot,
+    store: &S,
+    work: &mut StoreWork,
+    admission: &mut MapAdmission,
+) -> Result<PackageInterfaceValidation, Diagnostic> {
     if root.entries() > MAXIMUM_PACKAGE_INTERFACE_VALIDATION_WORK as u64 {
         return Err(interface_error(
             DiagnosticClass::Resource,
@@ -496,23 +507,25 @@ pub fn validate_package_interface<S: ImmutableObjectStore + ?Sized>(
         ));
     }
     let map = PersistentMap::from_root(root);
-    let reader = ObjectPageReader::new(store);
-    let mut map_work = MapWork::default();
-    let mut page_recorder = ReachablePageRecorder::default();
-    map.copy_reachable(&reader, &mut page_recorder, &mut map_work)
-        .map_err(map_diagnostic)?;
-    let mut bindings = Vec::with_capacity(root.entries() as usize);
-    map.for_each(&reader, &mut map_work, |key, value| {
+    let object_reader = ObjectPageReader::new(store);
+    let reader = ReachablePageReader::new(&object_reader);
+    let mut map_work = MapWork::with_admission(*admission);
+    let mut bindings = Vec::with_capacity(
+        usize::try_from(root.entries())
+            .unwrap_or(usize::MAX)
+            .min(64),
+    );
+    let read_result = map.for_each(&reader, &mut map_work, |key, value| {
         bindings.push((key.to_vec(), value.to_vec()));
         Ok(())
-    })
-    .map_err(map_diagnostic)?;
-    work.add(reader.work());
+    });
+    *admission = map_work.remaining_admission();
+    read_result.map_err(map_diagnostic)?;
+    work.add(object_reader.work());
 
-    let mut reachable_objects = page_recorder
-        .pages
-        .iter()
-        .copied()
+    let mut reachable_objects = reader
+        .into_pages()
+        .into_iter()
         .map(|digest| ObjectKey::from_digest(ObjectDomain::MapPage, digest.bytes()))
         .collect::<BTreeSet<_>>();
     let mut owners = BTreeMap::new();
@@ -963,32 +976,42 @@ fn semantic_declaration(
     }
 }
 
-#[derive(Default)]
-struct ReachablePageRecorder {
-    pages: BTreeSet<PageDigest>,
+struct ReachablePageReader<'a, P: ?Sized> {
+    source: &'a P,
+    pages: RefCell<BTreeSet<PageDigest>>,
 }
 
-impl PageStore for ReachablePageRecorder {
-    fn read_page(
-        &self,
-        _digest: PageDigest,
-        _maximum_bytes: usize,
-    ) -> Result<Option<Vec<u8>>, MapError> {
-        Ok(None)
+impl<'a, P: PageStore + ?Sized> ReachablePageReader<'a, P> {
+    fn new(source: &'a P) -> Self {
+        Self {
+            source,
+            pages: RefCell::new(BTreeSet::new()),
+        }
     }
 
-    fn write_page(&mut self, digest: PageDigest, bytes: &[u8]) -> Result<PageWrite, MapError> {
-        if PageDigest::of(bytes) != digest {
-            return Err(MapError {
-                class: MapErrorClass::Corrupt,
-                code: "package_interface_page_digest",
-                message: "reachable interface page changed digest during validation".to_owned(),
-            });
+    fn into_pages(self) -> BTreeSet<PageDigest> {
+        self.pages.into_inner()
+    }
+}
+
+impl<P: PageStore + ?Sized> PageStore for ReachablePageReader<'_, P> {
+    fn read_page(
+        &self,
+        digest: PageDigest,
+        maximum_bytes: usize,
+    ) -> Result<Option<Vec<u8>>, MapError> {
+        let bytes = self.source.read_page(digest, maximum_bytes)?;
+        if bytes.is_some() {
+            self.pages.borrow_mut().insert(digest);
         }
-        Ok(if self.pages.insert(digest) {
-            PageWrite::Inserted
-        } else {
-            PageWrite::Reused
+        Ok(bytes)
+    }
+
+    fn write_page(&mut self, _digest: PageDigest, _bytes: &[u8]) -> Result<PageWrite, MapError> {
+        Err(MapError {
+            class: MapErrorClass::Store,
+            code: "package_interface_reader_write",
+            message: "package-interface validation page source is read-only".to_owned(),
         })
     }
 }

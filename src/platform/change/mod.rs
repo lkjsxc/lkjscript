@@ -22,12 +22,14 @@ mod witness_update;
 
 pub use authority::{
     CanonicalMapEditCounts, FullStagedAuthority, PreparedAuthority, SemanticAuthority,
-    WitnessAuthority, stage_full_authority, stage_prepared_authority,
+    WitnessAuthority, stage_full_authority,
 };
+pub(crate) use authority::{prepare_owner_map_edits, stage_prepared_authority};
 pub use base_read::{
     BoundOwnerSummary, CanonicalBaseRead, CanonicalRead, CanonicalReadWork, WitnessBaseRead,
     WitnessRead, WitnessReadWork, WitnessRelationRead, WitnessTestDependencyRead,
 };
+pub(crate) use base_read::{BudgetedCanonicalBase, BudgetedWitnessBase};
 pub use budget::{
     AuthoredChangeAdmission, CanonicalEditAdmission, CanonicalEditWork,
     CanonicalMapUpdateAdmission, CanonicalMapUpdateWork, CanonicalReadAdmission, ChangeBudget,

@@ -8,9 +8,10 @@ use super::validate::{
     validate_incremental_frontier_with_admission, validate_structural_frontier_with_admission,
 };
 use super::{
-    CanonicalBaseRead, CanonicalDelta, CanonicalReadWork, ChangeBudget, ChangeBudgetWork,
-    DerivedDelta, IncrementalValidationReport, KernelOverlay, PlannedSummaries,
-    TestDependencyDelta, WitnessMapBase, WitnessMapUpdate, WitnessReadWork,
+    BudgetedCanonicalBase, BudgetedWitnessBase, CanonicalBaseRead, CanonicalDelta,
+    CanonicalReadWork, ChangeBudget, ChangeBudgetWork, DerivedDelta, IncrementalValidationReport,
+    KernelOverlay, PlannedSummaries, TestDependencyDelta, WitnessMapBase, WitnessMapUpdate,
+    WitnessReadWork,
 };
 use crate::platform::diagnostic::Diagnostic;
 
@@ -54,14 +55,26 @@ pub fn prepare_change_analysis_with_budget<
 ) -> Result<PreparedChangeAnalysis, Vec<Diagnostic>> {
     let declared_budget = budget;
     let mut budget = ChangeBudgetMeter::new(budget, initial_work).map_err(|error| vec![error])?;
+    let canonical_base = BudgetedCanonicalBase::new(
+        base,
+        declared_budget.canonical_reads,
+        initial_work.canonical_reads,
+    )
+    .map_err(|error| vec![error])?;
+    let witness_base = BudgetedWitnessBase::new(
+        base_witness,
+        declared_budget.witness_reads,
+        initial_work.witness_reads,
+    )
+    .map_err(|error| vec![error])?;
     budget
         .observe_canonical(&canonical)
         .map_err(|error| vec![error])?;
-    let overlay = KernelOverlay::new(base, &canonical);
+    let overlay = KernelOverlay::new(&canonical_base, &canonical);
     let derived = derive_local_delta_with_admission(
         &overlay,
         &canonical,
-        base_witness,
+        &witness_base,
         declared_budget.impact.maximum_ownership_steps,
         declared_budget.impact.maximum_relation_edges,
     )
@@ -73,7 +86,7 @@ pub fn prepare_change_analysis_with_budget<
         &overlay,
         &canonical,
         &derived,
-        base_witness,
+        &witness_base,
         declared_budget.validation,
     )?;
     budget
@@ -90,7 +103,7 @@ pub fn prepare_change_analysis_with_budget<
         &overlay,
         &canonical,
         &derived,
-        base_witness,
+        &witness_base,
         impact_admission,
     )
     .map_err(|error| vec![error])?;
@@ -105,7 +118,7 @@ pub fn prepare_change_analysis_with_budget<
         &canonical,
         &summaries.plan,
         &summaries.final_delta,
-        base_witness,
+        &witness_base,
         structural,
         declared_budget.validation,
     )?;
@@ -116,7 +129,7 @@ pub fn prepare_change_analysis_with_budget<
         &overlay,
         &canonical,
         &derived,
-        base_witness,
+        &witness_base,
         TestDependencyAdmission::new(
             declared_budget.tests,
             budget

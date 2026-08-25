@@ -8,18 +8,18 @@ use crate::platform::change::{
     AuthoredPort, AuthoredPortImplementation, AuthoredPortReference, AuthoredPrecondition,
     AuthoredRecordExpressionField, AuthoredRequirement, AuthoredRequirementReference,
     AuthoredResourceLimit, AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameter,
-    AuthoredTypeParameterReference, CanonicalDelta, ChangeBudget, DeclarationSelector,
-    KernelOverlay, ModuleSelector, OwnerSelector, ParameterParentSelector, PrimitiveEdit,
-    derive_local_delta, derive_summary_delta, derive_test_dependency_delta,
-    plan_impact_and_summaries, prepare_change_analysis, validate_incremental_frontier,
-    validate_structural_frontier,
+    AuthoredTypeParameterReference, BudgetedCanonicalBase, CanonicalBaseRead, CanonicalDelta,
+    CanonicalReadAdmission, CanonicalReadWork, ChangeBudget, DeclarationSelector, KernelOverlay,
+    ModuleSelector, OwnerSelector, ParameterParentSelector, PrimitiveEdit, derive_local_delta,
+    derive_summary_delta, derive_test_dependency_delta, plan_impact_and_summaries,
+    prepare_change_analysis, validate_incremental_frontier, validate_structural_frontier,
 };
 use crate::platform::diagnostic::DiagnosticClass;
 use crate::platform::kernel::{
     AnnotationClass, DeclarationPayload, DeclarationVisibility, DependencyObjectDigest,
-    DocumentationClass, ExactOwnerKey, ExpressionOperation, ExternalVisibility, FunctionEffect,
-    Idempotency, LocalValueReference, Name, NamespaceClass, OwnerKey, OwnerRecord, PackageId,
-    RelationEdge, RelationEndpoint, RelationKind, RequirementReference, ResourceUnit,
+    DependencyRecord, DocumentationClass, ExactOwnerKey, ExpressionOperation, ExternalVisibility,
+    FunctionEffect, Idempotency, LocalValueReference, Name, NamespaceClass, OwnerKey, OwnerRecord,
+    PackageId, RelationEdge, RelationEndpoint, RelationKind, RequirementReference, ResourceUnit,
     RetirementObjectDigest, SemanticRoot, SemanticRootDigest, TypeForm, TypeObject,
     TypeObjectDigest, encode_owner, encode_type_object,
 };
@@ -653,6 +653,78 @@ fn staged_package_interface_validates_an_exact_cross_package_pure_call() {
         .repository
         .stage_package_transport(exported.transport_digest, &exported.packs)
         .expect("stage source interface closure");
+    let package_view = target
+        .repository
+        .view_current()
+        .expect("pinned target view for package admission");
+    let dependency = DependencyRecord {
+        graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+        package: exported.revision.package,
+        semantic_revision: exported.revision.revision.revision_id().unwrap(),
+        package_revision: exported.revision_digest,
+    };
+    let package_read = CanonicalBaseRead::read_package_interface_owner(
+        &package_view,
+        &dependency,
+        OwnerKey::Declaration(source_function),
+    )
+    .expect("unbounded exact package-interface read");
+    assert!(package_read.value.is_some());
+    type SetPackageReadLimit = fn(&mut CanonicalReadAdmission, u64);
+    let package_read_dimensions: &[(SetPackageReadLimit, u64, &str)] = &[
+        (
+            |admission, value| admission.maximum_point_reads = value,
+            package_read.work.point_reads,
+            "change_budget_canonical_point_reads",
+        ),
+        (
+            |admission, value| admission.maximum_map_pages = value,
+            package_read.work.map_pages_read,
+            "change_budget_canonical_map_pages",
+        ),
+        (
+            |admission, value| admission.maximum_map_entries = value,
+            package_read.work.map_entries_visited,
+            "change_budget_canonical_map_entries",
+        ),
+        (
+            |admission, value| admission.maximum_catalog_lookups = value,
+            package_read.work.catalog_lookups,
+            "change_budget_canonical_catalog_lookups",
+        ),
+        (
+            |admission, value| admission.maximum_objects = value,
+            package_read.work.objects_read,
+            "change_budget_canonical_objects",
+        ),
+        (
+            |admission, value| admission.maximum_bytes = value,
+            package_read.work.bytes_read,
+            "change_budget_canonical_bytes",
+        ),
+        (
+            |admission, value| admission.maximum_decoded_records = value,
+            package_read.work.canonical_records_decoded,
+            "change_budget_canonical_decoded_records",
+        ),
+    ];
+    for (set_limit, observed, expected) in package_read_dimensions {
+        assert!(*observed > 0, "package read must exercise {expected}");
+        let mut admission = CanonicalReadAdmission::default();
+        set_limit(&mut admission, observed - 1);
+        let admitted =
+            BudgetedCanonicalBase::new(&package_view, admission, CanonicalReadWork::default())
+                .expect("valid package read admission");
+        let diagnostic = admitted
+            .read_package_interface_owner(&dependency, OwnerKey::Declaration(source_function))
+            .expect_err("each package read dimension must reject independently");
+        assert_eq!(diagnostic.code, *expected);
+        assert_eq!(
+            target.repository.current().unwrap().head,
+            target.current.head,
+            "an exhausted package read must not publish"
+        );
+    }
     let target_change = |function| AuthoredChangeSet {
         base: target.current.head.revision,
         preconditions: Vec::new(),
@@ -700,7 +772,8 @@ fn staged_package_interface_validates_an_exact_cross_package_pure_call() {
     assert!(
         rejected
             .iter()
-            .any(|diagnostic| diagnostic.code == "kernel_type_dependency_owner_missing")
+            .any(|diagnostic| diagnostic.code == "kernel_type_dependency_owner_missing"),
+        "unexpected diagnostics: {rejected:#?}"
     );
     assert_eq!(
         target.repository.current().unwrap().head,

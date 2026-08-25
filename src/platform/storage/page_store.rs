@@ -2,7 +2,7 @@
 
 use super::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, StageOutcome, StoreError, StoreErrorClass,
-    StoreReadAdmission, StoreWork,
+    StoreReadAdmission, StoreReadLimits, StoreWork,
 };
 use crate::platform::persistent_map::{MapError, MapErrorClass, PageDigest, PageStore, PageWrite};
 use std::cell::RefCell;
@@ -41,6 +41,12 @@ impl<'a, S: ?Sized> ObjectPageReader<'a, S> {
 
     pub fn work(&self) -> StoreWork {
         *self.work.borrow()
+    }
+
+    pub fn remaining_read_admission(&self) -> Option<StoreReadLimits> {
+        self.admission
+            .as_ref()
+            .map(|admission| admission.borrow().remaining())
     }
 }
 

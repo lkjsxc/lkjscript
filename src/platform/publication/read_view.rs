@@ -5,11 +5,13 @@ use super::{
     PublicationOptions, prepare_change_publication,
 };
 use crate::platform::change::{
-    AuthoredChangeSet, AuthoredLoweringWork, BoundOwnerSummary, CanonicalBaseRead, CanonicalDelta,
-    CanonicalRead, CanonicalReadWork, ChangeBudget, DerivedDelta, PrimitiveEdit, SummaryDelta,
+    AuthoredChangeSet, AuthoredLoweringWork, BoundOwnerSummary, BudgetedCanonicalBase,
+    BudgetedWitnessBase, CanonicalBaseRead, CanonicalDelta, CanonicalRead, CanonicalReadAdmission,
+    CanonicalReadWork, ChangeBudget, DerivedDelta, PrimitiveEdit, SummaryDelta,
     TestDependencyDelta, WitnessBaseRead, WitnessMapAdmission, WitnessMapBase, WitnessMapUpdate,
-    WitnessRead, WitnessReadWork, WitnessRelationRead, WitnessTestDependencyRead,
-    lower_authored_changes, prepare_change_analysis_with_budget, update_witness_maps_from,
+    WitnessRead, WitnessReadAdmission, WitnessReadWork, WitnessRelationRead,
+    WitnessTestDependencyRead, lower_authored_changes, prepare_change_analysis_with_budget,
+    update_witness_maps_from,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
@@ -22,21 +24,22 @@ use crate::platform::kernel::{
 };
 use crate::platform::package_interface::{
     PackageInterfaceBuild, PackageInterfaceOwner, PackageInterfaceSelection,
-    PackageInterfaceValidation, build_package_interface, decode_package_interface_binding,
-    package_interface_digest,
+    PackageInterfaceValidation, build_package_interface, package_interface_digest,
 };
 use crate::platform::package_transport::{
     MAXIMUM_PACKAGE_CLOSURE, MAXIMUM_PACKAGE_DEPENDENCIES, PACKAGE_REVISION_CONTRACT_VERSION,
     PACKAGE_TRANSPORT_CONTRACT_VERSION, PackageRevision, PackageTransport,
     PackageTransportClosureValidation,
 };
-use crate::platform::persistent_map::{MapError, MapErrorClass, MapRoot, MapWork, PersistentMap};
+use crate::platform::persistent_map::{
+    MapAdmission, MapError, MapErrorClass, MapRoot, MapWork, PersistentMap,
+};
 use crate::platform::semantic_id::RevisionId;
 use crate::platform::storage::contract::TARGET_PACK_BYTES;
 use crate::platform::storage::directory::PackDirectoryStore;
 use crate::platform::storage::object::{
-    ImmutableObjectStore, ObjectDomain, ObjectKey, ObjectStage, StoreError, StoreErrorClass,
-    StoreReadAdmission, StoreReadLimits, StoreWork,
+    ImmutableObjectStore, ObjectDomain, ObjectKey, ObjectStage, StageOutcome, StoreError,
+    StoreErrorClass, StoreReadAdmission, StoreReadLimits, StoreWork,
 };
 use crate::platform::storage::pack::PackBuilder;
 use crate::platform::storage::page_store::ObjectPageReader;
@@ -47,6 +50,7 @@ use crate::platform::witness::{
     forward_relation_prefix, owner_key_bytes, reverse_relation_package_owner_prefix,
     reverse_relation_prefix, test_dependency_forward_prefix,
 };
+use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 
 pub const MAXIMUM_RELATION_READ_ITEMS: usize =
@@ -106,6 +110,174 @@ impl RepositoryReadWork {
             .map
             .entries_skipped
             .saturating_add(other.entries_skipped);
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct RepositoryReadAdmission {
+    map: MapAdmission,
+    store: StoreReadAdmission,
+    maximum_canonical_records: u64,
+    maximum_witness_records: u64,
+}
+
+impl RepositoryReadAdmission {
+    const fn canonical(admission: CanonicalReadAdmission) -> Self {
+        Self {
+            map: MapAdmission {
+                maximum_pages_read: admission.maximum_map_pages,
+                maximum_bytes_read: admission.maximum_bytes,
+                maximum_entries_visited: admission.maximum_map_entries,
+                maximum_pages_encoded: 0,
+                maximum_bytes_encoded: 0,
+            },
+            store: StoreReadAdmission::new(StoreReadLimits {
+                maximum_catalog_lookups: admission.maximum_catalog_lookups,
+                maximum_objects: admission.maximum_objects,
+                maximum_bytes: admission.maximum_bytes,
+            }),
+            maximum_canonical_records: admission.maximum_decoded_records,
+            maximum_witness_records: 0,
+        }
+    }
+
+    const fn witness(admission: WitnessReadAdmission) -> Self {
+        Self {
+            map: MapAdmission {
+                maximum_pages_read: admission.maximum_map_pages,
+                maximum_bytes_read: admission.maximum_bytes,
+                maximum_entries_visited: admission.maximum_map_entries,
+                maximum_pages_encoded: 0,
+                maximum_bytes_encoded: 0,
+            },
+            store: StoreReadAdmission::new(StoreReadLimits {
+                maximum_catalog_lookups: admission.maximum_catalog_lookups,
+                maximum_objects: admission.maximum_objects,
+                maximum_bytes: admission.maximum_bytes,
+            }),
+            maximum_canonical_records: 0,
+            maximum_witness_records: admission.maximum_decoded_records,
+        }
+    }
+
+    const fn unbounded() -> Self {
+        Self {
+            map: MapAdmission::unbounded(),
+            store: StoreReadAdmission::unbounded(),
+            maximum_canonical_records: u64::MAX,
+            maximum_witness_records: u64::MAX,
+        }
+    }
+
+    fn admit_canonical_records(&mut self, records: u64) -> Result<(), Diagnostic> {
+        admit_decoded_records(
+            &mut self.maximum_canonical_records,
+            records,
+            "change_budget_canonical_decoded_records",
+            "canonical records",
+        )
+    }
+
+    fn admit_witness_records(&mut self, records: u64) -> Result<(), Diagnostic> {
+        admit_decoded_records(
+            &mut self.maximum_witness_records,
+            records,
+            "change_budget_witness_decoded_records",
+            "witness records",
+        )
+    }
+}
+
+/// Read-only adapter that carries one package-closure object and decoder admission through APIs
+/// whose transport-neutral store boundary predates change-budget enforcement.
+struct AdmittedRepositoryStore<'a> {
+    base: &'a PackDirectoryStore,
+    store: Cell<StoreReadAdmission>,
+    canonical_records: Cell<u64>,
+}
+
+impl<'a> AdmittedRepositoryStore<'a> {
+    const fn new(
+        base: &'a PackDirectoryStore,
+        store: StoreReadAdmission,
+        canonical_records: u64,
+    ) -> Self {
+        Self {
+            base,
+            store: Cell::new(store),
+            canonical_records: Cell::new(canonical_records),
+        }
+    }
+
+    fn remaining_store(&self) -> StoreReadAdmission {
+        self.store.get()
+    }
+
+    fn remaining_canonical_records(&self) -> u64 {
+        self.canonical_records.get()
+    }
+
+    fn admit_decoded_object(&self, domain: ObjectDomain) -> Result<(), StoreError> {
+        if !matches!(
+            domain,
+            ObjectDomain::SemanticRoot
+                | ObjectDomain::Type
+                | ObjectDomain::PackageRevision
+                | ObjectDomain::PackageTransport
+                | ObjectDomain::PackageInterface
+        ) {
+            return Ok(());
+        }
+        let remaining = self.canonical_records.get();
+        let Some(remaining) = remaining.checked_sub(1) else {
+            return Err(StoreError::new(
+                StoreErrorClass::Resource,
+                "change_budget_canonical_decoded_records",
+                "package closure exhausted its canonical decoded-record admission",
+            ));
+        };
+        self.canonical_records.set(remaining);
+        Ok(())
+    }
+}
+
+impl ImmutableObjectStore for AdmittedRepositoryStore<'_> {
+    fn read(
+        &self,
+        key: ObjectKey,
+        maximum_bytes: usize,
+        work: &mut StoreWork,
+    ) -> Result<Option<Vec<u8>>, StoreError> {
+        let mut admission = self.store.get();
+        let result = self
+            .base
+            .read_admitted(key, maximum_bytes, &mut admission, work);
+        self.store.set(admission);
+        let bytes = result?;
+        if bytes.is_some() {
+            self.admit_decoded_object(key.domain)?;
+        }
+        Ok(bytes)
+    }
+
+    fn contains(&self, key: ObjectKey, work: &mut StoreWork) -> Result<bool, StoreError> {
+        let mut admission = self.store.get();
+        let result = self.base.contains_admitted(key, &mut admission, work);
+        self.store.set(admission);
+        result
+    }
+
+    fn stage(
+        &mut self,
+        _key: ObjectKey,
+        _bytes: &[u8],
+        _work: &mut StoreWork,
+    ) -> Result<StageOutcome, StoreError> {
+        Err(StoreError::new(
+            StoreErrorClass::Input,
+            "publication_admitted_store_read_only",
+            "package closure admission is a read-only object-store boundary",
+        ))
     }
 }
 
@@ -222,9 +394,25 @@ impl RepositoryView {
         request: &AuthoredChangeSet,
         options: PublicationOptions,
     ) -> Result<PreparedAuthoredPublication, Vec<Diagnostic>> {
-        let lowering =
-            lower_authored_changes(self, self, request, options.idempotency_key.as_deref())
-                .map_err(|diagnostic| vec![diagnostic])?;
+        let canonical = BudgetedCanonicalBase::new(
+            self,
+            request.budget.canonical_reads,
+            CanonicalReadWork::default(),
+        )
+        .map_err(|diagnostic| vec![diagnostic])?;
+        let witness = BudgetedWitnessBase::new(
+            self,
+            request.budget.witness_reads,
+            WitnessReadWork::default(),
+        )
+        .map_err(|diagnostic| vec![diagnostic])?;
+        let lowering = lower_authored_changes(
+            &canonical,
+            &witness,
+            request,
+            options.idempotency_key.as_deref(),
+        )
+        .map_err(|diagnostic| vec![diagnostic])?;
         let publication = self.prepare_change_with_prior_work(
             lowering.edits,
             options,
@@ -259,8 +447,11 @@ impl RepositoryView {
         prior_work: AuthoredLoweringWork,
         budget: ChangeBudget,
     ) -> Result<PreparedPublication, Vec<Diagnostic>> {
-        let normalization =
-            CanonicalDelta::normalize_from(self, edits).map_err(|diagnostic| vec![diagnostic])?;
+        let canonical =
+            BudgetedCanonicalBase::new(self, budget.canonical_reads, prior_work.canonical)
+                .map_err(|diagnostic| vec![diagnostic])?;
+        let normalization = CanonicalDelta::normalize_from(&canonical, edits)
+            .map_err(|diagnostic| vec![diagnostic])?;
         if normalization.base_revision != Some(self.revision()) {
             return Err(vec![read_error(
                 DiagnosticClass::Corrupt,
@@ -270,12 +461,19 @@ impl RepositoryView {
         }
         for edit in normalization.canonical.dependencies.values() {
             if let Some((_, dependency)) = &edit.after {
-                self.resolve_package_transport(dependency.package_revision)
+                canonical
+                    .read_admitted(|read_admission| {
+                        self.resolve_package_transport_admitted(
+                            dependency.package_revision,
+                            &mut RepositoryReadAdmission::canonical(read_admission),
+                        )
+                        .map(canonical_read)
+                    })
                     .map_err(|diagnostic| vec![diagnostic])?;
             }
         }
         let mut budget_reads = prior_work;
-        budget_reads.canonical.add(normalization.work);
+        budget_reads.canonical = canonical.work();
         let initial_budget_work = budget_reads.budget_work();
         let mut analysis = prepare_change_analysis_with_budget(
             self,
@@ -284,8 +482,7 @@ impl RepositoryView {
             budget,
             initial_budget_work,
         )?;
-        analysis.canonical_read_work.add(prior_work.canonical);
-        analysis.canonical_read_work.add(normalization.work);
+        analysis.canonical_read_work.add(budget_reads.canonical);
         analysis.witness_read_work.add(prior_work.witness);
         prepare_change_publication(
             self.current.accepted,
@@ -298,22 +495,33 @@ impl RepositoryView {
     }
 
     pub fn owner(&self, owner: OwnerKey) -> Result<RevisionRead<Option<OwnerRecord>>, Diagnostic> {
+        self.owner_admitted(owner, &mut RepositoryReadAdmission::unbounded())
+    }
+
+    fn owner_admitted(
+        &self,
+        owner: OwnerKey,
+        admission: &mut RepositoryReadAdmission,
+    ) -> Result<RevisionRead<Option<OwnerRecord>>, Diagnostic> {
         let mut work = RepositoryReadWork::default();
-        let Some(binding_bytes) = self.lookup_map(
+        let Some(binding_bytes) = self.lookup_map_admitted(
             self.current.semantic_root.owners,
             &owner_map_key(owner),
             &mut work,
+            admission,
         )?
         else {
             return Ok(self.read(None, work));
         };
         let binding = decode_owner_binding(&binding_bytes, owner)?;
-        let bytes = self.read_required_object(
+        let bytes = self.read_required_object_admitted(
             ObjectDomain::Owner,
             binding.object.bytes(),
             "accepted owner binding references a missing owner object",
             &mut work,
+            admission,
         )?;
+        admission.admit_canonical_records(1)?;
         let record = decode_owner(&bytes, owner, binding.kind, binding.object)?;
         work.canonical_records_decoded = 1;
         work.items_returned = 1;
@@ -324,12 +532,25 @@ impl RepositoryView {
         &self,
         digest: TypeObjectDigest,
     ) -> Result<RevisionRead<Option<TypeObject>>, Diagnostic> {
+        self.type_object_admitted(digest, &mut RepositoryReadAdmission::unbounded())
+    }
+
+    fn type_object_admitted(
+        &self,
+        digest: TypeObjectDigest,
+        admission: &mut RepositoryReadAdmission,
+    ) -> Result<RevisionRead<Option<TypeObject>>, Diagnostic> {
         let mut work = RepositoryReadWork::default();
-        let Some(bytes) =
-            self.read_optional_object(ObjectDomain::Type, digest.bytes(), &mut work)?
+        let Some(bytes) = self.read_optional_object_admitted(
+            ObjectDomain::Type,
+            digest.bytes(),
+            &mut work,
+            admission,
+        )?
         else {
             return Ok(self.read(None, work));
         };
+        admission.admit_canonical_records(1)?;
         let object = decode_type_object(&bytes, digest)?;
         work.canonical_records_decoded = 1;
         work.items_returned = 1;
@@ -340,22 +561,33 @@ impl RepositoryView {
         &self,
         package: PackageId,
     ) -> Result<RevisionRead<Option<DependencyRecord>>, Diagnostic> {
+        self.dependency_admitted(package, &mut RepositoryReadAdmission::unbounded())
+    }
+
+    fn dependency_admitted(
+        &self,
+        package: PackageId,
+        admission: &mut RepositoryReadAdmission,
+    ) -> Result<RevisionRead<Option<DependencyRecord>>, Diagnostic> {
         let mut work = RepositoryReadWork::default();
-        let Some(binding_bytes) = self.lookup_map(
+        let Some(binding_bytes) = self.lookup_map_admitted(
             self.current.semantic_root.dependencies,
             &dependency_map_key(package),
             &mut work,
+            admission,
         )?
         else {
             return Ok(self.read(None, work));
         };
         let binding = decode_dependency_binding(&binding_bytes)?;
-        let bytes = self.read_required_object(
+        let bytes = self.read_required_object_admitted(
             ObjectDomain::Dependency,
             binding.object.bytes(),
             "accepted dependency binding references a missing dependency object",
             &mut work,
+            admission,
         )?;
+        admission.admit_canonical_records(1)?;
         let record = decode_dependency(&bytes, &package, binding.object)?;
         work.canonical_records_decoded = 1;
         work.items_returned = 1;
@@ -366,16 +598,48 @@ impl RepositoryView {
         &self,
         revision: PackageRevisionDigest,
     ) -> Result<RevisionRead<PackageTransportClosureValidation>, Diagnostic> {
+        self.resolve_package_transport_admitted(revision, &mut RepositoryReadAdmission::unbounded())
+    }
+
+    fn resolve_package_transport_admitted(
+        &self,
+        revision: PackageRevisionDigest,
+        admission: &mut RepositoryReadAdmission,
+    ) -> Result<RevisionRead<PackageTransportClosureValidation>, Diagnostic> {
         let mut work = RepositoryReadWork::default();
-        let validated = super::repository::resolve_package_transport_closure(
+        let admitted_store = AdmittedRepositoryStore::new(
             &self.store,
+            admission.store,
+            admission.maximum_canonical_records,
+        );
+        let initial_map_admission = admission.map;
+        let validated = super::repository::resolve_package_transport_closure_admitted(
+            &admitted_store,
             &self.store,
             revision,
             None,
             None,
             &mut work.store,
+            &mut admission.map,
         )?;
-        work.add_map(validated.root_interface.map_work);
+        admission.store = admitted_store.remaining_store();
+        let remaining_records = admitted_store.remaining_canonical_records();
+        work.canonical_records_decoded = admission
+            .maximum_canonical_records
+            .saturating_sub(remaining_records);
+        admission.maximum_canonical_records = remaining_records;
+        let mut interface_map_work = validated.interface_map_work;
+        interface_map_work.pages_read = initial_map_admission
+            .maximum_pages_read
+            .saturating_sub(admission.map.maximum_pages_read);
+        interface_map_work.pages_decoded = interface_map_work.pages_read;
+        interface_map_work.bytes_read = initial_map_admission
+            .maximum_bytes_read
+            .saturating_sub(admission.map.maximum_bytes_read);
+        interface_map_work.entries_visited = initial_map_admission
+            .maximum_entries_visited
+            .saturating_sub(admission.map.maximum_entries_visited);
+        work.add_map(interface_map_work);
         work.items_returned = 1;
         Ok(self.read(validated, work))
     }
@@ -406,32 +670,35 @@ impl RepositoryView {
         dependency: &DependencyRecord,
         owner: OwnerKey,
     ) -> Result<RevisionRead<Option<PackageInterfaceRecord>>, Diagnostic> {
+        self.package_interface_owner_from_dependency_admitted(
+            dependency,
+            owner,
+            &mut RepositoryReadAdmission::unbounded(),
+        )
+    }
+
+    fn package_interface_owner_from_dependency_admitted(
+        &self,
+        dependency: &DependencyRecord,
+        owner: OwnerKey,
+        admission: &mut RepositoryReadAdmission,
+    ) -> Result<RevisionRead<Option<PackageInterfaceRecord>>, Diagnostic> {
         let mut work = RepositoryReadWork::default();
-        let resolved = self.resolve_package_transport(dependency.package_revision)?;
+        let resolved =
+            self.resolve_package_transport_admitted(dependency.package_revision, admission)?;
         work.add(resolved.work);
         resolved
             .value
             .root_revision
             .matches_dependency(dependency.package_revision, dependency)?;
-        let Some(binding_bytes) = self.lookup_map(
-            resolved.value.root_transport.interface_owners,
-            &crate::platform::kernel::owner_map_key(owner),
-            &mut work,
-        )?
-        else {
-            return Ok(self.read(None, work));
-        };
-        let digest = decode_package_interface_binding(&binding_bytes)?;
-        let bytes = self.read_required_object(
-            ObjectDomain::PackageInterface,
-            digest.bytes(),
-            "package-interface map references a missing owner object",
-            &mut work,
-        )?;
-        let value = PackageInterfaceOwner::decode(&bytes, owner, digest)?;
-        work.canonical_records_decoded = work.canonical_records_decoded.saturating_add(1);
-        work.items_returned = 1;
-        Ok(self.read(Some(value.record), work))
+        let value = resolved
+            .value
+            .root_interface
+            .owners
+            .get(&owner)
+            .map(|value| value.record.clone());
+        work.items_returned = u64::from(value.is_some());
+        Ok(self.read(value, work))
     }
 
     /// Reconstructs the complete logical Graph 5 view for independent full validation and
@@ -1059,22 +1326,33 @@ impl RepositoryView {
         &self,
         owner: OwnerKey,
     ) -> Result<RevisionRead<Option<RetirementRecord>>, Diagnostic> {
+        self.retirement_admitted(owner, &mut RepositoryReadAdmission::unbounded())
+    }
+
+    fn retirement_admitted(
+        &self,
+        owner: OwnerKey,
+        admission: &mut RepositoryReadAdmission,
+    ) -> Result<RevisionRead<Option<RetirementRecord>>, Diagnostic> {
         let mut work = RepositoryReadWork::default();
-        let Some(binding_bytes) = self.lookup_map(
+        let Some(binding_bytes) = self.lookup_map_admitted(
             self.current.semantic_root.retirements,
             &retirement_map_key(owner),
             &mut work,
+            admission,
         )?
         else {
             return Ok(self.read(None, work));
         };
         let binding = decode_retirement_binding(&binding_bytes)?;
-        let bytes = self.read_required_object(
+        let bytes = self.read_required_object_admitted(
             ObjectDomain::Retirement,
             binding.object.bytes(),
             "accepted retirement binding references a missing retirement object",
             &mut work,
+            admission,
         )?;
+        admission.admit_canonical_records(1)?;
         let record = decode_retirement(&bytes, owner, binding.object)?;
         work.canonical_records_decoded = 1;
         work.items_returned = 1;
@@ -1085,12 +1363,22 @@ impl RepositoryView {
         &self,
         key: &NamespaceKey,
     ) -> Result<RevisionRead<Option<OwnerKey>>, Diagnostic> {
+        self.namespace_admitted(key, &mut RepositoryReadAdmission::unbounded())
+    }
+
+    fn namespace_admitted(
+        &self,
+        key: &NamespaceKey,
+        admission: &mut RepositoryReadAdmission,
+    ) -> Result<RevisionRead<Option<OwnerKey>>, Diagnostic> {
         let mut work = RepositoryReadWork::default();
-        let value = self.lookup_map(
+        let value = self.lookup_map_admitted(
             self.current.witness.roots.namespaces,
             &key.encode(),
             &mut work,
+            admission,
         )?;
+        admission.admit_witness_records(u64::from(value.is_some()))?;
         let value = value.as_deref().map(EncodedOwnerKey::decode).transpose()?;
         work.witness_records_decoded = u64::from(value.is_some());
         work.items_returned = u64::from(value.is_some());
@@ -1101,12 +1389,22 @@ impl RepositoryView {
         &self,
         owner: OwnerKey,
     ) -> Result<RevisionRead<Option<OwnershipEntry>>, Diagnostic> {
+        self.ownership_admitted(owner, &mut RepositoryReadAdmission::unbounded())
+    }
+
+    fn ownership_admitted(
+        &self,
+        owner: OwnerKey,
+        admission: &mut RepositoryReadAdmission,
+    ) -> Result<RevisionRead<Option<OwnershipEntry>>, Diagnostic> {
         let mut work = RepositoryReadWork::default();
-        let value = self.lookup_map(
+        let value = self.lookup_map_admitted(
             self.current.witness.roots.ownership,
             &owner_key_bytes(owner),
             &mut work,
+            admission,
         )?;
+        admission.admit_witness_records(u64::from(value.is_some()))?;
         let value = value.as_deref().map(decode_ownership).transpose()?;
         work.witness_records_decoded = u64::from(value.is_some());
         work.items_returned = u64::from(value.is_some());
@@ -1192,22 +1490,33 @@ impl RepositoryView {
         &self,
         owner: OwnerKey,
     ) -> Result<RevisionRead<Option<BoundOwnerSummary>>, Diagnostic> {
+        self.bound_owner_summary_admitted(owner, &mut RepositoryReadAdmission::unbounded())
+    }
+
+    fn bound_owner_summary_admitted(
+        &self,
+        owner: OwnerKey,
+        admission: &mut RepositoryReadAdmission,
+    ) -> Result<RevisionRead<Option<BoundOwnerSummary>>, Diagnostic> {
         let mut work = RepositoryReadWork::default();
-        let Some(binding_bytes) = self.lookup_map(
+        let Some(binding_bytes) = self.lookup_map_admitted(
             self.current.witness.roots.owner_summaries,
             &owner_key_bytes(owner),
             &mut work,
+            admission,
         )?
         else {
             return Ok(self.read(None, work));
         };
         let binding = SummaryBinding::decode(&binding_bytes, owner)?;
-        let bytes = self.read_required_object(
+        let bytes = self.read_required_object_admitted(
             ObjectDomain::OwnerSummary,
             binding.summary.bytes(),
             "accepted witness binding references a missing owner-summary object",
             &mut work,
+            admission,
         )?;
+        admission.admit_witness_records(1)?;
         let summary = decode_owner_summary(&bytes, binding.summary)?;
         if summary.owner != owner || summary.kind != binding.kind {
             return Err(read_error(
@@ -1231,12 +1540,22 @@ impl RepositoryView {
         &self,
         edge: RelationEdge,
     ) -> Result<RevisionRead<bool>, Diagnostic> {
+        self.contains_forward_relation_admitted(edge, &mut RepositoryReadAdmission::unbounded())
+    }
+
+    fn contains_forward_relation_admitted(
+        &self,
+        edge: RelationEdge,
+        admission: &mut RepositoryReadAdmission,
+    ) -> Result<RevisionRead<bool>, Diagnostic> {
         let mut work = RepositoryReadWork::default();
-        let value = self.lookup_map(
+        let value = self.lookup_map_admitted(
             self.current.witness.roots.forward_relations,
             &crate::platform::witness::forward_relation_key(edge),
             &mut work,
+            admission,
         )?;
+        admission.admit_witness_records(u64::from(value.is_some()))?;
         if value.as_ref().is_some_and(|bytes| !bytes.is_empty()) {
             return Err(read_error(
                 DiagnosticClass::Corrupt,
@@ -1288,7 +1607,23 @@ impl RepositoryView {
         kind: Option<RelationKind>,
         maximum_items: usize,
     ) -> Result<RevisionRead<RelationRead>, Diagnostic> {
-        self.relations(source, kind, maximum_items, false)
+        self.relations(
+            source,
+            kind,
+            maximum_items,
+            false,
+            &mut RepositoryReadAdmission::unbounded(),
+        )
+    }
+
+    fn outgoing_relations_admitted(
+        &self,
+        source: RelationEndpoint,
+        kind: Option<RelationKind>,
+        maximum_items: usize,
+        admission: &mut RepositoryReadAdmission,
+    ) -> Result<RevisionRead<RelationRead>, Diagnostic> {
+        self.relations(source, kind, maximum_items, false, admission)
     }
 
     pub fn incoming_relations(
@@ -1297,13 +1632,42 @@ impl RepositoryView {
         kind: Option<RelationKind>,
         maximum_items: usize,
     ) -> Result<RevisionRead<RelationRead>, Diagnostic> {
-        self.relations(target, kind, maximum_items, true)
+        self.relations(
+            target,
+            kind,
+            maximum_items,
+            true,
+            &mut RepositoryReadAdmission::unbounded(),
+        )
+    }
+
+    fn incoming_relations_admitted(
+        &self,
+        target: RelationEndpoint,
+        kind: Option<RelationKind>,
+        maximum_items: usize,
+        admission: &mut RepositoryReadAdmission,
+    ) -> Result<RevisionRead<RelationRead>, Diagnostic> {
+        self.relations(target, kind, maximum_items, true, admission)
     }
 
     pub fn incoming_package_relations(
         &self,
         package: PackageId,
         maximum_items: usize,
+    ) -> Result<RevisionRead<RelationRead>, Diagnostic> {
+        self.incoming_package_relations_admitted(
+            package,
+            maximum_items,
+            &mut RepositoryReadAdmission::unbounded(),
+        )
+    }
+
+    fn incoming_package_relations_admitted(
+        &self,
+        package: PackageId,
+        maximum_items: usize,
+        admission: &mut RepositoryReadAdmission,
     ) -> Result<RevisionRead<RelationRead>, Diagnostic> {
         if maximum_items == 0 || maximum_items > MAXIMUM_RELATION_READ_ITEMS {
             return Err(read_error(
@@ -1316,8 +1680,8 @@ impl RepositoryView {
         let mut work = RepositoryReadWork::default();
         let mut keys = Vec::with_capacity(maximum_items.min(64));
         let mut truncated = false;
-        let reader = ObjectPageReader::new(&self.store);
-        let mut map_work = MapWork::default();
+        let reader = ObjectPageReader::new_admitted(&self.store, admission.store);
+        let mut map_work = MapWork::with_admission(admission.map);
         let result = PersistentMap::from_root(self.current.witness.roots.reverse_relations)
             .for_each_prefix(&reader, &prefix, &mut map_work, |key, value| {
                 if !value.is_empty() {
@@ -1339,13 +1703,22 @@ impl RepositoryView {
                 keys.push(key.to_vec());
                 Ok(())
             });
-        work.map = map_work;
-        work.store = reader.work();
+        admission.map = map_work.remaining_admission();
+        admission.store = StoreReadAdmission::new(reader.remaining_read_admission().unwrap_or(
+            StoreReadLimits {
+                maximum_catalog_lookups: 0,
+                maximum_objects: 0,
+                maximum_bytes: 0,
+            },
+        ));
+        work.add_map(map_work);
+        work.store.add(reader.work());
         if let Err(error) = result
             && error.code != RELATION_LIMIT_STOP
         {
             return Err(map_diagnostic(error));
         }
+        admission.admit_witness_records(u64::try_from(keys.len()).unwrap_or(u64::MAX))?;
         let mut edges = Vec::with_capacity(keys.len());
         for key in keys {
             let edge = decode_reverse_relation_key(&key)?;
@@ -1374,6 +1747,19 @@ impl RepositoryView {
         test: OwnerKey,
         maximum_items: usize,
     ) -> Result<RevisionRead<TestDependencyRead>, Diagnostic> {
+        self.test_dependencies_admitted(
+            test,
+            maximum_items,
+            &mut RepositoryReadAdmission::unbounded(),
+        )
+    }
+
+    fn test_dependencies_admitted(
+        &self,
+        test: OwnerKey,
+        maximum_items: usize,
+        admission: &mut RepositoryReadAdmission,
+    ) -> Result<RevisionRead<TestDependencyRead>, Diagnostic> {
         if maximum_items == 0 || maximum_items > MAXIMUM_TEST_DEPENDENCY_READ_ITEMS {
             return Err(read_error(
                 DiagnosticClass::Resource,
@@ -1394,8 +1780,8 @@ impl RepositoryView {
         let mut work = RepositoryReadWork::default();
         let mut keys = Vec::with_capacity(maximum_items.min(64));
         let mut truncated = false;
-        let reader = ObjectPageReader::new(&self.store);
-        let mut map_work = MapWork::default();
+        let reader = ObjectPageReader::new_admitted(&self.store, admission.store);
+        let mut map_work = MapWork::with_admission(admission.map);
         let result = PersistentMap::from_root(self.current.witness.roots.test_dependencies)
             .for_each_prefix(&reader, &prefix, &mut map_work, |key, value| {
                 if !value.is_empty() {
@@ -1417,13 +1803,22 @@ impl RepositoryView {
                 keys.push(key.to_vec());
                 Ok(())
             });
-        work.map = map_work;
-        work.store = reader.work();
+        admission.map = map_work.remaining_admission();
+        admission.store = StoreReadAdmission::new(reader.remaining_read_admission().unwrap_or(
+            StoreReadLimits {
+                maximum_catalog_lookups: 0,
+                maximum_objects: 0,
+                maximum_bytes: 0,
+            },
+        ));
+        work.add_map(map_work);
+        work.store.add(reader.work());
         if let Err(error) = result
             && error.code != TEST_DEPENDENCY_LIMIT_STOP
         {
             return Err(map_diagnostic(error));
         }
+        admission.admit_witness_records(u64::try_from(keys.len()).unwrap_or(u64::MAX))?;
         let mut dependencies = Vec::with_capacity(keys.len());
         for key_bytes in keys {
             let dependency = decode_test_dependency_forward_key(&key_bytes)?;
@@ -1453,6 +1848,7 @@ impl RepositoryView {
         kind: Option<RelationKind>,
         maximum_items: usize,
         reverse: bool,
+        admission: &mut RepositoryReadAdmission,
     ) -> Result<RevisionRead<RelationRead>, Diagnostic> {
         if maximum_items == 0 || maximum_items > MAXIMUM_RELATION_READ_ITEMS {
             return Err(read_error(
@@ -1474,8 +1870,8 @@ impl RepositoryView {
         let mut work = RepositoryReadWork::default();
         let mut keys = Vec::with_capacity(maximum_items.min(64));
         let mut truncated = false;
-        let reader = ObjectPageReader::new(&self.store);
-        let mut map_work = MapWork::default();
+        let reader = ObjectPageReader::new_admitted(&self.store, admission.store);
+        let mut map_work = MapWork::with_admission(admission.map);
         let result = PersistentMap::from_root(root).for_each_prefix(
             &reader,
             &prefix,
@@ -1500,13 +1896,22 @@ impl RepositoryView {
                 Ok(())
             },
         );
-        work.map = map_work;
-        work.store = reader.work();
+        admission.map = map_work.remaining_admission();
+        admission.store = StoreReadAdmission::new(reader.remaining_read_admission().unwrap_or(
+            StoreReadLimits {
+                maximum_catalog_lookups: 0,
+                maximum_objects: 0,
+                maximum_bytes: 0,
+            },
+        ));
+        work.add_map(map_work);
+        work.store.add(reader.work());
         if let Err(error) = result
             && error.code != RELATION_LIMIT_STOP
         {
             return Err(map_diagnostic(error));
         }
+        admission.admit_witness_records(u64::try_from(keys.len()).unwrap_or(u64::MAX))?;
         let mut edges = Vec::with_capacity(keys.len());
         for key_bytes in keys {
             let edge = if reverse {
@@ -1535,9 +1940,29 @@ impl RepositoryView {
         key: &[u8],
         work: &mut RepositoryReadWork,
     ) -> Result<Option<Vec<u8>>, Diagnostic> {
-        let reader = ObjectPageReader::new(&self.store);
-        let result = PersistentMap::from_root(root).lookup(&reader, key, &mut work.map);
-        work.store = reader.work();
+        self.lookup_map_admitted(root, key, work, &mut RepositoryReadAdmission::unbounded())
+    }
+
+    fn lookup_map_admitted(
+        &self,
+        root: MapRoot,
+        key: &[u8],
+        work: &mut RepositoryReadWork,
+        admission: &mut RepositoryReadAdmission,
+    ) -> Result<Option<Vec<u8>>, Diagnostic> {
+        let reader = ObjectPageReader::new_admitted(&self.store, admission.store);
+        let mut map_work = MapWork::with_admission(admission.map);
+        let result = PersistentMap::from_root(root).lookup(&reader, key, &mut map_work);
+        admission.map = map_work.remaining_admission();
+        admission.store = StoreReadAdmission::new(reader.remaining_read_admission().unwrap_or(
+            StoreReadLimits {
+                maximum_catalog_lookups: 0,
+                maximum_objects: 0,
+                maximum_bytes: 0,
+            },
+        ));
+        work.add_map(map_work);
+        work.store.add(reader.work());
         result.map_err(map_diagnostic)
     }
 
@@ -1547,13 +1972,33 @@ impl RepositoryView {
         digest: [u8; 32],
         work: &mut RepositoryReadWork,
     ) -> Result<Option<Vec<u8>>, Diagnostic> {
-        self.store
-            .read(
+        self.read_optional_object_admitted(
+            domain,
+            digest,
+            work,
+            &mut RepositoryReadAdmission::unbounded(),
+        )
+    }
+
+    fn read_optional_object_admitted(
+        &self,
+        domain: ObjectDomain,
+        digest: [u8; 32],
+        work: &mut RepositoryReadWork,
+        admission: &mut RepositoryReadAdmission,
+    ) -> Result<Option<Vec<u8>>, Diagnostic> {
+        let mut store_work = StoreWork::default();
+        let result = self
+            .store
+            .read_admitted(
                 ObjectKey::from_digest(domain, digest),
                 domain.maximum_bytes(),
-                &mut work.store,
+                &mut admission.store,
+                &mut store_work,
             )
-            .map_err(store_diagnostic)
+            .map_err(store_diagnostic);
+        work.store.add(store_work);
+        result
     }
 
     fn read_required_object(
@@ -1563,7 +2008,24 @@ impl RepositoryView {
         missing: &'static str,
         work: &mut RepositoryReadWork,
     ) -> Result<Vec<u8>, Diagnostic> {
-        self.read_optional_object(domain, digest, work)?
+        self.read_required_object_admitted(
+            domain,
+            digest,
+            missing,
+            work,
+            &mut RepositoryReadAdmission::unbounded(),
+        )
+    }
+
+    fn read_required_object_admitted(
+        &self,
+        domain: ObjectDomain,
+        digest: [u8; 32],
+        missing: &'static str,
+        work: &mut RepositoryReadWork,
+        admission: &mut RepositoryReadAdmission,
+    ) -> Result<Vec<u8>, Diagnostic> {
+        self.read_optional_object_admitted(domain, digest, work, admission)?
             .ok_or_else(|| {
                 read_error(
                     DiagnosticClass::Corrupt,
@@ -1631,6 +2093,26 @@ fn read_error(
     Diagnostic::new(class, code, message)
 }
 
+fn admit_decoded_records(
+    remaining: &mut u64,
+    records: u64,
+    code: &'static str,
+    unit: &'static str,
+) -> Result<(), Diagnostic> {
+    if records > *remaining {
+        return Err(read_error(
+            DiagnosticClass::Resource,
+            code,
+            format!(
+                "read requires {records} {unit}, exceeding the remaining admission {}",
+                *remaining
+            ),
+        ));
+    }
+    *remaining -= records;
+    Ok(())
+}
+
 impl CanonicalBaseRead for RepositoryView {
     fn semantic_root(&self) -> &crate::platform::kernel::SemanticRoot {
         &self.current.semantic_root
@@ -1667,11 +2149,29 @@ impl CanonicalBaseRead for RepositoryView {
         RepositoryView::owner(self, owner).map(canonical_read)
     }
 
+    fn read_owner_admitted(
+        &self,
+        owner: OwnerKey,
+        admission: CanonicalReadAdmission,
+    ) -> Result<CanonicalRead<Option<OwnerRecord>>, Diagnostic> {
+        self.owner_admitted(owner, &mut RepositoryReadAdmission::canonical(admission))
+            .map(canonical_read)
+    }
+
     fn read_type_object(
         &self,
         digest: TypeObjectDigest,
     ) -> Result<CanonicalRead<Option<TypeObject>>, Diagnostic> {
         RepositoryView::type_object(self, digest).map(canonical_read)
+    }
+
+    fn read_type_object_admitted(
+        &self,
+        digest: TypeObjectDigest,
+        admission: CanonicalReadAdmission,
+    ) -> Result<CanonicalRead<Option<TypeObject>>, Diagnostic> {
+        self.type_object_admitted(digest, &mut RepositoryReadAdmission::canonical(admission))
+            .map(canonical_read)
     }
 
     fn read_package_interface_owner(
@@ -1683,6 +2183,20 @@ impl CanonicalBaseRead for RepositoryView {
             .map(canonical_read)
     }
 
+    fn read_package_interface_owner_admitted(
+        &self,
+        dependency: &DependencyRecord,
+        owner: OwnerKey,
+        admission: CanonicalReadAdmission,
+    ) -> Result<CanonicalRead<Option<PackageInterfaceRecord>>, Diagnostic> {
+        self.package_interface_owner_from_dependency_admitted(
+            dependency,
+            owner,
+            &mut RepositoryReadAdmission::canonical(admission),
+        )
+        .map(canonical_read)
+    }
+
     fn read_dependency(
         &self,
         package: PackageId,
@@ -1690,11 +2204,29 @@ impl CanonicalBaseRead for RepositoryView {
         RepositoryView::dependency(self, package).map(canonical_read)
     }
 
+    fn read_dependency_admitted(
+        &self,
+        package: PackageId,
+        admission: CanonicalReadAdmission,
+    ) -> Result<CanonicalRead<Option<DependencyRecord>>, Diagnostic> {
+        self.dependency_admitted(package, &mut RepositoryReadAdmission::canonical(admission))
+            .map(canonical_read)
+    }
+
     fn read_retirement(
         &self,
         owner: OwnerKey,
     ) -> Result<CanonicalRead<Option<RetirementRecord>>, Diagnostic> {
         RepositoryView::retirement(self, owner).map(canonical_read)
+    }
+
+    fn read_retirement_admitted(
+        &self,
+        owner: OwnerKey,
+        admission: CanonicalReadAdmission,
+    ) -> Result<CanonicalRead<Option<RetirementRecord>>, Diagnostic> {
+        self.retirement_admitted(owner, &mut RepositoryReadAdmission::canonical(admission))
+            .map(canonical_read)
     }
 }
 
@@ -1726,11 +2258,29 @@ impl WitnessBaseRead for RepositoryView {
         RepositoryView::namespace(self, key).map(witness_read)
     }
 
+    fn read_namespace_admitted(
+        &self,
+        key: &NamespaceKey,
+        admission: WitnessReadAdmission,
+    ) -> Result<WitnessRead<Option<OwnerKey>>, Diagnostic> {
+        self.namespace_admitted(key, &mut RepositoryReadAdmission::witness(admission))
+            .map(witness_read)
+    }
+
     fn read_ownership(
         &self,
         owner: OwnerKey,
     ) -> Result<WitnessRead<Option<OwnershipEntry>>, Diagnostic> {
         RepositoryView::ownership(self, owner).map(witness_read)
+    }
+
+    fn read_ownership_admitted(
+        &self,
+        owner: OwnerKey,
+        admission: WitnessReadAdmission,
+    ) -> Result<WitnessRead<Option<OwnershipEntry>>, Diagnostic> {
+        self.ownership_admitted(owner, &mut RepositoryReadAdmission::witness(admission))
+            .map(witness_read)
     }
 
     fn contains_forward_relation(
@@ -1740,11 +2290,32 @@ impl WitnessBaseRead for RepositoryView {
         RepositoryView::contains_forward_relation(self, edge).map(witness_read)
     }
 
+    fn contains_forward_relation_admitted(
+        &self,
+        edge: RelationEdge,
+        admission: WitnessReadAdmission,
+    ) -> Result<WitnessRead<bool>, Diagnostic> {
+        self.contains_forward_relation_admitted(
+            edge,
+            &mut RepositoryReadAdmission::witness(admission),
+        )
+        .map(witness_read)
+    }
+
     fn read_owner_summary(
         &self,
         owner: OwnerKey,
     ) -> Result<WitnessRead<Option<BoundOwnerSummary>>, Diagnostic> {
         RepositoryView::bound_owner_summary(self, owner).map(witness_read)
+    }
+
+    fn read_owner_summary_admitted(
+        &self,
+        owner: OwnerKey,
+        admission: WitnessReadAdmission,
+    ) -> Result<WitnessRead<Option<BoundOwnerSummary>>, Diagnostic> {
+        self.bound_owner_summary_admitted(owner, &mut RepositoryReadAdmission::witness(admission))
+            .map(witness_read)
     }
 
     fn read_outgoing_relations(
@@ -1760,6 +2331,25 @@ impl WitnessBaseRead for RepositoryView {
             .map(witness_relation_read)
     }
 
+    fn read_outgoing_relations_admitted(
+        &self,
+        owner: OwnerKey,
+        maximum_items: usize,
+        admission: WitnessReadAdmission,
+    ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
+        let endpoint = RelationEndpoint::Owner(crate::platform::kernel::ExactOwnerKey {
+            package: self.package(),
+            owner,
+        });
+        self.outgoing_relations_admitted(
+            endpoint,
+            None,
+            maximum_items,
+            &mut RepositoryReadAdmission::witness(admission),
+        )
+        .map(witness_relation_read)
+    }
+
     fn read_incoming_relations(
         &self,
         owner: OwnerKey,
@@ -1773,6 +2363,25 @@ impl WitnessBaseRead for RepositoryView {
             .map(witness_relation_read)
     }
 
+    fn read_incoming_relations_admitted(
+        &self,
+        owner: OwnerKey,
+        maximum_items: usize,
+        admission: WitnessReadAdmission,
+    ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
+        let endpoint = RelationEndpoint::Owner(crate::platform::kernel::ExactOwnerKey {
+            package: self.package(),
+            owner,
+        });
+        self.incoming_relations_admitted(
+            endpoint,
+            None,
+            maximum_items,
+            &mut RepositoryReadAdmission::witness(admission),
+        )
+        .map(witness_relation_read)
+    }
+
     fn read_incoming_package_relations(
         &self,
         package: PackageId,
@@ -1782,6 +2391,20 @@ impl WitnessBaseRead for RepositoryView {
             .map(witness_relation_read)
     }
 
+    fn read_incoming_package_relations_admitted(
+        &self,
+        package: PackageId,
+        maximum_items: usize,
+        admission: WitnessReadAdmission,
+    ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
+        self.incoming_package_relations_admitted(
+            package,
+            maximum_items,
+            &mut RepositoryReadAdmission::witness(admission),
+        )
+        .map(witness_relation_read)
+    }
+
     fn read_test_dependencies(
         &self,
         test: OwnerKey,
@@ -1789,6 +2412,20 @@ impl WitnessBaseRead for RepositoryView {
     ) -> Result<WitnessRead<WitnessTestDependencyRead>, Diagnostic> {
         RepositoryView::test_dependencies(self, test, maximum_items)
             .map(witness_test_dependency_read)
+    }
+
+    fn read_test_dependencies_admitted(
+        &self,
+        test: OwnerKey,
+        maximum_items: usize,
+        admission: WitnessReadAdmission,
+    ) -> Result<WitnessRead<WitnessTestDependencyRead>, Diagnostic> {
+        self.test_dependencies_admitted(
+            test,
+            maximum_items,
+            &mut RepositoryReadAdmission::witness(admission),
+        )
+        .map(witness_test_dependency_read)
     }
 }
 

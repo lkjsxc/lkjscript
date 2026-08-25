@@ -8,9 +8,9 @@ use crate::platform::kernel::{
     semantic_state_digest_from_root,
 };
 use crate::platform::package_interface::{
-    PackageInterfaceValidation, package_interface_digest, validate_package_interface,
+    PackageInterfaceValidation, package_interface_digest, validate_package_interface_admitted,
 };
-use crate::platform::persistent_map::MapRoot;
+use crate::platform::persistent_map::{MapAdmission, MapRoot, MapWork};
 use crate::platform::publication::RevisionCore;
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, StoreError, StoreErrorClass, StoreWork,
@@ -418,6 +418,7 @@ pub(crate) struct PackageTransportClosureValidation {
     pub root_revision: PackageRevision,
     pub root_transport: PackageTransport,
     pub root_interface: PackageInterfaceValidation,
+    pub interface_map_work: MapWork,
     pub dependency_edges: usize,
 }
 
@@ -426,6 +427,22 @@ pub(crate) fn validate_package_transport_local<S: ImmutableObjectStore + ?Sized>
     selection: PackageTransportBinding,
     revision: &PackageRevision,
     work: &mut StoreWork,
+) -> Result<(PackageTransport, PackageInterfaceValidation), Diagnostic> {
+    validate_package_transport_local_admitted(
+        store,
+        selection,
+        revision,
+        work,
+        &mut MapAdmission::unbounded(),
+    )
+}
+
+pub(crate) fn validate_package_transport_local_admitted<S: ImmutableObjectStore + ?Sized>(
+    store: &S,
+    selection: PackageTransportBinding,
+    revision: &PackageRevision,
+    work: &mut StoreWork,
+    interface_map_admission: &mut MapAdmission,
 ) -> Result<(PackageTransport, PackageInterfaceValidation), Diagnostic> {
     if selection.package_revision != revision.encode()?.0 {
         return Err(package_error(
@@ -443,8 +460,13 @@ pub(crate) fn validate_package_transport_local<S: ImmutableObjectStore + ?Sized>
         ));
     }
     bind_transport(store, &transport, revision, work)?;
-    let interface =
-        validate_package_interface(revision.package, transport.interface_owners, store, work)?;
+    let interface = validate_package_interface_admitted(
+        revision.package,
+        transport.interface_owners,
+        store,
+        work,
+        interface_map_admission,
+    )?;
     Ok((transport, interface))
 }
 
@@ -454,6 +476,24 @@ pub fn validate_package_transport_closure<S: ImmutableObjectStore + ?Sized>(
     selections: &[PackageTransportBinding],
     expected: Option<&DependencyRecord>,
     work: &mut StoreWork,
+) -> Result<PackageTransportClosureValidation, Diagnostic> {
+    validate_package_transport_closure_admitted(
+        store,
+        root_revision,
+        selections,
+        expected,
+        work,
+        &mut MapAdmission::unbounded(),
+    )
+}
+
+pub(crate) fn validate_package_transport_closure_admitted<S: ImmutableObjectStore + ?Sized>(
+    store: &S,
+    root_revision: PackageRevisionDigest,
+    selections: &[PackageTransportBinding],
+    expected: Option<&DependencyRecord>,
+    work: &mut StoreWork,
+    interface_map_admission: &mut MapAdmission,
 ) -> Result<PackageTransportClosureValidation, Diagnostic> {
     let logical = validate_package_revision_closure(store, root_revision, expected, work)?;
     if selections.len() != logical.revisions.len() {
@@ -476,6 +516,7 @@ pub fn validate_package_transport_closure<S: ImmutableObjectStore + ?Sized>(
     let revisions = logical.revisions;
     let mut transports = BTreeMap::new();
     let mut interfaces = BTreeMap::new();
+    let mut interface_map_work = MapWork::default();
     for selection in selections {
         let revision = revisions.get(&selection.package_revision).ok_or_else(|| {
             package_error(
@@ -484,8 +525,14 @@ pub fn validate_package_transport_closure<S: ImmutableObjectStore + ?Sized>(
                 "physical transport selection names a revision outside the logical closure",
             )
         })?;
-        let (transport, interface) =
-            validate_package_transport_local(store, *selection, revision, work)?;
+        let (transport, interface) = validate_package_transport_local_admitted(
+            store,
+            *selection,
+            revision,
+            work,
+            interface_map_admission,
+        )?;
+        add_map_work(&mut interface_map_work, interface.map_work);
         interfaces.insert(transport.package_revision, interface);
         transports.insert(transport.package_revision, (selection.transport, transport));
     }
@@ -522,8 +569,29 @@ pub fn validate_package_transport_closure<S: ImmutableObjectStore + ?Sized>(
         root_revision,
         root_transport,
         root_interface,
+        interface_map_work,
         dependency_edges: logical.dependency_edges,
     })
+}
+
+fn add_map_work(total: &mut MapWork, other: MapWork) {
+    total.pages_read = total.pages_read.saturating_add(other.pages_read);
+    total.pages_decoded = total.pages_decoded.saturating_add(other.pages_decoded);
+    total.pages_encoded = total.pages_encoded.saturating_add(other.pages_encoded);
+    total.pages_written = total.pages_written.saturating_add(other.pages_written);
+    total.pages_reused = total.pages_reused.saturating_add(other.pages_reused);
+    total.bytes_read = total.bytes_read.saturating_add(other.bytes_read);
+    total.bytes_encoded = total.bytes_encoded.saturating_add(other.bytes_encoded);
+    total.bytes_written = total.bytes_written.saturating_add(other.bytes_written);
+    total.key_comparisons = total.key_comparisons.saturating_add(other.key_comparisons);
+    total.entries_visited = total.entries_visited.saturating_add(other.entries_visited);
+    total.differences_emitted = total
+        .differences_emitted
+        .saturating_add(other.differences_emitted);
+    total.subtrees_skipped = total
+        .subtrees_skipped
+        .saturating_add(other.subtrees_skipped);
+    total.entries_skipped = total.entries_skipped.saturating_add(other.entries_skipped);
 }
 
 fn read_revision<S: ImmutableObjectStore + ?Sized>(

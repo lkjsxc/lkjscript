@@ -22,9 +22,10 @@ use crate::platform::package_transport::{
     MAXIMUM_PACKAGE_TRANSPORT_CANDIDATES, MAXIMUM_PACKAGE_TRANSPORT_SELECTION_BYTES,
     PackageRevision, PackageTransport, PackageTransportBinding, PackageTransportClosureValidation,
     PackageTransportSelection, validate_package_revision_closure,
-    validate_package_transport_closure, validate_package_transport_local,
+    validate_package_transport_closure_admitted, validate_package_transport_local,
+    validate_package_transport_local_admitted,
 };
-use crate::platform::persistent_map::{MapWork, MemoryPageStore, OverlayPageStore};
+use crate::platform::persistent_map::{MapAdmission, MapWork, MemoryPageStore, OverlayPageStore};
 use crate::platform::storage::contract::{
     MAXIMUM_PACK_BYTES, MAXIMUM_PACK_ENTRIES, TARGET_PACK_BYTES,
 };
@@ -1450,6 +1451,26 @@ pub(super) fn resolve_package_transport_closure<S: ImmutableObjectStore + ?Sized
     expected: Option<&crate::platform::kernel::DependencyRecord>,
     work: &mut StoreWork,
 ) -> Result<PackageTransportClosureValidation, Diagnostic> {
+    resolve_package_transport_closure_admitted(
+        store,
+        catalog,
+        root_revision,
+        root_override,
+        expected,
+        work,
+        &mut MapAdmission::unbounded(),
+    )
+}
+
+pub(super) fn resolve_package_transport_closure_admitted<S: ImmutableObjectStore + ?Sized>(
+    store: &S,
+    catalog: &PackDirectoryStore,
+    root_revision: crate::platform::kernel::PackageRevisionDigest,
+    root_override: Option<PackageTransportBinding>,
+    expected: Option<&crate::platform::kernel::DependencyRecord>,
+    work: &mut StoreWork,
+    interface_map_admission: &mut MapAdmission,
+) -> Result<PackageTransportClosureValidation, Diagnostic> {
     let logical = validate_package_revision_closure(store, root_revision, expected, work)?;
     let mut selections = Vec::with_capacity(logical.revisions.len());
     for (revision_digest, revision) in &logical.revisions {
@@ -1461,24 +1482,52 @@ pub(super) fn resolve_package_transport_closure<S: ImmutableObjectStore + ?Sized
             read_package_transport_selection(catalog.root(), *revision_digest)?
         {
             let binding = selection.binding;
-            match validate_package_transport_local(catalog, binding, revision, work) {
+            match validate_package_transport_local_admitted(
+                store,
+                binding,
+                revision,
+                work,
+                interface_map_admission,
+            ) {
                 Ok(_) => binding.transport,
+                Err(error) if package_resolution_admission_exhausted(&error) => return Err(error),
                 Err(error) if error.class != DiagnosticClass::Infrastructure => {
-                    find_valid_package_transport(catalog, *revision_digest, revision, work)?
-                        .ok_or_else(|| missing_package_transport(*revision_digest))?
+                    find_valid_package_transport_admitted(
+                        store,
+                        catalog,
+                        *revision_digest,
+                        revision,
+                        work,
+                        interface_map_admission,
+                    )?
+                    .ok_or_else(|| missing_package_transport(*revision_digest))?
                 }
                 Err(error) => return Err(error),
             }
         } else {
-            find_valid_package_transport(catalog, *revision_digest, revision, work)?
-                .ok_or_else(|| missing_package_transport(*revision_digest))?
+            find_valid_package_transport_admitted(
+                store,
+                catalog,
+                *revision_digest,
+                revision,
+                work,
+                interface_map_admission,
+            )?
+            .ok_or_else(|| missing_package_transport(*revision_digest))?
         };
         selections.push(PackageTransportBinding {
             package_revision: *revision_digest,
             transport,
         });
     }
-    validate_package_transport_closure(store, root_revision, &selections, expected, work)
+    validate_package_transport_closure_admitted(
+        store,
+        root_revision,
+        &selections,
+        expected,
+        work,
+        interface_map_admission,
+    )
 }
 
 fn read_package_transport_selection(
@@ -1549,8 +1598,26 @@ fn find_valid_package_transport(
     revision: &PackageRevision,
     work: &mut StoreWork,
 ) -> Result<Option<crate::platform::kernel::PackageTransportDigest>, Diagnostic> {
+    find_valid_package_transport_admitted(
+        store,
+        store,
+        revision_digest,
+        revision,
+        work,
+        &mut MapAdmission::unbounded(),
+    )
+}
+
+fn find_valid_package_transport_admitted<S: ImmutableObjectStore + ?Sized>(
+    store: &S,
+    catalog: &PackDirectoryStore,
+    revision_digest: crate::platform::kernel::PackageRevisionDigest,
+    revision: &PackageRevision,
+    work: &mut StoreWork,
+    interface_map_admission: &mut MapAdmission,
+) -> Result<Option<crate::platform::kernel::PackageTransportDigest>, Diagnostic> {
     let Some(revision_directory) = open_package_transport_revision_directory(
-        store.root(),
+        catalog.root(),
         revision_digest,
         "publication_package_transport_candidate_directory_open",
     )?
@@ -1609,16 +1676,34 @@ fn find_valid_package_transport(
             package_revision: revision_digest,
             transport: digest,
         };
-        match validate_package_transport_local(store, binding, revision, work) {
+        match validate_package_transport_local_admitted(
+            store,
+            binding,
+            revision,
+            work,
+            interface_map_admission,
+        ) {
             Ok(_) if selected.is_none_or(|previous| digest < previous) => {
                 selected = Some(digest);
             }
             Ok(_) => {}
+            Err(error) if package_resolution_admission_exhausted(&error) => return Err(error),
             Err(error) if error.class != DiagnosticClass::Infrastructure => {}
             Err(error) => return Err(error),
         }
     }
     Ok(selected)
+}
+
+fn package_resolution_admission_exhausted(error: &Diagnostic) -> bool {
+    error.code.starts_with("change_budget_canonical_")
+        || error.code.starts_with("persistent_map_admission_")
+        || matches!(
+            error.code.as_str(),
+            "object_read_catalog_lookups_exhausted"
+                | "object_read_objects_exhausted"
+                | "object_read_bytes_exhausted"
+        )
 }
 
 fn missing_package_transport(
