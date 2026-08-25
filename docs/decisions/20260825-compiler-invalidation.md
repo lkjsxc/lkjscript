@@ -44,7 +44,7 @@ material. The package transport replacement test changes physical witness/layout
 exact dependency while preserving the logical package revision. A separate test supplies a loaded
 dependency artifact with a different valid interface-map partition; relinking canonicalizes that
 layout and produces byte-identical artifacts with an equal bundle digest. The final compiler suite
-passes 20 tests, the complete library passes 326 tests, and warnings-denied Clippy passes.
+passes 20 tests, the exact committed library passes 323 tests, and warnings-denied Clippy passes.
 
 ## Consequences and remaining work
 

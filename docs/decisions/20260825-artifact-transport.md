@@ -58,7 +58,7 @@ closure ambiguous without changing application meaning.
 ## Evidence
 
 The final package/transport suite passes 10 tests, publication repository suite 40 tests, compiler
-suite 20 tests, and normalized execution suite 18 tests. The complete library passes 326 tests and
+suite 20 tests, and normalized execution suite 18 tests. The exact committed library passes 323 tests and
 warnings-denied Clippy.
 
 Focused tests reject semantic-root substitution, foreign revision and package binding, malformed
