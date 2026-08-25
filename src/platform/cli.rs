@@ -2,6 +2,7 @@
 
 use super::artifact::{MAXIMUM_ARTIFACT_BYTES, load_artifact};
 use super::bootstrap::{builtin_package_info, export_builtin_standard};
+use super::change::{AuthoredChange, AuthoredChangeSet, OwnerSelector};
 use super::contract::{
     CLI_CONTRACT_VERSION, MAXIMUM_CLI_RESPONSE_BYTES, MAXIMUM_CLI_RESPONSE_RECORDS,
     MAXIMUM_TRANSACTION_REQUEST_BYTES, PublicOperation, RegistrySection, RegistrySnapshot,
@@ -9,20 +10,22 @@ use super::contract::{
     registry_snapshot,
 };
 use super::control::{
-    ChangePlanDigest, CompactResponseLimits, CompactResponseWriter, MAXIMUM_COMPACT_INPUT_BYTES,
-    decode_compact_change,
+    ChangePlanDigest, CompactChangeOperation, CompactResponseLimits, CompactResponseWriter,
+    MAXIMUM_COMPACT_INPUT_BYTES, NormalizedChangeRequest, compact_change_operation_descriptor,
+    decode_compact_change, normalize_change_request,
 };
 use super::deployment::{MAXIMUM_DEPLOYMENT_BYTES, decode_deployment};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::execution::{PreparedProgram, ReferenceInterpreter, RunPolicy, Vm};
 use super::json::{JsonLimits, decode_strict, decode_typed, encode_typed};
-use super::kernel::{OwnerKey as KernelOwnerKey, OwnerKind as KernelOwnerKind, PackageId};
+use super::kernel::{Name, OwnerKey as KernelOwnerKey, OwnerKind as KernelOwnerKind, PackageId};
 use super::meaning::RelationRole;
 use super::package::RunnerKind;
 use super::project_creation::create_minimal_project;
 use super::project_discovery::discover_project;
 use super::publication::{
-    GraphRepository, PreparedAuthoredPublication, PublicationOutcome as GraphPublicationOutcome,
+    GraphRepository, PreparedAuthoredPublication, PublicationOptions,
+    PublicationOutcome as GraphPublicationOutcome,
 };
 use super::repository::SemanticRepository;
 use super::revision::{AffectedOwner, TransactionReceipt, ValidationFacts};
@@ -323,9 +326,21 @@ pub fn execute_status(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
     Ok(output.finish())
 }
 
-/// Plans or applies one compact authored request through the normalized repository engine.
-/// Apply reparses and reprepares the exact request, then requires the reviewed plan digest before
-/// repository access or publication.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ChangeAction {
+    Plan,
+    Apply,
+}
+
+struct ChangeCommandRequest {
+    normalized: NormalizedChangeRequest,
+    reviewed: Option<ChangePlanDigest>,
+    input_file: Option<String>,
+}
+
+/// Plans or applies one transport-neutral authored request through the normalized repository
+/// engine. Compact records and direct flags converge before plan comparison, repository access,
+/// preparation, response generation, or publication.
 pub fn execute_change(arguments: Vec<String>) -> Result<Vec<u8>, Vec<Diagnostic>> {
     let (arguments, project) = extract_global_project(arguments).map_err(single_diagnostic)?;
     if arguments.first().map(String::as_str) != Some("change") {
@@ -338,19 +353,45 @@ pub fn execute_change(arguments: Vec<String>) -> Result<Vec<u8>, Vec<Diagnostic>
             "change requires plan or apply; use 'capabilities change'",
         ))
     })?;
-    let options = &arguments[2..];
-    match action {
-        "plan" => {
-            ensure_options(options, &["--input", "--input-file"], &[]).map_err(single_diagnostic)?
-        }
-        "apply" => ensure_options(options, &["--input", "--input-file", "--plan"], &[])
-            .map_err(single_diagnostic)?,
+    let action = match action {
+        "plan" => ChangeAction::Plan,
+        "apply" => ChangeAction::Apply,
         other => {
             return Err(single_diagnostic(usage_error(format!(
                 "unknown change action '{other}'; use plan or apply"
             ))));
         }
-    }
+    };
+    let adapter_arguments = &arguments[2..];
+    let direct_operation = adapter_arguments
+        .first()
+        .and_then(|name| compact_change_operation_descriptor(name))
+        .and_then(|descriptor| descriptor.direct.map(|_| descriptor.operation));
+    let request = match direct_operation {
+        Some(CompactChangeOperation::RenameOwner) => {
+            decode_direct_rename(action, &adapter_arguments[1..]).map_err(single_diagnostic)?
+        }
+        Some(_) => {
+            return Err(single_diagnostic(internal_error(
+                "registered direct change operation has no typed CLI adapter",
+            )));
+        }
+        None => decode_record_change(action, adapter_arguments)?,
+    };
+    require_reviewed_change_plan(action, request.reviewed, request.normalized.plan)
+        .map_err(single_diagnostic)?;
+    execute_normalized_change(project, action, request)
+}
+
+fn decode_record_change(
+    action: ChangeAction,
+    options: &[String],
+) -> Result<ChangeCommandRequest, Vec<Diagnostic>> {
+    let allowed = match action {
+        ChangeAction::Plan => &["--input", "--input-file"][..],
+        ChangeAction::Apply => &["--input", "--input-file", "--plan"][..],
+    };
+    ensure_options(options, allowed, &[]).map_err(single_diagnostic)?;
     let inline = option_value(options, "--input").map_err(single_diagnostic)?;
     let file = option_value(options, "--input-file").map_err(single_diagnostic)?;
     let (source, bytes) = match (inline, file) {
@@ -386,48 +427,102 @@ pub fn execute_change(arguments: Vec<String>) -> Result<Vec<u8>, Vec<Diagnostic>
             )));
         }
     };
-    let request = decode_compact_change(&source, &bytes)?;
+    let normalized = decode_compact_change(&source, &bytes)?;
     let reviewed = option_value(options, "--plan")
         .map_err(single_diagnostic)?
         .map(|value| value.parse::<ChangePlanDigest>())
         .transpose()
         .map_err(single_diagnostic)?;
-    match action {
-        "plan" if reviewed.is_some() => {
-            return Err(single_diagnostic(usage_error(
-                "change plan does not accept --plan",
-            )));
-        }
-        "apply" => match reviewed {
-            None => {
-                return Err(single_diagnostic(usage_error(
-                    "change apply requires the exact --plan DIGEST returned by change plan",
-                )));
-            }
-            Some(reviewed) if reviewed != request.plan => {
-                return Err(single_diagnostic(Diagnostic::new(
-                    DiagnosticClass::Semantic,
-                    "change_plan_mismatch",
-                    format!(
-                        "reviewed plan {reviewed} does not match normalized input {}",
-                        request.plan
-                    ),
-                )));
-            }
-            Some(_) => {}
-        },
-        _ => {}
-    }
+    Ok(ChangeCommandRequest {
+        normalized,
+        reviewed,
+        input_file: Some(source),
+    })
+}
 
+fn decode_direct_rename(
+    action: ChangeAction,
+    options: &[String],
+) -> Result<ChangeCommandRequest, Diagnostic> {
+    let allowed = match action {
+        ChangeAction::Plan => &["--base", "--owner", "--name", "--idempotency", "--intent"][..],
+        ChangeAction::Apply => &[
+            "--base",
+            "--owner",
+            "--name",
+            "--idempotency",
+            "--intent",
+            "--plan",
+        ][..],
+    };
+    ensure_options(options, allowed, &[])?;
+    let base = required_option(options, "--base")?
+        .parse::<RevisionId>()
+        .map_err(|diagnostic| direct_option_error("--base", diagnostic))?;
+    let owner = required_option(options, "--owner")?
+        .parse::<KernelOwnerKey>()
+        .map_err(|diagnostic| direct_option_error("--owner", diagnostic))?;
+    let name = Name::new(&required_option(options, "--name")?)
+        .map_err(|diagnostic| direct_option_error("--name", diagnostic))?;
+    let publication_options = PublicationOptions {
+        idempotency_key: option_value(options, "--idempotency")?,
+        intent: option_value(options, "--intent")?,
+    };
+    let semantic = AuthoredChangeSet {
+        base,
+        preconditions: Vec::new(),
+        changes: vec![AuthoredChange::RenameOwner {
+            owner: OwnerSelector::Exact { owner },
+            name,
+        }],
+        budget: Default::default(),
+    };
+    let normalized = normalize_change_request(semantic, publication_options)?;
+    let reviewed = option_value(options, "--plan")?
+        .map(|value| value.parse::<ChangePlanDigest>())
+        .transpose()?;
+    Ok(ChangeCommandRequest {
+        normalized,
+        reviewed,
+        input_file: None,
+    })
+}
+
+fn require_reviewed_change_plan(
+    action: ChangeAction,
+    reviewed: Option<ChangePlanDigest>,
+    expected: ChangePlanDigest,
+) -> Result<(), Diagnostic> {
+    match (action, reviewed) {
+        (ChangeAction::Plan, None) => Ok(()),
+        (ChangeAction::Plan, Some(_)) => Err(usage_error("change plan does not accept --plan")),
+        (ChangeAction::Apply, None) => Err(usage_error(
+            "change apply requires the exact --plan DIGEST returned by change plan",
+        )),
+        (ChangeAction::Apply, Some(reviewed)) if reviewed != expected => Err(Diagnostic::new(
+            DiagnosticClass::Semantic,
+            "change_plan_mismatch",
+            format!("reviewed plan {reviewed} does not match normalized input {expected}"),
+        )),
+        (ChangeAction::Apply, Some(_)) => Ok(()),
+    }
+}
+
+fn execute_normalized_change(
+    project: Option<PathBuf>,
+    action: ChangeAction,
+    request: ChangeCommandRequest,
+) -> Result<Vec<u8>, Vec<Diagnostic>> {
     let repository = open_normalized_repository(project).map_err(single_diagnostic)?;
-    let prepared = repository.prepare_authored_change(&request.semantic, request.options)?;
-    if action == "plan" {
+    let prepared = repository
+        .prepare_authored_change(&request.normalized.semantic, request.normalized.options)?;
+    if action == ChangeAction::Plan {
         return compact_change_response(
             &repository,
             &prepared,
             "prepared",
-            request.plan,
-            Some(&source),
+            request.normalized.plan,
+            request.input_file.as_deref(),
         )
         .map_err(single_diagnostic);
     }
@@ -453,8 +548,14 @@ pub fn execute_change(arguments: Vec<String>) -> Result<Vec<u8>, Vec<Diagnostic>
             )));
         }
     };
-    compact_change_response(&repository, &prepared, status, request.plan, None)
-        .map_err(single_diagnostic)
+    compact_change_response(
+        &repository,
+        &prepared,
+        status,
+        request.normalized.plan,
+        None,
+    )
+    .map_err(single_diagnostic)
 }
 
 fn compact_change_response(
@@ -2501,6 +2602,15 @@ fn option_value(arguments: &[String], name: &str) -> Result<Option<String>, Diag
     Ok(values.into_iter().next())
 }
 
+fn required_option(arguments: &[String], name: &str) -> Result<String, Diagnostic> {
+    option_value(arguments, name)?.ok_or_else(|| usage_error(format!("{name} is required")))
+}
+
+fn direct_option_error(name: &str, mut diagnostic: Diagnostic) -> Diagnostic {
+    diagnostic.message = format!("{name} has an invalid typed value: {}", diagnostic.message);
+    diagnostic
+}
+
 fn option_values(arguments: &[String], name: &str) -> Result<Vec<String>, Diagnostic> {
     let mut values = Vec::new();
     let mut index = 0;
@@ -2886,6 +2996,53 @@ mod tests {
                 .expect("UTF-8 registry")
                 .contains("operation name=change")
         );
+    }
+
+    #[test]
+    fn direct_rename_and_compact_records_normalize_to_identical_typed_intent() {
+        let base = RevisionId::from_digest([0x41; 32]);
+        let owner = KernelOwnerKey::Module(ModuleId::migrate(b"direct-rename-owner", 1));
+        for (idempotency, intent) in [
+            (None, None),
+            (
+                Some("transport-equality"),
+                Some("rename through either adapter"),
+            ),
+        ] {
+            let mut direct = vec![
+                "--base".to_owned(),
+                base.to_string(),
+                "--owner".to_owned(),
+                owner.to_string(),
+                "--name".to_owned(),
+                "renamed".to_owned(),
+            ];
+            let mut request = format!("request base={base}");
+            if let Some(value) = idempotency {
+                direct.extend(["--idempotency".to_owned(), value.to_owned()]);
+                request.push_str(&format!(" idempotency={value}"));
+            }
+            if let Some(value) = intent {
+                direct.extend(["--intent".to_owned(), value.to_owned()]);
+                request.push_str(&format!(" intent=\"{value}\""));
+            }
+            request.push_str(&format!("\nrename.owner owner={owner} name=renamed\n"));
+
+            let direct = decode_direct_rename(ChangeAction::Plan, &direct)
+                .expect("direct rename normalization")
+                .normalized;
+            let compact = decode_compact_change("request", request.as_bytes())
+                .expect("compact rename normalization");
+            assert_eq!(direct.semantic, compact.semantic);
+            assert_eq!(direct.options, compact.options);
+            assert_eq!(direct.plan, compact.plan);
+            assert_eq!(
+                crate::platform::change::canonical_authored_intent_bytes(&direct.semantic)
+                    .expect("direct canonical intent"),
+                crate::platform::change::canonical_authored_intent_bytes(&compact.semantic)
+                    .expect("compact canonical intent")
+            );
+        }
     }
 
     #[test]

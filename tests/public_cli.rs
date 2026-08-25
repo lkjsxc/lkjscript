@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 const APPLICATION: &str = "applications/lkjournal";
-const CLI_CONTRACT_VERSION: u64 = 5;
+const CLI_CONTRACT_VERSION: u64 = 6;
 
 fn binary() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_lkjscript"))
@@ -128,13 +128,47 @@ fn compact_record<'a>(records: &'a [CompactRecord], operation: &str) -> &'a Comp
         .expect("compact record")
 }
 
+fn compact_record_values(record: &CompactRecord) -> Vec<(&str, &str)> {
+    record
+        .fields
+        .iter()
+        .map(|field| (field.name.as_str(), field.value.as_str()))
+        .collect()
+}
+
 fn compact_failure_output(output: Output) -> Vec<CompactRecord> {
-    assert_eq!(output.status.code(), Some(2));
+    compact_failure_output_with_status(output, 2)
+}
+
+fn compact_failure_output_with_status(output: Output, expected_status: i32) -> Vec<CompactRecord> {
+    assert_eq!(output.status.code(), Some(expected_status));
     assert!(output.stderr.is_empty());
     assert!(output.stdout.len() < 16 * 1024);
     let records = parse_records("stdout", &output.stdout).expect("compact failure records");
     assert_eq!(compact_field(&records[0], "status"), Some("failure"));
     records
+}
+
+fn current_revision(project: &Path) -> String {
+    let status = compact_success(&["--project", path(project), "status"]);
+    compact_field(compact_record(&status, "revision"), "id")
+        .expect("current revision")
+        .to_owned()
+}
+
+fn assert_direct_rename_rejection(
+    project: &Path,
+    arguments: &[&str],
+    expected_code: &str,
+    expected_status: i32,
+    unchanged_revision: &str,
+) {
+    let rejected = compact_failure_output_with_status(command(arguments), expected_status);
+    assert_eq!(
+        compact_field(compact_record(&rejected, "diagnostic"), "code"),
+        Some(expected_code)
+    );
+    assert_eq!(current_revision(project), unchanged_revision);
 }
 
 fn predecessor_project(
@@ -232,6 +266,85 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
     }
 
     let change_section = compact_success(&["capabilities", "--section", "change"]);
+    let operations = change_section
+        .iter()
+        .filter(|record| record.operation == "change.operation")
+        .filter_map(|record| compact_field(record, "name"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        operations,
+        vec![
+            "create.module",
+            "create.record",
+            "create.variant",
+            "create.function",
+            "create.constant",
+            "create.test",
+            "add.field",
+            "add.case",
+            "add.parameter",
+            "delete.owner",
+            "rename.owner",
+            "move.declaration",
+            "replace.body",
+        ]
+    );
+    let operation_fields = change_section
+        .iter()
+        .filter(|record| record.operation == "change.operation-field")
+        .collect::<Vec<_>>();
+    assert_eq!(operation_fields.len(), 49);
+    assert_eq!(
+        operation_fields
+            .iter()
+            .filter(|record| compact_field(record, "required") == Some("false"))
+            .map(|record| {
+                (
+                    compact_field(record, "operation").expect("field operation"),
+                    compact_field(record, "name").expect("field name"),
+                )
+            })
+            .collect::<Vec<_>>(),
+        vec![("add.case", "payload")]
+    );
+    let field_forms = change_section
+        .iter()
+        .filter(|record| record.operation == "change.field-form")
+        .filter_map(|record| compact_field(record, "name"))
+        .collect::<Vec<_>>();
+    assert_eq!(field_forms.len(), 16);
+    let name_form = change_section
+        .iter()
+        .find(|record| {
+            record.operation == "change.field-form" && compact_field(record, "name") == Some("name")
+        })
+        .expect("name field form");
+    assert_eq!(
+        compact_field(name_form, "syntax"),
+        Some("[A-Za-z_][A-Za-z0-9_-]{0,127}")
+    );
+    let type_reference = change_section
+        .iter()
+        .find(|record| {
+            record.operation == "change.field-form"
+                && compact_field(record, "name") == Some("type_reference")
+        })
+        .expect("type reference field form");
+    assert_eq!(
+        compact_field(type_reference, "syntax"),
+        Some("unit|bool|i64|bytes|text|static-text|secret|@NAME")
+    );
+    for field in change_section.iter().filter(|record| {
+        matches!(
+            record.operation.as_str(),
+            "change.operation-field" | "change.precondition-field"
+        )
+    }) {
+        assert!(
+            field_forms.contains(&compact_field(field, "form").expect("field form")),
+            "unadvertised change field form in {field:?}"
+        );
+    }
     let references = change_section
         .iter()
         .filter(|record| record.operation == "change.reference")
@@ -246,10 +359,6 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         Some("pkg_HEX/decl_HEX")
     );
     assert!(change_section.iter().any(|record| {
-        record.operation == "change.operation"
-            && compact_field(record, "name") == Some("delete.owner")
-    }));
-    assert!(change_section.iter().any(|record| {
         record.operation == "change.delete-policy"
             && compact_field(record, "name") == Some("reject")
     }));
@@ -260,6 +369,40 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             && compact_field(record, "required") == Some("true")
             && compact_field(record, "form") == Some("exact_owner")
     }));
+    assert_eq!(
+        change_section
+            .iter()
+            .filter(|record| record.operation == "change.declaration-visibility")
+            .filter_map(|record| compact_field(record, "name"))
+            .collect::<Vec<_>>(),
+        vec!["private", "package", "public"]
+    );
+    assert_eq!(
+        change_section
+            .iter()
+            .filter(|record| record.operation == "change.function-effect")
+            .filter_map(|record| compact_field(record, "name"))
+            .collect::<Vec<_>>(),
+        vec!["pure"]
+    );
+    let direct = change_section
+        .iter()
+        .filter(|record| record.operation == "change.direct-operation")
+        .collect::<Vec<_>>();
+    assert_eq!(direct.len(), 1);
+    assert_eq!(compact_field(direct[0], "name"), Some("rename.owner"));
+    assert_eq!(
+        compact_field(direct[0], "plan-usage"),
+        Some(
+            "change plan rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT]"
+        )
+    );
+    assert_eq!(
+        compact_field(direct[0], "apply-usage"),
+        Some(
+            "change apply rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT] --plan PLAN"
+        )
+    );
     assert!(change_section.iter().any(|record| {
         record.operation == "change.operation-field"
             && compact_field(record, "operation") == Some("delete.owner")
@@ -350,15 +493,6 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
     assert!(exported_records.len() > capabilities.len());
     assert_ne!(exported_bytes.first(), Some(&b'{'));
 
-    let verified = compact_success(&["capabilities", "--verify-generated", "docs/generated"]);
-    assert_eq!(
-        verified
-            .iter()
-            .filter(|record| record.operation == "file")
-            .count(),
-        3
-    );
-
     let rejected_schema = command(&["capabilities", "--known-schema", registry_digest]);
     assert_eq!(rejected_schema.status.code(), Some(2));
     assert!(serde_json::from_slice::<Value>(&rejected_schema.stdout).is_err());
@@ -371,6 +505,18 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
     assert_eq!(
         compact_field(compact_record(&rejected_records, "diagnostic"), "code"),
         Some("cli_usage")
+    );
+}
+
+#[test]
+fn generated_contract_documents_match_executable() {
+    let verified = compact_success(&["capabilities", "--verify-generated", "docs/generated"]);
+    assert_eq!(
+        verified
+            .iter()
+            .filter(|record| record.operation == "file")
+            .count(),
+        3
     );
 }
 
@@ -880,6 +1026,563 @@ fn public_change_reuses_planned_allocation_and_replaces_an_existing_body() {
 }
 
 #[test]
+fn direct_rename_matches_record_plans_and_applies_the_reviewed_typed_request() {
+    let temporary = tempfile::TempDir::new().expect("temporary direct rename authority");
+    let project = temporary.path().join("project");
+    let created = compact_success(&["new", path(&project), "--name", "project"]);
+    let initial =
+        compact_field(compact_record(&created, "revision"), "id").expect("initial revision");
+    let creation = format!("request base={initial}\ncreate.module as=$module name=before\n");
+    let creation_plan = compact_success(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "--input",
+        &creation,
+    ]);
+    let creation_digest =
+        compact_field(compact_record(&creation_plan, "plan"), "digest").expect("creation plan");
+    let created_module = compact_success(&[
+        "--project",
+        path(&project),
+        "change",
+        "apply",
+        "--input",
+        &creation,
+        "--plan",
+        creation_digest,
+    ]);
+    let owner = compact_field(
+        created_module
+            .iter()
+            .find(|record| record.operation == "identity")
+            .expect("allocated module"),
+        "id",
+    )
+    .expect("module identity")
+    .to_owned();
+    let base = compact_field(compact_record(&created_module, "revision"), "result")
+        .expect("rename base")
+        .to_owned();
+
+    let record_without_controls =
+        format!("request base={base}\nrename.owner owner={owner} name=renamed\n");
+    let record_output = command(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "--input",
+        &record_without_controls,
+    ]);
+    let direct_output = command(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "rename.owner",
+        "--base",
+        &base,
+        "--owner",
+        &owner,
+        "--name",
+        "renamed",
+    ]);
+    assert_eq!(record_output.status, direct_output.status);
+    assert_eq!(record_output.stderr, direct_output.stderr);
+    assert_eq!(record_output.stdout, direct_output.stdout);
+    let without_controls = compact_success_output(record_output);
+    let plan_without_controls = compact_field(compact_record(&without_controls, "plan"), "digest")
+        .expect("plan without controls")
+        .to_owned();
+
+    let record_with_controls = format!(
+        "request base={base} idempotency=direct-rename-equality intent=transport-equality\n\
+         rename.owner owner={owner} name=renamed\n"
+    );
+    let record_output = command(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "--input",
+        &record_with_controls,
+    ]);
+    let direct_output = command(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "rename.owner",
+        "--base",
+        &base,
+        "--owner",
+        &owner,
+        "--name",
+        "renamed",
+        "--idempotency",
+        "direct-rename-equality",
+        "--intent",
+        "transport-equality",
+    ]);
+    assert_eq!(record_output.status, direct_output.status);
+    assert_eq!(record_output.stderr, direct_output.stderr);
+    assert_eq!(record_output.stdout, direct_output.stdout);
+    let planned = compact_success_output(direct_output);
+    let plan = compact_field(compact_record(&planned, "plan"), "digest")
+        .expect("reviewed rename plan")
+        .to_owned();
+    assert_ne!(plan, plan_without_controls);
+
+    let applied = compact_success(&[
+        "--project",
+        path(&project),
+        "change",
+        "apply",
+        "rename.owner",
+        "--base",
+        &base,
+        "--owner",
+        &owner,
+        "--name",
+        "renamed",
+        "--idempotency",
+        "direct-rename-equality",
+        "--intent",
+        "transport-equality",
+        "--plan",
+        &plan,
+    ]);
+    assert_eq!(compact_field(&applied[0], "status"), Some("accepted"));
+    for operation in [
+        "revision",
+        "plan",
+        "change",
+        "summary",
+        "validation",
+        "receipt",
+    ] {
+        assert_eq!(
+            compact_record_values(compact_record(&planned, operation)),
+            compact_record_values(compact_record(&applied, operation)),
+            "plan/apply {operation} projection"
+        );
+    }
+    let accepted = compact_field(compact_record(&applied, "revision"), "result")
+        .expect("accepted rename revision")
+        .to_owned();
+    assert_eq!(current_revision(&project), accepted);
+    let inspected = compact_success(&[
+        "--project",
+        path(&project),
+        "inspect",
+        "owner",
+        "module",
+        &owner,
+    ]);
+    assert_eq!(
+        compact_field(compact_record(&inspected, "owner"), "name"),
+        Some("renamed")
+    );
+
+    let repeated = compact_failure_output_with_status(
+        command(&[
+            "--project",
+            path(&project),
+            "change",
+            "apply",
+            "rename.owner",
+            "--base",
+            &base,
+            "--owner",
+            &owner,
+            "--name",
+            "renamed",
+            "--idempotency",
+            "direct-rename-equality",
+            "--intent",
+            "transport-equality",
+            "--plan",
+            &plan,
+        ]),
+        7,
+    );
+    assert_eq!(
+        compact_field(compact_record(&repeated, "diagnostic"), "code"),
+        Some("change_authored_stale_base")
+    );
+    assert_eq!(current_revision(&project), accepted);
+}
+
+#[test]
+fn direct_rename_malformed_inputs_and_plan_mismatch_never_access_or_advance_authority() {
+    let temporary = tempfile::TempDir::new().expect("temporary direct rejection authority");
+    let project = temporary.path().join("project");
+    let created = compact_success(&["new", path(&project), "--name", "project"]);
+    let initial = compact_field(compact_record(&created, "revision"), "id").unwrap();
+    let creation = format!("request base={initial}\ncreate.module as=$module name=before\n");
+    let planned = compact_success(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "--input",
+        &creation,
+    ]);
+    let plan = compact_field(compact_record(&planned, "plan"), "digest").unwrap();
+    let applied = compact_success(&[
+        "--project",
+        path(&project),
+        "change",
+        "apply",
+        "--input",
+        &creation,
+        "--plan",
+        plan,
+    ]);
+    let owner = compact_field(
+        applied
+            .iter()
+            .find(|record| record.operation == "identity")
+            .unwrap(),
+        "id",
+    )
+    .unwrap()
+    .to_owned();
+    let revision = compact_field(compact_record(&applied, "revision"), "result")
+        .unwrap()
+        .to_owned();
+    let project_text = path(&project);
+    let common = ["--project", project_text, "change", "plan", "rename.owner"];
+
+    assert_direct_rename_rejection(
+        &project,
+        &[common.as_slice(), &["--owner", &owner, "--name", "renamed"]].concat(),
+        "cli_usage",
+        2,
+        &revision,
+    );
+    assert_direct_rename_rejection(
+        &project,
+        &[
+            common.as_slice(),
+            &["--base", &revision, "--name", "renamed"],
+        ]
+        .concat(),
+        "cli_usage",
+        2,
+        &revision,
+    );
+    assert_direct_rename_rejection(
+        &project,
+        &[common.as_slice(), &["--base", &revision, "--owner", &owner]].concat(),
+        "cli_usage",
+        2,
+        &revision,
+    );
+    assert_direct_rename_rejection(
+        &project,
+        &[
+            common.as_slice(),
+            &[
+                "--base", &revision, "--base", &revision, "--owner", &owner, "--name", "renamed",
+            ],
+        ]
+        .concat(),
+        "cli_usage",
+        2,
+        &revision,
+    );
+    for arguments in [
+        vec![
+            "--base",
+            revision.as_str(),
+            "--owner",
+            owner.as_str(),
+            "--name",
+            "renamed",
+            "--unknown",
+            "value",
+        ],
+        vec![
+            "--base",
+            revision.as_str(),
+            "--owner",
+            owner.as_str(),
+            "--name",
+            "renamed",
+            "extra",
+        ],
+    ] {
+        assert_direct_rename_rejection(
+            &project,
+            &[common.as_slice(), arguments.as_slice()].concat(),
+            "cli_usage",
+            2,
+            &revision,
+        );
+    }
+    for (arguments, code) in [
+        (
+            vec![
+                "--base",
+                "rev_bad",
+                "--owner",
+                owner.as_str(),
+                "--name",
+                "renamed",
+            ],
+            "revision_identity_length",
+        ),
+        (
+            vec![
+                "--base",
+                revision.as_str(),
+                "--owner",
+                "mod_bad",
+                "--name",
+                "renamed",
+            ],
+            "semantic_identity_length",
+        ),
+        (
+            vec![
+                "--base",
+                revision.as_str(),
+                "--owner",
+                revision.as_str(),
+                "--name",
+                "renamed",
+            ],
+            "kernel_owner_identity_domain",
+        ),
+        (
+            vec![
+                "--base",
+                revision.as_str(),
+                "--owner",
+                owner.as_str(),
+                "--name",
+                "9invalid",
+            ],
+            "kernel_name",
+        ),
+    ] {
+        assert_direct_rename_rejection(
+            &project,
+            &[common.as_slice(), arguments.as_slice()].concat(),
+            code,
+            2,
+            &revision,
+        );
+    }
+    let oversized_idempotency = "x".repeat(129);
+    let oversized_intent = "x".repeat(4097);
+    for (option, value, code) in [
+        ("--idempotency", "", "change_idempotency"),
+        (
+            "--idempotency",
+            oversized_idempotency.as_str(),
+            "change_idempotency",
+        ),
+        ("--intent", oversized_intent.as_str(), "change_intent_bytes"),
+    ] {
+        let arguments = [
+            common.as_slice(),
+            &[
+                "--base", &revision, "--owner", &owner, "--name", "renamed", option, value,
+            ],
+        ]
+        .concat();
+        assert_direct_rename_rejection(&project, &arguments, code, 2, &revision);
+    }
+
+    let apply = [
+        "--project",
+        project_text,
+        "change",
+        "apply",
+        "rename.owner",
+        "--base",
+        &revision,
+        "--owner",
+        &owner,
+        "--name",
+        "renamed",
+    ];
+    assert_direct_rename_rejection(&project, &apply, "cli_usage", 2, &revision);
+    let malformed_plan = [apply.as_slice(), &["--plan", "plan_bad"]].concat();
+    assert_direct_rename_rejection(
+        &project,
+        &malformed_plan,
+        "change_plan_length",
+        2,
+        &revision,
+    );
+    let wrong_plan = "plan_0000000000000000000000000000000000000000000000000000000000000000";
+    let mismatched = [apply.as_slice(), &["--plan", wrong_plan]].concat();
+    assert_direct_rename_rejection(&project, &mismatched, "change_plan_mismatch", 2, &revision);
+
+    let nonexistent = temporary.path().join("does-not-exist");
+    let rejected = compact_failure_output(command(&[
+        "--project",
+        path(&nonexistent),
+        "change",
+        "apply",
+        "rename.owner",
+        "--base",
+        &revision,
+        "--owner",
+        &owner,
+        "--name",
+        "renamed",
+        "--plan",
+        wrong_plan,
+    ]));
+    assert_eq!(
+        compact_field(compact_record(&rejected, "diagnostic"), "code"),
+        Some("change_plan_mismatch")
+    );
+    assert!(!nonexistent.exists());
+}
+
+#[test]
+fn direct_rename_stale_and_absent_exact_owners_leave_head_unchanged() {
+    let temporary = tempfile::TempDir::new().expect("temporary stale rename authority");
+    let project = temporary.path().join("project");
+    let created = compact_success(&["new", path(&project), "--name", "project"]);
+    let initial = compact_field(compact_record(&created, "revision"), "id").unwrap();
+    let creation = format!("request base={initial}\ncreate.module as=$module name=before\n");
+    let planned = compact_success(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "--input",
+        &creation,
+    ]);
+    let creation_plan = compact_field(compact_record(&planned, "plan"), "digest").unwrap();
+    let applied = compact_success(&[
+        "--project",
+        path(&project),
+        "change",
+        "apply",
+        "--input",
+        &creation,
+        "--plan",
+        creation_plan,
+    ]);
+    let owner = compact_field(
+        applied
+            .iter()
+            .find(|record| record.operation == "identity")
+            .unwrap(),
+        "id",
+    )
+    .unwrap()
+    .to_owned();
+    let base = compact_field(compact_record(&applied, "revision"), "result")
+        .unwrap()
+        .to_owned();
+
+    let first = compact_success(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "rename.owner",
+        "--base",
+        &base,
+        "--owner",
+        &owner,
+        "--name",
+        "first",
+    ]);
+    let first_plan = compact_field(compact_record(&first, "plan"), "digest").unwrap();
+    let second = compact_success(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "rename.owner",
+        "--base",
+        &base,
+        "--owner",
+        &owner,
+        "--name",
+        "second",
+    ]);
+    let second_plan = compact_field(compact_record(&second, "plan"), "digest")
+        .unwrap()
+        .to_owned();
+    let accepted = compact_success(&[
+        "--project",
+        path(&project),
+        "change",
+        "apply",
+        "rename.owner",
+        "--base",
+        &base,
+        "--owner",
+        &owner,
+        "--name",
+        "first",
+        "--plan",
+        first_plan,
+    ]);
+    let accepted_revision = compact_field(compact_record(&accepted, "revision"), "result")
+        .unwrap()
+        .to_owned();
+    assert_direct_rename_rejection(
+        &project,
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "apply",
+            "rename.owner",
+            "--base",
+            &base,
+            "--owner",
+            &owner,
+            "--name",
+            "second",
+            "--plan",
+            &second_plan,
+        ],
+        "change_authored_stale_base",
+        7,
+        &accepted_revision,
+    );
+
+    let absent = if owner == "mod_00000000000000000000000000000001" {
+        "mod_00000000000000000000000000000002"
+    } else {
+        "mod_00000000000000000000000000000001"
+    };
+    assert_direct_rename_rejection(
+        &project,
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "rename.owner",
+            "--base",
+            &accepted_revision,
+            "--owner",
+            absent,
+            "--name",
+            "missing",
+        ],
+        "change_authored_owner_missing",
+        2,
+        &accepted_revision,
+    );
+}
+
+#[test]
 fn broad_change_results_are_bounded_and_expandable() {
     let temporary = tempfile::TempDir::new().expect("temporary graph authority");
     let project = temporary.path().join("project");
@@ -1244,6 +1947,121 @@ fn copied_binary_creates_normalized_minimal_projects_and_rejects_unsafe_destinat
         );
         assert!(!actual_parent.join("project").exists());
     }
+}
+
+#[test]
+fn copied_binary_direct_rename_completes_a_normalized_external_workflow() {
+    let temporary = tempfile::TempDir::new().expect("isolated direct rename workspace");
+    let copied_binary = temporary.path().join("lkjscript");
+    copy_executable(&binary(), &copied_binary);
+    let project = temporary.path().join("project");
+    let created = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["new", path(&project), "--name", "project"],
+    );
+    let initial = compact_field(compact_record(&created, "revision"), "id").unwrap();
+    let creation = format!("request base={initial}\ncreate.module as=$module name=before\n");
+    let planned = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "--input",
+            &creation,
+        ],
+    );
+    let creation_plan = compact_field(compact_record(&planned, "plan"), "digest").unwrap();
+    let module = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "apply",
+            "--input",
+            &creation,
+            "--plan",
+            creation_plan,
+        ],
+    );
+    let owner = compact_field(
+        module
+            .iter()
+            .find(|record| record.operation == "identity")
+            .unwrap(),
+        "id",
+    )
+    .unwrap()
+    .to_owned();
+    let base = compact_field(compact_record(&module, "revision"), "result")
+        .unwrap()
+        .to_owned();
+    let rename_plan = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "rename.owner",
+            "--base",
+            &base,
+            "--owner",
+            &owner,
+            "--name",
+            "after",
+        ],
+    );
+    let plan = compact_field(compact_record(&rename_plan, "plan"), "digest").unwrap();
+    let renamed = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "apply",
+            "rename.owner",
+            "--base",
+            &base,
+            "--owner",
+            &owner,
+            "--name",
+            "after",
+            "--plan",
+            plan,
+        ],
+    );
+    assert_eq!(compact_field(&renamed[0], "status"), Some("accepted"));
+    let accepted = compact_field(compact_record(&renamed, "revision"), "result").unwrap();
+    let inspected = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "inspect",
+            "owner",
+            "module",
+            &owner,
+        ],
+    );
+    assert_eq!(
+        compact_field(compact_record(&inspected, "revision"), "observed"),
+        Some(accepted)
+    );
+    assert_eq!(
+        compact_field(compact_record(&inspected, "owner"), "name"),
+        Some("after")
+    );
+    assert!(!temporary.path().join("Cargo.toml").exists());
+    assert!(!project.join(".lkjscript").exists());
 }
 
 #[test]

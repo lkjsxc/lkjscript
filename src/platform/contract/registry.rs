@@ -2,10 +2,12 @@ use super::super::artifact::{ARTIFACT_CONTRACT_VERSION, PACKAGE_ARTIFACT_CONTRAC
 use super::super::bootstrap::BOOTSTRAP_CONTRACT_VERSION;
 use super::super::configuration::CONFIGURATION_ADAPTER_CONTRACT_VERSION;
 use super::super::control::{
-    CHANGE_PLAN_DIGEST_DOMAIN, COMPACT_CHANGE_CONTRACT_IDENTITY, COMPACT_CHANGE_OPERATION_FIELDS,
-    COMPACT_CHANGE_OPERATIONS, COMPACT_CHANGE_PRECONDITION_FIELDS, COMPACT_CHANGE_PRECONDITIONS,
-    COMPACT_DELETE_POLICIES, COMPACT_EXPRESSION_FORMS, COMPACT_NAMESPACE_CLASSES,
-    COMPACT_TYPE_FORMS, MAXIMUM_COMPACT_INPUT_BYTES, render_record,
+    CHANGE_PLAN_DIGEST_DOMAIN, COMPACT_CHANGE_CONTRACT_IDENTITY,
+    COMPACT_CHANGE_OPERATION_DESCRIPTORS, COMPACT_CHANGE_PRECONDITION_FIELDS,
+    COMPACT_CHANGE_PRECONDITIONS, COMPACT_DECLARATION_VISIBILITIES, COMPACT_DELETE_POLICIES,
+    COMPACT_EXPRESSION_FORMS, COMPACT_FUNCTION_EFFECTS, COMPACT_NAMESPACE_CLASSES,
+    COMPACT_TYPE_FORMS, CompactChangeFieldForm, CompactChangeOperation,
+    MAXIMUM_COMPACT_INPUT_BYTES, render_record,
 };
 use super::super::database::POSTGRES_ADAPTER_CONTRACT_VERSION;
 use super::super::deployment::DEPLOYMENT_CONTRACT_VERSION;
@@ -54,7 +56,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-3";
 pub const REGISTRY_CONTRACT_VERSION: u16 = 3;
-pub const CLI_CONTRACT_VERSION: u16 = 5;
+pub const CLI_CONTRACT_VERSION: u16 = 6;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -1042,8 +1044,8 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
         ),
         operation(
             PublicOperation::Change,
-            "Plan or atomically apply one compact typed semantic change.",
-            "change plan (--input RECORDS | --input-file PATH) | change apply (--input RECORDS | --input-file PATH) --plan DIGEST",
+            "Plan or atomically apply one typed semantic change through compact records or a direct operation.",
+            "change plan ((--input RECORDS | --input-file PATH) | rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT]) | change apply ((--input RECORDS | --input-file PATH) | rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT]) --plan DIGEST",
             ControlModel::ChangeRequest,
             AuthorityEffect::AcceptedOnCommit,
             ProjectRequirement::Required,
@@ -2425,20 +2427,39 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ("plan-prefix", "plan_".to_owned()),
                 ],
             )?);
-            for operation in COMPACT_CHANGE_OPERATIONS {
+            for descriptor in COMPACT_CHANGE_OPERATION_DESCRIPTORS {
                 records.push(compact_record(
                     "change.operation",
-                    &[("name", (*operation).to_owned())],
+                    &[("name", descriptor.name.to_owned())],
                 )?);
+                for field in descriptor.fields {
+                    records.push(compact_record(
+                        "change.operation-field",
+                        &[
+                            ("operation", descriptor.name.to_owned()),
+                            ("name", field.name.to_owned()),
+                            ("required", field.required.to_string()),
+                            ("form", field.form.name().to_owned()),
+                        ],
+                    )?);
+                }
+                if let Some(direct) = descriptor.direct {
+                    records.push(compact_record(
+                        "change.direct-operation",
+                        &[
+                            ("name", descriptor.name.to_owned()),
+                            ("plan-usage", direct.plan_usage.to_owned()),
+                            ("apply-usage", direct.apply_usage.to_owned()),
+                        ],
+                    )?);
+                }
             }
-            for field in COMPACT_CHANGE_OPERATION_FIELDS {
+            for form in CompactChangeFieldForm::ALL {
                 records.push(compact_record(
-                    "change.operation-field",
+                    "change.field-form",
                     &[
-                        ("operation", field.record.to_owned()),
-                        ("name", field.name.to_owned()),
-                        ("required", field.required.to_string()),
-                        ("form", field.form.to_owned()),
+                        ("name", form.name().to_owned()),
+                        ("syntax", form.syntax().to_owned()),
                     ],
                 )?);
             }
@@ -2455,7 +2476,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                         ("precondition", field.record.to_owned()),
                         ("name", field.name.to_owned()),
                         ("required", field.required.to_string()),
-                        ("form", field.form.to_owned()),
+                        ("form", field.form.name().to_owned()),
                     ],
                 )?);
             }
@@ -2463,6 +2484,18 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 records.push(compact_record(
                     "change.delete-policy",
                     &[("name", (*policy).to_owned())],
+                )?);
+            }
+            for (name, _) in COMPACT_DECLARATION_VISIBILITIES {
+                records.push(compact_record(
+                    "change.declaration-visibility",
+                    &[("name", (*name).to_owned())],
+                )?);
+            }
+            for effect in COMPACT_FUNCTION_EFFECTS {
+                records.push(compact_record(
+                    "change.function-effect",
+                    &[("name", (*effect).to_owned())],
                 )?);
             }
             for (name, _) in COMPACT_NAMESPACE_CLASSES {
@@ -2695,6 +2728,183 @@ fn validate_registry() -> Result<(), String> {
     if operation_descriptors().len() != PublicOperation::ALL.len() {
         return Err("every public operation must have exactly one descriptor".to_owned());
     }
+    for descriptor in COMPACT_CHANGE_OPERATION_DESCRIPTORS {
+        if let Some(direct) = descriptor.direct
+            && (direct.plan_usage.is_empty() || direct.apply_usage.is_empty())
+        {
+            return Err(format!(
+                "direct change operation '{}' has empty usage",
+                descriptor.name
+            ));
+        }
+    }
+    let (change_operations, change_fields, advertised_forms) =
+        compact_change_validation_inventory();
+    validate_compact_change_inventory(&change_operations, &change_fields, &advertised_forms)?;
+    validate_compact_change_preconditions(&advertised_forms)?;
+    Ok(())
+}
+
+#[derive(Clone, Debug)]
+struct ChangeOperationValidation<'a> {
+    operation: CompactChangeOperation,
+    name: &'a str,
+    direct: bool,
+}
+
+#[derive(Clone, Debug)]
+struct ChangeFieldValidation<'a> {
+    operation: &'a str,
+    name: &'a str,
+    required: bool,
+    form: &'a str,
+}
+
+fn compact_change_validation_inventory() -> (
+    Vec<ChangeOperationValidation<'static>>,
+    Vec<ChangeFieldValidation<'static>>,
+    [&'static str; 16],
+) {
+    let operations = COMPACT_CHANGE_OPERATION_DESCRIPTORS
+        .iter()
+        .map(|descriptor| ChangeOperationValidation {
+            operation: descriptor.operation,
+            name: descriptor.name,
+            direct: descriptor.direct.is_some(),
+        })
+        .collect();
+    let fields = COMPACT_CHANGE_OPERATION_DESCRIPTORS
+        .iter()
+        .flat_map(|descriptor| {
+            descriptor
+                .fields
+                .iter()
+                .map(move |field| ChangeFieldValidation {
+                    operation: descriptor.name,
+                    name: field.name,
+                    required: field.required,
+                    form: field.form.name(),
+                })
+        })
+        .collect();
+    let forms = CompactChangeFieldForm::ALL.map(CompactChangeFieldForm::name);
+    (operations, fields, forms)
+}
+
+fn validate_compact_change_inventory(
+    operations: &[ChangeOperationValidation<'_>],
+    fields: &[ChangeFieldValidation<'_>],
+    advertised_forms: &[&str],
+) -> Result<(), String> {
+    unique(
+        operations.iter().map(|value| value.name),
+        "change operation",
+    )?;
+    unique(advertised_forms.iter().copied(), "change field form")?;
+
+    let expected_operations = CompactChangeOperation::ALL
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    let described_operations = operations
+        .iter()
+        .map(|value| value.operation)
+        .collect::<BTreeSet<_>>();
+    if operations.len() != described_operations.len() || described_operations != expected_operations
+    {
+        return Err(
+            "compact change descriptor inventory and semantic decoder coverage differ".to_owned(),
+        );
+    }
+
+    let operation_names = operations
+        .iter()
+        .map(|operation| operation.name)
+        .collect::<BTreeSet<_>>();
+    for operation in operations {
+        if !fields.iter().any(|field| field.operation == operation.name) {
+            return Err(format!(
+                "change operation '{}' has no field descriptor",
+                operation.name
+            ));
+        }
+    }
+
+    let mut field_names = BTreeSet::new();
+    for field in fields {
+        if !operation_names.contains(field.operation) {
+            return Err(format!(
+                "change field '{}.{}' refers to an unknown operation",
+                field.operation, field.name
+            ));
+        }
+        if field.name.is_empty() || !field_names.insert((field.operation, field.name)) {
+            return Err(format!(
+                "change field '{}.{}' is empty or duplicated",
+                field.operation, field.name
+            ));
+        }
+        if !advertised_forms.contains(&field.form) {
+            return Err(format!(
+                "change field '{}.{}' uses unadvertised form '{}'",
+                field.operation, field.name, field.form
+            ));
+        }
+        if !field.required && (field.operation, field.name) != ("add.case", "payload") {
+            return Err(format!(
+                "change field '{}.{}' is unexpectedly optional",
+                field.operation, field.name
+            ));
+        }
+    }
+    if !fields.iter().any(|field| {
+        (field.operation, field.name, field.required) == ("add.case", "payload", false)
+    }) {
+        return Err("add.case.payload must be the sole optional change field".to_owned());
+    }
+
+    let direct_operations = operations
+        .iter()
+        .filter(|operation| operation.direct)
+        .map(|operation| operation.name)
+        .collect::<Vec<_>>();
+    if direct_operations != ["rename.owner"] {
+        return Err("rename.owner must be the sole direct compact change operation".to_owned());
+    }
+    Ok(())
+}
+
+fn validate_compact_change_preconditions(advertised_forms: &[&str]) -> Result<(), String> {
+    unique(
+        COMPACT_CHANGE_PRECONDITIONS.iter().copied(),
+        "change precondition",
+    )?;
+    let preconditions = COMPACT_CHANGE_PRECONDITIONS
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let mut fields = BTreeSet::new();
+    for field in COMPACT_CHANGE_PRECONDITION_FIELDS {
+        if !preconditions.contains(field.record) {
+            return Err(format!(
+                "change precondition field '{}.{}' refers to an unknown precondition",
+                field.record, field.name
+            ));
+        }
+        if field.name.is_empty() || !fields.insert((field.record, field.name)) {
+            return Err(format!(
+                "change precondition field '{}.{}' is empty or duplicated",
+                field.record, field.name
+            ));
+        }
+        if !advertised_forms.contains(&field.form.name()) {
+            return Err(format!(
+                "change precondition field '{}.{}' uses unadvertised form '{}'",
+                field.record,
+                field.name,
+                field.form.name()
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -2739,6 +2949,65 @@ mod tests {
         assert_eq!(RegistrySection::ALL.len(), first.sections.len());
         assert!(first.bytes.starts_with(b"registry "));
         assert!(!first.bytes.starts_with(b"{"));
+    }
+
+    #[test]
+    fn compact_change_registry_rejects_structural_descriptor_drift() {
+        let (operations, fields, forms) = compact_change_validation_inventory();
+        validate_compact_change_inventory(&operations, &fields, &forms)
+            .expect("authoritative compact change descriptors");
+
+        let mut duplicate_operations = operations.clone();
+        duplicate_operations.push(operations[0].clone());
+        assert!(
+            validate_compact_change_inventory(&duplicate_operations, &fields, &forms)
+                .expect_err("duplicate operation")
+                .contains("duplicated")
+        );
+
+        let mut duplicate_fields = fields.clone();
+        duplicate_fields.push(fields[0].clone());
+        assert!(
+            validate_compact_change_inventory(&operations, &duplicate_fields, &forms)
+                .expect_err("duplicate field")
+                .contains("duplicated")
+        );
+
+        let mut unknown_operation_fields = fields.clone();
+        unknown_operation_fields[0].operation = "unknown.operation";
+        assert!(
+            validate_compact_change_inventory(&operations, &unknown_operation_fields, &forms)
+                .expect_err("unknown field operation")
+                .contains("unknown operation")
+        );
+
+        let mut missing_operation = operations.clone();
+        missing_operation.pop();
+        assert!(
+            validate_compact_change_inventory(&missing_operation, &fields, &forms)
+                .expect_err("missing operation descriptor")
+                .contains("decoder coverage differ")
+        );
+
+        let first_operation = operations[0].name;
+        let no_fields = fields
+            .iter()
+            .filter(|field| field.operation != first_operation)
+            .cloned()
+            .collect::<Vec<_>>();
+        assert!(
+            validate_compact_change_inventory(&operations, &no_fields, &forms)
+                .expect_err("operation without fields")
+                .contains("no field descriptor")
+        );
+
+        let mut unadvertised = fields.clone();
+        unadvertised[0].form = "unadvertised_form";
+        assert!(
+            validate_compact_change_inventory(&operations, &unadvertised, &forms)
+                .expect_err("unadvertised form")
+                .contains("unadvertised form")
+        );
     }
 
     #[test]

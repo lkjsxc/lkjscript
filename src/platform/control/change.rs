@@ -20,22 +20,13 @@ use std::str::FromStr;
 
 pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-3";
 pub const CHANGE_PLAN_DIGEST_DOMAIN: &str = "lkjscript.change-plan.v4";
-pub const COMPACT_CHANGE_OPERATIONS: &[&str] = &[
-    "create.module",
-    "create.record",
-    "create.variant",
-    "create.function",
-    "create.constant",
-    "create.test",
-    "add.field",
-    "add.case",
-    "add.parameter",
-    "delete.owner",
-    "rename.owner",
-    "move.declaration",
-    "replace.body",
-];
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject"];
+pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
+    ("private", DeclarationVisibility::Private),
+    ("package", DeclarationVisibility::Package),
+    ("public", DeclarationVisibility::Public),
+];
+pub(crate) const COMPACT_FUNCTION_EFFECTS: &[&str] = &["pure"];
 pub const COMPACT_CHANGE_PRECONDITIONS: &[&str] = &[
     "precondition.owner-exists",
     "precondition.owner-absent",
@@ -58,124 +49,601 @@ pub(crate) const COMPACT_NAMESPACE_CLASSES: &[(&str, NamespaceClass)] = &[
     ("target", NamespaceClass::Target),
 ];
 
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) enum CompactChangeOperation {
+    CreateModule,
+    CreateRecord,
+    CreateVariant,
+    CreateFunction,
+    CreateConstant,
+    CreateTest,
+    AddField,
+    AddCase,
+    AddParameter,
+    DeleteOwner,
+    RenameOwner,
+    MoveDeclaration,
+    ReplaceBody,
+}
+
+impl CompactChangeOperation {
+    pub(crate) const ALL: [Self; 13] = [
+        Self::CreateModule,
+        Self::CreateRecord,
+        Self::CreateVariant,
+        Self::CreateFunction,
+        Self::CreateConstant,
+        Self::CreateTest,
+        Self::AddField,
+        Self::AddCase,
+        Self::AddParameter,
+        Self::DeleteOwner,
+        Self::RenameOwner,
+        Self::MoveDeclaration,
+        Self::ReplaceBody,
+    ];
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) enum CompactChangeFieldForm {
+    RequestLocalSymbol,
+    ModuleSelector,
+    DeclarationSelector,
+    OwnerSelector,
+    ExactOwner,
+    Name,
+    DeclarationVisibility,
+    FunctionEffect,
+    TypeReference,
+    ExpressionReference,
+    DeletePolicy,
+    OwnerParent,
+    NamespaceClass,
+    ExactPackage,
+    ExactRevision,
+    ExactPackageRevision,
+}
+
+impl CompactChangeFieldForm {
+    pub(crate) const ALL: [Self; 16] = [
+        Self::RequestLocalSymbol,
+        Self::ModuleSelector,
+        Self::DeclarationSelector,
+        Self::OwnerSelector,
+        Self::ExactOwner,
+        Self::Name,
+        Self::DeclarationVisibility,
+        Self::FunctionEffect,
+        Self::TypeReference,
+        Self::ExpressionReference,
+        Self::DeletePolicy,
+        Self::OwnerParent,
+        Self::NamespaceClass,
+        Self::ExactPackage,
+        Self::ExactRevision,
+        Self::ExactPackageRevision,
+    ];
+
+    pub(crate) const fn name(self) -> &'static str {
+        match self {
+            Self::RequestLocalSymbol => "request_local_symbol",
+            Self::ModuleSelector => "module_selector",
+            Self::DeclarationSelector => "declaration_selector",
+            Self::OwnerSelector => "owner_selector",
+            Self::ExactOwner => "exact_owner",
+            Self::Name => "name",
+            Self::DeclarationVisibility => "declaration_visibility",
+            Self::FunctionEffect => "function_effect",
+            Self::TypeReference => "type_reference",
+            Self::ExpressionReference => "expression_reference",
+            Self::DeletePolicy => "delete_policy",
+            Self::OwnerParent => "owner_parent",
+            Self::NamespaceClass => "namespace_class",
+            Self::ExactPackage => "exact_package",
+            Self::ExactRevision => "exact_revision",
+            Self::ExactPackageRevision => "exact_package_revision",
+        }
+    }
+
+    pub(crate) const fn syntax(self) -> &'static str {
+        match self {
+            Self::RequestLocalSymbol => "$NAME",
+            Self::ModuleSelector => "$NAME|mod_HEX|MODULE_NAME",
+            Self::DeclarationSelector => "$NAME|decl_HEX|MODULE/NAME",
+            Self::OwnerSelector => "$NAME|DOMAIN_HEX",
+            Self::ExactOwner => "DOMAIN_HEX",
+            Self::Name => "[A-Za-z_][A-Za-z0-9_-]{0,127}",
+            Self::DeclarationVisibility => "private|package|public",
+            Self::FunctionEffect => "pure",
+            Self::TypeReference => "unit|bool|i64|bytes|text|static-text|secret|@NAME",
+            Self::ExpressionReference => "$NAME",
+            Self::DeletePolicy => "reject",
+            Self::OwnerParent => "package|DOMAIN_HEX",
+            Self::NamespaceClass => "change.namespace-class.name",
+            Self::ExactPackage => "pkg_HEX",
+            Self::ExactRevision => "rev_HEX",
+            Self::ExactPackageRevision => "package_revision_HEX",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct CompactChangeField {
+pub(crate) struct CompactChangeOperationField {
+    pub(crate) name: &'static str,
+    pub(crate) required: bool,
+    pub(crate) form: CompactChangeFieldForm,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct CompactChangeDirectOperation {
+    pub(crate) plan_usage: &'static str,
+    pub(crate) apply_usage: &'static str,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct CompactChangeOperationDescriptor {
+    pub(crate) operation: CompactChangeOperation,
+    pub(crate) name: &'static str,
+    pub(crate) fields: &'static [CompactChangeOperationField],
+    pub(crate) direct: Option<CompactChangeDirectOperation>,
+}
+
+use CompactChangeFieldForm as FieldForm;
+
+pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationDescriptor] = &[
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::CreateModule,
+        name: "create.module",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestLocalSymbol,
+            },
+            CompactChangeOperationField {
+                name: "name",
+                required: true,
+                form: FieldForm::Name,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::CreateRecord,
+        name: "create.record",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestLocalSymbol,
+            },
+            CompactChangeOperationField {
+                name: "module",
+                required: true,
+                form: FieldForm::ModuleSelector,
+            },
+            CompactChangeOperationField {
+                name: "name",
+                required: true,
+                form: FieldForm::Name,
+            },
+            CompactChangeOperationField {
+                name: "visibility",
+                required: true,
+                form: FieldForm::DeclarationVisibility,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::CreateVariant,
+        name: "create.variant",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestLocalSymbol,
+            },
+            CompactChangeOperationField {
+                name: "module",
+                required: true,
+                form: FieldForm::ModuleSelector,
+            },
+            CompactChangeOperationField {
+                name: "name",
+                required: true,
+                form: FieldForm::Name,
+            },
+            CompactChangeOperationField {
+                name: "visibility",
+                required: true,
+                form: FieldForm::DeclarationVisibility,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::CreateFunction,
+        name: "create.function",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestLocalSymbol,
+            },
+            CompactChangeOperationField {
+                name: "module",
+                required: true,
+                form: FieldForm::ModuleSelector,
+            },
+            CompactChangeOperationField {
+                name: "name",
+                required: true,
+                form: FieldForm::Name,
+            },
+            CompactChangeOperationField {
+                name: "visibility",
+                required: true,
+                form: FieldForm::DeclarationVisibility,
+            },
+            CompactChangeOperationField {
+                name: "result",
+                required: true,
+                form: FieldForm::TypeReference,
+            },
+            CompactChangeOperationField {
+                name: "effect",
+                required: true,
+                form: FieldForm::FunctionEffect,
+            },
+            CompactChangeOperationField {
+                name: "body",
+                required: true,
+                form: FieldForm::ExpressionReference,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::CreateConstant,
+        name: "create.constant",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestLocalSymbol,
+            },
+            CompactChangeOperationField {
+                name: "module",
+                required: true,
+                form: FieldForm::ModuleSelector,
+            },
+            CompactChangeOperationField {
+                name: "name",
+                required: true,
+                form: FieldForm::Name,
+            },
+            CompactChangeOperationField {
+                name: "visibility",
+                required: true,
+                form: FieldForm::DeclarationVisibility,
+            },
+            CompactChangeOperationField {
+                name: "type",
+                required: true,
+                form: FieldForm::TypeReference,
+            },
+            CompactChangeOperationField {
+                name: "value",
+                required: true,
+                form: FieldForm::ExpressionReference,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::CreateTest,
+        name: "create.test",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestLocalSymbol,
+            },
+            CompactChangeOperationField {
+                name: "module",
+                required: true,
+                form: FieldForm::ModuleSelector,
+            },
+            CompactChangeOperationField {
+                name: "name",
+                required: true,
+                form: FieldForm::Name,
+            },
+            CompactChangeOperationField {
+                name: "visibility",
+                required: true,
+                form: FieldForm::DeclarationVisibility,
+            },
+            CompactChangeOperationField {
+                name: "actual",
+                required: true,
+                form: FieldForm::ExpressionReference,
+            },
+            CompactChangeOperationField {
+                name: "expected",
+                required: true,
+                form: FieldForm::ExpressionReference,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::AddField,
+        name: "add.field",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestLocalSymbol,
+            },
+            CompactChangeOperationField {
+                name: "record",
+                required: true,
+                form: FieldForm::DeclarationSelector,
+            },
+            CompactChangeOperationField {
+                name: "name",
+                required: true,
+                form: FieldForm::Name,
+            },
+            CompactChangeOperationField {
+                name: "type",
+                required: true,
+                form: FieldForm::TypeReference,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::AddCase,
+        name: "add.case",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestLocalSymbol,
+            },
+            CompactChangeOperationField {
+                name: "variant",
+                required: true,
+                form: FieldForm::DeclarationSelector,
+            },
+            CompactChangeOperationField {
+                name: "name",
+                required: true,
+                form: FieldForm::Name,
+            },
+            CompactChangeOperationField {
+                name: "payload",
+                required: false,
+                form: FieldForm::TypeReference,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::AddParameter,
+        name: "add.parameter",
+        fields: &[
+            CompactChangeOperationField {
+                name: "as",
+                required: true,
+                form: FieldForm::RequestLocalSymbol,
+            },
+            CompactChangeOperationField {
+                name: "function",
+                required: true,
+                form: FieldForm::DeclarationSelector,
+            },
+            CompactChangeOperationField {
+                name: "name",
+                required: true,
+                form: FieldForm::Name,
+            },
+            CompactChangeOperationField {
+                name: "type",
+                required: true,
+                form: FieldForm::TypeReference,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::DeleteOwner,
+        name: "delete.owner",
+        fields: &[
+            CompactChangeOperationField {
+                name: "owner",
+                required: true,
+                form: FieldForm::ExactOwner,
+            },
+            CompactChangeOperationField {
+                name: "policy",
+                required: true,
+                form: FieldForm::DeletePolicy,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::RenameOwner,
+        name: "rename.owner",
+        fields: &[
+            CompactChangeOperationField {
+                name: "owner",
+                required: true,
+                form: FieldForm::OwnerSelector,
+            },
+            CompactChangeOperationField {
+                name: "name",
+                required: true,
+                form: FieldForm::Name,
+            },
+        ],
+        direct: Some(CompactChangeDirectOperation {
+            plan_usage: "change plan rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT]",
+            apply_usage: "change apply rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT] --plan PLAN",
+        }),
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::MoveDeclaration,
+        name: "move.declaration",
+        fields: &[
+            CompactChangeOperationField {
+                name: "declaration",
+                required: true,
+                form: FieldForm::DeclarationSelector,
+            },
+            CompactChangeOperationField {
+                name: "module",
+                required: true,
+                form: FieldForm::ModuleSelector,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::ReplaceBody,
+        name: "replace.body",
+        fields: &[
+            CompactChangeOperationField {
+                name: "function",
+                required: true,
+                form: FieldForm::DeclarationSelector,
+            },
+            CompactChangeOperationField {
+                name: "body",
+                required: true,
+                form: FieldForm::ExpressionReference,
+            },
+        ],
+        direct: None,
+    },
+];
+
+pub(crate) fn compact_change_operation_descriptor(
+    name: &str,
+) -> Option<&'static CompactChangeOperationDescriptor> {
+    COMPACT_CHANGE_OPERATION_DESCRIPTORS
+        .iter()
+        .find(|descriptor| descriptor.name == name)
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct CompactChangePreconditionField {
     pub(crate) record: &'static str,
     pub(crate) name: &'static str,
     pub(crate) required: bool,
-    pub(crate) form: &'static str,
+    pub(crate) form: CompactChangeFieldForm,
 }
 
-pub(crate) const COMPACT_CHANGE_OPERATION_FIELDS: &[CompactChangeField] = &[
-    CompactChangeField {
-        record: "delete.owner",
-        name: "owner",
-        required: true,
-        form: "exact_owner",
-    },
-    CompactChangeField {
-        record: "delete.owner",
-        name: "policy",
-        required: true,
-        form: "delete_policy",
-    },
-];
-pub(crate) const COMPACT_CHANGE_PRECONDITION_FIELDS: &[CompactChangeField] = &[
-    CompactChangeField {
+pub(crate) const COMPACT_CHANGE_PRECONDITION_FIELDS: &[CompactChangePreconditionField] = &[
+    CompactChangePreconditionField {
         record: "precondition.owner-exists",
         name: "owner",
         required: true,
-        form: "exact_owner",
+        form: FieldForm::ExactOwner,
     },
-    CompactChangeField {
+    CompactChangePreconditionField {
         record: "precondition.owner-absent",
         name: "owner",
         required: true,
-        form: "exact_owner",
+        form: FieldForm::ExactOwner,
     },
-    CompactChangeField {
+    CompactChangePreconditionField {
         record: "precondition.owner-name",
         name: "owner",
         required: true,
-        form: "exact_owner",
+        form: FieldForm::ExactOwner,
     },
-    CompactChangeField {
+    CompactChangePreconditionField {
         record: "precondition.owner-name",
         name: "name",
         required: true,
-        form: "name",
+        form: FieldForm::Name,
     },
-    CompactChangeField {
+    CompactChangePreconditionField {
         record: "precondition.owner-parent",
         name: "owner",
         required: true,
-        form: "exact_owner",
+        form: FieldForm::ExactOwner,
     },
-    CompactChangeField {
+    CompactChangePreconditionField {
         record: "precondition.owner-parent",
         name: "parent",
         required: true,
-        form: "owner_parent",
+        form: FieldForm::OwnerParent,
     },
-    CompactChangeField {
+    CompactChangePreconditionField {
         record: "precondition.namespace-absent",
         name: "parent",
         required: true,
-        form: "owner_parent",
+        form: FieldForm::OwnerParent,
     },
-    CompactChangeField {
+    CompactChangePreconditionField {
         record: "precondition.namespace-absent",
         name: "class",
         required: true,
-        form: "namespace_class",
+        form: FieldForm::NamespaceClass,
     },
-    CompactChangeField {
+    CompactChangePreconditionField {
         record: "precondition.namespace-absent",
         name: "name",
         required: true,
-        form: "name",
+        form: FieldForm::Name,
     },
-    CompactChangeField {
+    CompactChangePreconditionField {
         record: "precondition.namespace-points-to",
         name: "parent",
         required: true,
-        form: "owner_parent",
+        form: FieldForm::OwnerParent,
     },
-    CompactChangeField {
+    CompactChangePreconditionField {
         record: "precondition.namespace-points-to",
         name: "class",
         required: true,
-        form: "namespace_class",
+        form: FieldForm::NamespaceClass,
     },
-    CompactChangeField {
+    CompactChangePreconditionField {
         record: "precondition.namespace-points-to",
         name: "name",
         required: true,
-        form: "name",
+        form: FieldForm::Name,
     },
-    CompactChangeField {
+    CompactChangePreconditionField {
         record: "precondition.namespace-points-to",
         name: "owner",
         required: true,
-        form: "exact_owner",
+        form: FieldForm::ExactOwner,
     },
-    CompactChangeField {
+    CompactChangePreconditionField {
         record: "precondition.dependency-binding",
         name: "package",
         required: true,
-        form: "exact_package",
+        form: FieldForm::ExactPackage,
     },
-    CompactChangeField {
+    CompactChangePreconditionField {
         record: "precondition.dependency-binding",
         name: "semantic-revision",
         required: true,
-        form: "exact_revision",
+        form: FieldForm::ExactRevision,
     },
-    CompactChangeField {
+    CompactChangePreconditionField {
         record: "precondition.dependency-binding",
         name: "package-revision",
         required: true,
-        form: "exact_package_revision",
+        form: FieldForm::ExactPackageRevision,
     },
 ];
 pub const COMPACT_TYPE_FORMS: &[&str] = &[
@@ -246,10 +714,10 @@ impl FromStr for ChangePlanDigest {
     }
 }
 
-/// One transport-decoded request. The semantic operations remain owned by the change engine;
+/// One transport-neutral public request. Semantic operations remain owned by the change engine;
 /// publication options and the reviewed-plan digest remain operational control data.
 #[derive(Clone, Debug)]
-pub(crate) struct CompactChangeRequest {
+pub(crate) struct NormalizedChangeRequest {
     pub semantic: AuthoredChangeSet,
     pub options: PublicationOptions,
     pub plan: ChangePlanDigest,
@@ -258,7 +726,7 @@ pub(crate) struct CompactChangeRequest {
 pub(crate) fn decode_compact_change(
     path: &str,
     input: &[u8],
-) -> Result<CompactChangeRequest, Vec<Diagnostic>> {
+) -> Result<NormalizedChangeRequest, Vec<Diagnostic>> {
     let records = parse_records(path, input)?;
     Decoder::new(records)
         .decode()
@@ -279,7 +747,7 @@ struct Decoder {
     arguments: BTreeMap<String, Vec<IndexedValue>>,
     type_parameters: BTreeMap<String, Vec<IndexedValue>>,
     preconditions: Vec<CompactRecord>,
-    changes: Vec<CompactRecord>,
+    changes: Vec<(&'static CompactChangeOperationDescriptor, CompactRecord)>,
     type_cache: BTreeMap<String, AuthoredType>,
     type_stack: BTreeSet<String>,
     expression_stack: BTreeSet<String>,
@@ -303,7 +771,7 @@ impl Decoder {
         }
     }
 
-    fn decode(mut self) -> Result<CompactChangeRequest, Diagnostic> {
+    fn decode(mut self) -> Result<NormalizedChangeRequest, Diagnostic> {
         let mut request = None;
         for record in std::mem::take(&mut self.records) {
             match record.operation.as_str() {
@@ -359,16 +827,19 @@ impl Decoder {
                         ),
                     ));
                 }
-                operation if is_change_operation(operation) => self.changes.push(record),
-                _ => {
-                    return Err(record_error(
-                        &record,
-                        "change_operation_unknown",
-                        format!(
-                            "unknown compact change record '{}'; use 'capabilities change'",
-                            record.operation
-                        ),
-                    ));
+                operation => {
+                    if let Some(descriptor) = compact_change_operation_descriptor(operation) {
+                        self.changes.push((descriptor, record));
+                    } else {
+                        return Err(record_error(
+                            &record,
+                            "change_operation_unknown",
+                            format!(
+                                "unknown compact change record '{}'; use 'capabilities change'",
+                                record.operation
+                            ),
+                        ));
+                    }
                 }
             }
         }
@@ -382,27 +853,7 @@ impl Decoder {
         check_fields(&request, &["base", "idempotency", "intent"])?;
         let base = parse_field::<RevisionId>(&request, "base")?;
         let idempotency_key = optional(&request, "idempotency").map(str::to_owned);
-        if let Some(key) = idempotency_key.as_deref()
-            && !idempotency_key_is_valid(key)
-        {
-            return Err(field_error(
-                &request,
-                "idempotency",
-                "change_idempotency",
-                "idempotency must contain 1 through 128 portable identifier bytes",
-            ));
-        }
         let intent = optional(&request, "intent").map(str::to_owned);
-        if intent.as_ref().is_some_and(|value| {
-            value.len() > crate::platform::publication::contract::MAXIMUM_INTENT_BYTES
-        }) {
-            return Err(field_error(
-                &request,
-                "intent",
-                "change_intent_bytes",
-                "intent exceeds its 4096-byte operational bound",
-            ));
-        }
         if self.changes.is_empty() {
             return Err(record_error(
                 &request,
@@ -417,8 +868,8 @@ impl Decoder {
             .map(decode_precondition)
             .collect::<Result<Vec<_>, _>>()?;
         let mut changes = Vec::with_capacity(self.changes.len());
-        for record in std::mem::take(&mut self.changes) {
-            changes.push(self.decode_change(&record)?);
+        for (descriptor, record) in std::mem::take(&mut self.changes) {
+            changes.push(self.decode_change(descriptor, &record)?);
         }
         for (symbol, uses) in &self.expression_uses {
             if *uses == 0 {
@@ -477,11 +928,14 @@ impl Decoder {
             idempotency_key,
             intent,
         };
-        let plan = compact_change_plan_digest(&semantic, &options)?;
-        Ok(CompactChangeRequest {
-            semantic,
-            options,
-            plan,
+        normalize_change_request(semantic, options).map_err(|mut diagnostic| {
+            let option = match diagnostic.code.as_str() {
+                "change_idempotency" => "idempotency",
+                "change_intent_bytes" => "intent",
+                _ => return diagnostic,
+            };
+            diagnostic.location = field(&request, option).map(|field| field.location.clone());
+            diagnostic
         })
     }
 
@@ -517,50 +971,34 @@ impl Decoder {
         Ok(())
     }
 
-    fn decode_change(&mut self, record: &CompactRecord) -> Result<AuthoredChange, Diagnostic> {
-        match record.operation.as_str() {
-            "create.module" => {
-                check_fields(record, &["as", "name"])?;
-                Ok(AuthoredChange::CreateModule {
-                    symbol: symbol(record, "as")?,
-                    name: parse_name(record, "name")?,
-                })
-            }
-            "create.record" => {
-                check_fields(record, &["as", "module", "name", "visibility"])?;
-                Ok(AuthoredChange::CreateRecord {
-                    symbol: symbol(record, "as")?,
-                    module: parse_module_selector(record, "module")?,
-                    name: parse_name(record, "name")?,
-                    visibility: parse_visibility(record, "visibility")?,
-                    fields: Vec::new(),
-                })
-            }
-            "create.variant" => {
-                check_fields(record, &["as", "module", "name", "visibility"])?;
-                Ok(AuthoredChange::CreateVariant {
-                    symbol: symbol(record, "as")?,
-                    module: parse_module_selector(record, "module")?,
-                    name: parse_name(record, "name")?,
-                    visibility: parse_visibility(record, "visibility")?,
-                    cases: Vec::new(),
-                })
-            }
-            "create.function" => {
-                check_fields(
-                    record,
-                    &[
-                        "as",
-                        "module",
-                        "name",
-                        "visibility",
-                        "result",
-                        "effect",
-                        "body",
-                    ],
-                )?;
+    fn decode_change(
+        &mut self,
+        descriptor: &CompactChangeOperationDescriptor,
+        record: &CompactRecord,
+    ) -> Result<AuthoredChange, Diagnostic> {
+        check_operation_fields(record, descriptor.fields)?;
+        match descriptor.operation {
+            CompactChangeOperation::CreateModule => Ok(AuthoredChange::CreateModule {
+                symbol: symbol(record, "as")?,
+                name: parse_name(record, "name")?,
+            }),
+            CompactChangeOperation::CreateRecord => Ok(AuthoredChange::CreateRecord {
+                symbol: symbol(record, "as")?,
+                module: parse_module_selector(record, "module")?,
+                name: parse_name(record, "name")?,
+                visibility: parse_visibility(record, "visibility")?,
+                fields: Vec::new(),
+            }),
+            CompactChangeOperation::CreateVariant => Ok(AuthoredChange::CreateVariant {
+                symbol: symbol(record, "as")?,
+                module: parse_module_selector(record, "module")?,
+                name: parse_name(record, "name")?,
+                visibility: parse_visibility(record, "visibility")?,
+                cases: Vec::new(),
+            }),
+            CompactChangeOperation::CreateFunction => {
                 let effect = required(record, "effect")?;
-                if effect != "pure" {
+                if !COMPACT_FUNCTION_EFFECTS.contains(&effect) {
                     return Err(field_error(
                         record,
                         "effect",
@@ -581,11 +1019,7 @@ impl Decoder {
                     body: self.decode_expression(&body)?,
                 })
             }
-            "create.constant" => {
-                check_fields(
-                    record,
-                    &["as", "module", "name", "visibility", "type", "value"],
-                )?;
+            CompactChangeOperation::CreateConstant => {
                 let value = required(record, "value")?.to_owned();
                 Ok(AuthoredChange::CreateConstant {
                     symbol: symbol(record, "as")?,
@@ -596,11 +1030,7 @@ impl Decoder {
                     value: self.decode_expression(&value)?,
                 })
             }
-            "create.test" => {
-                check_fields(
-                    record,
-                    &["as", "module", "name", "visibility", "actual", "expected"],
-                )?;
+            CompactChangeOperation::CreateTest => {
                 let actual = required(record, "actual")?.to_owned();
                 let expected = required(record, "expected")?.to_owned();
                 Ok(AuthoredChange::CreateTest {
@@ -612,45 +1042,35 @@ impl Decoder {
                     expected: self.decode_expression(&expected)?,
                 })
             }
-            "add.field" => {
-                check_fields(record, &["as", "record", "name", "type"])?;
-                Ok(AuthoredChange::AddField {
-                    record: parse_declaration_selector(record, "record")?,
-                    field: AuthoredField {
-                        symbol: symbol(record, "as")?,
-                        name: parse_name(record, "name")?,
-                        ty: self.decode_type(required(record, "type")?)?,
-                    },
-                })
-            }
-            "add.case" => {
-                check_fields(record, &["as", "variant", "name", "payload"])?;
-                Ok(AuthoredChange::AddCase {
-                    variant: parse_declaration_selector(record, "variant")?,
-                    case: AuthoredCase {
-                        symbol: symbol(record, "as")?,
-                        name: parse_name(record, "name")?,
-                        payload: optional(record, "payload")
-                            .map(|value| self.decode_type(value))
-                            .transpose()?,
-                    },
-                })
-            }
-            "add.parameter" => {
-                check_fields(record, &["as", "function", "name", "type"])?;
-                Ok(AuthoredChange::AddParameter {
-                    parent: ParameterParentSelector::Declaration {
-                        declaration: parse_declaration_selector(record, "function")?,
-                    },
-                    parameter: AuthoredParameter {
-                        symbol: symbol(record, "as")?,
-                        name: parse_name(record, "name")?,
-                        ty: self.decode_type(required(record, "type")?)?,
-                    },
-                })
-            }
-            "delete.owner" => {
-                check_described_fields(record, COMPACT_CHANGE_OPERATION_FIELDS)?;
+            CompactChangeOperation::AddField => Ok(AuthoredChange::AddField {
+                record: parse_declaration_selector(record, "record")?,
+                field: AuthoredField {
+                    symbol: symbol(record, "as")?,
+                    name: parse_name(record, "name")?,
+                    ty: self.decode_type(required(record, "type")?)?,
+                },
+            }),
+            CompactChangeOperation::AddCase => Ok(AuthoredChange::AddCase {
+                variant: parse_declaration_selector(record, "variant")?,
+                case: AuthoredCase {
+                    symbol: symbol(record, "as")?,
+                    name: parse_name(record, "name")?,
+                    payload: optional(record, "payload")
+                        .map(|value| self.decode_type(value))
+                        .transpose()?,
+                },
+            }),
+            CompactChangeOperation::AddParameter => Ok(AuthoredChange::AddParameter {
+                parent: ParameterParentSelector::Declaration {
+                    declaration: parse_declaration_selector(record, "function")?,
+                },
+                parameter: AuthoredParameter {
+                    symbol: symbol(record, "as")?,
+                    name: parse_name(record, "name")?,
+                    ty: self.decode_type(required(record, "type")?)?,
+                },
+            }),
+            CompactChangeOperation::DeleteOwner => {
                 let policy = required(record, "policy")?;
                 if policy != "reject" {
                     return Err(field_error(
@@ -667,33 +1087,21 @@ impl Decoder {
                     policy: AuthoredDeletePolicy::Reject,
                 })
             }
-            "rename.owner" => {
-                check_fields(record, &["owner", "name"])?;
-                Ok(AuthoredChange::RenameOwner {
-                    owner: parse_owner_selector(record, "owner")?,
-                    name: parse_name(record, "name")?,
-                })
-            }
-            "move.declaration" => {
-                check_fields(record, &["declaration", "module"])?;
-                Ok(AuthoredChange::MoveDeclaration {
-                    declaration: parse_declaration_selector(record, "declaration")?,
-                    module: parse_module_selector(record, "module")?,
-                })
-            }
-            "replace.body" => {
-                check_fields(record, &["function", "body"])?;
+            CompactChangeOperation::RenameOwner => Ok(AuthoredChange::RenameOwner {
+                owner: parse_owner_selector(record, "owner")?,
+                name: parse_name(record, "name")?,
+            }),
+            CompactChangeOperation::MoveDeclaration => Ok(AuthoredChange::MoveDeclaration {
+                declaration: parse_declaration_selector(record, "declaration")?,
+                module: parse_module_selector(record, "module")?,
+            }),
+            CompactChangeOperation::ReplaceBody => {
                 let body = required(record, "body")?.to_owned();
                 Ok(AuthoredChange::ReplaceFunctionBody {
                     function: parse_declaration_selector(record, "function")?,
                     body: self.decode_expression(&body)?,
                 })
             }
-            _ => Err(record_error(
-                record,
-                "change_operation_unknown",
-                "compact change operation is not registered",
-            )),
         }
     }
 
@@ -960,16 +1368,12 @@ impl Decoder {
     }
 }
 
-fn is_change_operation(operation: &str) -> bool {
-    COMPACT_CHANGE_OPERATIONS.contains(&operation)
-}
-
 fn is_change_precondition(operation: &str) -> bool {
     COMPACT_CHANGE_PRECONDITIONS.contains(&operation)
 }
 
 fn decode_precondition(record: &CompactRecord) -> Result<AuthoredPrecondition, Diagnostic> {
-    check_described_fields(record, COMPACT_CHANGE_PRECONDITION_FIELDS)?;
+    check_precondition_fields(record, COMPACT_CHANGE_PRECONDITION_FIELDS)?;
     match record.operation.as_str() {
         "precondition.owner-exists" => Ok(AuthoredPrecondition::OwnerExists {
             owner: parse_field(record, "owner")?,
@@ -1007,6 +1411,36 @@ fn decode_precondition(record: &CompactRecord) -> Result<AuthoredPrecondition, D
             format!("unknown compact precondition '{}'", record.operation),
         )),
     }
+}
+
+pub(crate) fn normalize_change_request(
+    semantic: AuthoredChangeSet,
+    options: PublicationOptions,
+) -> Result<NormalizedChangeRequest, Diagnostic> {
+    if let Some(key) = options.idempotency_key.as_deref()
+        && !idempotency_key_is_valid(key)
+    {
+        return Err(Diagnostic::new(
+            DiagnosticClass::Source,
+            "change_idempotency",
+            "idempotency must contain 1 through 128 portable identifier bytes",
+        ));
+    }
+    if options.intent.as_ref().is_some_and(|value| {
+        value.len() > crate::platform::publication::contract::MAXIMUM_INTENT_BYTES
+    }) {
+        return Err(Diagnostic::new(
+            DiagnosticClass::Source,
+            "change_intent_bytes",
+            "intent exceeds its 4096-byte operational bound",
+        ));
+    }
+    let plan = compact_change_plan_digest(&semantic, &options)?;
+    Ok(NormalizedChangeRequest {
+        semantic,
+        options,
+        plan,
+    })
 }
 
 fn compact_change_plan_digest(
@@ -1085,9 +1519,37 @@ fn check_fields(record: &CompactRecord, allowed: &[&str]) -> Result<(), Diagnost
     Ok(())
 }
 
-fn check_described_fields(
+fn check_operation_fields(
     record: &CompactRecord,
-    fields: &[CompactChangeField],
+    descriptors: &[CompactChangeOperationField],
+) -> Result<(), Diagnostic> {
+    for field in &record.fields {
+        if !descriptors
+            .iter()
+            .any(|descriptor| descriptor.name == field.name)
+        {
+            return Err(field_error(
+                record,
+                &field.name,
+                "change_field_unknown",
+                format!(
+                    "operation '{}' does not accept field '{}'",
+                    record.operation, field.name
+                ),
+            ));
+        }
+    }
+    for descriptor in descriptors {
+        if descriptor.required {
+            required(record, descriptor.name)?;
+        }
+    }
+    Ok(())
+}
+
+fn check_precondition_fields(
+    record: &CompactRecord,
+    fields: &[CompactChangePreconditionField],
 ) -> Result<(), Diagnostic> {
     let descriptors = fields
         .iter()
@@ -1103,7 +1565,7 @@ fn check_described_fields(
                 &field.name,
                 "change_field_unknown",
                 format!(
-                    "operation '{}' does not accept field '{}'",
+                    "precondition '{}' does not accept field '{}'",
                     record.operation, field.name
                 ),
             ));
@@ -1250,17 +1712,18 @@ fn parse_visibility(
     record: &CompactRecord,
     field_name: &str,
 ) -> Result<DeclarationVisibility, Diagnostic> {
-    match required(record, field_name)? {
-        "private" => Ok(DeclarationVisibility::Private),
-        "package" => Ok(DeclarationVisibility::Package),
-        "public" => Ok(DeclarationVisibility::Public),
-        value => Err(field_error(
-            record,
-            field_name,
-            "change_visibility",
-            format!("visibility must be private, package, or public; observed '{value}'"),
-        )),
-    }
+    let value = required(record, field_name)?;
+    COMPACT_DECLARATION_VISIBILITIES
+        .iter()
+        .find_map(|(name, visibility)| (*name == value).then_some(*visibility))
+        .ok_or_else(|| {
+            field_error(
+                record,
+                field_name,
+                "change_visibility",
+                format!("visibility must be private, package, or public; observed '{value}'"),
+            )
+        })
 }
 
 fn parse_module_selector(
