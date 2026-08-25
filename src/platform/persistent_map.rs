@@ -1080,13 +1080,6 @@ fn validate_page_local(page: &Page) -> Result<(), MapError> {
                     "leaf exceeds the hostile page-size bound",
                 ));
             }
-            if entries.len() > 1 && encoded_length > TARGET_LEAF_PAGE_BYTES {
-                return Err(map_error(
-                    MapErrorClass::Corrupt,
-                    "persistent_map_leaf_noncanonical",
-                    "multi-entry leaf exceeds the canonical split threshold",
-                ));
-            }
         }
         Page::Branch {
             prefix,
@@ -1182,14 +1175,6 @@ fn validate_page_local(page: &Page) -> Result<(), MapError> {
                     MapErrorClass::Corrupt,
                     "persistent_map_branch_summary",
                     "branch summaries do not match its terminal and child references",
-                ));
-            }
-            if leaf_encoded_length(prefix.len(), *count, *logical_bytes)? <= TARGET_LEAF_PAGE_BYTES
-            {
-                return Err(map_error(
-                    MapErrorClass::Corrupt,
-                    "persistent_map_branch_noncanonical",
-                    "branch contents fit in one canonical leaf",
                 ));
             }
         }
@@ -1730,7 +1715,24 @@ fn build_entries<S: PageStore + ?Sized>(
     depth: usize,
     work: &mut MapWork,
 ) -> Result<NodeRef, MapError> {
+    build_entries_with_target(store, entries, depth, TARGET_LEAF_PAGE_BYTES, work)
+}
+
+fn build_entries_with_target<S: PageStore + ?Sized>(
+    store: &mut S,
+    entries: &[Entry],
+    depth: usize,
+    target_leaf_bytes: usize,
+    work: &mut MapWork,
+) -> Result<NodeRef, MapError> {
     ensure_depth(depth)?;
+    if target_leaf_bytes == 0 || target_leaf_bytes > MAXIMUM_PAGE_BYTES {
+        return Err(map_error(
+            MapErrorClass::Input,
+            "persistent_map_leaf_target",
+            "physical leaf target must be within the page decoder bound",
+        ));
+    }
     if entries.is_empty() {
         return write_page(
             store,
@@ -1758,7 +1760,7 @@ fn build_entries<S: PageStore + ?Sized>(
     let count = usize_to_u64(entries.len(), "persistent_map_build_count")?;
     let logical_bytes = entry_logical_bytes(entries)?;
     let leaf_length = leaf_encoded_length(prefix.len(), count, logical_bytes)?;
-    if entries.len() == 1 || leaf_length <= TARGET_LEAF_PAGE_BYTES {
+    if entries.len() == 1 || leaf_length <= target_leaf_bytes {
         return write_page(
             store,
             &Page::Leaf {
@@ -1791,7 +1793,13 @@ fn build_entries<S: PageStore + ?Sized>(
         while end < entries.len() && entries[end].key.get(prefix.len()) == Some(&edge) {
             end += 1;
         }
-        let child = build_entries(store, &entries[position..end], depth + 1, work)?;
+        let child = build_entries_with_target(
+            store,
+            &entries[position..end],
+            depth + 1,
+            target_leaf_bytes,
+            work,
+        )?;
         children.push(child.child(edge));
         position = end;
     }
@@ -2731,6 +2739,42 @@ impl PersistentMap {
         })
     }
 
+    pub(crate) fn from_sorted_with_leaf_target<S, I>(
+        store: &mut S,
+        entries: I,
+        target_leaf_bytes: usize,
+        work: &mut MapWork,
+    ) -> Result<Self, MapError>
+    where
+        S: PageStore + ?Sized,
+        I: IntoIterator<Item = (Vec<u8>, Vec<u8>)>,
+    {
+        let mut logical = Vec::new();
+        for (key, value) in entries {
+            validate_key(&key)?;
+            validate_value(&value)?;
+            if logical
+                .last()
+                .is_some_and(|previous: &Entry| previous.key >= key)
+            {
+                return Err(map_error(
+                    MapErrorClass::Input,
+                    "persistent_map_input_order",
+                    "bulk map entries must be strictly ordered by key",
+                ));
+            }
+            logical.push(Entry { key, value });
+        }
+        let root = build_entries_with_target(store, &logical, 0, target_leaf_bytes, work)?;
+        Ok(Self {
+            root: MapRoot {
+                page: root.digest,
+                entries: root.count,
+                content: root.content,
+            },
+        })
+    }
+
     pub fn empty<S: PageStore + ?Sized>(
         store: &mut S,
         work: &mut MapWork,
@@ -3403,6 +3447,23 @@ mod tests {
         )
         .expect("physical map");
         assert_eq!(map.root().content_root(), oracle);
+
+        let mut alternate_store = MemoryPageStore::default();
+        let alternate = PersistentMap::from_sorted_with_leaf_target(
+            &mut alternate_store,
+            entries
+                .iter()
+                .map(|entry| (entry.key.clone(), entry.value.clone())),
+            512,
+            &mut MapWork::default(),
+        )
+        .expect("alternate valid physical partition");
+        assert_ne!(alternate.root().page(), map.root().page());
+        assert_eq!(alternate.root().content_root(), map.root().content_root());
+        assert_eq!(collect(&alternate_store, alternate), collect(&store, map));
+        alternate
+            .verify(&alternate_store, &mut MapWork::default())
+            .expect("alternate physical partition verifies");
     }
 
     #[test]

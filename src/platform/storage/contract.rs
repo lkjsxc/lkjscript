@@ -23,8 +23,9 @@ pub const CATALOG_GENERATION_DOMAIN: &str = "lkjscript.object-catalog.generation
 
 pub use crate::platform::kernel::contract::{
     BLOB_OBJECT_DIGEST_DOMAIN, CHANGE_DIGEST_DOMAIN, DEPENDENCY_OBJECT_DIGEST_DOMAIN,
-    OWNER_OBJECT_DIGEST_DOMAIN, PACKAGE_OBJECT_DIGEST_DOMAIN, RETIREMENT_OBJECT_DIGEST_DOMAIN,
-    SEMANTIC_ROOT_DIGEST_DOMAIN, SEQUENCE_OBJECT_DIGEST_DOMAIN, TYPE_OBJECT_DIGEST_DOMAIN,
+    OWNER_OBJECT_DIGEST_DOMAIN, PACKAGE_REVISION_DIGEST_DOMAIN, PACKAGE_TRANSPORT_DIGEST_DOMAIN,
+    RETIREMENT_OBJECT_DIGEST_DOMAIN, SEMANTIC_ROOT_DIGEST_DOMAIN, SEQUENCE_OBJECT_DIGEST_DOMAIN,
+    TYPE_OBJECT_DIGEST_DOMAIN,
 };
 pub use crate::platform::witness::contract::{
     OWNER_SUMMARY_DIGEST_DOMAIN, VALIDATION_WITNESS_DIGEST_DOMAIN,
@@ -37,10 +38,10 @@ pub const DRAFT_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.draft-object.v5";
 pub const CONFLICT_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.conflict-object.v5";
 pub const COMPILER_UNIT_DIGEST_DOMAIN: &str = "lkjscript.compiler-unit.v1";
 pub const COMPILATION_MANIFEST_DIGEST_DOMAIN: &str = "lkjscript.compilation-manifest-object.v1";
-pub const ARTIFACT_MANIFEST_DIGEST_DOMAIN: &str = "lkjscript.artifact-manifest.v5";
+pub const ARTIFACT_MANIFEST_DIGEST_DOMAIN: &str = "lkjscript.artifact-manifest.v10";
 pub const BACKUP_MANIFEST_DIGEST_DOMAIN: &str = "lkjscript.backup-manifest.v5";
 pub const BACKUP_SEGMENT_DIGEST_DOMAIN: &str = "lkjscript.backup-segment.v5";
-pub const PACKAGE_INTERFACE_OWNER_DIGEST_DOMAIN: &str = "lkjscript.package-interface-owner.v2";
+pub const PACKAGE_INTERFACE_OWNER_DIGEST_DOMAIN: &str = "lkjscript.package-interface-owner.v3";
 pub const MAP_PAGE_DIGEST_DOMAIN: &str =
     crate::platform::contract::registry::MAP_PAGE_DIGEST_DOMAIN;
 

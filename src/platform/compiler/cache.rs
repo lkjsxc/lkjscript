@@ -16,7 +16,8 @@ use crate::platform::persistent_map::{
     PersistentMap,
 };
 use crate::platform::publication::{
-    GraphRepository, PreparedPublication, RepositoryView, RevisionRecord, TransactionBody,
+    GraphRepository, PreparedPublication, RepositoryReadWork, RepositoryView, RevisionRecord,
+    TransactionBody,
 };
 use crate::platform::semantic_id::{RepositoryId, RevisionId};
 use crate::platform::storage::directory::SealReceipt;
@@ -108,6 +109,8 @@ pub struct CompilationBuildWork {
     pub manifest_map: MapWork,
     pub manifest_store: StoreWork,
     pub stage_store: StoreWork,
+    pub package_revision_read: RepositoryReadWork,
+    pub package_interface_map: MapWork,
 }
 
 #[derive(Clone, Debug)]
@@ -140,23 +143,23 @@ pub struct CompilationValidationReceipt {
 pub fn load_current_compilation(
     repository: &GraphRepository,
 ) -> Result<Option<CachedCompilation>, Diagnostic> {
-    let current = repository.current()?;
+    let view = repository.view_current()?;
     let Some(head) = read_cache_head(repository)? else {
         return Ok(None);
     };
-    if head.repository_id != current.head.repository_id {
+    if head.repository_id != view.current().head.repository_id {
         return Err(cache_error(
             DiagnosticClass::Corrupt,
             "compilation_cache_repository",
             "derived compilation cache head belongs to another repository",
         ));
     }
-    if head.revision != current.head.revision {
+    if head.revision != view.current().head.revision {
         return Ok(None);
     }
     let mut store = repository.object_store()?;
     let manifest = read_manifest(&mut store, head.manifest)?;
-    bind_manifest_to_current(&manifest, &current)?;
+    bind_manifest_to_current(&manifest, &view)?;
     Ok(Some(CachedCompilation {
         manifest,
         digest: head.manifest,
@@ -167,10 +170,10 @@ pub(crate) fn load_exact_current_compilation(
     repository: &GraphRepository,
     digest: CompilationManifestDigest,
 ) -> Result<CachedCompilation, Diagnostic> {
-    let current = repository.current()?;
+    let view = repository.view_current()?;
     let mut store = repository.object_store()?;
     let manifest = read_manifest(&mut store, digest)?;
-    bind_manifest_to_current(&manifest, &current)?;
+    bind_manifest_to_current(&manifest, &view)?;
     Ok(CachedCompilation { manifest, digest })
 }
 
@@ -365,6 +368,9 @@ fn finish_build(
     units_removed: u64,
     work: &mut CompilationBuildWork,
 ) -> Result<CompilationBuildReceipt, Diagnostic> {
+    let package_revision = view.build_package_revision()?;
+    work.package_revision_read = package_revision.read_work;
+    work.package_interface_map = package_revision.interface.map_work;
     let manifest = CompilationManifest {
         contract_version: COMPILATION_MANIFEST_CONTRACT_VERSION,
         graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
@@ -373,11 +379,20 @@ fn finish_build(
         repository_id: view.current().head.repository_id,
         package_id: view.package(),
         revision: view.revision(),
-        semantic_root: view.current().accepted.semantic_root,
-        validation_certificate: view.current().witness.certificate,
+        package_revision: package_revision.revision_digest,
+        semantic_state: package_revision.revision.revision.semantic_state,
+        package_interface: package_revision.revision.interface,
         optimization,
         units,
     };
+    insert_object(
+        &mut objects,
+        ObjectKey::from_digest(
+            ObjectDomain::PackageRevision,
+            package_revision.revision_digest.bytes(),
+        ),
+        package_revision.revision_bytes,
+    )?;
     let (manifest_digest, manifest_bytes) = manifest.encode()?;
     insert_object(
         &mut objects,
@@ -462,11 +477,11 @@ pub fn validate_current_compilation(
     repository: &GraphRepository,
     digest: CompilationManifestDigest,
 ) -> Result<CompilationValidationReceipt, Diagnostic> {
-    let current = repository.current()?;
+    let view = repository.view_current()?;
     let mut store = repository.object_store()?;
     let mut store_work = StoreWork::default();
     let manifest = read_manifest_with_work(&mut store, digest, &mut store_work)?;
-    bind_manifest_to_current(&manifest, &current)?;
+    bind_manifest_to_current(&manifest, &view)?;
 
     let reader = ObjectPageReader::new(&store);
     let map = PersistentMap::from_root(manifest.units);
@@ -545,10 +560,10 @@ pub(crate) fn read_current_binding(
     manifest: CompilationManifestDigest,
     owner: OwnerKey,
 ) -> Result<Option<CompilationBinding>, Diagnostic> {
-    let current = repository.current()?;
+    let view = repository.view_current()?;
     let mut store = repository.object_store()?;
     let decoded = read_manifest(&mut store, manifest)?;
-    bind_manifest_to_current(&decoded, &current)?;
+    bind_manifest_to_current(&decoded, &view)?;
     let reader = ObjectPageReader::new(&store);
     let mut map_work = MapWork::default();
     PersistentMap::from_root(decoded.units)
@@ -587,13 +602,15 @@ fn read_manifest_with_work(
 
 fn bind_manifest_to_current(
     manifest: &CompilationManifest,
-    current: &crate::platform::publication::CurrentPublication,
+    view: &RepositoryView,
 ) -> Result<(), Diagnostic> {
-    if manifest.repository_id != current.head.repository_id
-        || manifest.package_id != current.semantic_root.package_id
-        || manifest.revision != current.head.revision
-        || manifest.semantic_root != current.accepted.semantic_root
-        || manifest.validation_certificate != current.witness.certificate
+    let package_revision = view.build_package_revision()?;
+    if manifest.repository_id != view.current().head.repository_id
+        || manifest.package_id != view.package()
+        || manifest.revision != view.revision()
+        || manifest.package_revision != package_revision.revision_digest
+        || manifest.semantic_state != package_revision.revision.revision.semantic_state
+        || manifest.package_interface != package_revision.revision.interface
     {
         return Err(cache_error(
             DiagnosticClass::Corrupt,
@@ -670,7 +687,6 @@ fn validate_incremental_base(
             }
         };
     if transaction_base != base.revision
-        || transaction_base_root != base.semantic_root
         || transaction_result_root != current.current().accepted.semantic_root
     {
         return Err(cache_error(
@@ -697,8 +713,8 @@ fn validate_incremental_base(
     let parent = RevisionRecord::decode(&parent_bytes, expected_base.record)?;
     if parent.revision != expected_base.revision
         || parent.core.repository_id != base.repository_id
-        || parent.publication.semantic_root != base.semantic_root
-        || parent.publication.validation.certificate != base.validation_certificate
+        || parent.core.semantic_state != base.semantic_state
+        || parent.publication.semantic_root != transaction_base_root
     {
         return Err(cache_error(
             DiagnosticClass::Corrupt,

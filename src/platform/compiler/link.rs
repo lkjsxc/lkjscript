@@ -3,7 +3,8 @@
 use super::artifact::{
     ARTIFACT_CONTRACT_VERSION, ArtifactManifest, ArtifactPackage, ArtifactRuntimeOwner,
     EncodedArtifact, LoadedArtifact, MAXIMUM_ARTIFACT_REFERENCE_OWNERS, artifact_error,
-    closure_facts, encode_artifact, runtime_owner_expectations,
+    canonicalize_dependency_artifact_interfaces, closure_facts, encode_artifact,
+    runtime_owner_expectations,
 };
 use super::cache::load_exact_current_compilation;
 use super::manifest::{COMPILATION_MANIFEST_CONTRACT_VERSION, CompilationBinding};
@@ -17,6 +18,7 @@ use crate::platform::kernel::{
     OwnerKey, OwnerKind, OwnerRecord, PackageId, PortImplementation, TypeObjectDigest,
     decode_type_object, encode_owner, encode_owner_binding,
 };
+use crate::platform::package_interface::build_package_interface;
 use crate::platform::persistent_map::{
     MapError, MapErrorClass, MapWork, MemoryPageStore, PersistentMap,
 };
@@ -24,7 +26,6 @@ use crate::platform::publication::{GraphRepository, RepositoryReadWork, Reposito
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, StoreError, StoreErrorClass, StoreWork,
 };
-use crate::platform::storage::pack::PackMetadata;
 use crate::platform::storage::page_store::ObjectPageReader;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -55,7 +56,7 @@ pub struct ArtifactLinkReceipt {
 /// Links the exact current package and already validated dependency artifacts.
 ///
 /// Dependency bundles are flattened by immutable object identity. The strict artifact loader then
-/// proves that the final package set is exactly the root package-object dependency closure, so an
+/// proves that the final package set is exactly the root package-revision dependency closure, so an
 /// unrelated or stale supplied dependency artifact cannot enter the result.
 pub fn link_artifact(
     repository: &GraphRepository,
@@ -70,33 +71,50 @@ pub fn link_artifact(
 
     for dependency in dependencies {
         work.dependency_artifacts = work.dependency_artifacts.saturating_add(1);
-        for package in &dependency.manifest.packages {
-            insert_package(&mut packages, package.clone())?;
+        let canonical = canonicalize_dependency_artifact_interfaces(dependency)?;
+        add_map_work(&mut work.compilation_map, canonical.work.map);
+        work.store.add(canonical.work.store);
+        for package in canonical.packages {
+            insert_package(&mut packages, package)?;
         }
-        for (key, bytes) in &dependency.objects {
-            insert_object(&mut objects, *key, bytes.clone())?;
+        for (key, bytes) in canonical.objects {
+            insert_object(&mut objects, key, bytes)?;
         }
     }
 
-    let exported = repository.export_package_object()?;
+    let exported = repository.export_package_transport()?;
     add_repository_work(&mut work.repository, exported.read_work);
     add_map_work(&mut work.compilation_map, exported.interface_map_work);
     work.store.add(exported.closure_work);
-    for pack in &exported.packs {
-        import_pack(pack, &mut objects)?;
+    let artifact_interface =
+        build_package_interface(&exported.interface_owners, &exported.interface_types)?;
+    add_map_work(&mut work.compilation_map, artifact_interface.map_work);
+    work.store.add(artifact_interface.store_work);
+    for (key, bytes) in artifact_interface.objects {
+        insert_object(&mut objects, key, bytes)?;
     }
-    if exported.object.package != view.package()
-        || exported.object.semantic_revision != view.revision()
-        || exported.object.semantic_root != view.current().accepted.semantic_root
-        || exported.object.witness.certificate != view.current().witness.certificate
+    insert_object(
+        &mut objects,
+        ObjectKey::from_digest(
+            ObjectDomain::PackageRevision,
+            exported.revision_digest.bytes(),
+        ),
+        exported.revision_bytes.clone(),
+    )?;
+    if exported.revision.package != view.package()
+        || exported.revision.revision.revision_id()? != view.revision()
+        || exported.revision.revision != view.current().revision.core
+        || cached.manifest.package_revision != exported.revision_digest
+        || cached.manifest.semantic_state != exported.revision.revision.semantic_state
+        || cached.manifest.package_interface != exported.revision.interface
     {
         return Err(link_error(
             DiagnosticClass::Corrupt,
             "artifact_link_package_export",
-            "exported package object does not bind the exact linker revision",
+            "logical package revision and compilation do not bind the exact linker meaning",
         ));
     }
-    for dependency in &exported.object.dependencies {
+    for dependency in &exported.revision.dependencies {
         let supplied = packages.get(&dependency.package).ok_or_else(|| {
             link_error(
                 DiagnosticClass::Semantic,
@@ -104,11 +122,11 @@ pub fn link_artifact(
                 "linking requires an exact compiled artifact for every semantic dependency",
             )
         })?;
-        if supplied.package_object != dependency.package_object {
+        if supplied.package_revision != dependency.package_revision {
             return Err(link_error(
                 DiagnosticClass::Semantic,
                 "artifact_link_dependency_binding",
-                "dependency artifact does not bind the exact accepted package object",
+                "dependency artifact does not bind the exact logical package revision",
             ));
         }
     }
@@ -323,7 +341,11 @@ pub fn link_artifact(
         ArtifactPackage {
             repository_id: view.current().head.repository_id,
             package: view.package(),
-            package_object: exported.digest,
+            package_revision: exported.revision_digest,
+            semantic_revision: exported.revision.revision.revision_id()?,
+            semantic_state: exported.revision.revision.semantic_state,
+            interface: exported.revision.interface,
+            interface_owners: artifact_interface.root,
             compilation,
             runtime_owners,
             reference_owners,
@@ -586,24 +608,6 @@ fn reference_expression_bindings(
         _ => {}
     }
     bindings
-}
-
-fn import_pack(bytes: &[u8], objects: &mut BTreeMap<ObjectKey, Vec<u8>>) -> Result<(), Diagnostic> {
-    let metadata = PackMetadata::decode(bytes, true).map_err(store_diagnostic)?;
-    for entry in &metadata.entries {
-        let value = metadata
-            .read(bytes, entry.key, entry.key.domain.maximum_bytes())
-            .map_err(store_diagnostic)?
-            .ok_or_else(|| {
-                link_error(
-                    DiagnosticClass::Corrupt,
-                    "artifact_link_pack_entry_missing",
-                    "verified package transport lost one indexed object",
-                )
-            })?;
-        insert_object(objects, entry.key, value)?;
-    }
-    Ok(())
 }
 
 fn insert_package(

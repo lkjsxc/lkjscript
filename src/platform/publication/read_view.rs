@@ -14,18 +14,21 @@ use crate::platform::change::{
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     BlobObjectDigest, DependencyRecord, EncodedOwnerKey, KernelSnapshot, OwnerKey, OwnerKind,
-    OwnerRecord, PackageId, PackageInterfaceRecord, RelationEdge, RelationEndpoint, RelationKind,
-    RetirementRecord, TypeObject, TypeObjectDigest, decode_dependency, decode_dependency_binding,
-    decode_owner, decode_owner_binding, decode_retirement, decode_retirement_binding,
-    decode_type_object, dependency_map_key, owner_map_key, retirement_map_key,
+    OwnerRecord, PackageId, PackageInterfaceRecord, PackageRevisionDigest, PackageTransportDigest,
+    RelationEdge, RelationEndpoint, RelationKind, RetirementRecord, TypeObject, TypeObjectDigest,
+    decode_dependency, decode_dependency_binding, decode_owner, decode_owner_binding,
+    decode_retirement, decode_retirement_binding, decode_type_object, dependency_map_key,
+    owner_map_key, retirement_map_key,
 };
 use crate::platform::package_interface::{
-    PackageInterfaceOwner, PackageInterfaceSelection, PackageInterfaceValidation,
-    build_package_interface, decode_package_interface_binding,
+    PackageInterfaceBuild, PackageInterfaceOwner, PackageInterfaceSelection,
+    PackageInterfaceValidation, build_package_interface, decode_package_interface_binding,
+    package_interface_digest,
 };
-use crate::platform::package_object::{
-    MAXIMUM_PACKAGE_OBJECT_DEPENDENCIES, PackageObject, validate_package_object_closure,
-    validate_package_object_closure_with_interface,
+use crate::platform::package_transport::{
+    MAXIMUM_PACKAGE_CLOSURE, MAXIMUM_PACKAGE_DEPENDENCIES, PACKAGE_REVISION_CONTRACT_VERSION,
+    PACKAGE_TRANSPORT_CONTRACT_VERSION, PackageRevision, PackageTransport,
+    PackageTransportClosureValidation,
 };
 use crate::platform::persistent_map::{MapError, MapErrorClass, MapRoot, MapWork, PersistentMap};
 use crate::platform::semantic_id::RevisionId;
@@ -133,15 +136,31 @@ pub struct RevisionWitnessMapUpdate {
 }
 
 #[derive(Clone, Debug)]
-pub struct ExportedPackageObject {
-    pub object: PackageObject,
-    pub digest: crate::platform::kernel::PackageObjectDigest,
+pub struct ExportedPackageTransport {
+    pub revision: PackageRevision,
+    pub revision_digest: PackageRevisionDigest,
+    pub revision_bytes: Vec<u8>,
+    pub transport: PackageTransport,
+    pub transport_digest: PackageTransportDigest,
     pub packs: Vec<Vec<u8>>,
+    pub(crate) interface_owners: BTreeMap<OwnerKey, PackageInterfaceOwner>,
+    pub(crate) interface_types: BTreeMap<TypeObjectDigest, Vec<u8>>,
     pub interface_owner_count: u64,
     pub interface_type_count: u64,
     pub interface_map_work: MapWork,
     pub read_work: RepositoryReadWork,
     pub closure_work: StoreWork,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct BuiltPackageRevision {
+    pub revision: PackageRevision,
+    pub revision_digest: PackageRevisionDigest,
+    pub revision_bytes: Vec<u8>,
+    pub interface: PackageInterfaceBuild,
+    pub interface_owners: BTreeMap<OwnerKey, PackageInterfaceOwner>,
+    pub interface_types: BTreeMap<TypeObjectDigest, Vec<u8>>,
+    pub read_work: RepositoryReadWork,
 }
 
 /// One fully validated authored request plus its exact request-local identity allocation.
@@ -249,6 +268,12 @@ impl RepositoryView {
                 "canonical normalization did not retain the pinned repository revision",
             )]);
         }
+        for edit in normalization.canonical.dependencies.values() {
+            if let Some((_, dependency)) = &edit.after {
+                self.resolve_package_transport(dependency.package_revision)
+                    .map_err(|diagnostic| vec![diagnostic])?;
+            }
+        }
         let mut budget_reads = prior_work;
         budget_reads.canonical.add(normalization.work);
         let initial_budget_work = budget_reads.budget_work();
@@ -337,8 +362,26 @@ impl RepositoryView {
         Ok(self.read(Some(record), work))
     }
 
-    /// Resolves one implementation-free owner from the exact package object selected by the
-    /// pinned local dependency binding. Work follows one dependency-map path, one package object,
+    fn resolve_package_transport(
+        &self,
+        revision: PackageRevisionDigest,
+    ) -> Result<RevisionRead<PackageTransportClosureValidation>, Diagnostic> {
+        let mut work = RepositoryReadWork::default();
+        let validated = super::repository::resolve_package_transport_closure(
+            &self.store,
+            &self.store,
+            revision,
+            None,
+            None,
+            &mut work.store,
+        )?;
+        work.add_map(validated.root_interface.map_work);
+        work.items_returned = 1;
+        Ok(self.read(validated, work))
+    }
+
+    /// Resolves one implementation-free owner from the exact package revision selected by the
+    /// pinned local dependency binding. Work follows one dependency-map path, one package transport,
     /// one interface-map path, and one interface owner object.
     pub fn package_interface_owner(
         &self,
@@ -357,23 +400,21 @@ impl RepositoryView {
 
     /// Resolves one implementation-free owner through an explicit exact dependency binding.
     /// This path admits a dependency newly added by the current candidate overlay while retaining
-    /// the same package-object, revision, map, and owner integrity checks as accepted reads.
+    /// the same package-revision, transport, map, and owner integrity checks as accepted reads.
     fn package_interface_owner_from_dependency(
         &self,
         dependency: &DependencyRecord,
         owner: OwnerKey,
     ) -> Result<RevisionRead<Option<PackageInterfaceRecord>>, Diagnostic> {
         let mut work = RepositoryReadWork::default();
-        let package_bytes = self.read_required_object(
-            ObjectDomain::PackageObject,
-            dependency.package_object.bytes(),
-            "dependency binding references a missing package object",
-            &mut work,
-        )?;
-        let package_object = PackageObject::decode(&package_bytes, dependency.package_object)?;
-        package_object.matches_dependency(dependency)?;
+        let resolved = self.resolve_package_transport(dependency.package_revision)?;
+        work.add(resolved.work);
+        resolved
+            .value
+            .root_revision
+            .matches_dependency(dependency.package_revision, dependency)?;
         let Some(binding_bytes) = self.lookup_map(
-            package_object.interface_owners,
+            resolved.value.root_transport.interface_owners,
             &crate::platform::kernel::owner_map_key(owner),
             &mut work,
         )?
@@ -542,14 +583,12 @@ impl RepositoryView {
         let mut dependency_interfaces = BTreeMap::new();
         let mut dependency_types = BTreeMap::new();
         for dependency in dependencies.values() {
-            let mut closure_work = StoreWork::default();
-            let validated = validate_package_object_closure_with_interface(
-                &self.store,
-                dependency.package_object,
-                Some(dependency),
-                &mut closure_work,
-            )?;
-            work.store.add(closure_work);
+            let resolved = self.resolve_package_transport(dependency.package_revision)?;
+            work.add(resolved.work);
+            let validated = resolved.value;
+            validated
+                .root_revision
+                .matches_dependency(dependency.package_revision, dependency)?;
             let PackageInterfaceValidation {
                 owners: interface_owners,
                 type_objects: interface_types,
@@ -570,7 +609,7 @@ impl RepositoryView {
                 .into_iter()
                 .map(|(owner, value)| (owner, value.record))
                 .collect::<BTreeMap<_, _>>();
-            match dependency_interfaces.entry(dependency.package_object) {
+            match dependency_interfaces.entry(dependency.package_revision) {
                 Entry::Vacant(entry) => {
                     entry.insert(records);
                 }
@@ -578,7 +617,7 @@ impl RepositoryView {
                     return Err(read_error(
                         DiagnosticClass::Corrupt,
                         "publication_full_oracle_interface_conflict",
-                        "one exact package object reconstructed two different interfaces",
+                        "one exact logical package revision reconstructed two different interfaces",
                     ));
                 }
                 Entry::Occupied(_) => {}
@@ -644,9 +683,7 @@ impl RepositoryView {
         ))
     }
 
-    /// Builds one exact package descriptor from the pinned accepted revision. This explicit
-    /// export may enumerate direct dependencies, but it does not reconstruct owner authority.
-    pub fn export_package_object(&self) -> Result<ExportedPackageObject, Diagnostic> {
+    pub(crate) fn build_package_revision(&self) -> Result<BuiltPackageRevision, Diagnostic> {
         let dependencies = self.package_dependencies()?;
         let mut selection = PackageInterfaceSelection::new(self.package());
         let mut read_work = dependencies.work;
@@ -714,19 +751,58 @@ impl RepositoryView {
             interface_types.insert(digest, bytes);
         }
         let interface = build_package_interface(&interface_owners, &interface_types)?;
-        let object = PackageObject {
-            contract_version: crate::platform::package_object::PACKAGE_OBJECT_CONTRACT_VERSION,
+        let interface_digest =
+            package_interface_digest(self.package(), interface.root.content_root())?;
+        let revision = PackageRevision {
+            contract_version: PACKAGE_REVISION_CONTRACT_VERSION,
             graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-            repository_id: self.current.semantic_root.repository_id,
             package: self.current.semantic_root.package_id,
-            semantic_revision: self.current.head.revision,
+            revision: self.current.revision.core.clone(),
+            interface: interface_digest,
+            dependencies: dependencies.value,
+        };
+        let (revision_digest, revision_bytes) = revision.encode()?;
+        Ok(BuiltPackageRevision {
+            revision,
+            revision_digest,
+            revision_bytes,
+            interface,
+            interface_owners,
+            interface_types,
+            read_work,
+        })
+    }
+
+    /// Builds one logical package revision and its separate physical acceptance transport.
+    pub fn export_package_transport(&self) -> Result<ExportedPackageTransport, Diagnostic> {
+        let BuiltPackageRevision {
+            revision,
+            revision_digest,
+            revision_bytes,
+            interface,
+            interface_owners,
+            interface_types,
+            read_work,
+        } = self.build_package_revision()?;
+        let transport = PackageTransport {
+            contract_version: PACKAGE_TRANSPORT_CONTRACT_VERSION,
+            graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+            package_revision: revision_digest,
             semantic_root: self.current.accepted.semantic_root,
             validation_witness: self.current.accepted.validation_witness,
             witness: self.current.witness.clone(),
             interface_owners: interface.root,
-            dependencies: dependencies.value,
         };
-        let (digest, bytes) = object.encode()?;
+        let (transport_digest, transport_bytes) = transport.encode()?;
+        let (semantic_root_digest, semantic_root_bytes) =
+            crate::platform::kernel::encode_root(&self.current.semantic_root)?;
+        if semantic_root_digest != transport.semantic_root {
+            return Err(read_error(
+                DiagnosticClass::Corrupt,
+                "publication_package_transport_semantic_root",
+                "accepted semantic root changed during package transport export",
+            ));
+        }
         let mut stage = ObjectStage::new(&self.store);
         let mut closure_work = StoreWork::default();
         for (key, value) in &interface.objects {
@@ -736,17 +812,43 @@ impl RepositoryView {
         }
         stage
             .stage(
-                ObjectKey::from_digest(ObjectDomain::PackageObject, digest.bytes()),
-                &bytes,
+                ObjectKey::from_digest(ObjectDomain::PackageRevision, revision_digest.bytes()),
+                &revision_bytes,
                 &mut closure_work,
             )
             .map_err(store_diagnostic)?;
-        let validated = validate_package_object_closure(&stage, digest, None, &mut closure_work)?;
-        if validated != object {
+        stage
+            .stage(
+                ObjectKey::from_digest(ObjectDomain::SemanticRoot, semantic_root_digest.bytes()),
+                &semantic_root_bytes,
+                &mut closure_work,
+            )
+            .map_err(store_diagnostic)?;
+        stage
+            .stage(
+                ObjectKey::from_digest(ObjectDomain::PackageTransport, transport_digest.bytes()),
+                &transport_bytes,
+                &mut closure_work,
+            )
+            .map_err(store_diagnostic)?;
+        let validated = super::repository::resolve_package_transport_closure(
+            &stage,
+            &self.store,
+            revision_digest,
+            Some(
+                crate::platform::package_transport::PackageTransportBinding {
+                    package_revision: revision_digest,
+                    transport: transport_digest,
+                },
+            ),
+            None,
+            &mut closure_work,
+        )?;
+        if validated.root_revision != revision || validated.root_transport != transport {
             return Err(read_error(
                 DiagnosticClass::Corrupt,
-                "publication_package_object_export",
-                "exported package object changed during exact closure validation",
+                "publication_package_transport_export",
+                "exported package revision or transport changed during closure validation",
             ));
         }
         let mut builder = PackBuilder::default();
@@ -755,8 +857,20 @@ impl RepositoryView {
         }
         builder
             .insert(
-                ObjectKey::from_digest(ObjectDomain::PackageObject, digest.bytes()),
-                &bytes,
+                ObjectKey::from_digest(ObjectDomain::PackageRevision, revision_digest.bytes()),
+                &revision_bytes,
+            )
+            .map_err(store_diagnostic)?;
+        builder
+            .insert(
+                ObjectKey::from_digest(ObjectDomain::SemanticRoot, semantic_root_digest.bytes()),
+                &semantic_root_bytes,
+            )
+            .map_err(store_diagnostic)?;
+        builder
+            .insert(
+                ObjectKey::from_digest(ObjectDomain::PackageTransport, transport_digest.bytes()),
+                &transport_bytes,
             )
             .map_err(store_diagnostic)?;
         let packs = builder
@@ -765,10 +879,15 @@ impl RepositoryView {
             .into_iter()
             .map(|pack| pack.bytes)
             .collect();
-        Ok(ExportedPackageObject {
-            object,
-            digest,
+        Ok(ExportedPackageTransport {
+            revision,
+            revision_digest,
+            revision_bytes,
+            transport,
+            transport_digest,
             packs,
+            interface_owners,
+            interface_types,
             interface_owner_count: interface.owner_count,
             interface_type_count: interface.type_count,
             interface_map_work: interface.map_work,
@@ -842,12 +961,12 @@ impl RepositoryView {
 
     fn package_dependencies(&self) -> Result<RevisionRead<Vec<DependencyRecord>>, Diagnostic> {
         let count = self.current.semantic_root.dependencies.entries();
-        if count > MAXIMUM_PACKAGE_OBJECT_DEPENDENCIES as u64 {
+        if count > MAXIMUM_PACKAGE_DEPENDENCIES as u64 {
             return Err(read_error(
                 DiagnosticClass::Resource,
                 "publication_package_dependency_count",
                 format!(
-                    "package has {count} dependencies; current package-object export supports at most {MAXIMUM_PACKAGE_OBJECT_DEPENDENCIES}"
+                    "package has {count} dependencies; current package transport supports at most {MAXIMUM_PACKAGE_DEPENDENCIES}"
                 ),
             ));
         }

@@ -6,20 +6,20 @@ use super::unit::{
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    EncodedOwnerKey, OwnerKey, OwnerKind, PackageId, SemanticRootDigest,
+    EncodedOwnerKey, OwnerKey, OwnerKind, PackageId, PackageInterfaceDigest, PackageRevisionDigest,
+    SemanticStateDigest,
 };
 use crate::platform::persistent_map::MapRoot;
 use crate::platform::semantic_id::{RepositoryId, RevisionId};
 use crate::platform::storage::object::{ObjectDomain, ObjectKey};
-use crate::platform::witness::ValidationCertificateDigest;
 use bincode::{Decode, Encode};
 use std::fmt;
 
-pub const COMPILATION_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-compilation-manifest-2";
-pub const COMPILATION_MANIFEST_CONTRACT_VERSION: u16 = 2;
-pub(crate) const COMPILATION_MANIFEST_MAGIC: [u8; 8] = *b"LKJCMF02";
+pub const COMPILATION_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-compilation-manifest-3";
+pub const COMPILATION_MANIFEST_CONTRACT_VERSION: u16 = 3;
+pub(crate) const COMPILATION_MANIFEST_MAGIC: [u8; 8] = *b"LKJCMF03";
 pub(crate) const COMPILATION_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.compilation-manifest-envelope.v2";
+    "lkjscript.compilation-manifest-envelope.v3";
 pub(crate) const MAXIMUM_COMPILATION_MANIFEST_BYTES: usize = 64 * 1024;
 pub(crate) const MAXIMUM_COMPILATION_UNITS: u64 = 10_000_000;
 
@@ -142,8 +142,9 @@ pub struct CompilationManifest {
     pub repository_id: RepositoryId,
     pub package_id: PackageId,
     pub revision: RevisionId,
-    pub semantic_root: SemanticRootDigest,
-    pub validation_certificate: ValidationCertificateDigest,
+    pub package_revision: PackageRevisionDigest,
+    pub semantic_state: SemanticStateDigest,
+    pub package_interface: PackageInterfaceDigest,
     pub optimization: OptimizationPolicy,
     pub units: MapRoot,
 }

@@ -14,6 +14,7 @@ use crate::platform::change::{
     plan_impact_and_summaries, prepare_change_analysis, validate_incremental_frontier,
     validate_structural_frontier,
 };
+use crate::platform::diagnostic::DiagnosticClass;
 use crate::platform::kernel::{
     AnnotationClass, DeclarationPayload, DeclarationVisibility, DependencyObjectDigest,
     DocumentationClass, ExactOwnerKey, ExpressionOperation, ExternalVisibility, FunctionEffect,
@@ -138,7 +139,7 @@ fn strict_authored_protocol_prepares_the_same_exact_publication_and_compact_resp
 }
 
 #[test]
-fn staged_package_objects_bind_authored_dependency_lifecycle_without_advancing_head() {
+fn staged_package_transports_bind_authored_dependency_lifecycle_without_advancing_head() {
     let temporary = tempfile::tempdir().expect("temporary package staging repositories");
     let source_path = temporary.path().join("source");
     let target_path = temporary.path().join("target");
@@ -153,11 +154,11 @@ fn staged_package_objects_bind_authored_dependency_lifecycle_without_advancing_h
 
     let exported = source
         .repository
-        .export_package_object()
-        .expect("exact source package object");
-    assert!(exported.object.dependencies.is_empty());
+        .export_package_transport()
+        .expect("exact source package transport");
+    assert!(exported.revision.dependencies.is_empty());
     assert_eq!(
-        exported.object.semantic_revision,
+        exported.revision.revision.revision_id().unwrap(),
         source.current.head.revision
     );
     assert_eq!(exported.interface_owner_count, 0);
@@ -183,7 +184,7 @@ fn staged_package_objects_bind_authored_dependency_lifecycle_without_advancing_h
     assert_eq!(
         target
             .repository
-            .stage_package_object(exported.digest, &overcomplete)
+            .stage_package_transport(exported.transport_digest, &overcomplete)
             .expect_err("unreachable transport object must reject")
             .code,
         "publication_package_transport_reachability"
@@ -192,28 +193,29 @@ fn staged_package_objects_bind_authored_dependency_lifecycle_without_advancing_h
 
     let staged = target
         .repository
-        .stage_package_object(exported.digest, &exported.packs)
-        .expect("stage exact package object");
+        .stage_package_transport(exported.transport_digest, &exported.packs)
+        .expect("stage exact package transport");
     assert_eq!(staged.outcome, StageOutcome::Inserted);
-    assert_eq!(staged.package_object, exported.digest);
+    assert_eq!(staged.package_revision, exported.revision_digest);
+    assert_eq!(staged.package_transport, exported.transport_digest);
     assert_eq!(staged.current_revision, target_head.revision);
     assert_eq!(target.repository.current().unwrap().head, target_head);
     let repeated = target
         .repository
-        .stage_package_object(exported.digest, &exported.packs)
+        .stage_package_transport(exported.transport_digest, &exported.packs)
         .expect("idempotent package staging");
     assert_eq!(repeated.outcome, StageOutcome::Reused);
     assert!(repeated.seal.packs.is_empty());
     assert_eq!(target.repository.current().unwrap().head, target_head);
 
-    let missing_object = crate::platform::kernel::PackageObjectDigest::from_bytes([77; 32]);
+    let missing_revision = crate::platform::kernel::PackageRevisionDigest::from_bytes([77; 32]);
     let missing = AuthoredChangeSet {
         base: target_head.revision,
         preconditions: Vec::new(),
         changes: vec![AuthoredChange::AddDependency {
-            package: PackageId::migrate(b"missing-package-object", 0),
+            package: PackageId::migrate(b"missing-package-revision", 0),
             semantic_revision: crate::platform::semantic_id::RevisionId::from_digest([78; 32]),
-            package_object: missing_object,
+            package_revision: missing_revision,
         }],
         budget: ChangeBudget::default(),
     };
@@ -221,9 +223,9 @@ fn staged_package_objects_bind_authored_dependency_lifecycle_without_advancing_h
         target
             .repository
             .prepare_authored_change(&missing, PublicationOptions::default())
-            .expect_err("unstaged package object must reject")[0]
+            .expect_err("missing logical package revision must reject")[0]
             .code,
-        "package_object_missing"
+        "package_revision_missing"
     );
     assert_eq!(target.repository.current().unwrap().head, target_head);
 
@@ -231,9 +233,9 @@ fn staged_package_objects_bind_authored_dependency_lifecycle_without_advancing_h
         base: target_head.revision,
         preconditions: Vec::new(),
         changes: vec![AuthoredChange::AddDependency {
-            package: exported.object.package,
+            package: exported.revision.package,
             semantic_revision: crate::platform::semantic_id::RevisionId::from_digest([79; 32]),
-            package_object: exported.digest,
+            package_revision: exported.revision_digest,
         }],
         budget: ChangeBudget::default(),
     };
@@ -243,7 +245,7 @@ fn staged_package_objects_bind_authored_dependency_lifecycle_without_advancing_h
             .prepare_authored_change(&wrong_revision, PublicationOptions::default())
             .expect_err("wrong package revision must reject")[0]
             .code,
-        "package_object_dependency_binding"
+        "package_revision_dependency_binding"
     );
 
     let self_dependency = AuthoredChangeSet {
@@ -252,7 +254,7 @@ fn staged_package_objects_bind_authored_dependency_lifecycle_without_advancing_h
         changes: vec![AuthoredChange::AddDependency {
             package: target.current.semantic_root.package_id,
             semantic_revision: target_head.revision,
-            package_object: exported.digest,
+            package_revision: exported.revision_digest,
         }],
         budget: ChangeBudget::default(),
     };
@@ -269,8 +271,8 @@ fn staged_package_objects_bind_authored_dependency_lifecycle_without_advancing_h
     for change in [
         AuthoredChange::ReplaceDependency {
             package: absent_package,
-            semantic_revision: exported.object.semantic_revision,
-            package_object: exported.digest,
+            semantic_revision: exported.revision.revision.revision_id().unwrap(),
+            package_revision: exported.revision_digest,
         },
         AuthoredChange::DeleteDependency {
             package: absent_package,
@@ -296,9 +298,9 @@ fn staged_package_objects_bind_authored_dependency_lifecycle_without_advancing_h
         base: target_head.revision,
         preconditions: Vec::new(),
         changes: vec![AuthoredChange::AddDependency {
-            package: exported.object.package,
-            semantic_revision: exported.object.semantic_revision,
-            package_object: exported.digest,
+            package: exported.revision.package,
+            semantic_revision: exported.revision.revision.revision_id().unwrap(),
+            package_revision: exported.revision_digest,
         }],
         budget: ChangeBudget::default(),
     };
@@ -321,9 +323,9 @@ fn staged_package_objects_bind_authored_dependency_lifecycle_without_advancing_h
         base: added.head.revision,
         preconditions: Vec::new(),
         changes: vec![AuthoredChange::AddDependency {
-            package: exported.object.package,
-            semantic_revision: exported.object.semantic_revision,
-            package_object: exported.digest,
+            package: exported.revision.package,
+            semantic_revision: exported.revision.revision.revision_id().unwrap(),
+            package_revision: exported.revision_digest,
         }],
         budget: ChangeBudget::default(),
     };
@@ -340,13 +342,123 @@ fn staged_package_objects_bind_authored_dependency_lifecycle_without_advancing_h
             .repository
             .view_current()
             .unwrap()
-            .dependency(exported.object.package)
+            .dependency(exported.revision.package)
             .unwrap()
             .value
             .unwrap()
-            .package_object,
-        exported.digest
+            .package_revision,
+        exported.revision_digest
     );
+
+    let transport_selection = target
+        .repository
+        .root()
+        .join("PACKAGE-TRANSPORTS")
+        .join(crate::platform::semantic_id::encode_hex(
+            &exported.revision_digest.bytes(),
+        ))
+        .join("CURRENT");
+    std::fs::remove_file(&transport_selection).expect("remove derived transport selection");
+    let without_index = target
+        .repository
+        .export_package_transport()
+        .expect("bounded independent transport fallback without selection");
+    assert_eq!(without_index.revision.dependencies.len(), 1);
+    assert_eq!(
+        without_index.revision.dependencies[0].package_revision,
+        exported.revision_digest
+    );
+    std::fs::write(&transport_selection, b"corrupt derived transport selection")
+        .expect("write corrupt derived transport selection");
+    let with_corrupt_index = target
+        .repository
+        .export_package_transport()
+        .expect("bounded independent transport fallback with corrupt selection");
+    assert_eq!(with_corrupt_index.revision, without_index.revision);
+    let missing_binding_selection =
+        crate::platform::package_transport::PackageTransportSelection::new(
+            crate::platform::package_transport::PackageTransportBinding {
+                package_revision: exported.revision_digest,
+                transport: crate::platform::kernel::PackageTransportDigest::from_bytes([0xdd; 32]),
+            },
+        );
+    std::fs::write(
+        &transport_selection,
+        missing_binding_selection
+            .encode()
+            .expect("valid derived selection"),
+    )
+    .expect("write syntactically valid missing transport binding");
+    target
+        .repository
+        .export_package_transport()
+        .expect("valid selection with missing transport uses bounded independent fallback");
+    std::fs::write(
+        &transport_selection,
+        vec![
+            0_u8;
+            crate::platform::package_transport::MAXIMUM_PACKAGE_TRANSPORT_SELECTION_BYTES + 1
+        ],
+    )
+    .expect("write oversized derived selection");
+    target
+        .repository
+        .export_package_transport()
+        .expect("oversized derived selection uses bounded independent fallback");
+    std::fs::remove_file(&transport_selection).expect("remove derived transport selection");
+    let outside = target.repository.root().join("outside-transport-selection");
+    std::fs::write(&outside, b"outside").expect("write outside selection target");
+    {
+        use std::os::unix::fs::symlink;
+        symlink(&outside, &transport_selection).expect("symlink derived transport selection");
+    }
+    let index_read_error = target
+        .repository
+        .export_package_transport()
+        .expect_err("transport selection infrastructure errors must not become cache misses");
+    assert_eq!(index_read_error.class, DiagnosticClass::Infrastructure);
+    assert_eq!(
+        index_read_error.code,
+        "publication_package_transport_selection_read"
+    );
+    std::fs::remove_file(&transport_selection).expect("remove transport selection symlink");
+    let transport_candidate = transport_selection.parent().unwrap().join(format!(
+        "candidate-{}",
+        crate::platform::semantic_id::encode_hex(&exported.transport_digest.bytes())
+    ));
+    std::fs::remove_file(&transport_candidate).expect("remove package transport candidate marker");
+    {
+        use std::os::unix::fs::symlink;
+        symlink(&outside, &transport_candidate)
+            .expect("symlink package transport candidate marker");
+    }
+    let candidate_read_error = target
+        .repository
+        .export_package_transport()
+        .expect_err("candidate infrastructure errors must not become invalid-candidate skips");
+    assert_eq!(candidate_read_error.class, DiagnosticClass::Infrastructure);
+    assert_eq!(
+        candidate_read_error.code,
+        "publication_package_transport_candidate_marker_read"
+    );
+    std::fs::remove_file(&transport_candidate).expect("remove transport candidate symlink");
+    std::fs::File::create(&transport_candidate).expect("restore empty transport candidate marker");
+    let unrelated_revision_directory = target
+        .repository
+        .root()
+        .join("PACKAGE-TRANSPORTS")
+        .join(crate::platform::semantic_id::encode_hex(&[0xab; 32]));
+    std::fs::create_dir(&unrelated_revision_directory)
+        .expect("create unrelated retained revision bucket");
+    {
+        use std::os::unix::fs::symlink;
+        symlink(&outside, unrelated_revision_directory.join("CURRENT"))
+            .expect("symlink unrelated retained revision selection");
+    }
+    target
+        .repository
+        .export_package_transport()
+        .expect("unrelated retained revision bucket cannot disable exact dependency resolution");
 
     let source_change = AuthoredChangeSet {
         base: source.current.head.revision,
@@ -370,21 +482,39 @@ fn staged_package_objects_bind_authored_dependency_lifecycle_without_advancing_h
     ));
     let replacement = source
         .repository
-        .export_package_object()
-        .expect("replacement source package object");
-    assert_ne!(replacement.digest, exported.digest);
+        .export_package_transport()
+        .expect("replacement source package transport");
+    assert_ne!(replacement.revision_digest, exported.revision_digest);
     target
         .repository
-        .stage_package_object(replacement.digest, &replacement.packs)
-        .expect("stage replacement package object");
+        .stage_package_transport(replacement.transport_digest, &replacement.packs)
+        .expect("stage replacement package transport");
+    let invalid_binding_selection =
+        crate::platform::package_transport::PackageTransportSelection::new(
+            crate::platform::package_transport::PackageTransportBinding {
+                package_revision: exported.revision_digest,
+                transport: replacement.transport_digest,
+            },
+        );
+    std::fs::write(
+        &transport_selection,
+        invalid_binding_selection
+            .encode()
+            .expect("valid selection with foreign transport binding"),
+    )
+    .expect("write foreign transport binding");
+    target
+        .repository
+        .export_package_transport()
+        .expect("foreign indexed transport uses bounded independently validated fallback");
 
     let replace = AuthoredChangeSet {
         base: added.head.revision,
         preconditions: Vec::new(),
         changes: vec![AuthoredChange::ReplaceDependency {
-            package: replacement.object.package,
-            semantic_revision: replacement.object.semantic_revision,
-            package_object: replacement.digest,
+            package: replacement.revision.package,
+            semantic_revision: replacement.revision.revision.revision_id().unwrap(),
+            package_revision: replacement.revision_digest,
         }],
         budget: ChangeBudget::default(),
     };
@@ -414,7 +544,7 @@ fn staged_package_objects_bind_authored_dependency_lifecycle_without_advancing_h
         base: replaced.head.revision,
         preconditions: Vec::new(),
         changes: vec![AuthoredChange::DeleteDependency {
-            package: replacement.object.package,
+            package: replacement.revision.package,
         }],
         budget: ChangeBudget::default(),
     };
@@ -492,13 +622,13 @@ fn staged_package_interface_validates_an_exact_cross_package_pure_call() {
         .expect("publish source package");
     let exported = source
         .repository
-        .export_package_object()
+        .export_package_transport()
         .expect("export exact source interface");
     assert_eq!(exported.interface_owner_count, 1);
     assert_eq!(exported.interface_type_count, 1);
     assert_eq!(exported.packs.len(), 1);
     let transport = PackMetadata::decode(&exported.packs[0], true).unwrap();
-    assert_eq!(transport.entries.len(), 4);
+    assert_eq!(transport.entries.len(), 6);
     assert_eq!(
         transport
             .entries
@@ -508,7 +638,9 @@ fn staged_package_interface_validates_an_exact_cross_package_pure_call() {
         std::collections::BTreeSet::from([
             ObjectDomain::MapPage,
             ObjectDomain::PackageInterface,
-            ObjectDomain::PackageObject,
+            ObjectDomain::PackageRevision,
+            ObjectDomain::PackageTransport,
+            ObjectDomain::SemanticRoot,
             ObjectDomain::Type,
         ])
     );
@@ -519,7 +651,7 @@ fn staged_package_interface_validates_an_exact_cross_package_pure_call() {
             .expect("target repository");
     target
         .repository
-        .stage_package_object(exported.digest, &exported.packs)
+        .stage_package_transport(exported.transport_digest, &exported.packs)
         .expect("stage source interface closure");
     let target_change = |function| AuthoredChangeSet {
         base: target.current.head.revision,
@@ -527,9 +659,9 @@ fn staged_package_interface_validates_an_exact_cross_package_pure_call() {
         budget: ChangeBudget::default(),
         changes: vec![
             AuthoredChange::AddDependency {
-                package: exported.object.package,
-                semantic_revision: exported.object.semantic_revision,
-                package_object: exported.digest,
+                package: exported.revision.package,
+                semantic_revision: exported.revision.revision.revision_id().unwrap(),
+                package_revision: exported.revision_digest,
             },
             AuthoredChange::CreateModule {
                 symbol: "$target_module".to_owned(),
@@ -550,7 +682,7 @@ fn staged_package_interface_validates_an_exact_cross_package_pure_call() {
                     symbol: Some("$call".to_owned()),
                     operation: AuthoredExpressionOperation::Call {
                         function: AuthoredDeclarationReference::Exact {
-                            package: exported.object.package,
+                            package: exported.revision.package,
                             declaration: function,
                         },
                         type_arguments: Vec::new(),
@@ -607,7 +739,7 @@ fn staged_package_interface_validates_an_exact_cross_package_pure_call() {
         target.repository.view_current().unwrap().owner(OwnerKey::Expression(call)).unwrap().value,
         Some(OwnerRecord::Expression(record))
             if matches!(record.operation, ExpressionOperation::Call { function, .. }
-                if function.package == exported.object.package
+                if function.package == exported.revision.package
                     && function.declaration == source_function)
     ));
 
@@ -625,7 +757,7 @@ fn staged_package_interface_validates_an_exact_cross_package_pure_call() {
     assert_eq!(oracle.value.dependency_interfaces.len(), 1);
     assert_eq!(oracle.value.dependency_types.len(), 1);
     assert!(matches!(
-        oracle.value.dependency_interfaces[&exported.digest]
+        oracle.value.dependency_interfaces[&exported.revision_digest]
             .get(&OwnerKey::Declaration(source_function)),
         Some(crate::platform::kernel::PackageInterfaceRecord::Declaration(declaration))
             if matches!(
@@ -668,7 +800,7 @@ fn staged_package_interface_validates_exact_cross_package_task_requirements() {
     .expect("source task repository");
     let exported = source
         .repository
-        .export_package_object()
+        .export_package_transport()
         .expect("export exact source task interface");
 
     let target_path = temporary.path().join("target-task");
@@ -680,7 +812,7 @@ fn staged_package_interface_validates_exact_cross_package_task_requirements() {
     .expect("target task repository");
     target
         .repository
-        .stage_package_object(exported.digest, &exported.packs)
+        .stage_package_transport(exported.transport_digest, &exported.packs)
         .expect("stage source task interface closure");
 
     let exact_requirement = AuthoredRequirementReference::Exact {
@@ -693,9 +825,9 @@ fn staged_package_interface_validates_exact_cross_package_task_requirements() {
         budget: ChangeBudget::default(),
         changes: vec![
             AuthoredChange::AddDependency {
-                package: exported.object.package,
-                semantic_revision: exported.object.semantic_revision,
-                package_object: exported.digest,
+                package: exported.revision.package,
+                semantic_revision: exported.revision.revision.revision_id().unwrap(),
+                package_revision: exported.revision_digest,
             },
             AuthoredChange::CreateModule {
                 symbol: "$task_module".to_owned(),
@@ -838,11 +970,11 @@ fn staged_package_interface_validates_exact_cross_package_task_requirements() {
     );
     let reexported = target
         .repository
-        .export_package_object()
+        .export_package_transport()
         .expect("public foreign-task signature must export with its exact dependency closure");
     assert_eq!(reexported.interface_owner_count, 1);
-    assert_eq!(reexported.object.dependencies.len(), 1);
-    assert_eq!(reexported.object.dependencies[0].package, source_package);
+    assert_eq!(reexported.revision.dependencies.len(), 1);
+    assert_eq!(reexported.revision.dependencies[0].package, source_package);
 
     let reopened = GraphRepository::open(&target_path).expect("reopen cross-package task target");
     let accepted = reopened

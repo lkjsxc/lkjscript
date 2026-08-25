@@ -42,7 +42,7 @@ impl NormalizedResidentDeployment {
             || observation.repository != program.root_repository
             || observation.package != program.root_package
             || observation.revision != program.root_revision
-            || observation.semantic_root != program.root_semantic_root
+            || observation.semantic_state != program.root_semantic_state
         {
             return Err(resident_diagnostic(
                 "normalized_resident_deployment_binding",

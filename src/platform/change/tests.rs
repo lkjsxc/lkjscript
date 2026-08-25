@@ -334,7 +334,7 @@ fn dependency_edit_uses_the_same_package_relation_contract_as_full_rebuild() {
         graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
         package,
         semantic_revision: crate::platform::semantic_id::RevisionId::from_digest([21; 32]),
-        package_object: crate::platform::kernel::PackageObjectDigest::from_bytes([22; 32]),
+        package_revision: crate::platform::kernel::PackageRevisionDigest::from_bytes([22; 32]),
     };
     let delta = CanonicalDelta::normalize(
         &base,

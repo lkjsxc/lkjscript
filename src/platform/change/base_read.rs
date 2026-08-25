@@ -279,7 +279,7 @@ impl CanonicalBaseRead for KernelSnapshot {
     ) -> Result<CanonicalRead<Option<PackageInterfaceRecord>>, Diagnostic> {
         Ok(CanonicalRead::memory(
             self.dependency_interfaces
-                .get(&dependency.package_object)
+                .get(&dependency.package_revision)
                 .and_then(|owners| owners.get(&owner))
                 .cloned(),
         ))

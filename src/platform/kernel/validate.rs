@@ -13,7 +13,7 @@ use super::relation::{RelationEdge, extract_relations};
 use super::root::{DependencyRecord, RetirementRecord, SemanticRoot};
 use super::type_object::{TypeForm, TypeObject};
 use super::{
-    BlobObjectDigest, PackageInterfaceRecord, PackageObjectDigest, TypeObjectDigest,
+    BlobObjectDigest, PackageInterfaceRecord, PackageRevisionDigest, TypeObjectDigest,
     encode_type_object,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
@@ -28,10 +28,10 @@ pub struct KernelSnapshot {
     pub root: SemanticRoot,
     pub owners: BTreeMap<OwnerKey, OwnerRecord>,
     pub types: BTreeMap<TypeObjectDigest, TypeObject>,
-    /// Derived exact interfaces for bound dependency package objects. These are oracle inputs,
+    /// Derived exact interfaces for bound dependency package revisions. These are oracle inputs,
     /// not fields of the local semantic root.
     pub dependency_interfaces:
-        BTreeMap<PackageObjectDigest, BTreeMap<OwnerKey, PackageInterfaceRecord>>,
+        BTreeMap<PackageRevisionDigest, BTreeMap<OwnerKey, PackageInterfaceRecord>>,
     /// Structural types reachable from the bound dependency interfaces.
     pub dependency_types: BTreeMap<TypeObjectDigest, TypeObject>,
     pub blobs: BTreeMap<BlobObjectDigest, u64>,
@@ -1298,7 +1298,7 @@ impl FullValidator<'_> {
             match self
                 .snapshot
                 .dependency_interfaces
-                .get(&dependency.package_object)
+                .get(&dependency.package_revision)
                 .and_then(|owners| owners.get(&owner))
             {
                 Some(record) if kinds.contains(&record.header().kind) => {}
@@ -1346,7 +1346,7 @@ impl FullValidator<'_> {
         match self
             .snapshot
             .dependency_interfaces
-            .get(&dependency.package_object)?
+            .get(&dependency.package_revision)?
             .get(&OwnerKey::Operation(operation))?
         {
             PackageInterfaceRecord::Operation(record) => Some(record.declaration),
@@ -1394,7 +1394,7 @@ impl FullValidator<'_> {
                 .and_then(|dependency| {
                     self.snapshot
                         .dependency_interfaces
-                        .get(&dependency.package_object)
+                        .get(&dependency.package_revision)
                 })
                 .and_then(|owners| owners.get(&OwnerKey::Requirement(requirement.requirement)))
                 .and_then(|record| match record {

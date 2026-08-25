@@ -44,9 +44,9 @@ pub mod package;
 pub(crate) mod package_interface;
 #[allow(
     dead_code,
-    reason = "Graph 5 package objects remain private until repository publication cuts over"
+    reason = "normalized package transport remains private until repository publication cuts over"
 )]
-pub(crate) mod package_object;
+pub(crate) mod package_transport;
 pub(crate) mod packed;
 pub mod persistent_map;
 pub(crate) mod project_creation;

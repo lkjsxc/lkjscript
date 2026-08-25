@@ -26,7 +26,7 @@ use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     ChangeDigest, DependencyObjectDigest, DependencyRecord, ExpressionOperation, ExpressionRecord,
     ModuleRecord, Name, NamespaceClass, OwnerHeader, OwnerKey, OwnerKind, OwnerRecord, PackageId,
-    PackageObjectDigest, RetirementRecord, TypeObject, TypeObjectDigest, TypeObjectInterner,
+    PackageRevisionDigest, RetirementRecord, TypeObject, TypeObjectDigest, TypeObjectInterner,
     encode_dependency, encode_owner,
 };
 use crate::platform::semantic_id::{
@@ -247,12 +247,12 @@ pub enum AuthoredChange {
     AddDependency {
         package: PackageId,
         semantic_revision: RevisionId,
-        package_object: PackageObjectDigest,
+        package_revision: PackageRevisionDigest,
     },
     ReplaceDependency {
         package: PackageId,
         semantic_revision: RevisionId,
-        package_object: PackageObjectDigest,
+        package_revision: PackageRevisionDigest,
     },
     DeleteDependency {
         package: PackageId,
@@ -647,22 +647,22 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
             AuthoredChange::AddDependency {
                 package,
                 semantic_revision,
-                package_object,
+                package_revision,
             } => lowerer.add_dependency(DependencyRecord {
                 graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
                 package: *package,
                 semantic_revision: *semantic_revision,
-                package_object: *package_object,
+                package_revision: *package_revision,
             })?,
             AuthoredChange::ReplaceDependency {
                 package,
                 semantic_revision,
-                package_object,
+                package_revision,
             } => lowerer.replace_dependency(DependencyRecord {
                 graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
                 package: *package,
                 semantic_revision: *semantic_revision,
-                package_object: *package_object,
+                package_revision: *package_revision,
             })?,
             AuthoredChange::DeleteDependency { package } => {
                 lowerer.delete_dependency(*package)?;

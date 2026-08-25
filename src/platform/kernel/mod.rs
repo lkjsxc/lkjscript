@@ -34,9 +34,9 @@ pub use codec::{
     encode_retirement_binding, encode_root, encode_type_object,
 };
 pub use digest::{
-    BlobObjectDigest, ChangeDigest, DependencyObjectDigest, OwnerObjectDigest, PackageObjectDigest,
-    RetirementObjectDigest, SemanticRootDigest, SemanticStateDigest, SequenceObjectDigest,
-    TypeObjectDigest,
+    BlobObjectDigest, ChangeDigest, DependencyObjectDigest, OwnerObjectDigest,
+    PackageInterfaceDigest, PackageRevisionDigest, PackageTransportDigest, RetirementObjectDigest,
+    SemanticRootDigest, SemanticStateDigest, SequenceObjectDigest, TypeObjectDigest,
 };
 pub use expression::*;
 pub use id::{EncodedOwnerKey, ExactOwnerKey, OwnerHeader, OwnerKey, OwnerKind, PackageId};

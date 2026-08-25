@@ -20,7 +20,8 @@ pub enum ObjectDomain {
     Conflict,
     CompilerUnit,
     ArtifactManifest,
-    PackageObject,
+    PackageRevision,
+    PackageTransport,
     BackupManifest,
     BackupSegment,
     Dependency,
@@ -33,7 +34,7 @@ pub enum ObjectDomain {
 }
 
 impl ObjectDomain {
-    pub const ALL: [Self; 24] = [
+    pub const ALL: [Self; 25] = [
         Self::Owner,
         Self::Type,
         Self::Blob,
@@ -48,7 +49,8 @@ impl ObjectDomain {
         Self::Conflict,
         Self::CompilerUnit,
         Self::ArtifactManifest,
-        Self::PackageObject,
+        Self::PackageRevision,
+        Self::PackageTransport,
         Self::BackupManifest,
         Self::BackupSegment,
         Self::Dependency,
@@ -76,7 +78,8 @@ impl ObjectDomain {
             Self::Conflict => 12,
             Self::CompilerUnit => 13,
             Self::ArtifactManifest => 14,
-            Self::PackageObject => 15,
+            Self::PackageRevision => 25,
+            Self::PackageTransport => 26,
             Self::BackupManifest => 16,
             Self::BackupSegment => 17,
             Self::Dependency => 18,
@@ -118,7 +121,8 @@ impl ObjectDomain {
             Self::Conflict => "conflict",
             Self::CompilerUnit => "compiler_unit",
             Self::ArtifactManifest => "artifact_manifest",
-            Self::PackageObject => "package_object",
+            Self::PackageRevision => "package_revision",
+            Self::PackageTransport => "package_transport",
             Self::BackupManifest => "backup_manifest",
             Self::BackupSegment => "backup_segment",
             Self::Dependency => "dependency",
@@ -147,7 +151,8 @@ impl ObjectDomain {
             Self::Conflict => contract::CONFLICT_OBJECT_DIGEST_DOMAIN,
             Self::CompilerUnit => contract::COMPILER_UNIT_DIGEST_DOMAIN,
             Self::ArtifactManifest => contract::ARTIFACT_MANIFEST_DIGEST_DOMAIN,
-            Self::PackageObject => contract::PACKAGE_OBJECT_DIGEST_DOMAIN,
+            Self::PackageRevision => contract::PACKAGE_REVISION_DIGEST_DOMAIN,
+            Self::PackageTransport => contract::PACKAGE_TRANSPORT_DIGEST_DOMAIN,
             Self::BackupManifest => contract::BACKUP_MANIFEST_DIGEST_DOMAIN,
             Self::BackupSegment => contract::BACKUP_SEGMENT_DIGEST_DOMAIN,
             Self::Dependency => contract::DEPENDENCY_OBJECT_DIGEST_DOMAIN,
@@ -178,7 +183,8 @@ impl ObjectDomain {
             | Self::Conflict
             | Self::CompilerUnit
             | Self::ArtifactManifest
-            | Self::PackageObject
+            | Self::PackageRevision
+            | Self::PackageTransport
             | Self::BackupManifest
             | Self::Change
             | Self::Transaction

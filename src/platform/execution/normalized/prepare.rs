@@ -14,8 +14,8 @@ use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     BlobObjectDigest, CaseReference, ComparisonPolicy, DeclarationReference, EncodedOwnerKey,
     ExternalVisibility, FieldReference, Idempotency, Name, OperationReference, OwnerKey,
-    OwnerRecord, PackageId, PortReference, RequirementReference, ResourceLimit, SemanticRootDigest,
-    TypeObject, TypeObjectDigest, decode_type_object,
+    OwnerRecord, PackageId, PortReference, RequirementReference, ResourceLimit,
+    SemanticStateDigest, TypeObject, TypeObjectDigest, decode_type_object,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::persistent_map::{MapError, MapErrorClass, MapWork, PersistentMap};
@@ -249,7 +249,7 @@ pub struct NormalizedProgram {
     pub root_repository: RepositoryId,
     pub root_package: PackageId,
     pub root_revision: RevisionId,
-    pub root_semantic_root: SemanticRootDigest,
+    pub root_semantic_state: SemanticStateDigest,
     pub work: NormalizedPreparationWork,
     pub(crate) functions: Arc<[NormalizedFunction]>,
     pub(crate) function_by_declaration: BTreeMap<DeclarationReference, FunctionIndex>,
@@ -320,7 +320,7 @@ impl NormalizedProgram {
             root_repository: root_compilation.repository_id,
             root_package: artifact.manifest.root_package,
             root_revision: root_compilation.revision,
-            root_semantic_root: root_compilation.semantic_root,
+            root_semantic_state: root_compilation.semantic_state,
             artifact,
             work,
             functions: functions.into(),

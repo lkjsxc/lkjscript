@@ -12,14 +12,20 @@ use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     CaseReference, DeclarationPayload, DeclarationReference, EncodedOwnerKey, ExpressionOperation,
     ExternalVisibility, FieldReference, Idempotency, LocalValueReference, OperationReference,
-    OwnerKey, OwnerKind, OwnerObjectDigest, OwnerRecord, PackageId, PackageObjectDigest,
-    ParameterParent, PortImplementation, PortReference, RequirementReference, ResourceLimit,
-    TypeForm, TypeObjectDigest, decode_owner, decode_owner_binding, decode_type_object,
+    OwnerKey, OwnerKind, OwnerObjectDigest, OwnerRecord, PackageId, PackageInterfaceDigest,
+    PackageRevisionDigest, ParameterParent, PortImplementation, PortReference,
+    RequirementReference, ResourceLimit, SemanticStateDigest, TypeForm, TypeObjectDigest,
+    decode_owner, decode_owner_binding, decode_type_object, encode_type_object,
 };
-use crate::platform::package_object::{PackageObject, validate_package_object_closure};
+use crate::platform::package_interface::{
+    build_package_interface, package_interface_digest, validate_package_interface,
+};
+use crate::platform::package_transport::{
+    PackageRevision, validate_package_interface_closure, validate_package_revision_closure,
+};
 use crate::platform::persistent_map::{MapError, MapErrorClass, MapRoot, MapWork, PersistentMap};
 use crate::platform::semantic_id::{
-    BindingId, DeclarationId, ParameterId, RepositoryId, TargetId, TypeParameterId,
+    BindingId, DeclarationId, ParameterId, RepositoryId, RevisionId, TargetId, TypeParameterId,
 };
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, StageOutcome, StoreError, StoreErrorClass,
@@ -27,22 +33,24 @@ use crate::platform::storage::object::{
 };
 use crate::platform::storage::pack::{PackBuilder, PackId, PackMetadata};
 use crate::platform::storage::page_store::ObjectPageReader;
+use bincode::de::Decoder;
+use bincode::error::DecodeError;
 use bincode::{Decode, Encode};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-8";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-8";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 8;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF08";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART08";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEND8";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-10";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-10";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 10;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF10";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART10";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEN10";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v8";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v8";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v8";
-pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v8";
+    "lkjscript.artifact-manifest-envelope.v10";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v10";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v10";
+pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v10";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
 pub(crate) const MAXIMUM_ARTIFACT_RUNTIME_OWNERS: usize = 1_000_000;
@@ -119,11 +127,15 @@ pub struct ArtifactRuntimeOwner {
     pub object: OwnerObjectDigest,
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Encode, Eq, PartialEq)]
 pub struct ArtifactPackage {
     pub repository_id: RepositoryId,
     pub package: PackageId,
-    pub package_object: PackageObjectDigest,
+    pub package_revision: PackageRevisionDigest,
+    pub semantic_revision: RevisionId,
+    pub semantic_state: SemanticStateDigest,
+    pub interface: PackageInterfaceDigest,
+    pub interface_owners: MapRoot,
     pub compilation: CompilationManifestDigest,
     pub runtime_owners: Vec<ArtifactRuntimeOwner>,
     /// Exact canonical declarations, expressions, and bindings used only by the independent
@@ -131,7 +143,28 @@ pub struct ArtifactPackage {
     pub reference_owners: MapRoot,
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+impl<Context> Decode<Context> for ArtifactPackage {
+    fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        Ok(Self {
+            repository_id: RepositoryId::decode(decoder)?,
+            package: PackageId::decode(decoder)?,
+            package_revision: PackageRevisionDigest::decode(decoder)?,
+            semantic_revision: RevisionId::decode(decoder)?,
+            semantic_state: SemanticStateDigest::decode(decoder)?,
+            interface: PackageInterfaceDigest::decode(decoder)?,
+            interface_owners: MapRoot::decode(decoder)?,
+            compilation: CompilationManifestDigest::decode(decoder)?,
+            runtime_owners: decode_bounded_vec(
+                decoder,
+                MAXIMUM_ARTIFACT_RUNTIME_OWNERS,
+                "artifact runtime-owner count",
+            )?,
+            reference_owners: MapRoot::decode(decoder)?,
+        })
+    }
+}
+
+#[derive(Clone, Debug, Encode, Eq, PartialEq)]
 pub struct ArtifactManifest {
     pub contract_version: u16,
     pub graph_contract_version: u16,
@@ -143,6 +176,53 @@ pub struct ArtifactManifest {
     pub closure: ArtifactClosureDigest,
     pub object_count: u64,
     pub object_bytes: u64,
+}
+
+impl<Context> Decode<Context> for ArtifactManifest {
+    fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        Ok(Self {
+            contract_version: u16::decode(decoder)?,
+            graph_contract_version: u16::decode(decoder)?,
+            compiler_contract_version: u16::decode(decoder)?,
+            bytecode_contract_version: u16::decode(decoder)?,
+            compilation_manifest_contract_version: u16::decode(decoder)?,
+            root_package: PackageId::decode(decoder)?,
+            packages: decode_bounded_vec(
+                decoder,
+                MAXIMUM_ARTIFACT_PACKAGES,
+                "artifact package count",
+            )?,
+            closure: ArtifactClosureDigest::decode(decoder)?,
+            object_count: u64::decode(decoder)?,
+            object_bytes: u64::decode(decoder)?,
+        })
+    }
+}
+
+fn decode_bounded_vec<Context, T, D>(
+    decoder: &mut D,
+    maximum: usize,
+    label: &'static str,
+) -> Result<Vec<T>, DecodeError>
+where
+    T: Decode<Context>,
+    D: Decoder<Context = Context>,
+{
+    let encoded_length = u64::decode(decoder)?;
+    let length = usize::try_from(encoded_length)
+        .map_err(|_| DecodeError::OutsideUsizeRange(encoded_length))?;
+    if length > maximum {
+        return Err(DecodeError::OtherString(format!(
+            "{label} exceeds {maximum} before allocation"
+        )));
+    }
+    decoder.claim_container_read::<T>(length)?;
+    let mut values = Vec::with_capacity(length);
+    for _ in 0..length {
+        decoder.unclaim_bytes_read(std::mem::size_of::<T>());
+        values.push(T::decode(decoder)?);
+    }
+    Ok(values)
 }
 
 const fn runtime_owner_kind(kind: OwnerKind) -> bool {
@@ -449,6 +529,92 @@ impl ImmutableObjectStore for LoadedArtifact {
             "loaded artifact object storage is immutable",
         ))
     }
+}
+
+#[derive(Debug)]
+pub(crate) struct CanonicalDependencyArtifact {
+    pub packages: Vec<ArtifactPackage>,
+    pub objects: BTreeMap<ObjectKey, Vec<u8>>,
+    pub work: ArtifactLoadWork,
+}
+
+/// Rebuilds every package interface from its validated logical entries and retains only the exact
+/// executable closure reachable through the rebuilt roots. Dependency artifact page partitioning
+/// is therefore never inherited by a newly linked artifact.
+pub(crate) fn canonicalize_dependency_artifact_interfaces(
+    artifact: &LoadedArtifact,
+) -> Result<CanonicalDependencyArtifact, Diagnostic> {
+    let mut packages = artifact.manifest.packages.clone();
+    let mut objects = artifact.objects.clone();
+    let mut work = ArtifactLoadWork::default();
+    for package in &mut packages {
+        let mut store_work = StoreWork::default();
+        let interface = validate_package_interface(
+            package.package,
+            package.interface_owners,
+            artifact,
+            &mut store_work,
+        )?;
+        work.store.add(store_work);
+        add_map_work(&mut work.map, interface.map_work);
+        let mut types = BTreeMap::new();
+        for (digest, object) in interface.type_objects {
+            let (encoded_digest, bytes) = encode_type_object(&object)?;
+            if encoded_digest != digest {
+                return Err(artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_dependency_interface_type_digest",
+                    "dependency interface type changed during canonical encoding",
+                ));
+            }
+            types.insert(digest, bytes);
+        }
+        let rebuilt = build_package_interface(&interface.owners, &types)?;
+        if package_interface_digest(package.package, rebuilt.root.content_root())?
+            != package.interface
+        {
+            return Err(artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_dependency_interface_digest",
+                "rebuilt dependency interface disagrees with its logical package commitment",
+            ));
+        }
+        add_map_work(&mut work.map, rebuilt.map_work);
+        work.store.add(rebuilt.store_work);
+        for (key, bytes) in rebuilt.objects {
+            match objects.entry(key) {
+                std::collections::btree_map::Entry::Vacant(entry) => {
+                    entry.insert(bytes);
+                }
+                std::collections::btree_map::Entry::Occupied(entry) if entry.get() == &bytes => {}
+                std::collections::btree_map::Entry::Occupied(_) => {
+                    return Err(artifact_error(
+                        DiagnosticClass::Corrupt,
+                        "artifact_dependency_interface_object_collision",
+                        "canonical dependency interface collides with different immutable bytes",
+                    ));
+                }
+            }
+        }
+        package.interface_owners = rebuilt.root;
+    }
+    let mut manifest = artifact.manifest.clone();
+    manifest.packages = packages.clone();
+    manifest.validate()?;
+    let mut trace_work = ArtifactLoadWork::default();
+    let reachable = trace_object_closure(&manifest, &objects, &mut trace_work)?;
+    add_map_work(&mut work.map, trace_work.map);
+    work.store.add(trace_work.store);
+    objects.retain(|key, _| reachable.contains(key));
+    work.objects = objects.len() as u64;
+    work.object_bytes = objects.values().fold(0_u64, |total, bytes| {
+        total.saturating_add(bytes.len() as u64)
+    });
+    Ok(CanonicalDependencyArtifact {
+        packages,
+        objects,
+        work,
+    })
 }
 
 #[derive(Clone, Debug)]
@@ -788,7 +954,7 @@ fn validate_declared_closure(
                 | ObjectDomain::Blob
                 | ObjectDomain::MapPage
                 | ObjectDomain::CompilerUnit
-                | ObjectDomain::PackageObject
+                | ObjectDomain::PackageRevision
                 | ObjectDomain::PackageInterface
                 | ObjectDomain::CompilationManifest
         )
@@ -1282,6 +1448,23 @@ fn validate_object_closure(
     objects: &BTreeMap<ObjectKey, Vec<u8>>,
     work: &mut ArtifactLoadWork,
 ) -> Result<(), Diagnostic> {
+    let visited = trace_object_closure(manifest, objects, work)?;
+    let expected = objects.keys().copied().collect::<BTreeSet<_>>();
+    if visited != expected {
+        return Err(artifact_error(
+            DiagnosticClass::Corrupt,
+            "artifact_unreachable_object",
+            "artifact bundle contains an object outside its exact executable closure",
+        ));
+    }
+    Ok(())
+}
+
+fn trace_object_closure(
+    manifest: &ArtifactManifest,
+    objects: &BTreeMap<ObjectKey, Vec<u8>>,
+    work: &mut ArtifactLoadWork,
+) -> Result<BTreeSet<ObjectKey>, Diagnostic> {
     let store = TrackingObjectStore::new(objects);
     let root = manifest
         .packages
@@ -1295,44 +1478,67 @@ fn validate_object_closure(
             )
         })?;
     let mut store_work = StoreWork::default();
-    let root_object =
-        validate_package_object_closure(&store, root.package_object, None, &mut store_work)?;
-    if root_object.package != manifest.root_package {
+    let logical =
+        validate_package_revision_closure(&store, root.package_revision, None, &mut store_work)?;
+    if logical.root_revision.package != manifest.root_package {
         return Err(artifact_error(
             DiagnosticClass::Corrupt,
             "artifact_root_package_binding",
-            "artifact root package object has another package identity",
+            "artifact root logical revision has another package identity",
         ));
     }
-    let reachable_packages = store.visited_for_domain(ObjectDomain::PackageObject);
-    let expected_packages = manifest
+    let reachable_revisions = store.visited_for_domain(ObjectDomain::PackageRevision);
+    let expected_revisions = manifest
         .packages
         .iter()
         .map(|package| {
-            ObjectKey::from_digest(ObjectDomain::PackageObject, package.package_object.bytes())
+            ObjectKey::from_digest(
+                ObjectDomain::PackageRevision,
+                package.package_revision.bytes(),
+            )
         })
         .collect::<BTreeSet<_>>();
-    if reachable_packages != expected_packages {
+    if reachable_revisions != expected_revisions
+        || logical.revisions.len() != manifest.packages.len()
+    {
         return Err(artifact_error(
             DiagnosticClass::Corrupt,
             "artifact_package_closure",
-            "artifact package manifests do not equal the exact root dependency closure",
+            "artifact packages do not equal the exact logical package-revision closure",
         ));
     }
 
     let mut units = BTreeMap::<(PackageId, OwnerKey), CompilationUnit>::new();
     let mut type_roots = BTreeSet::new();
     let mut blobs = BTreeMap::new();
+    let mut interfaces = BTreeMap::new();
     for package in &manifest.packages {
-        let package_key =
-            ObjectKey::from_digest(ObjectDomain::PackageObject, package.package_object.bytes());
-        let package_bytes = required_object(
+        let revision = logical
+            .revisions
+            .get(&package.package_revision)
+            .ok_or_else(|| {
+                artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_package_revision_binding",
+                    "artifact package manifest names a revision outside the logical closure",
+                )
+            })?;
+        let interface = validate_package_interface(
+            package.package,
+            package.interface_owners,
             &store,
-            package_key,
-            "artifact package object is missing",
             &mut store_work,
         )?;
-        let package_object = PackageObject::decode(&package_bytes, package.package_object)?;
+        if package_interface_digest(package.package, package.interface_owners.content_root())?
+            != package.interface
+        {
+            return Err(artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_package_interface_digest",
+                "artifact package interface root disagrees with its logical content digest",
+            ));
+        }
+        interfaces.insert(package.package_revision, interface);
         let compilation_key = package.compilation.object_key();
         let compilation_bytes = required_object(
             &store,
@@ -1341,18 +1547,22 @@ fn validate_object_closure(
             &mut store_work,
         )?;
         let compilation = CompilationManifest::decode(&compilation_bytes, package.compilation)?;
-        if package.repository_id != package_object.repository_id
-            || package.package != package_object.package
+        if package.repository_id != revision.revision.repository_id
+            || package.package != revision.package
+            || package.semantic_revision != revision.revision.revision_id()?
+            || package.semantic_state != revision.revision.semantic_state
+            || package.interface != revision.interface
             || compilation.repository_id != package.repository_id
             || compilation.package_id != package.package
-            || compilation.revision != package_object.semantic_revision
-            || compilation.semantic_root != package_object.semantic_root
-            || compilation.validation_certificate != package_object.witness.certificate
+            || compilation.revision != package.semantic_revision
+            || compilation.package_revision != package.package_revision
+            || compilation.semantic_state != package.semantic_state
+            || compilation.package_interface != package.interface
         {
             return Err(artifact_error(
                 DiagnosticClass::Corrupt,
                 "artifact_package_compilation_binding",
-                "package object and compilation manifest do not bind one exact accepted package",
+                "logical package revision, deterministic interface, and compilation do not bind one package meaning",
             ));
         }
         let reader = ObjectPageReader::new(&store);
@@ -1427,6 +1637,7 @@ fn validate_object_closure(
         }
         result.map_err(map_diagnostic)?;
     }
+    validate_package_interface_closure(&logical.revisions, &interfaces)?;
     let runtime_owners = validate_runtime_owners(manifest, &units, &store, &mut store_work)?;
     validate_reference_owners(
         manifest,
@@ -1493,16 +1704,7 @@ fn validate_object_closure(
         }
     }
     work.store.add(store_work);
-    let visited = store.visited();
-    let expected = objects.keys().copied().collect::<BTreeSet<_>>();
-    if visited != expected {
-        return Err(artifact_error(
-            DiagnosticClass::Corrupt,
-            "artifact_unreachable_object",
-            "artifact bundle contains an object outside its exact executable closure",
-        ));
-    }
-    Ok(())
+    Ok(store.visited())
 }
 
 fn validate_runtime_owners(

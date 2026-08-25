@@ -4,7 +4,7 @@ use super::{CanonicalBaseRead, CanonicalDelta, CanonicalReadWork};
 use crate::platform::diagnostic::Diagnostic;
 use crate::platform::kernel::{
     DependencyRecord, KernelSnapshot, OwnerKey, OwnerRecord, PackageId, PackageInterfaceRecord,
-    PackageObjectDigest, RetirementRecord, TypeObject, TypeObjectDigest,
+    PackageRevisionDigest, RetirementRecord, TypeObject, TypeObjectDigest,
 };
 use crate::platform::persistent_map::MapRoot;
 use crate::platform::semantic_id::{RepositoryId, RevisionId};
@@ -19,7 +19,7 @@ pub struct KernelOverlay<'a, B: ?Sized = KernelSnapshot> {
     owners: RefCell<BTreeMap<OwnerKey, Option<OwnerRecord>>>,
     types: RefCell<BTreeMap<TypeObjectDigest, Option<TypeObject>>>,
     package_interfaces:
-        RefCell<BTreeMap<(PackageObjectDigest, OwnerKey), Option<PackageInterfaceRecord>>>,
+        RefCell<BTreeMap<(PackageRevisionDigest, OwnerKey), Option<PackageInterfaceRecord>>>,
     dependencies: RefCell<BTreeMap<PackageId, Option<DependencyRecord>>>,
     retirements: RefCell<BTreeMap<OwnerKey, Option<RetirementRecord>>>,
     work: RefCell<CanonicalReadWork>,
@@ -98,7 +98,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized> KernelOverlay<'a, B> {
         let Some(dependency) = self.dependency(package)? else {
             return Ok(None);
         };
-        let key = (dependency.package_object, owner);
+        let key = (dependency.package_revision, owner);
         if !self.package_interfaces.borrow().contains_key(&key) {
             let read = self.base.read_package_interface_owner(&dependency, owner)?;
             self.work.borrow_mut().add(read.work);

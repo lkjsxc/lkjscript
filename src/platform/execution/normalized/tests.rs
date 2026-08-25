@@ -193,7 +193,7 @@ fn linked_pure_program() -> (
     };
     let exported = source_created
         .repository
-        .export_package_object()
+        .export_package_transport()
         .expect("export linked source package");
     let source_compilation = build_clean(
         &source_created.repository,
@@ -217,16 +217,16 @@ fn linked_pure_program() -> (
     .expect("linked target repository");
     target_created
         .repository
-        .stage_package_object(exported.digest, &exported.packs)
+        .stage_package_transport(exported.transport_digest, &exported.packs)
         .expect("stage exact linked source package");
     let target_change = AuthoredChangeSet {
         base: target_created.current.head.revision,
         preconditions: Vec::new(),
         changes: vec![
             AuthoredChange::AddDependency {
-                package: exported.object.package,
-                semantic_revision: exported.object.semantic_revision,
-                package_object: exported.digest,
+                package: exported.revision.package,
+                semantic_revision: exported.revision.revision.revision_id().unwrap(),
+                package_revision: exported.revision_digest,
             },
             AuthoredChange::CreateModule {
                 symbol: "$target_module".to_owned(),
@@ -2153,8 +2153,8 @@ fn normalized_deployment_resolves_and_runs_one_exact_effect_adapter() {
         .expect("wall-clock revision-pinned view");
     assert_eq!(deployment.observation().revision, view.revision());
     assert_eq!(
-        deployment.observation().semantic_root,
-        program.root_semantic_root
+        deployment.observation().semantic_state,
+        program.root_semantic_state
     );
     let receipt = run_effectful_command(
         &view,

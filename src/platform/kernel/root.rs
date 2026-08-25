@@ -2,7 +2,7 @@
 
 use super::contract::GRAPH_CONTRACT_VERSION;
 use super::digest::{
-    ChangeDigest, DependencyObjectDigest, PackageObjectDigest, RetirementObjectDigest,
+    ChangeDigest, DependencyObjectDigest, PackageRevisionDigest, RetirementObjectDigest,
 };
 use super::id::{EncodedOwnerKey, OwnerKey, OwnerKind, PackageId};
 use super::name::Name;
@@ -57,7 +57,7 @@ pub struct DependencyRecord {
     pub graph_contract_version: u16,
     pub package: PackageId,
     pub semantic_revision: RevisionId,
-    pub package_object: PackageObjectDigest,
+    pub package_revision: PackageRevisionDigest,
 }
 
 impl DependencyRecord {

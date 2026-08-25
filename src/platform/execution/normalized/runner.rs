@@ -65,7 +65,7 @@ impl NormalizedReferenceRead for RepositoryView {
             repository: self.current().head.repository_id,
             package: self.package(),
             revision: Some(self.revision()),
-            semantic_root: Some(self.current().accepted.semantic_root),
+            semantic_state: Some(self.current().revision.core.semantic_state),
         })
     }
 

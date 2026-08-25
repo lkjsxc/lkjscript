@@ -584,7 +584,7 @@ mod tests {
         assert!(encoded.contains("\"additionalProperties\": false"));
         assert_eq!(
             authored_protocol_schema_digest().unwrap(),
-            "6846ee62409b56f1c69a54fca33ae2f60923af0eb26d45ea9aed6c385d84563a"
+            "8cf8304a68f8e689cda8a579f412a0c23027f6bf5d3d5361a28689e7b7fc5a37"
         );
     }
 

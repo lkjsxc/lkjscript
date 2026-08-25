@@ -16,7 +16,9 @@ use crate::platform::witness::{
     ValidationCertificateDigest, ValidationWitnessDigest, ValidationWitnessManifest,
     ValidatorContractDigest,
 };
-use bincode::{Decode, Encode};
+use bincode::de::{BorrowDecoder, Decoder};
+use bincode::error::DecodeError;
+use bincode::{BorrowDecode, Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 #[derive(
@@ -28,7 +30,7 @@ pub struct ParentRevision {
     pub record: RevisionObjectDigest,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Encode, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct RevisionCore {
     pub contract_version: u16,
@@ -36,6 +38,44 @@ pub struct RevisionCore {
     pub repository_id: RepositoryId,
     pub parents: Vec<RevisionId>,
     pub semantic_state: SemanticStateDigest,
+}
+
+impl<Context> Decode<Context> for RevisionCore {
+    fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let contract_version = u16::decode(decoder)?;
+        let graph_contract_version = u16::decode(decoder)?;
+        let repository_id = RepositoryId::decode(decoder)?;
+        let encoded_length = u64::decode(decoder)?;
+        let parent_count = usize::try_from(encoded_length)
+            .map_err(|_| DecodeError::OutsideUsizeRange(encoded_length))?;
+        if parent_count > 2 {
+            return Err(DecodeError::OtherString(
+                "revision parent count exceeds 2 before allocation".to_owned(),
+            ));
+        }
+        decoder.claim_container_read::<RevisionId>(parent_count)?;
+        let mut parents = Vec::with_capacity(parent_count);
+        for _ in 0..parent_count {
+            decoder.unclaim_bytes_read(std::mem::size_of::<RevisionId>());
+            parents.push(RevisionId::decode(decoder)?);
+        }
+        let semantic_state = SemanticStateDigest::decode(decoder)?;
+        Ok(Self {
+            contract_version,
+            graph_contract_version,
+            repository_id,
+            parents,
+            semantic_state,
+        })
+    }
+}
+
+impl<'de, Context> BorrowDecode<'de, Context> for RevisionCore {
+    fn borrow_decode<D: BorrowDecoder<'de, Context = Context>>(
+        decoder: &mut D,
+    ) -> Result<Self, DecodeError> {
+        Self::decode(decoder)
+    }
 }
 
 impl RevisionCore {
@@ -339,4 +379,54 @@ impl AcceptedBinding {
 
 fn revision_error(class: DiagnosticClass, code: &str, message: impl Into<String>) -> Diagnostic {
     Diagnostic::new(class, code, message)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct ExcessParents;
+
+    impl Encode for ExcessParents {
+        fn encode<E: bincode::enc::Encoder>(
+            &self,
+            encoder: &mut E,
+        ) -> Result<(), bincode::error::EncodeError> {
+            3_u64.encode(encoder)
+        }
+    }
+
+    #[derive(Encode)]
+    struct OversizedRevisionCore {
+        contract_version: u16,
+        graph_contract_version: u16,
+        repository_id: RepositoryId,
+        parents: ExcessParents,
+        semantic_state: SemanticStateDigest,
+    }
+
+    #[test]
+    fn revision_core_rejects_parent_length_before_allocation() {
+        let encoded = bincode::encode_to_vec(
+            OversizedRevisionCore {
+                contract_version: REVISION_CONTRACT_VERSION,
+                graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+                repository_id: RepositoryId::migrate(b"oversized-revision-parents", 0),
+                parents: ExcessParents,
+                semantic_state: SemanticStateDigest::from_bytes([0x91; 32]),
+            },
+            bincode::config::standard()
+                .with_little_endian()
+                .with_variable_int_encoding(),
+        )
+        .expect("encode hostile parent length without allocating parents");
+        let error = bincode::decode_from_slice::<RevisionCore, _>(
+            &encoded,
+            bincode::config::standard()
+                .with_little_endian()
+                .with_variable_int_encoding(),
+        )
+        .expect_err("hostile parent length must reject before allocation");
+        assert!(error.to_string().contains("before allocation"));
+    }
 }

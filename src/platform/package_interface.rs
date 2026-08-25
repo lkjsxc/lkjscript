@@ -1,20 +1,19 @@
 //! Derived, implementation-free package interface records for exact Graph 5 dependencies.
 //!
 //! These records are not accepted program authority. They are deterministic projections of one
-//! validated package revision and carry the committed summary dimensions needed to detect drift
-//! between canonical owners and the exported interface. Exact dependency bindings select one
-//! package object; the package object will in turn commit to a persistent map of these records.
+//! validated package revision. Exact dependency bindings select one storage-independent package
+//! revision; its separately replaceable transport commits to a persistent map of these records.
 
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     DeclarationPayload, DeclarationVisibility, EncodedOwnerKey, ExternalDeclaration,
     FunctionDeclaration, FunctionEffect, OwnerKey, OwnerKind, OwnerRecord, PackageId,
-    PackageInterfaceDeclarationPayload, PackageInterfaceRecord, ParameterParent, TypeForm,
-    TypeObject, TypeObjectDigest, decode_type_object, encode_owner,
+    PackageInterfaceDeclarationPayload, PackageInterfaceDigest, PackageInterfaceRecord,
+    ParameterParent, TypeForm, TypeObject, TypeObjectDigest, decode_type_object, encode_owner,
 };
 use crate::platform::persistent_map::{
-    MapEdit, MapError, MapErrorClass, MapRoot, MapWork, MemoryPageStore, PageDigest, PageStore,
-    PageWrite, PersistentMap,
+    MapContentRoot, MapError, MapErrorClass, MapRoot, MapWork, MemoryPageStore, PageDigest,
+    PageStore, PageWrite, PersistentMap,
 };
 use crate::platform::semantic_id::{
     CaseId, DeclarationId, FieldId, OperationId, ParameterId, PortId, RequirementId,
@@ -26,15 +25,17 @@ use crate::platform::storage::object::{
     StoreErrorClass, StoreWork,
 };
 use crate::platform::storage::page_store::{ObjectPageReader, ObjectPageStore};
-use crate::platform::witness::{OwnerSummary, SemanticDigest};
+use crate::platform::witness::OwnerSummary;
 use bincode::{Decode, Encode};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-2";
-pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 2;
-pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF02";
-pub const PACKAGE_INTERFACE_ENVELOPE_DOMAIN: &str = "lkjscript.package-interface-owner-envelope.v2";
+pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-3";
+pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 3;
+pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF03";
+pub const PACKAGE_INTERFACE_ENVELOPE_DOMAIN: &str = "lkjscript.package-interface-owner-envelope.v3";
+const PACKAGE_INTERFACE_IDENTITY_MAGIC: [u8; 8] = *b"LKJPIFI1";
+const PACKAGE_INTERFACE_IDENTITY_DOMAIN: &str = "lkjscript.package-interface-identity.v1";
 pub const MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES: usize = 1024 * 1024;
 pub const MAXIMUM_PACKAGE_INTERFACE_VALIDATION_WORK: usize =
     crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
@@ -66,31 +67,9 @@ impl fmt::Display for PackageInterfaceOwnerDigest {
     }
 }
 
-#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
-pub struct PackageInterfaceSummary {
-    pub semantic_interface: SemanticDigest,
-    pub type_digest: SemanticDigest,
-    pub effect: SemanticDigest,
-    pub capability: SemanticDigest,
-    pub presentation: SemanticDigest,
-}
-
-impl From<&OwnerSummary> for PackageInterfaceSummary {
-    fn from(summary: &OwnerSummary) -> Self {
-        Self {
-            semantic_interface: summary.semantic_interface,
-            type_digest: summary.type_digest,
-            effect: summary.effect,
-            capability: summary.capability,
-            presentation: summary.presentation,
-        }
-    }
-}
-
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct PackageInterfaceOwner {
     pub contract_version: u16,
-    pub summary: PackageInterfaceSummary,
     pub record: PackageInterfaceRecord,
 }
 
@@ -123,7 +102,6 @@ impl PackageInterfaceOwner {
         };
         let value = Self {
             contract_version: PACKAGE_INTERFACE_CONTRACT_VERSION,
-            summary: summary.into(),
             record,
         };
         value.validate_local()?;
@@ -200,6 +178,33 @@ impl PackageInterfaceOwner {
         }
         self.record.validate_local()
     }
+}
+
+#[derive(Encode)]
+struct PackageInterfaceIdentity {
+    contract_version: u16,
+    graph_contract_version: u16,
+    package: PackageId,
+    owners: MapContentRoot,
+}
+
+pub fn package_interface_digest(
+    package: PackageId,
+    owners: MapContentRoot,
+) -> Result<PackageInterfaceDigest, Diagnostic> {
+    let identity = PackageInterfaceIdentity {
+        contract_version: 1,
+        graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+        package,
+        owners,
+    };
+    let bytes = crate::platform::packed::encode(
+        PACKAGE_INTERFACE_IDENTITY_MAGIC,
+        PACKAGE_INTERFACE_IDENTITY_DOMAIN,
+        &identity,
+        1024,
+    )?;
+    Ok(PackageInterfaceDigest::of(&bytes))
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -367,10 +372,26 @@ pub fn build_package_interface(
     owners: &BTreeMap<OwnerKey, PackageInterfaceOwner>,
     types: &BTreeMap<TypeObjectDigest, Vec<u8>>,
 ) -> Result<PackageInterfaceBuild, Diagnostic> {
+    build_package_interface_with_physical_target(owners, types, None)
+}
+
+#[cfg(test)]
+pub(crate) fn build_package_interface_with_leaf_target(
+    owners: &BTreeMap<OwnerKey, PackageInterfaceOwner>,
+    types: &BTreeMap<TypeObjectDigest, Vec<u8>>,
+    target_leaf_bytes: usize,
+) -> Result<PackageInterfaceBuild, Diagnostic> {
+    build_package_interface_with_physical_target(owners, types, Some(target_leaf_bytes))
+}
+
+fn build_package_interface_with_physical_target(
+    owners: &BTreeMap<OwnerKey, PackageInterfaceOwner>,
+    types: &BTreeMap<TypeObjectDigest, Vec<u8>>,
+    target_leaf_bytes: Option<usize>,
+) -> Result<PackageInterfaceBuild, Diagnostic> {
     let mut page_store = MemoryPageStore::default();
     let mut map_work = MapWork::default();
-    let empty = PersistentMap::empty(&mut page_store, &mut map_work).map_err(map_diagnostic)?;
-    let mut edits = Vec::with_capacity(owners.len());
+    let mut entries = Vec::with_capacity(owners.len());
     let mut owner_bytes = Vec::with_capacity(owners.len());
     for (owner, value) in owners {
         if value.owner() != *owner {
@@ -381,16 +402,24 @@ pub fn build_package_interface(
             ));
         }
         let (digest, bytes) = value.encode()?;
-        edits.push(MapEdit {
-            key: EncodedOwnerKey::new(*owner).bytes().to_vec(),
-            before: None,
-            after: Some(encode_package_interface_binding(digest)),
-        });
+        entries.push((
+            EncodedOwnerKey::new(*owner).bytes().to_vec(),
+            encode_package_interface_binding(digest),
+        ));
         owner_bytes.push((digest, bytes));
     }
-    let (map, _) = empty
-        .apply_sorted_edits(&mut page_store, &edits, &mut map_work)
-        .map_err(map_diagnostic)?;
+    let map = if let Some(target_leaf_bytes) = target_leaf_bytes {
+        PersistentMap::from_sorted_with_leaf_target(
+            &mut page_store,
+            entries,
+            target_leaf_bytes,
+            &mut map_work,
+        )
+        .map_err(map_diagnostic)?
+    } else {
+        PersistentMap::from_sorted(&mut page_store, entries, &mut map_work)
+            .map_err(map_diagnostic)?
+    };
 
     let mut detached = ObjectStage::new(&EMPTY_OBJECT_STORE);
     let page_store_work;
@@ -1231,7 +1260,7 @@ mod tests {
             "package_interface_owner_key"
         );
         let mut predecessor = bytes;
-        predecessor[..8].copy_from_slice(b"LKJPIF01");
+        predecessor[..8].copy_from_slice(b"LKJPIF02");
         let predecessor_digest = PackageInterfaceOwnerDigest::of(&predecessor);
         assert!(PackageInterfaceOwner::decode(&predecessor, owner, predecessor_digest).is_err());
     }
@@ -1283,6 +1312,22 @@ mod tests {
                 .unwrap_err()
                 .code,
             "package_interface_owner_missing"
+        );
+    }
+
+    #[test]
+    fn interface_identity_uses_logical_content_not_physical_page_identity() {
+        let (package, build, _) = built_fixture();
+        let repacked = MapRoot::from_parts(
+            PageDigest::from_bytes([0xa7; 32]),
+            build.root.entries(),
+            build.root.content(),
+        );
+        assert_ne!(build.root.page(), repacked.page());
+        assert_eq!(build.root.content_root(), repacked.content_root());
+        assert_eq!(
+            package_interface_digest(package, build.root.content_root()).unwrap(),
+            package_interface_digest(package, repacked.content_root()).unwrap()
         );
     }
 }

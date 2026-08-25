@@ -985,7 +985,7 @@ fn every_prototype_owner_and_root_round_trips_canonically() {
         graph_contract_version: contract::GRAPH_CONTRACT_VERSION,
         package: dependency_package,
         semantic_revision: RevisionId::from_digest([12; 32]),
-        package_object: PackageObjectDigest::from_bytes([13; 32]),
+        package_revision: PackageRevisionDigest::from_bytes([13; 32]),
     };
     let (dependency_digest, dependency_bytes) =
         encode_dependency(&dependency).expect("dependency must encode");
@@ -1110,7 +1110,7 @@ fn package_dependency_relation_has_a_package_endpoint() {
             graph_contract_version: contract::GRAPH_CONTRACT_VERSION,
             package: dependency,
             semantic_revision: RevisionId::from_digest([7; 32]),
-            package_object: PackageObjectDigest::from_bytes([8; 32]),
+            package_revision: PackageRevisionDigest::from_bytes([8; 32]),
         },
     );
     snapshot.root.dependencies = map_root(1, 2);
@@ -1132,14 +1132,14 @@ fn package_dependency_relation_has_a_package_endpoint() {
 fn full_oracle_resolves_foreign_calls_only_through_the_exact_package_interface() {
     let (mut snapshot, ids) = prototype_snapshot();
     let foreign_package = PackageId::migrate(TEST_SEED, 45);
-    let package_object = PackageObjectDigest::from_bytes([45; 32]);
+    let package_revision = PackageRevisionDigest::from_bytes([45; 32]);
     snapshot.dependencies.insert(
         foreign_package,
         DependencyRecord {
             graph_contract_version: contract::GRAPH_CONTRACT_VERSION,
             package: foreign_package,
             semantic_revision: RevisionId::from_digest([46; 32]),
-            package_object,
+            package_revision,
         },
     );
     snapshot.root.dependencies = map_root(1, 2);
@@ -1158,7 +1158,7 @@ fn full_oracle_resolves_foreign_calls_only_through_the_exact_package_interface()
         .unwrap()
         .expect("public signature parameter interface");
     snapshot.dependency_interfaces.insert(
-        package_object,
+        package_revision,
         BTreeMap::from([(declaration_key, declaration), (parameter_key, parameter)]),
     );
 
@@ -1176,7 +1176,7 @@ fn full_oracle_resolves_foreign_calls_only_through_the_exact_package_interface()
 
     snapshot
         .dependency_interfaces
-        .get_mut(&package_object)
+        .get_mut(&package_revision)
         .unwrap()
         .remove(&declaration_key);
     let diagnostics = validate_full(&snapshot)
@@ -1192,14 +1192,14 @@ fn full_oracle_resolves_foreign_calls_only_through_the_exact_package_interface()
 fn full_oracle_types_foreign_nominal_and_capability_uses_from_the_interface() {
     let (mut snapshot, ids) = prototype_snapshot();
     let foreign_package = PackageId::migrate(TEST_SEED, 47);
-    let package_object = PackageObjectDigest::from_bytes([47; 32]);
+    let package_revision = PackageRevisionDigest::from_bytes([47; 32]);
     snapshot.dependencies.insert(
         foreign_package,
         DependencyRecord {
             graph_contract_version: contract::GRAPH_CONTRACT_VERSION,
             package: foreign_package,
             semantic_revision: RevisionId::from_digest([48; 32]),
-            package_object,
+            package_revision,
         },
     );
     snapshot.root.dependencies = map_root(1, 2);
@@ -1225,7 +1225,7 @@ fn full_oracle_types_foreign_nominal_and_capability_uses_from_the_interface() {
     .collect();
     snapshot
         .dependency_interfaces
-        .insert(package_object, exported);
+        .insert(package_revision, exported);
 
     for owner in snapshot.owners.values_mut() {
         match owner {

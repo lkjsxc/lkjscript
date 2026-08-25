@@ -165,18 +165,30 @@ kernel_digest!(
     contract::RETIREMENT_OBJECT_DIGEST_DOMAIN,
     7u8
 );
-kernel_digest!(
-    PackageObjectDigest,
-    "package_object_",
-    contract::PACKAGE_OBJECT_DIGEST_DOMAIN,
-    8u8
-);
 kernel_digest!(ChangeDigest, "change_", contract::CHANGE_DIGEST_DOMAIN, 9u8);
 kernel_digest!(
     SemanticStateDigest,
     "semantic_state_",
     contract::SEMANTIC_STATE_DIGEST_DOMAIN,
     10u8
+);
+kernel_digest!(
+    PackageRevisionDigest,
+    "package_revision_",
+    contract::PACKAGE_REVISION_DIGEST_DOMAIN,
+    11u8
+);
+kernel_digest!(
+    PackageInterfaceDigest,
+    "package_interface_",
+    contract::PACKAGE_INTERFACE_DIGEST_DOMAIN,
+    12u8
+);
+kernel_digest!(
+    PackageTransportDigest,
+    "package_transport_",
+    contract::PACKAGE_TRANSPORT_DIGEST_DOMAIN,
+    13u8
 );
 
 fn decode_digest(value: &str) -> Result<[u8; DIGEST_BYTES], Diagnostic> {

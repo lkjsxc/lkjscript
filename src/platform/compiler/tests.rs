@@ -9,12 +9,18 @@ use crate::platform::kernel::{
     TextValue, TypeForm, TypeObject, TypeObjectDigest, decode_owner, encode_owner,
     encode_type_object,
 };
-use crate::platform::persistent_map::{MapRoot, MapWork, MemoryPageStore, PersistentMap};
-use crate::platform::publication::{GraphRepository, PublicationOptions, PublicationOutcome};
+use crate::platform::package_interface::build_package_interface_with_leaf_target;
+use crate::platform::persistent_map::{
+    MapRoot, MapWork, MemoryPageStore, PageDigest, PersistentMap,
+};
+use crate::platform::publication::{
+    ExportedPackageTransport, GraphRepository, PublicationOptions, PublicationOutcome,
+};
 use crate::platform::semantic_id::{BindingId, CaseId, ExpressionId};
-use crate::platform::storage::object::{ObjectDomain, ObjectKey};
+use crate::platform::storage::object::{ImmutableObjectStore, ObjectDomain, ObjectKey, StoreWork};
+use crate::platform::storage::pack::{PackBuilder, PackMetadata};
 use crate::platform::storage::page_store::ObjectPageReader;
-use crate::platform::witness::rebuild_full_witness;
+use crate::platform::witness::{bind_witness_manifest, rebuild_full_witness};
 
 fn declaration_named(
     snapshot: &crate::platform::kernel::KernelSnapshot,
@@ -114,6 +120,155 @@ fn replace_artifact_map(
         );
     }
     map.root()
+}
+
+fn artifact_with_alternate_interface_layout(
+    artifact: &LoadedArtifact,
+    package: crate::platform::kernel::PackageId,
+    target_leaf_bytes: usize,
+) -> LoadedArtifact {
+    let mut manifest = artifact.manifest.clone();
+    let package_manifest = manifest
+        .packages
+        .iter_mut()
+        .find(|entry| entry.package == package)
+        .expect("artifact package for alternate interface layout");
+    let original_root = package_manifest.interface_owners;
+    let entries = artifact_map_entries(artifact, original_root);
+    let reader = ObjectPageReader::new(artifact);
+    let mut original_pages = MemoryPageStore::default();
+    PersistentMap::from_root(original_root)
+        .copy_reachable(&reader, &mut original_pages, &mut MapWork::default())
+        .expect("collect original interface pages");
+    let mut alternate_pages = MemoryPageStore::default();
+    let alternate = PersistentMap::from_sorted_with_leaf_target(
+        &mut alternate_pages,
+        entries,
+        target_leaf_bytes,
+        &mut MapWork::default(),
+    )
+    .expect("build alternate valid artifact interface layout");
+    assert_eq!(
+        alternate.root().content_root(),
+        original_root.content_root()
+    );
+    assert_ne!(alternate.root().page(), original_root.page());
+    package_manifest.interface_owners = alternate.root();
+
+    let mut objects = artifact.objects.clone();
+    let original_page_digests = original_pages
+        .objects()
+        .map(|(digest, _)| digest)
+        .collect::<Vec<_>>();
+    for digest in original_page_digests {
+        objects.remove(&ObjectKey::from_digest(
+            ObjectDomain::MapPage,
+            digest.bytes(),
+        ));
+    }
+    for (digest, bytes) in alternate_pages.objects() {
+        objects.insert(
+            ObjectKey::from_digest(ObjectDomain::MapPage, digest.bytes()),
+            bytes.to_vec(),
+        );
+    }
+    let (closure, object_count, object_bytes) =
+        super::artifact::closure_facts(&objects).expect("alternate interface closure facts");
+    manifest.closure = closure;
+    manifest.object_count = object_count;
+    manifest.object_bytes = object_bytes;
+    let encoded = super::artifact::encode_artifact(manifest, &objects)
+        .expect("encode alternate valid dependency artifact");
+    load_artifact(&encoded.bytes).expect("load alternate valid dependency artifact")
+}
+
+fn alternate_physical_transport(
+    exported: &ExportedPackageTransport,
+    page_byte: u8,
+) -> (
+    crate::platform::kernel::PackageTransportDigest,
+    Vec<Vec<u8>>,
+    MapRoot,
+) {
+    let mut objects = std::collections::BTreeMap::new();
+    for pack in &exported.packs {
+        let metadata = PackMetadata::decode(pack, true).expect("decode exported package pack");
+        metadata
+            .verify_all(pack)
+            .expect("verify exported package pack");
+        for entry in &metadata.entries {
+            if !matches!(
+                entry.key.domain,
+                ObjectDomain::PackageRevision | ObjectDomain::SemanticRoot
+            ) {
+                continue;
+            }
+            let bytes = metadata
+                .read(pack, entry.key, entry.key.domain.maximum_bytes())
+                .expect("read exported package object")
+                .expect("exported package object");
+            assert!(objects.insert(entry.key, bytes).is_none());
+        }
+    }
+
+    let alternate_interface = build_package_interface_with_leaf_target(
+        &exported.interface_owners,
+        &exported.interface_types,
+        256,
+    )
+    .expect("build alternate valid interface page partition");
+    assert_eq!(
+        alternate_interface.root.content_root(),
+        exported.transport.interface_owners.content_root()
+    );
+    assert_ne!(
+        alternate_interface.root.page(),
+        exported.transport.interface_owners.page()
+    );
+    objects.extend(alternate_interface.objects);
+
+    let mut roots = exported.transport.witness.roots;
+    roots.namespaces = MapRoot::from_parts(
+        PageDigest::from_bytes([page_byte; 32]),
+        roots.namespaces.entries(),
+        roots.namespaces.content(),
+    );
+    let (witness, validation_witness, _) = bind_witness_manifest(
+        exported.transport.witness.repository_id,
+        exported.transport.witness.package_id,
+        exported.transport.semantic_root,
+        roots,
+    )
+    .expect("bind alternate physical witness layout");
+    let mut transport = exported.transport.clone();
+    transport.witness = witness;
+    transport.validation_witness = validation_witness;
+    transport.interface_owners = alternate_interface.root;
+    let (transport_digest, transport_bytes) = transport
+        .encode()
+        .expect("encode alternate physical transport");
+    objects.insert(
+        ObjectKey::from_digest(ObjectDomain::PackageTransport, transport_digest.bytes()),
+        transport_bytes,
+    );
+
+    let mut builder = PackBuilder::default();
+    for (key, bytes) in objects {
+        builder
+            .insert(key, &bytes)
+            .expect("insert alternate package transport object");
+    }
+    let interface_root = transport.interface_owners;
+    (
+        transport_digest,
+        vec![
+            builder
+                .seal()
+                .expect("seal alternate package transport")
+                .bytes,
+        ],
+        interface_root,
+    )
 }
 
 fn structurally_empty_snapshot(seed: &[u8]) -> crate::platform::kernel::KernelSnapshot {
@@ -1410,6 +1565,149 @@ fn graph5_artifact_links_deterministically_and_reopens_without_graph4_modules() 
 }
 
 #[test]
+fn artifact_manifest_rejects_vector_lengths_before_allocation() {
+    struct ExcessPackages;
+    impl bincode::Encode for ExcessPackages {
+        fn encode<E: bincode::enc::Encoder>(
+            &self,
+            encoder: &mut E,
+        ) -> Result<(), bincode::error::EncodeError> {
+            bincode::Encode::encode(
+                &u64::try_from(super::artifact::MAXIMUM_ARTIFACT_PACKAGES + 1)
+                    .expect("artifact package limit fits u64"),
+                encoder,
+            )
+        }
+    }
+
+    struct ExcessRuntimeOwners;
+    impl bincode::Encode for ExcessRuntimeOwners {
+        fn encode<E: bincode::enc::Encoder>(
+            &self,
+            encoder: &mut E,
+        ) -> Result<(), bincode::error::EncodeError> {
+            bincode::Encode::encode(
+                &u64::try_from(super::artifact::MAXIMUM_ARTIFACT_RUNTIME_OWNERS + 1)
+                    .expect("artifact runtime-owner limit fits u64"),
+                encoder,
+            )
+        }
+    }
+
+    #[derive(bincode::Encode)]
+    struct OversizedPackagesManifest {
+        contract_version: u16,
+        graph_contract_version: u16,
+        compiler_contract_version: u16,
+        bytecode_contract_version: u16,
+        compilation_manifest_contract_version: u16,
+        root_package: crate::platform::kernel::PackageId,
+        packages: ExcessPackages,
+        closure: ArtifactClosureDigest,
+        object_count: u64,
+        object_bytes: u64,
+    }
+
+    #[derive(bincode::Encode)]
+    struct OversizedRuntimePackage {
+        repository_id: crate::platform::semantic_id::RepositoryId,
+        package: crate::platform::kernel::PackageId,
+        package_revision: crate::platform::kernel::PackageRevisionDigest,
+        semantic_revision: crate::platform::semantic_id::RevisionId,
+        semantic_state: crate::platform::kernel::SemanticStateDigest,
+        interface: crate::platform::kernel::PackageInterfaceDigest,
+        interface_owners: MapRoot,
+        compilation: CompilationManifestDigest,
+        runtime_owners: ExcessRuntimeOwners,
+        reference_owners: MapRoot,
+    }
+
+    #[derive(bincode::Encode)]
+    struct OversizedRuntimeManifest {
+        contract_version: u16,
+        graph_contract_version: u16,
+        compiler_contract_version: u16,
+        bytecode_contract_version: u16,
+        compilation_manifest_contract_version: u16,
+        root_package: crate::platform::kernel::PackageId,
+        packages: Vec<OversizedRuntimePackage>,
+        closure: ArtifactClosureDigest,
+        object_count: u64,
+        object_bytes: u64,
+    }
+
+    fn decode_hostile_manifest(value: &impl bincode::Encode) -> crate::platform::Diagnostic {
+        let bytes = crate::platform::packed::encode(
+            super::artifact::ARTIFACT_MANIFEST_MAGIC,
+            super::artifact::ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
+            value,
+            super::artifact::MAXIMUM_ARTIFACT_MANIFEST_BYTES,
+        )
+        .expect("encode hostile artifact manifest without allocating declared vectors");
+        let key = ObjectKey::for_bytes(ObjectDomain::ArtifactManifest, &bytes);
+        ArtifactManifest::decode(
+            &bytes,
+            ArtifactManifestDigest::from_bytes(key.digest.bytes()),
+        )
+        .expect_err("hostile artifact manifest vector length must reject")
+    }
+
+    let snapshot = crate::platform::kernel::tests::witness_snapshot();
+    let temporary = tempfile::tempdir().expect("hostile manifest fixture parent");
+    let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
+        .expect("hostile manifest fixture repository");
+    let compilation = build_clean(
+        &created.repository,
+        OptimizationPolicy::DeterministicBaseline,
+    )
+    .expect("hostile manifest fixture compilation");
+    let linked = link_artifact(&created.repository, compilation.manifest_digest, &[])
+        .expect("hostile manifest fixture artifact");
+    let manifest = &linked.artifact.manifest;
+    let package = &manifest.packages[0];
+    let package_error = decode_hostile_manifest(&OversizedPackagesManifest {
+        contract_version: manifest.contract_version,
+        graph_contract_version: manifest.graph_contract_version,
+        compiler_contract_version: manifest.compiler_contract_version,
+        bytecode_contract_version: manifest.bytecode_contract_version,
+        compilation_manifest_contract_version: manifest.compilation_manifest_contract_version,
+        root_package: manifest.root_package,
+        packages: ExcessPackages,
+        closure: manifest.closure,
+        object_count: manifest.object_count,
+        object_bytes: manifest.object_bytes,
+    });
+    assert_eq!(package_error.code, "packed_decode");
+    assert!(package_error.message.contains("before allocation"));
+
+    let runtime_error = decode_hostile_manifest(&OversizedRuntimeManifest {
+        contract_version: manifest.contract_version,
+        graph_contract_version: manifest.graph_contract_version,
+        compiler_contract_version: manifest.compiler_contract_version,
+        bytecode_contract_version: manifest.bytecode_contract_version,
+        compilation_manifest_contract_version: manifest.compilation_manifest_contract_version,
+        root_package: manifest.root_package,
+        packages: vec![OversizedRuntimePackage {
+            repository_id: package.repository_id,
+            package: package.package,
+            package_revision: package.package_revision,
+            semantic_revision: package.semantic_revision,
+            semantic_state: package.semantic_state,
+            interface: package.interface,
+            interface_owners: package.interface_owners,
+            compilation: package.compilation,
+            runtime_owners: ExcessRuntimeOwners,
+            reference_owners: package.reference_owners,
+        }],
+        closure: manifest.closure,
+        object_count: manifest.object_count,
+        object_bytes: manifest.object_bytes,
+    });
+    assert_eq!(runtime_error.code, "packed_decode");
+    assert!(runtime_error.message.contains("before allocation"));
+}
+
+#[test]
 fn graph5_artifact_links_exact_compiled_dependency_closure() {
     let temporary = tempfile::tempdir().expect("dependency artifact parent");
     let source_snapshot = crate::platform::kernel::tests::witness_snapshot();
@@ -1425,25 +1723,73 @@ fn graph5_artifact_links_exact_compiled_dependency_closure() {
             .expect("source artifact");
     let source_loaded =
         load_artifact(&source_artifact.artifact.bytes).expect("source strict artifact");
+    let source_alternate_interface = artifact_with_alternate_interface_layout(
+        &source_loaded,
+        source_snapshot.root.package_id,
+        256,
+    );
     let exported = source
         .repository
-        .export_package_object()
-        .expect("source package object");
+        .export_package_transport()
+        .expect("source package transport");
+    let (alternate_transport, alternate_packs, alternate_interface_root) =
+        alternate_physical_transport(&exported, 0xc7);
+    assert_ne!(alternate_transport, exported.transport_digest);
+    let source_head = source.repository.current().unwrap().head;
+    let source_initial_selection = source
+        .repository
+        .stage_package_transport(exported.transport_digest, &exported.packs)
+        .expect("stage original source transport selection");
+    assert_eq!(source_initial_selection.previous_transport, None);
+    let source_replacement = source
+        .repository
+        .stage_package_transport(alternate_transport, &alternate_packs)
+        .expect("stage alternate physical source transport");
+    assert_eq!(
+        source_replacement.previous_transport,
+        Some(exported.transport_digest)
+    );
+    assert_eq!(source.repository.current().unwrap().head, source_head);
+    let source_relinked =
+        link_artifact(&source.repository, source_compilation.manifest_digest, &[])
+            .expect("relink source through alternate physical interface transport");
+    assert_eq!(
+        source_relinked.artifact.bytes,
+        source_artifact.artifact.bytes
+    );
+    assert_eq!(
+        source_relinked.artifact.bundle_digest,
+        source_artifact.artifact.bundle_digest
+    );
+    let source_relinked_loaded = load_artifact(&source_relinked.artifact.bytes)
+        .expect("load transport-independent source artifact");
+    let artifact_interface_root = source_relinked_loaded
+        .package(source_snapshot.root.package_id)
+        .expect("source artifact package")
+        .interface_owners;
+    assert_eq!(
+        artifact_interface_root.content_root(),
+        alternate_interface_root.content_root()
+    );
+    assert_ne!(
+        artifact_interface_root.page(),
+        alternate_interface_root.page()
+    );
 
     let target_snapshot = structurally_empty_snapshot(b"artifact-dependency-target");
     let target = GraphRepository::create(&temporary.path().join("target"), &target_snapshot, None)
         .expect("target Graph 5 repository");
     target
         .repository
-        .stage_package_object(exported.digest, &exported.packs)
+        .stage_package_transport(exported.transport_digest, &exported.packs)
         .expect("stage exact source interface");
     let request = AuthoredChangeSet {
         base: target.current.head.revision,
         preconditions: Vec::new(),
         changes: vec![AuthoredChange::AddDependency {
-            package: exported.object.package,
-            semantic_revision: exported.object.semantic_revision,
-            package_object: exported.digest,
+            package: exported.revision.package,
+            semantic_revision: exported.revision.revision.revision_id().unwrap(),
+            package_revision: exported.revision_digest,
         }],
         budget: ChangeBudget::default(),
     };
@@ -1475,6 +1821,20 @@ fn graph5_artifact_links_exact_compiled_dependency_closure() {
         std::slice::from_ref(&source_loaded),
     )
     .expect("link exact dependency closure");
+    let linked_from_alternate_dependency = link_artifact(
+        &target.repository,
+        target_compilation.manifest_digest,
+        std::slice::from_ref(&source_alternate_interface),
+    )
+    .expect("link dependency artifact with alternate valid interface layout");
+    assert_eq!(
+        linked_from_alternate_dependency.artifact.bytes,
+        linked.artifact.bytes
+    );
+    assert_eq!(
+        linked_from_alternate_dependency.artifact.bundle_digest,
+        linked.artifact.bundle_digest
+    );
     assert_eq!(linked.work.dependency_artifacts, 1);
     assert_eq!(linked.work.packages, 2);
     let loaded = load_artifact(&linked.artifact.bytes).expect("load linked dependency artifact");
@@ -1484,6 +1844,44 @@ fn graph5_artifact_links_exact_compiled_dependency_closure() {
     );
     assert!(loaded.package(source_snapshot.root.package_id).is_some());
     assert!(loaded.package(target_snapshot.root.package_id).is_some());
+
+    let target_head = target.repository.current().unwrap().head;
+    let replacement = target
+        .repository
+        .stage_package_transport(alternate_transport, &alternate_packs)
+        .expect("stage equivalent package meaning through another physical transport");
+    assert_eq!(replacement.package_revision, exported.revision_digest);
+    assert_eq!(
+        replacement.previous_transport,
+        Some(exported.transport_digest)
+    );
+    assert_eq!(target.repository.current().unwrap().head, target_head);
+    let store = target
+        .repository
+        .object_store()
+        .expect("target object store");
+    assert!(
+        store
+            .contains(
+                ObjectKey::from_digest(
+                    ObjectDomain::PackageTransport,
+                    exported.transport_digest.bytes(),
+                ),
+                &mut StoreWork::default(),
+            )
+            .expect("old physical transport remains readable")
+    );
+    let relinked = link_artifact(
+        &target.repository,
+        target_compilation.manifest_digest,
+        std::slice::from_ref(&source_loaded),
+    )
+    .expect("relink with equivalent logical revision and another physical transport");
+    assert_eq!(relinked.artifact.bytes, linked.artifact.bytes);
+    assert_eq!(
+        relinked.artifact.bundle_digest,
+        linked.artifact.bundle_digest
+    );
 
     let source_reference_root = loaded
         .package(source_snapshot.root.package_id)
@@ -1563,7 +1961,7 @@ fn graph5_artifact_rejects_predecessor_corruption_and_inexact_closures() {
     let loaded = load_artifact(&linked.artifact.bytes).expect("load current artifact");
 
     let mut predecessor = linked.artifact.bytes.clone();
-    predecessor[..8].copy_from_slice(b"LKJART05");
+    predecessor[..8].copy_from_slice(b"LKJART08");
     assert_eq!(
         load_artifact(&predecessor)
             .expect_err("predecessor bundle must reject")

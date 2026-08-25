@@ -20,7 +20,7 @@ use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::{ExecutionError, ExecutionFailureClass};
 use crate::platform::kernel::{
     DeclarationReference, Name, OperationReference, PackageId, RequirementReference, ResourceUnit,
-    SemanticRootDigest, TypeForm, TypeObjectDigest,
+    SemanticStateDigest, TypeForm, TypeObjectDigest,
 };
 use crate::platform::secrets::SecretCatalog;
 use crate::platform::security::PasswordHashPolicy;
@@ -91,7 +91,7 @@ pub(crate) struct NormalizedDeploymentObservation {
     pub repository: RepositoryId,
     pub package: PackageId,
     pub revision: RevisionId,
-    pub semantic_root: SemanticRootDigest,
+    pub semantic_state: SemanticStateDigest,
     pub target: Name,
     pub component: DeclarationReference,
     pub resources: NormalizedDeploymentResourcePolicy,
@@ -236,7 +236,7 @@ impl NormalizedPreparedDeployment {
                 repository: program.root_repository,
                 package: program.root_package,
                 revision: program.root_revision,
-                semantic_root: program.root_semantic_root,
+                semantic_state: program.root_semantic_state,
                 target,
                 component: component.declaration,
                 resources,

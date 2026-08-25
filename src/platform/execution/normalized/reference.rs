@@ -15,7 +15,7 @@ use crate::platform::kernel::{
     BindingKind, CaseReference, DeclarationPayload, DeclarationReference, ExpressionOperation,
     FieldReference, FieldSelector, FunctionEffect, KernelSnapshot, LocalValueReference, Name,
     OperationReference, OwnerKey, OwnerRecord, PackageId, PortImplementation, RequirementReference,
-    SemanticRootDigest, TextValue,
+    SemanticStateDigest, TextValue,
 };
 use crate::platform::semantic_id::{BindingId, ExpressionId, RepositoryId, RevisionId};
 use crate::platform::storage::object::{ImmutableObjectStore, ObjectDomain, ObjectKey, StoreWork};
@@ -47,7 +47,7 @@ pub struct NormalizedReferenceBinding {
     pub repository: RepositoryId,
     pub package: PackageId,
     pub revision: Option<RevisionId>,
-    pub semantic_root: Option<SemanticRootDigest>,
+    pub semantic_state: Option<SemanticStateDigest>,
 }
 
 impl NormalizedReferenceBinding {
@@ -55,8 +55,8 @@ impl NormalizedReferenceBinding {
         self.repository == program.root_repository
             && self.package == program.root_package
             && self
-                .semantic_root
-                .is_none_or(|root| root == program.root_semantic_root)
+                .semantic_state
+                .is_none_or(|state| state == program.root_semantic_state)
             && self
                 .revision
                 .is_none_or(|revision| revision == program.root_revision)
@@ -93,7 +93,7 @@ impl NormalizedReferenceRead for KernelSnapshot {
             repository: self.root.repository_id,
             package: self.root.package_id,
             revision: None,
-            semantic_root: None,
+            semantic_state: None,
         })
     }
 

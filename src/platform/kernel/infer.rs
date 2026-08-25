@@ -78,7 +78,7 @@ impl ExpressionRead for KernelSnapshot {
         };
         Ok(self
             .dependency_interfaces
-            .get(&dependency.package_object)
+            .get(&dependency.package_revision)
             .and_then(|owners| owners.get(&owner))
             .cloned())
     }

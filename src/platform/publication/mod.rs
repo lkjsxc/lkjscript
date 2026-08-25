@@ -37,7 +37,7 @@ pub use prepare::{
     prepare_change_publication, prepare_initial_publication,
 };
 pub use read_view::{
-    ExportedPackageObject, MAXIMUM_RELATION_READ_ITEMS, MAXIMUM_TEST_DEPENDENCY_READ_ITEMS,
+    ExportedPackageTransport, MAXIMUM_RELATION_READ_ITEMS, MAXIMUM_TEST_DEPENDENCY_READ_ITEMS,
     PreparedAuthoredPublication, RelationRead, RepositoryReadWork, RepositoryView, RevisionRead,
     RevisionWitnessMapUpdate, TestDependencyRead,
 };
@@ -46,7 +46,7 @@ pub use receipt::{
     ValidationProfile, WorkObservation,
 };
 pub use repository::{
-    CreatedRepository, CurrentPublication, GraphRepository, PackageObjectStageReceipt,
+    CreatedRepository, CurrentPublication, GraphRepository, PackageTransportStageReceipt,
     PublicationOutcome, PublicationPoint, ReconciliationResult, ReconciliationStatus,
     ReconciliationWork,
 };
