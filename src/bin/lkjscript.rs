@@ -11,7 +11,7 @@ use lkjscript::platform::contract::{
 use lkjscript::platform::control::{CompactResponseLimits, CompactResponseWriter};
 use lkjscript::platform::{
     CLI_CONTRACT_VERSION, Diagnostic, PreparedDeployment, PublicOperation, execute_capabilities,
-    execute_cli, execute_new, execute_status,
+    execute_cli, execute_inspect, execute_new, execute_status,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -32,15 +32,8 @@ async fn main() -> ExitCode {
     if compact_status_arguments(&arguments) {
         return compact_status(arguments);
     }
-    if compact_exact_project_operation(&arguments, &["inspect", "status"]) {
-        return write_compact_failure(
-            "inspect.status",
-            &Diagnostic::new(
-                lkjscript::platform::DiagnosticClass::Source,
-                "predecessor_contract",
-                "inspect status is a removed predecessor command; use status",
-            ),
-        );
+    if compact_inspect_arguments(&arguments) {
+        return compact_inspect(arguments);
     }
     let operation = arguments
         .first()
@@ -153,6 +146,32 @@ fn compact_status(arguments: Vec<String>) -> ExitCode {
             )),
         },
         Err(error) => write_compact_failure("status", &error),
+    }
+}
+
+fn compact_inspect_arguments(arguments: &[String]) -> bool {
+    let mut filtered = Vec::new();
+    let mut index = 0;
+    while index < arguments.len() {
+        if arguments[index] == "--project" {
+            index = index.saturating_add(2);
+        } else {
+            filtered.push(arguments[index].as_str());
+            index += 1;
+        }
+    }
+    filtered.first().copied() == Some("inspect")
+}
+
+fn compact_inspect(arguments: Vec<String>) -> ExitCode {
+    match execute_inspect(arguments) {
+        Ok(bytes) => match write_bytes(&bytes) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(_) => ExitCode::from(exit_status_for(
+                lkjscript::platform::DiagnosticClass::Infrastructure,
+            )),
+        },
+        Err(error) => write_compact_failure("inspect", &error),
     }
 }
 

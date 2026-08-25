@@ -86,6 +86,22 @@ impl OwnerKind {
         Self::Annotation,
     ];
 
+    /// Coarse durable owner kinds that survive the scoped-identity cutover and may therefore be
+    /// selected by the current public exact-owner command.
+    pub const PUBLIC_EXACT: [Self; 11] = [
+        Self::Module,
+        Self::Record,
+        Self::Variant,
+        Self::Interface,
+        Self::External,
+        Self::PureFunction,
+        Self::TaskFunction,
+        Self::Constant,
+        Self::Component,
+        Self::Test,
+        Self::Target,
+    ];
+
     pub const fn tag(self) -> u8 {
         match self {
             Self::Module => 1,
@@ -111,6 +127,46 @@ impl OwnerKind {
             Self::Documentation => 21,
             Self::Annotation => 22,
         }
+    }
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Module => "module",
+            Self::Record => "record",
+            Self::Variant => "variant",
+            Self::Interface => "interface",
+            Self::External => "external",
+            Self::PureFunction => "pure_function",
+            Self::TaskFunction => "task_function",
+            Self::Constant => "constant",
+            Self::Component => "component",
+            Self::Test => "test",
+            Self::TypeParameter => "type_parameter",
+            Self::Field => "field",
+            Self::Case => "case",
+            Self::Operation => "operation",
+            Self::Parameter => "parameter",
+            Self::Binding => "binding",
+            Self::Expression => "expression",
+            Self::Requirement => "requirement",
+            Self::Port => "port",
+            Self::Target => "target",
+            Self::Documentation => "documentation",
+            Self::Annotation => "annotation",
+        }
+    }
+
+    pub fn parse(value: &str) -> Result<Self, Diagnostic> {
+        Self::ALL
+            .into_iter()
+            .find(|kind| kind.name() == value)
+            .ok_or_else(|| {
+                id_error(
+                    DiagnosticClass::Source,
+                    "kernel_owner_kind",
+                    format!("unknown semantic owner kind '{value}'"),
+                )
+            })
     }
 
     pub const fn accepts_owner(self, owner: OwnerKey) -> bool {
@@ -233,6 +289,69 @@ impl OwnerKey {
             Self::Target(id) => id.bytes(),
             Self::Documentation(id) => id.bytes(),
             Self::Annotation(id) => id.bytes(),
+        }
+    }
+}
+
+impl fmt::Display for OwnerKey {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Module(value) => value.fmt(formatter),
+            Self::Declaration(value) => value.fmt(formatter),
+            Self::TypeParameter(value) => value.fmt(formatter),
+            Self::Field(value) => value.fmt(formatter),
+            Self::Case(value) => value.fmt(formatter),
+            Self::Operation(value) => value.fmt(formatter),
+            Self::Parameter(value) => value.fmt(formatter),
+            Self::Binding(value) => value.fmt(formatter),
+            Self::Expression(value) => value.fmt(formatter),
+            Self::Requirement(value) => value.fmt(formatter),
+            Self::Port(value) => value.fmt(formatter),
+            Self::Target(value) => value.fmt(formatter),
+            Self::Documentation(value) => value.fmt(formatter),
+            Self::Annotation(value) => value.fmt(formatter),
+        }
+    }
+}
+
+impl FromStr for OwnerKey {
+    type Err = Diagnostic;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        if value.starts_with(ModuleId::PREFIX) {
+            value.parse().map(Self::Module)
+        } else if value.starts_with(DeclarationId::PREFIX) {
+            value.parse().map(Self::Declaration)
+        } else if value.starts_with(TypeParameterId::PREFIX) {
+            value.parse().map(Self::TypeParameter)
+        } else if value.starts_with(FieldId::PREFIX) {
+            value.parse().map(Self::Field)
+        } else if value.starts_with(CaseId::PREFIX) {
+            value.parse().map(Self::Case)
+        } else if value.starts_with(OperationId::PREFIX) {
+            value.parse().map(Self::Operation)
+        } else if value.starts_with(ParameterId::PREFIX) {
+            value.parse().map(Self::Parameter)
+        } else if value.starts_with(BindingId::PREFIX) {
+            value.parse().map(Self::Binding)
+        } else if value.starts_with(ExpressionId::PREFIX) {
+            value.parse().map(Self::Expression)
+        } else if value.starts_with(RequirementId::PREFIX) {
+            value.parse().map(Self::Requirement)
+        } else if value.starts_with(PortId::PREFIX) {
+            value.parse().map(Self::Port)
+        } else if value.starts_with(TargetId::PREFIX) {
+            value.parse().map(Self::Target)
+        } else if value.starts_with(DocumentationId::PREFIX) {
+            value.parse().map(Self::Documentation)
+        } else if value.starts_with(AnnotationId::PREFIX) {
+            value.parse().map(Self::Annotation)
+        } else {
+            Err(id_error(
+                DiagnosticClass::Source,
+                "kernel_owner_identity_domain",
+                "owner identity has an unknown typed identity prefix",
+            ))
         }
     }
 }

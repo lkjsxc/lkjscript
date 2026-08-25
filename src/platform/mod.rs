@@ -98,7 +98,8 @@ pub use bootstrap::{
     builtin_package_info, create_project, export_builtin_standard,
 };
 pub use cli::{
-    CliSuccess, execute as execute_cli, execute_capabilities, execute_new, execute_status,
+    CliSuccess, execute as execute_cli, execute_capabilities, execute_inspect,
+    execute_inspect_owner, execute_new, execute_status,
 };
 pub use configuration::{
     CONFIGURATION_ADAPTER_CONTRACT_VERSION, ConfigurationAdapter, ConfigurationObservation,

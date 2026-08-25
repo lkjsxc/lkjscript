@@ -211,7 +211,14 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
 
     let owner_section = compact_success(&["capabilities", "--section", "owners"]);
     assert!(owner_section.iter().any(|record| {
-        record.operation == "owner.kind" && compact_field(record, "name") == Some("type_parameter")
+        record.operation == "owner.kind" && compact_field(record, "name") == Some("module")
+    }));
+    assert!(!owner_section.iter().any(|record| {
+        record.operation == "owner.kind"
+            && matches!(
+                compact_field(record, "name"),
+                Some("field" | "expression" | "documentation" | "annotation")
+            )
     }));
 
     let expression_section = compact_success(&["capabilities", "--section", "expression"]);
@@ -318,36 +325,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
 }
 
 #[test]
-fn direct_cli_query_check_build_and_inspection_are_bounded() {
-    let project = success(&[
-        "--project",
-        APPLICATION,
-        "inspect",
-        "project",
-        "--limit",
-        "10",
-    ]);
-    assert_eq!(project["result"]["authority"], "typed_semantic_graph");
-    assert_eq!(project["result"]["module_count"], 3);
-    assert_eq!(project["result"]["target_count"], 2);
-    assert!(
-        project["result"]["expansion_commands"]
-            .as_array()
-            .expect("expansion commands")
-            .iter()
-            .all(|command| !command.as_str().unwrap().contains(" semantic "))
-    );
-
-    let targets = success(&[
-        "--project",
-        APPLICATION,
-        "inspect",
-        "targets",
-        "--limit",
-        "5",
-    ]);
-    assert_eq!(targets["result"]["items"].as_array().unwrap().len(), 2);
-
+fn direct_cli_query_check_and_build_are_bounded() {
     let found = success(&[
         "--project",
         APPLICATION,
@@ -358,25 +336,7 @@ fn direct_cli_query_check_build_and_inspection_are_bounded() {
         "--limit",
         "5",
     ]);
-    let component_id = found["result"]["items"][0]["id"]
-        .as_str()
-        .expect("component id");
-    let component = success(&[
-        "--project",
-        APPLICATION,
-        "inspect",
-        "owner",
-        component_id,
-        "--body",
-    ]);
-    assert_eq!(component["result"]["kind"], "component");
-    assert_eq!(
-        component["result"]["semantic"]["data"]["requirements"]
-            .as_array()
-            .unwrap()
-            .len(),
-        10
-    );
+    assert_eq!(found["result"]["items"][0]["kind"], "component");
 
     let tests = success(&["--project", APPLICATION, "check"]);
     assert_eq!(tests["result"]["passed"], 12);
@@ -389,8 +349,11 @@ fn direct_cli_query_check_build_and_inspection_are_bounded() {
     assert_eq!(first["result"]["publication"], "published");
     let repeated = success(&["--project", APPLICATION, "build", "--output", artifact_text]);
     assert_eq!(repeated["result"]["publication"], "unchanged");
-    let inspection = success(&["inspect", "artifact", artifact_text]);
-    assert_eq!(inspection["result"]["targets"].as_array().unwrap().len(), 2);
+    let inspection = compact_failure_output(command(&["inspect", "artifact", artifact_text]));
+    assert_eq!(
+        compact_field(compact_record(&inspection, "diagnostic"), "code"),
+        Some("predecessor_contract")
+    );
 }
 
 #[test]
@@ -438,6 +401,22 @@ fn copied_binary_rejects_the_predecessor_template_and_runs_a_predecessor_fixture
     ));
     assert_eq!(
         compact_field(compact_record(&status, "diagnostic"), "code"),
+        Some("predecessor_contract")
+    );
+    let inspected = compact_failure_output(command_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "inspect",
+            "owner",
+            "module",
+            "mod_00000000000000000000000000000001",
+        ],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&inspected, "diagnostic"), "code"),
         Some("predecessor_contract")
     );
     let checked = success_at(
@@ -748,9 +727,8 @@ fn one_public_change_allocates_a_connected_subgraph_and_reuses_dry_run_lowering(
         "--dry-run",
     ]);
     assert_eq!(dry_run["status"], "validated");
-    let after_dry_run = success(&["--project", path(&project), "inspect", "project"]);
     assert_eq!(
-        after_dry_run["result"]["revision"],
+        dry_run["result"]["observed_current"],
         Value::String(created.revision.to_string())
     );
 
@@ -860,13 +838,15 @@ fn removed_commands_and_predecessor_source_authority_reject_exactly() {
         b"{}\n",
     )
     .expect("predecessor marker");
-    let output = command(&["--project", path(temporary.path()), "inspect", "project"]);
-    assert_eq!(output.status.code(), Some(2));
-    assert!(output.stderr.is_empty());
-    let value: Value = serde_json::from_slice(&output.stdout).expect("failure JSON");
+    let value = compact_failure_output(command(&[
+        "--project",
+        path(temporary.path()),
+        "inspect",
+        "project",
+    ]));
     assert_eq!(
-        value["error"]["code"],
-        "semantic_predecessor_source_rejected"
+        compact_field(compact_record(&value, "diagnostic"), "code"),
+        Some("predecessor_contract")
     );
 }
 
@@ -958,6 +938,93 @@ fn copied_binary_creates_normalized_minimal_projects_and_rejects_unsafe_destinat
     assert_eq!(
         compact_field(compact_record(&removed_status_alias, "diagnostic"), "code"),
         Some("predecessor_contract")
+    );
+    let removed_project =
+        compact_failure_output(command_at(&copied_binary, &nested, &["inspect", "project"]));
+    assert_eq!(
+        compact_field(compact_record(&removed_project, "diagnostic"), "code"),
+        Some("predecessor_contract")
+    );
+    let unknown_owner = compact_failure_output(command_at(
+        &copied_binary,
+        &nested,
+        &[
+            "inspect",
+            "owner",
+            "module",
+            "mod_00000000000000000000000000000001",
+        ],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&unknown_owner, "diagnostic"), "code"),
+        Some("owner_not_found")
+    );
+    let wrong_kind = compact_failure_output(command_at(
+        &copied_binary,
+        &nested,
+        &[
+            "inspect",
+            "owner",
+            "record",
+            "mod_00000000000000000000000000000001",
+        ],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&wrong_kind, "diagnostic"), "code"),
+        Some("owner_wrong_kind")
+    );
+    let malformed = compact_failure_output(command_at(
+        &copied_binary,
+        &nested,
+        &["inspect", "owner", "module", "mod_not-hex"],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&malformed, "diagnostic"), "code"),
+        Some("owner_selector_identity")
+    );
+    let fine_owner = compact_failure_output(command_at(
+        &copied_binary,
+        &nested,
+        &[
+            "inspect",
+            "owner",
+            "field",
+            "field_00000000000000000000000000000001",
+        ],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&fine_owner, "diagnostic"), "code"),
+        Some("owner_selector_kind")
+    );
+    let predecessor_owner = compact_failure_output(command_at(
+        &copied_binary,
+        &nested,
+        &["inspect", "owner", "mod_00000000000000000000000000000001"],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&predecessor_owner, "diagnostic"), "code"),
+        Some("predecessor_contract")
+    );
+    let foreign_package = if first_package == "pkg_00000000000000000000000000000001" {
+        "pkg_00000000000000000000000000000002"
+    } else {
+        "pkg_00000000000000000000000000000001"
+    };
+    let foreign = compact_failure_output(command_at(
+        &copied_binary,
+        &nested,
+        &[
+            "inspect",
+            "owner",
+            "module",
+            "mod_00000000000000000000000000000001",
+            "--package",
+            foreign_package,
+        ],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&foreign, "diagnostic"), "code"),
+        Some("owner_foreign_package")
     );
     let second = temporary.path().join("second");
     std::fs::create_dir(&second).expect("existing empty destination");
@@ -1121,13 +1188,7 @@ fn exact_dependency_stage_and_change_use_the_public_protocol() {
         "--commit",
     ]);
     assert_eq!(committed["status"], "accepted_change");
-    let project = success(&["--project", path(&project), "inspect", "project"]);
-    assert_eq!(project["result"]["dependency_count"], 1);
-    assert_eq!(project["result"]["dependencies"][0]["alias"], "std");
-    assert_eq!(
-        project["result"]["dependencies"][0]["artifact"],
-        builtin["result"]["artifact"]
-    );
+    assert_eq!(committed["result"]["affected_owner_count"], 1);
 }
 
 fn path(value: &Path) -> &str {

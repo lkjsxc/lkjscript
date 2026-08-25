@@ -9,6 +9,7 @@ use super::super::execution::CAPABILITY_GRANT_CONTRACT_VERSION;
 use super::super::graph::{ROOT_STORAGE_CONTRACT_IDENTITY, ROOT_STORAGE_CONTRACT_VERSION};
 use super::super::http::HTTP_ADAPTER_CONTRACT_VERSION;
 use super::super::json::JSON_CONTRACT_VERSION;
+use super::super::kernel::OwnerKind;
 use super::super::meaning::{GRAPH_CONTRACT_IDENTITY, GRAPH_CONTRACT_VERSION, RelationRole};
 use super::super::object::OBJECT_ADAPTER_CONTRACT_VERSION;
 use super::super::package::{PACKAGE_CONTRACT_VERSION, RunnerKind};
@@ -33,7 +34,7 @@ use super::super::semantic_merge::SEMANTIC_MERGE_CONTRACT_VERSION;
 use super::super::semantic_projection::REVIEW_PROJECTION_CONTRACT_VERSION;
 use super::super::semantic_query::{
     MAXIMUM_BYTE_LIMIT, MAXIMUM_ITEM_LIMIT, MAXIMUM_QUERY_DEPTH, MAXIMUM_QUERY_FANOUT,
-    MAXIMUM_WORK_LIMIT, OwnerKind, QUERY_CONTRACT_VERSION, QUERY_INDEX_CONTRACT_VERSION,
+    MAXIMUM_WORK_LIMIT, QUERY_CONTRACT_VERSION, QUERY_INDEX_CONTRACT_VERSION,
 };
 use super::super::semantic_summary::{
     SEMANTIC_SUMMARY_CONTRACT_IDENTITY, SEMANTIC_SUMMARY_CONTRACT_VERSION,
@@ -947,6 +948,7 @@ pub enum ControlModel {
     StatusRequest,
     StatusResult,
     InspectRequest,
+    InspectResult,
     QueryRequest,
     ChangeRequest,
     DraftRequest,
@@ -975,6 +977,7 @@ impl ControlModel {
             Self::StatusRequest => "status_request",
             Self::StatusResult => "status_result",
             Self::InspectRequest => "inspect_request",
+            Self::InspectResult => "inspect_result",
             Self::QueryRequest => "query_request",
             Self::ChangeRequest => "change_request",
             Self::DraftRequest => "draft_request",
@@ -1022,14 +1025,9 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
             "Report the exact current semantic authority and its durable acceptance evidence.",
             "status",
         ),
-        operation(
-            PublicOperation::Inspect,
-            "Inspect project, owner, target, revision, artifact, or deployment detail.",
-            "inspect project|owner|targets|revision|artifact|deployment ...",
-            ControlModel::InspectRequest,
-            AuthorityEffect::None,
-            ProjectRequirement::RequiredByAction,
-            BudgetProfile::BoundedRead,
+        inspect_operation(
+            "Inspect a compact summary of one exact owner at the observed accepted revision.",
+            "inspect owner KIND ID [--package PACKAGE]",
         ),
         operation(
             PublicOperation::Query,
@@ -1209,6 +1207,19 @@ const fn status_operation(purpose: &'static str, usage: &'static str) -> Operati
         usage,
         request_model: ControlModel::StatusRequest,
         response_model: ControlModel::StatusResult,
+        authority_effect: AuthorityEffect::None,
+        project_requirement: ProjectRequirement::Required,
+        default_budget: BudgetProfile::BoundedRead,
+    }
+}
+
+const fn inspect_operation(purpose: &'static str, usage: &'static str) -> OperationDescriptor {
+    OperationDescriptor {
+        operation: PublicOperation::Inspect,
+        purpose,
+        usage,
+        request_model: ControlModel::InspectRequest,
+        response_model: ControlModel::InspectResult,
         authority_effect: AuthorityEffect::None,
         project_requirement: ProjectRequirement::Required,
         default_budget: BudgetProfile::BoundedRead,
@@ -1557,6 +1568,42 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             class: DiagnosticClass::Source,
             meaning: "Input uses a predecessor contract rejected by direct cutover.",
             retry: "Recreate the request or authority under the advertised current contract.",
+        },
+        DiagnosticDescriptor {
+            code: "owner_selector_kind",
+            class: DiagnosticClass::Source,
+            meaning: "An exact owner selector names an unknown or nonpublic semantic owner kind.",
+            retry: "Select one owner kind reported by capabilities --section owners.",
+        },
+        DiagnosticDescriptor {
+            code: "owner_selector_identity",
+            class: DiagnosticClass::Source,
+            meaning: "An exact owner selector contains a malformed or unknown identity domain.",
+            retry: "Use an exact identity returned by a current project query or change receipt.",
+        },
+        DiagnosticDescriptor {
+            code: "owner_foreign_package",
+            class: DiagnosticClass::Semantic,
+            meaning: "An exact owner selector belongs to another package authority.",
+            retry: "Open the selected package or use the current project's package identity.",
+        },
+        DiagnosticDescriptor {
+            code: "owner_wrong_kind",
+            class: DiagnosticClass::Semantic,
+            meaning: "An exact owner identity does not have the requested semantic kind.",
+            retry: "Refresh the exact owner kind and retry without changing the identity.",
+        },
+        DiagnosticDescriptor {
+            code: "owner_not_found",
+            class: DiagnosticClass::Semantic,
+            meaning: "The exact owner identity is not live at the observed accepted revision.",
+            retry: "Refresh the owner identity at the reported revision.",
+        },
+        DiagnosticDescriptor {
+            code: "publication_summary_binding",
+            class: DiagnosticClass::Corrupt,
+            meaning: "Accepted owner authority and its validation-summary binding disagree.",
+            retry: "Preserve the repository and run deep authority verification.",
         },
         DiagnosticDescriptor {
             code: "project_not_found",
@@ -1914,7 +1961,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
             }
         }
         RegistrySection::Owners => {
-            for kind in OwnerKind::ALL {
+            for kind in OwnerKind::PUBLIC_EXACT {
                 records.push(compact_record(
                     "owner.kind",
                     &[("name", kind.name().to_owned())],
@@ -2186,5 +2233,13 @@ mod tests {
         }
         assert!(OwnerKind::parse("function").is_err());
         assert!(OwnerKind::parse("task").is_err());
+        let owners = section_records(RegistrySection::Owners).expect("owner records");
+        assert_eq!(owners.len(), OwnerKind::PUBLIC_EXACT.len());
+        assert!(owners.iter().all(|record| !record.contains("name=field")));
+        assert!(
+            owners
+                .iter()
+                .all(|record| !record.contains("name=expression"))
+        );
     }
 }

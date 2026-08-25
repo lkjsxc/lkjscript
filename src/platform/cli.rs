@@ -13,6 +13,7 @@ use super::deployment::{MAXIMUM_DEPLOYMENT_BYTES, decode_deployment};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::execution::{PreparedProgram, ReferenceInterpreter, RunPolicy, Vm};
 use super::json::{JsonLimits, decode_strict, decode_typed, encode_typed};
+use super::kernel::{OwnerKey as KernelOwnerKey, OwnerKind as KernelOwnerKind, PackageId};
 use super::meaning::RelationRole;
 use super::package::RunnerKind;
 use super::project_creation::create_minimal_project;
@@ -220,17 +221,7 @@ pub fn execute_status(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
     if arguments.as_slice() != ["status"] {
         return Err(usage_error("status accepts no additional arguments"));
     }
-    let start = match project {
-        Some(path) => path,
-        None => std::env::current_dir().map_err(|error| {
-            Diagnostic::new(
-                DiagnosticClass::Infrastructure,
-                "project_io",
-                format!("current directory is unavailable: {error}"),
-            )
-        })?,
-    };
-    let repository: GraphRepository = discover_project(&start)?;
+    let repository = open_normalized_repository(project)?;
     let current = repository.current()?;
     let registry = registry_snapshot().map_err(contract_registry_error)?;
 
@@ -324,6 +315,269 @@ pub fn execute_status(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
         ],
     )?;
     Ok(output.finish())
+}
+
+/// Reads one exact owner from the accepted normalized authority observed by a revision-pinned
+/// repository view. The selector never consults predecessor workspace or query indexes.
+pub fn execute_inspect_owner(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
+    execute_inspect_owner_with_limits(
+        arguments,
+        CompactResponseLimits {
+            maximum_bytes: MAXIMUM_CLI_RESPONSE_BYTES,
+            maximum_records: MAXIMUM_CLI_RESPONSE_RECORDS,
+        },
+    )
+}
+
+/// Dispatches the complete released inspect family without falling back to predecessor JSON.
+/// Only exact coarse-owner summaries are current while other inspect actions remain removed.
+pub fn execute_inspect(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
+    let (filtered, _) = extract_global_project(arguments.clone())?;
+    if filtered.first().map(String::as_str) != Some("inspect") {
+        return Err(usage_error("inspect dispatch requires the inspect command"));
+    }
+    match filtered.get(1).map(String::as_str) {
+        Some("owner") => execute_inspect_owner(arguments),
+        Some(
+            action @ ("status" | "project" | "targets" | "revision" | "artifact" | "deployment"),
+        ) => Err(owner_inspection_error(
+            DiagnosticClass::Source,
+            "predecessor_contract",
+            format!(
+                "inspect action '{action}' belongs to the removed predecessor control contract; use 'capabilities inspect'"
+            ),
+        )),
+        Some(action) => Err(usage_error(format!(
+            "unknown inspect action '{action}'; use 'capabilities inspect'"
+        ))),
+        None => Err(usage_error(
+            "inspect requires an action; use 'capabilities inspect'",
+        )),
+    }
+}
+
+fn execute_inspect_owner_with_limits(
+    arguments: Vec<String>,
+    limits: CompactResponseLimits,
+) -> Result<Vec<u8>, Diagnostic> {
+    let (arguments, project) = extract_global_project(arguments)?;
+    if arguments.first().map(String::as_str) == Some("inspect")
+        && arguments.get(1).map(String::as_str) == Some("owner")
+        && arguments
+            .get(2)
+            .and_then(|value| value.parse::<KernelOwnerKey>().ok())
+            .is_some()
+    {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Source,
+            "predecessor_contract",
+            "the predecessor 'inspect owner ID' syntax is removed; use 'inspect owner KIND ID'",
+        ));
+    }
+    let kind_name = arguments
+        .get(2)
+        .filter(|value| !value.starts_with("--"))
+        .ok_or_else(|| {
+            usage_error("inspect owner requires KIND and ID; use 'capabilities inspect'")
+        })?;
+    let identity = arguments
+        .get(3)
+        .filter(|value| !value.starts_with("--"))
+        .ok_or_else(|| {
+            usage_error("inspect owner requires KIND and ID; use 'capabilities inspect'")
+        })?;
+    if arguments.first().map(String::as_str) != Some("inspect")
+        || arguments.get(1).map(String::as_str) != Some("owner")
+    {
+        return Err(usage_error(
+            "normalized owner inspection requires 'inspect owner KIND ID'",
+        ));
+    }
+    ensure_options(&arguments[4..], &["--package"], &[])?;
+    let requested_kind = parse_kernel_owner_kind(kind_name)?;
+    let owner = parse_kernel_owner_key(identity)?;
+    if !requested_kind.accepts_owner(owner) {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Semantic,
+            "owner_wrong_kind",
+            format!(
+                "owner identity '{identity}' cannot identify semantic kind '{}'",
+                requested_kind.name()
+            ),
+        ));
+    }
+
+    let repository = open_normalized_repository(project)?;
+    let view = repository.view_current()?;
+    let requested_package = option_value(&arguments[4..], "--package")?
+        .map(|value| parse_kernel_package(&value))
+        .transpose()?
+        .unwrap_or_else(|| view.package());
+    if requested_package != view.package() {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Semantic,
+            "owner_foreign_package",
+            format!(
+                "owner selector names package '{requested_package}', but the observed project package is '{}'",
+                view.package()
+            ),
+        ));
+    }
+
+    let owner_read = view.owner(owner)?;
+    let record = owner_read.value.as_ref().ok_or_else(|| {
+        owner_inspection_error(
+            DiagnosticClass::Semantic,
+            "owner_not_found",
+            format!(
+                "owner '{identity}' is not live at revision '{}'",
+                owner_read.revision
+            ),
+        )
+    })?;
+    if record.kind() != requested_kind {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Semantic,
+            "owner_wrong_kind",
+            format!(
+                "owner '{identity}' has kind '{}', not requested kind '{}'",
+                record.kind().name(),
+                requested_kind.name()
+            ),
+        ));
+    }
+    let summary_read = view.bound_owner_summary(owner)?;
+    let summary = summary_read.value.as_ref().ok_or_else(|| {
+        owner_inspection_error(
+            DiagnosticClass::Corrupt,
+            "publication_summary_binding",
+            "accepted owner has no bound validation summary",
+        )
+    })?;
+    if summary_read.revision != owner_read.revision {
+        return Err(owner_inspection_error(
+            DiagnosticClass::Corrupt,
+            "publication_summary_binding",
+            "owner record and validation summary were read at different revisions",
+        ));
+    }
+
+    let mut output = CompactResponseWriter::new(limits)?;
+    append_compact_record(
+        &mut output,
+        "result",
+        &[
+            ("status", "success".to_owned()),
+            ("command", "inspect.owner".to_owned()),
+        ],
+    )?;
+    append_compact_record(
+        &mut output,
+        "project",
+        &[
+            ("path", repository.root().display().to_string()),
+            (
+                "name",
+                view.current()
+                    .semantic_root
+                    .package_name
+                    .as_str()
+                    .to_owned(),
+            ),
+            ("repository", view.current().head.repository_id.to_string()),
+            ("package", view.package().to_string()),
+        ],
+    )?;
+    append_compact_record(
+        &mut output,
+        "revision",
+        &[("observed", owner_read.revision.to_string())],
+    )?;
+    let mut owner_fields = vec![
+        ("id", owner.to_string()),
+        ("kind", record.kind().name().to_owned()),
+        ("detail", "summary".to_owned()),
+        ("record", summary.summary.record.to_string()),
+        ("summary", summary.digest.to_string()),
+    ];
+    if let Some(name) = record.name() {
+        owner_fields.push(("name", name.as_str().to_owned()));
+    }
+    append_compact_record(&mut output, "owner", &owner_fields)?;
+    let summary_fields = vec![
+        ("type-roots", record.type_roots().len().to_string()),
+        (
+            "expression-roots",
+            record.expression_roots().len().to_string(),
+        ),
+        ("blob-roots", record.blob_roots().len().to_string()),
+        (
+            "test",
+            if summary.summary.test.is_some() {
+                "present"
+            } else {
+                "absent"
+            }
+            .to_owned(),
+        ),
+    ];
+    append_compact_record(&mut output, "summary", &summary_fields)?;
+    Ok(output.finish())
+}
+
+fn open_normalized_repository(project: Option<PathBuf>) -> Result<GraphRepository, Diagnostic> {
+    let start = match project {
+        Some(path) => path,
+        None => std::env::current_dir().map_err(|error| {
+            Diagnostic::new(
+                DiagnosticClass::Infrastructure,
+                "project_io",
+                format!("current directory is unavailable: {error}"),
+            )
+        })?,
+    };
+    discover_project(&start)
+}
+
+fn parse_kernel_owner_kind(value: &str) -> Result<KernelOwnerKind, Diagnostic> {
+    KernelOwnerKind::PUBLIC_EXACT
+        .into_iter()
+        .find(|kind| kind.name() == value)
+        .ok_or_else(|| {
+            owner_inspection_error(
+                DiagnosticClass::Source,
+                "owner_selector_kind",
+                format!("owner kind '{value}' is not a current public exact-owner kind"),
+            )
+        })
+}
+
+fn parse_kernel_package(value: &str) -> Result<PackageId, Diagnostic> {
+    value.parse().map_err(|_| {
+        owner_inspection_error(
+            DiagnosticClass::Source,
+            "owner_selector_identity",
+            format!("package identity '{value}' is malformed"),
+        )
+    })
+}
+
+fn parse_kernel_owner_key(value: &str) -> Result<KernelOwnerKey, Diagnostic> {
+    value.parse().map_err(|_| {
+        owner_inspection_error(
+            DiagnosticClass::Source,
+            "owner_selector_identity",
+            format!("owner identity '{value}' is malformed"),
+        )
+    })
+}
+
+fn owner_inspection_error(
+    class: DiagnosticClass,
+    code: &'static str,
+    message: impl Into<String>,
+) -> Diagnostic {
+    Diagnostic::new(class, code, message)
 }
 
 fn builtin_command(arguments: &[String]) -> Result<CliSuccess, Diagnostic> {
@@ -2413,6 +2667,7 @@ fn io_error(code: &str, path: &Path, error: std::io::Error) -> Diagnostic {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::platform::control::parse_records;
 
     #[test]
     fn unknown_options_and_noncanonical_numbers_reject() {
@@ -2436,5 +2691,95 @@ mod tests {
                 .expect("UTF-8 registry")
                 .contains("operation name=change")
         );
+    }
+
+    #[test]
+    fn normalized_owner_inspection_is_exact_compact_and_independently_bounded() {
+        let temporary = tempfile::TempDir::new().expect("temporary repository parent");
+        let destination = temporary.path().join("project");
+        let snapshot = crate::platform::kernel::tests::witness_snapshot();
+        let owner = *snapshot
+            .owners
+            .iter()
+            .find(|(_, record)| KernelOwnerKind::PUBLIC_EXACT.contains(&record.kind()))
+            .map(|(owner, _)| owner)
+            .expect("coarse fixture owner");
+        let expected = snapshot.owners[&owner].clone();
+        let expected_id = owner.to_string();
+        GraphRepository::create(&destination, &snapshot, None).expect("normalized repository");
+        let arguments = vec![
+            "--project".to_owned(),
+            destination.display().to_string(),
+            "inspect".to_owned(),
+            "owner".to_owned(),
+            expected.kind().name().to_owned(),
+            expected_id.clone(),
+        ];
+
+        let bytes = execute_inspect_owner(arguments.clone()).expect("exact owner inspection");
+        let records = parse_records("response", &bytes).expect("compact response");
+        assert_eq!(records.len(), 5);
+        assert_eq!(records[0].operation, "result");
+        assert_eq!(records[1].operation, "project");
+        assert_eq!(records[2].operation, "revision");
+        assert_eq!(records[3].operation, "owner");
+        assert_eq!(records[4].operation, "summary");
+        assert_eq!(
+            records[3]
+                .fields
+                .iter()
+                .find(|field| field.name == "id")
+                .map(|field| field.value.as_str()),
+            Some(expected_id.as_str())
+        );
+
+        let record_error = execute_inspect_owner_with_limits(
+            arguments.clone(),
+            CompactResponseLimits {
+                maximum_bytes: MAXIMUM_CLI_RESPONSE_BYTES,
+                maximum_records: 3,
+            },
+        )
+        .expect_err("record budget");
+        assert_eq!(record_error.code, "control_response_record_budget");
+        let byte_error = execute_inspect_owner_with_limits(
+            arguments,
+            CompactResponseLimits {
+                maximum_bytes: 1,
+                maximum_records: MAXIMUM_CLI_RESPONSE_RECORDS,
+            },
+        )
+        .expect_err("byte budget");
+        assert_eq!(byte_error.code, "control_response_byte_budget");
+    }
+
+    #[test]
+    fn normalized_owner_selector_rejects_unknown_domains_before_repository_access() {
+        let error = execute_inspect_owner(vec![
+            "inspect".to_owned(),
+            "owner".to_owned(),
+            "module".to_owned(),
+            "decl_not-hex".to_owned(),
+        ])
+        .expect_err("malformed identity");
+        assert_eq!(error.code, "owner_selector_identity");
+
+        let error = execute_inspect_owner(vec![
+            "inspect".to_owned(),
+            "owner".to_owned(),
+            "repository".to_owned(),
+            "repo_00000000000000000000000000000001".to_owned(),
+        ])
+        .expect_err("unknown owner kind");
+        assert_eq!(error.code, "owner_selector_kind");
+
+        let error = execute_inspect_owner(vec![
+            "inspect".to_owned(),
+            "owner".to_owned(),
+            "field".to_owned(),
+            "field_00000000000000000000000000000001".to_owned(),
+        ])
+        .expect_err("fine owner identity remains private");
+        assert_eq!(error.code, "owner_selector_kind");
     }
 }
