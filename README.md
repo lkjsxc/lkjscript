@@ -173,15 +173,15 @@ Application users need only the executable. Repository contributors can build an
 
 ```sh
 cargo build --workspace --release --locked
-tools/check focused
-tools/check changed
-tools/check product
-tools/check service
-tools/check full
+cargo run --locked -p lkjscript-dev -- check focused
+cargo run --locked -p lkjscript-dev -- check changed
+cargo run --locked -p lkjscript-dev -- check product
+cargo run --locked -p lkjscript-dev -- check service
+cargo run --locked -p lkjscript-dev -- check full
 ```
 
 Successful gates print one aggregate result and a receipt path while retaining bounded child logs
-under `.artifacts/check/`. Reusable gates identify fresh versus reused evidence by exact inputs;
+under `.artifacts/lkjscript-dev/check/`. Reusable gates identify fresh versus reused evidence by exact inputs;
 the authoritative `full` profile requires fresh execution.
 
 Normative contracts live under [docs/spec](docs/spec). Current implementation and limits are in

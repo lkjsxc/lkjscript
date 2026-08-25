@@ -93,12 +93,12 @@ generic Rust policy.
 ## Acceptance and recovery
 
 ```sh
-tools/service-acceptance --binary target/release/lkjscript
+cargo run --locked -p lkjscript-dev -- service --binary target/release/lkjscript
 ```
 
 The acceptance tool requires a cached `postgres:16-alpine` image. It starts an isolated database,
 exercises live HTTP and worker paths, performs `pg_dump`/`pg_restore`, restarts, and retains bounded
-evidence under `.artifacts/service/`.
+evidence under `.artifacts/lkjscript-dev/service/`.
 
 Canonical program backup is separate:
 

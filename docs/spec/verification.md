@@ -23,7 +23,8 @@ value equality. A missing, skipped, unavailable, exhausted, cancelled, or unrun 
 
 ## Profiles
 
-`tools/check` is the executable verification owner. `focused` runs formatting, locked library and
+The contributor-only `lkjscript-dev check` command is the executable verification owner. Invoke it
+as `cargo run --locked -p lkjscript-dev -- check PROFILE`. `focused` runs formatting, locked library and
 public integration tests, and diff checks. `changed` is selection convenience and widens
 uncertainty. `product` builds release and checks maintained packages, deep doctors, and artifact /
 built-in reproduction. `service` runs release-build and isolated PostgreSQL service/worker
@@ -36,7 +37,7 @@ requires formatting before compiler-producing gates. Checker self-test owns this
 contract so an `ETXTBSY` race cannot be normalized as flakiness.
 
 Successful checks emit one aggregate JSON line and a receipt locator. Each gate retains bounded
-stdout/stderr separately under `.artifacts/check`. Failure returns bounded excerpts and exact log
+stdout/stderr separately under `.artifacts/lkjscript-dev/check`. Failure returns bounded excerpts and exact log
 locations. Passing test names and child logs are not printed by default.
 
 ## Receipt rules

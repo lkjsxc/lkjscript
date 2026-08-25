@@ -59,7 +59,7 @@ direct CLI / strict authored change / exact transaction
 | Runtime | `runtime.rs`, `http.rs`, `worker.rs`, `stream.rs` | admission, task ownership, execution, cancellation, shutdown | routes, SQL, authorization, object keys, queue transitions |
 | Capabilities | `execution/capability.rs` and generic adapters | requirement/grant equality, operation accounting, resource mechanics | domain permission policy |
 | Deployment | `deployment.rs` and strict deployment JSON | concrete adapters, secret bindings, limits, listener topology | program meaning and artifact authority |
-| Repository verification | `tools/check` | dependency DAG, bounded parallel gates, exact input fingerprints, fresh/reused evidence, bounded logs | accepted program authority and provider-cost inference |
+| Repository verification | contributor-only `lkjscript-dev check` | dependency DAG, bounded parallel gates, exact input fingerprints, fresh/reused evidence, bounded logs | accepted program authority and provider-cost inference |
 
 ## Authority, identity, and history
 

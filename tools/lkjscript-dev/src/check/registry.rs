@@ -329,6 +329,23 @@ pub(crate) fn base_registry(
     ]);
     gates.push(self_test);
 
+    let mut rust_only = Gate::new(
+        "rust_only_tooling",
+        vec![
+            self_test_executable.to_string_lossy().into_owned(),
+            "policy".to_owned(),
+            "no-python".to_owned(),
+            "--machine".to_owned(),
+        ],
+    );
+    rust_only.identity_command = Some(vec![
+        "$HARNESS".to_owned(),
+        "policy".to_owned(),
+        "no-python".to_owned(),
+        "--machine".to_owned(),
+    ]);
+    gates.push(rust_only);
+
     gates.push(gate(
         "contract_registry_conformance",
         vec![
@@ -481,6 +498,7 @@ pub(crate) fn profile(name: &str) -> Option<Vec<String>> {
     let values: &[&str] = match name {
         "focused" => &[
             "fmt",
+            "rust_only_tooling",
             "library_tests",
             "general_service_tests",
             "public_cli_tests",
@@ -488,6 +506,7 @@ pub(crate) fn profile(name: &str) -> Option<Vec<String>> {
         ],
         "product" => &[
             "fmt",
+            "rust_only_tooling",
             "release_build",
             "contract_registry_conformance",
             "standard_package_test",
@@ -502,10 +521,17 @@ pub(crate) fn profile(name: &str) -> Option<Vec<String>> {
             "application_artifact_compare",
             "diff_check",
         ],
-        "service" => &["fmt", "release_build", "service_acceptance", "diff_check"],
+        "service" => &[
+            "fmt",
+            "rust_only_tooling",
+            "release_build",
+            "service_acceptance",
+            "diff_check",
+        ],
         "full" => &[
             "fmt",
             "checker_self_test",
+            "rust_only_tooling",
             "clippy",
             "workspace_tests",
             "release_build",
@@ -643,9 +669,10 @@ mod tests {
             .expect("first maintained registry");
         let second = base_registry(temporary.path(), &second_run, Path::new("/bin/true"))
             .expect("second maintained registry");
-        assert_eq!(first.gates.len(), 21);
+        assert_eq!(first.gates.len(), 22);
         for profile_name in ["focused", "product", "service", "full"] {
             let requested = profile(profile_name).expect("maintained profile");
+            assert!(requested.iter().any(|name| name == "rust_only_tooling"));
             assert!(
                 !first
                     .closure(&requested)

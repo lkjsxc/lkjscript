@@ -1,6 +1,7 @@
 mod cache;
 mod executor;
 mod model;
+mod policy;
 mod registry;
 mod self_test;
 mod snapshot;
@@ -78,6 +79,10 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
     } else {
         1
     })
+}
+
+pub(crate) fn policy_command(arguments: impl Iterator<Item = OsString>) -> Result<u8, DevError> {
+    policy::command(arguments)
 }
 
 pub(crate) fn fixture(mut arguments: impl Iterator<Item = OsString>) -> Result<u8, DevError> {

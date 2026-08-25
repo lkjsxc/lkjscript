@@ -24,9 +24,9 @@ template does the same. These are maintained abstraction consumers, not test-onl
 ## Current contracts
 
 The executable registry is the current owner of contract identities, versions, storage magic,
-digest domains, operations, schemas, limits, diagnostic classes, and security nonclaims. See the
-generated [contract table](generated/contracts.md), [operation table](generated/operations.md),
-and [machine manifest](generated/manifest.json). `tools/check` verifies those bytes against the
+digest domains, operations, control models, limits, diagnostic classes, and security nonclaims.
+See the generated [contract table](generated/contracts.md) and
+[operation table](generated/operations.md). `lkjscript-dev check` verifies those bytes against the
 release executable. This status file deliberately does not repeat the current version table.
 
 Execution currently retains the independently implemented `bytecode_v1` and
@@ -172,7 +172,7 @@ requires an external trusted boundary or a different adapter outside current sco
 
 ## Verification execution
 
-`tools/check` now owns an explicit gate dependency DAG, runs independent ready nodes with a
+The contributor-only `lkjscript-dev check` command owns an explicit gate dependency DAG, runs independent ready nodes with a
 bounded worker count, and stops descendants of failed prerequisites while retaining independent
 evidence. Reusable passes bind exact gate command, dependency evidence, tracked and relevant
 untracked content, `Cargo.lock`, compiler/tool/platform/environment identity, required outputs,

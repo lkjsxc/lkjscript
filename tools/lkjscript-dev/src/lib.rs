@@ -29,12 +29,13 @@ fn run(arguments: impl IntoIterator<Item = OsString>) -> Result<u8, DevError> {
     let command = next_utf8(&mut arguments, "command")?;
     match command.as_deref() {
         Some("check") => check::command(arguments),
+        Some("policy") => check::policy_command(arguments),
         Some("scale") => scale::command(arguments),
         Some("service") => service::command(arguments),
         Some("__fixture") => check::fixture(arguments),
         Some("help") | Some("--help") | Some("-h") | None => {
             println!(
-                "usage: lkjscript-dev check <focused|changed|product|service|full|self-test> ... | lkjscript-dev scale <independent-modules|small-functions|wide-module|deep-chain|wide-fanout> ... | lkjscript-dev service [--binary PATH] [--machine]"
+                "usage: lkjscript-dev check <focused|changed|product|service|full|self-test> ... | lkjscript-dev policy no-python [--machine] | lkjscript-dev scale <independent-modules|small-functions|wide-module|deep-chain|wide-fanout> ... | lkjscript-dev service [--binary PATH] [--machine]"
             );
             Ok(0)
         }

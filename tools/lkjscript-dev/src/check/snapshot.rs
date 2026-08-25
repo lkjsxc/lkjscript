@@ -80,6 +80,20 @@ pub(crate) fn capture(repository: &Path) -> Result<InputSnapshot, DevError> {
     })
 }
 
+pub(crate) fn repository_paths(repository: &Path) -> Result<Vec<String>, DevError> {
+    let mut paths = BTreeSet::new();
+    paths.extend(listed_paths(repository, &["ls-files", "--cached", "-z"])?);
+    paths.extend(
+        listed_paths(
+            repository,
+            &["ls-files", "--others", "--exclude-standard", "-z"],
+        )?
+        .into_iter()
+        .filter(|path| relevant_untracked(path)),
+    );
+    Ok(paths.into_iter().collect())
+}
+
 pub(crate) fn runtime_identity(
     repository: &Path,
     commands: impl IntoIterator<Item = (String, String)>,
@@ -179,7 +193,7 @@ pub(crate) fn changed_profile(repository: &Path) -> Result<Vec<String>, DevError
         .ok_or_else(|| DevError::infrastructure("product profile is absent"))?;
     let service = registry::profile("service")
         .ok_or_else(|| DevError::infrastructure("service profile is absent"))?;
-    let mut selected = BTreeSet::from(["diff_check".to_owned()]);
+    let mut selected = BTreeSet::from(["diff_check".to_owned(), "rust_only_tooling".to_owned()]);
     let mut widen_full = false;
     for path in paths {
         if path == "Cargo.toml"
@@ -191,8 +205,7 @@ pub(crate) fn changed_profile(repository: &Path) -> Result<Vec<String>, DevError
         } else if path.starts_with("applications/") || path.starts_with("packages/") {
             selected.extend(product.iter().cloned());
             selected.insert("service_acceptance".to_owned());
-        } else if path == "tools/check"
-            || path.starts_with("tools/lkjscript-dev/src/check/")
+        } else if path.starts_with("tools/lkjscript-dev/src/check/")
             || path == "tools/lkjscript-dev/Cargo.toml"
         {
             selected.insert("checker_self_test".to_owned());

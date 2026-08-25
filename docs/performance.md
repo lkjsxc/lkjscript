@@ -153,7 +153,7 @@ The predecessor full profile passed 15/15 gates in 94.743 seconds at
 `d822a652537d07e1859f0faea1e481b6d0e037f93f0eab3452416147074d0910`. It is not proof for the
 current tree.
 
-Current `tools/check` models gates and retained exact inputs separately and labels fresh versus
+Current `lkjscript-dev check` models gates and retained exact inputs separately and labels fresh versus
 reused evidence; the authoritative full policy requires fresh execution. A working-tree graph-4 /
 CLI-v4 full profile passed 17/17 fresh gates in 6.078 seconds at
 `.artifacts/check/20260822T131807.529974Z-726352/receipt.json` after a first run exposed and retained
