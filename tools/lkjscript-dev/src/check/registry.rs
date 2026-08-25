@@ -446,12 +446,21 @@ pub(crate) fn base_registry(
     let mut service = gate(
         "service_acceptance",
         vec![
-            path_string(&repository.join("tools/service-acceptance")),
+            path_string(self_test_executable),
+            "service".to_owned(),
             "--binary".to_owned(),
             path_string(&binary),
+            "--machine".to_owned(),
         ],
         &["release_build"],
     );
+    service.identity_command = Some(vec![
+        "$HARNESS".to_owned(),
+        "service".to_owned(),
+        "--binary".to_owned(),
+        path_string(&binary),
+        "--machine".to_owned(),
+    ]);
     service.cacheable = false;
     gates.push(service);
     gates.push(gate(

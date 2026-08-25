@@ -196,7 +196,7 @@ pub(crate) fn changed_profile(repository: &Path) -> Result<Vec<String>, DevError
             || path == "tools/lkjscript-dev/Cargo.toml"
         {
             selected.insert("checker_self_test".to_owned());
-        } else if path == "tools/service-acceptance" {
+        } else if path.starts_with("tools/lkjscript-dev/src/service") {
             selected.extend(service.iter().cloned());
         } else if path.starts_with("tools/lkjscript-dev/src/scale")
             || path.starts_with("tools/lkjscript-dev/src/process")

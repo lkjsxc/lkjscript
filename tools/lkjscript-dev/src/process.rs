@@ -12,12 +12,15 @@ use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
 const READ_CHUNK_BYTES: usize = 64 * 1024;
 const POLL_INTERVAL: Duration = Duration::from_millis(10);
+const CONTROL_NONE: u8 = 0;
+const CONTROL_INTERRUPT: u8 = 1;
+const CONTROL_KILL: u8 = 2;
 const APPROVED_ENVIRONMENT: &[&str] = &[
     "AR",
     "CARGO_BUILD_JOBS",
@@ -71,6 +74,26 @@ pub(crate) struct ProcessSpec {
     pub(crate) stderr_path: PathBuf,
 }
 
+#[derive(Clone, Debug, Default)]
+pub(crate) struct ProcessControl {
+    requested: Arc<AtomicU8>,
+}
+
+impl ProcessControl {
+    pub(crate) fn interrupt(&self) {
+        self.requested
+            .fetch_max(CONTROL_INTERRUPT, Ordering::AcqRel);
+    }
+
+    pub(crate) fn kill(&self) {
+        self.requested.fetch_max(CONTROL_KILL, Ordering::AcqRel);
+    }
+
+    fn requested(&self) -> u8 {
+        self.requested.load(Ordering::Acquire)
+    }
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum ProcessStatus {
@@ -100,8 +123,39 @@ pub(crate) struct ProcessObservation {
 }
 
 pub(crate) fn run(specification: &ProcessSpec, repository: &Path) -> ProcessObservation {
+    run_configured(specification, repository, None, None)
+}
+
+pub(crate) fn run_controlled(
+    specification: &ProcessSpec,
+    repository: &Path,
+    control: &ProcessControl,
+) -> ProcessObservation {
+    run_configured(specification, repository, Some(control), None)
+}
+
+pub(crate) fn run_with_stdin_file(
+    specification: &ProcessSpec,
+    repository: &Path,
+    stdin_path: &Path,
+    maximum_stdin_bytes: u64,
+) -> ProcessObservation {
+    run_configured(
+        specification,
+        repository,
+        None,
+        Some((stdin_path, maximum_stdin_bytes)),
+    )
+}
+
+fn run_configured(
+    specification: &ProcessSpec,
+    repository: &Path,
+    control: Option<&ProcessControl>,
+    stdin_file: Option<(&Path, u64)>,
+) -> ProcessObservation {
     let started = Instant::now();
-    match run_inner(specification, repository, started) {
+    match run_inner(specification, repository, started, control, stdin_file) {
         Ok(observation) => observation,
         Err(error) => infrastructure_observation(specification, repository, started, error),
     }
@@ -112,17 +166,23 @@ fn run_inner(
     specification: &ProcessSpec,
     repository: &Path,
     started: Instant,
+    control: Option<&ProcessControl>,
+    stdin_file: Option<(&Path, u64)>,
 ) -> Result<ProcessObservation, DevError> {
     if specification.command.is_empty() {
         return Err(DevError::infrastructure("child command is empty"));
     }
     let stdout_output = prepare_log(&specification.stdout_path)?;
     let stderr_output = prepare_log(&specification.stderr_path)?;
+    let stdin = match stdin_file {
+        Some((path, maximum)) => bounded_stdin(path, maximum)?,
+        None => Stdio::null(),
+    };
     let mut command = Command::new(&specification.command[0]);
     command
         .args(&specification.command[1..])
         .current_dir(&specification.cwd)
-        .stdin(Stdio::null())
+        .stdin(stdin)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env_clear()
@@ -181,6 +241,7 @@ fn run_inner(
     );
 
     let mut terminal_reason = None;
+    let mut sent_control = CONTROL_NONE;
     let exit_status = loop {
         if let Some(status) = child.try_wait().map_err(|error| {
             DevError::infrastructure(format!(
@@ -199,6 +260,23 @@ fn run_inner(
                     specification.command[0]
                 ))
             })?;
+        }
+        if let Some(control) = control {
+            let requested = control.requested();
+            if requested > sent_control {
+                if requested >= CONTROL_KILL {
+                    terminal_reason = Some(ProcessStatus::Signaled);
+                    let _ = kill_process_group(process_group, Signal::KILL);
+                    break child.wait().map_err(|error| {
+                        DevError::infrastructure(format!(
+                            "wait for killed child '{}': {error}",
+                            specification.command[0]
+                        ))
+                    })?;
+                }
+                let _ = kill_process_group(process_group, Signal::INT);
+                sent_control = CONTROL_INTERRUPT;
+            }
         }
         if started.elapsed() >= specification.timeout {
             terminal_reason = Some(ProcessStatus::Timeout);
@@ -226,6 +304,7 @@ fn run_inner(
             )),
         ),
         Some(ProcessStatus::Timeout) => (ProcessStatus::Timeout, Some("timeout".to_owned())),
+        Some(ProcessStatus::Signaled) => (ProcessStatus::Signaled, Some("control_kill".to_owned())),
         Some(_) => {
             return Err(DevError::infrastructure(
                 "invalid terminal child-process state",
@@ -260,10 +339,27 @@ fn run_inner(
     _specification: &ProcessSpec,
     _repository: &Path,
     _started: Instant,
+    _control: Option<&ProcessControl>,
+    _stdin_file: Option<(&Path, u64)>,
 ) -> Result<ProcessObservation, DevError> {
     Err(DevError::infrastructure(
         "bounded process execution requires Linux process-group signaling",
     ))
+}
+
+fn bounded_stdin(path: &Path, maximum: u64) -> Result<Stdio, DevError> {
+    let metadata = std::fs::symlink_metadata(path).map_err(|error| {
+        DevError::infrastructure(format!("inspect child stdin '{}': {error}", path.display()))
+    })?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > maximum {
+        return Err(DevError::infrastructure(format!(
+            "child stdin '{}' is unsafe or exceeds {maximum} bytes",
+            path.display()
+        )));
+    }
+    File::open(path).map(Stdio::from).map_err(|error| {
+        DevError::infrastructure(format!("open child stdin '{}': {error}", path.display()))
+    })
 }
 
 fn exhausted_reason(stdout: bool, stderr: bool) -> String {
@@ -620,5 +716,57 @@ mod tests {
         let value = excerpt(&path, 64).expect("bounded excerpt");
         assert!(value.len() <= 96);
         assert!(value.contains("bounded excerpt"));
+    }
+
+    #[test]
+    fn controlled_child_handles_graceful_interrupt() {
+        let temporary = tempfile::tempdir().expect("temporary controlled process directory");
+        let specification = specification(
+            &temporary,
+            vec![
+                "/bin/sh".to_owned(),
+                "-c".to_owned(),
+                "trap 'exit 0' INT; echo ready; while :; do sleep 1; done".to_owned(),
+            ],
+            Duration::from_secs(5),
+            1024,
+        );
+        let stdout_path = specification.stdout_path.clone();
+        let repository = temporary.path().to_path_buf();
+        let control = ProcessControl::default();
+        let child_control = control.clone();
+        let child =
+            std::thread::spawn(move || run_controlled(&specification, &repository, &child_control));
+        let started = Instant::now();
+        while std::fs::metadata(&stdout_path).map_or(true, |metadata| metadata.len() == 0) {
+            assert!(started.elapsed() < Duration::from_secs(2));
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        control.interrupt();
+        let result = child.join().expect("join controlled process");
+        assert_eq!(result.status, ProcessStatus::Passed);
+    }
+
+    #[test]
+    fn child_stdin_file_is_bounded_and_streamed() {
+        let temporary = tempfile::tempdir().expect("temporary stdin process directory");
+        let stdin_path = temporary.path().join("stdin.bin");
+        std::fs::write(&stdin_path, b"bounded input").expect("write child stdin");
+        let result = run_with_stdin_file(
+            &specification(
+                &temporary,
+                vec!["/bin/cat".to_owned()],
+                Duration::from_secs(2),
+                1024,
+            ),
+            temporary.path(),
+            &stdin_path,
+            1024,
+        );
+        assert_eq!(result.status, ProcessStatus::Passed);
+        assert_eq!(
+            std::fs::read(temporary.path().join("stdout.log")).expect("read child stdout"),
+            b"bounded input"
+        );
     }
 }

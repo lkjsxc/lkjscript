@@ -289,7 +289,19 @@ def base_gates(run_directory: Path) -> dict[str, Gate]:
         ),
         "service_acceptance": Gate(
             "service_acceptance",
-            (str(ROOT / "tools" / "service-acceptance"), "--binary", binary()),
+            (
+                "cargo",
+                "run",
+                "--quiet",
+                "--locked",
+                "-p",
+                "lkjscript-dev",
+                "--",
+                "service",
+                "--binary",
+                binary(),
+                "--machine",
+            ),
             dependencies=("release_build",),
             cacheable=False,
         ),
@@ -1312,9 +1324,9 @@ def select_changed() -> tuple[tuple[str, ...], dict[str, Any]]:
         elif path == "tools/check":
             selected.add("checker_self_test")
             reasons.append("verification_contract:tools/check")
-        elif path == "tools/service-acceptance":
+        elif path == "tools/lkjscript-dev/src/service.rs":
             selected.update(PROFILES["service"])
-            reasons.append("service_acceptance:tools/service-acceptance")
+            reasons.append("service_acceptance:tools/lkjscript-dev/src/service.rs")
         elif path.startswith(("docs/", "prompts/")) or path in {"README.md", "AGENTS.md"}:
             reasons.append(f"documentation:{path}")
         else:
