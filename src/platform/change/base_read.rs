@@ -13,18 +13,12 @@ use crate::platform::witness::{
     OwnerSummary, OwnerSummaryDigest, OwnershipEntry, TestDependency, ValidationWitnessManifest,
 };
 use bincode::{Decode, Encode};
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 
 const READ_ADMISSION_UNSUPPORTED: &str = "base_read_admission_unsupported";
 const READ_ADMISSION_DECODED_RECORDS: &str = "base_read_admission_decoded_records";
 
-#[derive(
-    Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize,
-)]
-#[schemars(rename = "lkjscript.CanonicalReadWorkV1")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Copy, Debug, Decode, Default, Encode, Eq, PartialEq)]
 pub struct CanonicalReadWork {
     pub point_reads: u64,
     pub map_pages_read: u64,
@@ -69,11 +63,7 @@ impl<T> CanonicalRead<T> {
     }
 }
 
-#[derive(
-    Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize,
-)]
-#[schemars(rename = "lkjscript.WitnessReadWorkV1")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Copy, Debug, Decode, Default, Encode, Eq, PartialEq)]
 pub struct WitnessReadWork {
     pub point_reads: u64,
     pub map_pages_read: u64,

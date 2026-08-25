@@ -9,7 +9,6 @@ use crate::platform::kernel::{
 };
 use crate::platform::packed;
 use bincode::{Decode, Encode};
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 const OWNERSHIP_VALUE_MAGIC: [u8; 8] = *b"LKJOWNW1";
@@ -42,20 +41,8 @@ impl NamespaceKey {
 }
 
 #[derive(
-    Clone,
-    Copy,
-    Debug,
-    Decode,
-    Deserialize,
-    Encode,
-    Eq,
-    JsonSchema,
-    Ord,
-    PartialEq,
-    PartialOrd,
-    Serialize,
+    Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, Ord, PartialEq, PartialOrd, Serialize,
 )]
-#[schemars(rename = "lkjscript.Graph5OwnershipParentV1")]
 #[serde(
     tag = "parent",
     content = "owner",

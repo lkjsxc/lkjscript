@@ -35,42 +35,29 @@ use crate::platform::semantic_id::{
     TypeParameterId,
 };
 use bincode::{Decode, Encode};
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5AuthoredTypeParameterV1")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct AuthoredTypeParameter {
-    #[serde(rename = "as")]
     pub symbol: String,
     pub name: Name,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5AuthoredParameterV1")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct AuthoredParameter {
-    #[serde(rename = "as")]
     pub symbol: String,
     pub name: Name,
     pub ty: AuthoredType,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5AuthoredFunctionEffectV1")]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub enum AuthoredFunctionEffect {
     Pure {},
     Task {
-        #[serde(default)]
         requirements: Vec<AuthoredRequirementReference>,
     },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5AuthoredTypeV1")]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub enum AuthoredType {
     Unit {},
     Bool {},
@@ -106,31 +93,24 @@ pub enum AuthoredType {
         item: Box<AuthoredType>,
     },
     Function {
-        #[serde(default)]
         parameters: Vec<AuthoredType>,
         result: Box<AuthoredType>,
     },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5AuthoredStructuralTypeFieldV1")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct AuthoredStructuralTypeField {
     pub name: Name,
     pub ty: AuthoredType,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5AuthoredTypeParameterReferenceV1")]
-#[serde(tag = "by", rename_all = "snake_case", deny_unknown_fields)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub enum AuthoredTypeParameterReference {
     Id { parameter: TypeParameterId },
     Symbol { symbol: String },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5AuthoredDeclarationReferenceV1")]
-#[serde(tag = "scope", rename_all = "snake_case", deny_unknown_fields)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub enum AuthoredDeclarationReference {
     Local {
         declaration: DeclarationSelector,
@@ -141,9 +121,7 @@ pub enum AuthoredDeclarationReference {
     },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5AuthoredFieldReferenceV1")]
-#[serde(tag = "by", rename_all = "snake_case", deny_unknown_fields)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub enum AuthoredFieldReference {
     Exact {
         package: crate::platform::kernel::PackageId,
@@ -154,9 +132,7 @@ pub enum AuthoredFieldReference {
     },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5AuthoredCaseReferenceV1")]
-#[serde(tag = "by", rename_all = "snake_case", deny_unknown_fields)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub enum AuthoredCaseReference {
     Exact {
         package: crate::platform::kernel::PackageId,
@@ -167,9 +143,7 @@ pub enum AuthoredCaseReference {
     },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5AuthoredOperationReferenceV1")]
-#[serde(tag = "by", rename_all = "snake_case", deny_unknown_fields)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub enum AuthoredOperationReference {
     Exact {
         package: crate::platform::kernel::PackageId,
@@ -180,9 +154,7 @@ pub enum AuthoredOperationReference {
     },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5AuthoredRequirementReferenceV1")]
-#[serde(tag = "by", rename_all = "snake_case", deny_unknown_fields)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub enum AuthoredRequirementReference {
     Exact {
         package: crate::platform::kernel::PackageId,
@@ -193,9 +165,7 @@ pub enum AuthoredRequirementReference {
     },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5AuthoredLocalReferenceV1")]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub enum AuthoredLocalReference {
     FunctionParameter { parameter: ParameterId },
     OperationParameter { parameter: ParameterId },
@@ -205,18 +175,13 @@ pub enum AuthoredLocalReference {
     Symbol { symbol: String },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5AuthoredExpressionV1")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct AuthoredExpression {
-    #[serde(default, rename = "as")]
     pub symbol: Option<String>,
     pub operation: AuthoredExpressionOperation,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5AuthoredExpressionOperationV1")]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub enum AuthoredExpressionOperation {
     Unit {},
     Bool {
@@ -251,29 +216,23 @@ pub enum AuthoredExpressionOperation {
     },
     Call {
         function: AuthoredDeclarationReference,
-        #[serde(default)]
         type_arguments: Vec<AuthoredType>,
-        #[serde(default)]
         arguments: Vec<AuthoredExpression>,
     },
     FunctionValue {
         function: AuthoredDeclarationReference,
-        #[serde(default)]
         type_arguments: Vec<AuthoredType>,
     },
     Invoke {
         callee: Box<AuthoredExpression>,
-        #[serde(default)]
         arguments: Vec<AuthoredExpression>,
     },
     Record {
-        #[serde(default)]
         nominal_type: Option<AuthoredDeclarationReference>,
         fields: Vec<AuthoredRecordExpressionField>,
     },
     Variant {
         case: AuthoredCaseReference,
-        #[serde(default)]
         payload: Option<Box<AuthoredExpression>>,
     },
     Field {
@@ -282,13 +241,11 @@ pub enum AuthoredExpressionOperation {
     },
     List {
         item_type: AuthoredType,
-        #[serde(default)]
         items: Vec<AuthoredExpression>,
     },
     Map {
         key_type: AuthoredType,
         value_type: AuthoredType,
-        #[serde(default)]
         entries: Vec<AuthoredMapExpressionEntry>,
     },
     Match {
@@ -298,7 +255,6 @@ pub enum AuthoredExpressionOperation {
     CapabilityCall {
         requirement: AuthoredRequirementReference,
         operation: AuthoredOperationReference,
-        #[serde(default)]
         arguments: Vec<AuthoredExpression>,
     },
     Transaction {
@@ -308,57 +264,41 @@ pub enum AuthoredExpressionOperation {
     },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5AuthoredLetBindingV1")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct AuthoredLetBinding {
-    #[serde(rename = "as")]
     pub symbol: String,
     pub name: Name,
     pub value: AuthoredExpression,
-    #[serde(default)]
     pub declared_type: Option<AuthoredType>,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5AuthoredBindingDefinitionV1")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct AuthoredBindingDefinition {
-    #[serde(rename = "as")]
     pub symbol: String,
     pub name: Name,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5AuthoredFieldSelectorV1")]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub enum AuthoredFieldSelector {
     Nominal { field: AuthoredFieldReference },
     Structural { name: Name },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5AuthoredRecordExpressionFieldV1")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct AuthoredRecordExpressionField {
     pub selector: AuthoredFieldSelector,
     pub value: AuthoredExpression,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5AuthoredMapExpressionEntryV1")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct AuthoredMapExpressionEntry {
     pub key: AuthoredExpression,
     pub value: AuthoredExpression,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5AuthoredMatchExpressionArmV1")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct AuthoredMatchExpressionArm {
     pub case: AuthoredCaseReference,
-    #[serde(default)]
     pub payload_binding: Option<AuthoredBindingDefinition>,
     pub body: AuthoredExpression,
 }

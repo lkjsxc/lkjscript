@@ -29,7 +29,6 @@ use super::semantic_id::{
 use super::syntax::SourceSpan;
 use super::{OwnerKind, SemanticQueryIndex};
 use bincode::{Decode, Encode};
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -38,8 +37,7 @@ pub const MAXIMUM_TRANSACTION_OPERATIONS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_WORK: usize = 10_000_000;
 pub const MAXIMUM_TRANSACTION_AFFECTED_OWNERS: usize = 100_000;
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.TransactionBudgetV4")]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct TransactionBudget {
     pub maximum_operations: usize,
@@ -145,12 +143,10 @@ impl TransactionRequest {
     }
 }
 
-#[derive(Decode, Encode, Clone, Debug, Deserialize, JsonSchema, Serialize)]
-#[schemars(rename = "lkjscript.SemanticPreconditionV4")]
+#[derive(Decode, Encode, Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "precondition", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SemanticPrecondition {
     RootDigest {
-        #[schemars(with = "String")]
         equals: RootObjectDigest,
     },
     OwnerExists {
@@ -165,8 +161,7 @@ pub enum SemanticPrecondition {
     },
 }
 
-#[derive(Decode, Encode, Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.OwnerSelectorV4")]
+#[derive(Decode, Encode, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(
     tag = "kind",
     content = "id",
@@ -174,9 +169,9 @@ pub enum SemanticPrecondition {
     deny_unknown_fields
 )]
 pub enum OwnerSelector {
-    Module(#[schemars(with = "String")] ModuleId),
-    Declaration(#[schemars(with = "String")] DeclarationId),
-    Target(#[schemars(with = "String")] TargetId),
+    Module(ModuleId),
+    Declaration(DeclarationId),
+    Target(TargetId),
 }
 
 #[derive(Decode, Encode, Clone, Debug, Deserialize, Serialize)]

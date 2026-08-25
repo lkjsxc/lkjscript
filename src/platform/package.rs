@@ -5,7 +5,6 @@ use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 #[cfg(test)]
 use std::collections::BTreeSet;
@@ -130,20 +129,8 @@ pub struct Dependency {
 }
 
 #[derive(
-    Clone,
-    Copy,
-    Debug,
-    Decode,
-    Deserialize,
-    Encode,
-    Eq,
-    JsonSchema,
-    Ord,
-    PartialEq,
-    PartialOrd,
-    Serialize,
+    Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, Ord, PartialEq, PartialOrd, Serialize,
 )]
-#[schemars(rename = "lkjscript.RunnerKindV1")]
 #[serde(rename_all = "snake_case")]
 pub enum RunnerKind {
     Command,

@@ -5,24 +5,11 @@
 
 use super::{Name, OwnerKey, OwnerRecord, ParameterParent};
 use bincode::{Decode, Encode};
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 #[derive(
-    Clone,
-    Copy,
-    Debug,
-    Decode,
-    Deserialize,
-    Encode,
-    Eq,
-    JsonSchema,
-    Ord,
-    PartialEq,
-    PartialOrd,
-    Serialize,
+    Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, Ord, PartialEq, PartialOrd, Serialize,
 )]
-#[schemars(rename = "lkjscript.Graph5NamespaceClassV1")]
 #[serde(rename_all = "snake_case")]
 pub enum NamespaceClass {
     Module,

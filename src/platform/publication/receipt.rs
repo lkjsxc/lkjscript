@@ -9,34 +9,22 @@ use super::idempotency::idempotency_key_is_valid;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::semantic_id::{RepositoryId, RevisionId};
 use bincode::{Decode, Encode};
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.PublicationStatusV1")]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
 pub enum PublicationStatus {
     AcceptedChange,
     ProjectCreated,
     MergeAccepted,
 }
 
-#[derive(
-    Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize,
-)]
-#[schemars(rename = "lkjscript.ValidationProfileV1")]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Copy, Debug, Decode, Default, Encode, Eq, PartialEq)]
 pub enum ValidationProfile {
     FullRebuild,
     #[default]
     IncrementalOwnerFrontier,
 }
 
-#[derive(
-    Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize,
-)]
-#[schemars(rename = "lkjscript.FullOracleStatusV1")]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Copy, Debug, Decode, Default, Encode, Eq, PartialEq)]
 pub enum FullOracleStatus {
     NotApplicable,
     #[default]
@@ -44,11 +32,7 @@ pub enum FullOracleStatus {
     Equal,
 }
 
-#[derive(
-    Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize,
-)]
-#[schemars(rename = "lkjscript.ChangeCountsV1")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Copy, Debug, Decode, Default, Encode, Eq, PartialEq)]
 pub struct ChangeCounts {
     pub owners_created: u64,
     pub owners_updated: u64,
@@ -59,11 +43,7 @@ pub struct ChangeCounts {
     pub witness_entries_changed: u64,
 }
 
-#[derive(
-    Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize,
-)]
-#[schemars(rename = "lkjscript.ValidationEvidenceV1")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Copy, Debug, Decode, Default, Encode, Eq, PartialEq)]
 pub struct ValidationEvidence {
     pub profile: ValidationProfile,
     pub structurally_checked: u64,
@@ -77,11 +57,7 @@ pub struct ValidationEvidence {
     pub full_oracle: FullOracleStatus,
 }
 
-#[derive(
-    Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize,
-)]
-#[schemars(rename = "lkjscript.WorkObservationV3")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Copy, Debug, Decode, Default, Encode, Eq, PartialEq)]
 pub struct WorkObservation {
     /// Exact multidimensional change-meter observation before this receipt and its enclosing
     /// revision are encoded. Bootstrap receipts retain the all-zero observation.
@@ -107,8 +83,7 @@ pub struct WorkObservation {
     pub bytes_staged: u64,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct PublicationReceipt {
     pub contract_version: u16,
     pub graph_contract_version: u16,

@@ -9,7 +9,6 @@ use super::reference::{
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::semantic_id::{BindingId, ExpressionId, ParameterId};
 use bincode::{Decode, Encode};
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
@@ -64,8 +63,7 @@ impl ExpressionRecord {
     }
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5ExpressionOperationV1")]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ExpressionOperation {
     Unit {},
@@ -149,8 +147,7 @@ pub enum ExpressionOperation {
     },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5TextValueV1")]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
 #[serde(tag = "storage", rename_all = "snake_case", deny_unknown_fields)]
 pub enum TextValue {
     Inline {
@@ -163,20 +160,8 @@ pub enum TextValue {
 }
 
 #[derive(
-    Clone,
-    Copy,
-    Debug,
-    Decode,
-    Deserialize,
-    Encode,
-    Eq,
-    JsonSchema,
-    Ord,
-    PartialEq,
-    PartialOrd,
-    Serialize,
+    Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, Ord, PartialEq, PartialOrd, Serialize,
 )]
-#[schemars(rename = "lkjscript.Graph5LocalValueReferenceV1")]
 #[serde(
     tag = "kind",
     content = "id",
@@ -191,18 +176,14 @@ pub enum LocalValueReference {
     TransactionBinding(BindingId),
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5RecordExpressionFieldV1")]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct RecordExpressionField {
     pub selector: FieldSelector,
     pub value: ExpressionId,
 }
 
-#[derive(
-    Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, Ord, PartialEq, PartialOrd, Serialize,
-)]
-#[schemars(rename = "lkjscript.Graph5FieldSelectorV1")]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(
     tag = "kind",
     content = "value",
@@ -214,16 +195,14 @@ pub enum FieldSelector {
     Structural(Name),
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5MapExpressionEntryV1")]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MapExpressionEntry {
     pub key: ExpressionId,
     pub value: ExpressionId,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5MatchExpressionArmV1")]
+#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MatchExpressionArm {
     pub case: CaseReference,

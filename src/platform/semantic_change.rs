@@ -23,19 +23,16 @@ use super::semantic_transaction::{
     TransactionRequest, TransactionResult, execute_transaction,
 };
 use super::syntax::SourceSpan;
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 pub const CHANGE_CONTRACT_VERSION: u16 = 3;
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
-#[schemars(rename = "lkjscript.ChangeRequestV3")]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ChangeRequest {
     pub contract_version: u16,
     #[serde(default)]
-    #[schemars(with = "Option<String>")]
     pub base_revision: Option<RevisionId>,
     #[serde(default)]
     pub idempotency_key: Option<String>,
@@ -48,26 +45,19 @@ pub struct ChangeRequest {
     pub intent: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
-#[schemars(rename = "lkjscript.ChangeV3")]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "change", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Change {
     AddDependency {
         alias: String,
-        #[schemars(with = "String")]
         package_id: PackageId,
-        #[schemars(with = "String")]
         semantic_revision: RevisionId,
-        #[schemars(with = "String")]
         artifact: ArtifactDigest,
     },
     ReplaceDependency {
         alias: String,
-        #[schemars(with = "String")]
         package_id: PackageId,
-        #[schemars(with = "String")]
         semantic_revision: RevisionId,
-        #[schemars(with = "String")]
         artifact: ArtifactDigest,
     },
     RemoveDependency {
@@ -216,8 +206,7 @@ impl Change {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
-#[schemars(rename = "lkjscript.ChangeFieldFormV3")]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct FieldForm {
     #[serde(default)]
@@ -226,8 +215,7 @@ pub struct FieldForm {
     pub r#type: TypeForm,
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
-#[schemars(rename = "lkjscript.ChangeCaseFormV3")]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CaseForm {
     #[serde(default)]
@@ -237,8 +225,7 @@ pub struct CaseForm {
     pub payload: Option<TypeForm>,
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
-#[schemars(rename = "lkjscript.ChangeParameterFormV3")]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ParameterForm {
     #[serde(default)]
@@ -247,16 +234,14 @@ pub struct ParameterForm {
     pub r#type: TypeForm,
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
-#[schemars(rename = "lkjscript.ChangeTypeParameterFormV3")]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct TypeParameterForm {
     pub r#as: String,
     pub name: String,
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
-#[schemars(rename = "lkjscript.ChangePortFormV3")]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PortForm {
     pub r#as: String,
@@ -267,8 +252,7 @@ pub struct PortForm {
     pub function: String,
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
-#[schemars(rename = "lkjscript.TypeFormV3")]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum TypeForm {
     Unit {},
@@ -395,16 +379,14 @@ impl TypeForm {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
-#[schemars(rename = "lkjscript.ChangeTypeFieldFormV3")]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct TypeFieldForm {
     pub name: String,
     pub r#type: TypeForm,
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
-#[schemars(rename = "lkjscript.ExpressionFormV3")]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(untagged, deny_unknown_fields)]
 pub enum ExpressionForm {
     Unit {
@@ -523,8 +505,7 @@ impl ExpressionForm {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
-#[schemars(rename = "lkjscript.ChangeExpressionFieldFormV3")]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ExpressionFieldForm {
     pub name: String,

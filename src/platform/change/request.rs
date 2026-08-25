@@ -36,53 +36,38 @@ use crate::platform::semantic_id::{
 };
 use crate::platform::witness::NamespaceKey;
 use bincode::{Decode, Encode};
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub const MAXIMUM_AUTHORED_CHANGES: usize = 10_000;
 pub const MAXIMUM_AUTHORED_CHANGE_BYTES: usize = 4 * 1_048_576;
 const MAXIMUM_REQUEST_SYMBOL_BYTES: usize = 128;
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5AuthoredChangeSetV2")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct AuthoredChangeSet {
     pub base: RevisionId,
-    #[serde(default)]
-    #[schemars(length(max = MAXIMUM_AUTHORED_CHANGES))]
     pub preconditions: Vec<AuthoredPrecondition>,
-    #[schemars(length(min = 1, max = MAXIMUM_AUTHORED_CHANGES))]
     pub changes: Vec<AuthoredChange>,
-    #[serde(default)]
     pub budget: ChangeBudget,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5AuthoredChangeV1")]
-#[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub enum AuthoredChange {
     CreateModule {
-        #[serde(rename = "as")]
         symbol: String,
         name: Name,
     },
     CreateFunction {
-        #[serde(rename = "as")]
         symbol: String,
         module: ModuleSelector,
         name: Name,
         visibility: crate::platform::kernel::DeclarationVisibility,
-        #[serde(default)]
         type_parameters: Vec<AuthoredTypeParameter>,
-        #[serde(default)]
         parameters: Vec<AuthoredParameter>,
         result: AuthoredType,
         effect: AuthoredFunctionEffect,
         body: AuthoredExpression,
     },
     CreateRecord {
-        #[serde(rename = "as")]
         symbol: String,
         module: ModuleSelector,
         name: Name,
@@ -90,7 +75,6 @@ pub enum AuthoredChange {
         fields: Vec<AuthoredField>,
     },
     CreateVariant {
-        #[serde(rename = "as")]
         symbol: String,
         module: ModuleSelector,
         name: Name,
@@ -98,7 +82,6 @@ pub enum AuthoredChange {
         cases: Vec<AuthoredCase>,
     },
     CreateInterface {
-        #[serde(rename = "as")]
         symbol: String,
         module: ModuleSelector,
         name: Name,
@@ -106,20 +89,16 @@ pub enum AuthoredChange {
         operations: Vec<AuthoredOperation>,
     },
     CreateExternal {
-        #[serde(rename = "as")]
         symbol: String,
         module: ModuleSelector,
         name: Name,
         visibility: crate::platform::kernel::DeclarationVisibility,
-        #[serde(default)]
         type_parameters: Vec<AuthoredTypeParameter>,
-        #[serde(default)]
         parameters: Vec<AuthoredParameter>,
         result: AuthoredType,
         implementation: Name,
     },
     CreateConstant {
-        #[serde(rename = "as")]
         symbol: String,
         module: ModuleSelector,
         name: Name,
@@ -128,17 +107,14 @@ pub enum AuthoredChange {
         value: AuthoredExpression,
     },
     CreateComponent {
-        #[serde(rename = "as")]
         symbol: String,
         module: ModuleSelector,
         name: Name,
         visibility: crate::platform::kernel::DeclarationVisibility,
-        #[serde(default)]
         requirements: Vec<AuthoredRequirement>,
         ports: Vec<AuthoredPort>,
     },
     CreateTest {
-        #[serde(rename = "as")]
         symbol: String,
         module: ModuleSelector,
         name: Name,
@@ -147,7 +123,6 @@ pub enum AuthoredChange {
         expected: AuthoredExpression,
     },
     CreateTarget {
-        #[serde(rename = "as")]
         symbol: String,
         name: Name,
         component: AuthoredDeclarationReference,
@@ -155,14 +130,12 @@ pub enum AuthoredChange {
         runner: crate::platform::package::RunnerKind,
     },
     CreateDocumentation {
-        #[serde(rename = "as")]
         symbol: String,
         owner: OwnerSelector,
         class: crate::platform::kernel::DocumentationClass,
         text: String,
     },
     CreateAnnotation {
-        #[serde(rename = "as")]
         symbol: String,
         owner: OwnerSelector,
         class: crate::platform::kernel::AnnotationClass,
@@ -217,7 +190,6 @@ pub enum AuthoredChange {
     },
     SetCasePayload {
         case: OwnerSelector,
-        #[serde(default)]
         payload: Option<AuthoredType>,
     },
     SetParameterType {
@@ -233,9 +205,7 @@ pub enum AuthoredChange {
     SetRequirementContract {
         requirement: OwnerSelector,
         interface: AuthoredDeclarationReference,
-        #[serde(default)]
         operations: Vec<AuthoredOperationReference>,
-        #[serde(default)]
         limits: Vec<AuthoredResourceLimit>,
     },
     SetTarget {
@@ -279,9 +249,7 @@ pub enum AuthoredChange {
     },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5OwnerSelectorV1")]
-#[serde(tag = "by", rename_all = "snake_case", deny_unknown_fields)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub enum OwnerSelector {
     Exact { owner: OwnerKey },
     ModuleName { name: Name },
@@ -289,18 +257,14 @@ pub enum OwnerSelector {
     Symbol { symbol: String },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5ModuleSelectorV1")]
-#[serde(tag = "by", rename_all = "snake_case", deny_unknown_fields)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub enum ModuleSelector {
     Id { module: ModuleId },
     Name { name: Name },
     Symbol { symbol: String },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5DeclarationSelectorV1")]
-#[serde(tag = "by", rename_all = "snake_case", deny_unknown_fields)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub enum DeclarationSelector {
     Id {
         declaration: crate::platform::semantic_id::DeclarationId,
@@ -314,9 +278,7 @@ pub enum DeclarationSelector {
     },
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5ParameterParentSelectorV1")]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub enum ParameterParentSelector {
     Declaration { declaration: DeclarationSelector },
     Operation { operation: OwnerSelector },

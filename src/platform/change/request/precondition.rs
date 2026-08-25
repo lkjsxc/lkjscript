@@ -10,13 +10,9 @@ use crate::platform::kernel::{
 };
 use crate::platform::witness::{NamespaceKey, OwnerSummaryDigest, OwnershipEntry, OwnershipParent};
 use bincode::{Decode, Encode};
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.Graph5AuthoredPreconditionV1")]
-#[serde(tag = "precondition", rename_all = "snake_case", deny_unknown_fields)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub enum AuthoredPrecondition {
     SemanticRoot {
         equals: SemanticRootDigest,

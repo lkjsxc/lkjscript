@@ -6,8 +6,6 @@ use super::{
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use bincode::{Decode, Encode};
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
 // Deterministic per-request engine ceilings. Count ceilings bound the named work unit at the
@@ -64,9 +62,7 @@ pub const MAXIMUM_CHANGE_STAGED_OBJECTS: u64 = 1_000_000;
 pub const MAXIMUM_CHANGE_STAGED_BYTES: u64 = 512 * 1_048_576;
 pub const MAXIMUM_CHANGE_STAGED_PAGES: u64 = 1_000_000;
 
-#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.AuthoredChangeAdmissionV2")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct AuthoredChangeAdmission {
     /// Authored operations in the normalized request.
     pub maximum_operations: u64,
@@ -89,9 +85,7 @@ impl Default for AuthoredChangeAdmission {
     }
 }
 
-#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.CanonicalEditAdmissionV1")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct CanonicalEditAdmission {
     /// Distinct accepted-owner bindings created, replaced, or removed.
     pub maximum_owner_edits: u64,
@@ -114,9 +108,7 @@ impl Default for CanonicalEditAdmission {
     }
 }
 
-#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.CanonicalReadAdmissionV2")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct CanonicalReadAdmission {
     /// Logical point-read requests issued to accepted semantic authority.
     pub maximum_point_reads: u64,
@@ -219,9 +211,7 @@ impl CanonicalReadAdmission {
     }
 }
 
-#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.CanonicalMapUpdateAdmissionV1")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct CanonicalMapUpdateAdmission {
     /// Candidate persistent-map page encodings produced across semantic authority maps.
     pub maximum_pages_encoded: u64,
@@ -238,9 +228,7 @@ impl Default for CanonicalMapUpdateAdmission {
     }
 }
 
-#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.WitnessReadAdmissionV2")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct WitnessReadAdmission {
     /// Logical point-read requests issued to accepted validation evidence.
     pub maximum_point_reads: u64,
@@ -343,9 +331,7 @@ impl WitnessReadAdmission {
     }
 }
 
-#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.ImpactAdmissionV4")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct ImpactAdmission {
     /// Distinct owners in the combined direct and transitive validation frontier.
     pub maximum_affected_owners: u64,
@@ -377,9 +363,7 @@ impl Default for ImpactAdmission {
     }
 }
 
-#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.ValidationAdmissionV2")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct ValidationAdmission {
     /// Owner records checked by structural or semantic validation.
     pub maximum_owner_records: u64,
@@ -405,9 +389,7 @@ impl Default for ValidationAdmission {
     }
 }
 
-#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.TestAdmissionV2")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct TestAdmission {
     /// Graph-owned tests selected by the impact frontier.
     pub maximum_selected: u64,
@@ -430,9 +412,7 @@ impl Default for TestAdmission {
     }
 }
 
-#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.WitnessUpdateAdmissionV1")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct WitnessUpdateAdmission {
     /// Logical witness-map entries inserted, replaced, removed, or confirmed unchanged.
     pub maximum_edits: u64,
@@ -452,9 +432,7 @@ impl Default for WitnessUpdateAdmission {
     }
 }
 
-#[derive(Clone, Copy, Debug, Decode, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize)]
-#[schemars(rename = "lkjscript.StagingAdmissionV1")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct StagingAdmission {
     /// Newly isolated immutable objects retained for this preparation.
     pub maximum_objects: u64,
@@ -474,11 +452,7 @@ impl Default for StagingAdmission {
     }
 }
 
-#[derive(
-    Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize,
-)]
-#[schemars(rename = "lkjscript.ChangeBudgetV6")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Copy, Debug, Decode, Default, Encode, Eq, PartialEq)]
 pub struct ChangeBudget {
     pub authored: AuthoredChangeAdmission,
     pub canonical_edits: CanonicalEditAdmission,
@@ -884,11 +858,7 @@ impl ChangeBudget {
     }
 }
 
-#[derive(
-    Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize,
-)]
-#[schemars(rename = "lkjscript.CanonicalEditWorkV1")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Copy, Debug, Decode, Default, Encode, Eq, PartialEq)]
 pub struct CanonicalEditWork {
     pub owner_edits: u64,
     pub type_edits: u64,
@@ -896,21 +866,13 @@ pub struct CanonicalEditWork {
     pub retirement_edits: u64,
 }
 
-#[derive(
-    Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize,
-)]
-#[schemars(rename = "lkjscript.CanonicalMapUpdateWorkV1")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Copy, Debug, Decode, Default, Encode, Eq, PartialEq)]
 pub struct CanonicalMapUpdateWork {
     pub pages_encoded: u64,
     pub bytes_encoded: u64,
 }
 
-#[derive(
-    Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize,
-)]
-#[schemars(rename = "lkjscript.ValidationBudgetWorkV2")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Copy, Debug, Decode, Default, Encode, Eq, PartialEq)]
 pub struct ValidationBudgetWork {
     pub owner_records: u64,
     pub ownership_entries: u64,
@@ -919,44 +881,28 @@ pub struct ValidationBudgetWork {
     pub diagnostics: u64,
 }
 
-#[derive(
-    Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize,
-)]
-#[schemars(rename = "lkjscript.TestBudgetWorkV1")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Copy, Debug, Decode, Default, Encode, Eq, PartialEq)]
 pub struct TestBudgetWork {
     pub selected: u64,
     pub ownership_steps: u64,
     pub owners_visited: u64,
 }
 
-#[derive(
-    Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize,
-)]
-#[schemars(rename = "lkjscript.WitnessUpdateWorkV1")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Copy, Debug, Decode, Default, Encode, Eq, PartialEq)]
 pub struct WitnessUpdateWork {
     pub edits: u64,
     pub pages_encoded: u64,
     pub bytes_encoded: u64,
 }
 
-#[derive(
-    Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize,
-)]
-#[schemars(rename = "lkjscript.StagingBudgetWorkV1")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Copy, Debug, Decode, Default, Encode, Eq, PartialEq)]
 pub struct StagingBudgetWork {
     pub objects: u64,
     pub bytes: u64,
     pub pages: u64,
 }
 
-#[derive(
-    Clone, Copy, Debug, Decode, Default, Deserialize, Encode, Eq, JsonSchema, PartialEq, Serialize,
-)]
-#[schemars(rename = "lkjscript.ChangeBudgetWorkV6")]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Copy, Debug, Decode, Default, Encode, Eq, PartialEq)]
 pub struct ChangeBudgetWork {
     pub authored_operations: u64,
     pub preconditions_checked: u64,

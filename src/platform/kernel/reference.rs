@@ -5,7 +5,6 @@ use crate::platform::semantic_id::{
     CaseId, DeclarationId, FieldId, ModuleId, OperationId, PortId, RequirementId, TargetId,
 };
 use bincode::{Decode, Encode};
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 macro_rules! exact_reference {
@@ -18,13 +17,11 @@ macro_rules! exact_reference {
             Deserialize,
             Encode,
             Eq,
-            JsonSchema,
             Ord,
             PartialEq,
             PartialOrd,
             Serialize,
         )]
-        #[schemars(rename = $schema)]
         #[serde(deny_unknown_fields)]
         pub struct $name {
             pub package: PackageId,
