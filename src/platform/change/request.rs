@@ -269,6 +269,10 @@ pub enum AuthoredChange {
         declaration: DeclarationSelector,
         module: ModuleSelector,
     },
+    ReplaceFunctionBody {
+        function: DeclarationSelector,
+        body: AuthoredExpression,
+    },
     ReplaceExpression {
         expression: ExpressionId,
         operation: ExpressionOperation,
@@ -736,6 +740,51 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
                 };
                 record.module = module;
             }
+            AuthoredChange::ReplaceFunctionBody { function, body } => {
+                let function = lowerer.resolve_declaration(function)?;
+                let previous_body = {
+                    let OwnerRecord::Declaration(record) =
+                        lowerer.candidate_mut(OwnerKey::Declaration(function))?
+                    else {
+                        return Err(request_error(
+                            DiagnosticClass::Corrupt,
+                            "change_authored_declaration_record",
+                            "resolved declaration identity is bound to a foreign owner record",
+                        ));
+                    };
+                    let crate::platform::kernel::DeclarationPayload::Function(function) =
+                        &record.payload
+                    else {
+                        return Err(request_error(
+                            DiagnosticClass::Semantic,
+                            "change_authored_function_kind",
+                            "function-body replacement selector does not name a function declaration",
+                        ));
+                    };
+                    function.body
+                };
+                let body = lowerer.lower_expression(body)?;
+                let OwnerRecord::Declaration(record) =
+                    lowerer.candidate_mut(OwnerKey::Declaration(function))?
+                else {
+                    return Err(request_error(
+                        DiagnosticClass::Corrupt,
+                        "change_authored_declaration_record",
+                        "resolved function identity is bound to a foreign owner record",
+                    ));
+                };
+                let crate::platform::kernel::DeclarationPayload::Function(function) =
+                    &mut record.payload
+                else {
+                    return Err(request_error(
+                        DiagnosticClass::Semantic,
+                        "change_authored_function_kind",
+                        "function-body replacement selector does not name a function declaration",
+                    ));
+                };
+                function.body = body;
+                deletion::retire_replaced_expression_tree(&mut lowerer, previous_body)?;
+            }
             AuthoredChange::ReplaceExpression {
                 expression,
                 operation,
@@ -860,6 +909,9 @@ fn collect_symbol_definitions(
             | AuthoredChange::RenameOwner { .. }
             | AuthoredChange::MoveDeclaration { .. }
             | AuthoredChange::ReplaceExpression { .. } => {}
+            AuthoredChange::ReplaceFunctionBody { body, .. } => {
+                creation::collect_expression_symbols(body, &mut definitions)?
+            }
         }
     }
     Ok(definitions.into_entries())
@@ -948,7 +1000,9 @@ fn allocate_symbols(
     Ok(allocated)
 }
 
-fn canonical_authored_request_bytes(request: &AuthoredChangeSet) -> Result<Vec<u8>, Diagnostic> {
+pub(crate) fn canonical_authored_request_bytes(
+    request: &AuthoredChangeSet,
+) -> Result<Vec<u8>, Diagnostic> {
     let configuration = bincode::config::standard()
         .with_little_endian()
         .with_variable_int_encoding();

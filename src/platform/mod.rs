@@ -98,7 +98,7 @@ pub use bootstrap::{
     builtin_package_info, create_project, export_builtin_standard,
 };
 pub use cli::{
-    CliSuccess, execute as execute_cli, execute_capabilities, execute_inspect,
+    CliSuccess, execute as execute_cli, execute_capabilities, execute_change, execute_inspect,
     execute_inspect_owner, execute_new, execute_status,
 };
 pub use configuration::{
@@ -188,7 +188,7 @@ pub use semantic::{
 };
 pub use semantic_change::{
     AllocatedIdentity, CHANGE_CONTRACT_VERSION, Change, ChangeRequest, ChangeResult,
-    ExpressionForm, TypeForm, TypeParameterForm, execute_change,
+    ExpressionForm, TypeForm, TypeParameterForm,
 };
 pub use semantic_diff::{
     SEMANTIC_DIFF_CONTRACT_VERSION, SemanticChangeClass, SemanticDiffReport, SemanticDiffStatus,

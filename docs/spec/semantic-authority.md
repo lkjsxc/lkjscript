@@ -113,63 +113,48 @@ start a worker, or publish. Rebase is explicit; drop cannot affect accepted auth
 
 ## Sole normal writer and publication
 
-All normal program mutations lower through the exact transaction-v4 evaluator. CLI-v4 entry points
-that can publish accepted authority are:
+Normalized program mutations lower one typed `AuthoredChangeSet` through deterministic identity
+allocation, primitive edits, canonical deltas, derived witness deltas, impact selection, incremental
+validation, and required full-oracle policy. `GraphRepository::publish` is the sole visibility
+boundary for an existing normalized repository. The current normalized CLI entry points that can
+publish are:
 
-- `new`, which creates initial authority in a private sibling stage;
-- `change --commit`;
-- `draft publish`;
-- `history merge --apply`; and
-- `restore`, which verifies and recreates the exact backed-up authority.
+- `new DEST --template minimal`, which creates initial authority in a private sibling stage; and
+- `change apply ... --plan DIGEST`, which publishes one exactly reviewed prepared change.
 
-`change --dry-run`, queries, inspection, checks, builds, runs, review, package staging, and
-built-in export do not publish. Package staging only verifies and stores unreachable exact
-dependency objects for a later dependency-binding change.
+`change plan`, status, inspection, and capability discovery do not publish. Draft, history merge,
+restore, package, check, build, run, review, service, worker, and doctor still target predecessor
+authority and cannot mutate a normalized repository; their normalized cutover remains required.
 
-A change-v3 request carries an optional exact base, optional idempotency key, ordered
-preconditions, ordered high-level changes, an explicit work budget, and bounded nonsemantic intent.
-Current high-level forms add/replace/remove a dependency; create a module, record, variant, pure
-function, component, test, or target; rename a module or declaration; and replace a function body.
-The exact internal transaction supports the additional lower-level operations required by drafts,
-merge, tests, and maintained reconstruction without exposing physical records.
+A compact request carries an exact base, optional idempotency key, ordered high-level changes, and
+bounded nonsemantic intent. The public vocabulary and current subset are executable-derived from
+`capabilities --section change`, `type`, and `expression`. The typed engine retains additional
+private operations and explicit multidimensional work budgets, but those are not public grammar
+until their complete compact workflows exist.
 
-Dry-run and commit share change normalization and lowering. Four precondition-free transaction
-classes may prepare locally: eligible pure-function body replacements, independent empty-module
-creation, module rename, and declaration rename. Body replacement resolves exact owners, validates
-selected modules plus their recursive local import dependencies, and emits exact tombstone deltas
-when a structurally different body removes nested identities. Independent creation validates the
-new empty modules. Module and declaration rename use exact root lookup and validate owning modules
-plus outgoing import dependencies without loading or rewriting importers or targets. Preconditions,
-mixed operations, selection uncertainty, index failure, and every other operation fall back to
-complete logical reconstruction, canonicalization, and validation. Building a missing disposable
-index may itself require complete reconstruction.
+Plan and apply use the same parser, typed lowering, impact analysis, validation, predicted revision,
+semantic diff, and allocation path. Apply reparses and reprepares the request and requires the exact
+`plan_` digest before publication. Function-body replacement updates the function and retires its
+complete prior expression/binding ownership closure; it never leaves live unowned nodes. A stale or
+invalid request publishes nothing.
 
-Either path carries a prepared result bound to the exact base root, result root, stored-root
-update, changed module set, semantic-fact map delta, semantic certificate, and validation facts.
-Under the write lock publication rereads HEAD, rejects a stale base, verifies the prepared update
-against the accepted stored root and the result/certificate bindings, writes immutable
-module/map-page/root/receipt/revision/dependency objects durably, and replaces HEAD once. It does
-not repeat the completed semantic validation.
-
-The generated [contract registry](../generated/contracts.md) owns the current summary, fact, and
-validator identities. The semantic-summary contract produces content-addressed module summaries.
-The semantic-fact contract persists exact summary bindings, test owners, and typed reverse dependency edges as three Merkle
-maps plus one revision/root-bound manifest. The four local paths apply key-sorted path-local edits.
-Missing or malformed cache bytes rebuild from canonical modules; a rebuilt certificate that differs
-from the accepted revision is corruption. The bounded dependency frontier does not yet select
-general validation. Packed reconstruction and the complete validator remain explicit full-oracle
-and focused differential-test routes; deep doctor separately walks retained object/history
-bindings and checks the current rebuilt certificate.
+Prepared publication binds the repository, package, exact base revision, canonical semantic root,
+dependency bindings, validation contract and evidence, semantic diff, transaction, and publication
+receipt in separate typed digest domains. Under the publication lock, the repository rechecks the
+base, makes immutable semantic and evidence objects durable, publishes their bindings, and advances
+HEAD once. HEAD locates both accepted meaning and the exact durable acceptance binding. Rebuilding
+derived witness maps, summaries, indexes, packs, or validation evidence does not silently change
+semantic meaning identity.
 
 ## Outcomes, ordering, and failure
 
 Changes execute in request order after strict decoding and precondition evaluation. Canonical sets
-and diagnostics use deterministic order. Closed transaction outcomes distinguish accepted change,
-semantic no-change, exact replay, stale base, failed precondition, foreign identity, invalid graph,
-and resource exhaustion. Malformed protocol, corrupt authority, cancellation, capability failure,
-and infrastructure failure remain distinct diagnostics.
+and diagnostics use deterministic order. Compact results distinguish prepared, accepted, already
+accepted, stale base, source or semantic invalidity, resource exhaustion, corruption, and
+infrastructure failure. Stale-base failures use process exit 7; other classes retain the executable
+exit mapping. Diagnostics carry a stable code and available physical record location.
 
-Validation, dry-run, query, stale input, rejection, no-change, and failed restore publish nothing.
+Validation, planning, query, stale input, rejection, no-change, and failed restore publish nothing.
 An uncertain visibility failure requires reading current HEAD and retained receipts before retrying;
 blind replay is forbidden.
 

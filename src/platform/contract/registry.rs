@@ -1,7 +1,10 @@
 use super::super::artifact::{ARTIFACT_CONTRACT_VERSION, PACKAGE_ARTIFACT_CONTRACT_VERSION};
 use super::super::bootstrap::BOOTSTRAP_CONTRACT_VERSION;
 use super::super::configuration::CONFIGURATION_ADAPTER_CONTRACT_VERSION;
-use super::super::control::render_record;
+use super::super::control::{
+    CHANGE_PLAN_DIGEST_DOMAIN, COMPACT_CHANGE_CONTRACT_IDENTITY, COMPACT_CHANGE_OPERATIONS,
+    COMPACT_EXPRESSION_FORMS, COMPACT_TYPE_FORMS, MAXIMUM_COMPACT_INPUT_BYTES, render_record,
+};
 use super::super::database::POSTGRES_ADAPTER_CONTRACT_VERSION;
 use super::super::deployment::DEPLOYMENT_CONTRACT_VERSION;
 use super::super::diagnostic::DiagnosticClass;
@@ -22,9 +25,6 @@ use super::super::revision::{RECEIPT_CONTRACT_VERSION, REVISION_CONTRACT_VERSION
 use super::super::runtime::RESIDENT_RUNTIME_CONTRACT_VERSION;
 use super::super::secrets::{SECRET_CATALOG_CONTRACT_VERSION, SECRET_VERIFIER_CONTRACT_VERSION};
 use super::super::security::SECURITY_ADAPTER_CONTRACT_VERSION;
-use super::super::semantic_change::{
-    CHANGE_CONTRACT_VERSION, ChangeKind, ExpressionFormKind, TypeFormKind,
-};
 use super::super::semantic_diff::SEMANTIC_DIFF_CONTRACT_VERSION;
 use super::super::semantic_draft::DRAFT_CONTRACT_VERSION;
 use super::super::semantic_fact::{
@@ -50,15 +50,15 @@ use super::super::workspace::WORKSPACE_CONTRACT_VERSION;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-2";
-pub const REGISTRY_CONTRACT_VERSION: u16 = 2;
-pub const CLI_CONTRACT_VERSION: u16 = 4;
+pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-3";
+pub const REGISTRY_CONTRACT_VERSION: u16 = 3;
+pub const CLI_CONTRACT_VERSION: u16 = 5;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
 
-const REGISTRY_DIGEST_DOMAIN: &str = "lkjscript.contract-registry.v2";
-const REGISTRY_SECTION_DIGEST_DOMAIN: &str = "lkjscript.contract-registry-section.v2";
+const REGISTRY_DIGEST_DOMAIN: &str = "lkjscript.contract-registry.v3";
+const REGISTRY_SECTION_DIGEST_DOMAIN: &str = "lkjscript.contract-registry-section.v3";
 
 pub(crate) const MODULE_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.module-object.v2";
 pub(crate) const ROOT_OBJECT_DIGEST_DOMAIN: &str = "lkjscript.root-object.v2";
@@ -461,13 +461,13 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
         ContractDescriptor {
             key: ContractKey::Change,
             name: "authored semantic change",
-            identity: "lkjscript-change-3",
-            version: CHANGE_CONTRACT_VERSION,
+            identity: COMPACT_CHANGE_CONTRACT_IDENTITY,
+            version: 1,
             stability: CURRENT,
             authority: ContractAuthority::PublicProtocol,
             predecessor_policy: REJECT,
             magic_values: NONE,
-            digest_domains: &[CHANGE_ALLOCATION_SEED_DOMAIN],
+            digest_domains: &[CHANGE_ALLOCATION_SEED_DOMAIN, CHANGE_PLAN_DIGEST_DOMAIN],
         },
         ContractDescriptor {
             key: ContractKey::Transaction,
@@ -1040,8 +1040,8 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
         ),
         operation(
             PublicOperation::Change,
-            "Normalize and validate or atomically commit one semantic change.",
-            "change (--request JSON | --request-file PATH) [--dry-run|--commit]",
+            "Plan or atomically apply one compact typed semantic change.",
+            "change plan (--input RECORDS | --input-file PATH) | change apply (--input RECORDS | --input-file PATH) --plan DIGEST",
             ControlModel::ChangeRequest,
             AuthorityEffect::AcceptedOnCommit,
             ProjectRequirement::Required,
@@ -1336,7 +1336,7 @@ pub fn limit_descriptors() -> &'static [LimitDescriptor] {
         ),
         limit(
             "change_request_bytes",
-            MAXIMUM_TRANSACTION_REQUEST_BYTES,
+            MAXIMUM_COMPACT_INPUT_BYTES,
             LimitClass::HostileDecoderSafety,
             LimitUnit::Bytes,
             OverridePolicy::Fixed,
@@ -1447,6 +1447,20 @@ pub struct DiagnosticDescriptor {
     pub retry: &'static str,
 }
 
+const fn diagnostic(
+    code: &'static str,
+    class: DiagnosticClass,
+    meaning: &'static str,
+    retry: &'static str,
+) -> DiagnosticDescriptor {
+    DiagnosticDescriptor {
+        code,
+        class,
+        meaning,
+        retry,
+    }
+}
+
 pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
     const DIAGNOSTICS: &[DiagnosticDescriptor] = &[
         DiagnosticDescriptor {
@@ -1455,6 +1469,354 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             meaning: "The command, option, or argument grammar is invalid.",
             retry: "Correct the request using capabilities output.",
         },
+        diagnostic(
+            "control_input_bytes",
+            DiagnosticClass::Resource,
+            "Compact input exceeds its deterministic byte bound.",
+            "Reduce the request or move large values to an advertised external input.",
+        ),
+        diagnostic(
+            "control_utf8",
+            DiagnosticClass::Source,
+            "Compact input is not valid UTF-8.",
+            "Encode the request as valid UTF-8 records.",
+        ),
+        diagnostic(
+            "control_record_count",
+            DiagnosticClass::Source,
+            "Compact input exceeds its record-count format bound.",
+            "Split the semantic work into smaller exact-base requests.",
+        ),
+        diagnostic(
+            "control_record_bytes",
+            DiagnosticClass::Source,
+            "One compact physical record exceeds its byte bound.",
+            "Use flat fragments or an advertised external value input.",
+        ),
+        diagnostic(
+            "control_operation",
+            DiagnosticClass::Source,
+            "A compact record has a malformed or unknown operation token.",
+            "Select an operation reported by the focused capabilities section.",
+        ),
+        diagnostic(
+            "control_field_separator",
+            DiagnosticClass::Source,
+            "Compact fields are not separated by ASCII whitespace.",
+            "Separate each field assignment with ASCII whitespace.",
+        ),
+        diagnostic(
+            "control_field_count",
+            DiagnosticClass::Source,
+            "One compact record exceeds its field-count format bound.",
+            "Use additional flat records for repeated or nested facts.",
+        ),
+        diagnostic(
+            "control_field_name",
+            DiagnosticClass::Source,
+            "A compact field name is malformed.",
+            "Use the closed lowercase field name reported by capabilities.",
+        ),
+        diagnostic(
+            "control_duplicate_field",
+            DiagnosticClass::Source,
+            "One compact record repeats a field name.",
+            "Supply each closed field exactly once.",
+        ),
+        diagnostic(
+            "control_field_equals",
+            DiagnosticClass::Source,
+            "A compact field is missing its immediate equals delimiter.",
+            "Write each assignment as field=value.",
+        ),
+        diagnostic(
+            "control_value_missing",
+            DiagnosticClass::Source,
+            "A compact field has no value.",
+            "Supply a bare or quoted explicit value.",
+        ),
+        diagnostic(
+            "control_bare_value",
+            DiagnosticClass::Source,
+            "A bare compact value contains a byte that requires quoting.",
+            "Quote the value using the advertised deterministic escaping rule.",
+        ),
+        diagnostic(
+            "control_quote_unclosed",
+            DiagnosticClass::Source,
+            "A quoted compact value is not closed on its physical record.",
+            "Close the quote on the same record.",
+        ),
+        diagnostic(
+            "control_escape_truncated",
+            DiagnosticClass::Source,
+            "A quoted compact escape ends before its payload.",
+            "Complete the escape sequence.",
+        ),
+        diagnostic(
+            "control_escape_unknown",
+            DiagnosticClass::Source,
+            "A quoted compact value uses an unknown escape.",
+            "Use one escape reported by the compact record grammar.",
+        ),
+        diagnostic(
+            "control_unicode_escape",
+            DiagnosticClass::Source,
+            "A Unicode compact escape is malformed.",
+            "Use a canonical hexadecimal Unicode scalar escape.",
+        ),
+        diagnostic(
+            "control_unicode_scalar",
+            DiagnosticClass::Source,
+            "A Unicode compact escape does not identify a scalar value.",
+            "Use a valid Unicode scalar value.",
+        ),
+        diagnostic(
+            "control_quoted_control",
+            DiagnosticClass::Source,
+            "A quoted compact value contains an unescaped control character.",
+            "Escape control characters using the compact grammar.",
+        ),
+        diagnostic(
+            "control_value_bytes",
+            DiagnosticClass::Source,
+            "One decoded compact value exceeds its byte bound.",
+            "Use an advertised external value input or reduce the value.",
+        ),
+        diagnostic(
+            "change_request_missing",
+            DiagnosticClass::Source,
+            "A compact change has no request record.",
+            "Add exactly one request record with an exact base revision.",
+        ),
+        diagnostic(
+            "change_request_duplicate",
+            DiagnosticClass::Source,
+            "A compact change has more than one request record.",
+            "Retain one request record and one exact base.",
+        ),
+        diagnostic(
+            "change_operations_missing",
+            DiagnosticClass::Source,
+            "A compact change has no semantic operation.",
+            "Add at least one operation reported by capabilities --section change.",
+        ),
+        diagnostic(
+            "change_operation_unknown",
+            DiagnosticClass::Source,
+            "A compact change record is not registered.",
+            "Select a record reported by capabilities --section change.",
+        ),
+        diagnostic(
+            "change_field_unknown",
+            DiagnosticClass::Source,
+            "A compact semantic record contains an unknown field.",
+            "Remove the field or use the focused operation grammar.",
+        ),
+        diagnostic(
+            "change_field_missing",
+            DiagnosticClass::Source,
+            "A compact semantic record omits a required field.",
+            "Supply the exact required field reported by focused discovery.",
+        ),
+        diagnostic(
+            "change_field_value",
+            DiagnosticClass::Source,
+            "A compact semantic field has an invalid typed value.",
+            "Correct the value using the field diagnostic and focused grammar.",
+        ),
+        diagnostic(
+            "change_local_label",
+            DiagnosticClass::Source,
+            "A request-local symbol or fragment label is malformed.",
+            "Use a portable $ semantic label or @ type label.",
+        ),
+        diagnostic(
+            "change_idempotency",
+            DiagnosticClass::Source,
+            "An idempotency key violates its portable byte contract.",
+            "Use 1 through 128 portable identifier bytes.",
+        ),
+        diagnostic(
+            "change_intent_bytes",
+            DiagnosticClass::Source,
+            "Nonsemantic intent exceeds its byte bound.",
+            "Shorten or omit the intent field.",
+        ),
+        diagnostic(
+            "change_boolean",
+            DiagnosticClass::Source,
+            "A compact boolean is not exactly true or false.",
+            "Use true or false.",
+        ),
+        diagnostic(
+            "change_visibility",
+            DiagnosticClass::Source,
+            "A declaration visibility value is unknown.",
+            "Use private, package, or public.",
+        ),
+        diagnostic(
+            "change_declaration_selector",
+            DiagnosticClass::Source,
+            "A declaration selector has no supported exact form.",
+            "Use $symbol, decl_ID, or MODULE/NAME.",
+        ),
+        diagnostic(
+            "change_local_reference",
+            DiagnosticClass::Source,
+            "A local-value reference has a foreign or malformed identity domain.",
+            "Use a compatible request symbol, parameter ID, or binding ID.",
+        ),
+        diagnostic(
+            "change_edge_index_duplicate",
+            DiagnosticClass::Source,
+            "A flat fragment repeats one child index.",
+            "Use each zero-based child index once.",
+        ),
+        diagnostic(
+            "change_edge_index_order",
+            DiagnosticClass::Source,
+            "A flat fragment's child indexes are not contiguous from zero.",
+            "Provide the missing index or renumber the fragment edges.",
+        ),
+        diagnostic(
+            "change_edge_parent",
+            DiagnosticClass::Source,
+            "A flat child edge names no matching parent fragment.",
+            "Define the exact expression or type parent label.",
+        ),
+        diagnostic(
+            "change_type_duplicate",
+            DiagnosticClass::Source,
+            "A compact type label is defined more than once.",
+            "Define each @ type label once.",
+        ),
+        diagnostic(
+            "change_type_reference",
+            DiagnosticClass::Source,
+            "A compact type reference is neither primitive nor an @ label.",
+            "Use an advertised primitive or defined @ type label.",
+        ),
+        diagnostic(
+            "change_type_undefined",
+            DiagnosticClass::Source,
+            "A compact type label is referenced but not defined.",
+            "Define the referenced @ type fragment.",
+        ),
+        diagnostic(
+            "change_type_cycle",
+            DiagnosticClass::Semantic,
+            "Compact type fragments contain an ill-founded cycle.",
+            "Use an exact named declaration reference at recursive boundaries.",
+        ),
+        diagnostic(
+            "change_type_form_unknown",
+            DiagnosticClass::Source,
+            "A compact type fragment uses an unknown form.",
+            "Select a form reported by capabilities --section type.",
+        ),
+        diagnostic(
+            "change_expression_duplicate",
+            DiagnosticClass::Source,
+            "A compact expression label is defined more than once.",
+            "Define each $ expression label once.",
+        ),
+        diagnostic(
+            "change_expression_reference",
+            DiagnosticClass::Source,
+            "An expression reference is not a request-local $ label.",
+            "Use a defined $ expression label.",
+        ),
+        diagnostic(
+            "change_expression_undefined",
+            DiagnosticClass::Source,
+            "An expression label is referenced but not defined.",
+            "Define the referenced $ expression fragment.",
+        ),
+        diagnostic(
+            "change_expression_cycle",
+            DiagnosticClass::Semantic,
+            "Compact expression fragments contain an ownership cycle.",
+            "Make expression fragments one acyclic owned tree.",
+        ),
+        diagnostic(
+            "change_expression_unused",
+            DiagnosticClass::Source,
+            "A compact expression fragment is unreachable from every operation.",
+            "Remove the fragment or attach it to one semantic operation.",
+        ),
+        diagnostic(
+            "change_expression_shared",
+            DiagnosticClass::Source,
+            "A compact expression fragment has more than one owner.",
+            "Define a distinct fragment for each owned tree position.",
+        ),
+        diagnostic(
+            "change_expression_form_unknown",
+            DiagnosticClass::Source,
+            "A compact expression fragment uses an unknown form.",
+            "Select a form reported by capabilities --section expression.",
+        ),
+        diagnostic(
+            "change_effect_unsupported",
+            DiagnosticClass::Source,
+            "The compact operation does not expose the requested function effect.",
+            "Use the advertised effect or wait for the complete typed form cutover.",
+        ),
+        diagnostic(
+            "change_plan_domain",
+            DiagnosticClass::Source,
+            "A reviewed plan has the wrong typed digest prefix.",
+            "Use the exact plan_ digest returned by change plan.",
+        ),
+        diagnostic(
+            "change_plan_length",
+            DiagnosticClass::Source,
+            "A reviewed plan has the wrong digest length.",
+            "Use the complete plan_ digest returned by change plan.",
+        ),
+        diagnostic(
+            "change_plan_field_length",
+            DiagnosticClass::Resource,
+            "A normalized plan field exceeds its digest length domain.",
+            "Reduce the request within the advertised compact input bounds.",
+        ),
+        diagnostic(
+            "change_plan_hex",
+            DiagnosticClass::Source,
+            "A reviewed plan has noncanonical hexadecimal bytes.",
+            "Use the lowercase plan_ digest returned by change plan.",
+        ),
+        diagnostic(
+            "change_plan_mismatch",
+            DiagnosticClass::Semantic,
+            "Reviewed plan identity differs from the normalized input.",
+            "Re-run change plan for the exact input and review the new result.",
+        ),
+        diagnostic(
+            "change_authored_stale_base",
+            DiagnosticClass::Semantic,
+            "The request base is not the currently observed accepted revision.",
+            "Refresh status and rebuild the request against the observed revision.",
+        ),
+        diagnostic(
+            "change_stale_base",
+            DiagnosticClass::Semantic,
+            "HEAD changed after preparation and before publication.",
+            "Refresh status, re-plan the request, and review its new plan digest.",
+        ),
+        diagnostic(
+            "change_expression_inventory",
+            DiagnosticClass::Infrastructure,
+            "Compact expression inventory disagrees with decoded definitions.",
+            "Use a verified executable and retain the failing request.",
+        ),
+        diagnostic(
+            "change_prepared_base",
+            DiagnosticClass::Corrupt,
+            "Prepared publication does not bind one exact accepted base.",
+            "Preserve the repository and run deep verification.",
+        ),
         DiagnosticDescriptor {
             code: "control_response_byte_budget",
             class: DiagnosticClass::Resource,
@@ -1914,29 +2276,41 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
             records.push(compact_record(
                 "change",
                 &[
-                    (
-                        "contract",
-                        format!("lkjscript-change-{CHANGE_CONTRACT_VERSION}"),
-                    ),
+                    ("contract", COMPACT_CHANGE_CONTRACT_IDENTITY.to_owned()),
                     (
                         "request-model",
                         ControlModel::ChangeRequest.name().to_owned(),
                     ),
+                    ("request-record", "request".to_owned()),
+                    ("plan-prefix", "plan_".to_owned()),
                 ],
             )?);
-            for form in ChangeKind::ALL {
+            for operation in COMPACT_CHANGE_OPERATIONS {
                 records.push(compact_record(
-                    "change.form",
-                    &[("name", form.name().to_owned())],
+                    "change.operation",
+                    &[("name", (*operation).to_owned())],
+                )?);
+            }
+            for (name, parent, child) in [
+                ("expression.argument", "expression", "expression"),
+                ("type.argument", "type", "type"),
+            ] {
+                records.push(compact_record(
+                    "change.edge",
+                    &[
+                        ("name", name.to_owned()),
+                        ("parent", parent.to_owned()),
+                        ("child", child.to_owned()),
+                        ("order", "zero-based-contiguous-index".to_owned()),
+                    ],
                 )?);
             }
             for (name, syntax) in [
                 ("request_local_symbol", "$NAME"),
-                ("local_declaration_id", "decl_HEX"),
-                (
-                    "exact_package_module_declaration",
-                    "exact:PACKAGE_HEX/mod_HEX/decl_HEX",
-                ),
+                ("request_local_type", "@NAME"),
+                ("exact_owner", "DOMAIN_HEX"),
+                ("qualified_declaration", "MODULE/NAME"),
+                ("exact_package_declaration", "pkg_HEX/decl_HEX"),
             ] {
                 records.push(compact_record(
                     "change.reference",
@@ -1945,18 +2319,18 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
             }
         }
         RegistrySection::Type => {
-            for form in TypeFormKind::ALL {
+            for form in COMPACT_TYPE_FORMS {
                 records.push(compact_record(
                     "type.form",
-                    &[("name", form.name().to_owned())],
+                    &[("name", (*form).to_owned())],
                 )?);
             }
         }
         RegistrySection::Expression => {
-            for form in ExpressionFormKind::ALL {
+            for form in COMPACT_EXPRESSION_FORMS {
                 records.push(compact_record(
                     "expression.form",
-                    &[("name", form.name().to_owned())],
+                    &[("name", (*form).to_owned())],
                 )?);
             }
         }

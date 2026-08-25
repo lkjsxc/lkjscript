@@ -3,7 +3,7 @@
 Status: normative.
 
 Current contract identities and versions are executable-derived in the generated
-[contract table](../generated/contracts.md) and [machine manifest](../generated/manifest.json).
+[contract table](../generated/contracts.md) and [operation table](../generated/operations.md).
 This normative document does not maintain a parallel version catalog.
 
 ## Authority and executable owner
@@ -16,21 +16,22 @@ executable projects that registry through:
 ```sh
 lkjscript capabilities
 lkjscript capabilities COMMAND
-lkjscript capabilities --known-schema DIGEST
+lkjscript capabilities --known-registry DIGEST
 lkjscript capabilities --section SECTION
 lkjscript capabilities --known-section SECTION=DIGEST
-lkjscript capabilities --output schema.json
+lkjscript capabilities --output registry.records
 ```
 
-The `--known-schema` form returns only the digest and `unchanged: true` when the caller already
+The `--known-registry` form returns only the digest and `unchanged=true` when the caller already
 knows the current registry. Documentation may describe workflows, but it does not define a second grammar.
 An unknown command or option fails with the `cli_usage` diagnostic; no compatibility routing is
 performed.
 
-The public CLI reads and writes accepted meaning only through repository APIs. `new`, committed
-`change`, published drafts, committed merges, and `restore` are the accepted-authority operations.
-Package staging, review and artifact output, query indexes, logs, and runtime deployments are not
-accepted program authority.
+The normalized public slice reads and writes accepted meaning only through `GraphRepository` APIs.
+Normalized `new` and `change apply` are its current accepted-authority operations. Draft, merge,
+restore, package, compiler, runtime, and deployment commands still target predecessor authority
+until direct cutover; their output cannot alter a normalized repository. Package staging, review,
+artifact output, query indexes, logs, and runtime deployments are not accepted program authority.
 
 ## Direct command groups
 
@@ -47,7 +48,7 @@ built-in-package, project creation, and restore actions use their explicit paths
 
 ## Binary-only project creation
 
-`new DEST [--template minimal|command] [--name NAME]` creates fresh accepted authority without a
+`new DEST [--template minimal] [--name NAME]` creates fresh accepted authority without a
 repository checkout, external artifact, network access, Cargo, or Rust toolchain. The parent of
 `DEST` must exist. `DEST` may be absent or an empty ordinary directory; a nonempty destination,
 non-directory, or symlinked destination or parent path rejects without publication.
@@ -58,10 +59,9 @@ project through one filesystem rename. Its receipt names the template, project p
 package, accepted revision, root, built-in dependency when present, allocated identities, and
 publication evidence.
 
-The `minimal` template contains one empty module and no dependency. The `command` template binds
-the exact embedded standard package and uses the public change lowering path to add a function,
-component, port, test, and command target named `main`. `check`, `build`, and `run main` operate on
-the result as on any other current project.
+The normalized `minimal` template contains an empty package and no dependency. The predecessor
+command template is rejected by normalized `new`; a normalized command template remains a cutover
+blocker. Consequently `check`, `build`, and `run` do not yet consume projects created by this path.
 
 The embedded package is derived data carried by the executable, not mutable accepted authority.
 `package builtin inspect` exposes its graph contract, package ID, semantic revision, package
@@ -71,25 +71,13 @@ reproduction compares the exported bytes with the maintained standard artifact.
 
 ## Finite response contract
 
-Each finite invocation writes one strict JSON value followed by a newline and writes no stderr for
-a classified outcome. A success has this envelope:
-
-```json
-{
-  "contract_version": 4,
-  "ok": true,
-  "status": "success",
-  "command": "inspect.status",
-  "result": {}
-}
-```
-
-`status` is closed per command. A valid request whose requested semantic result is rejected, such
-as a stale base or invalid candidate, uses the same envelope with `ok: false` and the exact typed
-status. A decoding, corruption, capability, resource, cancellation, or infrastructure failure has
-`status: "failure"` and one structured `error` containing class, code, message, and only bounded
-optional location or notes. Normal output excludes stack traces, full schemas, passing-test lists,
-secrets, and child logs.
+`capabilities`, normalized `new`, `status`, exact `inspect owner`, and `change` write deterministic
+compact line records and no stderr for a classified finite outcome. Records use one closed
+operation followed by unique `field=value` assignments and one escaping rule. Success begins with
+`result status=... command=...`; failure begins with `result status=failure` and contains bounded
+`diagnostic` records with class, code, message, and available source location. Remaining finite
+commands retain their predecessor JSON envelope only until direct cutover. Compact output excludes
+stack traces, complete schemas, passing-test lists, secrets, and child logs.
 
 The hard finite-response limit is 4 MiB. Large bodies require explicit selection; growing results
 use budgets and continuations or publish bytes to an explicit output file. Project-bound reads
@@ -106,11 +94,11 @@ shutdown or failure.
 
 ## Inspection, queries, and bounds
 
-`inspect` covers status, bounded project orientation, one exact owner with optional body, targets,
-one revision, artifacts, and deployment descriptors. `query` covers owners, exact or broad name
-search, relations, callers, callees, type uses, capability uses, task context, impact, and a closed
-structured request. Owner selection uses typed stable identities; a name is a locator, not
-continuity.
+Normalized `status` covers project orientation, and `inspect owner KIND ID [--package PACKAGE]`
+reads one exact coarse owner summary at the observed revision. Other inspect and query actions are
+currently rejected for normalized repositories rather than falling back to predecessor readers.
+The eventual bounded relation, name, context, and impact query surface remains a cutover blocker.
+Owner selection uses typed stable identities; a name is a locator, not continuity.
 
 Growing queries have item, byte, work, depth, and fanout budgets. Defaults are 50 items, 64 KiB,
 100,000 work, depth 4, and fanout 1,000. Current hostile/resource maxima are 10,000 items, 4 MiB,
@@ -125,62 +113,42 @@ Missing or corrupt state rebuilds from canonical authority.
 
 ## Public change protocol
 
-`change (--request JSON | --request-file PATH) [--dry-run|--commit]` accepts one strict change
-contract v3 request. With no mode flag or with `--dry-run`, it normalizes and validates without
-publication. `--commit` lowers the same request to the exact internal transaction protocol and may
-publish at most one revision.
+`change plan (--input RECORDS | --input-file PATH)` and `change apply ... --plan DIGEST` accept
+flat UTF-8 records under contract `lkjscript-change-records-1`. A request begins with exactly one
+`request base=REVISION` record and may add bounded `idempotency` and nonsemantic `intent` fields.
+Every later record is a closed semantic operation, type fragment, expression fragment, or indexed
+edge. There is no indentation meaning, implicit scalar typing, duplicate field, macro, include, or
+JSON fallback.
 
-The request envelope contains:
+`plan` parses, resolves fragments, lowers to the typed authored model, allocates request-local
+identities, performs impact analysis and validation, and returns a `plan_` digest plus the predicted
+revision, semantic diff, compact counts, validation work, allocation map, and predicted receipt and
+revision-record identities. It publishes nothing and reports no durable receipt path. `apply`
+reparses and reprepares the input through the same path, rejects a mismatched reviewed digest before
+repository access, and then atomically publishes or reports a stale base without partial visibility.
+Both actions require an explicit exact base.
 
-- `contract_version` equal to 3;
-- optional `base_revision` and `idempotency_key`;
-- ordered `preconditions` and `changes`;
-- a bounded transaction `budget`;
-- optional bounded nonsemantic `intent`.
+The executable sections `capabilities --section change`, `type`, and `expression` are the only
+public vocabulary owner. The current compact subset includes module, record, variant, pure
+function, constant, and test creation; field, case, and function-parameter addition; owner rename;
+declaration move; and complete function-body replacement. Types include the advertised primitive,
+named, parameter, collection, result, stream, and function forms. Expressions include unit,
+boolean, integer, text, local/constant references, conditional, sequence, and direct call. Broader
+typed engine operations remain private until their compact workflows are complete.
 
-An omitted base is resolved to the observed current revision once. An idempotency key requires an
-explicit base. One commit prepares semantic validation once, carries the exact result into
-publication, rereads HEAD under the repository write lock, and verifies the base, result root,
-root delta, changed modules, summary delta, semantic certificate, and validation-fact bindings
-before publishing. A precondition-free request may prepare locally when it contains only eligible
-pure-function body replacements, only independent empty-module creations, only module renames, or
-only declaration renames. Body replacement validates selected modules and their recursive local
-import dependencies and carries removed nested-identity tombstones in the same delta. Module and
-declaration rename validate owning modules plus outgoing imports without rewriting importers or
-targets. Preconditions, mixed operations, and every other request use complete candidate
-preparation. A separate dry-run and later commit are separate invocations and each prepare
-independently; no reusable public prepared handle exists. Rejection, validation, no-change, and
-dry-run publish nothing.
+`$name` identifies request-local semantic owners and expressions; `@name` identifies notation-only
+type fragments. `expression.argument` and `type.argument` records use zero-based contiguous indexes
+to keep trees flat and deterministic. Exact local declaration selectors use `decl_...`, qualified
+selectors use `MODULE/NAME`, and dependency declaration references use `pkg_.../decl_...`.
+Selectors lower to typed exact references before validation; record spelling is never accepted
+graph authority.
 
-The exact accepted change, type, and expression form catalogs come from `capabilities --section
-change`, `capabilities --section type`, and `capabilities --section expression`. The complete nested
-change schema is available through `capabilities --output schema.json` and is retained as
-[generated JSON Schema](../generated/protocol.schema.json).
-
-Declaration references accept a typed request-local symbol, a local `decl_` identity resolved at
-the selected revision, or a fully exact
-`exact:PACKAGE_HEX/mod_HEX/decl_HEX` selector. The last form is required for direct dependency
-references that cannot be derived from a local declaration identity. Every form lowers to the same
-typed package/module/declaration reference before validation; the selector string is not graph
-authority.
-
-`capabilities` publishes every current high-level change, top-level type form, concise expression
-form, owner kind, relation role, and declaration-reference form through digest-addressed sections.
-Unknown request-envelope fields and trailing input reject at the owning boundary. Executable
-decoder conformance remains an independent oracle for generated schema strictness.
-
-A created construct uses an `as` symbol beginning with `$`. The remaining 1–64 bytes contain only
-ASCII alphanumeric characters, `-`, or `_`. A symbol is request-local, unique, defined before use,
-and valid only in its typed identity domain. Allocation is deterministic from repository, exact
-base, and request content. The result returns the complete symbol-to-domain-and-stable-ID map plus
-the exact lowered transaction digest. Repeating a dry-run against the same base yields the same
-map; exact idempotent replay preserves it.
-
-Preconditions can bind a root digest, owner existence or absence, or an expected owner name. A
-transaction result names requested base, observed current revision, transaction digest, semantic
-diff and predicted or published revision when applicable, diagnostics, and affected-owner count.
-At most 64 affected owners are inline; an accepted receipt gives `history show REVISION` as exact
-expansion.
+Allocation is deterministic from repository, exact base, normalized typed request, and optional
+idempotency key. Plan and apply return equal complete symbol maps. Function-body replacement
+retires the exact old expression/binding ownership closure in the same semantic change. Raw JSON,
+the former `--request`/`--request-file` grammar, and `--dry-run`/`--commit` are rejected before
+publication. Preconditions, large external value files, direct single-operation flags, and broad
+result export are not yet exposed by this compact subset.
 
 ## Drafts, history, and packages
 

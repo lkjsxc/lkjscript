@@ -399,7 +399,7 @@ pub(super) fn collect_test_symbols(
     collect_expression_symbols(expected, definitions)
 }
 
-fn collect_expression_symbols(
+pub(super) fn collect_expression_symbols(
     expression: &AuthoredExpression,
     definitions: &mut SymbolDefinitions,
 ) -> Result<(), Diagnostic> {
@@ -725,7 +725,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         }
     }
 
-    fn lower_expression(
+    pub(super) fn lower_expression(
         &mut self,
         authored: &AuthoredExpression,
     ) -> Result<crate::platform::semantic_id::ExpressionId, Diagnostic> {

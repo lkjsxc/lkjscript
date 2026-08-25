@@ -1,6 +1,6 @@
 # Current status
 
-Status date: 2026-08-22 UTC. This file describes implemented checkout reality. Timings and sizes
+Status date: 2026-08-25 UTC. This file describes implemented checkout reality. Timings and sizes
 from predecessor contracts are historical and remain in `docs/performance.md`.
 
 ## Maintained authorities and consumers
@@ -30,8 +30,8 @@ See the generated [contract table](generated/contracts.md) and
 release executable. This status file deliberately does not repeat the current version table.
 
 Execution currently retains the independently implemented `bytecode_v1` and
-`semantic_reference_v1` routes; their replacement is part of the active Graph 5 campaign rather
-than a registry fact claimed complete here.
+`semantic_reference_v1` predecessor routes. Normalized compiler and execution implementations are
+not yet the released path, so this file does not claim runtime cutover complete.
 
 Unknown contracts and fields, malformed tagged identities, duplicate/noncanonical order, trailing
 bytes, checksum mismatch, foreign IDs, and configured exhaustion reject at their owning boundary.
@@ -48,13 +48,13 @@ old namespace, separate ID allocator, graph import, text projection aliases, and
 return `cli_usage`. `capabilities` owns the registry and schema digest; a known digest receives a
 bounded unchanged response.
 
-`new DEST --template minimal|command` creates graph-4 authority in an absent or empty safe
-directory using a private sibling stage and one visibility rename. The command template uses the
-embedded exact standard artifact and the same change-v3 lowering/publication machinery as later
-changes. A copied executable can inspect/export the built-in package, create, inspect, change,
-check, build, run, back up, restore, and deep-doctor without a repository checkout, Rust toolchain,
-network, or external bootstrap artifact. Black-box `tests/public_cli.rs` covers this workflow,
-conflicts, corruption, local identities, exact reproduction, and predecessor-command rejection.
+Normalized `new DEST --template minimal` creates current semantic authority in an absent or empty
+safe directory using a private sibling stage and one visibility rename. It rejects the predecessor
+command template. A copied executable can discover contracts, create a minimal normalized project,
+read status, inspect one exact coarse owner, and plan/apply the currently exposed compact semantic
+changes without a repository checkout, Rust toolchain, network, or external bootstrap artifact.
+Check, build, run, service, worker, package, history, draft, review, backup, restore, and doctor
+still use predecessor authority and cannot consume that new project yet.
 
 `doctor cleanup` implements retention contract 1 as a read-only inventory. Its policy roots are
 HEAD's parent DAG plus every live draft and its base DAG. It reports retained-object counts,
@@ -63,11 +63,16 @@ unknown-entry counts, and an integrity-bound plan digest. It deliberately report
 `destructive_ready: false` and names missing revision-pin, active-reader-lease, and
 registered-backup-root authority; it never deletes data.
 
-Change v3 exposes 13 high-level forms: dependency add/replace/remove; module, record, variant, pure
-function, component, test, and target creation; module/declaration rename; and body replacement.
-Typed request-local symbols allocate stable identities deterministically and return the complete
-map. A common commit prepares its selected validation path once, then publication rechecks its
-exact base, result, delta, changed modules, and facts instead of repeating semantic validation.
+Compact change contract `lkjscript-change-records-1` is the released change boundary. `change
+plan` and `change apply --plan DIGEST` share the normalized typed lowering and publication path,
+require an explicit revision, and return deterministic bounded records. The exposed subset has 12
+semantic operations, 15 type forms, and 10 expression forms listed by focused capabilities.
+Connected creation and flat expression edges allocate identities in one request; complete function
+body replacement retires the prior expression/binding closure. The private authored JSON adapter
+and generated schema were deleted, and predecessor JSON change requests reject without advancing
+HEAD. Allocation and plan bytes still depend on the typed model's bincode representation and local
+symbol spelling; replacing that seed codec is the next correctness prerequisite before grammar
+freeze.
 
 ## Persistent root, validation, and derived state
 

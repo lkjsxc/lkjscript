@@ -88,6 +88,48 @@ pub(super) fn lower_deletions<
     Ok(())
 }
 
+/// Retires the accepted expression and binding closure detached by a parent edit. The caller
+/// replaces the parent's root first, allowing incoming-reference validation to distinguish that
+/// deliberate detachment from an untouched live reference.
+pub(super) fn retire_replaced_expression_tree<
+    B: CanonicalBaseRead + ?Sized,
+    W: WitnessBaseRead + ?Sized,
+>(
+    lowerer: &mut AuthoredLowerer<'_, B, W>,
+    root: crate::platform::semantic_id::ExpressionId,
+) -> Result<(), Diagnostic> {
+    let root = OwnerKey::Expression(root);
+    require_accepted_owner(lowerer, root)?;
+    if !matches!(lowerer.owners[&root].record, OwnerRecord::Expression(_)) {
+        return Err(delete_corrupt(
+            "change_replace_body_root_kind",
+            "accepted function body identity is not bound to an expression owner",
+        ));
+    }
+
+    let candidate_external_children = index_candidate_external_children(lowerer);
+    let mut closure = BTreeSet::new();
+    let mut frontier = VecDeque::from([root]);
+    while let Some(owner) = frontier.pop_front() {
+        if closure.contains(&owner) {
+            continue;
+        }
+        lowerer.admit_owner_edit(owner)?;
+        lowerer.admit_retirement_edit(owner)?;
+        require_accepted_owner(lowerer, owner)?;
+        closure.insert(owner);
+        for child in current_owned_children(lowerer, owner, &candidate_external_children)? {
+            if !closure.contains(&child) {
+                frontier.push_back(child);
+            }
+        }
+        lowerer.check_budget("function-body replacement ownership closure")?;
+    }
+
+    reject_untouched_incoming_references(lowerer, &closure)?;
+    retain_retirements_and_mark_deleted(lowerer, &closure)
+}
+
 fn require_accepted_owner<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     lowerer: &mut AuthoredLowerer<'_, B, W>,
     owner: OwnerKey,

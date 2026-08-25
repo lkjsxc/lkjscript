@@ -8,7 +8,10 @@ use super::contract::{
     generated_documents, operation_descriptors, operation_record, outcome_exit_status,
     registry_snapshot,
 };
-use super::control::{CompactResponseLimits, CompactResponseWriter};
+use super::control::{
+    ChangePlanDigest, CompactResponseLimits, CompactResponseWriter, MAXIMUM_COMPACT_INPUT_BYTES,
+    decode_compact_change,
+};
 use super::deployment::{MAXIMUM_DEPLOYMENT_BYTES, decode_deployment};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::execution::{PreparedProgram, ReferenceInterpreter, RunPolicy, Vm};
@@ -18,10 +21,11 @@ use super::meaning::RelationRole;
 use super::package::RunnerKind;
 use super::project_creation::create_minimal_project;
 use super::project_discovery::discover_project;
-use super::publication::GraphRepository;
+use super::publication::{
+    GraphRepository, PreparedAuthoredPublication, PublicationOutcome as GraphPublicationOutcome,
+};
 use super::repository::SemanticRepository;
 use super::revision::{AffectedOwner, TransactionReceipt, ValidationFacts};
-use super::semantic_change::{ChangeRequest, execute_change};
 use super::semantic_diff::diff_revisions;
 use super::semantic_digest::{ReceiptDigest, SemanticDiffDigest, TransactionDigest};
 use super::semantic_draft::SemanticDraftStore;
@@ -87,7 +91,9 @@ pub fn execute(arguments: Vec<String>) -> Result<CliSuccess, Diagnostic> {
         )),
         PublicOperation::Inspect => inspect_command(&arguments[1..], project.as_deref()),
         PublicOperation::Query => public_query_command(&arguments[1..], project.as_deref()),
-        PublicOperation::Change => change_command(&arguments[1..], project.as_deref()),
+        PublicOperation::Change => Err(usage_error(
+            "change uses the compact executable process boundary",
+        )),
         PublicOperation::Draft => public_draft_command(&arguments[1..], project.as_deref()),
         PublicOperation::History => public_history_command(&arguments[1..], project.as_deref()),
         PublicOperation::Package => package_command(&arguments[1..], project.as_deref()),
@@ -315,6 +321,277 @@ pub fn execute_status(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
         ],
     )?;
     Ok(output.finish())
+}
+
+/// Plans or applies one compact authored request through the normalized repository engine.
+/// Apply reparses and reprepares the exact request, then requires the reviewed plan digest before
+/// repository access or publication.
+pub fn execute_change(arguments: Vec<String>) -> Result<Vec<u8>, Vec<Diagnostic>> {
+    let (arguments, project) = extract_global_project(arguments).map_err(single_diagnostic)?;
+    if arguments.first().map(String::as_str) != Some("change") {
+        return Err(single_diagnostic(usage_error(
+            "change dispatch requires the change command",
+        )));
+    }
+    let action = arguments.get(1).map(String::as_str).ok_or_else(|| {
+        single_diagnostic(usage_error(
+            "change requires plan or apply; use 'capabilities change'",
+        ))
+    })?;
+    let options = &arguments[2..];
+    match action {
+        "plan" => {
+            ensure_options(options, &["--input", "--input-file"], &[]).map_err(single_diagnostic)?
+        }
+        "apply" => ensure_options(options, &["--input", "--input-file", "--plan"], &[])
+            .map_err(single_diagnostic)?,
+        other => {
+            return Err(single_diagnostic(usage_error(format!(
+                "unknown change action '{other}'; use plan or apply"
+            ))));
+        }
+    }
+    let inline = option_value(options, "--input").map_err(single_diagnostic)?;
+    let file = option_value(options, "--input-file").map_err(single_diagnostic)?;
+    let (source, bytes) = match (inline, file) {
+        (Some(value), None) if value.len() <= MAXIMUM_COMPACT_INPUT_BYTES => {
+            ("<change-input>".to_owned(), value.into_bytes())
+        }
+        (Some(_), None) => {
+            return Err(single_diagnostic(Diagnostic::new(
+                DiagnosticClass::Resource,
+                "control_input_bytes",
+                format!(
+                    "compact change input exceeds the {MAXIMUM_COMPACT_INPUT_BYTES}-byte format bound"
+                ),
+            )));
+        }
+        (None, Some(path)) => {
+            let bytes = read_bounded(
+                Path::new(&path),
+                MAXIMUM_COMPACT_INPUT_BYTES,
+                "compact change input",
+            )
+            .map_err(single_diagnostic)?;
+            (path, bytes)
+        }
+        (Some(_), Some(_)) => {
+            return Err(single_diagnostic(usage_error(
+                "supply exactly one of --input or --input-file",
+            )));
+        }
+        (None, None) => {
+            return Err(single_diagnostic(usage_error(
+                "change requires --input RECORDS or --input-file PATH",
+            )));
+        }
+    };
+    let request = decode_compact_change(&source, &bytes)?;
+    let reviewed = option_value(options, "--plan")
+        .map_err(single_diagnostic)?
+        .map(|value| value.parse::<ChangePlanDigest>())
+        .transpose()
+        .map_err(single_diagnostic)?;
+    match action {
+        "plan" if reviewed.is_some() => {
+            return Err(single_diagnostic(usage_error(
+                "change plan does not accept --plan",
+            )));
+        }
+        "apply" => match reviewed {
+            None => {
+                return Err(single_diagnostic(usage_error(
+                    "change apply requires the exact --plan DIGEST returned by change plan",
+                )));
+            }
+            Some(reviewed) if reviewed != request.plan => {
+                return Err(single_diagnostic(Diagnostic::new(
+                    DiagnosticClass::Semantic,
+                    "change_plan_mismatch",
+                    format!(
+                        "reviewed plan {reviewed} does not match normalized input {}",
+                        request.plan
+                    ),
+                )));
+            }
+            Some(_) => {}
+        },
+        _ => {}
+    }
+
+    let repository = open_normalized_repository(project).map_err(single_diagnostic)?;
+    let prepared = repository.prepare_authored_change(&request.semantic, request.options)?;
+    if action == "plan" {
+        return compact_change_response(
+            &repository,
+            &prepared,
+            "prepared",
+            request.plan,
+            Some(&source),
+        )
+        .map_err(single_diagnostic);
+    }
+    let outcome = repository
+        .publish(&prepared.publication)
+        .map_err(single_diagnostic)?;
+    let status = match &outcome {
+        GraphPublicationOutcome::Accepted { .. } => "accepted",
+        GraphPublicationOutcome::AlreadyAccepted { .. } => "already-accepted",
+        GraphPublicationOutcome::Stale { expected, current } => {
+            return Err(single_diagnostic(Diagnostic::new(
+                DiagnosticClass::Semantic,
+                "change_stale_base",
+                format!(
+                    "publication base changed after preparation: expected {}, observed {}",
+                    expected
+                        .as_ref()
+                        .map_or_else(|| "absent".to_owned(), |head| head.revision.to_string()),
+                    current
+                        .as_ref()
+                        .map_or_else(|| "absent".to_owned(), |head| head.revision.to_string())
+                ),
+            )));
+        }
+    };
+    compact_change_response(&repository, &prepared, status, request.plan, None)
+        .map_err(single_diagnostic)
+}
+
+fn compact_change_response(
+    repository: &GraphRepository,
+    prepared: &PreparedAuthoredPublication,
+    status: &str,
+    plan: ChangePlanDigest,
+    input_file: Option<&str>,
+) -> Result<Vec<u8>, Diagnostic> {
+    let publication = &prepared.publication;
+    let [base] = publication.receipt.bases.as_slice() else {
+        return Err(Diagnostic::new(
+            DiagnosticClass::Corrupt,
+            "change_prepared_base",
+            "prepared authored change does not bind one exact accepted base",
+        ));
+    };
+    let registry = registry_snapshot().map_err(contract_registry_error)?;
+    let mut output = compact_response_writer()?;
+    append_compact_record(
+        &mut output,
+        "result",
+        &[
+            ("status", status.to_owned()),
+            (
+                "command",
+                if status == "prepared" {
+                    "change.plan"
+                } else {
+                    "change.apply"
+                }
+                .to_owned(),
+            ),
+        ],
+    )?;
+    append_compact_record(
+        &mut output,
+        "project",
+        &[
+            ("path", repository.root().display().to_string()),
+            ("repository", publication.head.repository_id.to_string()),
+            (
+                "package",
+                publication.authority.semantic.root.package_id.to_string(),
+            ),
+        ],
+    )?;
+    append_compact_record(
+        &mut output,
+        "revision",
+        &[
+            ("base", base.to_string()),
+            ("result", publication.head.revision.to_string()),
+        ],
+    )?;
+    append_compact_record(&mut output, "plan", &[("digest", plan.to_string())])?;
+    append_compact_record(
+        &mut output,
+        "change",
+        &[
+            ("transaction", publication.transaction_digest.to_string()),
+            (
+                "semantic-diff",
+                publication.semantic_diff_digest.to_string(),
+            ),
+        ],
+    )?;
+    for (symbol, owner) in &prepared.allocated {
+        append_compact_record(
+            &mut output,
+            "identity",
+            &[("symbol", symbol.clone()), ("id", owner.to_string())],
+        )?;
+    }
+    let counts = publication.receipt.counts;
+    append_compact_record(
+        &mut output,
+        "summary",
+        &[
+            ("created", counts.owners_created.to_string()),
+            ("updated", counts.owners_updated.to_string()),
+            ("deleted", counts.owners_deleted.to_string()),
+            ("types", counts.type_objects_added.to_string()),
+            ("dependencies", counts.dependencies_changed.to_string()),
+            ("retirements", counts.retirements_changed.to_string()),
+            ("witness", counts.witness_entries_changed.to_string()),
+        ],
+    )?;
+    let validation = publication.receipt.validation;
+    append_compact_record(
+        &mut output,
+        "validation",
+        &[
+            (
+                "structural-owners",
+                validation.structurally_checked.to_string(),
+            ),
+            (
+                "semantic-owners",
+                validation.semantically_checked.to_string(),
+            ),
+            ("summaries-reused", validation.summaries_reused.to_string()),
+            (
+                "relation-edges",
+                validation.reverse_edges_visited.to_string(),
+            ),
+            ("tests-selected", validation.tests_selected.to_string()),
+            ("tests-passed", validation.tests_passed.to_string()),
+            (
+                "compiler-units",
+                validation.compiler_units_planned.to_string(),
+            ),
+        ],
+    )?;
+    append_compact_record(
+        &mut output,
+        "receipt",
+        &[
+            ("digest", publication.receipt_digest.to_string()),
+            ("revision-record", publication.revision_digest.to_string()),
+        ],
+    )?;
+    append_compact_record(&mut output, "schema", &[("registry", registry.digest)])?;
+    if status == "prepared" {
+        let mut next = vec![("kind", "apply".to_owned()), ("plan", plan.to_string())];
+        if let Some(path) = input_file
+            && path != "<change-input>"
+        {
+            next.push(("input-file", path.to_owned()));
+        }
+        append_compact_record(&mut output, "next", &next)?;
+    }
+    Ok(output.finish())
+}
+
+fn single_diagnostic(diagnostic: Diagnostic) -> Vec<Diagnostic> {
+    vec![diagnostic]
 }
 
 /// Reads one exact owner from the accepted normalized authority observed by a revision-pinned
@@ -764,88 +1041,6 @@ fn package_command(arguments: &[String], project: Option<&Path>) -> Result<CliSu
             "unknown package action '{other}'; use 'capabilities package'"
         ))),
     }
-}
-
-fn change_command(arguments: &[String], project: Option<&Path>) -> Result<CliSuccess, Diagnostic> {
-    ensure_options(
-        arguments,
-        &["--request", "--request-file"],
-        &["--dry-run", "--commit"],
-    )?;
-    let dry_run = flag_present(arguments, "--dry-run")?;
-    let commit = flag_present(arguments, "--commit")?;
-    if dry_run && commit {
-        return Err(usage_error(
-            "change accepts only one of --dry-run or --commit",
-        ));
-    }
-    let inline = option_value(arguments, "--request")?;
-    let file = option_value(arguments, "--request-file")?;
-    let bytes = match (inline, file) {
-        (Some(value), None) if value.len() <= MAXIMUM_TRANSACTION_REQUEST_BYTES => {
-            value.into_bytes()
-        }
-        (Some(_), None) => {
-            return Err(Diagnostic::new(
-                DiagnosticClass::Resource,
-                "change_request_limit",
-                format!("change request exceeds {MAXIMUM_TRANSACTION_REQUEST_BYTES} bytes"),
-            ));
-        }
-        (None, Some(path)) => read_bounded(
-            Path::new(&path),
-            MAXIMUM_TRANSACTION_REQUEST_BYTES,
-            "change request",
-        )?,
-        (Some(_), Some(_)) => {
-            return Err(usage_error(
-                "supply exactly one of --request or --request-file",
-            ));
-        }
-        (None, None) => {
-            return Err(usage_error(
-                "change requires --request JSON or --request-file PATH",
-            ));
-        }
-    };
-    let mut deserializer = serde_json::Deserializer::from_slice(&bytes);
-    let request = ChangeRequest::deserialize(&mut deserializer).map_err(|error| {
-        Diagnostic::new(
-            DiagnosticClass::Source,
-            "change_request",
-            format!("change request is not strict current JSON: {error}"),
-        )
-    })?;
-    deserializer.end().map_err(|error| {
-        Diagnostic::new(
-            DiagnosticClass::Source,
-            "change_request_trailing",
-            format!("change request has trailing input: {error}"),
-        )
-    })?;
-    let workspace = open_workspace(project)?;
-    let change = execute_change(workspace.repository(), &request, commit)?;
-    let mut output = transaction_result("change", &change.transaction)?;
-    let fields = output.result.as_object_mut().ok_or_else(|| {
-        Diagnostic::new(
-            DiagnosticClass::Infrastructure,
-            "change_projection",
-            "normalized transaction projection was not an object",
-        )
-    })?;
-    fields.insert(
-        "change_contract_version".to_owned(),
-        serde_json::Value::from(change.contract_version),
-    );
-    fields.insert(
-        "base_revision".to_owned(),
-        serde_json::to_value(change.base_revision).map_err(internal_json)?,
-    );
-    fields.insert(
-        "allocated_identities".to_owned(),
-        serde_json::to_value(change.allocated_identities).map_err(internal_json)?,
-    );
-    Ok(output)
 }
 
 pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {

@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 const APPLICATION: &str = "applications/lkjournal";
-const CLI_CONTRACT_VERSION: u64 = 4;
+const CLI_CONTRACT_VERSION: u64 = 5;
 
 fn binary() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_lkjscript"))
@@ -106,7 +106,10 @@ fn compact_success_output(output: Output) -> Vec<CompactRecord> {
         "compact success output is excessive"
     );
     let records = parse_records("stdout", &output.stdout).expect("compact records");
-    assert_eq!(compact_field(&records[0], "status"), Some("success"));
+    assert!(matches!(
+        compact_field(&records[0], "status"),
+        Some("success" | "prepared" | "accepted" | "already-accepted")
+    ));
     records
 }
 
@@ -222,7 +225,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
     }));
 
     let expression_section = compact_success(&["capabilities", "--section", "expression"]);
-    for expected in ["invoke", "constant"] {
+    for expected in ["call", "constant"] {
         assert!(expression_section.iter().any(|record| {
             record.operation == "expression.form" && compact_field(record, "name") == Some(expected)
         }));
@@ -233,14 +236,14 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .iter()
         .filter(|record| record.operation == "change.reference")
         .collect::<Vec<_>>();
-    assert_eq!(references.len(), 3);
+    assert_eq!(references.len(), 5);
     let exact_reference = references
         .iter()
-        .find(|record| compact_field(record, "name") == Some("exact_package_module_declaration"))
+        .find(|record| compact_field(record, "name") == Some("exact_package_declaration"))
         .expect("exact reference form");
     assert_eq!(
         compact_field(exact_reference, "syntax"),
-        Some("exact:PACKAGE_HEX/mod_HEX/decl_HEX")
+        Some("pkg_HEX/decl_HEX")
     );
     let known_type_digest = compact_field(compact_record(&type_section, "section"), "digest")
         .expect("type section digest");
@@ -255,11 +258,10 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
     let change_help = compact_success(&["capabilities", "change"]);
     let change_operation = compact_record(&change_help, "operation");
     assert_eq!(compact_field(change_operation, "name"), Some("change"));
-    assert!(
-        compact_field(change_operation, "usage")
-            .expect("usage")
-            .contains("--commit")
-    );
+    let change_usage = compact_field(change_operation, "usage").expect("usage");
+    assert!(change_usage.contains("change plan"));
+    assert!(change_usage.contains("change apply"));
+    assert!(change_usage.contains("--plan DIGEST"));
 
     let new_help = compact_success(&["capabilities", "new"]);
     let new_operation = compact_record(&new_help, "operation");
@@ -433,164 +435,22 @@ fn copied_binary_rejects_the_predecessor_template_and_runs_a_predecessor_fixture
     assert_eq!(ran["result"]["result"], "hello");
     assert_eq!(ran["result"]["differential"], "equal");
 
-    let found = success_at(
-        &copied_binary,
-        temporary.path(),
-        &[
-            "--project",
-            path(&project),
-            "query",
-            "find",
-            "main",
-            "--exact",
-            "--limit",
-            "16",
-        ],
-    );
-    let main = found["result"]["items"]
-        .as_array()
-        .expect("main candidates")
-        .iter()
-        .find(|item| item["kind"] == "pure_function")
-        .and_then(|item| item["id"].as_str())
-        .expect("main function");
-    let body_change = serde_json::json!({
-        "contract_version": 3,
-        "base_revision": created.revision,
-        "changes": [{
-            "change": "replace_body",
-            "function": main,
-            "body": {"text": "goodbye"}
-        }]
-    });
-    let body_change_path = temporary.path().join("body-change.json");
-    std::fs::write(
-        &body_change_path,
-        serde_json::to_vec(&body_change).expect("body change JSON"),
-    )
-    .expect("body change request");
-    let changed = success_at(
+    let rejected_change = compact_failure_output(command_at(
         &copied_binary,
         temporary.path(),
         &[
             "--project",
             path(&project),
             "change",
-            "--request-file",
-            path(&body_change_path),
-            "--commit",
+            "plan",
+            "--input",
+            r#"{"contract_version":3,"changes":[]}"#,
         ],
-    );
+    ));
     assert_eq!(
-        changed["result"]["receipt"]["validation"]["profile"],
-        "incremental_pure_body_slice"
+        compact_field(compact_record(&rejected_change, "diagnostic"), "code"),
+        Some("control_operation")
     );
-    assert_eq!(
-        changed["result"]["receipt"]["validation"]["modules_checked"],
-        1
-    );
-    let found_after_body_change = success_at(
-        &copied_binary,
-        temporary.path(),
-        &[
-            "--project",
-            path(&project),
-            "query",
-            "find",
-            "main",
-            "--exact",
-            "--limit",
-            "16",
-        ],
-    );
-    assert!(
-        found_after_body_change["result"]["items"]
-            .as_array()
-            .expect("main candidates after body change")
-            .iter()
-            .any(|item| item["kind"] == "pure_function" && item["id"] == main)
-    );
-
-    let rename = serde_json::json!({
-        "contract_version": 3,
-        "base_revision": changed["result"]["published_revision"],
-        "changes": [{
-            "change": "rename_declaration",
-            "declaration": main,
-            "new_name": "entry"
-        }]
-    });
-    let rename_path = temporary.path().join("rename.json");
-    std::fs::write(
-        &rename_path,
-        serde_json::to_vec(&rename).expect("rename JSON"),
-    )
-    .expect("rename request");
-    let renamed = success_at(
-        &copied_binary,
-        temporary.path(),
-        &[
-            "--project",
-            path(&project),
-            "change",
-            "--request-file",
-            path(&rename_path),
-            "--commit",
-        ],
-    );
-    assert_eq!(
-        renamed["result"]["receipt"]["validation"]["profile"],
-        "incremental_declaration_rename"
-    );
-    let found_after_rename = success_at(
-        &copied_binary,
-        temporary.path(),
-        &[
-            "--project",
-            path(&project),
-            "query",
-            "find",
-            "entry",
-            "--exact",
-            "--limit",
-            "16",
-        ],
-    );
-    assert!(
-        found_after_rename["result"]["items"]
-            .as_array()
-            .expect("entry candidates after rename")
-            .iter()
-            .any(|item| item["kind"] == "pure_function" && item["id"] == main)
-    );
-    let stale_name = success_at(
-        &copied_binary,
-        temporary.path(),
-        &[
-            "--project",
-            path(&project),
-            "query",
-            "find",
-            "main",
-            "--exact",
-            "--limit",
-            "16",
-        ],
-    );
-    assert!(
-        stale_name["result"]["items"]
-            .as_array()
-            .expect("remaining main candidates")
-            .iter()
-            .all(|item| item["kind"] != "pure_function" || item["id"] != main)
-    );
-    let reran = success_at(
-        &copied_binary,
-        temporary.path(),
-        &["--project", path(&project), "run", "main"],
-    );
-    assert_eq!(reran["result"]["result"], "goodbye");
-    assert_eq!(reran["result"]["differential"], "equal");
 
     let artifact = temporary.path().join("sample.lkja");
     let built = success_at(
@@ -658,157 +518,208 @@ fn copied_binary_rejects_the_predecessor_template_and_runs_a_predecessor_fixture
 }
 
 #[test]
-fn one_public_change_allocates_a_connected_subgraph_and_reuses_dry_run_lowering() {
+fn public_change_reuses_planned_allocation_and_replaces_an_existing_body() {
     let temporary = tempfile::TempDir::new().expect("temporary graph authority");
     let project = temporary.path().join("project");
-    let created = predecessor_project(&project, "project", ProjectTemplate::Minimal);
-    let request = serde_json::json!({
-        "contract_version": 3,
-        "changes": [
-            {"change": "create_module", "as": "$domain", "name": "domain"},
-            {
-                "change": "create_record",
-                "as": "$message",
-                "module": "$domain",
-                "name": "Message",
-                "fields": [{"as": "$message-text", "name": "text", "type": {"type": "text"}}],
-                "exported": true
-            },
-            {
-                "change": "create_function",
-                "as": "$main",
-                "module": "$domain",
-                "name": "main",
-                "result": {"type": "text"},
-                "body": {"text": "hello"},
-                "exported": true
-            },
-            {
-                "change": "create_component",
-                "as": "$app",
-                "module": "$domain",
-                "name": "App",
-                "ports": [{
-                    "as": "$main-port",
-                    "name": "main",
-                    "result": {"type": "text"},
-                    "function": "$main"
-                }],
-                "exported": true
-            },
-            {
-                "change": "create_test",
-                "as": "$main-test",
-                "module": "$domain",
-                "name": "main_returns_hello",
-                "actual": {"call": "$main"},
-                "expected": {"text": "hello"}
-            },
-            {
-                "change": "create_target",
-                "as": "$main-target",
-                "name": "main",
-                "component": "$app",
-                "port": "$main-port",
-                "runner": "command"
-            }
-        ],
-        "intent": "public local-symbol acceptance"
-    });
-    let request_path = temporary.path().join("change.json");
-    std::fs::write(&request_path, serde_json::to_vec(&request).unwrap()).unwrap();
+    let created = compact_success(&["new", path(&project), "--name", "project"]);
+    let revision =
+        compact_field(compact_record(&created, "revision"), "id").expect("created revision");
+    let request = format!(
+        "request base={revision} idempotency=connected-public-1 intent=connected-creation\n\
+         create.module as=$domain name=domain\n\
+         create.record as=$message module=$domain name=Message visibility=public\n\
+         add.field as=$message-text record=$message name=text type=text\n\
+         expression.local as=$read value=$value\n\
+         expression.sequence as=$body\n\
+         expression.argument parent=$body index=0 expression=$read\n\
+         create.function as=$main module=$domain name=main visibility=public result=text effect=pure body=$body\n\
+         add.parameter as=$value function=$main name=value type=text\n"
+    );
+    let request_path = temporary.path().join("change.lkjc");
+    std::fs::write(&request_path, request).expect("compact change request");
 
-    let dry_run = success(&[
+    let planned = compact_success(&[
         "--project",
         path(&project),
         "change",
-        "--request-file",
+        "plan",
+        "--input-file",
         path(&request_path),
-        "--dry-run",
     ]);
-    assert_eq!(dry_run["status"], "validated");
+    assert_eq!(compact_field(&planned[0], "status"), Some("prepared"));
     assert_eq!(
-        dry_run["result"]["observed_current"],
-        Value::String(created.revision.to_string())
+        compact_field(compact_record(&planned, "revision"), "base"),
+        Some(revision)
     );
+    let plan = compact_field(compact_record(&planned, "plan"), "digest")
+        .expect("reviewed plan")
+        .to_owned();
+    let planned_identities = planned
+        .iter()
+        .filter(|record| record.operation == "identity")
+        .map(|record| {
+            (
+                compact_field(record, "symbol").unwrap(),
+                compact_field(record, "id").unwrap(),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(planned_identities.len(), 7);
 
-    let committed = success(&[
+    let committed = compact_success(&[
         "--project",
         path(&project),
         "change",
-        "--request-file",
+        "apply",
+        "--input-file",
         path(&request_path),
-        "--commit",
+        "--plan",
+        &plan,
     ]);
-    assert_eq!(committed["status"], "accepted_change");
+    assert_eq!(compact_field(&committed[0], "status"), Some("accepted"));
     assert_eq!(
-        committed["result"]["allocated_identities"],
-        dry_run["result"]["allocated_identities"]
+        committed
+            .iter()
+            .filter(|record| record.operation == "identity")
+            .map(|record| {
+                (
+                    compact_field(record, "symbol").unwrap(),
+                    compact_field(record, "id").unwrap(),
+                )
+            })
+            .collect::<Vec<_>>(),
+        planned_identities
+    );
+    let accepted_revision = compact_field(compact_record(&committed, "revision"), "result")
+        .expect("accepted revision")
+        .to_owned();
+    let status = compact_success(&["--project", path(&project), "status"]);
+    assert_eq!(
+        compact_field(compact_record(&status, "revision"), "id"),
+        Some(accepted_revision.as_str())
+    );
+
+    let mismatch = compact_failure_output(command(&[
+        "--project",
+        path(&project),
+        "change",
+        "apply",
+        "--input-file",
+        path(&request_path),
+        "--plan",
+        "plan_0000000000000000000000000000000000000000000000000000000000000000",
+    ]));
+    assert_eq!(
+        compact_field(compact_record(&mismatch, "diagnostic"), "code"),
+        Some("change_plan_mismatch")
+    );
+
+    let stale_output = command(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "--input-file",
+        path(&request_path),
+    ]);
+    assert_eq!(stale_output.status.code(), Some(7));
+    let stale = parse_records("stdout", &stale_output.stdout).expect("compact stale response");
+    assert_eq!(
+        compact_field(compact_record(&stale, "diagnostic"), "code"),
+        Some("change_authored_stale_base")
+    );
+
+    let function = planned_identities
+        .iter()
+        .find_map(|(symbol, identity)| (*symbol == "$main").then_some(*identity))
+        .expect("allocated function identity");
+    let replacement = format!(
+        "request base={accepted_revision}\n\
+         expression.text as=$replacement value=replaced\n\
+         replace.body function={function} body=$replacement\n"
+    );
+    let replacement_path = temporary.path().join("replacement.lkjc");
+    std::fs::write(&replacement_path, replacement).expect("replacement change request");
+    let replacement_plan = compact_success(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "--input-file",
+        path(&replacement_path),
+    ]);
+    assert_eq!(
+        compact_field(compact_record(&replacement_plan, "summary"), "updated"),
+        Some("1")
     );
     assert_eq!(
-        committed["result"]["allocated_identities"]
-            .as_object()
-            .unwrap()
-            .len(),
-        8
+        compact_field(compact_record(&replacement_plan, "summary"), "deleted"),
+        Some("2")
     );
-    assert!(
-        committed["result"]["receipt"]["expansion"]
-            .as_str()
-            .unwrap()
-            .starts_with("history show rev_")
+    let replacement_digest = compact_field(compact_record(&replacement_plan, "plan"), "digest")
+        .expect("replacement plan digest");
+    let replaced = compact_success(&[
+        "--project",
+        path(&project),
+        "change",
+        "apply",
+        "--input-file",
+        path(&replacement_path),
+        "--plan",
+        replacement_digest,
+    ]);
+    assert_eq!(compact_field(&replaced[0], "status"), Some("accepted"));
+    assert_eq!(
+        compact_field(compact_record(&replaced, "summary"), "updated"),
+        Some("1")
     );
-    let checked = success(&["--project", path(&project), "check"]);
-    assert_eq!(checked["result"]["passed"], 1);
-    let ran = success(&["--project", path(&project), "run", "main"]);
-    assert_eq!(ran["result"]["result"], "hello");
 }
 
 #[test]
 fn broad_change_results_are_bounded_and_expandable() {
     let temporary = tempfile::TempDir::new().expect("temporary graph authority");
     let project = temporary.path().join("project");
-    predecessor_project(&project, "project", ProjectTemplate::Minimal);
-    let changes = (1..=100)
-        .map(|ordinal| {
-            serde_json::json!({
-                "change": "create_module",
-                "as": format!("$module-{ordinal}"),
-                "name": format!("bounded.module{ordinal:03}"),
-            })
-        })
-        .collect::<Vec<_>>();
-    let request = serde_json::json!({"contract_version": 3, "changes": changes});
-    let request_path = temporary.path().join("change.json");
-    std::fs::write(&request_path, serde_json::to_vec(&request).unwrap()).unwrap();
-    let applied = success(&[
+    let created = compact_success(&["new", path(&project), "--name", "project"]);
+    let revision = compact_field(compact_record(&created, "revision"), "id").unwrap();
+    let mut request = format!("request base={revision}\n");
+    for ordinal in 1..=100 {
+        request.push_str(&format!(
+            "create.module as=$module-{ordinal} name=module_{ordinal:03}\n"
+        ));
+    }
+    let request_path = temporary.path().join("change.lkjc");
+    std::fs::write(&request_path, request).unwrap();
+    let planned = compact_success(&[
         "--project",
         path(&project),
         "change",
-        "--request-file",
+        "plan",
+        "--input-file",
         path(&request_path),
-        "--commit",
     ]);
-    assert_eq!(applied["status"], "accepted_change");
-    assert_eq!(applied["result"]["affected_owner_count"], 100);
+    let plan = compact_field(compact_record(&planned, "plan"), "digest").unwrap();
     assert_eq!(
-        applied["result"]["affected_owners"]
-            .as_array()
-            .expect("affected owners")
-            .len(),
-        64
-    );
-    assert_eq!(applied["result"]["affected_owners_truncated"], true);
-    assert_eq!(
-        applied["result"]["receipt"]["validation"]["profile"],
-        "incremental_independent_module_create"
-    );
-    assert_eq!(
-        applied["result"]["receipt"]["validation"]["modules_checked"],
+        planned
+            .iter()
+            .filter(|record| record.operation == "identity")
+            .count(),
         100
     );
-    let doctor = success(&["--project", path(&project), "doctor", "--deep"]);
-    assert_eq!(doctor["result"]["valid"], true);
+    let applied = compact_success(&[
+        "--project",
+        path(&project),
+        "change",
+        "apply",
+        "--input-file",
+        path(&request_path),
+        "--plan",
+        plan,
+    ]);
+    assert_eq!(compact_field(&applied[0], "status"), Some("accepted"));
+    assert_eq!(
+        compact_field(compact_record(&applied, "summary"), "created"),
+        Some("100")
+    );
 }
 
 #[test]
@@ -1149,46 +1060,34 @@ fn builtin_bytes_reproduce_maintained_authority() {
 }
 
 #[test]
-fn exact_dependency_stage_and_change_use_the_public_protocol() {
-    let temporary = tempfile::TempDir::new().expect("temporary dependency workflow");
+fn predecessor_json_change_is_rejected_without_advancing_normalized_authority() {
+    let temporary = tempfile::TempDir::new().expect("temporary rejection workflow");
     let project = temporary.path().join("project");
-    let created = predecessor_project(&project, "project", ProjectTemplate::Minimal);
-    let builtin = success(&["package", "builtin", "inspect"]);
-    let artifact = temporary.path().join("standard.lkja");
-    success(&["package", "builtin", "export", "--output", path(&artifact)]);
-    let staged = success(&[
-        "--project",
-        path(&project),
-        "package",
-        "stage",
-        path(&artifact),
-    ]);
-    assert_eq!(staged["result"]["status"], "staged");
-
-    let request = serde_json::json!({
-        "contract_version": 3,
-        "base_revision": created.revision,
-        "idempotency_key": "public-dependency-add-v1",
-        "changes": [{
-            "change": "add_dependency",
-            "alias": "std",
-            "package_id": builtin["result"]["package_id"],
-            "semantic_revision": builtin["result"]["semantic_revision"],
-            "artifact": builtin["result"]["artifact"]
-        }]
-    });
-    let request_path = temporary.path().join("dependency-change.json");
-    std::fs::write(&request_path, serde_json::to_vec(&request).unwrap()).unwrap();
-    let committed = success(&[
+    let created = compact_success(&["new", path(&project), "--name", "project"]);
+    let revision = compact_field(compact_record(&created, "revision"), "id").unwrap();
+    let request_path = temporary.path().join("change.json");
+    std::fs::write(
+        &request_path,
+        format!(r#"{{"base":"{revision}","changes":[]}}"#),
+    )
+    .unwrap();
+    let rejected = compact_failure_output(command(&[
         "--project",
         path(&project),
         "change",
-        "--request-file",
+        "plan",
+        "--input-file",
         path(&request_path),
-        "--commit",
-    ]);
-    assert_eq!(committed["status"], "accepted_change");
-    assert_eq!(committed["result"]["affected_owner_count"], 1);
+    ]));
+    assert_eq!(
+        compact_field(compact_record(&rejected, "diagnostic"), "code"),
+        Some("control_operation")
+    );
+    let status = compact_success(&["--project", path(&project), "status"]);
+    assert_eq!(
+        compact_field(compact_record(&status, "revision"), "id"),
+        Some(revision)
+    );
 }
 
 fn path(value: &Path) -> &str {

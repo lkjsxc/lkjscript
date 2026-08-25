@@ -7,34 +7,31 @@ handles, and deployment bindings are projections or consumers; none is a second 
 truth. The physical root is a fixed manifest over six immutable path-compressed Merkle maps, while
 the complete logical graph remains the reconstruction and validation oracle.
 
-One released executable is enough for ordinary offline application development. In an empty
-working directory, an agent can discover the platform, create a project, inspect and change its
-graph, run graph-owned tests, build an artifact, run a target, back up the authority, and restore
-it. This path needs no repository checkout, Cargo, Rust toolchain, network registry, or external
-bootstrap artifact.
+The released executable currently provides a binary-only normalized vertical slice for discovery,
+minimal project creation, status, exact owner inspection, and semantic change planning and
+publication. Check, build, run, service, worker, package, history, draft, review, backup, restore,
+and doctor still use predecessor authority and are not yet available for a newly created normalized
+project. This limitation is tracked by the active public-cutover campaign.
 
 The verified bootstrap is stable Rust 2024 on Linux x86-64.
 
 ## Start from one binary
 
-Discover the exact current CLI contract and create a command application:
+Discover the exact current CLI contract and create a minimal accepted project:
 
 ```sh
 lkjscript capabilities
 lkjscript capabilities new
-lkjscript new ./hello --template command --name hello
-lkjscript --project ./hello inspect project --limit 20
-lkjscript --project ./hello check
-lkjscript --project ./hello run main
-lkjscript --project ./hello build --output ./hello.lkja
+lkjscript new ./hello --template minimal --name hello
+lkjscript --project ./hello status
+lkjscript capabilities change
 ```
 
 `new` accepts an absent or empty ordinary directory. It rejects nonempty destinations and symlink
 components, constructs the complete repository in a private sibling stage, and makes it visible
-with one rename after durable publication. The `minimal` template creates one empty package; the
-`command` template binds the exact embedded standard package and creates an ordinary graph-owned
-function, component, port, test, and command target. It prints the new repository, package,
-revision, optional built-in dependency, and allocated stable identities.
+with one rename after durable publication. The current normalized command accepts only the
+`minimal` template, which creates an empty package. It prints compact records naming the project,
+repository, package, semantic root, accepted revision, and durable publication receipt.
 
 The embedded standard package is inspectable and exportable:
 
@@ -48,34 +45,43 @@ maintained standard package during repository verification.
 
 ## Inspect and change meaning
 
-Global `--project PATH` selects a project explicitly; from inside a project, discovery also walks
-ordinary parent directories. Bounded direct commands replace the former universal namespace:
+Global `--project PATH` selects a project explicitly; from inside a normalized project, discovery
+also walks ordinary parent directories without following symbolic links. Current normalized reads
+are deliberately narrow:
 
 ```sh
-lkjscript --project ./hello inspect status
-lkjscript --project ./hello inspect targets --limit 20
-lkjscript --project ./hello query find main --exact --limit 10
-lkjscript --project ./hello query context --seed DECLARATION_ID --depth 4
+lkjscript --project ./hello status
+lkjscript --project ./hello inspect owner module mod_...
 ```
 
-Every finite command emits one strict current-protocol JSON value. Growing reads accept item, byte, work,
-depth, fanout, revision, and continuation controls. Project-bound results identify the exact
-observed revision where applicable, and every response stays below the 4 MiB hard response bound.
+`capabilities`, normalized `new`, `status`, exact `inspect`, and `change` emit deterministic compact
+line records. Finite predecessor commands still emit JSON until their direct cutover. Compact
+responses have independent record and byte bounds and identify the exact observed revision where
+applicable.
 
-One `change` request may create connected meaning with request-local symbols. The symbols are
-defined before use, checked in their identity domain, and returned as stable IDs in the result;
-there is no separate preallocation step. For example:
+One compact `change` file may create connected meaning with request-local symbols. Definitions and
+flat expression/type fragments are checked in their identity domains, and allocated identities are
+returned in both plan and apply results; there is no separate preallocation step. For example,
+replace `rev_...` with the exact revision returned by `status`:
 
 ```sh
-lkjscript --project ./hello change --dry-run --request \
-  '{"contract_version":3,"changes":[{"change":"create_module","as":"$notes","name":"notes"},{"change":"create_record","as":"$note","module":"$notes","name":"Note","fields":[{"name":"text","type":{"type":"text"}}],"exported":true}]}'
+cat >change.lkjc <<'EOF'
+request base=rev_...
+create.module as=$notes name=notes
+create.record as=$note module=$notes name=Note visibility=public
+add.field as=$text record=$note name=text type=text
+EOF
+lkjscript --project ./hello change plan --input-file change.lkjc
+lkjscript --project ./hello change apply --input-file change.lkjc --plan plan_...
 ```
 
-Use `--commit` on the same normalized request to publish one accepted revision. Omitting
-`base_revision` binds the request to the observed current revision once; idempotent replay requires
-an explicit base. Stale base, precondition failure, invalid meaning, foreign identity, exhaustion,
-no-change, and corruption remain distinct and publish nothing. Drafts provide separate
-non-executable authority for multi-step work.
+`change plan` parses, normalizes, allocates, analyzes, and validates without publication.
+`change apply` reparses and reprepares the same typed request, requires the exact returned `plan_`
+digest, and publishes only after rechecking its explicit base. Raw JSON change requests and the
+former `--request`, `--dry-run`, and `--commit` grammar are rejected. The currently exposed compact
+operation/type/expression subset is discoverable from `capabilities --section change`, `type`, and
+`expression`; the broader typed engine remains private until each form has a complete compact
+workflow.
 
 Pure functions support explicit rank-1 type parameters. Calls and named function values provide
 their type arguments explicitly; `invoke` applies a named function value. The graph stores stable

@@ -77,68 +77,6 @@ fn repository_create_reopen_and_exact_current_reads_bind_every_object() {
 }
 
 #[test]
-fn strict_authored_protocol_prepares_the_same_exact_publication_and_compact_response() {
-    let temporary = tempfile::tempdir().expect("temporary authored protocol repository");
-    let created = GraphRepository::create(
-        &temporary.path().join("meaning"),
-        &crate::platform::kernel::tests::witness_snapshot(),
-        None,
-    )
-    .expect("Graph 5 protocol repository");
-    let request = AuthoredChangeRequest {
-        contract: AuthoredChangeContract::Current,
-        idempotency_key: Some("graph5-protocol-test".to_owned()),
-        semantic: AuthoredChangeSet {
-            base: created.current.head.revision,
-            preconditions: Vec::new(),
-            changes: vec![AuthoredChange::CreateModule {
-                symbol: "$protocol_module".to_owned(),
-                name: Name::new("protocol_added").unwrap(),
-            }],
-            budget: ChangeBudget::default(),
-        },
-        intent: Some("strict authored protocol acceptance".to_owned()),
-    };
-    let decoded = AuthoredChangeRequest::decode_json(&request.encode_json().unwrap())
-        .expect("strict protocol decode");
-    let (prepared, response) = created
-        .repository
-        .prepare_authored_protocol_change(&decoded)
-        .expect("strict protocol preparation");
-    assert_eq!(response.contract, AuthoredChangeContract::Current);
-    assert_eq!(response.status, AuthoredChangeResponseStatus::Prepared);
-    assert_eq!(response.base, created.current.head.revision);
-    assert_eq!(response.result, prepared.publication.head.revision);
-    assert_eq!(
-        response.transaction,
-        prepared.publication.transaction_digest
-    );
-    assert_eq!(
-        response.semantic_diff,
-        prepared.publication.semantic_diff_digest
-    );
-    assert_eq!(response.allocated, prepared.allocated);
-    assert_eq!(
-        response.schema_digest,
-        authored_protocol_schema_digest().unwrap()
-    );
-    assert!(response.encode_json().unwrap().len() < MAXIMUM_AUTHORED_RESPONSE_BYTES);
-
-    let outcome = created
-        .repository
-        .publish(&prepared.publication)
-        .expect("publish strict protocol result");
-    let PublicationOutcome::Accepted { current, .. } = &outcome else {
-        panic!("strict protocol publication must advance HEAD")
-    };
-    assert_eq!(current.head.revision, response.result);
-    let accepted =
-        AuthoredChangeResponse::accepted(&prepared, &outcome).expect("accepted protocol response");
-    assert_eq!(accepted.status, AuthoredChangeResponseStatus::Accepted);
-    assert_eq!(accepted.result, response.result);
-}
-
-#[test]
 fn staged_package_transports_bind_authored_dependency_lifecycle_without_advancing_head() {
     let temporary = tempfile::tempdir().expect("temporary package staging repositories");
     let source_path = temporary.path().join("source");

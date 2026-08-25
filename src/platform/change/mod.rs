@@ -47,6 +47,7 @@ pub use overlay::KernelOverlay;
 pub use prepare::{
     PreparedChangeAnalysis, prepare_change_analysis, prepare_change_analysis_with_budget,
 };
+pub(crate) use request::canonical_authored_request_bytes;
 pub use request::{
     AuthoredAnnotationValue, AuthoredBindingDefinition, AuthoredCase, AuthoredCaseReference,
     AuthoredChange, AuthoredChangeSet, AuthoredDeclarationReference, AuthoredExpression,

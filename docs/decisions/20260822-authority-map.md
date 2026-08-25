@@ -4,7 +4,13 @@ Date: 2026-08-22 UTC.
 
 ## Status
 
-Accepted inventory of the CLI v4 and current repository implementation. It distinguishes accepted
+Superseded for normalized public authority by the
+[semantic revision identity decision](20260825-semantic-revision-identity.md), the current
+[semantic authority specification](../spec/semantic-authority.md), and executable registry. This
+file remains a historical inventory of the predecessor CLI v4 repository and is not a current
+implementation contract.
+
+The historical inventory distinguishes accepted
 program authority from draft, operational, derived, evidence, bootstrap, recovery, and deployment
 state. Persisted semantic summaries and their persistent fact maps are described as derived; compiler
 caches, packs, retention pins, compaction, and garbage collection are not described as

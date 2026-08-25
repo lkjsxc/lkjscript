@@ -11,7 +11,7 @@ use lkjscript::platform::contract::{
 use lkjscript::platform::control::{CompactResponseLimits, CompactResponseWriter};
 use lkjscript::platform::{
     CLI_CONTRACT_VERSION, Diagnostic, PreparedDeployment, PublicOperation, execute_capabilities,
-    execute_cli, execute_inspect, execute_new, execute_status,
+    execute_change, execute_cli, execute_inspect, execute_new, execute_status,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -34,6 +34,9 @@ async fn main() -> ExitCode {
     }
     if compact_inspect_arguments(&arguments) {
         return compact_inspect(arguments);
+    }
+    if compact_change_arguments(&arguments) {
+        return compact_change(arguments);
     }
     let operation = arguments
         .first()
@@ -175,6 +178,24 @@ fn compact_inspect(arguments: Vec<String>) -> ExitCode {
     }
 }
 
+fn compact_change_arguments(arguments: &[String]) -> bool {
+    arguments.first().map(String::as_str) == Some("change")
+        || (arguments.first().map(String::as_str) == Some("--project")
+            && arguments.get(2).map(String::as_str) == Some("change"))
+}
+
+fn compact_change(arguments: Vec<String>) -> ExitCode {
+    match execute_change(arguments) {
+        Ok(bytes) => match write_bytes(&bytes) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(_) => ExitCode::from(exit_status_for(
+                lkjscript::platform::DiagnosticClass::Infrastructure,
+            )),
+        },
+        Err(diagnostics) => write_compact_failures("change", &diagnostics),
+    }
+}
+
 fn cli(arguments: Vec<String>) -> ExitCode {
     match execute_cli(arguments) {
         Ok(receipt) => {
@@ -208,30 +229,51 @@ fn write_failure(error: &Diagnostic, contract_version: u16) -> ExitCode {
 }
 
 fn write_compact_failure(command: &str, error: &Diagnostic) -> ExitCode {
-    let exit = exit_for(error);
-    let class = match error.class {
-        lkjscript::platform::DiagnosticClass::Source => "source",
-        lkjscript::platform::DiagnosticClass::Semantic => "semantic",
-        lkjscript::platform::DiagnosticClass::Capability => "capability",
-        lkjscript::platform::DiagnosticClass::Resource => "resource",
-        lkjscript::platform::DiagnosticClass::Cancelled => "cancelled",
-        lkjscript::platform::DiagnosticClass::Corrupt => "corrupt",
-        lkjscript::platform::DiagnosticClass::Infrastructure => "infrastructure",
+    write_compact_failures(command, std::slice::from_ref(error))
+}
+
+fn write_compact_failures(command: &str, diagnostics: &[Diagnostic]) -> ExitCode {
+    let Some(first) = diagnostics.first() else {
+        return ExitCode::from(exit_status_for(
+            lkjscript::platform::DiagnosticClass::Infrastructure,
+        ));
     };
+    const MAXIMUM_INLINE_DIAGNOSTICS: usize = 64;
+    let exit = exit_for(first);
     let result = (|| {
         let mut output = CompactResponseWriter::new(CompactResponseLimits {
             maximum_bytes: MAXIMUM_CLI_RESPONSE_BYTES,
             maximum_records: MAXIMUM_CLI_RESPONSE_RECORDS,
         })?;
         output.append_record("result", &[("status", "failure"), ("command", command)])?;
-        output.append_record(
-            "diagnostic",
-            &[
-                ("class", class),
-                ("code", &error.code),
-                ("message", &error.message),
-            ],
-        )?;
+        for error in diagnostics.iter().take(MAXIMUM_INLINE_DIAGNOSTICS) {
+            let class = diagnostic_class_name(error.class);
+            let mut fields = vec![
+                ("class", class.to_owned()),
+                ("code", error.code.clone()),
+                ("message", error.message.clone()),
+            ];
+            if let Some(location) = &error.location {
+                fields.push(("path", location.path.clone()));
+                fields.push(("line", location.line.to_string()));
+                fields.push(("column", location.column.to_string()));
+            }
+            let borrowed = fields
+                .iter()
+                .map(|(name, value)| (*name, value.as_str()))
+                .collect::<Vec<_>>();
+            output.append_record("diagnostic", &borrowed)?;
+        }
+        if diagnostics.len() > MAXIMUM_INLINE_DIAGNOSTICS {
+            let omitted = diagnostics.len() - MAXIMUM_INLINE_DIAGNOSTICS;
+            output.append_record(
+                "summary",
+                &[
+                    ("diagnostics", &diagnostics.len().to_string()),
+                    ("omitted", &omitted.to_string()),
+                ],
+            )?;
+        }
         write_bytes(&output.finish())
     })();
     if result.is_err() {
@@ -240,6 +282,18 @@ fn write_compact_failure(command: &str, error: &Diagnostic) -> ExitCode {
         ))
     } else {
         ExitCode::from(exit)
+    }
+}
+
+const fn diagnostic_class_name(class: lkjscript::platform::DiagnosticClass) -> &'static str {
+    match class {
+        lkjscript::platform::DiagnosticClass::Source => "source",
+        lkjscript::platform::DiagnosticClass::Semantic => "semantic",
+        lkjscript::platform::DiagnosticClass::Capability => "capability",
+        lkjscript::platform::DiagnosticClass::Resource => "resource",
+        lkjscript::platform::DiagnosticClass::Cancelled => "cancelled",
+        lkjscript::platform::DiagnosticClass::Corrupt => "corrupt",
+        lkjscript::platform::DiagnosticClass::Infrastructure => "infrastructure",
     }
 }
 
@@ -348,5 +402,8 @@ fn cli_error(message: impl Into<String>) -> Diagnostic {
 }
 
 fn exit_for(error: &Diagnostic) -> u8 {
-    exit_status_for(error.class)
+    match error.code.as_str() {
+        "change_stale_base" | "change_authored_stale_base" => 7,
+        _ => exit_status_for(error.class),
+    }
 }

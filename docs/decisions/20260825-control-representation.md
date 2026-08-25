@@ -4,23 +4,24 @@ Date: 2026-08-25 UTC.
 
 ## Status
 
-Proposed. The current typed operation inventory and JSON baseline are audited. The streaming parser,
-transport-neutral normalization, complete workflow comparison, and direct public cutover remain to
-be implemented and measured.
+Partially implemented. Flat records, focused discovery, normalized plan/apply, connected creation,
+flat expression edges, exact body replacement, compact output, and predecessor JSON rejection are
+public. The explicit normalized request codec, label-independent allocation, complete operation
+coverage, external large-value inputs, direct common flags, and complete workflow measurements
+remain required before the grammar is frozen.
 
 ## Problem
 
-The released `change` command currently requires a recursive JSON request. The normalized authored
-operation enum is broader and typed, but its private protocol still derives JSON shape and schema
-from Rust/serde representation. Expression construction is recursively nested, request hashing is
-performed before semantic normalization, local-symbol spelling and lexical map order influence
-allocation, and one malformed nested value has poor shell and repair locality.
+The predecessor `change` command required a recursive JSON request. The released command now uses
+flat records, but its typed request hashing still depends on bincode enum layout, operational
+budget fields, request-local spelling, and lexical map order. The public compact subset is narrower
+than the transport-neutral authored operation enum.
 
 The control representation must let an agent discover, author, repair, dry-run, and publish exact
 semantic operations with bounded output. It is an ephemeral request representation, never accepted
 program authority.
 
-## Proposed decision
+## Decision
 
 - Use flat UTF-8 line records with no indentation semantics: one closed operation name followed by
   closed `field=value` assignments.
@@ -32,9 +33,9 @@ program authority.
   references, not labels, enter the normalized request digest.
 - Declare flat fragments in a mechanically resolvable order. A connected multi-owner change remains
   one request; expression and type trees do not require nested JSON braces.
-- Parse incrementally from `BufRead` with independent input-byte, record, field, list, string,
-  fragment, operation, and diagnostic bounds. Large text and bytes use explicit file path plus
-  digest.
+- Parse independent physical UTF-8 records with input-byte, record, record-byte, field, name, value,
+  fragment, operation, and diagnostic bounds. Adopt streaming input and explicit path-plus-digest
+  values before workflows require payloads that should not be retained with the complete request.
 - Keep typed selectors, operations, preconditions, normalized requests, plans, results, and
   diagnostics independent from tokenization, terminal rendering, serde tags, Rust enum order, and
   optional projections.
@@ -85,10 +86,21 @@ copied-binary workflow that does not read repository source.
 
 ## Consequences
 
-The private authored JSON protocol and schema are transitional and will be deleted. The typed
-operation registry becomes the sole owner of public names and forms. Parser source locations are
-retained only through planning and diagnostics. Accepted graph bytes and revision identity remain
-independent of line spelling, whitespace, comments, output format, and future transports.
+The private authored JSON protocol and schema were deleted. The executable registry owns public
+names and forms. Parser source locations are retained only through planning and diagnostics.
+Accepted graph bytes and revision identity are independent of the compact representation; request
+allocation and plan identity are not yet independent of local labels or bincode layout, which is a
+recorded blocker rather than a compatibility promise.
+
+## Current evidence
+
+- Compact parser unit tests cover connected typed lowering, out-of-order indexed edges, exact
+  malformed-record locations, cycles, unused/shared expression rejection, and JSON rejection.
+- Black-box copied-binary tests cover plan/apply allocation equality, reviewed-plan mismatch,
+  connected module/record/function creation, 100-module bounded output, predecessor JSON rejection
+  without HEAD movement, and complete old-body ownership retirement.
+- The private JSON adapter, schema generator, repository convenience methods, and predecessor
+  success tests are absent. Generated contract bytes come from the executable registry.
 
 ## Reversal condition
 
