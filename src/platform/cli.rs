@@ -3,11 +3,12 @@
 use super::artifact::{MAXIMUM_ARTIFACT_BYTES, load_artifact};
 use super::bootstrap::{builtin_package_info, export_builtin_standard};
 use super::contract::{
-    CLI_CONTRACT_VERSION, MAXIMUM_CLI_RESPONSE_BYTES, MAXIMUM_TRANSACTION_REQUEST_BYTES,
-    PublicOperation, RegistrySection, RegistrySnapshot, generated_documents, operation_descriptors,
-    operation_record, outcome_exit_status, registry_snapshot,
+    CLI_CONTRACT_VERSION, MAXIMUM_CLI_RESPONSE_BYTES, MAXIMUM_CLI_RESPONSE_RECORDS,
+    MAXIMUM_TRANSACTION_REQUEST_BYTES, PublicOperation, RegistrySection, RegistrySnapshot,
+    generated_documents, operation_descriptors, operation_record, outcome_exit_status,
+    registry_snapshot,
 };
-use super::control::render_record;
+use super::control::{CompactResponseLimits, CompactResponseWriter};
 use super::deployment::{MAXIMUM_DEPLOYMENT_BYTES, decode_deployment};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::execution::{PreparedProgram, ReferenceInterpreter, RunPolicy, Vm};
@@ -142,7 +143,7 @@ pub fn execute_new(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
         ));
     }
     let created = create_minimal_project(Path::new(destination), &package_name)?;
-    let mut output = String::new();
+    let mut output = compact_response_writer()?;
     append_compact_record(
         &mut output,
         "result",
@@ -210,7 +211,7 @@ pub fn execute_new(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
             ("command", "lkjscript capabilities inspect".to_owned()),
         ],
     )?;
-    finish_compact_response("new", output)
+    Ok(output.finish())
 }
 
 /// Reports the exact current normalized authority without consulting a predecessor reader.
@@ -233,7 +234,7 @@ pub fn execute_status(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
     let current = repository.current()?;
     let registry = registry_snapshot().map_err(contract_registry_error)?;
 
-    let mut output = String::new();
+    let mut output = compact_response_writer()?;
     append_compact_record(
         &mut output,
         "result",
@@ -322,7 +323,7 @@ pub fn execute_status(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
             ("command", "lkjscript capabilities status".to_owned()),
         ],
     )?;
-    finish_compact_response("status", output)
+    Ok(output.finish())
 }
 
 fn builtin_command(arguments: &[String]) -> Result<CliSuccess, Diagnostic> {
@@ -604,7 +605,7 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
             .iter()
             .find(|descriptor| descriptor.operation == operation)
             .ok_or_else(|| internal_error("registered public operation has no descriptor"))?;
-        let mut output = String::new();
+        let mut output = compact_response_writer()?;
         append_capability_record(
             &mut output,
             "result",
@@ -614,8 +615,9 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
             ],
         )?;
         append_registry_summary(&mut output, &snapshot)?;
-        output.push_str(&operation_record(descriptor).map_err(contract_registry_error)?);
-        return finish_capabilities(output);
+        let record = operation_record(descriptor).map_err(contract_registry_error)?;
+        output.append_serialized_records(record.as_bytes())?;
+        return Ok(output.finish());
     }
 
     ensure_options(
@@ -674,7 +676,7 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
     if let Some(directory) = generated_directory {
         let documents = generated_documents().map_err(contract_registry_error)?;
         let directory = PathBuf::from(directory);
-        let mut output = String::new();
+        let mut output = compact_response_writer()?;
         append_capability_record(
             &mut output,
             "result",
@@ -702,13 +704,13 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
                 status,
             )?;
         }
-        return finish_capabilities(output);
+        return Ok(output.finish());
     }
 
     if let Some(directory) = verify_directory {
         let documents = generated_documents().map_err(contract_registry_error)?;
         let directory = PathBuf::from(directory);
-        let mut output = String::new();
+        let mut output = compact_response_writer()?;
         append_capability_record(
             &mut output,
             "result",
@@ -745,7 +747,7 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
                 "current",
             )?;
         }
-        return finish_capabilities(output);
+        return Ok(output.finish());
     }
 
     if let Some(path) = output_path {
@@ -774,7 +776,7 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
             MAXIMUM_CLI_RESPONSE_BYTES,
             "compact registry output",
         )?;
-        let mut output = String::new();
+        let mut output = compact_response_writer()?;
         append_capability_record(
             &mut output,
             "result",
@@ -785,11 +787,11 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
         )?;
         append_registry_summary(&mut output, &snapshot)?;
         append_file_record(&mut output, kind, &path, bytes, digest, status)?;
-        return finish_capabilities(output);
+        return Ok(output.finish());
     }
 
     if let Some(section) = selected_section {
-        let mut output = String::new();
+        let mut output = compact_response_writer()?;
         append_capability_record(
             &mut output,
             "result",
@@ -800,7 +802,7 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
         )?;
         append_registry_summary(&mut output, &snapshot)?;
         append_section(&mut output, &snapshot, section, true, None)?;
-        return finish_capabilities(output);
+        return Ok(output.finish());
     }
 
     if !known_sections.is_empty() {
@@ -809,7 +811,7 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
                 .section(*section)
                 .is_some_and(|current| current.digest == *known)
         });
-        let mut output = String::new();
+        let mut output = compact_response_writer()?;
         append_capability_record(
             &mut output,
             "result",
@@ -826,11 +828,11 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
                 .is_some_and(|current| current.digest != known);
             append_section(&mut output, &snapshot, section, changed, Some(changed))?;
         }
-        return finish_capabilities(output);
+        return Ok(output.finish());
     }
 
     if known_registry.as_deref() == Some(snapshot.digest.as_str()) {
-        let mut output = String::new();
+        let mut output = compact_response_writer()?;
         append_capability_record(
             &mut output,
             "result",
@@ -841,10 +843,10 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
             ],
         )?;
         append_registry_summary(&mut output, &snapshot)?;
-        return finish_capabilities(output);
+        return Ok(output.finish());
     }
 
-    let mut output = String::new();
+    let mut output = compact_response_writer()?;
     append_capability_record(
         &mut output,
         "result",
@@ -884,11 +886,11 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
             &[("kind", kind.to_owned()), ("command", command.to_owned())],
         )?;
     }
-    finish_capabilities(output)
+    Ok(output.finish())
 }
 
 fn append_registry_summary(
-    output: &mut String,
+    output: &mut CompactResponseWriter,
     snapshot: &RegistrySnapshot,
 ) -> Result<(), Diagnostic> {
     append_capability_record(
@@ -905,7 +907,7 @@ fn append_registry_summary(
 }
 
 fn append_section(
-    output: &mut String,
+    output: &mut CompactResponseWriter,
     registry: &RegistrySnapshot,
     section: RegistrySection,
     include_records: bool,
@@ -925,16 +927,13 @@ fn append_section(
     }
     append_capability_record(output, "section", &fields)?;
     if include_records {
-        output.push_str(
-            std::str::from_utf8(&snapshot.bytes)
-                .map_err(|_| internal_error("compact registry section was not valid UTF-8"))?,
-        );
+        output.append_serialized_records(&snapshot.bytes)?;
     }
     Ok(())
 }
 
 fn append_file_record(
-    output: &mut String,
+    output: &mut CompactResponseWriter,
     kind: &str,
     path: &Path,
     bytes: &[u8],
@@ -955,7 +954,7 @@ fn append_file_record(
 }
 
 fn append_capability_record(
-    output: &mut String,
+    output: &mut CompactResponseWriter,
     operation: &str,
     fields: &[(&str, String)],
 ) -> Result<(), Diagnostic> {
@@ -963,7 +962,7 @@ fn append_capability_record(
 }
 
 fn append_compact_record(
-    output: &mut String,
+    output: &mut CompactResponseWriter,
     operation: &str,
     fields: &[(&str, String)],
 ) -> Result<(), Diagnostic> {
@@ -971,23 +970,14 @@ fn append_compact_record(
         .iter()
         .map(|(name, value)| (*name, value.as_str()))
         .collect::<Vec<_>>();
-    output.push_str(&render_record(operation, &borrowed)?);
-    Ok(())
+    output.append_record(operation, &borrowed)
 }
 
-fn finish_capabilities(output: String) -> Result<Vec<u8>, Diagnostic> {
-    finish_compact_response("capabilities", output)
-}
-
-fn finish_compact_response(command: &str, output: String) -> Result<Vec<u8>, Diagnostic> {
-    if output.len() > MAXIMUM_CLI_RESPONSE_BYTES {
-        return Err(Diagnostic::new(
-            DiagnosticClass::Resource,
-            "cli_output_budget",
-            format!("{command} response exceeds the hard {MAXIMUM_CLI_RESPONSE_BYTES}-byte bound"),
-        ));
-    }
-    Ok(output.into_bytes())
+fn compact_response_writer() -> Result<CompactResponseWriter, Diagnostic> {
+    CompactResponseWriter::new(CompactResponseLimits {
+        maximum_bytes: MAXIMUM_CLI_RESPONSE_BYTES,
+        maximum_records: MAXIMUM_CLI_RESPONSE_RECORDS,
+    })
 }
 
 fn ensure_capability_export_bound(bytes: &[u8]) -> Result<(), Diagnostic> {

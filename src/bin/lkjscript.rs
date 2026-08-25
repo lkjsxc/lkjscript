@@ -5,8 +5,10 @@
     reason = "the process boundary preserves the complete structured diagnostic"
 )]
 
-use lkjscript::platform::contract::exit_status_for;
-use lkjscript::platform::control::render_record;
+use lkjscript::platform::contract::{
+    MAXIMUM_CLI_RESPONSE_BYTES, MAXIMUM_CLI_RESPONSE_RECORDS, exit_status_for,
+};
+use lkjscript::platform::control::{CompactResponseLimits, CompactResponseWriter};
 use lkjscript::platform::{
     CLI_CONTRACT_VERSION, Diagnostic, PreparedDeployment, PublicOperation, execute_capabilities,
     execute_cli, execute_new, execute_status,
@@ -197,19 +199,22 @@ fn write_compact_failure(command: &str, error: &Diagnostic) -> ExitCode {
         lkjscript::platform::DiagnosticClass::Corrupt => "corrupt",
         lkjscript::platform::DiagnosticClass::Infrastructure => "infrastructure",
     };
-    let result = render_record("result", &[("status", "failure"), ("command", command)])
-        .and_then(|mut output| {
-            output.push_str(&render_record(
-                "diagnostic",
-                &[
-                    ("class", class),
-                    ("code", &error.code),
-                    ("message", &error.message),
-                ],
-            )?);
-            Ok(output)
-        })
-        .and_then(|output| write_bytes(output.as_bytes()));
+    let result = (|| {
+        let mut output = CompactResponseWriter::new(CompactResponseLimits {
+            maximum_bytes: MAXIMUM_CLI_RESPONSE_BYTES,
+            maximum_records: MAXIMUM_CLI_RESPONSE_RECORDS,
+        })?;
+        output.append_record("result", &[("status", "failure"), ("command", command)])?;
+        output.append_record(
+            "diagnostic",
+            &[
+                ("class", class),
+                ("code", &error.code),
+                ("message", &error.message),
+            ],
+        )?;
+        write_bytes(&output.finish())
+    })();
     if result.is_err() {
         ExitCode::from(exit_status_for(
             lkjscript::platform::DiagnosticClass::Infrastructure,

@@ -53,6 +53,7 @@ pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-2";
 pub const REGISTRY_CONTRACT_VERSION: u16 = 2;
 pub const CLI_CONTRACT_VERSION: u16 = 4;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
+pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
 
 const REGISTRY_DIGEST_DOMAIN: &str = "lkjscript.contract-registry.v2";
@@ -1236,6 +1237,7 @@ const fn runtime_operation(
 #[serde(rename_all = "snake_case")]
 pub enum LimitClass {
     HostileDecoderSafety,
+    DeterministicOperationBudget,
     ExplicitRequestBudget,
     DefaultPagination,
     ImplementationLimitation,
@@ -1246,6 +1248,7 @@ impl LimitClass {
     pub const fn name(self) -> &'static str {
         match self {
             Self::HostileDecoderSafety => "hostile_decoder_safety",
+            Self::DeterministicOperationBudget => "deterministic_operation_budget",
             Self::ExplicitRequestBudget => "explicit_request_budget",
             Self::DefaultPagination => "default_pagination",
             Self::ImplementationLimitation => "implementation_limitation",
@@ -1258,6 +1261,7 @@ impl LimitClass {
 #[serde(rename_all = "snake_case")]
 pub enum LimitUnit {
     Bytes,
+    Records,
     Items,
     Work,
     Depth,
@@ -1267,6 +1271,7 @@ impl LimitUnit {
     pub const fn name(self) -> &'static str {
         match self {
             Self::Bytes => "bytes",
+            Self::Records => "records",
             Self::Items => "items",
             Self::Work => "work",
             Self::Depth => "depth",
@@ -1307,8 +1312,15 @@ pub fn limit_descriptors() -> &'static [LimitDescriptor] {
         limit(
             "cli_response_bytes",
             MAXIMUM_CLI_RESPONSE_BYTES,
-            LimitClass::HostileDecoderSafety,
+            LimitClass::DeterministicOperationBudget,
             LimitUnit::Bytes,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "cli_response_records",
+            MAXIMUM_CLI_RESPONSE_RECORDS,
+            LimitClass::DeterministicOperationBudget,
+            LimitUnit::Records,
             OverridePolicy::Fixed,
         ),
         limit(
@@ -1431,6 +1443,90 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             class: DiagnosticClass::Source,
             meaning: "The command, option, or argument grammar is invalid.",
             retry: "Correct the request using capabilities output.",
+        },
+        DiagnosticDescriptor {
+            code: "control_response_byte_budget",
+            class: DiagnosticClass::Resource,
+            meaning: "A finite compact response exceeds its deterministic byte budget.",
+            retry: "Request a focused section or export the complete material to a file.",
+        },
+        DiagnosticDescriptor {
+            code: "control_response_record_budget",
+            class: DiagnosticClass::Resource,
+            meaning: "A finite compact response exceeds its deterministic record budget.",
+            retry: "Request a focused section or export the complete material to a file.",
+        },
+        DiagnosticDescriptor {
+            code: "control_response_allocation",
+            class: DiagnosticClass::Resource,
+            meaning: "The bounded compact response buffer could not be allocated.",
+            retry: "Request less output or retry when host memory is available.",
+        },
+        DiagnosticDescriptor {
+            code: "control_response_limits",
+            class: DiagnosticClass::Infrastructure,
+            meaning: "Configured compact response limits are zero or not addressable.",
+            retry: "Use a verified executable build with a valid response budget.",
+        },
+        DiagnosticDescriptor {
+            code: "control_response_records_newline",
+            class: DiagnosticClass::Infrastructure,
+            meaning: "Executable registry records are not newline-complete.",
+            retry: "Use a verified executable build whose registry passes conformance checks.",
+        },
+        DiagnosticDescriptor {
+            code: "control_response_records_blank",
+            class: DiagnosticClass::Infrastructure,
+            meaning: "Executable registry material contains a blank physical record.",
+            retry: "Use a verified executable build whose registry passes conformance checks.",
+        },
+        DiagnosticDescriptor {
+            code: "control_response_records_invalid",
+            class: DiagnosticClass::Infrastructure,
+            meaning: "Executable registry material contains an invalid compact record.",
+            retry: "Use a verified executable build whose registry passes conformance checks.",
+        },
+        DiagnosticDescriptor {
+            code: "control_render_operation",
+            class: DiagnosticClass::Infrastructure,
+            meaning: "A compact response producer supplied an invalid operation name.",
+            retry: "Use a verified executable build whose registry passes conformance checks.",
+        },
+        DiagnosticDescriptor {
+            code: "control_render_fields",
+            class: DiagnosticClass::Resource,
+            meaning: "One compact response record exceeds the format field-count bound.",
+            retry: "Request a focused result or export the complete material to a file.",
+        },
+        DiagnosticDescriptor {
+            code: "control_render_field",
+            class: DiagnosticClass::Infrastructure,
+            meaning: "A compact response producer supplied an invalid field name.",
+            retry: "Use a verified executable build whose registry passes conformance checks.",
+        },
+        DiagnosticDescriptor {
+            code: "control_render_duplicate_field",
+            class: DiagnosticClass::Infrastructure,
+            meaning: "A compact response producer supplied a duplicate field name.",
+            retry: "Use a verified executable build whose registry passes conformance checks.",
+        },
+        DiagnosticDescriptor {
+            code: "control_render_value_bytes",
+            class: DiagnosticClass::Resource,
+            meaning: "One compact response field exceeds the format byte bound.",
+            retry: "Request a focused result or export the complete value to a file.",
+        },
+        DiagnosticDescriptor {
+            code: "control_render_record_bytes",
+            class: DiagnosticClass::Resource,
+            meaning: "One compact response record exceeds the format byte bound.",
+            retry: "Request a focused result or export the complete material to a file.",
+        },
+        DiagnosticDescriptor {
+            code: "control_render_allocation",
+            class: DiagnosticClass::Resource,
+            meaning: "The bounded compact record buffer could not be allocated.",
+            retry: "Request less output or retry when host memory is available.",
         },
         DiagnosticDescriptor {
             code: "contract_registry_invalid",
@@ -2033,6 +2129,51 @@ mod tests {
         assert_eq!(RegistrySection::ALL.len(), first.sections.len());
         assert!(first.bytes.starts_with(b"registry "));
         assert!(!first.bytes.starts_with(b"{"));
+    }
+
+    #[test]
+    fn cli_response_budgets_and_writer_failures_are_advertised() {
+        let bytes = limit_descriptors()
+            .iter()
+            .find(|descriptor| descriptor.name == "cli_response_bytes")
+            .expect("CLI response byte descriptor");
+        assert_eq!(bytes.value, MAXIMUM_CLI_RESPONSE_BYTES as u64);
+        assert_eq!(bytes.class, LimitClass::DeterministicOperationBudget);
+        assert_eq!(bytes.unit, LimitUnit::Bytes);
+        assert_eq!(bytes.override_policy, OverridePolicy::Fixed);
+
+        let records = limit_descriptors()
+            .iter()
+            .find(|descriptor| descriptor.name == "cli_response_records")
+            .expect("CLI response record descriptor");
+        assert_eq!(records.value, MAXIMUM_CLI_RESPONSE_RECORDS as u64);
+        assert_eq!(records.class, LimitClass::DeterministicOperationBudget);
+        assert_eq!(records.unit, LimitUnit::Records);
+        assert_eq!(records.override_policy, OverridePolicy::Fixed);
+
+        for code in [
+            "control_response_byte_budget",
+            "control_response_record_budget",
+            "control_response_allocation",
+            "control_response_limits",
+            "control_response_records_newline",
+            "control_response_records_blank",
+            "control_response_records_invalid",
+            "control_render_operation",
+            "control_render_fields",
+            "control_render_field",
+            "control_render_duplicate_field",
+            "control_render_value_bytes",
+            "control_render_record_bytes",
+            "control_render_allocation",
+        ] {
+            assert!(
+                diagnostic_descriptors()
+                    .iter()
+                    .any(|descriptor| descriptor.code == code),
+                "missing compact response diagnostic descriptor {code}"
+            );
+        }
     }
 
     #[test]

@@ -3,6 +3,6 @@
 mod compact;
 
 pub use compact::{
-    CompactField, CompactRecord, MAXIMUM_COMPACT_INPUT_BYTES, MAXIMUM_COMPACT_RECORDS,
-    parse_records, render_record,
+    CompactField, CompactRecord, CompactResponseLimits, CompactResponseWriter,
+    MAXIMUM_COMPACT_INPUT_BYTES, MAXIMUM_COMPACT_RECORDS, parse_records, render_record,
 };

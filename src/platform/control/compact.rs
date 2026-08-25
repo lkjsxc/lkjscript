@@ -24,6 +24,183 @@ pub struct CompactRecord {
     pub location: SourceLocation,
 }
 
+/// Independent deterministic bounds for one finite compact response.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CompactResponseLimits {
+    pub maximum_bytes: usize,
+    pub maximum_records: usize,
+}
+
+impl CompactResponseLimits {
+    fn validate(self) -> Result<Self, Diagnostic> {
+        if self.maximum_bytes == 0
+            || self.maximum_bytes > isize::MAX as usize
+            || self.maximum_records == 0
+            || self.maximum_records > isize::MAX as usize
+        {
+            return Err(Diagnostic::new(
+                DiagnosticClass::Infrastructure,
+                "control_response_limits",
+                "compact response limits require nonzero addressable byte and record maxima",
+            ));
+        }
+        Ok(self)
+    }
+}
+
+/// Bounded owner of one finite compact response.
+///
+/// Each append is atomic with respect to this buffer: rendering, framing validation, resource
+/// checks, and allocation all complete before the response bytes or counters change.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CompactResponseWriter {
+    limits: CompactResponseLimits,
+    bytes: Vec<u8>,
+    records: usize,
+}
+
+impl CompactResponseWriter {
+    pub fn new(limits: CompactResponseLimits) -> Result<Self, Diagnostic> {
+        Ok(Self {
+            limits: limits.validate()?,
+            bytes: Vec::new(),
+            records: 0,
+        })
+    }
+
+    pub fn append_record(
+        &mut self,
+        operation: &str,
+        fields: &[(&str, &str)],
+    ) -> Result<(), Diagnostic> {
+        let record = render_record(operation, fields)?;
+        self.preflight(record.len(), 1)?;
+        self.reserve(record.len())?;
+        self.bytes.extend_from_slice(record.as_bytes());
+        self.records += 1;
+        Ok(())
+    }
+
+    /// Appends one or more complete serialized records, such as an executable-registry section.
+    /// Empty input is a no-op. Nonempty input must contain only valid, nonblank, newline-terminated
+    /// physical records.
+    pub fn append_serialized_records(&mut self, bytes: &[u8]) -> Result<(), Diagnostic> {
+        if bytes.is_empty() {
+            return Ok(());
+        }
+        if bytes.last() != Some(&b'\n') {
+            return Err(Diagnostic::new(
+                DiagnosticClass::Infrastructure,
+                "control_response_records_newline",
+                "serialized compact response records are not newline-complete",
+            ));
+        }
+        let records = bytes.iter().filter(|byte| **byte == b'\n').count();
+        self.preflight(bytes.len(), records)?;
+        validate_serialized_records(bytes)?;
+        self.reserve(bytes.len())?;
+        self.bytes.extend_from_slice(bytes);
+        self.records += records;
+        Ok(())
+    }
+
+    pub const fn byte_count(&self) -> usize {
+        self.bytes.len()
+    }
+
+    pub const fn record_count(&self) -> usize {
+        self.records
+    }
+
+    pub fn finish(self) -> Vec<u8> {
+        self.bytes
+    }
+
+    fn preflight(
+        &self,
+        additional_bytes: usize,
+        additional_records: usize,
+    ) -> Result<(), Diagnostic> {
+        let records = self
+            .records
+            .checked_add(additional_records)
+            .ok_or_else(|| {
+                response_budget_error(
+                    "control_response_record_budget",
+                    "compact response record accounting overflowed",
+                )
+            })?;
+        if records > self.limits.maximum_records {
+            return Err(response_budget_error(
+                "control_response_record_budget",
+                format!(
+                    "compact response requires {records} records, exceeding its {}-record budget",
+                    self.limits.maximum_records
+                ),
+            ));
+        }
+        let bytes = self
+            .bytes
+            .len()
+            .checked_add(additional_bytes)
+            .ok_or_else(|| {
+                response_budget_error(
+                    "control_response_byte_budget",
+                    "compact response byte accounting overflowed",
+                )
+            })?;
+        if bytes > self.limits.maximum_bytes {
+            return Err(response_budget_error(
+                "control_response_byte_budget",
+                format!(
+                    "compact response requires {bytes} bytes, exceeding its {}-byte budget",
+                    self.limits.maximum_bytes
+                ),
+            ));
+        }
+        Ok(())
+    }
+
+    fn reserve(&mut self, additional: usize) -> Result<(), Diagnostic> {
+        self.bytes.try_reserve_exact(additional).map_err(|_| {
+            response_budget_error(
+                "control_response_allocation",
+                "compact response buffer allocation failed within its declared byte budget",
+            )
+        })
+    }
+}
+
+fn validate_serialized_records(bytes: &[u8]) -> Result<(), Diagnostic> {
+    for line in bytes.split_inclusive(|byte| *byte == b'\n') {
+        match parse_records("<compact-response-records>", line) {
+            Ok(records) if records.len() == 1 => {}
+            Ok(_) => {
+                return Err(Diagnostic::new(
+                    DiagnosticClass::Infrastructure,
+                    "control_response_records_blank",
+                    "serialized compact response records contain a blank physical record",
+                ));
+            }
+            Err(diagnostics) => {
+                let code = diagnostics
+                    .first()
+                    .map_or("unknown", |diagnostic| diagnostic.code.as_str());
+                return Err(Diagnostic::new(
+                    DiagnosticClass::Infrastructure,
+                    "control_response_records_invalid",
+                    format!("serialized compact response record failed validation with {code}"),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn response_budget_error(code: &'static str, message: impl Into<String>) -> Diagnostic {
+    Diagnostic::new(DiagnosticClass::Resource, code, message)
+}
+
 /// Parses independent physical records and reports at most one syntax diagnostic per malformed
 /// record. Records never span lines, so a malformed record cannot hide the location of later
 /// independent records.
@@ -111,7 +288,10 @@ pub fn render_record(operation: &str, fields: &[(&str, &str)]) -> Result<String,
         ));
     }
     let mut names = BTreeSet::new();
-    let mut output = String::from(operation);
+    let mut rendered_bytes = operation
+        .len()
+        .checked_add(1)
+        .ok_or_else(record_size_error)?;
     for (name, value) in fields {
         validate_field_name(name).map_err(|message| {
             Diagnostic::new(
@@ -136,22 +316,65 @@ pub fn render_record(operation: &str, fields: &[(&str, &str)]) -> Result<String,
                 ),
             ));
         }
+        rendered_bytes = rendered_bytes
+            .checked_add(2)
+            .and_then(|bytes| bytes.checked_add(name.len()))
+            .and_then(|bytes| bytes.checked_add(rendered_value_bytes(value)?))
+            .ok_or_else(record_size_error)?;
+        if rendered_bytes > MAXIMUM_COMPACT_RECORD_BYTES {
+            return Err(record_size_error());
+        }
+    }
+    let mut output = String::new();
+    output.try_reserve_exact(rendered_bytes).map_err(|_| {
+        response_budget_error(
+            "control_render_allocation",
+            "compact record buffer allocation failed within its format bound",
+        )
+    })?;
+    output.push_str(operation);
+    for (name, value) in fields {
         output.push(' ');
         output.push_str(name);
         output.push('=');
         render_value(value, &mut output);
     }
     output.push('\n');
-    if output.len() > MAXIMUM_COMPACT_RECORD_BYTES {
-        return Err(Diagnostic::new(
-            DiagnosticClass::Resource,
-            "control_render_record_bytes",
-            format!(
-                "compact output record exceeds the {MAXIMUM_COMPACT_RECORD_BYTES}-byte format bound"
-            ),
-        ));
-    }
+    debug_assert_eq!(output.len(), rendered_bytes);
     Ok(output)
+}
+
+fn rendered_value_bytes(value: &str) -> Option<usize> {
+    if !value.is_empty() && value.bytes().all(is_bare_byte) {
+        return Some(value.len());
+    }
+    value.chars().try_fold(2_usize, |bytes, character| {
+        let additional = match character {
+            '"' | '\\' | '\n' | '\r' | '\t' => 2,
+            character if character.is_control() => 4 + hexadecimal_digits(u32::from(character)),
+            character => character.len_utf8(),
+        };
+        bytes.checked_add(additional)
+    })
+}
+
+fn hexadecimal_digits(mut value: u32) -> usize {
+    let mut digits = 1;
+    while value >= 16 {
+        value /= 16;
+        digits += 1;
+    }
+    digits
+}
+
+fn record_size_error() -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticClass::Resource,
+        "control_render_record_bytes",
+        format!(
+            "compact output record exceeds the {MAXIMUM_COMPACT_RECORD_BYTES}-byte format bound"
+        ),
+    )
 }
 
 fn parse_record(
@@ -691,5 +914,133 @@ mod tests {
             diagnostics[0].location.as_ref().map(|value| value.line),
             Some(MAXIMUM_COMPACT_RECORDS + 1)
         );
+    }
+
+    #[test]
+    fn response_writer_enforces_bytes_and_records_independently_before_append() {
+        let oversized_value = "x".repeat(MAXIMUM_COMPACT_RECORD_BYTES);
+        let error = render_record("result", &[("value", &oversized_value)])
+            .expect_err("record size must be checked before rendering its buffer");
+        assert_eq!(error.code, "control_render_record_bytes");
+
+        let one = render_record("result", &[("status", "ok")]).expect("one record");
+        let mut byte_limited = CompactResponseWriter::new(CompactResponseLimits {
+            maximum_bytes: one.len(),
+            maximum_records: 2,
+        })
+        .expect("byte-limited writer");
+        byte_limited
+            .append_record("result", &[("status", "ok")])
+            .expect("first record fits exactly");
+        let error = byte_limited
+            .append_record("next", &[("command", "again")])
+            .expect_err("byte budget must reject before append");
+        assert_eq!(error.code, "control_response_byte_budget");
+        assert_eq!(byte_limited.byte_count(), one.len());
+        assert_eq!(byte_limited.record_count(), 1);
+        assert_eq!(byte_limited.finish(), one.as_bytes());
+
+        let mut record_limited = CompactResponseWriter::new(CompactResponseLimits {
+            maximum_bytes: MAXIMUM_COMPACT_INPUT_BYTES,
+            maximum_records: 1,
+        })
+        .expect("record-limited writer");
+        record_limited
+            .append_record("result", &[("status", "ok")])
+            .expect("first record fits");
+        let bytes_before = record_limited.byte_count();
+        let error = record_limited
+            .append_record("next", &[("command", "again")])
+            .expect_err("record budget must reject before append");
+        assert_eq!(error.code, "control_response_record_budget");
+        assert_eq!(record_limited.byte_count(), bytes_before);
+        assert_eq!(record_limited.record_count(), 1);
+    }
+
+    #[test]
+    fn response_writer_validates_and_counts_serialized_physical_records() {
+        let section = b"owner.kind name=module\nowner.kind name=declaration\n";
+        let mut writer = CompactResponseWriter::new(CompactResponseLimits {
+            maximum_bytes: section.len(),
+            maximum_records: 2,
+        })
+        .expect("section writer");
+        writer
+            .append_serialized_records(section)
+            .expect("valid complete records");
+        assert_eq!(writer.byte_count(), section.len());
+        assert_eq!(writer.record_count(), 2);
+        assert_eq!(writer.finish(), section);
+
+        let mut record_limited = CompactResponseWriter::new(CompactResponseLimits {
+            maximum_bytes: section.len(),
+            maximum_records: 1,
+        })
+        .expect("record-limited section writer");
+        let error = record_limited
+            .append_serialized_records(section)
+            .expect_err("physical section records must consume the record budget");
+        assert_eq!(error.code, "control_response_record_budget");
+        assert_eq!(record_limited.byte_count(), 0);
+        assert_eq!(record_limited.record_count(), 0);
+
+        for (bytes, code) in [
+            (
+                b"owner.kind name=module".as_slice(),
+                "control_response_records_newline",
+            ),
+            (
+                b"owner.kind name=module\n\n".as_slice(),
+                "control_response_records_blank",
+            ),
+            (
+                b"owner.kind name=\"open\n".as_slice(),
+                "control_response_records_invalid",
+            ),
+        ] {
+            let mut writer = CompactResponseWriter::new(CompactResponseLimits {
+                maximum_bytes: MAXIMUM_COMPACT_INPUT_BYTES,
+                maximum_records: MAXIMUM_COMPACT_RECORDS,
+            })
+            .expect("response writer");
+            let error = writer
+                .append_serialized_records(bytes)
+                .expect_err("malformed serialized records must reject");
+            assert_eq!(error.code, code);
+            assert_eq!(writer.byte_count(), 0);
+            assert_eq!(writer.record_count(), 0);
+        }
+    }
+
+    #[test]
+    fn response_writer_rejects_invalid_limit_domains() {
+        for limits in [
+            CompactResponseLimits {
+                maximum_bytes: 0,
+                maximum_records: 1,
+            },
+            CompactResponseLimits {
+                maximum_bytes: 1,
+                maximum_records: 0,
+            },
+            CompactResponseLimits {
+                maximum_bytes: usize::MAX,
+                maximum_records: 1,
+            },
+            CompactResponseLimits {
+                maximum_bytes: 1,
+                maximum_records: usize::MAX,
+            },
+        ] {
+            let error = CompactResponseWriter::new(limits)
+                .expect_err("zero and unaddressable limits must reject");
+            assert_eq!(error.code, "control_response_limits");
+        }
+
+        CompactResponseWriter::new(CompactResponseLimits {
+            maximum_bytes: MAXIMUM_COMPACT_INPUT_BYTES + 1,
+            maximum_records: MAXIMUM_COMPACT_RECORDS + 1,
+        })
+        .expect("response budgets must be independent from compact input format bounds");
     }
 }
