@@ -405,13 +405,8 @@ impl RepositoryView {
             WitnessReadWork::default(),
         )
         .map_err(|diagnostic| vec![diagnostic])?;
-        let lowering = lower_authored_changes(
-            &canonical,
-            &witness,
-            request,
-            options.idempotency_key.as_deref(),
-        )
-        .map_err(|diagnostic| vec![diagnostic])?;
+        let lowering = lower_authored_changes(&canonical, &witness, request)
+            .map_err(|diagnostic| vec![diagnostic])?;
         let publication = self.prepare_change_with_prior_work(
             lowering.edits,
             options,

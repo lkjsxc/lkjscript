@@ -34,22 +34,21 @@ use crate::platform::semantic_id::{
     BindingId, CaseId, DeclarationId, FieldId, OperationId, ParameterId, RequirementId,
     TypeParameterId,
 };
-use bincode::{Decode, Encode};
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthoredTypeParameter {
     pub symbol: String,
     pub name: Name,
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthoredParameter {
     pub symbol: String,
     pub name: Name,
     pub ty: AuthoredType,
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredFunctionEffect {
     Pure {},
     Task {
@@ -57,7 +56,7 @@ pub enum AuthoredFunctionEffect {
     },
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredType {
     Unit {},
     Bool {},
@@ -98,19 +97,19 @@ pub enum AuthoredType {
     },
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthoredStructuralTypeField {
     pub name: Name,
     pub ty: AuthoredType,
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredTypeParameterReference {
     Id { parameter: TypeParameterId },
     Symbol { symbol: String },
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredDeclarationReference {
     Local {
         declaration: DeclarationSelector,
@@ -121,7 +120,7 @@ pub enum AuthoredDeclarationReference {
     },
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredFieldReference {
     Exact {
         package: crate::platform::kernel::PackageId,
@@ -132,7 +131,7 @@ pub enum AuthoredFieldReference {
     },
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredCaseReference {
     Exact {
         package: crate::platform::kernel::PackageId,
@@ -143,7 +142,7 @@ pub enum AuthoredCaseReference {
     },
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredOperationReference {
     Exact {
         package: crate::platform::kernel::PackageId,
@@ -154,7 +153,7 @@ pub enum AuthoredOperationReference {
     },
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredRequirementReference {
     Exact {
         package: crate::platform::kernel::PackageId,
@@ -165,7 +164,7 @@ pub enum AuthoredRequirementReference {
     },
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredLocalReference {
     FunctionParameter { parameter: ParameterId },
     OperationParameter { parameter: ParameterId },
@@ -175,13 +174,13 @@ pub enum AuthoredLocalReference {
     Symbol { symbol: String },
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthoredExpression {
     pub symbol: Option<String>,
     pub operation: AuthoredExpressionOperation,
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredExpressionOperation {
     Unit {},
     Bool {
@@ -264,7 +263,7 @@ pub enum AuthoredExpressionOperation {
     },
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthoredLetBinding {
     pub symbol: String,
     pub name: Name,
@@ -272,31 +271,31 @@ pub struct AuthoredLetBinding {
     pub declared_type: Option<AuthoredType>,
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthoredBindingDefinition {
     pub symbol: String,
     pub name: Name,
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredFieldSelector {
     Nominal { field: AuthoredFieldReference },
     Structural { name: Name },
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthoredRecordExpressionField {
     pub selector: AuthoredFieldSelector,
     pub value: AuthoredExpression,
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthoredMapExpressionEntry {
     pub key: AuthoredExpression,
     pub value: AuthoredExpression,
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthoredMatchExpressionArm {
     pub case: AuthoredCaseReference,
     pub payload_binding: Option<AuthoredBindingDefinition>,

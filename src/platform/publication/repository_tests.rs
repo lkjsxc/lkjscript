@@ -1768,6 +1768,65 @@ fn revision_view_detects_corruption_in_the_selected_owner_without_full_scan() {
 }
 
 #[test]
+fn authored_allocation_ignores_local_labels_budgets_and_operational_options() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let created = GraphRepository::create(
+        &destination,
+        &empty_snapshot(b"authored-allocation-normalization"),
+        None,
+    )
+    .expect("create repository");
+    let base = created.current.head.revision;
+    let request = |first: &str, second: &str, budget| AuthoredChangeSet {
+        base,
+        preconditions: Vec::new(),
+        changes: vec![
+            AuthoredChange::CreateModule {
+                symbol: first.to_owned(),
+                name: Name::new("first_module").unwrap(),
+            },
+            AuthoredChange::CreateModule {
+                symbol: second.to_owned(),
+                name: Name::new("second_module").unwrap(),
+            },
+        ],
+        budget,
+    };
+
+    let first = created
+        .repository
+        .prepare_authored_change(
+            &request("$z_first", "$a_second", ChangeBudget::default()),
+            PublicationOptions {
+                idempotency_key: Some("allocation-one".to_owned()),
+                intent: Some("first operational observation".to_owned()),
+            },
+        )
+        .expect("prepare first spelling");
+    let mut changed_budget = ChangeBudget::default();
+    changed_budget.canonical_reads.maximum_bytes -= 1;
+    let second = created
+        .repository
+        .prepare_authored_change(
+            &request("$a_first", "$z_second", changed_budget),
+            PublicationOptions {
+                idempotency_key: Some("allocation-two".to_owned()),
+                intent: Some("different operational observation".to_owned()),
+            },
+        )
+        .expect("prepare renamed labels and operational controls");
+
+    assert_eq!(first.allocated["$z_first"], second.allocated["$a_first"]);
+    assert_eq!(first.allocated["$a_second"], second.allocated["$z_second"]);
+    assert_eq!(
+        first.publication.authority.semantic.root,
+        second.publication.authority.semantic.root
+    );
+    assert_eq!(created.repository.current().unwrap().head.revision, base);
+}
+
+#[test]
 fn authored_request_allocates_forward_symbols_and_preserves_exact_uses() {
     let temporary = tempfile::tempdir().expect("temporary repository parent");
     let destination = temporary.path().join("meaning");

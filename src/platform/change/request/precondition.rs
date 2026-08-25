@@ -9,10 +9,9 @@ use crate::platform::kernel::{
     encode_dependency, encode_owner, encode_retirement, encode_root,
 };
 use crate::platform::witness::{NamespaceKey, OwnerSummaryDigest, OwnershipEntry, OwnershipParent};
-use bincode::{Decode, Encode};
 use std::collections::BTreeMap;
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredPrecondition {
     SemanticRoot {
         equals: SemanticRootDigest,

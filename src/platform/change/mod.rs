@@ -47,7 +47,6 @@ pub use overlay::KernelOverlay;
 pub use prepare::{
     PreparedChangeAnalysis, prepare_change_analysis, prepare_change_analysis_with_budget,
 };
-pub(crate) use request::canonical_authored_request_bytes;
 pub use request::{
     AuthoredAnnotationValue, AuthoredBindingDefinition, AuthoredCase, AuthoredCaseReference,
     AuthoredChange, AuthoredChangeSet, AuthoredDeclarationReference, AuthoredExpression,
@@ -62,6 +61,7 @@ pub use request::{
     MAXIMUM_AUTHORED_CHANGES, ModuleSelector, OwnerSelector, ParameterParentSelector,
     lower_authored_changes,
 };
+pub(crate) use request::{canonical_authored_budget_bytes, canonical_authored_intent_bytes};
 pub use summary_delta::{
     OwnerSummaryEdit, SummaryDelta, derive_summary_delta, derive_summary_delta_for,
 };

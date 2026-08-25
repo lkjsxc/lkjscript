@@ -16,7 +16,7 @@ use std::fmt;
 use std::str::FromStr;
 
 pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-1";
-pub const CHANGE_PLAN_DIGEST_DOMAIN: &str = "lkjscript.change-plan.v1";
+pub const CHANGE_PLAN_DIGEST_DOMAIN: &str = "lkjscript.change-plan.v2";
 pub const COMPACT_CHANGE_OPERATIONS: &[&str] = &[
     "create.module",
     "create.record",
@@ -785,10 +785,12 @@ fn compact_change_plan_digest(
     request: &AuthoredChangeSet,
     options: &PublicationOptions,
 ) -> Result<ChangePlanDigest, Diagnostic> {
-    let semantic = crate::platform::change::canonical_authored_request_bytes(request)?;
+    let intent = crate::platform::change::canonical_authored_intent_bytes(request)?;
+    let budget = crate::platform::change::canonical_authored_budget_bytes(request.budget)?;
     let mut hasher = blake3::Hasher::new_derive_key(CHANGE_PLAN_DIGEST_DOMAIN);
     hash_digest_field(&mut hasher, COMPACT_CHANGE_CONTRACT_IDENTITY.as_bytes())?;
-    hash_digest_field(&mut hasher, &semantic)?;
+    hash_digest_field(&mut hasher, &intent)?;
+    hash_digest_field(&mut hasher, &budget)?;
     hash_optional_digest_field(&mut hasher, options.idempotency_key.as_deref())?;
     hash_optional_digest_field(&mut hasher, options.intent.as_deref())?;
     Ok(ChangePlanDigest(*hasher.finalize().as_bytes()))
@@ -1228,6 +1230,31 @@ mod tests {
         assert_eq!(
             decode_compact_change("change.lk", unknown.as_bytes()).unwrap_err()[0].code,
             "change_operation_unknown"
+        );
+    }
+
+    #[test]
+    fn reviewed_plan_binds_budget_and_operational_options() {
+        let input = format!(
+            "request base={}\ncreate.module as=$module name=module\n",
+            revision()
+        );
+        let decoded = decode_compact_change("change.lk", input.as_bytes()).unwrap();
+
+        let mut budget_changed = decoded.semantic.clone();
+        budget_changed.budget.canonical_reads.maximum_bytes -= 1;
+        assert_ne!(
+            decoded.plan,
+            compact_change_plan_digest(&budget_changed, &decoded.options).unwrap()
+        );
+
+        let options_changed = PublicationOptions {
+            idempotency_key: Some("reviewed-plan-option".to_owned()),
+            intent: None,
+        };
+        assert_ne!(
+            decoded.plan,
+            compact_change_plan_digest(&decoded.semantic, &options_changed).unwrap()
         );
     }
 }

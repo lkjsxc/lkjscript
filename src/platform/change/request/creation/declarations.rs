@@ -9,21 +9,21 @@ use crate::platform::kernel::{
 };
 use crate::platform::package::RunnerKind;
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthoredField {
     pub symbol: String,
     pub name: Name,
     pub ty: AuthoredType,
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthoredCase {
     pub symbol: String,
     pub name: Name,
     pub payload: Option<AuthoredType>,
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthoredOperation {
     pub symbol: String,
     pub name: Name,
@@ -33,14 +33,14 @@ pub struct AuthoredOperation {
     pub external_visibility: ExternalVisibility,
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthoredResourceLimit {
     pub name: Name,
     pub maximum: u64,
     pub unit: ResourceUnit,
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthoredRequirement {
     pub symbol: String,
     pub name: Name,
@@ -49,7 +49,7 @@ pub struct AuthoredRequirement {
     pub limits: Vec<AuthoredResourceLimit>,
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredPortImplementation {
     Expression {
         expression: AuthoredExpression,
@@ -59,7 +59,7 @@ pub enum AuthoredPortImplementation {
     },
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthoredPort {
     pub symbol: String,
     pub name: Name,
@@ -67,7 +67,7 @@ pub struct AuthoredPort {
     pub implementation: AuthoredPortImplementation,
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredAnnotationValue {
     Bool(bool),
     I64(i64),
@@ -572,7 +572,7 @@ pub(in crate::platform::change::request) fn lower_annotation<
     }))
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredPortReference {
     Exact {
         package: crate::platform::kernel::PackageId,

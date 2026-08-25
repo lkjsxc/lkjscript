@@ -1,5 +1,6 @@
 //! High-level Graph 5 authored intent lowered to exact primitive owner edits.
 
+mod codec;
 mod creation;
 mod deletion;
 mod precondition;
@@ -35,14 +36,13 @@ use crate::platform::semantic_id::{
     TypeParameterId,
 };
 use crate::platform::witness::NamespaceKey;
-use bincode::{Decode, Encode};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub const MAXIMUM_AUTHORED_CHANGES: usize = 10_000;
 pub const MAXIMUM_AUTHORED_CHANGE_BYTES: usize = 4 * 1_048_576;
 const MAXIMUM_REQUEST_SYMBOL_BYTES: usize = 128;
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthoredChangeSet {
     pub base: RevisionId,
     pub preconditions: Vec<AuthoredPrecondition>,
@@ -50,7 +50,7 @@ pub struct AuthoredChangeSet {
     pub budget: ChangeBudget,
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredChange {
     CreateModule {
         symbol: String,
@@ -245,7 +245,7 @@ pub enum AuthoredChange {
     },
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum OwnerSelector {
     Exact { owner: OwnerKey },
     ModuleName { name: Name },
@@ -253,14 +253,14 @@ pub enum OwnerSelector {
     Symbol { symbol: String },
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ModuleSelector {
     Id { module: ModuleId },
     Name { name: Name },
     Symbol { symbol: String },
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DeclarationSelector {
     Id {
         declaration: crate::platform::semantic_id::DeclarationId,
@@ -274,7 +274,7 @@ pub enum DeclarationSelector {
     },
 }
 
-#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ParameterParentSelector {
     Declaration { declaration: DeclarationSelector },
     Operation { operation: OwnerSelector },
@@ -302,6 +302,28 @@ pub(super) enum SymbolKind {
 }
 
 impl SymbolKind {
+    const fn canonical_tag(self) -> u8 {
+        match self {
+            Self::Module => 1,
+            Self::Declaration => 2,
+            Self::TypeParameter => 3,
+            Self::Field => 4,
+            Self::Case => 5,
+            Self::Operation => 6,
+            Self::FunctionParameter => 7,
+            Self::OperationParameter => 8,
+            Self::LexicalBinding => 9,
+            Self::MatchPayloadBinding => 10,
+            Self::TransactionBinding => 11,
+            Self::Expression => 12,
+            Self::Requirement => 13,
+            Self::Port => 14,
+            Self::Target => 15,
+            Self::Documentation => 16,
+            Self::Annotation => 17,
+        }
+    }
+
     const fn allocation_domain(self) -> u8 {
         match self {
             Self::Module => 1,
@@ -385,7 +407,6 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
     base: &B,
     witness: &W,
     request: &AuthoredChangeSet,
-    idempotency_key: Option<&str>,
 ) -> Result<AuthoredLowering, Diagnostic> {
     if base.exact_revision() != Some(request.base) {
         return Err(request_error(
@@ -417,12 +438,12 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
         .budget
         .validate_request_counts(request.changes.len(), request.preconditions.len())?;
 
-    let request_bytes = canonical_authored_request_bytes(request)?;
-    let seed = allocation_seed(base, request.base, &request_bytes, idempotency_key)?;
-    let deletion_change = ChangeDigest::of(&request_bytes);
     let (definitions, total_identity_count) =
         collect_symbol_definitions(request, budget.authored.maximum_allocated_identities)?;
     budget.check_allocated_identities(total_identity_count)?;
+    let request_bytes = codec::encode_authored_intent(request, &definitions)?;
+    let seed = allocation_seed(base, &request_bytes)?;
+    let deletion_change = ChangeDigest::of(&request_bytes);
     let definition_count = definitions.len();
     let allocated = allocate_symbols(&seed, &definitions)?;
     let mut lowerer = AuthoredLowerer::new(
@@ -760,7 +781,7 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
 fn collect_symbol_definitions(
     request: &AuthoredChangeSet,
     maximum: u64,
-) -> Result<(BTreeMap<String, SymbolKind>, usize), Diagnostic> {
+) -> Result<(BTreeMap<String, SymbolDefinition>, usize), Diagnostic> {
     let mut definitions = SymbolDefinitions::new(maximum);
     for change in &request.changes {
         match change {
@@ -860,8 +881,15 @@ fn collect_symbol_definitions(
 
 pub(super) struct SymbolDefinitions {
     maximum: u64,
-    entries: BTreeMap<String, SymbolKind>,
+    entries: BTreeMap<String, SymbolDefinition>,
+    next_ordinals: BTreeMap<u8, u64>,
     anonymous_identities: usize,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) struct SymbolDefinition {
+    kind: SymbolKind,
+    ordinal: u64,
 }
 
 impl SymbolDefinitions {
@@ -869,11 +897,12 @@ impl SymbolDefinitions {
         Self {
             maximum,
             entries: BTreeMap::new(),
+            next_ordinals: BTreeMap::new(),
             anonymous_identities: 0,
         }
     }
 
-    fn into_entries(self) -> (BTreeMap<String, SymbolKind>, usize) {
+    fn into_entries(self) -> (BTreeMap<String, SymbolDefinition>, usize) {
         let identity_count = self.identity_count();
         (self.entries, identity_count)
     }
@@ -917,75 +946,59 @@ pub(super) fn define_symbol(
         ));
     }
     definitions.admit_one_identity()?;
-    definitions.entries.insert(symbol.to_owned(), kind);
+    let next = definitions
+        .next_ordinals
+        .entry(kind.allocation_domain())
+        .or_default();
+    *next = next.checked_add(1).ok_or_else(|| {
+        request_error(
+            DiagnosticClass::Resource,
+            "change_authored_allocation_ordinal",
+            "request-local allocation ordinal was exhausted",
+        )
+    })?;
+    definitions.entries.insert(
+        symbol.to_owned(),
+        SymbolDefinition {
+            kind,
+            ordinal: *next,
+        },
+    );
     Ok(())
 }
 
 fn allocate_symbols(
     seed: &[u8],
-    definitions: &BTreeMap<String, SymbolKind>,
+    definitions: &BTreeMap<String, SymbolDefinition>,
 ) -> Result<BTreeMap<String, OwnerKey>, Diagnostic> {
-    let mut ordinals = BTreeMap::<u8, u64>::new();
     let mut allocated = BTreeMap::new();
-    for (symbol, kind) in definitions {
-        let ordinal = ordinals.entry(kind.allocation_domain()).or_default();
-        *ordinal = ordinal.checked_add(1).ok_or_else(|| {
-            request_error(
-                DiagnosticClass::Resource,
-                "change_authored_allocation_ordinal",
-                "request-local allocation ordinal was exhausted",
-            )
-        })?;
-        allocated.insert(symbol.clone(), kind.allocate(seed, *ordinal));
+    for (symbol, definition) in definitions {
+        allocated.insert(
+            symbol.clone(),
+            definition.kind.allocate(seed, definition.ordinal),
+        );
     }
     Ok(allocated)
 }
 
-pub(crate) fn canonical_authored_request_bytes(
+pub(crate) fn canonical_authored_intent_bytes(
     request: &AuthoredChangeSet,
 ) -> Result<Vec<u8>, Diagnostic> {
-    let configuration = bincode::config::standard()
-        .with_little_endian()
-        .with_variable_int_encoding();
-    let mut counter =
-        bincode::enc::EncoderImpl::new(bincode::enc::write::SizeWriter::default(), configuration);
-    Encode::encode(request, &mut counter).map_err(|error| {
-        request_error(
-            DiagnosticClass::Resource,
-            "change_authored_encode",
-            format!("authored change cannot be canonically sized: {error}"),
-        )
-    })?;
-    let encoded_bytes = counter.into_writer().bytes_written;
-    if encoded_bytes > MAXIMUM_AUTHORED_CHANGE_BYTES {
-        return Err(request_error(
-            DiagnosticClass::Resource,
-            "change_authored_bytes",
-            format!(
-                "authored change requires {encoded_bytes} canonical bytes, exceeding the {MAXIMUM_AUTHORED_CHANGE_BYTES}-byte budget"
-            ),
-        ));
-    }
-    let mut bytes = vec![0_u8; encoded_bytes];
-    let written =
-        bincode::encode_into_slice(request, &mut bytes, configuration).map_err(|error| {
-            request_error(
-                DiagnosticClass::Resource,
-                "change_authored_encode",
-                format!("authored change cannot be canonically encoded: {error}"),
-            )
-        })?;
-    debug_assert_eq!(written, encoded_bytes);
-    Ok(bytes)
+    let (definitions, _) = collect_symbol_definitions(
+        request,
+        request.budget.authored.maximum_allocated_identities,
+    )?;
+    codec::encode_authored_intent(request, &definitions)
+}
+
+pub(crate) fn canonical_authored_budget_bytes(budget: ChangeBudget) -> Result<Vec<u8>, Diagnostic> {
+    codec::encode_budget(budget)
 }
 
 fn allocation_seed<B: CanonicalBaseRead + ?Sized>(
     base: &B,
-    request_base: RevisionId,
     request_bytes: &[u8],
-    idempotency_key: Option<&str>,
 ) -> Result<[u8; 32], Diagnostic> {
-    let idempotency = idempotency_key.unwrap_or_default().as_bytes();
     let request_length = u64::try_from(request_bytes.len()).map_err(|_| {
         request_error(
             DiagnosticClass::Resource,
@@ -993,20 +1006,10 @@ fn allocation_seed<B: CanonicalBaseRead + ?Sized>(
             "authored change byte length exceeds its canonical allocation domain",
         )
     })?;
-    let idempotency_length = u64::try_from(idempotency.len()).map_err(|_| {
-        request_error(
-            DiagnosticClass::Resource,
-            "change_authored_idempotency_length",
-            "idempotency identity byte length exceeds its canonical allocation domain",
-        )
-    })?;
     let mut hasher = blake3::Hasher::new_derive_key(CHANGE_ALLOCATION_SEED_DOMAIN);
     hasher.update(&base.repository_id().bytes());
-    hasher.update(&request_base.bytes());
     hasher.update(&request_length.to_be_bytes());
     hasher.update(request_bytes);
-    hasher.update(&idempotency_length.to_be_bytes());
-    hasher.update(idempotency);
     Ok(*hasher.finalize().as_bytes())
 }
 
@@ -1028,7 +1031,7 @@ struct AuthoredLowerer<'a, B: ?Sized, W: ?Sized> {
     allocation_seed: [u8; 32],
     deletion_change: ChangeDigest,
     allocated: BTreeMap<String, OwnerKey>,
-    definitions: BTreeMap<String, SymbolKind>,
+    definitions: BTreeMap<String, SymbolDefinition>,
     owners: BTreeMap<OwnerKey, WorkingOwner>,
     owner_edits: BTreeSet<OwnerKey>,
     dependencies: BTreeMap<PackageId, WorkingDependency>,
@@ -1053,12 +1056,12 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         allocation_seed: [u8; 32],
         deletion_change: ChangeDigest,
         allocated: BTreeMap<String, OwnerKey>,
-        definitions: BTreeMap<String, SymbolKind>,
+        definitions: BTreeMap<String, SymbolDefinition>,
         budget: ChangeBudget,
     ) -> Result<Self, Diagnostic> {
         let expression_symbol_count = definitions
             .values()
-            .filter(|kind| **kind == SymbolKind::Expression)
+            .filter(|definition| definition.kind == SymbolKind::Expression)
             .count();
         let next_anonymous_expression_ordinal = u64::try_from(expression_symbol_count)
             .ok()
@@ -1204,13 +1207,16 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
 
     fn symbol_kind(&self, symbol: &str) -> Result<SymbolKind, Diagnostic> {
         validate_symbol(symbol)?;
-        self.definitions.get(symbol).copied().ok_or_else(|| {
-            request_error(
-                DiagnosticClass::Source,
-                "change_authored_symbol_missing",
-                format!("request-local symbol {symbol} has no unique definition"),
-            )
-        })
+        self.definitions
+            .get(symbol)
+            .map(|definition| definition.kind)
+            .ok_or_else(|| {
+                request_error(
+                    DiagnosticClass::Source,
+                    "change_authored_symbol_missing",
+                    format!("request-local symbol {symbol} has no unique definition"),
+                )
+            })
     }
 
     fn symbol_owner(&self, symbol: &str, expected: SymbolKind) -> Result<OwnerKey, Diagnostic> {

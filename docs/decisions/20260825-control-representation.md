@@ -5,17 +5,16 @@ Date: 2026-08-25 UTC.
 ## Status
 
 Partially implemented. Flat records, focused discovery, normalized plan/apply, connected creation,
-flat expression edges, exact body replacement, compact output, and predecessor JSON rejection are
-public. The explicit normalized request codec, label-independent allocation, complete operation
+flat expression edges, exact body replacement, compact output, predecessor JSON rejection, an
+explicit normalized request codec, and label-independent allocation are public. Complete operation
 coverage, external large-value inputs, direct common flags, and complete workflow measurements
 remain required before the grammar is frozen.
 
 ## Problem
 
 The predecessor `change` command required a recursive JSON request. The released command now uses
-flat records, but its typed request hashing still depends on bincode enum layout, operational
-budget fields, request-local spelling, and lexical map order. The public compact subset is narrower
-than the transport-neutral authored operation enum.
+flat records and explicit typed hashing. The public compact subset remains narrower than the
+transport-neutral authored operation enum.
 
 The control representation must let an agent discover, author, repair, dry-run, and publish exact
 semantic operations with bounded output. It is an ephemeral request representation, never accepted
@@ -47,15 +46,19 @@ program authority.
 - Retain JSON only as an explicit bounded projection for a demonstrated external integration. Do
   not retain JSON request authoring or generated schema without such a consumer.
 
-## Corrections required before public grammar freeze
+## Corrections before public grammar freeze
 
-- Hash the semantic normalized request, not its bincode/serde representation.
-- Make allocation traversal independent from user label spelling and ordered-map lexical order.
-- Replace implicit Rust enum-layout tags with explicit stable operation and form tags.
+- Completed: hash normalized authored intent through an explicit bounded codec rather than
+  bincode, serde, or Rust layout.
+- Completed: allocate by typed encounter ordinal rather than user label spelling or ordered-map
+  lexical order.
+- Completed: use fixed stable tags, big-endian lengths and integers, and typed fixed-width identity
+  fields.
 - Replace `DeleteOwner { cascade: bool }` with a closed delete policy, initially `reject` and later
   an exact reviewed repair or closure plan.
 - Remove physical semantic-root and derived-summary preconditions from caller intent.
-- Replace the scalar change-work maximum with independent typed budgets and observations.
+- Completed: replace the scalar change-work maximum with independent typed budgets and
+  observations.
 - Author connected expression subtrees through flat fragments rather than a low-level single-node
   replacement field.
 
@@ -88,9 +91,14 @@ copied-binary workflow that does not read repository source.
 
 The private authored JSON protocol and schema were deleted. The executable registry owns public
 names and forms. Parser source locations are retained only through planning and diagnostics.
-Accepted graph bytes and revision identity are independent of the compact representation; request
-allocation and plan identity are not yet independent of local labels or bincode layout, which is a
-recorded blocker rather than a compatibility promise.
+Accepted graph bytes and revision identity are independent of the compact representation. Durable
+allocation hashes only normalized authored intent plus repository identity. Authored record and
+list order is allocation-significant, including where lowering stores keyed graph relations; this
+avoids a hidden second traversal and keeps operation ordering locally repairable. The reviewed plan
+also binds the exact multidimensional budget, idempotency key, and intent without making those
+fields semantic meaning. Before grammar freeze, reverse this ordering choice only if complete
+workflow evidence shows material identity churn from harmless model reordering; reversal requires
+one explicit normalized request view and a new allocation-seed contract domain.
 
 ## Current evidence
 
@@ -99,6 +107,10 @@ recorded blocker rather than a compatibility promise.
 - Black-box copied-binary tests cover plan/apply allocation equality, reviewed-plan mismatch,
   connected module/record/function creation, 100-module bounded output, predecessor JSON rejection
   without HEAD movement, and complete old-body ownership retirement.
+- Codec tests retain a golden authored-intent digest, prove label-renaming equality, budget
+  separation, semantic-field and list-order sensitivity, undefined-symbol rejection, and depth
+  exhaustion. Repository tests prove equal semantic roots and allocated identities across local
+  label, admissible-budget, idempotency-key, and intent changes.
 - The private JSON adapter, schema generator, repository convenience methods, and predecessor
   success tests are absent. Generated contract bytes come from the executable registry.
 

@@ -70,9 +70,11 @@ semantic operations, 15 type forms, and 10 expression forms listed by focused ca
 Connected creation and flat expression edges allocate identities in one request; complete function
 body replacement retires the prior expression/binding closure. The private authored JSON adapter
 and generated schema were deleted, and predecessor JSON change requests reject without advancing
-HEAD. Allocation and plan bytes still depend on the typed model's bincode representation and local
-symbol spelling; replacing that seed codec is the next correctness prerequisite before grammar
-freeze.
+HEAD. An explicit bounded codec with fixed tags, big-endian lengths, and typed fixed-width
+identities owns normalized request hashing. Request-local label spelling, operational budgets,
+idempotency keys, and intent do not perturb durable allocations; the reviewed plan separately binds
+the exact budget and operational options. Authored operation and list order remains
+allocation-significant even when lowering stores a collection as keyed graph relations.
 
 ## Persistent root, validation, and derived state
 

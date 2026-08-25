@@ -118,8 +118,8 @@ macro_rules! semantic_id {
             }
 
             /// Exact allocation for one normalized request. The caller-owned seed binds the
-            /// repository, base revision, normalized request, and idempotency identity. The
-            /// ordinal is the canonical request-local allocation order within this ID domain.
+            /// repository, base revision, and normalized authored intent. The ordinal is the
+            /// authored encounter order within this identity domain.
             pub fn allocate(seed: &[u8], ordinal: u64) -> Self {
                 Self(IdentityBytes::request_local(Self::DOMAIN, seed, ordinal))
             }
