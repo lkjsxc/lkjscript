@@ -15,6 +15,8 @@ use super::json::{JsonLimits, decode_strict, decode_typed, encode_typed};
 use super::meaning::RelationRole;
 use super::package::RunnerKind;
 use super::project_creation::create_minimal_project;
+use super::project_discovery::discover_project;
+use super::publication::GraphRepository;
 use super::repository::SemanticRepository;
 use super::revision::{AffectedOwner, TransactionReceipt, ValidationFacts};
 use super::semantic_change::{ChangeRequest, execute_change};
@@ -77,6 +79,9 @@ pub fn execute(arguments: Vec<String>) -> Result<CliSuccess, Diagnostic> {
         )),
         PublicOperation::New => Err(usage_error(
             "new uses the compact executable process boundary",
+        )),
+        PublicOperation::Status => Err(usage_error(
+            "status uses the compact executable process boundary",
         )),
         PublicOperation::Inspect => inspect_command(&arguments[1..], project.as_deref()),
         PublicOperation::Query => public_query_command(&arguments[1..], project.as_deref()),
@@ -206,6 +211,118 @@ pub fn execute_new(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
         ],
     )?;
     finish_compact_response("new", output)
+}
+
+/// Reports the exact current normalized authority without consulting a predecessor reader.
+pub fn execute_status(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
+    let (arguments, project) = extract_global_project(arguments)?;
+    if arguments.as_slice() != ["status"] {
+        return Err(usage_error("status accepts no additional arguments"));
+    }
+    let start = match project {
+        Some(path) => path,
+        None => std::env::current_dir().map_err(|error| {
+            Diagnostic::new(
+                DiagnosticClass::Infrastructure,
+                "project_io",
+                format!("current directory is unavailable: {error}"),
+            )
+        })?,
+    };
+    let repository: GraphRepository = discover_project(&start)?;
+    let current = repository.current()?;
+    let registry = registry_snapshot().map_err(contract_registry_error)?;
+
+    let mut output = String::new();
+    append_compact_record(
+        &mut output,
+        "result",
+        &[
+            ("status", "success".to_owned()),
+            ("command", "status".to_owned()),
+        ],
+    )?;
+    append_compact_record(
+        &mut output,
+        "project",
+        &[
+            ("path", repository.root().display().to_string()),
+            (
+                "name",
+                current.semantic_root.package_name.as_str().to_owned(),
+            ),
+        ],
+    )?;
+    append_compact_record(
+        &mut output,
+        "repository",
+        &[("id", current.head.repository_id.to_string())],
+    )?;
+    append_compact_record(
+        &mut output,
+        "package",
+        &[("id", current.semantic_root.package_id.to_string())],
+    )?;
+    append_compact_record(
+        &mut output,
+        "revision",
+        &[
+            ("id", current.head.revision.to_string()),
+            ("record", current.head.record.to_string()),
+        ],
+    )?;
+    append_compact_record(
+        &mut output,
+        "state",
+        &[("digest", current.accepted.semantic_state.to_string())],
+    )?;
+    append_compact_record(
+        &mut output,
+        "root",
+        &[("digest", current.accepted.semantic_root.to_string())],
+    )?;
+    append_compact_record(
+        &mut output,
+        "evidence",
+        &[
+            ("witness", current.accepted.validation_witness.to_string()),
+            (
+                "certificate",
+                current.accepted.validation_certificate.to_string(),
+            ),
+            ("validator", current.accepted.validator_contract.to_string()),
+        ],
+    )?;
+    append_compact_record(
+        &mut output,
+        "receipt",
+        &[("digest", current.accepted.receipt.to_string())],
+    )?;
+    append_compact_record(
+        &mut output,
+        "summary",
+        &[
+            ("owners", current.semantic_root.owners.entries().to_string()),
+            (
+                "dependencies",
+                current.semantic_root.dependencies.entries().to_string(),
+            ),
+            (
+                "retirements",
+                current.semantic_root.retirements.entries().to_string(),
+            ),
+        ],
+    )?;
+    append_compact_record(&mut output, "schema", &[("registry", registry.digest)])?;
+    append_compact_record(
+        &mut output,
+        "next",
+        &[
+            ("kind", "discovery".to_owned()),
+            ("command", "lkjscript capabilities status".to_owned()),
+        ],
+    )?;
+    finish_compact_response("status", output)
 }
 
 fn builtin_command(arguments: &[String]) -> Result<CliSuccess, Diagnostic> {

@@ -9,7 +9,7 @@ use lkjscript::platform::contract::exit_status_for;
 use lkjscript::platform::control::render_record;
 use lkjscript::platform::{
     CLI_CONTRACT_VERSION, Diagnostic, PreparedDeployment, PublicOperation, execute_capabilities,
-    execute_cli, execute_new,
+    execute_cli, execute_new, execute_status,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -26,6 +26,19 @@ async fn main() -> ExitCode {
     }
     if let Some(new_arguments) = compact_new_arguments(&arguments) {
         return compact_new(&new_arguments);
+    }
+    if compact_status_arguments(&arguments) {
+        return compact_status(arguments);
+    }
+    if compact_exact_project_operation(&arguments, &["inspect", "status"]) {
+        return write_compact_failure(
+            "inspect.status",
+            &Diagnostic::new(
+                lkjscript::platform::DiagnosticClass::Source,
+                "predecessor_contract",
+                "inspect status is a removed predecessor command; use status",
+            ),
+        );
     }
     let operation = arguments
         .first()
@@ -105,6 +118,39 @@ fn compact_new(arguments: &[String]) -> ExitCode {
             )),
         },
         Err(error) => write_compact_failure("new", &error),
+    }
+}
+
+fn compact_status_arguments(arguments: &[String]) -> bool {
+    compact_exact_project_operation(arguments, &["status"])
+}
+
+fn compact_exact_project_operation(arguments: &[String], expected: &[&str]) -> bool {
+    let mut filtered = Vec::new();
+    let mut index = 0;
+    while index < arguments.len() {
+        if arguments[index] == "--project" {
+            if arguments.get(index + 1).is_none() {
+                return filtered == expected;
+            }
+            index += 2;
+        } else {
+            filtered.push(arguments[index].as_str());
+            index += 1;
+        }
+    }
+    filtered == expected
+}
+
+fn compact_status(arguments: Vec<String>) -> ExitCode {
+    match execute_status(arguments) {
+        Ok(bytes) => match write_bytes(&bytes) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(_) => ExitCode::from(exit_status_for(
+                lkjscript::platform::DiagnosticClass::Infrastructure,
+            )),
+        },
+        Err(error) => write_compact_failure("status", &error),
     }
 }
 

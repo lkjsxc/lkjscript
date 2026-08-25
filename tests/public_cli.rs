@@ -167,6 +167,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         vec![
             "capabilities",
             "new",
+            "status",
             "inspect",
             "query",
             "change",
@@ -262,6 +263,13 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
     assert_eq!(
         compact_field(new_operation, "usage"),
         Some("new DEST [--template minimal] [--name NAME]")
+    );
+    let status_help = compact_success(&["capabilities", "status"]);
+    let status_operation = compact_record(&status_help, "operation");
+    assert_eq!(compact_field(status_operation, "usage"), Some("status"));
+    assert_eq!(
+        compact_field(status_operation, "response-model"),
+        Some("status_result")
     );
     let templates = compact_success(&["capabilities", "--section", "templates"]);
     assert_eq!(
@@ -423,14 +431,14 @@ fn copied_binary_rejects_the_predecessor_template_and_runs_a_predecessor_fixture
     );
     assert_eq!(created.allocated_identities.len(), 5);
 
-    let status = success_at(
+    let status = compact_failure_output(command_at(
         &copied_binary,
         temporary.path(),
-        &["--project", path(&project), "inspect", "status"],
-    );
+        &["--project", path(&project), "status"],
+    ));
     assert_eq!(
-        status["result"]["revision"],
-        Value::String(created.revision.to_string())
+        compact_field(compact_record(&status, "diagnostic"), "code"),
+        Some("predecessor_contract")
     );
     let checked = success_at(
         &copied_binary,
@@ -467,14 +475,9 @@ fn copied_binary_rejects_the_predecessor_template_and_runs_a_predecessor_fixture
         .find(|item| item["kind"] == "pure_function")
         .and_then(|item| item["id"].as_str())
         .expect("main function");
-    let before_edit = success_at(
-        &copied_binary,
-        temporary.path(),
-        &["--project", path(&project), "inspect", "status"],
-    );
     let body_change = serde_json::json!({
         "contract_version": 3,
-        "base_revision": before_edit["result"]["revision"],
+        "base_revision": created.revision,
         "changes": [{
             "change": "replace_body",
             "function": main,
@@ -679,8 +682,7 @@ fn copied_binary_rejects_the_predecessor_template_and_runs_a_predecessor_fixture
 fn one_public_change_allocates_a_connected_subgraph_and_reuses_dry_run_lowering() {
     let temporary = tempfile::TempDir::new().expect("temporary graph authority");
     let project = temporary.path().join("project");
-    predecessor_project(&project, "project", ProjectTemplate::Minimal);
-    let before = success(&["--project", path(&project), "inspect", "status"]);
+    let created = predecessor_project(&project, "project", ProjectTemplate::Minimal);
     let request = serde_json::json!({
         "contract_version": 3,
         "changes": [
@@ -746,10 +748,10 @@ fn one_public_change_allocates_a_connected_subgraph_and_reuses_dry_run_lowering(
         "--dry-run",
     ]);
     assert_eq!(dry_run["status"], "validated");
-    let after_dry_run = success(&["--project", path(&project), "inspect", "status"]);
+    let after_dry_run = success(&["--project", path(&project), "inspect", "project"]);
     assert_eq!(
         after_dry_run["result"]["revision"],
-        before["result"]["revision"]
+        Value::String(created.revision.to_string())
     );
 
     let committed = success(&[
@@ -925,6 +927,38 @@ fn copied_binary_creates_normalized_minimal_projects_and_rejects_unsafe_destinat
     assert!(first.join("LOCK").is_file());
     assert!(!first.join(".lkjscript").exists());
 
+    let nested = first.join("ordinary/nested");
+    std::fs::create_dir_all(&nested).expect("nested project directory");
+    let status = compact_success_at(&copied_binary, &nested, &["status"]);
+    assert_eq!(compact_field(&status[0], "command"), Some("status"));
+    assert_eq!(
+        compact_field(compact_record(&status, "repository"), "id"),
+        Some(first_repository)
+    );
+    assert_eq!(
+        compact_field(compact_record(&status, "package"), "id"),
+        Some(first_package)
+    );
+    assert_eq!(
+        compact_field(compact_record(&status, "summary"), "owners"),
+        Some("0")
+    );
+    assert!(compact_field(compact_record(&status, "schema"), "registry").is_some());
+    let explicit_status = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["--project", path(&nested), "status"],
+    );
+    assert_eq!(
+        compact_field(compact_record(&explicit_status, "revision"), "id"),
+        compact_field(compact_record(&status, "revision"), "id")
+    );
+    let removed_status_alias =
+        compact_failure_output(command_at(&copied_binary, &nested, &["inspect", "status"]));
+    assert_eq!(
+        compact_field(compact_record(&removed_status_alias, "diagnostic"), "code"),
+        Some("predecessor_contract")
+    );
     let second = temporary.path().join("second");
     std::fs::create_dir(&second).expect("existing empty destination");
     let second_receipt = compact_success_at(
@@ -1051,8 +1085,7 @@ fn builtin_bytes_reproduce_maintained_authority() {
 fn exact_dependency_stage_and_change_use_the_public_protocol() {
     let temporary = tempfile::TempDir::new().expect("temporary dependency workflow");
     let project = temporary.path().join("project");
-    predecessor_project(&project, "project", ProjectTemplate::Minimal);
-    let status = success(&["--project", path(&project), "inspect", "status"]);
+    let created = predecessor_project(&project, "project", ProjectTemplate::Minimal);
     let builtin = success(&["package", "builtin", "inspect"]);
     let artifact = temporary.path().join("standard.lkja");
     success(&["package", "builtin", "export", "--output", path(&artifact)]);
@@ -1067,7 +1100,7 @@ fn exact_dependency_stage_and_change_use_the_public_protocol() {
 
     let request = serde_json::json!({
         "contract_version": 3,
-        "base_revision": status["result"]["revision"],
+        "base_revision": created.revision,
         "idempotency_key": "public-dependency-add-v1",
         "changes": [{
             "change": "add_dependency",

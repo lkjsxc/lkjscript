@@ -788,6 +788,7 @@ const fn simple_contract_with_domains(
 pub enum PublicOperation {
     Capabilities,
     New,
+    Status,
     Inspect,
     Query,
     Change,
@@ -806,9 +807,10 @@ pub enum PublicOperation {
 }
 
 impl PublicOperation {
-    pub const ALL: [Self; 17] = [
+    pub const ALL: [Self; 18] = [
         Self::Capabilities,
         Self::New,
+        Self::Status,
         Self::Inspect,
         Self::Query,
         Self::Change,
@@ -830,6 +832,7 @@ impl PublicOperation {
         match self {
             Self::Capabilities => "capabilities",
             Self::New => "new",
+            Self::Status => "status",
             Self::Inspect => "inspect",
             Self::Query => "query",
             Self::Change => "change",
@@ -940,6 +943,8 @@ pub enum ControlModel {
     CapabilitiesResult,
     NewRequest,
     NewResult,
+    StatusRequest,
+    StatusResult,
     InspectRequest,
     QueryRequest,
     ChangeRequest,
@@ -966,6 +971,8 @@ impl ControlModel {
             Self::CapabilitiesResult => "capabilities_result",
             Self::NewRequest => "new_request",
             Self::NewResult => "new_result",
+            Self::StatusRequest => "status_request",
+            Self::StatusResult => "status_result",
             Self::InspectRequest => "inspect_request",
             Self::QueryRequest => "query_request",
             Self::ChangeRequest => "change_request",
@@ -1010,10 +1017,14 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
             "Create fresh normalized semantic authority atomically in an absent or empty safe destination.",
             "new DEST [--template minimal] [--name NAME]",
         ),
+        status_operation(
+            "Report the exact current semantic authority and its durable acceptance evidence.",
+            "status",
+        ),
         operation(
             PublicOperation::Inspect,
-            "Inspect project, owner, target, revision, artifact, or deployment state.",
-            "inspect status|project|owner|targets|revision|artifact|deployment ...",
+            "Inspect project, owner, target, revision, artifact, or deployment detail.",
+            "inspect project|owner|targets|revision|artifact|deployment ...",
             ControlModel::InspectRequest,
             AuthorityEffect::None,
             ProjectRequirement::RequiredByAction,
@@ -1187,6 +1198,19 @@ const fn new_operation(purpose: &'static str, usage: &'static str) -> OperationD
         authority_effect: AuthorityEffect::Accepted,
         project_requirement: ProjectRequirement::Destination,
         default_budget: BudgetProfile::SemanticChange,
+    }
+}
+
+const fn status_operation(purpose: &'static str, usage: &'static str) -> OperationDescriptor {
+    OperationDescriptor {
+        operation: PublicOperation::Status,
+        purpose,
+        usage,
+        request_model: ControlModel::StatusRequest,
+        response_model: ControlModel::StatusResult,
+        authority_effect: AuthorityEffect::None,
+        project_requirement: ProjectRequirement::Required,
+        default_budget: BudgetProfile::BoundedRead,
     }
 }
 
@@ -1437,6 +1461,30 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             class: DiagnosticClass::Source,
             meaning: "Input uses a predecessor contract rejected by direct cutover.",
             retry: "Recreate the request or authority under the advertised current contract.",
+        },
+        DiagnosticDescriptor {
+            code: "project_not_found",
+            class: DiagnosticClass::Source,
+            meaning: "No current semantic repository exists at or above the selected directory.",
+            retry: "Select a current project directory or create one with new.",
+        },
+        DiagnosticDescriptor {
+            code: "project_path",
+            class: DiagnosticClass::Source,
+            meaning: "The project discovery path is missing, non-directory, traversing, or symbolic.",
+            retry: "Select an existing ordinary directory without symbolic-link or parent traversal components.",
+        },
+        DiagnosticDescriptor {
+            code: "project_marker",
+            class: DiagnosticClass::Corrupt,
+            meaning: "A normalized repository marker is not an ordinary file.",
+            retry: "Preserve the authority and inspect the reported repository path.",
+        },
+        DiagnosticDescriptor {
+            code: "project_io",
+            class: DiagnosticClass::Infrastructure,
+            meaning: "Project discovery could not inspect the current directory, path, or marker.",
+            retry: "Correct host path availability or permissions and retry.",
         },
     ];
     DIAGNOSTICS
