@@ -1,159 +1,67 @@
-# Repository Instructions
+# Repository Agent Instructions
 
 ## Scope and precedence
 
-This file applies to the entire repository unless a deeper `AGENTS.md` or
-`AGENTS.override.md` supplies narrower instructions for its directory.
+This file applies to the repository root and every descendant unless a nearer `AGENTS.md` or `AGENTS.override.md` provides more specific instructions.
 
-Follow instructions in this order:
+Apply instructions in this order:
 
 1. the active user request;
-2. the active campaign prompt explicitly supplied for the task;
-3. the closest applicable agent-instruction file;
-4. current executable contracts and tests;
-5. current normative specifications;
-6. current implementation and generated documentation;
-7. historical decisions, campaign ledgers, prompts, and comments.
+2. the active campaign prompt explicitly selected by the user;
+3. the nearest applicable agent instruction file;
+4. executable public contracts, tests, and verification policy;
+5. normative specifications under `docs/spec/`;
+6. current status and architecture documents;
+7. implementation and generated documentation;
+8. historical prompts, ledgers, comments, and commits.
 
-The active checkout outranks stale descriptions.
+Historical prompts are evidence, not current requirements. When sources conflict, preserve the higher-precedence source and record the conflict rather than silently combining incompatible rules.
 
-Historical prompts explain history only.
-Do not treat them as current requirements unless the active task explicitly adopts them.
+Read the active campaign and inspect the current Git state before editing. A recorded campaign baseline is orientation; audit later commits when HEAD has advanced.
 
-Read the applicable instructions before editing.
-Inspect the actual repository before planning.
-Do not infer current behavior from filenames, old contract numbers, or prior campaigns.
+## Mission and enduring invariants
 
-All first-party code, comments, diagnostics, command help, specifications, and maintained
-documentation must be in English.
+`lkjscript` is an AI-first programming language and application platform.
 
-Do not record or expose private chain-of-thought.
-Record decisions, evidence, alternatives, and uncertainty in concise reviewable form.
+- One accepted revision of the typed semantic graph is the sole authority for program meaning.
+- Source text, compact requests, direct CLI flags, review projections, indexes, artifacts, bytecode, runtime handles, deployment descriptors, caches, logs, and receipts are not second editable program authorities.
+- Ordinary application development must be possible through the distributed `lkjscript` executable.
+- Application policy belongs in graph meaning. Rust owns generic host mechanisms.
+- Names are mutable locators and presentation. Stable typed identities express continuity.
+- Exact semantic references and dense runtime indexes are separate concerns.
+- Logical meaning and physical layout are separate concerns.
+- Accepted writes use an exact base, complete validation evidence, durable immutable objects, and one atomic HEAD visibility point.
+- Failed, stale, cancelled, exhausted, corrupt, or interrupted work must not partially advance accepted authority.
+- Backward compatibility is not a default objective. Move maintained consumers, reject predecessor input, and delete predecessor paths as one dependency-closed cutover.
+- Keep representations replaceable so measured future optimization does not require changing language meaning.
 
-## Mission
+AI-first does not justify ambiguous contracts, hidden state, excessive terminology, weak diagnostics, or an undiscoverable CLI.
 
-lkjscript is an AI-first programming platform whose accepted typed semantic graph is the sole
-authoritative representation of application meaning.
+## Repository map
 
-Ordinary application development must be possible through the released `lkjscript` CLI.
+Use these locations according to their authority:
 
-Editable text source must not become a second program authority.
+- `src/platform/`: language, authority, repository, compiler, runtime, adapter, and public-control implementation.
+- `src/bin/lkjscript.rs`: released process boundary.
+- `tools/lkjscript-dev/`: contributor-only verification, evidence, scale, service, and policy tooling.
+- `tests/`: black-box public CLI and service acceptance.
+- `packages/standard/`: maintained standard-package consumer.
+- `applications/lkjournal/`: maintained application and service consumer.
+- `docs/spec/`: normative behavior.
+- `docs/status.md`: implemented current facts and limitations.
+- `docs/architecture.md`: current layer and dependency map.
+- `docs/roadmap.md`: deferred evidence-gated work.
+- `docs/performance.md` and `docs/evidence/`: reproduced measurements and retained evidence.
+- `docs/generated/`: executable-generated contract documentation; never hand-edit it.
+- `docs/decisions/`: durable design decisions and reversal conditions.
+- `prompts/`: campaign implementation specifications and history.
+- `docs/campaigns/`: concise campaign state and evidence indexes.
 
-A change file, command request, review projection, generated document, query index, compiler
-artifact, runtime handle, cache, or validation receipt is not program meaning unless a current
-normative contract explicitly makes it part of accepted semantic authority.
+Do not turn `AGENTS.md` into a normative specification, campaign plan, status report, measurement log, or roadmap.
 
-Human readability is useful for inspection and operations, but it is not a design objective that
-may weaken machine precision, semantic locality, determinism, or performance.
+## Initial repository inspection
 
-The platform must remain general.
-Do not place application-specific policy in Rust merely to complete one maintained application.
-
-The long-term objective is one coherent system, not preservation of accumulated implementations.
-
-## Architectural invariants
-
-There must be one accepted semantic authority.
-
-Do not maintain parallel editable representations.
-
-Do not wrap a predecessor AST, source model, or graph as the permanent core of a new design.
-
-Names are mutable namespace and presentation data.
-Stable references must not depend on names when exact identity is available.
-
-Identity has a cost.
-Assign durable identity only when a demonstrated consumer needs continuity across edits, history,
-merge, external reference, or precise selection.
-
-Do not give every implementation detail a global identity by default.
-Prefer scoped identity, immutable content identity, or no identity when those are sufficient.
-
-Keep logical meaning independent from physical layout.
-
-Do not make object boundaries, pack sizes, page fanout, cache shards, compiler units, or runtime
-indexes language semantics merely because the current implementation uses them.
-
-Derived relations, indexes, summaries, validation data, and compiler caches must be rebuildable
-from accepted meaning unless a specification proves that they alter meaning.
-
-Separate semantic revision identity from validation evidence and operational receipts.
-A validator upgrade must be able to re-evaluate unchanged meaning without silently changing that
-meaning's identity.
-
-Publication may become visible only after its required semantic data and acceptance evidence are
-durable and mutually bound.
-
-Use exact references at semantic boundaries.
-Lower exact references to dense runtime indexes before hot execution.
-
-Keep host mechanisms generic.
-Application routes, policy, queries, state transitions, authorization rules, and domain behavior
-belong in graph meaning when the platform can express them.
-
-Backward compatibility is not a default objective.
-
-When replacing a contract, migrate every maintained consumer, reject predecessor inputs, remove
-predecessor readers and writers, delete compatibility aliases, and update documentation in the same
-dependency-closed campaign.
-
-Do not create editions, legacy modes, fallback readers, or shadow authorities unless the active
-user explicitly requires them.
-
-## Decision discipline
-
-Prefer deletion, consolidation, and reuse over adding another abstraction.
-
-Prefer the smallest design that satisfies complete workflows.
-
-Do not preserve a design because it is implemented, documented, tested, or recently written.
-
-Do not replace a design merely to produce visible change.
-
-Before a major architectural choice:
-
-- state the actual problem;
-- identify the current authority and consumers;
-- list the smallest credible alternatives;
-- compare correctness, complexity, locality, performance, migration cost, and deletion cost;
-- identify what evidence can distinguish the alternatives;
-- choose one path;
-- define the reversal or deletion condition;
-- remove losing prototypes.
-
-Do not elevate arbitrary numeric thresholds into design principles.
-
-Every maintained limit must be classified as one of:
-
-- a format bound required for safe decoding;
-- a deterministic request or execution budget;
-- an operational default;
-- a measured implementation ceiling;
-- a temporary test parameter.
-
-State the unit and owning boundary.
-Do not use one scalar as a substitute for independent resource dimensions.
-
-Do not flatten an inherently multidimensional problem merely to simplify an API or document.
-
-Avoid project-specific terminology when an established technical term is accurate.
-
-Introduce a new public term only when it names a real distinction that users or agents must reason
-about.
-
-Use one term for one concept.
-Remove retired aliases and obsolete contract names after cutover.
-
-Do not turn this file into an architecture specification.
-Durable operating rules belong here.
-Campaign design belongs in the active prompt.
-Normative behavior belongs under `docs/spec/`.
-Current facts belong in `docs/status.md`.
-Measurements belong in evidence or performance records.
-
-## Repository work
-
-Start significant work by recording:
+Before changing files, capture:
 
 ```sh
 git status --short
@@ -162,330 +70,196 @@ git branch --show-current
 git rev-parse HEAD
 git log -20 --oneline
 git remote -v
-find .. -name AGENTS.md -o -name AGENTS.override.md
+find .. \( -name AGENTS.md -o -name AGENTS.override.md \) -print
 rustc --version
 cargo --version
 ```
 
-Inspect the released command surface and relevant focused tests before changing a public boundary.
+Then read only the smallest authoritative path set needed by the active campaign. Prefer exact symbol search over broad rescans.
 
-Preserve unrelated work.
+Preserve pre-existing tracked and untracked work. Do not assume an unfamiliar change is disposable.
 
-Do not use `git reset`, `git clean`, history rewriting, force push, blanket staging, or destructive
-checkout commands.
+## Git and working-tree safety
 
-Do not use `git add .` or `git add -A`.
-Stage explicit paths.
+Never use destructive commands such as:
 
-Do not amend, rebase, merge, or switch branches unless the active task requires it.
+```text
+git reset --hard
+git clean -fd
+git checkout -- .
+git restore .
+git rebase
+git push --force
+git push --force-with-lease
+```
 
-Make coherent commits that compile and preserve the repository's intended intermediate state.
+unless the active user request explicitly requires the exact action and its consequences have been verified.
 
-A normal fast-forward push is allowed only when the active user request or campaign prompt
-authorizes it.
+Additional rules:
 
-Do not ask the user to choose routine implementation details that can be resolved from evidence and
-these priorities.
+- Do not rewrite history.
+- Do not remove or overwrite unrelated user work.
+- Do not use `git add .` or `git add -A`; stage explicit paths.
+- Inspect the staged diff before every commit.
+- Keep commits coherent, buildable where practical, and paired with their proving tests.
+- Do not mix unrelated formatting or cleanup into a campaign commit.
+- Use a normal fast-forward push only when authorized and the remote state is understood.
+- End with a clean working tree unless an explicit preserved user change is documented.
 
-Ask only when an external fact, credential, irreversible action, or genuinely ambiguous product
-decision cannot be resolved safely from the repository and active request.
+## Build and verification entry points
 
-Do not stop at a design document when implementation is requested.
+The workspace is stable Rust 2024 and uses the locked dependency graph.
 
-Do not leave a new path private indefinitely while the predecessor remains public.
-Complete a vertical public slice or remove the unfinished path.
+Useful narrow checks include:
+
+```sh
+cargo fmt --all -- --check
+cargo test --locked --lib FILTER
+cargo test --locked --test public_cli FILTER
+cargo test --locked --test general_service FILTER
+cargo run --locked -p lkjscript-dev -- check focused
+cargo run --locked -p lkjscript-dev -- check changed
+```
+
+Repository-level profiles are:
+
+```sh
+cargo build --workspace --release --locked
+cargo run --locked -p lkjscript-dev -- check focused
+cargo run --locked -p lkjscript-dev -- check changed
+cargo run --locked -p lkjscript-dev -- check product
+cargo run --locked -p lkjscript-dev -- check service
+cargo run --locked -p lkjscript-dev -- check full
+```
+
+During iteration, run the narrowest relevant unit or black-box test. Do not run the full suite after every edit. Run the fresh `full` profile once the final content, generated files, and documentation are complete.
+
+The verification harness owns gate dependencies, exact fingerprints, bounded child logs, required outputs, and fresh/reused classification. Reuse evidence only when the harness proves exact input identity. Never describe skipped, stale, unavailable, or failed evidence as passed. Store large logs under the harness artifact directory and return paths rather than pasting them.
+
+Environment-dependent service checks may be unavailable. Report the environmental reason and all independent evidence; do not weaken the gate or fabricate success.
 
 ## Rust and first-party tooling
 
-Rust is the default language for production code, repository tooling, verification, fixtures,
-benchmarks, migrations, and maintained generators.
-
-Do not add new first-party Python tooling.
-
-When an existing Python tool is in scope, replace it with a tested Rust implementation and remove
-the Python path after parity.
-
-Shell may coordinate standard commands, but substantial first-party logic must not hide in shell
-scripts.
-
-Application developers must not need Python, Cargo, a Rust toolchain, repository source, or network
-access for ordinary binary-only lkjscript development.
-
-Use the repository's active Rust edition and locked dependency graph.
-
-Prefer explicit domain types over strings and untyped maps at authority boundaries.
-
-Keep parsing, validation, canonicalization, storage, and execution boundaries typed.
-
-Reject unknown fields, trailing bytes, duplicate keys, invalid order, foreign identities,
-overflow, exhaustion, and malformed framing at their owning boundary.
-
-Avoid `unwrap`, `expect`, `panic`, `todo`, and `unimplemented` on maintained runtime paths.
-
-Safe Rust is the default.
-
-First-party `unsafe` requires all of the following:
-
-- a measured requirement that safe Rust cannot satisfy adequately;
-- a narrow module boundary;
-- documented invariants;
-- focused adversarial tests;
-- sanitizer or equivalent evidence when applicable;
-- benchmark evidence for the claimed benefit;
-- an explicit rollback condition.
-
-Do not relax repository-wide safety merely for speculative optimization.
-
-Add a dependency only when it removes more maintained complexity than it introduces.
-
-Inspect source, maintenance state, feature flags, transitive cost, licensing, and security impact
-before adding a production dependency.
-
-Prefer private modules and narrow exports.
-Split by ownership and dependency direction, not by arbitrary line counts.
-
-Large files are evidence to inspect, not automatic proof that a split is correct.
-
-Warnings are errors.
-Formatting, Clippy, and tests must remain clean for touched code.
-
-## CLI and protocol
-
-The released `lkjscript` CLI is the normal application-development interface.
-
-The CLI must be composable, deterministic, discoverable, revision-aware, bounded, and useful from
-an empty directory with one copied release binary.
-
-A fresh agent must be able to discover the current command and data model without reading repository
-source or a giant generated schema.
-
-Provide focused discovery by command, operation, semantic kind, and changed schema section.
-
-Default output must be concise.
-Return exact identities, revision bindings, status, essential counts, and the next useful handle or
-command.
-
-Write large payloads to explicit files and return their paths and digests.
-Do not dump complete graphs, schemas, logs, or artifacts to ordinary stdout.
-
-Raw recursive JSON must not be the normal way to author semantic changes.
-
-JSON must not be canonical semantic storage, an artifact format, or a required control-plane
-transport.
-
-JSON may remain as an explicit optional projection and as ordinary application data at external
-boundaries such as HTTP APIs when a real consumer justifies it.
-
-Keep typed request and response models independent of any one transport.
-
-A compact text change notation, direct CLI flags, optional machine projection, and any future
-resident transport must lower to the same typed operation registry and semantic change engine.
-
-Do not create a second source language, macro system, or hidden builder.
-
-Change notation is an ephemeral request representation.
-Accepted graph meaning remains authoritative.
-
-Diagnostics must identify the failed operation, field, selector, expected form, observed revision,
-and safe recovery action when those facts are available.
-
-Dry-run and commit must use the same normalization, impact, validation, and publication preparation.
-
-A prepared write must bind an exact base revision.
-Publication must recheck that base before visibility.
-
-Use request-local symbols for connected creation.
-Return their allocated stable identities compactly.
-
-Do not require a separate identity-allocation round trip.
-
-Do not add a resident session, daemon, local socket, or custom binary protocol because it appears
-agent-friendly.
-
-Measure complete repeated workflows first.
-Retain a session only when it materially reduces latency, output, retries, or provider cost without
-weakening stateless correctness, revision binding, cancellation, recovery, or resource bounds.
-
-## Correctness, storage, and evidence
-
-Accepted revisions are immutable.
-
-Publication must be atomic, fail closed, and crash consistent.
-
-No rejected, stale, exhausted, corrupt, or interrupted operation may advance accepted state.
-
-Never rely on a derived index for correctness without an independent path that can rebuild or
-verify it from accepted meaning.
-
-Incremental validation and compilation must agree with independent complete oracles.
-
-Do not call a path incremental when it reconstructs, scans, clones, validates, compiles, or loads
-the complete project or dependency closure.
-
-Measure actual owner reads, edges, pages, objects, bytes, compiler units, writes, synchronization
-operations, elapsed time, CPU time, and peak memory where applicable.
-
-Semantic revision identity, validation evidence, verification receipts, and benchmark observations
-must use separate typed domains.
-
-If a command reports a durable receipt path, the receipt must already be complete, synchronized as
-required, and atomically visible.
-
-Retain failure evidence as carefully as success evidence.
-
-A missing, partial, stale, or unverifiable receipt is not a pass.
-
-Do not report generated files as authoritative when they are not mechanically verified against
-their executable owner.
-
-Backup and restore must operate on exact retained authority, verify integrity before visibility,
-and never depend on disposable indexes.
-
-Deletion, compaction, and garbage collection require exact roots, pins, active-reader protection,
-registered backup roots, an independent reachability oracle, interruption tests, and conservative
-failure behavior.
-
-Never delete reachable authority.
-
-## Performance and model-economy claims
-
-Optimize end-to-end workflows, not isolated microbenchmarks.
-
-Preserve asymptotic locality before tuning constants.
-
-Benchmark maintained applications and representative synthetic topologies.
-
-Distinguish semantic work from storage work, compiler work, runtime work, operating-system work, and
-transport work.
-
-Do not infer tokens or monetary cost from byte counts.
-
-Provider token and monetary claims require exact provider telemetry or an explicitly identified
-tokenizer with its limitations.
-
-Byte counts, command counts, retries, latency, and context size may be reported directly.
-
-Reduce agent cost through focused discovery, stable handles, revision-bound context, compact
-diagnostics, quiet successful verification, reusable receipts, and avoiding repeated schema or
-repository dumps.
-
-Do not optimize cost by hiding required evidence or making failures ambiguous.
-
-JIT, AOT specialization, memory mapping, custom allocators, SIMD, unsafe code, resident processes,
-and new storage engines are evidence-gated options, not standing requirements.
-
-Keep hot runtime representations replaceable so later evidence can support stronger optimization
-without changing semantic authority.
-
-## Security boundaries
-
-Treat all external bytes, paths, archives, descriptors, requests, artifacts, store objects, and
-environment-derived values as untrusted input.
-
-Validate before allocation, traversal, publication, execution, or adapter binding.
-
-Reject path traversal, symlink escape, ambiguous normalization, foreign identity, forged digest,
-duplicate binding, oversized input, excessive nesting, integer overflow, and trailing data.
-
-Secrets must remain host-owned and redacted.
-Do not place secret values in accepted graph meaning, receipts, diagnostics, logs, artifacts, or
-provider telemetry.
-
-Capability grants must be exact, least-authority, typed, revision-bound where required, and checked
-before effects.
-
-Runtime resource handles must not cross scopes or durable boundaries accidentally.
-
-Do not claim hostile-code sandboxing, multi-tenant isolation, encrypted transport, artifact
-signatures, portability, or production readiness without retained evidence for that exact claim.
-
-Do not broaden the campaign into unrelated security infrastructure.
-
-## Verification
-
-Run the narrowest relevant checks during iteration.
-
-Run the repository's authoritative complete profile before final handoff when feasible.
-
-A successful final verification must use the exact final content.
-Reused evidence is not fresh evidence when the full profile requires freshness.
-
-Tests must cover public behavior, not only private helpers.
-
-For changed authority boundaries, include:
-
-- valid round trips;
-- malformed and truncated input;
-- unknown forms;
-- duplicate and noncanonical input;
-- stale revisions;
-- foreign identities;
-- exhaustion;
-- crash points;
-- corruption;
-- deterministic reproduction;
-- independent-oracle agreement;
-- predecessor rejection after cutover.
-
-For performance claims, retain commands, inputs, toolchain, platform, revision, outputs, elapsed
-time, CPU, peak memory when available, and artifact or receipt digests.
-
-Successful checks should print a compact aggregate result and durable receipt location.
-
-Child logs and detailed evidence belong in bounded files.
-
-Do not suppress warnings or weaken tests to make a gate pass.
-
-Do not classify a skipped, unavailable, timed-out, flaky, or partially executed gate as success.
-
-Review the final diff for duplicated authority, compatibility residue, stale terminology, hidden
-full-project work, unchecked resource dimensions, accidental application policy in Rust, and
-documentation drift.
-
-## Documentation
-
-Keep normative specifications, current status, architecture, security boundaries, roadmap, and
-performance evidence distinct.
-
-Do not copy the same contract table or operation catalog into multiple handwritten documents.
-
-Generate repetitive reference material from one executable registry and verify generated bytes.
-
-Current-status documentation must describe implemented checkout reality and explicitly identify
-what remains private, incomplete, unmeasured, or unsupported.
-
-Decision records must state the decision, alternatives, evidence, consequences, and reversal
-condition.
-
-Campaign ledgers must be concise operational indexes, not transcripts or replacements for source
-control.
-
-Do not append long narrative checkpoints when a commit, receipt, and short status row carry the
-same information.
-
-Keep the root `AGENTS.md` below Codex's ordinary project-instruction budget.
-Do not enlarge it with campaign-specific schemas, phase plans, field catalogs, or implementation
-details.
-
-## Completion
-
-Work is complete only when the requested public workflow works through maintained interfaces.
-
-Before handoff:
-
-- inspect the final status and diff;
-- confirm every maintained consumer uses the selected authority;
-- remove superseded readers, writers, aliases, fixtures, generators, and documentation;
-- run focused and complete verification as required;
-- retain exact receipts;
-- update current facts and limitations;
-- record commits;
-- report whether a normal push was performed;
-- list any failed or unavailable checks honestly.
-
-Do not describe a private prototype as a completed public capability.
-
-Do not leave TODO text in place of required implementation.
-
-Do not preserve dead architecture for possible future use.
-Git history is the archive.
+- Rust is the default implementation and repository-tooling language.
+- Do not add Python, shell orchestration that replaces typed first-party tooling, or a new runtime dependency without a campaign-specific necessity.
+- Use stable Rust and keep `Cargo.lock` authoritative.
+- Safe Rust is the default; repository lint policy forbids `unsafe`.
+- Production code must satisfy the workspace denial of `unwrap`, `expect`, `panic`, `todo`, and `unimplemented`.
+- Tests may use local allowances only with a narrow reason.
+- Prefer typed domain objects, checked conversions, deterministic collections, explicit ownership, and bounded decoding.
+- Reject malformed tags, foreign identity domains, duplicate or noncanonical data, overflow, trailing bytes, and limit exhaustion at the owning boundary.
+- Do not couple contract bytes or digest identity to Rust enum order, serde representation, memory layout, filesystem paths, or hash iteration.
+- Keep generated artifacts reproducible and regenerate them through their owning executable command.
+- Avoid new dependencies when the standard library or an existing dependency is sufficient.
+- Remove first-party predecessor tooling in the same campaign after all maintained consumers move.
+
+## Semantic authority and publication
+
+- Mutations must lower to typed semantic intent before validation or publication.
+- The repository publication API remains the sole normal accepted-authority writer.
+- Plan and apply for the same operation must share normalization, allocation, impact analysis, validation, and response semantics.
+- A plan binds the exact semantic base and normalized request. Apply must reject a mismatched plan before repository access when the plan can be checked without it.
+- Under the publication lock, recheck the accepted base before advancing HEAD.
+- Durable canonical objects precede the single HEAD visibility change.
+- A retry after uncertain interruption begins by reading current HEAD and retained receipts; never blindly replay.
+- Derived summaries, indexes, compiler state, artifacts, review files, and deployment data may rebuild but cannot silently alter accepted meaning.
+- Missing disposable state may rebuild. Inconsistent canonical authority is corruption, not a cache miss.
+- Keep independent complete oracles until differential evidence justifies removal.
+
+## Public CLI and control protocols
+
+- The executable registry is the exhaustive owner of finite public operations, request/response models, vocabulary, limits, diagnostics, and security nonclaims.
+- One behavior has one public name. Reject unknown commands and options; do not add compatibility aliases or fallback routing.
+- Direct flags, compact records, and any future transport are adapters to transport-neutral typed requests.
+- Do not make raw JSON, storage objects, generated schemas, source text, or review text the required authoring path.
+- Public finite output is deterministic, bounded, and machine-readable. It names the observed revision when meaning is read.
+- Use stdout for the classified machine result. Keep stderr empty for classified finite outcomes unless the current contract explicitly states otherwise.
+- Growing results use explicit budgets and continuations or write to an explicit output file.
+- Large payloads and logs belong in files referenced by digest and path, not repeated in process output or agent context.
+- A public operation is complete only when discovery, valid behavior, failures, bounds, copied-binary use, documentation, and predecessor rejection are all proven.
+- Do not expose a private typed operation until its complete public workflow exists.
+
+## Errors, resources, and recovery
+
+Diagnostics must identify a stable class and code, the failed boundary, and an actionable correction. Preserve useful locations without leaking secrets or large payloads.
+
+Keep resource dimensions separate. At minimum distinguish, when relevant:
+
+- input bytes and records;
+- semantic operations;
+- semantic work;
+- affected owners;
+- output bytes and records;
+- wall and CPU time;
+- peak RSS;
+- filesystem bytes and synchronization operations;
+- runtime task, connection, queue, object, page, and retry counts.
+
+Every numeric bound must have a unit, owning boundary, classification, override policy, and rationale. Do not use one `fuel` value as a substitute for a multidimensional resource model. Do not infer provider tokens, cache usage, or monetary cost without direct telemetry.
+
+Cancellation and exhaustion are normal typed outcomes. Release owned resources, leave authority unchanged, and return enough evidence for deterministic recovery.
+
+## Security and external effects
+
+Treat request files, paths, artifacts, backups, continuations, deployment descriptors, adapter input, and network data as hostile decoding boundaries.
+
+- Validate before unbounded allocation or external effect.
+- Reject symlink and non-regular-file surprises at publication boundaries.
+- Use private staging, synchronization, and atomic visibility for durable output.
+- Redact secrets from output, logs, diagnostics, receipts, and test fixtures.
+- Keep application authorization in graph meaning and generic capability enforcement in host mechanisms.
+- Do not claim hostile-code sandboxing, multi-tenant isolation, encrypted graph storage, artifact provenance, distributed consensus, or platform support that has not been implemented and verified.
+- The current plaintext HTTP and PostgreSQL `NoTls` boundary is not permission to add speculative TLS machinery. Transport encryption belongs at an explicitly selected trusted boundary or a separately justified adapter.
+
+## Design and scope discipline
+
+For a substantial campaign:
+
+1. define one primary objective;
+2. identify current authorities and maintained consumers;
+3. compare the smallest credible alternatives;
+4. select one dependency-closed target;
+5. classify mandates, selected design, empirical questions, and non-goals;
+6. implement vertical, verifiable milestones;
+7. migrate maintained consumers and delete predecessors;
+8. update the correct documentation layer;
+9. verify the final public workflow and complete repository policy.
+
+Prefer established technical vocabulary. Use one term per concept. Remove obsolete terms from current code and documentation after cutover.
+
+Do not introduce sessions, daemons, additional registry layers, schedulers, caches, JITs, AOT, SIMD, memory mapping, custom allocators, `unsafe`, or distributed machinery without a measured problem, a named consumer, an independent oracle, and a deletion or reversal condition.
+
+Do not preserve a design merely because it is implemented or recent. Do not replace correct work merely to create visible change. Avoid speculative abstraction and arbitrary structural limits.
+
+When a serious unrelated problem is found, record exact evidence and defer it unless it invalidates the active objective or presents an immediate authority, data-loss, or security risk.
+
+## Documentation ownership
+
+- Change normative behavior only in `docs/spec/`.
+- Change current implementation facts only in `docs/status.md`.
+- Change the layer map only in `docs/architecture.md`.
+- Record actual measurements in `docs/performance.md` or `docs/evidence/`.
+- Keep generated contract tables executable-derived.
+- Keep durable decisions concise and include reversal conditions.
+- Keep campaign ledgers concise and evidence-oriented.
+- Keep user examples in `README.md`.
+- Do not duplicate complete field catalogs, operation catalogs, or version tables across handwritten files.
+
+Historical comments and prompts must not override current executable contracts.
+
+## Completion conditions
+
+Work is complete only when:
+
+- the selected public workflow works through the released executable;
+- maintained consumers use the selected path;
+- predecessor readers, writers, adapters, aliases, fixtures, schemas, tests, and stale documentation in scope are deleted;
+- valid, malformed, stale, exhausted, interrupted, corrupt, and predecessor cases relevant to the change are tested;
+- independent oracles agree;
+- generated files match their owner;
+- final verification is fresh for the final content;
+- commits are coherent;
+- the working tree is clean or preserved user work is explicitly identified; and
+- the final report returns exact commands, outcomes, commit SHAs, receipt/log/artifact paths, deviations, limitations, and the smallest next candidates.
+
+Do not claim public completion from a private prototype, an internal unit test, a stale receipt, or documentation alone.
