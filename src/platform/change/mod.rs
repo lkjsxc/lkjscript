@@ -49,10 +49,10 @@ pub use prepare::{
 };
 pub use request::{
     AuthoredAnnotationValue, AuthoredBindingDefinition, AuthoredCase, AuthoredCaseReference,
-    AuthoredChange, AuthoredChangeSet, AuthoredDeclarationReference, AuthoredExpression,
-    AuthoredExpressionOperation, AuthoredField, AuthoredFieldReference, AuthoredFieldSelector,
-    AuthoredFunctionEffect, AuthoredLetBinding, AuthoredLocalReference, AuthoredLowering,
-    AuthoredLoweringWork, AuthoredMapExpressionEntry, AuthoredMatchExpressionArm,
+    AuthoredChange, AuthoredChangeSet, AuthoredDeclarationReference, AuthoredDeletePolicy,
+    AuthoredExpression, AuthoredExpressionOperation, AuthoredField, AuthoredFieldReference,
+    AuthoredFieldSelector, AuthoredFunctionEffect, AuthoredLetBinding, AuthoredLocalReference,
+    AuthoredLowering, AuthoredLoweringWork, AuthoredMapExpressionEntry, AuthoredMatchExpressionArm,
     AuthoredOperation, AuthoredOperationReference, AuthoredParameter, AuthoredPort,
     AuthoredPortImplementation, AuthoredPortReference, AuthoredPrecondition,
     AuthoredRecordExpressionField, AuthoredRequirement, AuthoredRequirementReference,

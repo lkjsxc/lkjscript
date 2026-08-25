@@ -3,20 +3,21 @@
 use super::{CompactField, CompactRecord, parse_records};
 use crate::platform::change::{
     AuthoredCase, AuthoredChange, AuthoredChangeSet, AuthoredDeclarationReference,
-    AuthoredExpression, AuthoredExpressionOperation, AuthoredField, AuthoredFunctionEffect,
-    AuthoredLocalReference, AuthoredParameter, AuthoredType, AuthoredTypeParameterReference,
-    DeclarationSelector, ModuleSelector, OwnerSelector, ParameterParentSelector,
+    AuthoredDeletePolicy, AuthoredExpression, AuthoredExpressionOperation, AuthoredField,
+    AuthoredFunctionEffect, AuthoredLocalReference, AuthoredParameter, AuthoredType,
+    AuthoredTypeParameterReference, DeclarationSelector, ModuleSelector, OwnerSelector,
+    ParameterParentSelector,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass, SourceLocation};
-use crate::platform::kernel::{DeclarationVisibility, Name};
+use crate::platform::kernel::{DeclarationVisibility, Name, OwnerKey};
 use crate::platform::publication::{PublicationOptions, idempotency_key_is_valid};
 use crate::platform::semantic_id::{BindingId, DeclarationId, ModuleId, ParameterId, RevisionId};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-1";
-pub const CHANGE_PLAN_DIGEST_DOMAIN: &str = "lkjscript.change-plan.v2";
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-2";
+pub const CHANGE_PLAN_DIGEST_DOMAIN: &str = "lkjscript.change-plan.v3";
 pub const COMPACT_CHANGE_OPERATIONS: &[&str] = &[
     "create.module",
     "create.record",
@@ -27,9 +28,33 @@ pub const COMPACT_CHANGE_OPERATIONS: &[&str] = &[
     "add.field",
     "add.case",
     "add.parameter",
+    "delete.owner",
     "rename.owner",
     "move.declaration",
     "replace.body",
+];
+pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject"];
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct CompactChangeOperationField {
+    pub(crate) operation: &'static str,
+    pub(crate) name: &'static str,
+    pub(crate) required: bool,
+    pub(crate) form: &'static str,
+}
+
+pub(crate) const COMPACT_CHANGE_OPERATION_FIELDS: &[CompactChangeOperationField] = &[
+    CompactChangeOperationField {
+        operation: "delete.owner",
+        name: "owner",
+        required: true,
+        form: "exact_owner",
+    },
+    CompactChangeOperationField {
+        operation: "delete.owner",
+        name: "policy",
+        required: true,
+        form: "delete_policy",
+    },
 ];
 pub const COMPACT_TYPE_FORMS: &[&str] = &[
     "unit",
@@ -484,6 +509,24 @@ impl Decoder {
                     },
                 })
             }
+            "delete.owner" => {
+                check_described_operation_fields(record, "delete.owner")?;
+                let policy = required(record, "policy")?;
+                if policy != "reject" {
+                    return Err(field_error(
+                        record,
+                        "policy",
+                        "change_delete_policy",
+                        format!("deletion policy must be reject; observed '{policy}'"),
+                    ));
+                }
+                Ok(AuthoredChange::DeleteOwner {
+                    owner: OwnerSelector::Exact {
+                        owner: parse_field::<OwnerKey>(record, "owner")?,
+                    },
+                    policy: AuthoredDeletePolicy::Reject,
+                })
+            }
             "rename.owner" => {
                 check_fields(record, &["owner", "name"])?;
                 Ok(AuthoredChange::RenameOwner {
@@ -857,6 +900,38 @@ fn check_fields(record: &CompactRecord, allowed: &[&str]) -> Result<(), Diagnost
     Ok(())
 }
 
+fn check_described_operation_fields(
+    record: &CompactRecord,
+    operation: &str,
+) -> Result<(), Diagnostic> {
+    let descriptors = COMPACT_CHANGE_OPERATION_FIELDS
+        .iter()
+        .filter(|descriptor| descriptor.operation == operation)
+        .collect::<Vec<_>>();
+    for field in &record.fields {
+        if !descriptors
+            .iter()
+            .any(|descriptor| descriptor.name == field.name)
+        {
+            return Err(field_error(
+                record,
+                &field.name,
+                "change_field_unknown",
+                format!(
+                    "operation '{}' does not accept field '{}'",
+                    record.operation, field.name
+                ),
+            ));
+        }
+    }
+    for descriptor in descriptors {
+        if descriptor.required {
+            required(record, descriptor.name)?;
+        }
+    }
+    Ok(())
+}
+
 fn required<'a>(record: &'a CompactRecord, name: &str) -> Result<&'a str, Diagnostic> {
     optional(record, name).ok_or_else(|| {
         record_error(
@@ -1196,6 +1271,40 @@ mod tests {
         let error = decode_compact_change("change.lk", input.as_bytes()).unwrap_err();
         assert_eq!(error[0].code, "change_field_unknown");
         assert_eq!(error[0].location.as_ref().unwrap().line, 2);
+    }
+
+    #[test]
+    fn deletion_is_exact_and_reject_only() {
+        let owner = OwnerKey::Module(ModuleId::migrate(b"compact-delete", 1));
+        let input = format!(
+            "request base={}\ndelete.owner owner={owner} policy=reject\n",
+            revision()
+        );
+        let decoded = decode_compact_change("delete.lk", input.as_bytes()).unwrap();
+        assert!(matches!(
+            &decoded.semantic.changes[..],
+            [AuthoredChange::DeleteOwner {
+                owner: OwnerSelector::Exact { owner: observed },
+                policy: AuthoredDeletePolicy::Reject,
+            }] if *observed == owner
+        ));
+
+        let unsupported = format!(
+            "request base={}\ndelete.owner owner={owner} policy=owned-closure\n",
+            revision()
+        );
+        assert_eq!(
+            decode_compact_change("delete.lk", unsupported.as_bytes()).unwrap_err()[0].code,
+            "change_delete_policy"
+        );
+        let predecessor = format!(
+            "request base={}\ndelete.owner owner={owner} cascade=true policy=reject\n",
+            revision()
+        );
+        assert_eq!(
+            decode_compact_change("delete.lk", predecessor.as_bytes()).unwrap_err()[0].code,
+            "change_field_unknown"
+        );
     }
 
     #[test]

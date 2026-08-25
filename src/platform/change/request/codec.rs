@@ -13,7 +13,7 @@ use crate::platform::kernel::{
 use crate::platform::package::RunnerKind;
 use crate::platform::witness::OwnershipParent;
 
-const INTENT_MAGIC: [u8; 8] = *b"LKJACR02";
+const INTENT_MAGIC: [u8; 8] = *b"LKJACR03";
 const BUDGET_MAGIC: [u8; 8] = *b"LKJABG01";
 const MAXIMUM_BUDGET_BYTES: usize = 1_024;
 
@@ -629,10 +629,10 @@ impl Writer {
                 self.tag(31)?;
                 self.raw(&package.bytes())
             }
-            AuthoredChange::DeleteOwner { owner, cascade } => {
+            AuthoredChange::DeleteOwner { owner, policy } => {
                 self.tag(32)?;
                 self.owner_selector(owner, definitions)?;
-                self.boolean(*cascade)
+                self.delete_policy(policy)
             }
             AuthoredChange::RenameOwner { owner, name } => {
                 self.tag(33)?;
@@ -678,6 +678,12 @@ impl Writer {
                 self.tag(4)?;
                 self.symbol(symbol, definitions)
             }
+        }
+    }
+
+    fn delete_policy(&mut self, value: &AuthoredDeletePolicy) -> Result<(), Diagnostic> {
+        match value {
+            AuthoredDeletePolicy::Reject => self.tag(1),
         }
     }
 
@@ -1440,7 +1446,7 @@ mod tests {
         assert_eq!(&first[..8], &INTENT_MAGIC);
         assert_eq!(
             crate::platform::semantic_id::encode_hex(blake3::hash(&first).as_bytes()),
-            "8271fb853310a44a1f0a17df900f9882c2a8954fb4d525925cfaf2514ab27f20"
+            "c1d53911b358fcf3d9ae93baa0b385bbd72d61fb070b35c3f014dbac1de6701a"
         );
     }
 

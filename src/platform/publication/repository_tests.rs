@@ -1,13 +1,14 @@
 use super::*;
 use crate::platform::change::{
     AuthoredAnnotationValue, AuthoredBindingDefinition, AuthoredCase, AuthoredCaseReference,
-    AuthoredChange, AuthoredChangeSet, AuthoredDeclarationReference, AuthoredExpression,
-    AuthoredExpressionOperation, AuthoredField, AuthoredFieldReference, AuthoredFieldSelector,
-    AuthoredFunctionEffect, AuthoredLetBinding, AuthoredLocalReference, AuthoredMapExpressionEntry,
-    AuthoredMatchExpressionArm, AuthoredOperation, AuthoredOperationReference, AuthoredParameter,
-    AuthoredPort, AuthoredPortImplementation, AuthoredPortReference, AuthoredPrecondition,
-    AuthoredRecordExpressionField, AuthoredRequirement, AuthoredRequirementReference,
-    AuthoredResourceLimit, AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameter,
+    AuthoredChange, AuthoredChangeSet, AuthoredDeclarationReference, AuthoredDeletePolicy,
+    AuthoredExpression, AuthoredExpressionOperation, AuthoredField, AuthoredFieldReference,
+    AuthoredFieldSelector, AuthoredFunctionEffect, AuthoredLetBinding, AuthoredLocalReference,
+    AuthoredMapExpressionEntry, AuthoredMatchExpressionArm, AuthoredOperation,
+    AuthoredOperationReference, AuthoredParameter, AuthoredPort, AuthoredPortImplementation,
+    AuthoredPortReference, AuthoredPrecondition, AuthoredRecordExpressionField,
+    AuthoredRequirement, AuthoredRequirementReference, AuthoredResourceLimit,
+    AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameter,
     AuthoredTypeParameterReference, BudgetedCanonicalBase, CanonicalBaseRead, CanonicalDelta,
     CanonicalReadAdmission, CanonicalReadWork, ChangeBudget, DeclarationSelector, KernelOverlay,
     ModuleSelector, OwnerSelector, ParameterParentSelector, PrimitiveEdit, derive_local_delta,
@@ -2136,109 +2137,31 @@ fn authored_request_rejects_invalid_symbols_kinds_and_empty_work() {
 }
 
 #[test]
-fn authored_deletion_requires_cascade_and_retires_the_exact_owned_closure() {
+fn authored_reject_deletion_never_infers_an_owned_closure() {
     let temporary = tempfile::tempdir().expect("temporary repository parent");
     let destination = temporary.path().join("meaning");
     let logical = crate::platform::kernel::tests::witness_snapshot();
     let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
     let base = created.current.head.revision;
     let test = owner_named(&created.initial.snapshot, "caller_test");
-    let OwnerRecord::Declaration(test_record) = &created.initial.snapshot.owners[&test] else {
-        panic!("caller_test must be a declaration")
-    };
-    let DeclarationPayload::Test {
-        actual, expected, ..
-    } = test_record.payload
-    else {
-        panic!("caller_test must own test expressions")
-    };
-    let closure = [
-        test,
-        OwnerKey::Expression(actual),
-        OwnerKey::Expression(expected),
-    ];
-
-    let non_cascade = AuthoredChangeSet {
+    let request = AuthoredChangeSet {
         base,
         preconditions: Vec::new(),
         budget: ChangeBudget::default(),
         changes: vec![AuthoredChange::DeleteOwner {
             owner: OwnerSelector::Exact { owner: test },
-            cascade: false,
+            policy: AuthoredDeletePolicy::Reject,
         }],
     };
     assert_eq!(
         created
             .repository
-            .prepare_authored_change(&non_cascade, PublicationOptions::default())
-            .expect_err("owned expressions require explicit cascade")[0]
+            .prepare_authored_change(&request, PublicationOptions::default())
+            .expect_err("reject policy must not infer an owned closure")[0]
             .code,
-        "change_delete_requires_cascade"
+        "change_delete_owned_children"
     );
     assert_eq!(created.repository.current().unwrap().head.revision, base);
-
-    let cascade = AuthoredChangeSet {
-        base,
-        preconditions: Vec::new(),
-        budget: ChangeBudget::default(),
-        changes: vec![AuthoredChange::DeleteOwner {
-            owner: OwnerSelector::Exact { owner: test },
-            cascade: true,
-        }],
-    };
-    let prepared = created
-        .repository
-        .prepare_authored_change(&cascade, PublicationOptions::default())
-        .expect("dependency-closed cascade must prepare through the generic pipeline");
-    assert_eq!(prepared.publication.receipt.counts.owners_deleted, 3);
-    assert_eq!(prepared.publication.receipt.counts.retirements_changed, 3);
-    assert_eq!(prepared.publication.receipt.counts.owners_updated, 0);
-    assert!(prepared.lowering_work.relation_edges_read > 0);
-    assert!(matches!(
-        created
-            .repository
-            .publish(&prepared.publication)
-            .expect("publish authored cascade"),
-        PublicationOutcome::Accepted { .. }
-    ));
-
-    let view = created.repository.view_current().expect("advanced view");
-    let mut deletion_change = None;
-    for owner in closure {
-        assert!(view.owner(owner).unwrap().value.is_none());
-        let retirement = view
-            .retirement(owner)
-            .unwrap()
-            .value
-            .expect("deleted accepted owner must retain compact retirement evidence");
-        let original = &created.initial.snapshot.owners[&owner];
-        let ownership = created.initial.witness.entries.ownership[&owner];
-        assert_eq!(retirement.owner, owner);
-        assert_eq!(retirement.last_kind, original.kind());
-        assert_eq!(retirement.last_name.as_ref(), original.name());
-        assert_eq!(retirement.last_live_revision, base);
-        assert_eq!(
-            retirement.last_parent,
-            match ownership.parent {
-                OwnershipParent::Package => None,
-                OwnershipParent::Owner(parent) => Some(parent),
-            }
-        );
-        match deletion_change {
-            None => deletion_change = Some(retirement.deletion_change),
-            Some(expected) => assert_eq!(retirement.deletion_change, expected),
-        }
-    }
-    assert_eq!(
-        view.namespace(&NamespaceKey {
-            parent: Some(OwnerKey::Module(test_record.module)),
-            class: NamespaceClass::Declaration,
-            name: test_record.name.clone(),
-        })
-        .unwrap()
-        .value,
-        None
-    );
 }
 
 #[test]
@@ -2255,7 +2178,7 @@ fn authored_deletion_rejects_untouched_live_references_and_created_owner_erasure
         budget: ChangeBudget::default(),
         changes: vec![AuthoredChange::DeleteOwner {
             owner: OwnerSelector::Exact { owner: field },
-            cascade: false,
+            policy: AuthoredDeletePolicy::Reject,
         }],
     };
     assert_eq!(
@@ -2263,47 +2186,6 @@ fn authored_deletion_rejects_untouched_live_references_and_created_owner_erasure
             .repository
             .prepare_authored_change(&live_reference, PublicationOptions::default())
             .expect_err("untouched nominal field uses must block deletion")[0]
-            .code,
-        "change_delete_live_reference"
-    );
-
-    let callee = owner_named(&created.initial.snapshot, "callee");
-    let OwnerKey::Declaration(callee_id) = callee else {
-        panic!("callee must have declaration identity")
-    };
-    let caller = owner_named(&created.initial.snapshot, "caller");
-    let OwnerKey::Declaration(caller_id) = caller else {
-        panic!("caller must have declaration identity")
-    };
-    let changed_relation_kind = AuthoredChangeSet {
-        base,
-        preconditions: Vec::new(),
-        budget: ChangeBudget::default(),
-        changes: vec![
-            AuthoredChange::ReplaceFunctionBody {
-                function: DeclarationSelector::Id {
-                    declaration: caller_id,
-                },
-                body: authored_expression(AuthoredExpressionOperation::Call {
-                    function: AuthoredDeclarationReference::Exact {
-                        package: created.initial.snapshot.root.package_id,
-                        declaration: callee_id,
-                    },
-                    type_arguments: Vec::new(),
-                    arguments: vec![authored_expression(AuthoredExpressionOperation::Unit {})],
-                }),
-            },
-            AuthoredChange::DeleteOwner {
-                owner: OwnerSelector::Exact { owner: callee },
-                cascade: true,
-            },
-        ],
-    };
-    assert_eq!(
-        created
-            .repository
-            .prepare_authored_change(&changed_relation_kind, PublicationOptions::default())
-            .expect_err("changing relation kind must not retain the same deleted target")[0]
             .code,
         "change_delete_live_reference"
     );
@@ -2321,7 +2203,7 @@ fn authored_deletion_rejects_untouched_live_references_and_created_owner_erasure
                 owner: OwnerSelector::Symbol {
                     symbol: "$temporary_module".to_owned(),
                 },
-                cascade: false,
+                policy: AuthoredDeletePolicy::Reject,
             },
         ],
     };
@@ -2337,268 +2219,95 @@ fn authored_deletion_rejects_untouched_live_references_and_created_owner_erasure
 }
 
 #[test]
-fn authored_module_cascade_uses_exact_reverse_ownership_without_graph_reconstruction() {
+fn authored_leaf_deletion_accepts_same_request_reference_repair() {
     let temporary = tempfile::tempdir().expect("temporary repository parent");
     let destination = temporary.path().join("meaning");
     let logical = crate::platform::kernel::tests::witness_snapshot();
     let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
-    let create = AuthoredChangeSet {
-        base: created.current.head.revision,
-        preconditions: Vec::new(),
-        budget: ChangeBudget::default(),
-        changes: vec![
-            AuthoredChange::CreateModule {
-                symbol: "$retired_module".to_owned(),
-                name: Name::new("retired_module").unwrap(),
-            },
-            AuthoredChange::CreateFunction {
-                symbol: "$retired_function".to_owned(),
-                module: ModuleSelector::Symbol {
-                    symbol: "$retired_module".to_owned(),
-                },
-                name: Name::new("retired_function").unwrap(),
-                visibility: DeclarationVisibility::Private,
-                type_parameters: Vec::new(),
-                parameters: Vec::new(),
-                result: AuthoredType::Unit {},
-                effect: AuthoredFunctionEffect::Pure {},
-                body: AuthoredExpression {
-                    symbol: Some("$retired_body".to_owned()),
-                    operation: AuthoredExpressionOperation::Unit {},
-                },
-            },
-        ],
-    };
-    let created_slice = created
-        .repository
-        .prepare_authored_change(&create, PublicationOptions::default())
-        .expect("prepare isolated module slice");
-    let module = created_slice.allocated["$retired_module"];
-    let declaration = created_slice.allocated["$retired_function"];
-    let body = created_slice.allocated["$retired_body"];
-    created
-        .repository
-        .publish(&created_slice.publication)
-        .expect("publish isolated module slice");
-    let base = created.repository.current().unwrap().head.revision;
-
-    let delete = AuthoredChangeSet {
-        base,
-        preconditions: Vec::new(),
-        budget: ChangeBudget::default(),
-        changes: vec![AuthoredChange::DeleteOwner {
-            owner: OwnerSelector::Exact { owner: module },
-            cascade: true,
-        }],
-    };
-    let prepared = created
-        .repository
-        .prepare_authored_change(&delete, PublicationOptions::default())
-        .expect("module cascade must use exact reverse ownership");
-    assert_eq!(prepared.publication.receipt.counts.owners_deleted, 3);
-    assert!(prepared.lowering_work.canonical.canonical_records_decoded <= 3);
-    assert!(prepared.lowering_work.witness.point_reads <= 9);
-    created
-        .repository
-        .publish(&prepared.publication)
-        .expect("publish module cascade");
-    let view = created.repository.view_current().expect("advanced view");
-    for owner in [module, declaration, body] {
-        assert!(view.owner(owner).unwrap().value.is_none());
-        assert!(view.retirement(owner).unwrap().value.is_some());
-    }
-}
-
-#[test]
-fn authored_deletion_analyzes_the_complete_request_independent_of_delete_order() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
-    let create = AuthoredChangeSet {
-        base: created.current.head.revision,
-        preconditions: Vec::new(),
-        budget: ChangeBudget::default(),
-        changes: vec![
-            AuthoredChange::CreateModule {
-                symbol: "$delete_order_module".to_owned(),
-                name: Name::new("delete_order_module").unwrap(),
-            },
-            AuthoredChange::CreateFunction {
-                symbol: "$delete_order_callee".to_owned(),
-                module: ModuleSelector::Symbol {
-                    symbol: "$delete_order_module".to_owned(),
-                },
-                name: Name::new("delete_order_callee").unwrap(),
-                visibility: DeclarationVisibility::Private,
-                type_parameters: Vec::new(),
-                parameters: Vec::new(),
-                result: AuthoredType::Unit {},
-                effect: AuthoredFunctionEffect::Pure {},
-                body: authored_expression(AuthoredExpressionOperation::Unit {}),
-            },
-            AuthoredChange::CreateFunction {
-                symbol: "$delete_order_caller".to_owned(),
-                module: ModuleSelector::Symbol {
-                    symbol: "$delete_order_module".to_owned(),
-                },
-                name: Name::new("delete_order_caller").unwrap(),
-                visibility: DeclarationVisibility::Private,
-                type_parameters: Vec::new(),
-                parameters: Vec::new(),
-                result: AuthoredType::Unit {},
-                effect: AuthoredFunctionEffect::Pure {},
-                body: authored_expression(AuthoredExpressionOperation::Call {
-                    function: AuthoredDeclarationReference::Local {
-                        declaration: DeclarationSelector::Symbol {
-                            symbol: "$delete_order_callee".to_owned(),
-                        },
-                    },
-                    type_arguments: Vec::new(),
-                    arguments: Vec::new(),
-                }),
-            },
-        ],
-    };
-    let prepared_create = created
-        .repository
-        .prepare_authored_change(&create, PublicationOptions::default())
-        .expect("prepare related declarations");
-    let callee = prepared_create.allocated["$delete_order_callee"];
-    let caller = prepared_create.allocated["$delete_order_caller"];
-    created
-        .repository
-        .publish(&prepared_create.publication)
-        .expect("publish related declarations");
-
-    let delete = AuthoredChangeSet {
-        base: created.repository.current().unwrap().head.revision,
-        preconditions: Vec::new(),
-        budget: ChangeBudget::default(),
-        changes: vec![
-            AuthoredChange::DeleteOwner {
-                owner: OwnerSelector::Exact { owner: callee },
-                cascade: true,
-            },
-            AuthoredChange::DeleteOwner {
-                owner: OwnerSelector::Exact { owner: caller },
-                cascade: true,
-            },
-        ],
-    };
-    let prepared_delete = created
-        .repository
-        .prepare_authored_change(&delete, PublicationOptions::default())
-        .expect("complete final-state deletion must not depend on authored delete order");
-    assert_eq!(prepared_delete.publication.receipt.counts.owners_deleted, 4);
-    created
-        .repository
-        .publish(&prepared_delete.publication)
-        .expect("publish dependency-closed related deletions");
-    let view = created.repository.view_current().expect("advanced view");
-    assert!(view.owner(callee).unwrap().value.is_none());
-    assert!(view.owner(caller).unwrap().value.is_none());
-}
-
-#[test]
-fn authored_deletion_accepts_an_exact_same_request_rebind() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
-    let create_replacement = AuthoredChangeSet {
-        base: created.current.head.revision,
-        preconditions: Vec::new(),
-        budget: ChangeBudget::default(),
-        changes: vec![AuthoredChange::CreateFunction {
-            symbol: "$replacement_callee".to_owned(),
-            module: ModuleSelector::Name {
-                name: Name::new("second").unwrap(),
-            },
-            name: Name::new("replacement_callee").unwrap(),
-            visibility: DeclarationVisibility::Private,
-            type_parameters: Vec::new(),
-            parameters: vec![authored_parameter(
-                "$replacement_input",
-                "replacement_input",
-                AuthoredType::Unit {},
-            )],
-            result: AuthoredType::Unit {},
-            effect: AuthoredFunctionEffect::Pure {},
-            body: authored_expression(AuthoredExpressionOperation::Local {
-                value: AuthoredLocalReference::Symbol {
-                    symbol: "$replacement_input".to_owned(),
-                },
-            }),
-        }],
-    };
-    let prepared_replacement = created
-        .repository
-        .prepare_authored_change(&create_replacement, PublicationOptions::default())
-        .expect("prepare exact replacement function");
-    let replacement = prepared_replacement.allocated["$replacement_callee"];
-    created
-        .repository
-        .publish(&prepared_replacement.publication)
-        .expect("publish exact replacement function");
-
-    let callee = owner_named(&created.initial.snapshot, "callee");
-    let OwnerKey::Declaration(replacement_id) = replacement else {
-        panic!("replacement symbol must have declaration identity")
+    let record = owner_named(&created.initial.snapshot, "Payload");
+    let OwnerKey::Declaration(record_id) = record else {
+        panic!("Payload must have declaration identity")
     };
     let caller = owner_named(&created.initial.snapshot, "caller");
     let OwnerKey::Declaration(caller_id) = caller else {
         panic!("caller must have declaration identity")
     };
+    let removed = field_named(&created.initial.snapshot, "value");
     let previous_body = function_body(&created.initial.snapshot, "caller");
-    let mixed = AuthoredChangeSet {
-        base: created.repository.current().unwrap().head.revision,
+    let request = AuthoredChangeSet {
+        base: created.current.head.revision,
         preconditions: Vec::new(),
         budget: ChangeBudget::default(),
         changes: vec![
+            AuthoredChange::AddField {
+                record: DeclarationSelector::Id {
+                    declaration: record_id,
+                },
+                field: AuthoredField {
+                    symbol: "$replacement_field".to_owned(),
+                    name: Name::new("replacement").unwrap(),
+                    ty: AuthoredType::Unit {},
+                },
+            },
             AuthoredChange::ReplaceFunctionBody {
                 function: DeclarationSelector::Id {
                     declaration: caller_id,
                 },
                 body: AuthoredExpression {
-                    symbol: Some("$rebound_caller_body".to_owned()),
-                    operation: AuthoredExpressionOperation::Call {
-                        function: AuthoredDeclarationReference::Exact {
-                            package: created.initial.snapshot.root.package_id,
-                            declaration: replacement_id,
-                        },
-                        type_arguments: Vec::new(),
-                        arguments: vec![authored_expression(AuthoredExpressionOperation::Unit {})],
-                    },
+                    symbol: Some("$replacement_body".to_owned()),
+                    operation: AuthoredExpressionOperation::Unit {},
                 },
             },
             AuthoredChange::DeleteOwner {
-                owner: OwnerSelector::Exact { owner: callee },
-                cascade: true,
+                owner: OwnerSelector::Exact { owner: removed },
+                policy: AuthoredDeletePolicy::Reject,
             },
         ],
     };
     let prepared = created
         .repository
-        .prepare_authored_change(&mixed, PublicationOptions::default())
-        .expect("exact final-state rebind must remove the incoming relation before deletion");
-    assert!(prepared.publication.receipt.counts.owners_deleted >= 3);
-    assert_eq!(prepared.publication.receipt.counts.owners_updated, 1);
-    let rebound_body = prepared.allocated["$rebound_caller_body"];
+        .prepare_authored_change(&request, PublicationOptions::default())
+        .expect("same-request body repair must release the exact leaf reference");
+    assert_eq!(prepared.publication.receipt.counts.owners_updated, 2);
+    assert!(prepared.publication.receipt.counts.owners_deleted > 1);
+    let replacement_field = prepared.allocated["$replacement_field"];
+    let replacement_body = prepared.allocated["$replacement_body"];
     created
         .repository
         .publish(&prepared.publication)
-        .expect("publish exact rebind and deletion once");
+        .expect("publish repaired leaf deletion");
+
     let view = created.repository.view_current().expect("advanced view");
-    assert!(view.owner(callee).unwrap().value.is_none());
+    assert!(view.owner(removed).unwrap().value.is_none());
     assert!(view.owner(previous_body).unwrap().value.is_none());
-    let Some(OwnerRecord::Expression(rebound)) = view.owner(rebound_body).unwrap().value else {
-        panic!("rebound call must remain live")
+    let Some(OwnerRecord::Declaration(record)) =
+        view.owner(OwnerKey::Declaration(record_id)).unwrap().value
+    else {
+        panic!("repaired record must remain live")
     };
-    assert!(matches!(
-        rebound.operation,
-        ExpressionOperation::Call { function, .. } if function.declaration == replacement_id
-    ));
+    let DeclarationPayload::Record { fields } = record.payload else {
+        panic!("Payload must remain a record")
+    };
+    assert_eq!(
+        fields,
+        vec![match replacement_field {
+            OwnerKey::Field(field) => field,
+            _ => panic!("replacement field must have field identity"),
+        }]
+    );
+    let Some(OwnerRecord::Declaration(caller)) =
+        view.owner(OwnerKey::Declaration(caller_id)).unwrap().value
+    else {
+        panic!("repaired caller must remain live")
+    };
+    let DeclarationPayload::Function(caller) = caller.payload else {
+        panic!("caller must remain a function")
+    };
+    assert_eq!(OwnerKey::Expression(caller.body), replacement_body);
+    let Some(OwnerRecord::Expression(body)) = view.owner(replacement_body).unwrap().value else {
+        panic!("replacement body must remain live")
+    };
+    assert!(matches!(body.operation, ExpressionOperation::Unit {}));
 }
 
 #[test]
@@ -2650,7 +2359,7 @@ fn authored_member_deletion_detaches_the_exact_parent_and_preserves_siblings() {
         budget: ChangeBudget::default(),
         changes: vec![AuthoredChange::DeleteOwner {
             owner: OwnerSelector::Exact { owner: removed },
-            cascade: false,
+            policy: AuthoredDeletePolicy::Reject,
         }],
     };
     let prepared_delete = created

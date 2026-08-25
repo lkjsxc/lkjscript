@@ -114,7 +114,7 @@ Missing or corrupt state rebuilds from canonical authority.
 ## Public change protocol
 
 `change plan (--input RECORDS | --input-file PATH)` and `change apply ... --plan DIGEST` accept
-flat UTF-8 records under contract `lkjscript-change-records-1`. A request begins with exactly one
+flat UTF-8 records under contract `lkjscript-change-records-2`. A request begins with exactly one
 `request base=REVISION` record and may add bounded `idempotency` and nonsemantic `intent` fields.
 Every later record is a closed semantic operation, type fragment, expression fragment, or indexed
 edge. There is no indentation meaning, implicit scalar typing, duplicate field, macro, include, or
@@ -131,10 +131,16 @@ Both actions require an explicit exact base.
 The executable sections `capabilities --section change`, `type`, and `expression` are the only
 public vocabulary owner. The current compact subset includes module, record, variant, pure
 function, constant, and test creation; field, case, and function-parameter addition; owner rename;
-declaration move; and complete function-body replacement. Types include the advertised primitive,
-named, parameter, collection, result, stream, and function forms. Expressions include unit,
-boolean, integer, text, local/constant references, conditional, sequence, and direct call. Broader
-typed engine operations remain private until their compact workflows are complete.
+declaration move; complete function-body replacement; and exact leaf-owner deletion with
+`policy=reject`. Reject deletion never infers an ownership closure, and predecessor `cascade` input
+is invalid. Types include the advertised primitive, named, parameter, collection, result, stream,
+and function forms. Expressions include unit, boolean, integer, text, local/constant references,
+conditional, sequence, and direct call. Broader typed engine operations remain private until their
+compact workflows are complete.
+
+`change.operation-field` discovery records expose a registered field's operation, name, required
+status, and typed form. The registry exposes the complete `delete.owner` grammar as required
+`owner=exact_owner` and `policy=delete_policy` fields without requiring repository source.
 
 `$name` identifies request-local semantic owners and expressions; `@name` identifies notation-only
 type fragments. `expression.argument` and `type.argument` records use zero-based contiguous indexes
@@ -143,12 +149,14 @@ selectors use `MODULE/NAME`, and dependency declaration references use `pkg_.../
 Selectors lower to typed exact references before validation; record spelling is never accepted
 graph authority.
 
-Allocation is deterministic from repository, exact base, normalized typed request, and optional
-idempotency key. Plan and apply return equal complete symbol maps. Function-body replacement
+Allocation is deterministic from repository, exact base, and normalized authored intent;
+operational budgets, idempotency, and intent are bound by the reviewed plan without perturbing
+allocated identities. Plan and apply return equal complete symbol maps. Function-body replacement
 retires the exact old expression/binding ownership closure in the same semantic change. Raw JSON,
 the former `--request`/`--request-file` grammar, and `--dry-run`/`--commit` are rejected before
-publication. Preconditions, large external value files, direct single-operation flags, and broad
-result export are not yet exposed by this compact subset.
+publication. Owned-closure deletion remains unavailable until an exported typed impact plan lists
+and binds every removed owner and relation. Preconditions, large external value files, direct
+single-operation flags, and broad result export are not yet exposed by this compact subset.
 
 ## Drafts, history, and packages
 

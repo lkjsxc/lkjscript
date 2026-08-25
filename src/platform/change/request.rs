@@ -229,7 +229,7 @@ pub enum AuthoredChange {
     },
     DeleteOwner {
         owner: OwnerSelector,
-        cascade: bool,
+        policy: AuthoredDeletePolicy,
     },
     RenameOwner {
         owner: OwnerSelector,
@@ -278,6 +278,11 @@ pub enum DeclarationSelector {
 pub enum ParameterParentSelector {
     Declaration { declaration: DeclarationSelector },
     Operation { operation: OwnerSelector },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum AuthoredDeletePolicy {
+    Reject,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -770,7 +775,7 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
     deletion::lower_deletions(
         &mut lowerer,
         request.changes.iter().filter_map(|change| match change {
-            AuthoredChange::DeleteOwner { owner, cascade } => Some((owner, *cascade)),
+            AuthoredChange::DeleteOwner { owner, policy } => Some((owner, policy)),
             _ => None,
         }),
     )?;

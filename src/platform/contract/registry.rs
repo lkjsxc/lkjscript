@@ -2,8 +2,9 @@ use super::super::artifact::{ARTIFACT_CONTRACT_VERSION, PACKAGE_ARTIFACT_CONTRAC
 use super::super::bootstrap::BOOTSTRAP_CONTRACT_VERSION;
 use super::super::configuration::CONFIGURATION_ADAPTER_CONTRACT_VERSION;
 use super::super::control::{
-    CHANGE_PLAN_DIGEST_DOMAIN, COMPACT_CHANGE_CONTRACT_IDENTITY, COMPACT_CHANGE_OPERATIONS,
-    COMPACT_EXPRESSION_FORMS, COMPACT_TYPE_FORMS, MAXIMUM_COMPACT_INPUT_BYTES, render_record,
+    CHANGE_PLAN_DIGEST_DOMAIN, COMPACT_CHANGE_CONTRACT_IDENTITY, COMPACT_CHANGE_OPERATION_FIELDS,
+    COMPACT_CHANGE_OPERATIONS, COMPACT_DELETE_POLICIES, COMPACT_EXPRESSION_FORMS,
+    COMPACT_TYPE_FORMS, MAXIMUM_COMPACT_INPUT_BYTES, render_record,
 };
 use super::super::database::POSTGRES_ADAPTER_CONTRACT_VERSION;
 use super::super::deployment::DEPLOYMENT_CONTRACT_VERSION;
@@ -163,7 +164,7 @@ pub(crate) const MODULE_IMPLEMENTATION_DIGEST_DOMAIN: &str = "lkjscript.module-i
 pub(crate) const SUMMARY_DEPENDENCY_DIGEST_DOMAIN: &str =
     "lkjscript.semantic-summary-dependencies.v3";
 pub(crate) const SUMMARY_RECORD_DIGEST_DOMAIN: &str = "lkjscript.semantic-summary-record.v3";
-pub(crate) const CHANGE_ALLOCATION_SEED_DOMAIN: &str = "lkjscript.change-allocation-seed.v2";
+pub(crate) const CHANGE_ALLOCATION_SEED_DOMAIN: &str = "lkjscript.change-allocation-seed.v3";
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -462,7 +463,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             key: ContractKey::Change,
             name: "authored semantic change",
             identity: COMPACT_CHANGE_CONTRACT_IDENTITY,
-            version: 1,
+            version: 2,
             stability: CURRENT,
             authority: ContractAuthority::PublicProtocol,
             predecessor_policy: REJECT,
@@ -1764,6 +1765,84 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Use the advertised effect or wait for the complete typed form cutover.",
         ),
         diagnostic(
+            "change_delete_policy",
+            DiagnosticClass::Source,
+            "A compact deletion requests an unsupported policy.",
+            "Use policy=reject; owned closure deletion requires a future reviewed impact plan.",
+        ),
+        diagnostic(
+            "change_delete_owned_children",
+            DiagnosticClass::Semantic,
+            "Reject deletion selected an owner with owned identities.",
+            "Delete a leaf owner or retain it until exact owned-closure planning is available.",
+        ),
+        diagnostic(
+            "change_delete_live_reference",
+            DiagnosticClass::Semantic,
+            "A live semantic relation still targets the selected owner.",
+            "Repair every exact consumer in the same request or retain the owner.",
+        ),
+        diagnostic(
+            "change_delete_created_owner",
+            DiagnosticClass::Semantic,
+            "One request creates and deletes the same owner.",
+            "Remove both operations instead of publishing an identity-only no-op.",
+        ),
+        diagnostic(
+            "change_delete_duplicate",
+            DiagnosticClass::Semantic,
+            "One request selects the same owner for deletion more than once.",
+            "Retain one exact delete operation.",
+        ),
+        diagnostic(
+            "change_delete_expression_parent",
+            DiagnosticClass::Semantic,
+            "A binding or expression was selected as an independent deletion root.",
+            "Replace its exact owning body or parent semantic field.",
+        ),
+        diagnostic(
+            "change_delete_parent_membership",
+            DiagnosticClass::Semantic,
+            "A selected member is not attached exactly once to its expected parent.",
+            "Refresh exact owner context and re-plan against the observed base.",
+        ),
+        diagnostic(
+            "change_delete_parent_kind",
+            DiagnosticClass::Semantic,
+            "A selected member is incompatible with its recorded parent kind.",
+            "Refresh exact owner context and select the correct semantic parent.",
+        ),
+        diagnostic(
+            "change_delete_owner_cache",
+            DiagnosticClass::Corrupt,
+            "Deletion preparation lost a selected canonical owner.",
+            "Preserve the repository and run deep doctor verification.",
+        ),
+        diagnostic(
+            "change_delete_ownership_endpoint",
+            DiagnosticClass::Corrupt,
+            "An ownership relation has an invalid endpoint domain.",
+            "Preserve the repository and run deep doctor verification.",
+        ),
+        diagnostic(
+            "change_delete_ownership_missing",
+            DiagnosticClass::Corrupt,
+            "An accepted owner has no exact ownership witness.",
+            "Preserve the repository and run deep doctor verification.",
+        ),
+        diagnostic(
+            "change_delete_ownership_package",
+            DiagnosticClass::Corrupt,
+            "An ownership relation crosses a foreign package boundary.",
+            "Preserve the repository and run deep doctor verification.",
+        ),
+        diagnostic(
+            "change_delete_revision",
+            DiagnosticClass::Corrupt,
+            "Deletion preparation has no exact accepted base revision.",
+            "Preserve the repository and run deep doctor verification.",
+        ),
+        diagnostic(
             "change_plan_domain",
             DiagnosticClass::Source,
             "A reviewed plan has the wrong typed digest prefix.",
@@ -2289,6 +2368,23 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 records.push(compact_record(
                     "change.operation",
                     &[("name", (*operation).to_owned())],
+                )?);
+            }
+            for field in COMPACT_CHANGE_OPERATION_FIELDS {
+                records.push(compact_record(
+                    "change.operation-field",
+                    &[
+                        ("operation", field.operation.to_owned()),
+                        ("name", field.name.to_owned()),
+                        ("required", field.required.to_string()),
+                        ("form", field.form.to_owned()),
+                    ],
+                )?);
+            }
+            for policy in COMPACT_DELETE_POLICIES {
+                records.push(compact_record(
+                    "change.delete-policy",
+                    &[("name", (*policy).to_owned())],
                 )?);
             }
             for (name, parent, child) in [

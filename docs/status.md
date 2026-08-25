@@ -63,9 +63,9 @@ unknown-entry counts, and an integrity-bound plan digest. It deliberately report
 `destructive_ready: false` and names missing revision-pin, active-reader-lease, and
 registered-backup-root authority; it never deletes data.
 
-Compact change contract `lkjscript-change-records-1` is the released change boundary. `change
+Compact change contract `lkjscript-change-records-2` is the released change boundary. `change
 plan` and `change apply --plan DIGEST` share the normalized typed lowering and publication path,
-require an explicit revision, and return deterministic bounded records. The exposed subset has 12
+require an explicit revision, and return deterministic bounded records. The exposed subset has 13
 semantic operations, 15 type forms, and 10 expression forms listed by focused capabilities.
 Connected creation and flat expression edges allocate identities in one request; complete function
 body replacement retires the prior expression/binding closure. The private authored JSON adapter
@@ -75,6 +75,10 @@ identities owns normalized request hashing. Request-local label spelling, operat
 idempotency keys, and intent do not perturb durable allocations; the reviewed plan separately binds
 the exact budget and operational options. Authored operation and list order remains
 allocation-significant even when lowering stores a collection as keyed graph relations.
+Exact leaf-owner deletion requires `policy=reject`; it never infers an ownership closure. Reviewed
+owned-closure deletion remains unsupported until impact output binds every removed owner and
+relation. The executable registry publishes its exact required field forms. A leaf with live
+references remains rejected unless the same reviewed request removes those exact relations.
 
 ## Persistent root, validation, and derived state
 

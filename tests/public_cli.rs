@@ -245,6 +245,28 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         compact_field(exact_reference, "syntax"),
         Some("pkg_HEX/decl_HEX")
     );
+    assert!(change_section.iter().any(|record| {
+        record.operation == "change.operation"
+            && compact_field(record, "name") == Some("delete.owner")
+    }));
+    assert!(change_section.iter().any(|record| {
+        record.operation == "change.delete-policy"
+            && compact_field(record, "name") == Some("reject")
+    }));
+    assert!(change_section.iter().any(|record| {
+        record.operation == "change.operation-field"
+            && compact_field(record, "operation") == Some("delete.owner")
+            && compact_field(record, "name") == Some("owner")
+            && compact_field(record, "required") == Some("true")
+            && compact_field(record, "form") == Some("exact_owner")
+    }));
+    assert!(change_section.iter().any(|record| {
+        record.operation == "change.operation-field"
+            && compact_field(record, "operation") == Some("delete.owner")
+            && compact_field(record, "name") == Some("policy")
+            && compact_field(record, "required") == Some("true")
+            && compact_field(record, "form") == Some("delete_policy")
+    }));
     let known_type_digest = compact_field(compact_record(&type_section, "section"), "digest")
         .expect("type section digest");
     let known_type = format!("type={known_type_digest}");
@@ -529,6 +551,7 @@ fn public_change_reuses_planned_allocation_and_replaces_an_existing_body() {
          create.module as=$domain name=domain\n\
          create.record as=$message module=$domain name=Message visibility=public\n\
          add.field as=$message-text record=$message name=text type=text\n\
+         add.field as=$message-spare record=$message name=spare type=unit\n\
          expression.local as=$read value=$value\n\
          expression.sequence as=$body\n\
          expression.argument parent=$body index=0 expression=$read\n\
@@ -564,7 +587,7 @@ fn public_change_reuses_planned_allocation_and_replaces_an_existing_body() {
             )
         })
         .collect::<Vec<_>>();
-    assert_eq!(planned_identities.len(), 7);
+    assert_eq!(planned_identities.len(), 8);
 
     let committed = compact_success(&[
         "--project",
@@ -596,6 +619,73 @@ fn public_change_reuses_planned_allocation_and_replaces_an_existing_body() {
     let status = compact_success(&["--project", path(&project), "status"]);
     assert_eq!(
         compact_field(compact_record(&status, "revision"), "id"),
+        Some(accepted_revision.as_str())
+    );
+
+    let record = planned_identities
+        .iter()
+        .find_map(|(symbol, identity)| (*symbol == "$message").then_some(*identity))
+        .expect("allocated record identity");
+    for (name, request, code) in [
+        (
+            "reject-delete-policy",
+            format!(
+                "request base={accepted_revision}\n\
+                 delete.owner owner={record} policy=owned-closure\n"
+            ),
+            "change_delete_policy",
+        ),
+        (
+            "reject-delete-cascade",
+            format!(
+                "request base={accepted_revision}\n\
+                 delete.owner owner={record} cascade=true policy=reject\n"
+            ),
+            "change_field_unknown",
+        ),
+    ] {
+        let request_path = temporary.path().join(format!("{name}.lkjc"));
+        std::fs::write(&request_path, request).expect("unsupported deletion request");
+        let rejected = compact_failure_output(command(&[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "--input-file",
+            path(&request_path),
+        ]));
+        assert_eq!(
+            compact_field(compact_record(&rejected, "diagnostic"), "code"),
+            Some(code)
+        );
+        let after_rejection = compact_success(&["--project", path(&project), "status"]);
+        assert_eq!(
+            compact_field(compact_record(&after_rejection, "revision"), "id"),
+            Some(accepted_revision.as_str())
+        );
+    }
+    let rejected_delete = format!(
+        "request base={accepted_revision}\n\
+         delete.owner owner={record} policy=reject\n"
+    );
+    let rejected_delete_path = temporary.path().join("reject-owned-delete.lkjc");
+    std::fs::write(&rejected_delete_path, rejected_delete)
+        .expect("owned deletion rejection request");
+    let rejected = compact_failure_output(command(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "--input-file",
+        path(&rejected_delete_path),
+    ]));
+    assert_eq!(
+        compact_field(compact_record(&rejected, "diagnostic"), "code"),
+        Some("change_delete_owned_children")
+    );
+    let after_rejection = compact_success(&["--project", path(&project), "status"]);
+    assert_eq!(
+        compact_field(compact_record(&after_rejection, "revision"), "id"),
         Some(accepted_revision.as_str())
     );
 
@@ -671,6 +761,52 @@ fn public_change_reuses_planned_allocation_and_replaces_an_existing_body() {
     assert_eq!(compact_field(&replaced[0], "status"), Some("accepted"));
     assert_eq!(
         compact_field(compact_record(&replaced, "summary"), "updated"),
+        Some("1")
+    );
+
+    let replaced_revision = compact_field(compact_record(&replaced, "revision"), "result")
+        .expect("replacement revision");
+    let field = planned_identities
+        .iter()
+        .find_map(|(symbol, identity)| (*symbol == "$message-text").then_some(*identity))
+        .expect("allocated field identity");
+    let deletion = format!(
+        "request base={replaced_revision}\n\
+         delete.owner owner={field} policy=reject\n"
+    );
+    let deletion_path = temporary.path().join("delete.lkjc");
+    std::fs::write(&deletion_path, deletion).expect("exact leaf deletion request");
+    let deletion_plan = compact_success(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "--input-file",
+        path(&deletion_path),
+    ]);
+    assert_eq!(
+        compact_field(compact_record(&deletion_plan, "summary"), "deleted"),
+        Some("1")
+    );
+    assert_eq!(
+        compact_field(compact_record(&deletion_plan, "summary"), "updated"),
+        Some("1")
+    );
+    let deletion_digest = compact_field(compact_record(&deletion_plan, "plan"), "digest")
+        .expect("deletion plan digest");
+    let deleted = compact_success(&[
+        "--project",
+        path(&project),
+        "change",
+        "apply",
+        "--input-file",
+        path(&deletion_path),
+        "--plan",
+        deletion_digest,
+    ]);
+    assert_eq!(compact_field(&deleted[0], "status"), Some("accepted"));
+    assert_eq!(
+        compact_field(compact_record(&deleted, "summary"), "deleted"),
         Some("1")
     );
 }

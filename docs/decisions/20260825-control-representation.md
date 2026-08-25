@@ -54,8 +54,9 @@ program authority.
   lexical order.
 - Completed: use fixed stable tags, big-endian lengths and integers, and typed fixed-width identity
   fields.
-- Replace `DeleteOwner { cascade: bool }` with a closed delete policy, initially `reject` and later
-  an exact reviewed repair or closure plan.
+- Completed: replace `DeleteOwner { cascade: bool }` with closed reject-only leaf deletion.
+  Owned-closure deletion remains absent until one exported typed impact plan binds every removed
+  owner and relation.
 - Remove physical semantic-root and derived-summary preconditions from caller intent.
 - Completed: replace the scalar change-work maximum with independent typed budgets and
   observations.

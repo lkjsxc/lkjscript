@@ -1,6 +1,6 @@
-//! Explicit Graph 5 owner deletion, ownership closure, and retirement lowering.
+//! Explicit semantic-owner deletion and internal expression-retirement lowering.
 
-use super::{AuthoredLowerer, OwnerSelector, request_error};
+use super::{AuthoredDeletePolicy, AuthoredLowerer, OwnerSelector, request_error};
 use crate::platform::change::{CanonicalBaseRead, WitnessBaseRead};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
@@ -20,10 +20,13 @@ pub(super) fn lower_deletions<
     W: WitnessBaseRead + ?Sized,
 >(
     lowerer: &mut AuthoredLowerer<'_, B, W>,
-    deletions: impl IntoIterator<Item = (&'request OwnerSelector, bool)>,
+    deletions: impl IntoIterator<Item = (&'request OwnerSelector, &'request AuthoredDeletePolicy)>,
 ) -> Result<(), Diagnostic> {
-    let mut roots = BTreeMap::new();
-    for (selector, cascade) in deletions {
+    let mut roots = BTreeSet::new();
+    for (selector, policy) in deletions {
+        match policy {
+            AuthoredDeletePolicy::Reject => {}
+        }
         let root = lowerer.resolve_owner(selector)?;
         if matches!(root, OwnerKey::Binding(_) | OwnerKey::Expression(_)) {
             return Err(delete_error(
@@ -32,7 +35,7 @@ pub(super) fn lower_deletions<
             ));
         }
         require_accepted_owner(lowerer, root)?;
-        if roots.insert(root, cascade).is_some() {
+        if !roots.insert(root) {
             return Err(delete_error(
                 "change_delete_duplicate",
                 format!("owner {root:?} is selected for deletion more than once"),
@@ -44,43 +47,25 @@ pub(super) fn lower_deletions<
     }
 
     let candidate_external_children = index_candidate_external_children(lowerer);
-    let mut closure = BTreeSet::new();
-    for (root, cascade) in &roots {
-        let direct_children = current_owned_children(lowerer, *root, &candidate_external_children)?;
-        let undeclared_children = direct_children
-            .iter()
-            .filter(|child| !roots.contains_key(child))
-            .count();
-        if !cascade && undeclared_children != 0 {
+    for root in &roots {
+        let owned = current_owned_children(lowerer, *root, &candidate_external_children)?;
+        if !owned.is_empty() {
             return Err(delete_error(
-                "change_delete_requires_cascade",
+                "change_delete_owned_children",
                 format!(
-                    "owner {root:?} has {} owned children; deletion requires explicit cascade",
-                    undeclared_children
+                    "owner {root:?} owns {} identities; reject policy requires a leaf owner",
+                    owned.len()
                 ),
             ));
         }
-        let mut frontier = VecDeque::from([*root]);
-        while let Some(owner) = frontier.pop_front() {
-            if closure.contains(&owner) {
-                continue;
-            }
-            lowerer.admit_owner_edit(owner)?;
-            lowerer.admit_retirement_edit(owner)?;
-            closure.insert(owner);
-            require_accepted_owner(lowerer, owner)?;
-            if *cascade {
-                for child in current_owned_children(lowerer, owner, &candidate_external_children)? {
-                    if !closure.contains(&child) {
-                        frontier.push_back(child);
-                    }
-                }
-            }
-            lowerer.check_budget("authored deletion ownership closure")?;
-        }
+        lowerer.admit_owner_edit(*root)?;
+        lowerer.admit_retirement_edit(*root)?;
+        lowerer.check_budget("authored leaf deletion")?;
     }
 
-    for root in roots.keys() {
+    let closure = roots;
+
+    for root in &closure {
         detach_root_from_live_parent(lowerer, *root, &closure)?;
     }
     reject_untouched_incoming_references(lowerer, &closure)?;
