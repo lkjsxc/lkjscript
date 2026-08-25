@@ -1,30 +1,29 @@
-//! Exact, base-only preconditions for authored Graph 5 changes.
+//! Exact semantic caller intent evaluated against one accepted base revision.
 
 use super::{AuthoredLowerer, WorkingOwner};
 use crate::platform::change::{CanonicalBaseRead, WitnessBaseRead};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    DependencyObjectDigest, DependencyRecord, Name, NamespaceClass, OwnerKey, OwnerObjectDigest,
-    OwnerRecord, PackageId, RetirementObjectDigest, RetirementRecord, SemanticRootDigest,
-    encode_dependency, encode_owner, encode_retirement, encode_root,
+    DependencyRecord, Name, NamespaceClass, OwnerKey, OwnerRecord, PackageId,
+    PackageRevisionDigest, encode_owner, owner_namespace,
 };
-use crate::platform::witness::{NamespaceKey, OwnerSummaryDigest, OwnershipEntry, OwnershipParent};
+use crate::platform::semantic_id::RevisionId;
+use crate::platform::witness::{NamespaceKey, OwnershipParent, ownership_contributions};
 use std::collections::BTreeMap;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AuthoredOwnerParent {
+    Package,
+    Owner(OwnerKey),
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredPrecondition {
-    SemanticRoot {
-        equals: SemanticRootDigest,
-    },
     OwnerExists {
         owner: OwnerKey,
     },
     OwnerAbsent {
         owner: OwnerKey,
-    },
-    OwnerDigest {
-        owner: OwnerKey,
-        equals: OwnerObjectDigest,
     },
     OwnerName {
         owner: OwnerKey,
@@ -32,7 +31,7 @@ pub enum AuthoredPrecondition {
     },
     OwnerParent {
         owner: OwnerKey,
-        equals: OwnershipParent,
+        equals: AuthoredOwnerParent,
     },
     NamespaceAbsent {
         parent: Option<OwnerKey>,
@@ -45,17 +44,10 @@ pub enum AuthoredPrecondition {
         name: Name,
         owner: OwnerKey,
     },
-    OwnerSummaryDigest {
-        owner: OwnerKey,
-        equals: OwnerSummaryDigest,
-    },
-    DependencyDigest {
+    DependencyBinding {
         package: PackageId,
-        equals: DependencyObjectDigest,
-    },
-    RetirementDigest {
-        owner: OwnerKey,
-        equals: RetirementObjectDigest,
+        semantic_revision: RevisionId,
+        package_revision: PackageRevisionDigest,
     },
 }
 
@@ -63,24 +55,11 @@ pub(super) fn evaluate<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Size
     lowerer: &mut AuthoredLowerer<'_, B, W>,
     preconditions: &[AuthoredPrecondition],
 ) -> Result<(), Diagnostic> {
-    let mut ownership = BTreeMap::<OwnerKey, Option<OwnershipEntry>>::new();
-    let mut summaries = BTreeMap::<OwnerKey, Option<OwnerSummaryDigest>>::new();
     let mut dependencies = BTreeMap::<PackageId, Option<DependencyRecord>>::new();
-    let mut retirements = BTreeMap::<OwnerKey, Option<RetirementRecord>>::new();
 
     for precondition in preconditions {
         lowerer.work.preconditions_checked = lowerer.work.preconditions_checked.saturating_add(1);
         match precondition {
-            AuthoredPrecondition::SemanticRoot { equals } => {
-                let observed = encode_root(lowerer.base.semantic_root())?.0;
-                require(
-                    observed == *equals,
-                    "change_precondition_semantic_root",
-                    format!(
-                        "semantic-root precondition failed: expected {equals}, observed {observed}"
-                    ),
-                )?;
-            }
             AuthoredPrecondition::OwnerExists { owner } => {
                 require(
                     read_owner(lowerer, *owner)?.is_some(),
@@ -93,20 +72,6 @@ pub(super) fn evaluate<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Size
                     read_owner(lowerer, *owner)?.is_none(),
                     "change_precondition_owner_present",
                     format!("owner {owner:?} expected to be absent is live at the exact base"),
-                )?;
-            }
-            AuthoredPrecondition::OwnerDigest { owner, equals } => {
-                let observed = read_owner(lowerer, *owner)?
-                    .as_ref()
-                    .map(encode_owner)
-                    .transpose()?
-                    .map(|(digest, _)| digest);
-                require(
-                    observed == Some(*equals),
-                    "change_precondition_owner_digest",
-                    format!(
-                        "owner {owner:?} digest precondition failed: expected {equals}, observed {observed:?}"
-                    ),
                 )?;
             }
             AuthoredPrecondition::OwnerName { owner, equals } => {
@@ -123,8 +88,7 @@ pub(super) fn evaluate<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Size
                 )?;
             }
             AuthoredPrecondition::OwnerParent { owner, equals } => {
-                let observed =
-                    read_ownership(lowerer, &mut ownership, *owner)?.map(|entry| entry.parent);
+                let observed = canonical_owner_parent(lowerer, *owner, *equals)?;
                 require(
                     observed == Some(*equals),
                     "change_precondition_owner_parent",
@@ -144,6 +108,9 @@ pub(super) fn evaluate<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Size
                     name: name.clone(),
                 };
                 let observed = read_namespace(lowerer, &key)?;
+                if let Some(observed) = observed {
+                    verify_namespace_target(lowerer, &key, observed)?;
+                }
                 require(
                     observed.is_none(),
                     "change_precondition_namespace_present",
@@ -164,6 +131,9 @@ pub(super) fn evaluate<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Size
                     name: name.clone(),
                 };
                 let observed = read_namespace(lowerer, &key)?;
+                if let Some(observed) = observed {
+                    verify_namespace_target(lowerer, &key, observed)?;
+                }
                 require(
                     observed == Some(*owner),
                     "change_precondition_namespace_owner",
@@ -172,41 +142,21 @@ pub(super) fn evaluate<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Size
                     ),
                 )?;
             }
-            AuthoredPrecondition::OwnerSummaryDigest { owner, equals } => {
-                let observed = read_summary(lowerer, &mut summaries, *owner)?;
+            AuthoredPrecondition::DependencyBinding {
+                package,
+                semantic_revision,
+                package_revision,
+            } => {
+                let observed = read_dependency(lowerer, &mut dependencies, *package)?;
                 require(
-                    observed == Some(*equals),
-                    "change_precondition_owner_summary",
+                    observed.as_ref().is_some_and(|record| {
+                        record.package == *package
+                            && record.semantic_revision == *semantic_revision
+                            && record.package_revision == *package_revision
+                    }),
+                    "change_precondition_dependency_binding",
                     format!(
-                        "owner {owner:?} summary precondition failed: expected {equals}, observed {observed:?}"
-                    ),
-                )?;
-            }
-            AuthoredPrecondition::DependencyDigest { package, equals } => {
-                let observed = read_dependency(lowerer, &mut dependencies, *package)?
-                    .as_ref()
-                    .map(encode_dependency)
-                    .transpose()?
-                    .map(|(digest, _)| digest);
-                require(
-                    observed == Some(*equals),
-                    "change_precondition_dependency_digest",
-                    format!(
-                        "dependency {package} digest precondition failed: expected {equals}, observed {observed:?}"
-                    ),
-                )?;
-            }
-            AuthoredPrecondition::RetirementDigest { owner, equals } => {
-                let observed = read_retirement(lowerer, &mut retirements, *owner)?
-                    .as_ref()
-                    .map(encode_retirement)
-                    .transpose()?
-                    .map(|(digest, _)| digest);
-                require(
-                    observed == Some(*equals),
-                    "change_precondition_retirement_digest",
-                    format!(
-                        "retirement {owner:?} digest precondition failed: expected {equals}, observed {observed:?}"
+                        "dependency {package} binding precondition failed: expected semantic revision {semantic_revision} and package revision {package_revision}, observed {observed:?}"
                     ),
                 )?;
             }
@@ -254,30 +204,57 @@ fn read_namespace<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     Ok(lowerer.namespace.get(key).copied().flatten())
 }
 
-fn read_ownership<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+fn verify_namespace_target<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     lowerer: &mut AuthoredLowerer<'_, B, W>,
-    cache: &mut BTreeMap<OwnerKey, Option<OwnershipEntry>>,
+    key: &NamespaceKey,
     owner: OwnerKey,
-) -> Result<Option<OwnershipEntry>, Diagnostic> {
-    if let std::collections::btree_map::Entry::Vacant(entry) = cache.entry(owner) {
-        let read = lowerer.witness.read_ownership(owner)?;
-        lowerer.work.witness.add(read.work);
-        entry.insert(read.value);
+) -> Result<(), Diagnostic> {
+    let observed = read_owner(lowerer, owner)?;
+    let canonical = observed
+        .as_ref()
+        .and_then(owner_namespace)
+        .map(|entry| NamespaceKey {
+            parent: entry.parent,
+            class: entry.class,
+            name: entry.name.clone(),
+        });
+    if canonical.as_ref() == Some(key) {
+        Ok(())
+    } else {
+        Err(Diagnostic::new(
+            DiagnosticClass::Corrupt,
+            "change_precondition_namespace_witness",
+            format!(
+                "namespace witness maps {key:?} to owner {owner:?}, whose canonical namespace is {canonical:?}"
+            ),
+        ))
     }
-    Ok(cache.get(&owner).copied().flatten())
 }
 
-fn read_summary<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+fn canonical_owner_parent<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     lowerer: &mut AuthoredLowerer<'_, B, W>,
-    cache: &mut BTreeMap<OwnerKey, Option<OwnerSummaryDigest>>,
     owner: OwnerKey,
-) -> Result<Option<OwnerSummaryDigest>, Diagnostic> {
-    if let std::collections::btree_map::Entry::Vacant(entry) = cache.entry(owner) {
-        let read = lowerer.witness.read_owner_summary(owner)?;
-        lowerer.work.witness.add(read.work);
-        entry.insert(read.value.map(|bound| bound.digest));
+    expected: AuthoredOwnerParent,
+) -> Result<Option<AuthoredOwnerParent>, Diagnostic> {
+    let owner_record = read_owner(lowerer, owner)?;
+    let mut canonical = owner_record
+        .as_ref()
+        .map(ownership_contributions)
+        .transpose()?
+        .and_then(|entries| entries.get(&owner).copied());
+    if canonical.is_none()
+        && let AuthoredOwnerParent::Owner(parent) = expected
+    {
+        canonical = read_owner(lowerer, parent)?
+            .as_ref()
+            .map(ownership_contributions)
+            .transpose()?
+            .and_then(|entries| entries.get(&owner).copied());
     }
-    Ok(cache.get(&owner).copied().flatten())
+    Ok(canonical.map(|entry| match entry.parent {
+        OwnershipParent::Package => AuthoredOwnerParent::Package,
+        OwnershipParent::Owner(parent) => AuthoredOwnerParent::Owner(parent),
+    }))
 }
 
 fn read_dependency<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
@@ -291,19 +268,6 @@ fn read_dependency<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
         entry.insert(read.value);
     }
     Ok(cache.get(&package).cloned().flatten())
-}
-
-fn read_retirement<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
-    lowerer: &mut AuthoredLowerer<'_, B, W>,
-    cache: &mut BTreeMap<OwnerKey, Option<RetirementRecord>>,
-    owner: OwnerKey,
-) -> Result<Option<RetirementRecord>, Diagnostic> {
-    if let std::collections::btree_map::Entry::Vacant(entry) = cache.entry(owner) {
-        let read = lowerer.base.read_retirement(owner)?;
-        lowerer.work.canonical.add(read.work);
-        entry.insert(read.value);
-    }
-    Ok(cache.get(&owner).cloned().flatten())
 }
 
 fn require(

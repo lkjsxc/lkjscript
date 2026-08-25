@@ -236,7 +236,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .iter()
         .filter(|record| record.operation == "change.reference")
         .collect::<Vec<_>>();
-    assert_eq!(references.len(), 5);
+    assert_eq!(references.len(), 8);
     let exact_reference = references
         .iter()
         .find(|record| compact_field(record, "name") == Some("exact_package_declaration"))
@@ -266,6 +266,32 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             && compact_field(record, "name") == Some("policy")
             && compact_field(record, "required") == Some("true")
             && compact_field(record, "form") == Some("delete_policy")
+    }));
+    assert!(change_section.iter().any(|record| {
+        record.operation == "change.precondition"
+            && compact_field(record, "name") == Some("precondition.owner-exists")
+    }));
+    assert!(change_section.iter().any(|record| {
+        record.operation == "change.precondition-field"
+            && compact_field(record, "precondition") == Some("precondition.owner-exists")
+            && compact_field(record, "name") == Some("owner")
+            && compact_field(record, "required") == Some("true")
+            && compact_field(record, "form") == Some("exact_owner")
+    }));
+    assert!(change_section.iter().any(|record| {
+        record.operation == "change.precondition-field"
+            && compact_field(record, "precondition") == Some("precondition.dependency-binding")
+            && compact_field(record, "name") == Some("package-revision")
+            && compact_field(record, "form") == Some("exact_package_revision")
+    }));
+    assert!(change_section.iter().any(|record| {
+        record.operation == "change.namespace-class"
+            && compact_field(record, "name") == Some("declaration")
+    }));
+    assert!(change_section.iter().any(|record| {
+        record.operation == "change.parent-form"
+            && compact_field(record, "name") == Some("package")
+            && compact_field(record, "syntax") == Some("package")
     }));
     let known_type_digest = compact_field(compact_record(&type_section, "section"), "digest")
         .expect("type section digest");
@@ -770,8 +796,50 @@ fn public_change_reuses_planned_allocation_and_replaces_an_existing_body() {
         .iter()
         .find_map(|(symbol, identity)| (*symbol == "$message-text").then_some(*identity))
         .expect("allocated field identity");
+    for (name, request, code) in [
+        (
+            "predecessor-precondition",
+            format!(
+                "request base={replaced_revision}\n\
+                 precondition.semantic-root equals=old\n\
+                 delete.owner owner={field} policy=reject\n"
+            ),
+            "change_precondition_unknown",
+        ),
+        (
+            "failed-semantic-precondition",
+            format!(
+                "request base={replaced_revision}\n\
+                 precondition.owner-name owner={field} name=wrong\n\
+                 delete.owner owner={field} policy=reject\n"
+            ),
+            "change_precondition_owner_name",
+        ),
+    ] {
+        let request_path = temporary.path().join(format!("{name}.lkjc"));
+        std::fs::write(&request_path, request).expect("rejected precondition request");
+        let rejected = compact_failure_output(command(&[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "--input-file",
+            path(&request_path),
+        ]));
+        assert_eq!(
+            compact_field(compact_record(&rejected, "diagnostic"), "code"),
+            Some(code)
+        );
+        let after_rejection = compact_success(&["--project", path(&project), "status"]);
+        assert_eq!(
+            compact_field(compact_record(&after_rejection, "revision"), "id"),
+            Some(replaced_revision)
+        );
+    }
     let deletion = format!(
         "request base={replaced_revision}\n\
+         precondition.owner-exists owner={field}\n\
+         precondition.owner-name owner={field} name=text\n\
          delete.owner owner={field} policy=reject\n"
     );
     let deletion_path = temporary.path().join("delete.lkjc");

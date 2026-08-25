@@ -1,4 +1,4 @@
-//! High-level Graph 5 authored intent lowered to exact primitive owner edits.
+//! High-level semantic intent lowered to exact primitive owner edits.
 
 mod codec;
 mod creation;
@@ -16,7 +16,7 @@ pub use creation::{
     AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameter,
     AuthoredTypeParameterReference,
 };
-pub use precondition::AuthoredPrecondition;
+pub use precondition::{AuthoredOwnerParent, AuthoredPrecondition};
 
 use super::{
     CanonicalBaseRead, CanonicalReadWork, ChangeBudget, ChangeBudgetWork, PrimitiveEdit,

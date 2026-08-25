@@ -63,7 +63,7 @@ unknown-entry counts, and an integrity-bound plan digest. It deliberately report
 `destructive_ready: false` and names missing revision-pin, active-reader-lease, and
 registered-backup-root authority; it never deletes data.
 
-Compact change contract `lkjscript-change-records-2` is the released change boundary. `change
+Compact change contract `lkjscript-change-records-3` is the released change boundary. `change
 plan` and `change apply --plan DIGEST` share the normalized typed lowering and publication path,
 require an explicit revision, and return deterministic bounded records. The exposed subset has 13
 semantic operations, 15 type forms, and 10 expression forms listed by focused capabilities.
@@ -79,6 +79,11 @@ Exact leaf-owner deletion requires `policy=reject`; it never infers an ownership
 owned-closure deletion remains unsupported until impact output binds every removed owner and
 relation. The executable registry publishes its exact required field forms. A leaf with live
 references remains rejected unless the same reviewed request removes those exact relations.
+Seven semantic preconditions are public: exact owner existence, absence, name, and parent;
+namespace absence and exact binding; and exact dependency binding by package, semantic revision,
+and logical package revision. Physical roots and encoded or derived object digests are not accepted
+as caller intent. Parent guards read canonical meaning instead of derived ownership; present
+namespace witness entries are checked against canonical owner meaning.
 
 ## Persistent root, validation, and derived state
 

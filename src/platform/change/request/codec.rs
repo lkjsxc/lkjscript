@@ -11,9 +11,8 @@ use crate::platform::kernel::{
     ResourceUnit,
 };
 use crate::platform::package::RunnerKind;
-use crate::platform::witness::OwnershipParent;
 
-const INTENT_MAGIC: [u8; 8] = *b"LKJACR03";
+const INTENT_MAGIC: [u8; 8] = *b"LKJACR04";
 const BUDGET_MAGIC: [u8; 8] = *b"LKJABG01";
 const MAXIMUM_BUDGET_BYTES: usize = 1_024;
 
@@ -205,34 +204,25 @@ impl Writer {
 
     fn precondition(&mut self, value: &AuthoredPrecondition) -> Result<(), Diagnostic> {
         match value {
-            AuthoredPrecondition::SemanticRoot { equals } => {
-                self.tag(1)?;
-                self.raw(&equals.bytes())
-            }
             AuthoredPrecondition::OwnerExists { owner } => {
-                self.tag(2)?;
+                self.tag(1)?;
                 self.owner(*owner)
             }
             AuthoredPrecondition::OwnerAbsent { owner } => {
-                self.tag(3)?;
+                self.tag(2)?;
                 self.owner(*owner)
             }
-            AuthoredPrecondition::OwnerDigest { owner, equals } => {
-                self.tag(4)?;
-                self.owner(*owner)?;
-                self.raw(&equals.bytes())
-            }
             AuthoredPrecondition::OwnerName { owner, equals } => {
-                self.tag(5)?;
+                self.tag(3)?;
                 self.owner(*owner)?;
                 self.name(equals)
             }
             AuthoredPrecondition::OwnerParent { owner, equals } => {
-                self.tag(6)?;
+                self.tag(4)?;
                 self.owner(*owner)?;
                 match equals {
-                    OwnershipParent::Package => self.tag(1),
-                    OwnershipParent::Owner(parent) => {
+                    AuthoredOwnerParent::Package => self.tag(1),
+                    AuthoredOwnerParent::Owner(parent) => {
                         self.tag(2)?;
                         self.owner(*parent)
                     }
@@ -243,7 +233,7 @@ impl Writer {
                 class,
                 name,
             } => {
-                self.tag(7)?;
+                self.tag(5)?;
                 self.optional(parent.as_ref(), |writer, parent| writer.owner(*parent))?;
                 self.tag(class.tag())?;
                 self.name(name)
@@ -254,26 +244,21 @@ impl Writer {
                 name,
                 owner,
             } => {
-                self.tag(8)?;
+                self.tag(6)?;
                 self.optional(parent.as_ref(), |writer, parent| writer.owner(*parent))?;
                 self.tag(class.tag())?;
                 self.name(name)?;
                 self.owner(*owner)
             }
-            AuthoredPrecondition::OwnerSummaryDigest { owner, equals } => {
-                self.tag(9)?;
-                self.owner(*owner)?;
-                self.raw(&equals.bytes())
-            }
-            AuthoredPrecondition::DependencyDigest { package, equals } => {
-                self.tag(10)?;
+            AuthoredPrecondition::DependencyBinding {
+                package,
+                semantic_revision,
+                package_revision,
+            } => {
+                self.tag(7)?;
                 self.raw(&package.bytes())?;
-                self.raw(&equals.bytes())
-            }
-            AuthoredPrecondition::RetirementDigest { owner, equals } => {
-                self.tag(11)?;
-                self.owner(*owner)?;
-                self.raw(&equals.bytes())
+                self.raw(&semantic_revision.bytes())?;
+                self.raw(&package_revision.bytes())
             }
         }
     }
@@ -1446,7 +1431,7 @@ mod tests {
         assert_eq!(&first[..8], &INTENT_MAGIC);
         assert_eq!(
             crate::platform::semantic_id::encode_hex(blake3::hash(&first).as_bytes()),
-            "c1d53911b358fcf3d9ae93baa0b385bbd72d61fb070b35c3f014dbac1de6701a"
+            "ceec8234ee421eb30e764bfc81a3a54cea5e3c61c03ac74f00b7dfd4ba0a97b4"
         );
     }
 

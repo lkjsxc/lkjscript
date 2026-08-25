@@ -57,7 +57,9 @@ program authority.
 - Completed: replace `DeleteOwner { cascade: bool }` with closed reject-only leaf deletion.
   Owned-closure deletion remains absent until one exported typed impact plan binds every removed
   owner and relation.
-- Remove physical semantic-root and derived-summary preconditions from caller intent.
+- Completed: remove physical semantic-root, encoded-owner, derived-summary, dependency-object, and
+  retirement-digest preconditions. Retained preconditions state exact semantic owner, namespace,
+  parent, and dependency bindings.
 - Completed: replace the scalar change-work maximum with independent typed budgets and
   observations.
 - Author connected expression subtrees through flat fragments rather than a low-level single-node

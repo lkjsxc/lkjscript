@@ -4,20 +4,22 @@ use super::{CompactField, CompactRecord, parse_records};
 use crate::platform::change::{
     AuthoredCase, AuthoredChange, AuthoredChangeSet, AuthoredDeclarationReference,
     AuthoredDeletePolicy, AuthoredExpression, AuthoredExpressionOperation, AuthoredField,
-    AuthoredFunctionEffect, AuthoredLocalReference, AuthoredParameter, AuthoredType,
-    AuthoredTypeParameterReference, DeclarationSelector, ModuleSelector, OwnerSelector,
-    ParameterParentSelector,
+    AuthoredFunctionEffect, AuthoredLocalReference, AuthoredOwnerParent, AuthoredParameter,
+    AuthoredPrecondition, AuthoredType, AuthoredTypeParameterReference, DeclarationSelector,
+    ModuleSelector, OwnerSelector, ParameterParentSelector,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass, SourceLocation};
-use crate::platform::kernel::{DeclarationVisibility, Name, OwnerKey};
+use crate::platform::kernel::{
+    DeclarationVisibility, Name, NamespaceClass, OwnerKey, PackageId, PackageRevisionDigest,
+};
 use crate::platform::publication::{PublicationOptions, idempotency_key_is_valid};
 use crate::platform::semantic_id::{BindingId, DeclarationId, ModuleId, ParameterId, RevisionId};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-2";
-pub const CHANGE_PLAN_DIGEST_DOMAIN: &str = "lkjscript.change-plan.v3";
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-3";
+pub const CHANGE_PLAN_DIGEST_DOMAIN: &str = "lkjscript.change-plan.v4";
 pub const COMPACT_CHANGE_OPERATIONS: &[&str] = &[
     "create.module",
     "create.record",
@@ -34,26 +36,146 @@ pub const COMPACT_CHANGE_OPERATIONS: &[&str] = &[
     "replace.body",
 ];
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject"];
+pub const COMPACT_CHANGE_PRECONDITIONS: &[&str] = &[
+    "precondition.owner-exists",
+    "precondition.owner-absent",
+    "precondition.owner-name",
+    "precondition.owner-parent",
+    "precondition.namespace-absent",
+    "precondition.namespace-points-to",
+    "precondition.dependency-binding",
+];
+pub(crate) const COMPACT_NAMESPACE_CLASSES: &[(&str, NamespaceClass)] = &[
+    ("module", NamespaceClass::Module),
+    ("declaration", NamespaceClass::Declaration),
+    ("type-parameter", NamespaceClass::TypeParameter),
+    ("field", NamespaceClass::Field),
+    ("case", NamespaceClass::Case),
+    ("operation", NamespaceClass::Operation),
+    ("parameter", NamespaceClass::Parameter),
+    ("requirement", NamespaceClass::Requirement),
+    ("port", NamespaceClass::Port),
+    ("target", NamespaceClass::Target),
+];
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct CompactChangeOperationField {
-    pub(crate) operation: &'static str,
+pub(crate) struct CompactChangeField {
+    pub(crate) record: &'static str,
     pub(crate) name: &'static str,
     pub(crate) required: bool,
     pub(crate) form: &'static str,
 }
 
-pub(crate) const COMPACT_CHANGE_OPERATION_FIELDS: &[CompactChangeOperationField] = &[
-    CompactChangeOperationField {
-        operation: "delete.owner",
+pub(crate) const COMPACT_CHANGE_OPERATION_FIELDS: &[CompactChangeField] = &[
+    CompactChangeField {
+        record: "delete.owner",
         name: "owner",
         required: true,
         form: "exact_owner",
     },
-    CompactChangeOperationField {
-        operation: "delete.owner",
+    CompactChangeField {
+        record: "delete.owner",
         name: "policy",
         required: true,
         form: "delete_policy",
+    },
+];
+pub(crate) const COMPACT_CHANGE_PRECONDITION_FIELDS: &[CompactChangeField] = &[
+    CompactChangeField {
+        record: "precondition.owner-exists",
+        name: "owner",
+        required: true,
+        form: "exact_owner",
+    },
+    CompactChangeField {
+        record: "precondition.owner-absent",
+        name: "owner",
+        required: true,
+        form: "exact_owner",
+    },
+    CompactChangeField {
+        record: "precondition.owner-name",
+        name: "owner",
+        required: true,
+        form: "exact_owner",
+    },
+    CompactChangeField {
+        record: "precondition.owner-name",
+        name: "name",
+        required: true,
+        form: "name",
+    },
+    CompactChangeField {
+        record: "precondition.owner-parent",
+        name: "owner",
+        required: true,
+        form: "exact_owner",
+    },
+    CompactChangeField {
+        record: "precondition.owner-parent",
+        name: "parent",
+        required: true,
+        form: "owner_parent",
+    },
+    CompactChangeField {
+        record: "precondition.namespace-absent",
+        name: "parent",
+        required: true,
+        form: "owner_parent",
+    },
+    CompactChangeField {
+        record: "precondition.namespace-absent",
+        name: "class",
+        required: true,
+        form: "namespace_class",
+    },
+    CompactChangeField {
+        record: "precondition.namespace-absent",
+        name: "name",
+        required: true,
+        form: "name",
+    },
+    CompactChangeField {
+        record: "precondition.namespace-points-to",
+        name: "parent",
+        required: true,
+        form: "owner_parent",
+    },
+    CompactChangeField {
+        record: "precondition.namespace-points-to",
+        name: "class",
+        required: true,
+        form: "namespace_class",
+    },
+    CompactChangeField {
+        record: "precondition.namespace-points-to",
+        name: "name",
+        required: true,
+        form: "name",
+    },
+    CompactChangeField {
+        record: "precondition.namespace-points-to",
+        name: "owner",
+        required: true,
+        form: "exact_owner",
+    },
+    CompactChangeField {
+        record: "precondition.dependency-binding",
+        name: "package",
+        required: true,
+        form: "exact_package",
+    },
+    CompactChangeField {
+        record: "precondition.dependency-binding",
+        name: "semantic-revision",
+        required: true,
+        form: "exact_revision",
+    },
+    CompactChangeField {
+        record: "precondition.dependency-binding",
+        name: "package-revision",
+        required: true,
+        form: "exact_package_revision",
     },
 ];
 pub const COMPACT_TYPE_FORMS: &[&str] = &[
@@ -156,6 +278,7 @@ struct Decoder {
     expressions: BTreeMap<String, CompactRecord>,
     arguments: BTreeMap<String, Vec<IndexedValue>>,
     type_parameters: BTreeMap<String, Vec<IndexedValue>>,
+    preconditions: Vec<CompactRecord>,
     changes: Vec<CompactRecord>,
     type_cache: BTreeMap<String, AuthoredType>,
     type_stack: BTreeSet<String>,
@@ -171,6 +294,7 @@ impl Decoder {
             expressions: BTreeMap::new(),
             arguments: BTreeMap::new(),
             type_parameters: BTreeMap::new(),
+            preconditions: Vec::new(),
             changes: Vec::new(),
             type_cache: BTreeMap::new(),
             type_stack: BTreeSet::new(),
@@ -224,6 +348,17 @@ impl Decoder {
                     }
                     self.expression_uses.insert(symbol, 0);
                 }
+                operation if is_change_precondition(operation) => self.preconditions.push(record),
+                operation if operation.starts_with("precondition.") => {
+                    return Err(record_error(
+                        &record,
+                        "change_precondition_unknown",
+                        format!(
+                            "unknown compact semantic precondition '{}'; use focused change discovery",
+                            record.operation
+                        ),
+                    ));
+                }
                 operation if is_change_operation(operation) => self.changes.push(record),
                 _ => {
                     return Err(record_error(
@@ -276,6 +411,11 @@ impl Decoder {
             ));
         }
 
+        let preconditions = self
+            .preconditions
+            .iter()
+            .map(decode_precondition)
+            .collect::<Result<Vec<_>, _>>()?;
         let mut changes = Vec::with_capacity(self.changes.len());
         for record in std::mem::take(&mut self.changes) {
             changes.push(self.decode_change(&record)?);
@@ -329,7 +469,7 @@ impl Decoder {
 
         let semantic = AuthoredChangeSet {
             base,
-            preconditions: Vec::new(),
+            preconditions,
             changes,
             budget: Default::default(),
         };
@@ -510,7 +650,7 @@ impl Decoder {
                 })
             }
             "delete.owner" => {
-                check_described_operation_fields(record, "delete.owner")?;
+                check_described_fields(record, COMPACT_CHANGE_OPERATION_FIELDS)?;
                 let policy = required(record, "policy")?;
                 if policy != "reject" {
                     return Err(field_error(
@@ -824,6 +964,51 @@ fn is_change_operation(operation: &str) -> bool {
     COMPACT_CHANGE_OPERATIONS.contains(&operation)
 }
 
+fn is_change_precondition(operation: &str) -> bool {
+    COMPACT_CHANGE_PRECONDITIONS.contains(&operation)
+}
+
+fn decode_precondition(record: &CompactRecord) -> Result<AuthoredPrecondition, Diagnostic> {
+    check_described_fields(record, COMPACT_CHANGE_PRECONDITION_FIELDS)?;
+    match record.operation.as_str() {
+        "precondition.owner-exists" => Ok(AuthoredPrecondition::OwnerExists {
+            owner: parse_field(record, "owner")?,
+        }),
+        "precondition.owner-absent" => Ok(AuthoredPrecondition::OwnerAbsent {
+            owner: parse_field(record, "owner")?,
+        }),
+        "precondition.owner-name" => Ok(AuthoredPrecondition::OwnerName {
+            owner: parse_field(record, "owner")?,
+            equals: parse_name(record, "name")?,
+        }),
+        "precondition.owner-parent" => Ok(AuthoredPrecondition::OwnerParent {
+            owner: parse_field(record, "owner")?,
+            equals: parse_owner_parent(record, "parent")?,
+        }),
+        "precondition.namespace-absent" => Ok(AuthoredPrecondition::NamespaceAbsent {
+            parent: parse_namespace_parent(record, "parent")?,
+            class: parse_namespace_class(record, "class")?,
+            name: parse_name(record, "name")?,
+        }),
+        "precondition.namespace-points-to" => Ok(AuthoredPrecondition::NamespacePointsTo {
+            parent: parse_namespace_parent(record, "parent")?,
+            class: parse_namespace_class(record, "class")?,
+            name: parse_name(record, "name")?,
+            owner: parse_field(record, "owner")?,
+        }),
+        "precondition.dependency-binding" => Ok(AuthoredPrecondition::DependencyBinding {
+            package: parse_field::<PackageId>(record, "package")?,
+            semantic_revision: parse_field::<RevisionId>(record, "semantic-revision")?,
+            package_revision: parse_field::<PackageRevisionDigest>(record, "package-revision")?,
+        }),
+        _ => Err(record_error(
+            record,
+            "change_precondition_unknown",
+            format!("unknown compact precondition '{}'", record.operation),
+        )),
+    }
+}
+
 fn compact_change_plan_digest(
     request: &AuthoredChangeSet,
     options: &PublicationOptions,
@@ -900,13 +1085,13 @@ fn check_fields(record: &CompactRecord, allowed: &[&str]) -> Result<(), Diagnost
     Ok(())
 }
 
-fn check_described_operation_fields(
+fn check_described_fields(
     record: &CompactRecord,
-    operation: &str,
+    fields: &[CompactChangeField],
 ) -> Result<(), Diagnostic> {
-    let descriptors = COMPACT_CHANGE_OPERATION_FIELDS
+    let descriptors = fields
         .iter()
-        .filter(|descriptor| descriptor.operation == operation)
+        .filter(|descriptor| descriptor.record == record.operation)
         .collect::<Vec<_>>();
     for field in &record.fields {
         if !descriptors
@@ -986,6 +1171,46 @@ fn parse_bool(record: &CompactRecord, name: &str) -> Result<bool, Diagnostic> {
 fn parse_name(record: &CompactRecord, field_name: &str) -> Result<Name, Diagnostic> {
     let value = required(record, field_name)?;
     Name::new(value).map_err(|error| field_error(record, field_name, error.code, error.message))
+}
+
+fn parse_owner_parent(
+    record: &CompactRecord,
+    field_name: &str,
+) -> Result<AuthoredOwnerParent, Diagnostic> {
+    let value = required(record, field_name)?;
+    if value == "package" {
+        Ok(AuthoredOwnerParent::Package)
+    } else {
+        parse_field(record, field_name).map(AuthoredOwnerParent::Owner)
+    }
+}
+
+fn parse_namespace_parent(
+    record: &CompactRecord,
+    field_name: &str,
+) -> Result<Option<OwnerKey>, Diagnostic> {
+    match parse_owner_parent(record, field_name)? {
+        AuthoredOwnerParent::Package => Ok(None),
+        AuthoredOwnerParent::Owner(owner) => Ok(Some(owner)),
+    }
+}
+
+fn parse_namespace_class(
+    record: &CompactRecord,
+    field_name: &str,
+) -> Result<NamespaceClass, Diagnostic> {
+    let value = required(record, field_name)?;
+    COMPACT_NAMESPACE_CLASSES
+        .iter()
+        .find_map(|(name, class)| (*name == value).then_some(*class))
+        .ok_or_else(|| {
+            field_error(
+                record,
+                field_name,
+                "change_precondition_namespace_class",
+                format!("unknown namespace class '{value}'; use focused change discovery"),
+            )
+        })
 }
 
 fn symbol(record: &CompactRecord, name: &str) -> Result<String, Diagnostic> {
@@ -1305,6 +1530,96 @@ mod tests {
             decode_compact_change("delete.lk", predecessor.as_bytes()).unwrap_err()[0].code,
             "change_field_unknown"
         );
+    }
+
+    #[test]
+    fn semantic_preconditions_are_typed_and_predecessor_forms_are_unknown() {
+        let owner = OwnerKey::Module(ModuleId::migrate(b"compact-precondition-owner", 1));
+        let target =
+            OwnerKey::Declaration(DeclarationId::migrate(b"compact-precondition-target", 1));
+        let package = PackageId::migrate(b"compact-precondition-package", 1);
+        let semantic_revision = RevisionId::from_digest([0x44; 32]);
+        let package_revision = PackageRevisionDigest::from_bytes([0x55; 32]);
+        let input = format!(
+            "request base={}\n\
+             precondition.owner-exists owner={owner}\n\
+             precondition.owner-absent owner={target}\n\
+             precondition.owner-name owner={owner} name=module\n\
+             precondition.owner-parent owner={owner} parent=package\n\
+             precondition.namespace-absent parent=package class=module name=free\n\
+             precondition.namespace-points-to parent={owner} class=declaration name=item owner={target}\n\
+             precondition.dependency-binding package={package} semantic-revision={semantic_revision} package-revision={package_revision}\n\
+             create.module as=$module name=created\n",
+            revision()
+        );
+        let decoded = decode_compact_change("preconditions.lk", input.as_bytes()).unwrap();
+        assert_eq!(decoded.semantic.preconditions.len(), 7);
+        assert!(matches!(
+            decoded.semantic.preconditions[0].clone(),
+            AuthoredPrecondition::OwnerExists { owner: observed } if observed == owner
+        ));
+        assert!(matches!(
+            decoded.semantic.preconditions[3].clone(),
+            AuthoredPrecondition::OwnerParent {
+                owner: observed,
+                equals: AuthoredOwnerParent::Package,
+            } if observed == owner
+        ));
+        assert!(matches!(
+            decoded.semantic.preconditions[5].clone(),
+            AuthoredPrecondition::NamespacePointsTo {
+                parent: Some(observed_parent),
+                class: NamespaceClass::Declaration,
+                ref name,
+                owner: observed_owner,
+            } if observed_parent == owner && name.as_str() == "item" && observed_owner == target
+        ));
+        assert!(matches!(
+            decoded.semantic.preconditions[6].clone(),
+            AuthoredPrecondition::DependencyBinding {
+                package: observed_package,
+                semantic_revision: observed_semantic,
+                package_revision: observed_package_revision,
+            } if observed_package == package
+                && observed_semantic == semantic_revision
+                && observed_package_revision == package_revision
+        ));
+
+        let invalid_class = format!(
+            "request base={}\nprecondition.namespace-absent parent=package class=unknown name=free\ncreate.module as=$module name=created\n",
+            revision()
+        );
+        assert_eq!(
+            decode_compact_change("preconditions.lk", invalid_class.as_bytes()).unwrap_err()[0]
+                .code,
+            "change_precondition_namespace_class"
+        );
+        let missing_owner = format!(
+            "request base={}\nprecondition.owner-exists\ncreate.module as=$module name=created\n",
+            revision()
+        );
+        assert_eq!(
+            decode_compact_change("preconditions.lk", missing_owner.as_bytes()).unwrap_err()[0]
+                .code,
+            "change_field_missing"
+        );
+
+        for predecessor in [
+            "precondition.semantic-root equals=old",
+            "precondition.owner-digest owner=old equals=old",
+            "precondition.owner-summary-digest owner=old equals=old",
+            "precondition.dependency-digest package=old equals=old",
+            "precondition.retirement-digest owner=old equals=old",
+        ] {
+            let input = format!(
+                "request base={}\n{predecessor}\ncreate.module as=$module name=created\n",
+                revision()
+            );
+            assert_eq!(
+                decode_compact_change("predecessor.lk", input.as_bytes()).unwrap_err()[0].code,
+                "change_precondition_unknown"
+            );
+        }
     }
 
     #[test]

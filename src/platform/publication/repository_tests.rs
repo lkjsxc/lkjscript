@@ -5,28 +5,29 @@ use crate::platform::change::{
     AuthoredExpression, AuthoredExpressionOperation, AuthoredField, AuthoredFieldReference,
     AuthoredFieldSelector, AuthoredFunctionEffect, AuthoredLetBinding, AuthoredLocalReference,
     AuthoredMapExpressionEntry, AuthoredMatchExpressionArm, AuthoredOperation,
-    AuthoredOperationReference, AuthoredParameter, AuthoredPort, AuthoredPortImplementation,
-    AuthoredPortReference, AuthoredPrecondition, AuthoredRecordExpressionField,
-    AuthoredRequirement, AuthoredRequirementReference, AuthoredResourceLimit,
-    AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameter,
+    AuthoredOperationReference, AuthoredOwnerParent, AuthoredParameter, AuthoredPort,
+    AuthoredPortImplementation, AuthoredPortReference, AuthoredPrecondition,
+    AuthoredRecordExpressionField, AuthoredRequirement, AuthoredRequirementReference,
+    AuthoredResourceLimit, AuthoredStructuralTypeField, AuthoredType, AuthoredTypeParameter,
     AuthoredTypeParameterReference, BudgetedCanonicalBase, CanonicalBaseRead, CanonicalDelta,
     CanonicalReadAdmission, CanonicalReadWork, ChangeBudget, DeclarationSelector, KernelOverlay,
     ModuleSelector, OwnerSelector, ParameterParentSelector, PrimitiveEdit, derive_local_delta,
-    derive_summary_delta, derive_test_dependency_delta, plan_impact_and_summaries,
-    prepare_change_analysis, validate_incremental_frontier, validate_structural_frontier,
+    derive_summary_delta, derive_test_dependency_delta, lower_authored_changes,
+    plan_impact_and_summaries, prepare_change_analysis, validate_incremental_frontier,
+    validate_structural_frontier,
 };
 use crate::platform::diagnostic::DiagnosticClass;
 use crate::platform::kernel::{
-    AnnotationClass, DeclarationPayload, DeclarationVisibility, DependencyObjectDigest,
-    DependencyRecord, DocumentationClass, ExactOwnerKey, ExpressionOperation, ExternalVisibility,
-    FunctionEffect, Idempotency, LocalValueReference, Name, NamespaceClass, OwnerKey, OwnerRecord,
-    PackageId, RelationEdge, RelationEndpoint, RelationKind, RequirementReference, ResourceUnit,
-    RetirementObjectDigest, SemanticRoot, SemanticRootDigest, TypeForm, TypeObject,
-    TypeObjectDigest, encode_owner, encode_type_object,
+    AnnotationClass, DeclarationPayload, DeclarationVisibility, DependencyRecord,
+    DocumentationClass, ExactOwnerKey, ExpressionOperation, ExternalVisibility, FunctionEffect,
+    Idempotency, LocalValueReference, Name, NamespaceClass, OwnerKey, OwnerRecord, PackageId,
+    PackageRevisionDigest, RelationEdge, RelationEndpoint, RelationKind, RequirementReference,
+    ResourceUnit, SemanticRoot, TypeForm, TypeObject, TypeObjectDigest, encode_owner,
+    encode_type_object,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::persistent_map::{MapRoot, PageDigest};
-use crate::platform::semantic_id::{DeclarationId, RepositoryId};
+use crate::platform::semantic_id::{DeclarationId, RepositoryId, RevisionId};
 use crate::platform::storage::directory::SealCheckpoint;
 use crate::platform::storage::object::{ObjectDomain, ObjectKey, StageOutcome};
 use crate::platform::storage::pack::{PackBuilder, PackMetadata};
@@ -258,8 +259,58 @@ fn staged_package_transports_bind_authored_dependency_lifecycle_without_advancin
     else {
         panic!("dependency insertion must advance HEAD")
     };
-    let duplicate_add = AuthoredChangeSet {
+    let expected_semantic_revision = exported.revision.revision.revision_id().unwrap();
+    let wrong_guard = AuthoredChangeSet {
         base: added.head.revision,
+        preconditions: vec![AuthoredPrecondition::DependencyBinding {
+            package: exported.revision.package,
+            semantic_revision: RevisionId::from_digest([0xaa; 32]),
+            package_revision: exported.revision_digest,
+        }],
+        changes: vec![AuthoredChange::CreateModule {
+            symbol: "$never_guarded_module".to_owned(),
+            name: Name::new("never_guarded_module").unwrap(),
+        }],
+        budget: ChangeBudget::default(),
+    };
+    assert_eq!(
+        target
+            .repository
+            .prepare_authored_change(&wrong_guard, PublicationOptions::default())
+            .expect_err("wrong semantic dependency revision must reject")[0]
+            .code,
+        "change_precondition_dependency_binding"
+    );
+    assert_eq!(target.repository.current().unwrap().head, added.head);
+
+    let guarded_change = AuthoredChangeSet {
+        base: added.head.revision,
+        preconditions: vec![AuthoredPrecondition::DependencyBinding {
+            package: exported.revision.package,
+            semantic_revision: expected_semantic_revision,
+            package_revision: exported.revision_digest,
+        }],
+        changes: vec![AuthoredChange::CreateModule {
+            symbol: "$guarded_module".to_owned(),
+            name: Name::new("guarded_module").unwrap(),
+        }],
+        budget: ChangeBudget::default(),
+    };
+    let guarded_change = target
+        .repository
+        .prepare_authored_change(&guarded_change, PublicationOptions::default())
+        .expect("exact semantic dependency binding must prepare");
+    let PublicationOutcome::Accepted {
+        current: guarded, ..
+    } = target
+        .repository
+        .publish(&guarded_change.publication)
+        .expect("publish dependency-guarded change")
+    else {
+        panic!("dependency-guarded change must advance HEAD")
+    };
+    let duplicate_add = AuthoredChangeSet {
+        base: guarded.head.revision,
         preconditions: Vec::new(),
         changes: vec![AuthoredChange::AddDependency {
             package: exported.revision.package,
@@ -448,7 +499,7 @@ fn staged_package_transports_bind_authored_dependency_lifecycle_without_advancin
         .expect("foreign indexed transport uses bounded independently validated fallback");
 
     let replace = AuthoredChangeSet {
-        base: added.head.revision,
+        base: guarded.head.revision,
         preconditions: Vec::new(),
         changes: vec![AuthoredChange::ReplaceDependency {
             package: replacement.revision.package,
@@ -2400,41 +2451,26 @@ fn authored_preconditions_are_exact_base_point_reads_and_publish_once() {
     let destination = temporary.path().join("meaning");
     let logical = crate::platform::kernel::tests::witness_snapshot();
     let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
-    let view = created.repository.view_current().expect("current view");
     let callee = owner_named(&created.initial.snapshot, "callee");
     let callee_record = created.initial.snapshot.owners[&callee].clone();
-    let callee_digest = encode_owner(&callee_record).expect("callee encoding").0;
     let OwnerRecord::Declaration(callee_declaration) = &callee_record else {
         panic!("callee must be a declaration")
     };
     let module = OwnerKey::Module(callee_declaration.module);
-    let summary = view
-        .bound_owner_summary(callee)
-        .expect("callee summary")
-        .value
-        .expect("bound callee summary")
-        .digest;
     let absent = OwnerKey::Declaration(DeclarationId::migrate(b"precondition-absent", 1));
     let base = created.current.head.revision;
     let request = AuthoredChangeSet {
         base,
         preconditions: vec![
-            AuthoredPrecondition::SemanticRoot {
-                equals: created.current.accepted.semantic_root,
-            },
             AuthoredPrecondition::OwnerExists { owner: callee },
             AuthoredPrecondition::OwnerAbsent { owner: absent },
-            AuthoredPrecondition::OwnerDigest {
-                owner: callee,
-                equals: callee_digest,
-            },
             AuthoredPrecondition::OwnerName {
                 owner: callee,
                 equals: Name::new("callee").unwrap(),
             },
             AuthoredPrecondition::OwnerParent {
                 owner: callee,
-                equals: OwnershipParent::Owner(module),
+                equals: AuthoredOwnerParent::Owner(module),
             },
             AuthoredPrecondition::NamespacePointsTo {
                 parent: Some(module),
@@ -2446,10 +2482,6 @@ fn authored_preconditions_are_exact_base_point_reads_and_publish_once() {
                 parent: Some(module),
                 class: NamespaceClass::Declaration,
                 name: Name::new("guarded_callee").unwrap(),
-            },
-            AuthoredPrecondition::OwnerSummaryDigest {
-                owner: callee,
-                equals: summary,
             },
         ],
         budget: ChangeBudget::default(),
@@ -2464,8 +2496,8 @@ fn authored_preconditions_are_exact_base_point_reads_and_publish_once() {
         .prepare_authored_change(&request, PublicationOptions::default())
         .expect("prepare guarded authored change");
     assert_eq!(prepared.lowering_work.operations_lowered, 1);
-    assert_eq!(prepared.lowering_work.preconditions_checked, 9);
-    assert_eq!(prepared.publication.budget_work.preconditions_checked, 9);
+    assert_eq!(prepared.lowering_work.preconditions_checked, 6);
+    assert_eq!(prepared.publication.budget_work.preconditions_checked, 6);
     request
         .budget
         .check_observed(
@@ -2508,20 +2540,10 @@ fn failed_authored_preconditions_publish_nothing_with_stable_codes() {
     let destination = temporary.path().join("meaning");
     let logical = crate::platform::kernel::tests::witness_snapshot();
     let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
-    let view = created.repository.view_current().expect("current view");
     let base = created.current.head.revision;
     let callee = owner_named(&created.initial.snapshot, "callee");
     let body = function_body(&created.initial.snapshot, "callee");
     let callee_record = &created.initial.snapshot.owners[&callee];
-    let body_digest = encode_owner(&created.initial.snapshot.owners[&body])
-        .expect("body encoding")
-        .0;
-    let body_summary = view
-        .bound_owner_summary(body)
-        .expect("body summary")
-        .value
-        .expect("bound body summary")
-        .digest;
     let OwnerRecord::Declaration(declaration) = callee_record else {
         panic!("callee must be a declaration")
     };
@@ -2530,25 +2552,12 @@ fn failed_authored_preconditions_publish_nothing_with_stable_codes() {
     let foreign_package = PackageId::migrate(b"failed-precondition-package", 1);
     let failures = vec![
         (
-            "change_precondition_semantic_root",
-            AuthoredPrecondition::SemanticRoot {
-                equals: SemanticRootDigest::from_bytes([0x11; 32]),
-            },
-        ),
-        (
             "change_precondition_owner_missing",
             AuthoredPrecondition::OwnerExists { owner: absent },
         ),
         (
             "change_precondition_owner_present",
             AuthoredPrecondition::OwnerAbsent { owner: callee },
-        ),
-        (
-            "change_precondition_owner_digest",
-            AuthoredPrecondition::OwnerDigest {
-                owner: callee,
-                equals: body_digest,
-            },
         ),
         (
             "change_precondition_owner_name",
@@ -2561,7 +2570,7 @@ fn failed_authored_preconditions_publish_nothing_with_stable_codes() {
             "change_precondition_owner_parent",
             AuthoredPrecondition::OwnerParent {
                 owner: callee,
-                equals: OwnershipParent::Package,
+                equals: AuthoredOwnerParent::Package,
             },
         ),
         (
@@ -2582,24 +2591,11 @@ fn failed_authored_preconditions_publish_nothing_with_stable_codes() {
             },
         ),
         (
-            "change_precondition_owner_summary",
-            AuthoredPrecondition::OwnerSummaryDigest {
-                owner: callee,
-                equals: body_summary,
-            },
-        ),
-        (
-            "change_precondition_dependency_digest",
-            AuthoredPrecondition::DependencyDigest {
+            "change_precondition_dependency_binding",
+            AuthoredPrecondition::DependencyBinding {
                 package: foreign_package,
-                equals: DependencyObjectDigest::from_bytes([0x22; 32]),
-            },
-        ),
-        (
-            "change_precondition_retirement_digest",
-            AuthoredPrecondition::RetirementDigest {
-                owner: absent,
-                equals: RetirementObjectDigest::from_bytes([0x33; 32]),
+                semantic_revision: RevisionId::from_digest([0x22; 32]),
+                package_revision: PackageRevisionDigest::from_bytes([0x33; 32]),
             },
         ),
     ];
@@ -2621,6 +2617,80 @@ fn failed_authored_preconditions_publish_nothing_with_stable_codes() {
         assert_eq!(diagnostics[0].code, expected_code);
         assert_eq!(created.repository.current().unwrap().head.revision, base);
     }
+}
+
+#[test]
+fn semantic_preconditions_reject_derived_entries_that_disagree_with_meaning() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let base = created
+        .repository
+        .view_current()
+        .expect("exact accepted base");
+    let callee = owner_named(&created.initial.snapshot, "callee");
+    let body = function_body(&created.initial.snapshot, "callee");
+    let OwnerRecord::Declaration(declaration) = &created.initial.snapshot.owners[&callee] else {
+        panic!("callee must be a declaration")
+    };
+    let key = NamespaceKey {
+        parent: Some(OwnerKey::Module(declaration.module)),
+        class: NamespaceClass::Declaration,
+        name: Name::new("callee").unwrap(),
+    };
+    let mut corrupt_witness = created.initial.witness.clone();
+    corrupt_witness.entries.namespaces.insert(key.clone(), body);
+    let request = AuthoredChangeSet {
+        base: created.current.head.revision,
+        preconditions: vec![AuthoredPrecondition::NamespacePointsTo {
+            parent: key.parent,
+            class: key.class,
+            name: key.name,
+            owner: body,
+        }],
+        changes: vec![AuthoredChange::RenameOwner {
+            owner: OwnerSelector::Exact { owner: callee },
+            name: Name::new("never_published").unwrap(),
+        }],
+        budget: ChangeBudget::default(),
+    };
+    let diagnostic = lower_authored_changes(&base, &corrupt_witness, &request)
+        .expect_err("derived namespace data cannot satisfy false semantic caller intent");
+    assert_eq!(diagnostic.class, DiagnosticClass::Corrupt);
+    assert_eq!(diagnostic.code, "change_precondition_namespace_witness");
+    assert_eq!(
+        created.repository.current().unwrap().head.revision,
+        request.base
+    );
+
+    let mut corrupt_ownership = created.initial.witness.clone();
+    let ownership = corrupt_ownership
+        .entries
+        .ownership
+        .get_mut(&callee)
+        .expect("callee ownership");
+    ownership.parent = OwnershipParent::Package;
+    let request = AuthoredChangeSet {
+        base: created.current.head.revision,
+        preconditions: vec![AuthoredPrecondition::OwnerParent {
+            owner: callee,
+            equals: AuthoredOwnerParent::Package,
+        }],
+        changes: vec![AuthoredChange::RenameOwner {
+            owner: OwnerSelector::Exact { owner: callee },
+            name: Name::new("also_never_published").unwrap(),
+        }],
+        budget: ChangeBudget::default(),
+    };
+    let diagnostic = lower_authored_changes(&base, &corrupt_ownership, &request)
+        .expect_err("derived ownership data cannot satisfy false semantic caller intent");
+    assert_eq!(diagnostic.class, DiagnosticClass::Semantic);
+    assert_eq!(diagnostic.code, "change_precondition_owner_parent");
+    assert_eq!(
+        created.repository.current().unwrap().head.revision,
+        request.base
+    );
 }
 
 #[test]

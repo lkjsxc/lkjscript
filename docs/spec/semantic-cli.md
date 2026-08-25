@@ -114,11 +114,11 @@ Missing or corrupt state rebuilds from canonical authority.
 ## Public change protocol
 
 `change plan (--input RECORDS | --input-file PATH)` and `change apply ... --plan DIGEST` accept
-flat UTF-8 records under contract `lkjscript-change-records-2`. A request begins with exactly one
+flat UTF-8 records under contract `lkjscript-change-records-3`. A request begins with exactly one
 `request base=REVISION` record and may add bounded `idempotency` and nonsemantic `intent` fields.
-Every later record is a closed semantic operation, type fragment, expression fragment, or indexed
-edge. There is no indentation meaning, implicit scalar typing, duplicate field, macro, include, or
-JSON fallback.
+Every later record is a closed semantic precondition, operation, type fragment, expression
+fragment, or indexed edge. There is no indentation meaning, implicit scalar typing, duplicate
+field, macro, include, or JSON fallback.
 
 `plan` parses, resolves fragments, lowers to the typed authored model, allocates request-local
 identities, performs impact analysis and validation, and returns a `plan_` digest plus the predicted
@@ -141,6 +141,17 @@ compact workflows are complete.
 `change.operation-field` discovery records expose a registered field's operation, name, required
 status, and typed form. The registry exposes the complete `delete.owner` grammar as required
 `owner=exact_owner` and `policy=delete_policy` fields without requiring repository source.
+`change.precondition` and `change.precondition-field` records likewise expose the complete current
+precondition set and field forms.
+
+The current preconditions are exact owner existence, absence, name, and semantic parent; namespace
+absence and exact owner binding; and an exact dependency binding containing package identity,
+semantic revision, and logical package revision. `package` denotes the package parent; every other
+parent is an exact owner. Owner-parent guards derive from canonical owner and exact parent records,
+without treating the ownership witness as authority. Present namespace entries are checked against
+canonical owner meaning before they can satisfy caller intent. Physical semantic-root digests,
+encoded owner digests, derived summary digests, dependency-object digests, and retirement digests
+are not caller intent; their predecessor record names are unknown input.
 
 `$name` identifies request-local semantic owners and expressions; `@name` identifies notation-only
 type fragments. `expression.argument` and `type.argument` records use zero-based contiguous indexes
@@ -155,8 +166,8 @@ allocated identities. Plan and apply return equal complete symbol maps. Function
 retires the exact old expression/binding ownership closure in the same semantic change. Raw JSON,
 the former `--request`/`--request-file` grammar, and `--dry-run`/`--commit` are rejected before
 publication. Owned-closure deletion remains unavailable until an exported typed impact plan lists
-and binds every removed owner and relation. Preconditions, large external value files, direct
-single-operation flags, and broad result export are not yet exposed by this compact subset.
+and binds every removed owner and relation. Large external value files, direct single-operation
+flags, and broad result export are not yet exposed by this compact subset.
 
 ## Drafts, history, and packages
 

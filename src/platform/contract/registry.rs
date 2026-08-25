@@ -3,7 +3,8 @@ use super::super::bootstrap::BOOTSTRAP_CONTRACT_VERSION;
 use super::super::configuration::CONFIGURATION_ADAPTER_CONTRACT_VERSION;
 use super::super::control::{
     CHANGE_PLAN_DIGEST_DOMAIN, COMPACT_CHANGE_CONTRACT_IDENTITY, COMPACT_CHANGE_OPERATION_FIELDS,
-    COMPACT_CHANGE_OPERATIONS, COMPACT_DELETE_POLICIES, COMPACT_EXPRESSION_FORMS,
+    COMPACT_CHANGE_OPERATIONS, COMPACT_CHANGE_PRECONDITION_FIELDS, COMPACT_CHANGE_PRECONDITIONS,
+    COMPACT_DELETE_POLICIES, COMPACT_EXPRESSION_FORMS, COMPACT_NAMESPACE_CLASSES,
     COMPACT_TYPE_FORMS, MAXIMUM_COMPACT_INPUT_BYTES, render_record,
 };
 use super::super::database::POSTGRES_ADAPTER_CONTRACT_VERSION;
@@ -164,7 +165,7 @@ pub(crate) const MODULE_IMPLEMENTATION_DIGEST_DOMAIN: &str = "lkjscript.module-i
 pub(crate) const SUMMARY_DEPENDENCY_DIGEST_DOMAIN: &str =
     "lkjscript.semantic-summary-dependencies.v3";
 pub(crate) const SUMMARY_RECORD_DIGEST_DOMAIN: &str = "lkjscript.semantic-summary-record.v3";
-pub(crate) const CHANGE_ALLOCATION_SEED_DOMAIN: &str = "lkjscript.change-allocation-seed.v3";
+pub(crate) const CHANGE_ALLOCATION_SEED_DOMAIN: &str = "lkjscript.change-allocation-seed.v4";
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -463,7 +464,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             key: ContractKey::Change,
             name: "authored semantic change",
             identity: COMPACT_CHANGE_CONTRACT_IDENTITY,
-            version: 2,
+            version: 3,
             stability: CURRENT,
             authority: ContractAuthority::PublicProtocol,
             predecessor_policy: REJECT,
@@ -1765,6 +1766,66 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Use the advertised effect or wait for the complete typed form cutover.",
         ),
         diagnostic(
+            "change_precondition_unknown",
+            DiagnosticClass::Source,
+            "A compact request uses an unknown semantic precondition.",
+            "Select a precondition reported by capabilities --section change.",
+        ),
+        diagnostic(
+            "change_precondition_namespace_class",
+            DiagnosticClass::Source,
+            "A namespace precondition uses an unknown namespace class.",
+            "Select a change.namespace-class value from focused change discovery.",
+        ),
+        diagnostic(
+            "change_precondition_owner_missing",
+            DiagnosticClass::Semantic,
+            "An owner-exists precondition observed no live exact owner.",
+            "Refresh the exact owner at the observed base and rebuild the request.",
+        ),
+        diagnostic(
+            "change_precondition_owner_present",
+            DiagnosticClass::Semantic,
+            "An owner-absent precondition observed a live exact owner.",
+            "Refresh the exact owner at the observed base and rebuild the request.",
+        ),
+        diagnostic(
+            "change_precondition_owner_name",
+            DiagnosticClass::Semantic,
+            "An exact owner no longer has the expected name.",
+            "Inspect that owner at the observed base and rebuild the request.",
+        ),
+        diagnostic(
+            "change_precondition_owner_parent",
+            DiagnosticClass::Semantic,
+            "An exact owner no longer has the expected semantic parent.",
+            "Inspect that owner at the observed base and rebuild the request.",
+        ),
+        diagnostic(
+            "change_precondition_namespace_present",
+            DiagnosticClass::Semantic,
+            "A namespace expected to be free points to a live owner.",
+            "Inspect the exact namespace owner and choose another name or base.",
+        ),
+        diagnostic(
+            "change_precondition_namespace_owner",
+            DiagnosticClass::Semantic,
+            "A namespace no longer points to the expected exact owner.",
+            "Refresh the namespace and exact owner at the observed base.",
+        ),
+        diagnostic(
+            "change_precondition_namespace_witness",
+            DiagnosticClass::Corrupt,
+            "A derived namespace entry disagrees with its canonical owner record.",
+            "Preserve the repository and run deep doctor verification.",
+        ),
+        diagnostic(
+            "change_precondition_dependency_binding",
+            DiagnosticClass::Semantic,
+            "A package dependency no longer has the expected semantic and package revisions.",
+            "Inspect the exact dependency binding at the observed base and rebuild the request.",
+        ),
+        diagnostic(
             "change_delete_policy",
             DiagnosticClass::Source,
             "A compact deletion requests an unsupported policy.",
@@ -2374,7 +2435,24 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 records.push(compact_record(
                     "change.operation-field",
                     &[
-                        ("operation", field.operation.to_owned()),
+                        ("operation", field.record.to_owned()),
+                        ("name", field.name.to_owned()),
+                        ("required", field.required.to_string()),
+                        ("form", field.form.to_owned()),
+                    ],
+                )?);
+            }
+            for precondition in COMPACT_CHANGE_PRECONDITIONS {
+                records.push(compact_record(
+                    "change.precondition",
+                    &[("name", (*precondition).to_owned())],
+                )?);
+            }
+            for field in COMPACT_CHANGE_PRECONDITION_FIELDS {
+                records.push(compact_record(
+                    "change.precondition-field",
+                    &[
+                        ("precondition", field.record.to_owned()),
                         ("name", field.name.to_owned()),
                         ("required", field.required.to_string()),
                         ("form", field.form.to_owned()),
@@ -2385,6 +2463,18 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 records.push(compact_record(
                     "change.delete-policy",
                     &[("name", (*policy).to_owned())],
+                )?);
+            }
+            for (name, _) in COMPACT_NAMESPACE_CLASSES {
+                records.push(compact_record(
+                    "change.namespace-class",
+                    &[("name", (*name).to_owned())],
+                )?);
+            }
+            for (name, syntax) in [("package", "package"), ("exact_owner", "DOMAIN_HEX")] {
+                records.push(compact_record(
+                    "change.parent-form",
+                    &[("name", name.to_owned()), ("syntax", syntax.to_owned())],
                 )?);
             }
             for (name, parent, child) in [
@@ -2405,6 +2495,9 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 ("request_local_symbol", "$NAME"),
                 ("request_local_type", "@NAME"),
                 ("exact_owner", "DOMAIN_HEX"),
+                ("exact_package", "pkg_HEX"),
+                ("exact_revision", "rev_HEX"),
+                ("exact_package_revision", "package_revision_HEX"),
                 ("qualified_declaration", "MODULE/NAME"),
                 ("exact_package_declaration", "pkg_HEX/decl_HEX"),
             ] {
