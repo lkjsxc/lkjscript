@@ -20,6 +20,9 @@ const SCOPED_RECORD_KEY_VERSION: u8 = 1;
 const DECLARATION_SCOPE_TAG: u8 = 1;
 const OPERATION_SCOPE_TAG: u8 = 2;
 const BODY_SCOPE_TAG: u8 = 3;
+const EXACT_SCOPE_TAG: u8 = 4;
+const EXACT_KEY_TAG: u8 = 1;
+const BODY_COMMITMENT_TAG: u8 = 1;
 const ALLOCATION_DIGEST_DOMAIN: &str = "lkjscript.scoped-token-allocation.v1";
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -35,13 +38,13 @@ impl LocalTokenBytes {
     }
 
     fn allocate(
-        parent_scope: ScopedRecordScope,
+        parent_scope: ExactScopedRecordScope,
         normalized_request_digest: ChangeDigest,
         domain: ScopedSectionDomain,
         ordinal: u64,
         collision_counter: u32,
     ) -> Result<Self, Diagnostic> {
-        validate_scope_domain(parent_scope, domain)?;
+        validate_scope_domain(parent_scope.scope, domain)?;
         let parent_scope_bytes = parent_scope.allocation_bytes();
         let mut hasher = blake3::Hasher::new_derive_key(ALLOCATION_DIGEST_DOMAIN);
         hasher.update(&(parent_scope_bytes.len() as u64).to_be_bytes());
@@ -94,7 +97,7 @@ macro_rules! scoped_token {
             pub(crate) const DOMAIN: ScopedSectionDomain = ScopedSectionDomain::$domain;
 
             pub(crate) fn allocate(
-                parent_scope: ScopedRecordScope,
+                parent_scope: ExactScopedRecordScope,
                 normalized_request_digest: ChangeDigest,
                 ordinal: u64,
                 collision_counter: u32,
@@ -167,6 +170,10 @@ macro_rules! scoped_token {
         }
 
         bincode::impl_borrow_decode!($name);
+
+        impl ScopedTokenType for $name {
+            const DOMAIN: ScopedSectionDomain = ScopedSectionDomain::$domain;
+        }
     };
 }
 
@@ -180,6 +187,21 @@ scoped_token!(RequirementToken, "sreq_", Requirement);
 scoped_token!(PortToken, "sport_", Port);
 scoped_token!(ExpressionToken, "sexpr_", Expression);
 scoped_token!(BindingToken, "sbind_", Binding);
+
+pub(crate) trait ScopedTokenType: Copy + Eq {
+    const DOMAIN: ScopedSectionDomain;
+}
+
+pub(crate) trait OrderedScopedToken: ScopedTokenType {}
+
+impl OrderedScopedToken for TypeParameterToken {}
+impl OrderedScopedToken for FieldToken {}
+impl OrderedScopedToken for CaseToken {}
+impl OrderedScopedToken for InterfaceOperationToken {}
+impl OrderedScopedToken for FunctionParameterToken {}
+impl OrderedScopedToken for OperationParameterToken {}
+impl OrderedScopedToken for RequirementToken {}
+impl OrderedScopedToken for PortToken {}
 
 /// Closed identity section domains in the package-wide scoped-record map.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -425,32 +447,16 @@ scoped_token_conversion!(PortToken, Port);
 scoped_token_conversion!(ExpressionToken, Expression);
 scoped_token_conversion!(BindingToken, Binding);
 
-/// One executable expression/binding ownership scope.
+/// One package-local executable expression/binding ownership scope.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub(crate) struct BodyScope {
-    pub(crate) package: PackageId,
     pub(crate) declaration: DeclarationId,
     pub(crate) role: BodyRole,
 }
 
 impl BodyScope {
-    pub(crate) const fn new(
-        package: PackageId,
-        declaration: DeclarationId,
-        role: BodyRole,
-    ) -> Self {
-        Self {
-            package,
-            declaration,
-            role,
-        }
-    }
-
-    /// Stable bytes used as the parent-scope input to deterministic local-token allocation.
-    pub(crate) fn allocation_bytes(self) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity(50);
-        encode_body_scope(&mut bytes, self);
-        bytes
+    pub(crate) const fn new(declaration: DeclarationId, role: BodyRole) -> Self {
+        Self { declaration, role }
     }
 }
 
@@ -505,7 +511,6 @@ bincode::impl_borrow_decode!(BodyRole);
 impl Encode for BodyScope {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         BODY_SCOPE_TAG.encode(encoder)?;
-        self.package.encode(encoder)?;
         self.declaration.encode(encoder)?;
         self.role.encode(encoder)
     }
@@ -520,7 +525,6 @@ impl<Context> Decode<Context> for BodyScope {
             )));
         }
         Ok(Self::new(
-            PackageId::decode(decoder)?,
             DeclarationId::decode(decoder)?,
             BodyRole::decode(decoder)?,
         ))
@@ -529,15 +533,13 @@ impl<Context> Decode<Context> for BodyScope {
 
 bincode::impl_borrow_decode!(BodyScope);
 
-/// Exact parent scope for one scoped-record section.
+/// Package-local parent scope for one record in the package's scoped-record map.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub(crate) enum ScopedRecordScope {
     Declaration {
-        package: PackageId,
         declaration: DeclarationId,
     },
     InterfaceOperation {
-        package: PackageId,
         declaration: DeclarationId,
         operation: InterfaceOperationToken,
     },
@@ -545,20 +547,15 @@ pub(crate) enum ScopedRecordScope {
 }
 
 impl ScopedRecordScope {
-    pub(crate) const fn declaration(package: PackageId, declaration: DeclarationId) -> Self {
-        Self::Declaration {
-            package,
-            declaration,
-        }
+    pub(crate) const fn declaration(declaration: DeclarationId) -> Self {
+        Self::Declaration { declaration }
     }
 
     pub(crate) const fn interface_operation(
-        package: PackageId,
         declaration: DeclarationId,
         operation: InterfaceOperationToken,
     ) -> Self {
         Self::InterfaceOperation {
-            package,
             declaration,
             operation,
         }
@@ -567,30 +564,20 @@ impl ScopedRecordScope {
     pub(crate) const fn body(scope: BodyScope) -> Self {
         Self::Body(scope)
     }
-
-    pub(crate) fn allocation_bytes(self) -> Vec<u8> {
-        encode_scope_prefix(self)
-    }
 }
 
 impl Encode for ScopedRecordScope {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         match self {
-            Self::Declaration {
-                package,
-                declaration,
-            } => {
+            Self::Declaration { declaration } => {
                 DECLARATION_SCOPE_TAG.encode(encoder)?;
-                package.encode(encoder)?;
                 declaration.encode(encoder)
             }
             Self::InterfaceOperation {
-                package,
                 declaration,
                 operation,
             } => {
                 OPERATION_SCOPE_TAG.encode(encoder)?;
-                package.encode(encoder)?;
                 declaration.encode(encoder)?;
                 operation.encode(encoder)
             }
@@ -602,17 +589,12 @@ impl Encode for ScopedRecordScope {
 impl<Context> Decode<Context> for ScopedRecordScope {
     fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
         match u8::decode(decoder)? {
-            DECLARATION_SCOPE_TAG => Ok(Self::declaration(
-                PackageId::decode(decoder)?,
-                DeclarationId::decode(decoder)?,
-            )),
+            DECLARATION_SCOPE_TAG => Ok(Self::declaration(DeclarationId::decode(decoder)?)),
             OPERATION_SCOPE_TAG => Ok(Self::interface_operation(
-                PackageId::decode(decoder)?,
                 DeclarationId::decode(decoder)?,
                 InterfaceOperationToken::decode(decoder)?,
             )),
             BODY_SCOPE_TAG => Ok(Self::body(BodyScope::new(
-                PackageId::decode(decoder)?,
                 DeclarationId::decode(decoder)?,
                 BodyRole::decode(decoder)?,
             ))),
@@ -625,7 +607,49 @@ impl<Context> Decode<Context> for ScopedRecordScope {
 
 bincode::impl_borrow_decode!(ScopedRecordScope);
 
-/// Canonical key in the single package-wide scoped-record map.
+/// Package qualification used by public references and deterministic token allocation.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(crate) struct ExactScopedRecordScope {
+    pub(crate) package: PackageId,
+    pub(crate) scope: ScopedRecordScope,
+}
+
+impl ExactScopedRecordScope {
+    pub(crate) const fn new(package: PackageId, scope: ScopedRecordScope) -> Self {
+        Self { package, scope }
+    }
+
+    fn allocation_bytes(self) -> Vec<u8> {
+        encode_exact_scope_prefix(self)
+    }
+}
+
+impl Encode for ExactScopedRecordScope {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        EXACT_SCOPE_TAG.encode(encoder)?;
+        self.package.encode(encoder)?;
+        self.scope.encode(encoder)
+    }
+}
+
+impl<Context> Decode<Context> for ExactScopedRecordScope {
+    fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let tag = u8::decode(decoder)?;
+        if tag != EXACT_SCOPE_TAG {
+            return Err(DecodeError::OtherString(format!(
+                "foreign exact scoped-record scope tag {tag}; expected {EXACT_SCOPE_TAG}"
+            )));
+        }
+        Ok(Self::new(
+            PackageId::decode(decoder)?,
+            ScopedRecordScope::decode(decoder)?,
+        ))
+    }
+}
+
+bincode::impl_borrow_decode!(ExactScopedRecordScope);
+
+/// Canonical package-local key in the single package scoped-record map.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub(crate) struct ScopedRecordKey {
     pub(crate) scope: ScopedRecordScope,
@@ -651,50 +675,85 @@ impl ScopedRecordKey {
 
     pub(crate) fn decode(bytes: &[u8]) -> Result<Self, Diagnostic> {
         let mut cursor = KeyCursor::new(bytes);
-        let version = cursor.take_byte("version")?;
-        if version != SCOPED_RECORD_KEY_VERSION {
-            return Err(key_error(format!(
-                "scoped record key has unknown version {version}"
-            )));
-        }
-        let package =
-            PackageId::from_bytes(cursor.take_array("package identity")?).ok_or_else(|| {
-                key_error("scoped record key contains the reserved zero package identity")
-            })?;
-        let declaration = DeclarationId::from_bytes(cursor.take_array("declaration identity")?)
-            .ok_or_else(|| {
-                key_error("scoped record key contains the reserved zero declaration identity")
-            })?;
-        let scope = match cursor.take_byte("scope tag")? {
-            DECLARATION_SCOPE_TAG => ScopedRecordScope::declaration(package, declaration),
-            OPERATION_SCOPE_TAG => {
-                let operation = InterfaceOperationToken::from_bytes(
-                    cursor.take_array("interface-operation token")?,
-                )
-                .ok_or_else(|| key_error("scoped record key contains a zero operation token"))?;
-                ScopedRecordScope::interface_operation(package, declaration, operation)
-            }
-            BODY_SCOPE_TAG => {
-                let role = decode_body_role(&mut cursor)?;
-                ScopedRecordScope::body(BodyScope::new(package, declaration, role))
-            }
-            tag => {
-                return Err(key_error(format!(
-                    "scoped record key contains unknown scope tag {tag}"
-                )));
-            }
-        };
-        let domain_tag = cursor.take_byte("section domain")?;
-        let domain = ScopedSectionDomain::from_tag(domain_tag)
-            .map_err(|error| key_error(error.to_string()))?;
-        let token = ScopedToken::from_domain_bytes(domain, cursor.take_array("local token")?)
-            .map_err(|error| key_error(error.to_string()))?;
+        decode_key_version(&mut cursor)?;
+        let key = decode_local_key(&mut cursor)?;
         cursor.finish()?;
-        Self::new(scope, token)
+        Ok(key)
     }
 }
 
-/// Exact lexical bounds for one parent/domain section in the global scoped-record map.
+/// Exact package-qualified scoped record reference.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(crate) struct ExactScopedRecordKey {
+    pub(crate) package: PackageId,
+    pub(crate) key: ScopedRecordKey,
+}
+
+impl ExactScopedRecordKey {
+    pub(crate) fn new(
+        scope: ExactScopedRecordScope,
+        token: impl Into<ScopedToken>,
+    ) -> Result<Self, Diagnostic> {
+        Ok(Self {
+            package: scope.package,
+            key: ScopedRecordKey::new(scope.scope, token)?,
+        })
+    }
+
+    pub(crate) const fn scope(self) -> ExactScopedRecordScope {
+        ExactScopedRecordScope::new(self.package, self.key.scope)
+    }
+
+    pub(crate) fn encode(self) -> Vec<u8> {
+        let local = self.key.encode();
+        let mut bytes = Vec::with_capacity(local.len() + LOCAL_TOKEN_BYTES);
+        bytes.push(SCOPED_RECORD_KEY_VERSION);
+        bytes.extend_from_slice(&self.package.bytes());
+        bytes.extend(local.into_iter().skip(1));
+        bytes
+    }
+
+    pub(crate) fn decode(bytes: &[u8]) -> Result<Self, Diagnostic> {
+        let mut cursor = KeyCursor::new(bytes);
+        decode_key_version(&mut cursor)?;
+        let package =
+            PackageId::from_bytes(cursor.take_array("package identity")?).ok_or_else(|| {
+                key_error("exact scoped record key contains the reserved zero package identity")
+            })?;
+        let key = decode_local_key(&mut cursor)?;
+        cursor.finish()?;
+        Ok(Self { package, key })
+    }
+}
+
+impl Encode for ExactScopedRecordKey {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        EXACT_KEY_TAG.encode(encoder)?;
+        self.package.encode(encoder)?;
+        self.key.scope.encode(encoder)?;
+        self.key.token.encode(encoder)
+    }
+}
+
+impl<Context> Decode<Context> for ExactScopedRecordKey {
+    fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let tag = u8::decode(decoder)?;
+        if tag != EXACT_KEY_TAG {
+            return Err(DecodeError::OtherString(format!(
+                "foreign exact scoped-record key tag {tag}; expected {EXACT_KEY_TAG}"
+            )));
+        }
+        let package = PackageId::decode(decoder)?;
+        let scope = ScopedRecordScope::decode(decoder)?;
+        let token = ScopedToken::decode(decoder)?;
+        Self::new(ExactScopedRecordScope::new(package, scope), token)
+            .map_err(|error| DecodeError::OtherString(error.to_string()))
+    }
+}
+
+bincode::impl_borrow_decode!(ExactScopedRecordKey);
+
+/// Exact lexical bounds for one parent/domain section in the package-local map.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct ScopedRecordKeyBounds {
     pub(crate) start_inclusive: Vec<u8>,
@@ -707,7 +766,7 @@ impl ScopedRecordKeyBounds {
     }
 }
 
-/// Parent/domain prefix for a bounded section scan.
+/// Parent/domain prefix for one bounded package-local section scan.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub(crate) struct ScopedSectionPrefix {
     pub(crate) scope: ScopedRecordScope,
@@ -744,76 +803,168 @@ impl ScopedSectionPrefix {
     }
 }
 
-/// Ordered section metadata stored by its authoritative declaration, operation, or body.
-///
-/// The package-wide scoped-record map's `MapContentRoot` commits record content. This metadata
-/// commits only section membership order and never owns a physical page root.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub(crate) struct ScopedSectionCommitment {
-    pub(crate) domain: ScopedSectionDomain,
+/// Typed head/tail metadata for an ordered declaration or operation section.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct OrderedSection<T> {
     pub(crate) count: u64,
-    pub(crate) head: Option<ScopedToken>,
-    pub(crate) tail: Option<ScopedToken>,
+    pub(crate) head: Option<T>,
+    pub(crate) tail: Option<T>,
 }
 
-impl ScopedSectionCommitment {
-    pub(crate) fn new(
-        scope: ScopedRecordScope,
-        domain: ScopedSectionDomain,
-        count: u64,
-        head: Option<ScopedToken>,
-        tail: Option<ScopedToken>,
-    ) -> Result<Self, Diagnostic> {
-        validate_scope_domain(scope, domain)?;
-        validate_section_fields(domain, count, head, tail)?;
-        Ok(Self::from_validated_parts(domain, count, head, tail))
+impl<T: OrderedScopedToken> OrderedSection<T> {
+    pub(crate) fn new(count: u64, head: Option<T>, tail: Option<T>) -> Result<Self, Diagnostic> {
+        validate_ordered_section(count, head, tail)?;
+        Ok(Self { count, head, tail })
     }
 
     pub(crate) fn validate_for_scope(self, scope: ScopedRecordScope) -> Result<(), Diagnostic> {
-        validate_scope_domain(scope, self.domain)?;
-        validate_section_fields(self.domain, self.count, self.head, self.tail)
-    }
-
-    fn from_validated_parts(
-        domain: ScopedSectionDomain,
-        count: u64,
-        head: Option<ScopedToken>,
-        tail: Option<ScopedToken>,
-    ) -> Self {
-        Self {
-            domain,
-            count,
-            head,
-            tail,
-        }
+        validate_scope_domain(scope, T::DOMAIN)?;
+        validate_ordered_section(self.count, self.head, self.tail)
     }
 }
 
-impl Encode for ScopedSectionCommitment {
+impl<T> Encode for OrderedSection<T>
+where
+    T: OrderedScopedToken + Encode,
+{
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        self.domain.encode(encoder)?;
+        T::DOMAIN.encode(encoder)?;
         self.count.encode(encoder)?;
-        encode_optional_token(self.head, encoder)?;
-        encode_optional_token(self.tail, encoder)
+        encode_optional_typed(self.head, encoder)?;
+        encode_optional_typed(self.tail, encoder)
     }
 }
 
-impl<Context> Decode<Context> for ScopedSectionCommitment {
+impl<Context, T> Decode<Context> for OrderedSection<T>
+where
+    T: OrderedScopedToken + Decode<Context>,
+{
     fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let domain = ScopedSectionDomain::decode(decoder)?;
+        decode_expected_domain::<T, Context, D>(decoder)?;
         let count = u64::decode(decoder)?;
-        let head = decode_optional_token(decoder)?;
-        let tail = decode_optional_token(decoder)?;
-        validate_section_fields(domain, count, head, tail)
+        validate_scoped_count("ordered section", count, true)
             .map_err(|error| DecodeError::OtherString(error.to_string()))?;
-        Ok(Self::from_validated_parts(domain, count, head, tail))
+        let head = decode_optional_typed(decoder)?;
+        let tail = decode_optional_typed(decoder)?;
+        validate_ordered_section(count, head, tail)
+            .map_err(|error| DecodeError::OtherString(error.to_string()))?;
+        Ok(Self { count, head, tail })
     }
 }
 
-bincode::impl_borrow_decode!(ScopedSectionCommitment);
+impl<'de, Context, T> bincode::BorrowDecode<'de, Context> for OrderedSection<T>
+where
+    T: OrderedScopedToken + Decode<Context>,
+{
+    fn borrow_decode<D: bincode::de::BorrowDecoder<'de, Context = Context>>(
+        decoder: &mut D,
+    ) -> Result<Self, DecodeError> {
+        Self::decode(decoder)
+    }
+}
 
-fn encode_optional_token<E: Encoder>(
-    token: Option<ScopedToken>,
+/// Intrusive ordering links stored beside one exact ordered record.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct OrderLinks<T> {
+    pub(crate) previous: Option<T>,
+    pub(crate) next: Option<T>,
+}
+
+impl<T: OrderedScopedToken> OrderLinks<T> {
+    pub(crate) const fn new(previous: Option<T>, next: Option<T>) -> Self {
+        Self { previous, next }
+    }
+}
+
+impl<T> Encode for OrderLinks<T>
+where
+    T: OrderedScopedToken + Encode,
+{
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        T::DOMAIN.encode(encoder)?;
+        encode_optional_typed(self.previous, encoder)?;
+        encode_optional_typed(self.next, encoder)
+    }
+}
+
+impl<Context, T> Decode<Context> for OrderLinks<T>
+where
+    T: OrderedScopedToken + Decode<Context>,
+{
+    fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        decode_expected_domain::<T, Context, D>(decoder)?;
+        Ok(Self::new(
+            decode_optional_typed(decoder)?,
+            decode_optional_typed(decoder)?,
+        ))
+    }
+}
+
+impl<'de, Context, T> bincode::BorrowDecode<'de, Context> for OrderLinks<T>
+where
+    T: OrderedScopedToken + Decode<Context>,
+{
+    fn borrow_decode<D: bincode::de::BorrowDecoder<'de, Context = Context>>(
+        decoder: &mut D,
+    ) -> Result<Self, DecodeError> {
+        Self::decode(decoder)
+    }
+}
+
+/// Payload-independent body membership summary. Expressions and bindings remain unordered.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct BodyCommitment {
+    pub(crate) root: ExpressionToken,
+    pub(crate) expression_count: u64,
+    pub(crate) binding_count: u64,
+}
+
+impl BodyCommitment {
+    pub(crate) fn new(
+        root: ExpressionToken,
+        expression_count: u64,
+        binding_count: u64,
+    ) -> Result<Self, Diagnostic> {
+        validate_scoped_count("body expression", expression_count, false)?;
+        validate_scoped_count("body binding", binding_count, true)?;
+        Ok(Self {
+            root,
+            expression_count,
+            binding_count,
+        })
+    }
+}
+
+impl Encode for BodyCommitment {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        BODY_COMMITMENT_TAG.encode(encoder)?;
+        self.root.encode(encoder)?;
+        self.expression_count.encode(encoder)?;
+        self.binding_count.encode(encoder)
+    }
+}
+
+impl<Context> Decode<Context> for BodyCommitment {
+    fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let tag = u8::decode(decoder)?;
+        if tag != BODY_COMMITMENT_TAG {
+            return Err(DecodeError::OtherString(format!(
+                "foreign body commitment tag {tag}; expected {BODY_COMMITMENT_TAG}"
+            )));
+        }
+        Self::new(
+            ExpressionToken::decode(decoder)?,
+            u64::decode(decoder)?,
+            u64::decode(decoder)?,
+        )
+        .map_err(|error| DecodeError::OtherString(error.to_string()))
+    }
+}
+
+bincode::impl_borrow_decode!(BodyCommitment);
+
+fn encode_optional_typed<T: Encode, E: Encoder>(
+    token: Option<T>,
     encoder: &mut E,
 ) -> Result<(), EncodeError> {
     match token {
@@ -825,65 +976,79 @@ fn encode_optional_token<E: Encoder>(
     }
 }
 
-fn decode_optional_token<Context, D: Decoder<Context = Context>>(
-    decoder: &mut D,
-) -> Result<Option<ScopedToken>, DecodeError> {
+fn decode_optional_typed<Context, T, D>(decoder: &mut D) -> Result<Option<T>, DecodeError>
+where
+    T: Decode<Context>,
+    D: Decoder<Context = Context>,
+{
     match u8::decode(decoder)? {
         0 => Ok(None),
-        1 => ScopedToken::decode(decoder).map(Some),
+        1 => T::decode(decoder).map(Some),
         tag => Err(DecodeError::OtherString(format!(
             "unknown scoped optional-token tag {tag}"
         ))),
     }
 }
 
-fn validate_section_fields(
-    domain: ScopedSectionDomain,
-    count: u64,
-    head: Option<ScopedToken>,
-    tail: Option<ScopedToken>,
-) -> Result<(), Diagnostic> {
-    let maximum_count = u64::try_from(super::contract::MAXIMUM_CHILDREN).map_err(|_| {
-        scoped_error(
-            DiagnosticClass::Infrastructure,
-            "scoped_section_count_configuration",
-            "kernel child limit cannot be represented as a scoped section count",
-        )
-    })?;
-    if count > maximum_count {
-        return Err(scoped_error(
-            DiagnosticClass::Semantic,
-            "scoped_section_count",
-            format!("scoped section count exceeds the format limit of {maximum_count}"),
-        ));
+fn decode_expected_domain<T, Context, D>(decoder: &mut D) -> Result<(), DecodeError>
+where
+    T: ScopedTokenType,
+    D: Decoder<Context = Context>,
+{
+    let observed = ScopedSectionDomain::decode(decoder)?;
+    if observed == T::DOMAIN {
+        Ok(())
+    } else {
+        Err(DecodeError::OtherString(format!(
+            "foreign ordered token domain tag {}; expected {}",
+            observed.tag(),
+            T::DOMAIN.tag()
+        )))
     }
+}
+
+fn validate_ordered_section<T: OrderedScopedToken>(
+    count: u64,
+    head: Option<T>,
+    tail: Option<T>,
+) -> Result<(), Diagnostic> {
+    validate_scoped_count("ordered section", count, true)?;
     match (count, head, tail) {
         (0, None, None) => Ok(()),
         (0, _, _) => Err(section_error(
-            "an empty scoped section must not have head or tail tokens",
+            "an empty ordered section must not have head or tail tokens",
         )),
-        (_, Some(head), Some(tail)) => {
-            if head.domain() != domain || tail.domain() != domain {
-                return Err(section_error(
-                    "scoped section head and tail must belong to its exact token domain",
-                ));
-            }
-            if count == 1 && head != tail {
-                return Err(section_error(
-                    "a one-record scoped section must have equal head and tail tokens",
-                ));
-            }
-            if count > 1 && head >= tail {
-                return Err(section_error(
-                    "a multi-record scoped section must have strictly ordered head and tail tokens",
-                ));
-            }
-            Ok(())
-        }
+        (1, Some(head), Some(tail)) if head == tail => Ok(()),
+        (1, _, _) => Err(section_error(
+            "a one-record ordered section must have equal head and tail tokens",
+        )),
+        (_, Some(head), Some(tail)) if head != tail => Ok(()),
+        (_, Some(_), Some(_)) => Err(section_error(
+            "a multi-record ordered section must have distinct head and tail tokens",
+        )),
         (_, _, _) => Err(section_error(
-            "a nonempty scoped section must have both head and tail tokens",
+            "a nonempty ordered section must have both head and tail tokens",
         )),
     }
+}
+
+fn validate_scoped_count(label: &str, count: u64, allow_zero: bool) -> Result<(), Diagnostic> {
+    let maximum_count = u64::try_from(super::contract::MAXIMUM_CHILDREN).map_err(|_| {
+        scoped_error(
+            DiagnosticClass::Infrastructure,
+            "scoped_count_configuration",
+            "kernel child limit cannot be represented as a scoped record count",
+        )
+    })?;
+    if (!allow_zero && count == 0) || count > maximum_count {
+        let minimum_count = u8::from(!allow_zero);
+        return Err(scoped_error(
+            DiagnosticClass::Semantic,
+            "scoped_count",
+            format!("{label} count must be between {minimum_count} and {maximum_count}"),
+        ));
+    }
+    Ok(())
 }
 
 fn validate_scope_domain(
@@ -922,22 +1087,56 @@ fn validate_scope_domain(
     }
 }
 
-fn encode_scope_prefix(scope: ScopedRecordScope) -> Vec<u8> {
-    let (package, declaration) = match scope {
-        ScopedRecordScope::Declaration {
-            package,
-            declaration,
+fn decode_key_version(cursor: &mut KeyCursor<'_>) -> Result<(), Diagnostic> {
+    let version = cursor.take_byte("version")?;
+    if version == SCOPED_RECORD_KEY_VERSION {
+        Ok(())
+    } else {
+        Err(key_error(format!(
+            "scoped record key has unknown version {version}"
+        )))
+    }
+}
+
+fn decode_local_key(cursor: &mut KeyCursor<'_>) -> Result<ScopedRecordKey, Diagnostic> {
+    let declaration = DeclarationId::from_bytes(cursor.take_array("declaration identity")?)
+        .ok_or_else(|| {
+            key_error("scoped record key contains the reserved zero declaration identity")
+        })?;
+    let scope = match cursor.take_byte("scope tag")? {
+        DECLARATION_SCOPE_TAG => ScopedRecordScope::declaration(declaration),
+        OPERATION_SCOPE_TAG => {
+            let operation = InterfaceOperationToken::from_bytes(
+                cursor.take_array("interface-operation token")?,
+            )
+            .ok_or_else(|| key_error("scoped record key contains a zero operation token"))?;
+            ScopedRecordScope::interface_operation(declaration, operation)
         }
-        | ScopedRecordScope::InterfaceOperation {
-            package,
-            declaration,
-            ..
-        } => (package, declaration),
-        ScopedRecordScope::Body(scope) => (scope.package, scope.declaration),
+        BODY_SCOPE_TAG => {
+            let role = decode_body_role(cursor)?;
+            ScopedRecordScope::body(BodyScope::new(declaration, role))
+        }
+        tag => {
+            return Err(key_error(format!(
+                "scoped record key contains unknown scope tag {tag}"
+            )));
+        }
     };
-    let mut bytes = Vec::with_capacity(51);
+    let domain = ScopedSectionDomain::from_tag(cursor.take_byte("section domain")?)
+        .map_err(|error| key_error(error.to_string()))?;
+    let token = ScopedToken::from_domain_bytes(domain, cursor.take_array("local token")?)
+        .map_err(|error| key_error(error.to_string()))?;
+    ScopedRecordKey::new(scope, token)
+}
+
+fn encode_scope_prefix(scope: ScopedRecordScope) -> Vec<u8> {
+    let declaration = match scope {
+        ScopedRecordScope::Declaration { declaration }
+        | ScopedRecordScope::InterfaceOperation { declaration, .. } => declaration,
+        ScopedRecordScope::Body(scope) => scope.declaration,
+    };
+    let mut bytes = Vec::with_capacity(35);
     bytes.push(SCOPED_RECORD_KEY_VERSION);
-    bytes.extend_from_slice(&package.bytes());
     bytes.extend_from_slice(&declaration.bytes());
     match scope {
         ScopedRecordScope::Declaration { .. } => bytes.push(DECLARATION_SCOPE_TAG),
@@ -950,11 +1149,13 @@ fn encode_scope_prefix(scope: ScopedRecordScope) -> Vec<u8> {
     bytes
 }
 
-fn encode_body_scope(bytes: &mut Vec<u8>, scope: BodyScope) {
+fn encode_exact_scope_prefix(scope: ExactScopedRecordScope) -> Vec<u8> {
+    let local = encode_scope_prefix(scope.scope);
+    let mut bytes = Vec::with_capacity(local.len() + LOCAL_TOKEN_BYTES);
     bytes.push(SCOPED_RECORD_KEY_VERSION);
     bytes.extend_from_slice(&scope.package.bytes());
-    bytes.extend_from_slice(&scope.declaration.bytes());
-    encode_body_role(bytes, scope.role);
+    bytes.extend(local.into_iter().skip(1));
+    bytes
 }
 
 fn encode_body_role(bytes: &mut Vec<u8>, role: BodyRole) {
@@ -1095,7 +1296,8 @@ mod tests {
 
     #[test]
     fn typed_tokens_are_strictly_domain_tagged_and_exactly_parsed() {
-        let scope = ScopedRecordScope::declaration(package(1), declaration(1));
+        let scope =
+            ExactScopedRecordScope::new(package(1), ScopedRecordScope::declaration(declaration(1)));
         let field = FieldToken::allocate(scope, request_digest(1), 3, 0).expect("allocate field");
         let text = field.to_string();
         assert_eq!(text.parse::<FieldToken>().expect("parse field"), field);
@@ -1136,8 +1338,11 @@ mod tests {
 
     #[test]
     fn deterministic_allocation_binds_every_input_dimension() {
-        let parent_a = ScopedRecordScope::declaration(package(1), declaration(1));
-        let parent_b = ScopedRecordScope::declaration(package(1), declaration(2));
+        let local = ScopedRecordScope::declaration(declaration(1));
+        let parent_a = ExactScopedRecordScope::new(package(1), local);
+        let parent_b = ExactScopedRecordScope::new(package(2), local);
+        let parent_c =
+            ExactScopedRecordScope::new(package(1), ScopedRecordScope::declaration(declaration(2)));
         let base = FieldToken::allocate(parent_a, request_digest(2), 7, 0).expect("allocate base");
         assert_eq!(
             FieldToken::allocate(parent_a, request_digest(2), 7, 0).expect("replay"),
@@ -1145,6 +1350,11 @@ mod tests {
         );
         assert_ne!(
             FieldToken::allocate(parent_b, request_digest(2), 7, 0).expect("parent separation"),
+            base
+        );
+        assert_ne!(
+            FieldToken::allocate(parent_c, request_digest(2), 7, 0)
+                .expect("local scope separation"),
             base
         );
         assert_ne!(
@@ -1175,7 +1385,7 @@ mod tests {
         let package = package(1);
         let declaration = declaration(1);
         let port = PortToken::from_bytes([6; 16]).expect("port");
-        let body = BodyScope::new(package, declaration, BodyRole::PortImplementation(port));
+        let body = BodyScope::new(declaration, BodyRole::PortImplementation(port));
         let body_bytes = bincode::encode_to_vec(body, config()).expect("encode body");
         assert_eq!(body_bytes[0], BODY_SCOPE_TAG);
         assert_eq!(
@@ -1188,11 +1398,11 @@ mod tests {
         let operation = InterfaceOperationToken::from_bytes([7; 16]).expect("operation");
         for (scope, expected_tag) in [
             (
-                ScopedRecordScope::declaration(package, declaration),
+                ScopedRecordScope::declaration(declaration),
                 DECLARATION_SCOPE_TAG,
             ),
             (
-                ScopedRecordScope::interface_operation(package, declaration, operation),
+                ScopedRecordScope::interface_operation(declaration, operation),
                 OPERATION_SCOPE_TAG,
             ),
             (ScopedRecordScope::body(body), BODY_SCOPE_TAG),
@@ -1209,20 +1419,24 @@ mod tests {
         assert!(bincode::decode_from_slice::<BodyRole, _>(&[u8::MAX], config()).is_err());
         assert!(bincode::decode_from_slice::<ScopedRecordScope, _>(&[u8::MAX], config()).is_err());
 
-        let first = FieldToken::from_bytes([1; 16]).expect("first");
-        let last = FieldToken::from_bytes([2; 16]).expect("last");
-        let scope = ScopedRecordScope::declaration(package, declaration);
-        let section = ScopedSectionCommitment::new(
-            scope,
-            ScopedSectionDomain::Field,
-            2,
-            Some(first.into()),
-            Some(last.into()),
-        )
-        .expect("section");
+        let exact =
+            ExactScopedRecordScope::new(package, ScopedRecordScope::declaration(declaration));
+        let exact_bytes = bincode::encode_to_vec(exact, config()).expect("encode exact scope");
+        assert_eq!(
+            bincode::decode_from_slice::<ExactScopedRecordScope, _>(&exact_bytes, config())
+                .expect("decode exact scope")
+                .0,
+            exact
+        );
+
+        let first = FieldToken::from_bytes([9; 16]).expect("first");
+        let last = FieldToken::from_bytes([1; 16]).expect("last");
+        let scope = ScopedRecordScope::declaration(declaration);
+        let section = OrderedSection::<FieldToken>::new(2, Some(first), Some(last))
+            .expect("descending logical order is valid");
         let section_bytes = bincode::encode_to_vec(section, config()).expect("encode section");
         let decoded =
-            bincode::decode_from_slice::<ScopedSectionCommitment, _>(&section_bytes, config())
+            bincode::decode_from_slice::<OrderedSection<FieldToken>, _>(&section_bytes, config())
                 .expect("decode section")
                 .0;
         assert_eq!(decoded, section);
@@ -1230,11 +1444,39 @@ mod tests {
         assert!(
             decoded
                 .validate_for_scope(ScopedRecordScope::body(BodyScope::new(
-                    package,
                     declaration,
                     BodyRole::Function,
                 )))
                 .is_err()
+        );
+        assert!(
+            bincode::decode_from_slice::<OrderedSection<CaseToken>, _>(&section_bytes, config())
+                .is_err(),
+            "typed ordered sections reject a foreign token domain"
+        );
+
+        let links = OrderLinks::<FieldToken>::new(Some(first), Some(last));
+        let link_bytes = bincode::encode_to_vec(links, config()).expect("encode links");
+        assert_eq!(
+            bincode::decode_from_slice::<OrderLinks<FieldToken>, _>(&link_bytes, config())
+                .expect("decode links")
+                .0,
+            links
+        );
+        assert!(
+            bincode::decode_from_slice::<OrderLinks<CaseToken>, _>(&link_bytes, config()).is_err(),
+            "intrusive links are token-domain typed"
+        );
+
+        let expression = ExpressionToken::from_bytes([4; 16]).expect("expression");
+        let body_commitment = BodyCommitment::new(expression, 3, 2).expect("body commitment");
+        let body_commitment_bytes =
+            bincode::encode_to_vec(body_commitment, config()).expect("encode body commitment");
+        assert_eq!(
+            bincode::decode_from_slice::<BodyCommitment, _>(&body_commitment_bytes, config())
+                .expect("decode body commitment")
+                .0,
+            body_commitment
         );
 
         #[derive(Encode)]
@@ -1255,7 +1497,8 @@ mod tests {
         )
         .expect("encode invalid section");
         assert!(
-            bincode::decode_from_slice::<ScopedSectionCommitment, _>(&invalid, config()).is_err()
+            bincode::decode_from_slice::<OrderedSection<FieldToken>, _>(&invalid, config())
+                .is_err()
         );
 
         let maximum_count =
@@ -1270,9 +1513,27 @@ mod tests {
             config(),
         )
         .expect("encode oversized section");
-        let error = bincode::decode_from_slice::<ScopedSectionCommitment, _>(&oversized, config())
-            .expect_err("oversized section count");
-        assert!(error.to_string().contains("scoped section count"));
+        assert!(
+            bincode::decode_from_slice::<OrderedSection<FieldToken>, _>(&oversized, config())
+                .is_err()
+        );
+        let zero_expression_error =
+            BodyCommitment::new(expression, 0, 0).expect_err("zero expressions must fail");
+        assert!(
+            zero_expression_error
+                .to_string()
+                .contains("body expression count must be between 1 and")
+        );
+        let oversized_section_error =
+            OrderedSection::<FieldToken>::new(maximum_count + 1, None, None)
+                .expect_err("oversized ordered section must fail");
+        assert!(
+            oversized_section_error
+                .to_string()
+                .contains("ordered section count must be between 0 and")
+        );
+        assert!(BodyCommitment::new(expression, maximum_count + 1, 0).is_err());
+        assert!(BodyCommitment::new(expression, 1, maximum_count + 1).is_err());
     }
 
     #[test]
@@ -1283,7 +1544,7 @@ mod tests {
         let declaration_b = declaration(2);
         let field = FieldToken::from_bytes([9; 16]).expect("field");
         let case = CaseToken::from_bytes([9; 16]).expect("case");
-        let declaration_scope = ScopedRecordScope::declaration(package_a, declaration_a);
+        let declaration_scope = ScopedRecordScope::declaration(declaration_a);
         let field_key = ScopedRecordKey::new(declaration_scope, field).expect("field key");
         let field_bytes = field_key.encode();
         assert_eq!(
@@ -1300,33 +1561,62 @@ mod tests {
             .encode();
         assert_ne!(field_bytes, case_bytes);
         assert!(!field_bounds.contains(&case_bytes));
-        assert_ne!(
-            field_bytes,
-            ScopedRecordKey::new(
-                ScopedRecordScope::declaration(package_b, declaration_a),
-                field,
-            )
-            .expect("package-separated key")
-            .encode()
+
+        let exact_a = ExactScopedRecordKey::new(
+            ExactScopedRecordScope::new(package_a, declaration_scope),
+            field,
+        )
+        .expect("exact A");
+        let exact_b = ExactScopedRecordKey::new(
+            ExactScopedRecordScope::new(package_b, declaration_scope),
+            field,
+        )
+        .expect("exact B");
+        let local_scope_bytes =
+            bincode::encode_to_vec(declaration_scope, config()).expect("encode local scope");
+        assert_eq!(
+            bincode::encode_to_vec(exact_a.scope().scope, config()).expect("encode scope A"),
+            local_scope_bytes
+        );
+        assert_eq!(
+            bincode::encode_to_vec(exact_b.scope().scope, config()).expect("encode scope B"),
+            local_scope_bytes
         );
         assert_ne!(
+            bincode::encode_to_vec(exact_a.scope(), config()).expect("encode exact scope A"),
+            bincode::encode_to_vec(exact_b.scope(), config()).expect("encode exact scope B")
+        );
+        assert_eq!(exact_a.key.encode(), exact_b.key.encode());
+        assert_ne!(exact_a.encode(), exact_b.encode());
+        assert_eq!(
+            exact_a.encode().len(),
+            field_bytes.len() + LOCAL_TOKEN_BYTES
+        );
+        assert_eq!(
+            ExactScopedRecordKey::decode(&exact_a.encode()).expect("decode exact key"),
+            exact_a
+        );
+        assert_eq!(exact_a.scope().scope, declaration_scope);
+        let exact_record_bytes =
+            bincode::encode_to_vec(exact_a, config()).expect("encode exact record");
+        assert_eq!(
+            bincode::decode_from_slice::<ExactScopedRecordKey, _>(&exact_record_bytes, config())
+                .expect("decode exact record")
+                .0,
+            exact_a
+        );
+
+        assert_ne!(
             field_bytes,
-            ScopedRecordKey::new(
-                ScopedRecordScope::declaration(package_a, declaration_b),
-                field,
-            )
-            .expect("declaration-separated key")
-            .encode()
+            ScopedRecordKey::new(ScopedRecordScope::declaration(declaration_b), field)
+                .expect("package-separated key")
+                .encode()
         );
 
         let expression = ExpressionToken::from_bytes([7; 16]).expect("expression");
-        let function =
-            ScopedRecordScope::body(BodyScope::new(package_a, declaration_a, BodyRole::Function));
-        let expected = ScopedRecordScope::body(BodyScope::new(
-            package_a,
-            declaration_a,
-            BodyRole::TestExpected,
-        ));
+        let function = ScopedRecordScope::body(BodyScope::new(declaration_a, BodyRole::Function));
+        let expected =
+            ScopedRecordScope::body(BodyScope::new(declaration_a, BodyRole::TestExpected));
         assert_ne!(
             ScopedRecordKey::new(function, expression)
                 .expect("function expression")
@@ -1344,83 +1634,65 @@ mod tests {
                 .code,
             "scoped_record_key"
         );
+
+        let mut zero_package = exact_a.encode();
+        zero_package[1..1 + LOCAL_TOKEN_BYTES].fill(0);
+        assert!(ExactScopedRecordKey::decode(&zero_package).is_err());
+        let mut trailing_exact = exact_a.encode();
+        trailing_exact.push(0);
+        assert!(ExactScopedRecordKey::decode(&trailing_exact).is_err());
     }
 
     #[test]
-    fn section_commitment_rejects_wrong_domain_count_and_endpoints() {
-        let scope = ScopedRecordScope::declaration(package(1), declaration(1));
+    fn ordered_sections_are_bounded_typed_and_not_token_sorted() {
+        let scope = ScopedRecordScope::declaration(declaration(1));
         let first = FieldToken::from_bytes([1; 16]).expect("first");
         let last = FieldToken::from_bytes([2; 16]).expect("last");
+        assert!(OrderedSection::<FieldToken>::new(2, Some(first), Some(last)).is_ok());
+        assert!(OrderedSection::<FieldToken>::new(0, Some(first), Some(first)).is_err());
         assert!(
-            ScopedSectionCommitment::new(
-                scope,
-                ScopedSectionDomain::Field,
-                2,
-                Some(first.into()),
-                Some(last.into()),
-            )
-            .is_ok()
+            OrderedSection::<FieldToken>::new(2, Some(last), Some(first)).is_ok(),
+            "logical order must not depend on random token byte order"
+        );
+        assert!(OrderedSection::<FieldToken>::new(1, Some(first), Some(last)).is_err());
+        assert!(OrderedSection::<FieldToken>::new(2, Some(first), Some(first)).is_err());
+        assert!(
+            OrderedSection::<FieldToken>::new(1, Some(first), Some(first))
+                .expect("singleton")
+                .validate_for_scope(scope)
+                .is_ok()
         );
         assert!(
-            ScopedSectionCommitment::new(scope, ScopedSectionDomain::Expression, 0, None, None,)
+            OrderedSection::<FieldToken>::new(1, Some(first), Some(first))
+                .expect("singleton")
+                .validate_for_scope(ScopedRecordScope::body(BodyScope::new(
+                    declaration(1),
+                    BodyRole::Function,
+                )))
                 .is_err()
-        );
-        assert!(
-            ScopedSectionCommitment::new(
-                scope,
-                ScopedSectionDomain::Field,
-                0,
-                Some(first.into()),
-                Some(first.into()),
-            )
-            .is_err()
-        );
-        assert!(
-            ScopedSectionCommitment::new(
-                scope,
-                ScopedSectionDomain::Field,
-                1,
-                Some(first.into()),
-                Some(last.into()),
-            )
-            .is_err()
-        );
-        let case = CaseToken::from_bytes([3; 16]).expect("case");
-        assert!(
-            ScopedSectionCommitment::new(
-                scope,
-                ScopedSectionDomain::Field,
-                1,
-                Some(case.into()),
-                Some(case.into()),
-            )
-            .is_err()
         );
         let maximum_count =
             u64::try_from(super::super::contract::MAXIMUM_CHILDREN).expect("child limit fits");
         assert_eq!(
-            ScopedSectionCommitment::new(
-                scope,
-                ScopedSectionDomain::Field,
-                maximum_count + 1,
-                Some(first.into()),
-                Some(last.into()),
-            )
-            .expect_err("oversized section count")
-            .code,
-            "scoped_section_count"
+            OrderedSection::<FieldToken>::new(maximum_count + 1, Some(first), Some(last))
+                .expect_err("oversized section count")
+                .code,
+            "scoped_count"
         );
     }
 
     #[test]
     fn whole_map_content_commitment_ignores_physical_page_partition() {
-        let scope = ScopedRecordScope::declaration(package(1), declaration(1));
+        let local_scope = ScopedRecordScope::declaration(declaration(1));
+        let exact_scope = ExactScopedRecordScope::new(package(1), local_scope);
         let mut entries = (0_u64..160)
             .map(|ordinal| {
-                let token = FieldToken::allocate(scope, request_digest(4), ordinal, 0)
+                let token = FieldToken::allocate(exact_scope, request_digest(4), ordinal, 0)
                     .expect("allocate field");
                 (
-                    ScopedRecordKey::new(scope, token).expect("key").encode(),
+                    ScopedRecordKey::new(local_scope, token)
+                        .expect("key")
+                        .encode(),
                     vec![u8::try_from(ordinal % 251).expect("bounded"); 192],
                 )
             })
