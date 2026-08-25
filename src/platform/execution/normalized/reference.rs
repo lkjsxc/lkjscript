@@ -294,24 +294,10 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         control: &ExecutionControl,
     ) -> Result<NormalizedReferenceTestInvocation, ExecutionError> {
         let actual = self.execute(capabilities, control, |state| {
-            let record = state.declaration(declaration)?;
-            let DeclarationPayload::Test { actual, .. } = record.payload else {
-                return Err(reference_error(
-                    "normalized_reference_test_kind",
-                    "exact test selection names another declaration kind",
-                ));
-            };
-            state.evaluate(actual, &mut BTreeMap::new())
+            state.evaluate_test(declaration, false)
         })?;
         let expected = self.execute(capabilities, control, |state| {
-            let record = state.declaration(declaration)?;
-            let DeclarationPayload::Test { expected, .. } = record.payload else {
-                return Err(reference_error(
-                    "normalized_reference_test_kind",
-                    "exact test selection names another declaration kind",
-                ));
-            };
-            state.evaluate(expected, &mut BTreeMap::new())
+            state.evaluate_test(declaration, true)
         })?;
         Ok((actual, expected))
     }
@@ -345,6 +331,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         let mut state = ReferenceState {
             authority: self.authority,
             binding,
+            active_package: binding.package,
             program: self.program,
             policy: self.policy,
             host: self.host,
@@ -397,6 +384,7 @@ struct ReferenceTransaction {
 struct ReferenceState<'a> {
     authority: &'a dyn NormalizedReferenceRead,
     binding: NormalizedReferenceBinding,
+    active_package: PackageId,
     program: &'a NormalizedProgram,
     policy: NormalizedRunPolicy,
     host: &'a dyn NormalizedReferenceHost,
@@ -412,19 +400,57 @@ struct ReferenceState<'a> {
 }
 
 impl ReferenceState<'_> {
+    fn evaluate_test(
+        &mut self,
+        reference: DeclarationReference,
+        expected: bool,
+    ) -> Result<NormalizedValue, ExecutionError> {
+        if self.program.artifact().package(reference.package).is_none() {
+            return Err(reference_error(
+                "normalized_reference_dependency_package",
+                "exact test reference names a package outside the linked artifact closure",
+            ));
+        }
+        let previous_package = self.active_package;
+        self.active_package = reference.package;
+        let result = (|| {
+            let record = self.declaration(reference)?;
+            let DeclarationPayload::Test {
+                actual,
+                expected: expected_expression,
+                ..
+            } = record.payload
+            else {
+                return Err(reference_error(
+                    "normalized_reference_test_kind",
+                    "exact test selection names another declaration kind",
+                ));
+            };
+            self.evaluate(
+                if expected {
+                    expected_expression
+                } else {
+                    actual
+                },
+                &mut BTreeMap::new(),
+            )
+        })();
+        self.active_package = previous_package;
+        result
+    }
+
     fn call_declaration(
         &mut self,
         reference: DeclarationReference,
         arguments: Vec<NormalizedValue>,
     ) -> Result<NormalizedValue, ExecutionError> {
         self.control.check()?;
-        if reference.package != self.binding.package {
+        if self.program.artifact().package(reference.package).is_none() {
             return Err(reference_error(
-                "normalized_reference_dependency",
-                "the canonical reference oracle currently requires local package authority",
+                "normalized_reference_dependency_package",
+                "exact declaration reference names a package outside the linked artifact closure",
             ));
         }
-        let declaration = self.declaration(reference)?;
         if self.call_depth >= self.policy.maximum_call_depth {
             return Err(reference_resource(
                 "normalized_reference_call_depth",
@@ -435,61 +461,67 @@ impl ReferenceState<'_> {
         self.observation.calls = self.observation.calls.saturating_add(1);
         self.observation.maximum_call_depth =
             self.observation.maximum_call_depth.max(self.call_depth);
-        let result = match declaration.payload {
-            DeclarationPayload::Function(function) => {
-                if arguments.len() != function.parameters.len() {
-                    Err(reference_type_error(
-                        "function argument count disagrees with canonical parameters",
-                    ))
-                } else if matches!(
-                    &function.effect,
-                    FunctionEffect::Task { requirements }
-                        if requirements.iter().any(|requirement| {
-                            self.capabilities.is_none_or(|capabilities| {
-                                !capabilities.requires_exact(*requirement)
+        let previous_package = self.active_package;
+        self.active_package = reference.package;
+        let result = (|| {
+            let declaration = self.declaration(reference)?;
+            match declaration.payload {
+                DeclarationPayload::Function(function) => {
+                    if arguments.len() != function.parameters.len() {
+                        Err(reference_type_error(
+                            "function argument count disagrees with canonical parameters",
+                        ))
+                    } else if matches!(
+                        &function.effect,
+                        FunctionEffect::Task { requirements }
+                            if requirements.iter().any(|requirement| {
+                                self.capabilities.is_none_or(|capabilities| {
+                                    !capabilities.requires_exact(*requirement)
+                                })
                             })
-                        })
-                ) {
-                    Err(reference_capabilities_unbound())
-                } else {
-                    let mut locals = function
-                        .parameters
-                        .into_iter()
-                        .zip(arguments)
-                        .map(|(parameter, value)| {
-                            (LocalValueReference::FunctionParameter(parameter), value)
-                        })
-                        .collect();
-                    self.evaluate(function.body, &mut locals)
+                    ) {
+                        Err(reference_capabilities_unbound())
+                    } else {
+                        let mut locals = function
+                            .parameters
+                            .into_iter()
+                            .zip(arguments)
+                            .map(|(parameter, value)| {
+                                (LocalValueReference::FunctionParameter(parameter), value)
+                            })
+                            .collect();
+                        self.evaluate(function.body, &mut locals)
+                    }
                 }
-            }
-            DeclarationPayload::External(external) => {
-                if arguments.len() != external.parameters.len() {
-                    Err(reference_type_error(
-                        "external argument count disagrees with canonical parameters",
-                    ))
-                } else {
-                    self.observation.external_calls =
-                        self.observation.external_calls.saturating_add(1);
-                    self.host
-                        .call(&external.implementation, arguments, self.control)
-                        .and_then(|value| {
-                            self.charge_value(&value)?;
-                            Ok(value)
-                        })
+                DeclarationPayload::External(external) => {
+                    if arguments.len() != external.parameters.len() {
+                        Err(reference_type_error(
+                            "external argument count disagrees with canonical parameters",
+                        ))
+                    } else {
+                        self.observation.external_calls =
+                            self.observation.external_calls.saturating_add(1);
+                        self.host
+                            .call(&external.implementation, arguments, self.control)
+                            .and_then(|value| {
+                                self.charge_value(&value)?;
+                                Ok(value)
+                            })
+                    }
                 }
-            }
-            DeclarationPayload::Constant { value, .. } => {
-                if arguments.is_empty() {
-                    self.evaluate(value, &mut BTreeMap::new())
-                } else {
-                    Err(reference_type_error("constant call received arguments"))
+                DeclarationPayload::Constant { value, .. } => {
+                    if arguments.is_empty() {
+                        self.evaluate(value, &mut BTreeMap::new())
+                    } else {
+                        Err(reference_type_error("constant call received arguments"))
+                    }
                 }
+                _ => Err(reference_type_error(
+                    "exact callable reference names a non-callable declaration",
+                )),
             }
-            _ => Err(reference_type_error(
-                "exact callable reference names a non-callable declaration",
-            )),
-        };
+        })();
+        self.active_package = previous_package;
         self.call_depth -= 1;
         result
     }
@@ -779,13 +811,10 @@ impl ReferenceState<'_> {
         &mut self,
         reference: DeclarationReference,
     ) -> Result<crate::platform::kernel::DeclarationRecord, ExecutionError> {
-        if reference.package != self.binding.package {
-            return Err(reference_error(
-                "normalized_reference_dependency",
-                "the canonical reference oracle currently requires local package authority",
-            ));
-        }
-        match self.owner(OwnerKey::Declaration(reference.declaration))? {
+        match self.owner_in_package(
+            reference.package,
+            OwnerKey::Declaration(reference.declaration),
+        )? {
             Some(OwnerRecord::Declaration(record)) => Ok(record),
             Some(_) => Err(reference_error(
                 "normalized_reference_declaration_kind",
@@ -799,7 +828,42 @@ impl ReferenceState<'_> {
     }
 
     fn owner(&mut self, owner: OwnerKey) -> Result<Option<OwnerRecord>, ExecutionError> {
-        let read = self.authority.owner(owner)?;
+        self.owner_in_package(self.active_package, owner)
+    }
+
+    fn owner_in_package(
+        &mut self,
+        package: PackageId,
+        owner: OwnerKey,
+    ) -> Result<Option<OwnerRecord>, ExecutionError> {
+        let read = if package == self.binding.package {
+            self.authority.owner(owner)?
+        } else {
+            let mut map = crate::platform::persistent_map::MapWork::default();
+            let mut store = StoreWork::default();
+            let record = self
+                .program
+                .artifact()
+                .reference_owner(package, owner, &mut map, &mut store)
+                .map_err(|diagnostic| {
+                    reference_error(
+                        "normalized_reference_dependency_authority",
+                        format!(
+                            "linked canonical reference-owner read failed ({}): {}",
+                            diagnostic.code, diagnostic.message
+                        ),
+                    )
+                })?;
+            NormalizedReferenceOwnerRead {
+                record,
+                work: NormalizedReferenceReadWork {
+                    owner_reads: 1,
+                    map_pages_read: map.pages_read,
+                    objects_read: store.objects_read,
+                    bytes_read: map.bytes_read.saturating_add(store.bytes_read),
+                },
+            }
+        };
         self.observation.canonical_owner_reads = self
             .observation
             .canonical_owner_reads

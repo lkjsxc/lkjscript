@@ -2,8 +2,8 @@
 
 use super::artifact::{
     ARTIFACT_CONTRACT_VERSION, ArtifactManifest, ArtifactPackage, ArtifactRuntimeOwner,
-    EncodedArtifact, LoadedArtifact, artifact_error, closure_facts, encode_artifact,
-    runtime_owner_expectations,
+    EncodedArtifact, LoadedArtifact, MAXIMUM_ARTIFACT_REFERENCE_OWNERS, artifact_error,
+    closure_facts, encode_artifact, runtime_owner_expectations,
 };
 use super::cache::load_exact_current_compilation;
 use super::manifest::{COMPILATION_MANIFEST_CONTRACT_VERSION, CompilationBinding};
@@ -13,12 +13,14 @@ use super::unit::{
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    EncodedOwnerKey, OwnerKey, PackageId, TypeObjectDigest, decode_type_object, encode_owner,
+    DeclarationPayload, EncodedOwnerKey, ExpressionOperation, LocalValueReference, OwnerBinding,
+    OwnerKey, OwnerKind, OwnerRecord, PackageId, PortImplementation, TypeObjectDigest,
+    decode_type_object, encode_owner, encode_owner_binding,
 };
 use crate::platform::persistent_map::{
     MapError, MapErrorClass, MapWork, MemoryPageStore, PersistentMap,
 };
-use crate::platform::publication::{GraphRepository, RepositoryReadWork};
+use crate::platform::publication::{GraphRepository, RepositoryReadWork, RepositoryView};
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, StoreError, StoreErrorClass, StoreWork,
 };
@@ -37,6 +39,8 @@ pub struct ArtifactLinkWork {
     pub type_objects: u64,
     pub blob_objects: u64,
     pub runtime_owners: u64,
+    pub reference_owners: u64,
+    pub reference_map: MapWork,
     pub closure_objects: u64,
     pub closure_bytes: u64,
     pub output_bytes: u64,
@@ -223,6 +227,7 @@ pub fn link_artifact(
     }
 
     let mut runtime_owners = Vec::new();
+    let mut runtime_records = BTreeMap::new();
     for ((package, owner), expectation) in runtime_owner_expectations(&local_units)? {
         if package != view.package() {
             return Err(link_error(
@@ -251,8 +256,23 @@ pub fn link_artifact(
             kind: expectation.kind(),
             object: digest,
         });
+        if runtime_records.insert(owner, record).is_some() {
+            return Err(link_error(
+                DiagnosticClass::Corrupt,
+                "artifact_link_runtime_owner_duplicate",
+                "compiler units produced duplicate exact runtime-owner metadata",
+            ));
+        }
         work.runtime_owners = work.runtime_owners.saturating_add(1);
     }
+
+    let reference_owners = build_reference_owner_map(
+        &view,
+        &local_units,
+        &runtime_records,
+        &mut objects,
+        &mut work,
+    )?;
 
     let mut resolved_types = BTreeSet::new();
     while let Some(digest) = types.pop_first() {
@@ -306,6 +326,7 @@ pub fn link_artifact(
             package_object: exported.digest,
             compilation,
             runtime_owners,
+            reference_owners,
         },
     )?;
     let packages = packages.into_values().collect::<Vec<_>>();
@@ -328,6 +349,243 @@ pub fn link_artifact(
     work.closure_bytes = object_bytes;
     work.output_bytes = artifact.bytes.len() as u64;
     Ok(ArtifactLinkReceipt { artifact, work })
+}
+
+fn build_reference_owner_map(
+    view: &RepositoryView,
+    units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
+    runtime_owners: &BTreeMap<OwnerKey, OwnerRecord>,
+    objects: &mut BTreeMap<ObjectKey, Vec<u8>>,
+    work: &mut ArtifactLinkWork,
+) -> Result<crate::platform::persistent_map::MapRoot, Diagnostic> {
+    let package = view.package();
+    let mut pending = BTreeSet::new();
+    for ((unit_package, owner), unit) in units {
+        if *unit_package == package && reference_compilation_payload(&unit.payload) {
+            pending.insert(*owner);
+        }
+    }
+    for record in runtime_owners.values() {
+        if let OwnerRecord::Port(port) = record
+            && let PortImplementation::Expression(expression) = port.implementation
+        {
+            pending.insert(OwnerKey::Expression(expression));
+        }
+    }
+
+    let mut bindings = BTreeMap::<OwnerKey, OwnerBinding>::new();
+    while let Some(owner) = pending.pop_first() {
+        if bindings.contains_key(&owner) {
+            continue;
+        }
+        if bindings.len() as u64 == MAXIMUM_ARTIFACT_REFERENCE_OWNERS {
+            return Err(link_error(
+                DiagnosticClass::Resource,
+                "artifact_link_reference_owner_count",
+                "reference-execution closure exceeds its per-package owner bound",
+            ));
+        }
+        let read = view.owner(owner)?;
+        add_repository_work(&mut work.repository, read.work);
+        let record = read.value.ok_or_else(|| {
+            link_error(
+                DiagnosticClass::Corrupt,
+                "artifact_link_reference_owner_missing",
+                "reference-execution closure requires a missing exact canonical owner",
+            )
+        })?;
+        match &record {
+            OwnerRecord::Declaration(declaration) => {
+                let unit = units.get(&(package, owner)).ok_or_else(|| {
+                    link_error(
+                        DiagnosticClass::Corrupt,
+                        "artifact_link_reference_declaration_unit",
+                        "reference declaration has no exact local compiler unit",
+                    )
+                })?;
+                if !reference_payload_matches(&unit.payload, &declaration.payload) {
+                    return Err(link_error(
+                        DiagnosticClass::Corrupt,
+                        "artifact_link_reference_declaration_payload",
+                        "reference declaration kind disagrees with its exact compiler unit",
+                    ));
+                }
+                pending.extend(
+                    record
+                        .expression_roots()
+                        .into_iter()
+                        .map(OwnerKey::Expression),
+                );
+            }
+            OwnerRecord::Expression(expression) => {
+                pending.extend(
+                    expression
+                        .children()
+                        .into_iter()
+                        .map(|child| OwnerKey::Expression(child.expression)),
+                );
+                pending.extend(
+                    reference_expression_bindings(&expression.operation)
+                        .into_iter()
+                        .map(OwnerKey::Binding),
+                );
+                for declaration in reference_expression_declarations(&expression.operation) {
+                    if declaration.package == package {
+                        require_local_reference_callable(units, declaration)?;
+                    }
+                }
+            }
+            OwnerRecord::Binding(_) => {
+                pending.extend(
+                    record
+                        .expression_roots()
+                        .into_iter()
+                        .map(OwnerKey::Expression),
+                );
+            }
+            _ => {
+                return Err(link_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_link_reference_owner_kind",
+                    "reference-execution closure reached a non-executable canonical owner",
+                ));
+            }
+        }
+        let (digest, bytes) = encode_owner(&record)?;
+        insert_object(
+            objects,
+            ObjectKey::from_digest(ObjectDomain::Owner, digest.bytes()),
+            bytes,
+        )?;
+        bindings.insert(
+            owner,
+            OwnerBinding {
+                kind: record.kind(),
+                object: digest,
+            },
+        );
+    }
+
+    let mut entries = bindings
+        .iter()
+        .map(|(owner, binding)| {
+            (
+                EncodedOwnerKey::new(*owner).bytes().to_vec(),
+                encode_owner_binding(binding),
+            )
+        })
+        .collect::<Vec<_>>();
+    entries.sort_by(|left, right| left.0.cmp(&right.0));
+    let mut pages = MemoryPageStore::default();
+    let mut map_work = MapWork::default();
+    let map =
+        PersistentMap::from_sorted(&mut pages, entries, &mut map_work).map_err(map_diagnostic)?;
+    for (digest, bytes) in pages.objects() {
+        insert_object(
+            objects,
+            ObjectKey::from_digest(ObjectDomain::MapPage, digest.bytes()),
+            bytes.to_vec(),
+        )?;
+    }
+    add_map_work(&mut work.reference_map, map_work);
+    work.reference_owners = bindings.len() as u64;
+    Ok(map.root())
+}
+
+fn reference_compilation_payload(payload: &CompilationPayload) -> bool {
+    matches!(
+        payload,
+        CompilationPayload::External { .. }
+            | CompilationPayload::Function { .. }
+            | CompilationPayload::Constant { .. }
+            | CompilationPayload::Test { .. }
+    )
+}
+
+fn reference_callable_payload(payload: &CompilationPayload) -> bool {
+    matches!(
+        payload,
+        CompilationPayload::External { .. }
+            | CompilationPayload::Function { .. }
+            | CompilationPayload::Constant { .. }
+    )
+}
+
+fn reference_payload_matches(
+    compiled: &CompilationPayload,
+    canonical: &DeclarationPayload,
+) -> bool {
+    matches!(
+        (compiled, canonical),
+        (
+            CompilationPayload::External { .. },
+            DeclarationPayload::External(_)
+        ) | (
+            CompilationPayload::Function { .. },
+            DeclarationPayload::Function(_)
+        ) | (
+            CompilationPayload::Constant { .. },
+            DeclarationPayload::Constant { .. }
+        ) | (
+            CompilationPayload::Test { .. },
+            DeclarationPayload::Test { .. }
+        )
+    )
+}
+
+fn require_local_reference_callable(
+    units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
+    reference: crate::platform::kernel::DeclarationReference,
+) -> Result<(), Diagnostic> {
+    let key = (
+        reference.package,
+        OwnerKey::Declaration(reference.declaration),
+    );
+    if units
+        .get(&key)
+        .is_none_or(|unit| !reference_callable_payload(&unit.payload))
+    {
+        return Err(link_error(
+            DiagnosticClass::Corrupt,
+            "artifact_link_reference_callable_missing",
+            "canonical reference execution names no exact callable local compiler unit",
+        ));
+    }
+    Ok(())
+}
+
+fn reference_expression_declarations(
+    operation: &ExpressionOperation,
+) -> Vec<crate::platform::kernel::DeclarationReference> {
+    match operation {
+        ExpressionOperation::Constant { declaration } => vec![*declaration],
+        ExpressionOperation::Call { function, .. }
+        | ExpressionOperation::FunctionValue { function, .. } => vec![*function],
+        _ => Vec::new(),
+    }
+}
+
+fn reference_expression_bindings(
+    operation: &ExpressionOperation,
+) -> Vec<crate::platform::semantic_id::BindingId> {
+    let mut bindings = Vec::new();
+    match operation {
+        ExpressionOperation::Local {
+            value:
+                LocalValueReference::LexicalBinding(binding)
+                | LocalValueReference::MatchPayload(binding)
+                | LocalValueReference::TransactionBinding(binding),
+        } => bindings.push(*binding),
+        ExpressionOperation::Let {
+            bindings: declared, ..
+        } => bindings.extend(declared.iter().copied()),
+        ExpressionOperation::Match { arms, .. } => {
+            bindings.extend(arms.iter().filter_map(|arm| arm.payload_binding));
+        }
+        ExpressionOperation::Transaction { binding, .. } => bindings.push(*binding),
+        _ => {}
+    }
+    bindings
 }
 
 fn import_pack(bytes: &[u8], objects: &mut BTreeMap<ObjectKey, Vec<u8>>) -> Result<(), Diagnostic> {

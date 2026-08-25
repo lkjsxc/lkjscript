@@ -26,6 +26,11 @@ use super::runner::{
 use super::value::{NormalizedMapKey, NormalizedValue};
 use super::vm::{NormalizedRunPolicy, NormalizedVm};
 use super::worker::NormalizedWorkerApplication;
+use crate::platform::change::{
+    AuthoredChange, AuthoredChangeSet, AuthoredDeclarationReference, AuthoredExpression,
+    AuthoredExpressionOperation, AuthoredFunctionEffect, AuthoredType, ChangeBudget,
+    ModuleSelector,
+};
 use crate::platform::compiler::{OptimizationPolicy, build_clean, link_artifact, load_artifact};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::json::JsonLimits;
@@ -38,7 +43,10 @@ use crate::platform::kernel::{
     TargetRecord, TypeForm, TypeObject, TypeObjectDigest, encode_type_object,
 };
 use crate::platform::package::RunnerKind;
-use crate::platform::publication::{GraphRepository, RepositoryView};
+use crate::platform::persistent_map::{MapRoot, PageDigest};
+use crate::platform::publication::{
+    GraphRepository, PublicationOptions, PublicationOutcome, RepositoryView,
+};
 use crate::platform::secrets::SecretCatalog;
 use crate::platform::semantic_id::{
     DeclarationId, ExpressionId, OperationId, ParameterId, PortId, RevisionId, TargetId,
@@ -94,6 +102,198 @@ fn prepare_repository(
     let loaded = load_artifact(&linked.artifact.bytes).expect("strict Graph 5 artifact");
     let program = NormalizedProgram::prepare(loaded).expect("dense runtime preparation");
     (temporary, created.repository, program)
+}
+
+fn empty_normalized_snapshot(seed: &[u8]) -> crate::platform::kernel::KernelSnapshot {
+    let empty = MapRoot::from_parts(PageDigest::from_bytes([0; 32]), 0);
+    crate::platform::kernel::KernelSnapshot {
+        root: crate::platform::kernel::SemanticRoot {
+            graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+            repository_id: crate::platform::semantic_id::RepositoryId::migrate(seed, 0),
+            package_id: crate::platform::kernel::PackageId::migrate(seed, 0),
+            package_name: Name::new("linked_fixture").expect("linked fixture package name"),
+            owners: empty,
+            dependencies: empty,
+            retirements: empty,
+        },
+        owners: BTreeMap::new(),
+        types: BTreeMap::new(),
+        dependency_interfaces: BTreeMap::new(),
+        dependency_types: BTreeMap::new(),
+        blobs: BTreeMap::new(),
+        dependencies: BTreeMap::new(),
+        retirements: BTreeMap::new(),
+    }
+}
+
+fn linked_pure_program() -> (
+    tempfile::TempDir,
+    GraphRepository,
+    GraphRepository,
+    NormalizedProgram,
+    DeclarationReference,
+    DeclarationReference,
+) {
+    let temporary = tempfile::tempdir().expect("linked reference parent");
+    let source_created = GraphRepository::create(
+        &temporary.path().join("source"),
+        &empty_normalized_snapshot(b"normalized-reference-source"),
+        None,
+    )
+    .expect("linked source repository");
+    let source_change = AuthoredChangeSet {
+        base: source_created.current.head.revision,
+        preconditions: Vec::new(),
+        changes: vec![
+            AuthoredChange::CreateModule {
+                symbol: "$source_module".to_owned(),
+                name: Name::new("library").unwrap(),
+            },
+            AuthoredChange::CreateFunction {
+                symbol: "$source_function".to_owned(),
+                module: ModuleSelector::Symbol {
+                    symbol: "$source_module".to_owned(),
+                },
+                name: Name::new("produce").unwrap(),
+                visibility: DeclarationVisibility::Public,
+                type_parameters: Vec::new(),
+                parameters: Vec::new(),
+                result: AuthoredType::Unit {},
+                effect: AuthoredFunctionEffect::Pure {},
+                body: AuthoredExpression {
+                    symbol: Some("$source_body".to_owned()),
+                    operation: AuthoredExpressionOperation::Unit {},
+                },
+            },
+        ],
+        budget: ChangeBudget::default(),
+    };
+    let prepared_source = source_created
+        .repository
+        .prepare_authored_change(&source_change, PublicationOptions::default())
+        .expect("prepare linked source");
+    let OwnerKey::Declaration(source_declaration) = prepared_source.allocated["$source_function"]
+    else {
+        panic!("source function allocation kind")
+    };
+    assert!(matches!(
+        source_created
+            .repository
+            .publish(&prepared_source.publication)
+            .expect("publish linked source"),
+        PublicationOutcome::Accepted { .. }
+    ));
+    let source_reference = DeclarationReference {
+        package: source_created.current.semantic_root.package_id,
+        declaration: source_declaration,
+    };
+    let exported = source_created
+        .repository
+        .export_package_object()
+        .expect("export linked source package");
+    let source_compilation = build_clean(
+        &source_created.repository,
+        OptimizationPolicy::DeterministicBaseline,
+    )
+    .expect("compile linked source");
+    let source_artifact = link_artifact(
+        &source_created.repository,
+        source_compilation.manifest_digest,
+        &[],
+    )
+    .expect("link source artifact");
+    let source_loaded =
+        load_artifact(&source_artifact.artifact.bytes).expect("load source artifact");
+
+    let target_created = GraphRepository::create(
+        &temporary.path().join("target"),
+        &empty_normalized_snapshot(b"normalized-reference-target"),
+        None,
+    )
+    .expect("linked target repository");
+    target_created
+        .repository
+        .stage_package_object(exported.digest, &exported.packs)
+        .expect("stage exact linked source package");
+    let target_change = AuthoredChangeSet {
+        base: target_created.current.head.revision,
+        preconditions: Vec::new(),
+        changes: vec![
+            AuthoredChange::AddDependency {
+                package: exported.object.package,
+                semantic_revision: exported.object.semantic_revision,
+                package_object: exported.digest,
+            },
+            AuthoredChange::CreateModule {
+                symbol: "$target_module".to_owned(),
+                name: Name::new("application").unwrap(),
+            },
+            AuthoredChange::CreateFunction {
+                symbol: "$caller".to_owned(),
+                module: ModuleSelector::Symbol {
+                    symbol: "$target_module".to_owned(),
+                },
+                name: Name::new("call_library").unwrap(),
+                visibility: DeclarationVisibility::Private,
+                type_parameters: Vec::new(),
+                parameters: Vec::new(),
+                result: AuthoredType::Unit {},
+                effect: AuthoredFunctionEffect::Pure {},
+                body: AuthoredExpression {
+                    symbol: Some("$call".to_owned()),
+                    operation: AuthoredExpressionOperation::Call {
+                        function: AuthoredDeclarationReference::Exact {
+                            package: source_reference.package,
+                            declaration: source_reference.declaration,
+                        },
+                        type_arguments: Vec::new(),
+                        arguments: Vec::new(),
+                    },
+                },
+            },
+        ],
+        budget: ChangeBudget::default(),
+    };
+    let prepared_target = target_created
+        .repository
+        .prepare_authored_change(&target_change, PublicationOptions::default())
+        .expect("prepare linked target");
+    let OwnerKey::Declaration(caller_declaration) = prepared_target.allocated["$caller"] else {
+        panic!("caller allocation kind")
+    };
+    assert!(matches!(
+        target_created
+            .repository
+            .publish(&prepared_target.publication)
+            .expect("publish linked target"),
+        PublicationOutcome::Accepted { .. }
+    ));
+    let caller_reference = DeclarationReference {
+        package: target_created.current.semantic_root.package_id,
+        declaration: caller_declaration,
+    };
+    let target_compilation = build_clean(
+        &target_created.repository,
+        OptimizationPolicy::DeterministicBaseline,
+    )
+    .expect("compile linked target");
+    let target_artifact = link_artifact(
+        &target_created.repository,
+        target_compilation.manifest_digest,
+        std::slice::from_ref(&source_loaded),
+    )
+    .expect("link exact two-package artifact");
+    let target_loaded =
+        load_artifact(&target_artifact.artifact.bytes).expect("load linked target artifact");
+    let program = NormalizedProgram::prepare(target_loaded).expect("prepare linked program");
+    (
+        temporary,
+        source_created.repository,
+        target_created.repository,
+        program,
+        source_reference,
+        caller_reference,
+    )
 }
 
 fn pure_command_snapshot() -> crate::platform::kernel::KernelSnapshot {
@@ -2501,6 +2701,59 @@ fn canonical_reference_and_dense_vm_agree_on_fixture_execution() {
     assert_eq!(vm_task.1.capability_calls, 1);
     assert_eq!(reference_task.1.capability_calls, 1);
     assert_eq!(calls.load(Ordering::Relaxed), 2);
+}
+
+#[test]
+fn canonical_reference_executes_exact_linked_dependency_bodies_with_shared_budgets() {
+    let (_temporary, _source, target, program, source, caller) = linked_pure_program();
+    let view = target.view_current().expect("linked target view");
+    let policy = NormalizedRunPolicy::default();
+    let control = ExecutionControl::uncancelled();
+
+    let production = NormalizedVm::new(&program, policy)
+        .invoke(caller, Vec::new(), None, &control)
+        .expect("dense linked dependency call");
+    let reference = NormalizedReferenceInterpreter::from_reader(&view, &program, policy)
+        .invoke(caller, Vec::new(), None, &control)
+        .expect("canonical linked dependency call");
+    assert_eq!(production.0, NormalizedValue::Unit);
+    assert_eq!(production.0, reference.0);
+    assert_eq!(reference.1.calls, 2);
+    assert_eq!(reference.1.maximum_call_depth, 2);
+    assert!(reference.1.canonical_objects_read > 0);
+    assert!(reference.1.canonical_map_pages_read > 0);
+
+    let direct_dependency = NormalizedReferenceInterpreter::from_reader(&view, &program, policy)
+        .invoke(source, Vec::new(), None, &control)
+        .expect("direct exact linked dependency body");
+    assert_eq!(direct_dependency.0, NormalizedValue::Unit);
+
+    let absent_package = DeclarationReference {
+        package: crate::platform::kernel::PackageId::migrate(
+            b"normalized-reference-absent-package",
+            0,
+        ),
+        declaration: source.declaration,
+    };
+    let missing = NormalizedReferenceInterpreter::from_reader(&view, &program, policy)
+        .invoke(absent_package, Vec::new(), None, &control)
+        .expect_err("unlinked package authority must reject");
+    assert_eq!(missing.code, "normalized_reference_dependency_package");
+
+    let bounded = NormalizedRunPolicy {
+        maximum_call_depth: 1,
+        ..policy
+    };
+    let production_error = NormalizedVm::new(&program, bounded)
+        .invoke(caller, Vec::new(), None, &control)
+        .expect_err("dense linked call depth must be shared");
+    let reference_error = NormalizedReferenceInterpreter::from_reader(&view, &program, bounded)
+        .invoke(caller, Vec::new(), None, &control)
+        .expect_err("reference linked call depth must be shared");
+    assert_eq!(production_error.code, "normalized_call_depth");
+    assert_eq!(reference_error.code, "normalized_reference_call_depth");
+    assert_eq!(production_error.class, ExecutionFailureClass::Resource);
+    assert_eq!(reference_error.class, ExecutionFailureClass::Resource);
 }
 
 #[test]

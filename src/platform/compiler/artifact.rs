@@ -10,15 +10,16 @@ use super::unit::{
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    CaseReference, DeclarationReference, ExternalVisibility, FieldReference, Idempotency,
-    OperationReference, OwnerKey, OwnerKind, OwnerObjectDigest, OwnerRecord, PackageId,
-    PackageObjectDigest, ParameterParent, PortImplementation, PortReference, RequirementReference,
-    ResourceLimit, TypeForm, TypeObjectDigest, decode_owner, decode_type_object,
+    CaseReference, DeclarationPayload, DeclarationReference, EncodedOwnerKey, ExpressionOperation,
+    ExternalVisibility, FieldReference, Idempotency, LocalValueReference, OperationReference,
+    OwnerKey, OwnerKind, OwnerObjectDigest, OwnerRecord, PackageId, PackageObjectDigest,
+    ParameterParent, PortImplementation, PortReference, RequirementReference, ResourceLimit,
+    TypeForm, TypeObjectDigest, decode_owner, decode_owner_binding, decode_type_object,
 };
 use crate::platform::package_object::{PackageObject, validate_package_object_closure};
-use crate::platform::persistent_map::{MapError, MapErrorClass, MapWork, PersistentMap};
+use crate::platform::persistent_map::{MapError, MapErrorClass, MapRoot, MapWork, PersistentMap};
 use crate::platform::semantic_id::{
-    DeclarationId, ParameterId, RepositoryId, TargetId, TypeParameterId,
+    BindingId, DeclarationId, ParameterId, RepositoryId, TargetId, TypeParameterId,
 };
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, StageOutcome, StoreError, StoreErrorClass,
@@ -31,20 +32,21 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-6";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-6";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 6;
-pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF06";
-pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART06";
-pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEND6";
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-7";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-7";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = 7;
+pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMF07";
+pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJART07";
+pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEND7";
 pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str =
-    "lkjscript.artifact-manifest-envelope.v6";
-pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v6";
-pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v6";
-pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v6";
+    "lkjscript.artifact-manifest-envelope.v7";
+pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle.v7";
+pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete.v7";
+pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure.v7";
 pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
 pub(crate) const MAXIMUM_ARTIFACT_RUNTIME_OWNERS: usize = 1_000_000;
+pub(crate) const MAXIMUM_ARTIFACT_REFERENCE_OWNERS: u64 = 1_000_000;
 pub(crate) const MAXIMUM_ARTIFACT_SEGMENTS: usize = 1_000_000;
 pub(crate) const MAXIMUM_ARTIFACT_BUNDLE_BYTES: u64 = 16 * 1024 * 1024 * 1024;
 pub(crate) const TARGET_ARTIFACT_SEGMENT_BYTES: usize = 4 * 1024 * 1024;
@@ -124,6 +126,9 @@ pub struct ArtifactPackage {
     pub package_object: PackageObjectDigest,
     pub compilation: CompilationManifestDigest,
     pub runtime_owners: Vec<ArtifactRuntimeOwner>,
+    /// Exact canonical declarations, expressions, and bindings used only by the independent
+    /// reference tier. The Merkle map is cold artifact data and is not a runtime identity table.
+    pub reference_owners: MapRoot,
 }
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
@@ -151,6 +156,19 @@ const fn runtime_owner_kind(kind: OwnerKind) -> bool {
             | OwnerKind::Requirement
             | OwnerKind::Port
             | OwnerKind::Target
+    )
+}
+
+const fn reference_owner_kind(kind: OwnerKind) -> bool {
+    matches!(
+        kind,
+        OwnerKind::External
+            | OwnerKind::PureFunction
+            | OwnerKind::TaskFunction
+            | OwnerKind::Constant
+            | OwnerKind::Test
+            | OwnerKind::Binding
+            | OwnerKind::Expression
     )
 }
 
@@ -239,6 +257,7 @@ impl ArtifactManifest {
             }
             if package.repository_id.bytes() == [0; 16]
                 || package.package.bytes() == [0; 16]
+                || package.reference_owners.entries() > MAXIMUM_ARTIFACT_REFERENCE_OWNERS
                 || package
                     .runtime_owners
                     .windows(2)
@@ -342,6 +361,50 @@ impl LoadedArtifact {
                 )
             })?;
         decode_owner(&bytes, owner, expected_kind, binding.object)
+    }
+
+    pub(crate) fn reference_owner(
+        &self,
+        package: PackageId,
+        owner: OwnerKey,
+        map_work: &mut MapWork,
+        store_work: &mut StoreWork,
+    ) -> Result<Option<OwnerRecord>, Diagnostic> {
+        let package = self.package(package).ok_or_else(|| {
+            artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_reference_package_missing",
+                "reference-owner lookup names a package outside the exact artifact closure",
+            )
+        })?;
+        let reader = ObjectPageReader::new(self);
+        let binding = PersistentMap::from_root(package.reference_owners)
+            .lookup(&reader, &EncodedOwnerKey::new(owner).bytes(), map_work)
+            .map_err(map_diagnostic)?;
+        store_work.add(reader.work());
+        let Some(binding) = binding else {
+            return Ok(None);
+        };
+        let binding = decode_owner_binding(&binding, owner)?;
+        if !reference_owner_kind(binding.kind) {
+            return Err(artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_reference_owner_kind",
+                "reference-owner map contains a non-executable owner kind",
+            ));
+        }
+        let key = ObjectKey::from_digest(ObjectDomain::Owner, binding.object.bytes());
+        let bytes = self
+            .read(key, ObjectDomain::Owner.maximum_bytes(), store_work)
+            .map_err(store_diagnostic)?
+            .ok_or_else(|| {
+                artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_reference_owner_object_missing",
+                    "reference-owner map names a missing exact canonical owner object",
+                )
+            })?;
+        decode_owner(&bytes, owner, binding.kind, binding.object).map(Some)
     }
 }
 
@@ -1364,7 +1427,15 @@ fn validate_object_closure(
         }
         result.map_err(map_diagnostic)?;
     }
-    validate_runtime_owners(manifest, &units, &store, &mut store_work)?;
+    let runtime_owners = validate_runtime_owners(manifest, &units, &store, &mut store_work)?;
+    validate_reference_owners(
+        manifest,
+        &units,
+        &runtime_owners,
+        &store,
+        &mut store_work,
+        &mut work.map,
+    )?;
     let relocations = validate_unit_relocations(&units)?;
 
     let mut types = BTreeSet::new();
@@ -1439,7 +1510,7 @@ fn validate_runtime_owners(
     units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
     store: &TrackingObjectStore<'_>,
     work: &mut StoreWork,
-) -> Result<(), Diagnostic> {
+) -> Result<BTreeMap<(PackageId, OwnerKey), OwnerRecord>, Diagnostic> {
     let expected = runtime_owner_expectations(units)?;
     let package_ids = manifest
         .packages
@@ -1461,6 +1532,7 @@ fn validate_runtime_owners(
         *expected_counts.entry(package).or_default() += 1;
     }
     let mut visited = BTreeSet::new();
+    let mut records = BTreeMap::new();
     for package in &manifest.packages {
         let expected_count = expected_counts.get(&package.package).copied().unwrap_or(0);
         if expected_count != package.runtime_owners.len() {
@@ -1501,6 +1573,13 @@ fn validate_runtime_owners(
                     "artifact runtime-owner metadata disagrees with its exact compiler-unit semantics",
                 ));
             }
+            if records.insert(key, record).is_some() {
+                return Err(artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_runtime_owner_duplicate",
+                    "artifact repeats one exact runtime-owner binding",
+                ));
+            }
         }
     }
     if visited.len() != expected.len() {
@@ -1510,7 +1589,287 @@ fn validate_runtime_owners(
             "artifact runtime metadata omitted one exact compiler-unit boundary owner",
         ));
     }
+    Ok(records)
+}
+
+fn validate_reference_owners(
+    manifest: &ArtifactManifest,
+    units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
+    runtime_owners: &BTreeMap<(PackageId, OwnerKey), OwnerRecord>,
+    store: &TrackingObjectStore<'_>,
+    store_work: &mut StoreWork,
+    total_map_work: &mut MapWork,
+) -> Result<(), Diagnostic> {
+    let mut records = BTreeMap::<(PackageId, OwnerKey), OwnerRecord>::new();
+    for package in &manifest.packages {
+        let reader = ObjectPageReader::new(store);
+        let mut map_work = MapWork::default();
+        let mut captured = None;
+        let result = PersistentMap::from_root(package.reference_owners).for_each(
+            &reader,
+            &mut map_work,
+            |key, value| {
+                let operation = (|| {
+                    let owner = EncodedOwnerKey::decode(key)?;
+                    let binding = decode_owner_binding(value, owner)?;
+                    if !reference_owner_kind(binding.kind) {
+                        return Err(artifact_error(
+                            DiagnosticClass::Corrupt,
+                            "artifact_reference_owner_kind",
+                            "reference-execution closure contains a non-executable owner kind",
+                        ));
+                    }
+                    let owner_key =
+                        ObjectKey::from_digest(ObjectDomain::Owner, binding.object.bytes());
+                    let bytes = required_object(
+                        store,
+                        owner_key,
+                        "reference-execution closure names a missing owner object",
+                        store_work,
+                    )?;
+                    let record = decode_owner(&bytes, owner, binding.kind, binding.object)?;
+                    if records.insert((package.package, owner), record).is_some() {
+                        return Err(artifact_error(
+                            DiagnosticClass::Corrupt,
+                            "artifact_reference_owner_duplicate",
+                            "reference-execution closure repeats one exact package owner",
+                        ));
+                    }
+                    Ok::<(), Diagnostic>(())
+                })();
+                match operation {
+                    Ok(()) => Ok(()),
+                    Err(diagnostic) => {
+                        captured = Some(diagnostic);
+                        Err(MapError {
+                            class: MapErrorClass::Corrupt,
+                            code: "artifact_reference_iteration_stop",
+                            message: "reference-execution map iteration stopped after an exact diagnostic"
+                                .to_owned(),
+                        })
+                    }
+                }
+            },
+        );
+        add_map_work(total_map_work, map_work);
+        store_work.add(reader.work());
+        if let Some(diagnostic) = captured {
+            return Err(diagnostic);
+        }
+        result.map_err(map_diagnostic)?;
+    }
+
+    let mut pending = BTreeSet::<(PackageId, OwnerKey)>::new();
+    for ((package, owner), unit) in units {
+        if reference_compilation_payload(&unit.payload) {
+            pending.insert((*package, *owner));
+        }
+    }
+    for ((package, _), record) in runtime_owners {
+        if let OwnerRecord::Port(port) = record {
+            match port.implementation {
+                PortImplementation::Function(reference) => {
+                    require_reference_callable(units, reference)?;
+                }
+                PortImplementation::Expression(expression) => {
+                    pending.insert((*package, OwnerKey::Expression(expression)));
+                }
+            }
+        }
+    }
+
+    let mut reachable = BTreeSet::new();
+    let mut package_counts = BTreeMap::<PackageId, u64>::new();
+    while let Some(key @ (package, _owner)) = pending.pop_first() {
+        if !reachable.insert(key) {
+            continue;
+        }
+        let count = package_counts.entry(package).or_default();
+        *count = count.saturating_add(1);
+        if *count > MAXIMUM_ARTIFACT_REFERENCE_OWNERS {
+            return Err(artifact_error(
+                DiagnosticClass::Resource,
+                "artifact_reference_owner_count",
+                "reference-execution closure exceeds its per-package owner bound",
+            ));
+        }
+        let record = records.get(&key).ok_or_else(|| {
+            artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_reference_owner_missing",
+                "reference-execution closure omits a required exact canonical owner",
+            )
+        })?;
+        match record {
+            OwnerRecord::Declaration(declaration) => {
+                let unit = units.get(&key).ok_or_else(|| {
+                    artifact_error(
+                        DiagnosticClass::Corrupt,
+                        "artifact_reference_declaration_unit",
+                        "reference declaration has no exact compiler unit in the artifact closure",
+                    )
+                })?;
+                if !reference_payload_matches(&unit.payload, &declaration.payload) {
+                    return Err(artifact_error(
+                        DiagnosticClass::Corrupt,
+                        "artifact_reference_declaration_payload",
+                        "reference declaration kind disagrees with its exact compiler unit",
+                    ));
+                }
+                pending.extend(
+                    record
+                        .expression_roots()
+                        .into_iter()
+                        .map(|expression| (package, OwnerKey::Expression(expression))),
+                );
+            }
+            OwnerRecord::Expression(expression) => {
+                pending.extend(
+                    expression
+                        .children()
+                        .into_iter()
+                        .map(|child| (package, OwnerKey::Expression(child.expression))),
+                );
+                pending.extend(
+                    reference_expression_bindings(&expression.operation)
+                        .into_iter()
+                        .map(|binding| (package, OwnerKey::Binding(binding))),
+                );
+                for declaration in reference_expression_declarations(&expression.operation) {
+                    require_reference_callable(units, declaration)?;
+                }
+            }
+            OwnerRecord::Binding(_) => {
+                pending.extend(
+                    record
+                        .expression_roots()
+                        .into_iter()
+                        .map(|expression| (package, OwnerKey::Expression(expression))),
+                );
+            }
+            _ => {
+                return Err(artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_reference_owner_kind",
+                    "reference-execution closure contains a non-executable owner record",
+                ));
+            }
+        }
+    }
+
+    let observed = records.keys().copied().collect::<BTreeSet<_>>();
+    if observed != reachable {
+        return Err(artifact_error(
+            DiagnosticClass::Corrupt,
+            "artifact_reference_owner_unreachable",
+            "reference-execution closure contains an owner outside its exact executable roots",
+        ));
+    }
+    for package in &manifest.packages {
+        let observed = package_counts.get(&package.package).copied().unwrap_or(0);
+        if observed != package.reference_owners.entries() {
+            return Err(artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_reference_owner_count",
+                "reference-execution map count disagrees with its reachable executable owners",
+            ));
+        }
+    }
     Ok(())
+}
+
+fn reference_compilation_payload(payload: &CompilationPayload) -> bool {
+    matches!(
+        payload,
+        CompilationPayload::External { .. }
+            | CompilationPayload::Function { .. }
+            | CompilationPayload::Constant { .. }
+            | CompilationPayload::Test { .. }
+    )
+}
+
+fn reference_callable_payload(payload: &CompilationPayload) -> bool {
+    matches!(
+        payload,
+        CompilationPayload::External { .. }
+            | CompilationPayload::Function { .. }
+            | CompilationPayload::Constant { .. }
+    )
+}
+
+fn reference_payload_matches(
+    compiled: &CompilationPayload,
+    canonical: &DeclarationPayload,
+) -> bool {
+    matches!(
+        (compiled, canonical),
+        (
+            CompilationPayload::External { .. },
+            DeclarationPayload::External(_)
+        ) | (
+            CompilationPayload::Function { .. },
+            DeclarationPayload::Function(_)
+        ) | (
+            CompilationPayload::Constant { .. },
+            DeclarationPayload::Constant { .. }
+        ) | (
+            CompilationPayload::Test { .. },
+            DeclarationPayload::Test { .. }
+        )
+    )
+}
+
+fn require_reference_callable(
+    units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
+    reference: DeclarationReference,
+) -> Result<(), Diagnostic> {
+    let key = (
+        reference.package,
+        OwnerKey::Declaration(reference.declaration),
+    );
+    if units
+        .get(&key)
+        .is_none_or(|unit| !reference_callable_payload(&unit.payload))
+    {
+        return Err(artifact_error(
+            DiagnosticClass::Corrupt,
+            "artifact_reference_callable_missing",
+            "canonical reference execution names no exact callable compiler unit in the linked artifact",
+        ));
+    }
+    Ok(())
+}
+
+fn reference_expression_declarations(operation: &ExpressionOperation) -> Vec<DeclarationReference> {
+    match operation {
+        ExpressionOperation::Constant { declaration } => vec![*declaration],
+        ExpressionOperation::Call { function, .. }
+        | ExpressionOperation::FunctionValue { function, .. } => vec![*function],
+        _ => Vec::new(),
+    }
+}
+
+fn reference_expression_bindings(operation: &ExpressionOperation) -> Vec<BindingId> {
+    let mut bindings = Vec::new();
+    match operation {
+        ExpressionOperation::Local {
+            value:
+                LocalValueReference::LexicalBinding(binding)
+                | LocalValueReference::MatchPayload(binding)
+                | LocalValueReference::TransactionBinding(binding),
+        } => bindings.push(*binding),
+        ExpressionOperation::Let {
+            bindings: declared, ..
+        } => bindings.extend(declared.iter().copied()),
+        ExpressionOperation::Match { arms, .. } => bindings.extend(
+            arms.iter()
+                .filter_map(|arm| arm.payload_binding)
+                .collect::<Vec<_>>(),
+        ),
+        ExpressionOperation::Transaction { binding, .. } => bindings.push(*binding),
+        _ => {}
+    }
+    bindings
 }
 
 #[derive(Default)]

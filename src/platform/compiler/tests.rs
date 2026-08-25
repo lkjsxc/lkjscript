@@ -9,10 +9,11 @@ use crate::platform::kernel::{
     TextValue, TypeForm, TypeObject, TypeObjectDigest, decode_owner, encode_owner,
     encode_type_object,
 };
-use crate::platform::persistent_map::MapRoot;
+use crate::platform::persistent_map::{MapRoot, MapWork, MemoryPageStore, PersistentMap};
 use crate::platform::publication::{GraphRepository, PublicationOptions, PublicationOutcome};
 use crate::platform::semantic_id::{BindingId, CaseId, ExpressionId};
 use crate::platform::storage::object::{ObjectDomain, ObjectKey};
+use crate::platform::storage::page_store::ObjectPageReader;
 use crate::platform::witness::rebuild_full_witness;
 
 fn declaration_named(
@@ -83,6 +84,36 @@ fn add_expression(
             .is_none()
     );
     id
+}
+
+fn artifact_map_entries(artifact: &LoadedArtifact, root: MapRoot) -> Vec<(Vec<u8>, Vec<u8>)> {
+    let reader = ObjectPageReader::new(artifact);
+    let mut work = MapWork::default();
+    let mut entries = Vec::new();
+    PersistentMap::from_root(root)
+        .for_each(&reader, &mut work, |key, value| {
+            entries.push((key.to_vec(), value.to_vec()));
+            Ok(())
+        })
+        .expect("read exact artifact map");
+    entries
+}
+
+fn replace_artifact_map(
+    objects: &mut std::collections::BTreeMap<ObjectKey, Vec<u8>>,
+    entries: Vec<(Vec<u8>, Vec<u8>)>,
+) -> MapRoot {
+    let mut pages = MemoryPageStore::default();
+    let mut work = MapWork::default();
+    let map = PersistentMap::from_sorted(&mut pages, entries, &mut work)
+        .expect("build replacement artifact map");
+    for (digest, bytes) in pages.objects() {
+        objects.insert(
+            ObjectKey::from_digest(ObjectDomain::MapPage, digest.bytes()),
+            bytes.to_vec(),
+        );
+    }
+    map.root()
 }
 
 fn structurally_empty_snapshot(seed: &[u8]) -> crate::platform::kernel::KernelSnapshot {
@@ -1450,6 +1481,36 @@ fn graph5_artifact_links_exact_compiled_dependency_closure() {
     assert!(loaded.package(source_snapshot.root.package_id).is_some());
     assert!(loaded.package(target_snapshot.root.package_id).is_some());
 
+    let source_reference_root = loaded
+        .package(source_snapshot.root.package_id)
+        .expect("source artifact package")
+        .reference_owners;
+    let foreign_entry = artifact_map_entries(&loaded, source_reference_root)
+        .into_iter()
+        .next()
+        .expect("source reference-execution owner");
+    let mut foreign_objects = loaded.objects.clone();
+    let mut foreign_manifest = loaded.manifest.clone();
+    let target_package = foreign_manifest
+        .packages
+        .iter_mut()
+        .find(|package| package.package == target_snapshot.root.package_id)
+        .expect("target artifact package");
+    let mut target_entries = artifact_map_entries(&loaded, target_package.reference_owners);
+    target_entries.push(foreign_entry);
+    target_entries.sort_by(|left, right| left.0.cmp(&right.0));
+    target_package.reference_owners = replace_artifact_map(&mut foreign_objects, target_entries);
+    let (closure, count, bytes) = super::artifact::closure_facts(&foreign_objects).unwrap();
+    foreign_manifest.closure = closure;
+    foreign_manifest.object_count = count;
+    foreign_manifest.object_bytes = bytes;
+    assert_eq!(
+        super::artifact::encode_artifact(foreign_manifest, &foreign_objects)
+            .expect_err("foreign package reference owner must reject")
+            .code,
+        "artifact_reference_owner_unreachable"
+    );
+
     let unrelated_snapshot = structurally_empty_snapshot(b"artifact-unrelated-package");
     let unrelated = GraphRepository::create(
         &temporary.path().join("unrelated"),
@@ -1551,6 +1612,25 @@ fn graph5_artifact_rejects_predecessor_corruption_and_inexact_closures() {
             .expect_err("missing runtime metadata must reject")
             .code,
         "artifact_runtime_owner_count"
+    );
+
+    let mut missing_reference_objects = loaded.objects.clone();
+    let mut missing_reference_manifest = loaded.manifest.clone();
+    let reference_root = missing_reference_manifest.packages[0].reference_owners;
+    let mut reference_entries = artifact_map_entries(&loaded, reference_root);
+    assert!(reference_entries.pop().is_some());
+    missing_reference_manifest.packages[0].reference_owners =
+        replace_artifact_map(&mut missing_reference_objects, reference_entries);
+    let (closure, count, bytes) =
+        super::artifact::closure_facts(&missing_reference_objects).unwrap();
+    missing_reference_manifest.closure = closure;
+    missing_reference_manifest.object_count = count;
+    missing_reference_manifest.object_bytes = bytes;
+    assert_eq!(
+        super::artifact::encode_artifact(missing_reference_manifest, &missing_reference_objects,)
+            .expect_err("missing canonical reference owner must reject")
+            .code,
+        "artifact_reference_owner_missing"
     );
 
     let mut wrong_runtime_objects = loaded.objects.clone();
