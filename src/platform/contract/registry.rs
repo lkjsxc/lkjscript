@@ -4,13 +4,14 @@ use super::super::configuration::CONFIGURATION_ADAPTER_CONTRACT_VERSION;
 use super::super::control::{
     AUTHORED_CHANGE_CODEC_IDENTITY, AUTHORED_CHANGE_CODEC_VERSION,
     CHANGE_REQUEST_COMMITMENT_DOMAIN, COMPACT_CHANGE_CONTRACT_IDENTITY,
-    COMPACT_CHANGE_OPERATION_DESCRIPTORS, COMPACT_CHANGE_PRECONDITION_FIELDS,
-    COMPACT_CHANGE_PRECONDITIONS, COMPACT_DECLARATION_VISIBILITIES, COMPACT_DELETE_POLICIES,
-    COMPACT_EXPRESSION_FORMS, COMPACT_FUNCTION_EFFECTS, COMPACT_NAMESPACE_CLASSES,
-    COMPACT_TYPE_FORMS, CompactChangeFieldForm, CompactChangeOperation,
-    LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY, LOGICAL_CHANGE_PLAN_CONTRACT_VERSION,
-    LOGICAL_PLAN_RECORD_DESCRIPTORS, MAXIMUM_COMPACT_INPUT_BYTES, MAXIMUM_LOGICAL_PLAN_BYTES,
-    MAXIMUM_LOGICAL_PLAN_RECORDS, PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN, render_record,
+    COMPACT_CHANGE_CONTRACT_VERSION, COMPACT_CHANGE_OPERATION_DESCRIPTORS,
+    COMPACT_CHANGE_PRECONDITION_FIELDS, COMPACT_CHANGE_PRECONDITIONS,
+    COMPACT_DECLARATION_VISIBILITIES, COMPACT_DELETE_POLICIES, COMPACT_EXPRESSION_FORMS,
+    COMPACT_FUNCTION_EFFECTS, COMPACT_NAMESPACE_CLASSES, COMPACT_TYPE_FORMS,
+    CompactChangeFieldForm, CompactChangeOperation, LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY,
+    LOGICAL_CHANGE_PLAN_CONTRACT_VERSION, LOGICAL_PLAN_RECORD_DESCRIPTORS,
+    MAXIMUM_COMPACT_INPUT_BYTES, MAXIMUM_LOGICAL_PLAN_BYTES, MAXIMUM_LOGICAL_PLAN_RECORDS,
+    PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN, render_record,
 };
 use super::super::database::POSTGRES_ADAPTER_CONTRACT_VERSION;
 use super::super::deployment::DEPLOYMENT_CONTRACT_VERSION;
@@ -63,7 +64,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-3";
 pub const REGISTRY_CONTRACT_VERSION: u16 = 3;
-pub const CLI_CONTRACT_VERSION: u16 = 8;
+pub const CLI_CONTRACT_VERSION: u16 = 9;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -174,7 +175,7 @@ pub(crate) const MODULE_IMPLEMENTATION_DIGEST_DOMAIN: &str = "lkjscript.module-i
 pub(crate) const SUMMARY_DEPENDENCY_DIGEST_DOMAIN: &str =
     "lkjscript.semantic-summary-dependencies.v3";
 pub(crate) const SUMMARY_RECORD_DIGEST_DOMAIN: &str = "lkjscript.semantic-summary-record.v3";
-pub(crate) const CHANGE_ALLOCATION_SEED_DOMAIN: &str = "lkjscript.change-allocation-seed.v4";
+pub(crate) const CHANGE_ALLOCATION_SEED_DOMAIN: &str = "lkjscript.change-allocation-seed.v5";
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -477,7 +478,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             key: ContractKey::Change,
             name: "authored semantic change",
             identity: COMPACT_CHANGE_CONTRACT_IDENTITY,
-            version: 3,
+            version: COMPACT_CHANGE_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::PublicProtocol,
             predecessor_policy: REJECT,
@@ -492,7 +493,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::PublicProtocol,
             predecessor_policy: REJECT,
-            magic_values: &["LKJACR04", "LKJABG01"],
+            magic_values: &["LKJACR05", "LKJABG01"],
             digest_domains: &[
                 CHANGE_ALLOCATION_SEED_DOMAIN,
                 CHANGE_REQUEST_COMMITMENT_DOMAIN,
@@ -1906,13 +1907,13 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "change_delete_policy",
             DiagnosticClass::Source,
             "A compact deletion requests an unsupported policy.",
-            "Use policy=reject; owned closure deletion requires a future reviewed impact plan.",
+            "Use exactly policy=reject or policy=owned-closure.",
         ),
         diagnostic(
             "change_delete_owned_children",
             DiagnosticClass::Semantic,
             "Reject deletion selected an owner with owned identities.",
-            "Delete a leaf owner or retain it until exact owned-closure planning is available.",
+            "Delete a leaf owner with reject or review the exact policy=owned-closure plan.",
         ),
         diagnostic(
             "change_delete_live_reference",
@@ -1969,9 +1970,21 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Preserve the repository and run deep doctor verification.",
         ),
         diagnostic(
+            "change_delete_ownership_disagreement",
+            DiagnosticClass::Corrupt,
+            "An ownership witness is not reproduced by accepted canonical meaning.",
+            "Preserve the repository and run deep doctor verification.",
+        ),
+        diagnostic(
             "change_delete_ownership_package",
             DiagnosticClass::Corrupt,
             "An ownership relation crosses a foreign package boundary.",
+            "Preserve the repository and run deep doctor verification.",
+        ),
+        diagnostic(
+            "change_delete_relation_disagreement",
+            DiagnosticClass::Corrupt,
+            "An incoming relation witness is not reproduced by accepted canonical meaning.",
             "Preserve the repository and run deep doctor verification.",
         ),
         diagnostic(

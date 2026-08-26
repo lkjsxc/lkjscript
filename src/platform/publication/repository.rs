@@ -640,6 +640,74 @@ impl GraphRepository {
         Ok(RepositoryView::new(current, store))
     }
 
+    /// Reopens the exact accepted base bound to an already accepted idempotency key. This is a
+    /// read-only retry path: callers must still normalize and prepare the complete request against
+    /// the returned view, compare its reviewed commitments, and enter `publish` for the locked
+    /// idempotency and HEAD decision.
+    pub(crate) fn view_idempotency_base(
+        &self,
+        key: &str,
+        base: crate::platform::semantic_id::RevisionId,
+    ) -> Result<Option<RepositoryView>, Diagnostic> {
+        let root_directory = open_directory(&self.root)?;
+        let lock = open_lock(&root_directory)?;
+        FileExt::lock_shared(&lock).map_err(|error| {
+            io_diagnostic(
+                "publication_repository_idempotency_view_lock",
+                &self.root,
+                error,
+            )
+        })?;
+        let store = PackDirectoryStore::open(&self.root).map_err(store_diagnostic)?;
+        let current = read_current_optional(&root_directory, &store)?.ok_or_else(|| {
+            repository_error(
+                DiagnosticClass::Source,
+                "publication_repository_unpublished",
+                "Graph 5 repository has no accepted HEAD",
+            )
+        })?;
+        let binding = if current.receipt.idempotency_key.as_deref() == Some(key) {
+            IdempotencyBinding::from_accepted(current.accepted, &current.receipt)?
+        } else {
+            let reader = ObjectPageReader::new(&store);
+            let mut map_work = MapWork::default();
+            lookup_idempotency_history(
+                current.revision.publication.idempotency_receipts,
+                key,
+                &reader,
+                &mut map_work,
+            )?
+        };
+        let Some(binding) = binding.filter(|binding| binding.base == base) else {
+            return Ok(None);
+        };
+        let accepted = read_publication(&store, binding.result)?;
+        validate_idempotency_result(&binding, &accepted)?;
+        let [parent] = accepted.revision.publication.parents.as_slice() else {
+            return Err(repository_error(
+                DiagnosticClass::Corrupt,
+                "publication_repository_idempotency_base",
+                "accepted idempotency result does not bind one exact parent revision",
+            ));
+        };
+        if parent.revision != base {
+            return Err(repository_error(
+                DiagnosticClass::Corrupt,
+                "publication_repository_idempotency_base",
+                "accepted idempotency result parent disagrees with its history binding",
+            ));
+        }
+        let base_head = HeadRecord {
+            contract_version: REVISION_CONTRACT_VERSION,
+            graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+            repository_id: binding.repository_id,
+            revision: parent.revision,
+            record: parent.record,
+        };
+        let base_publication = read_publication(&store, base_head)?;
+        Ok(Some(RepositoryView::new(base_publication, store)))
+    }
+
     /// Prepares one exact change against the currently observed revision without publishing it.
     pub fn prepare_change(
         &self,

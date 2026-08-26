@@ -18,16 +18,17 @@ use crate::platform::change::{
 };
 use crate::platform::diagnostic::DiagnosticClass;
 use crate::platform::kernel::{
-    AnnotationClass, DeclarationPayload, DeclarationVisibility, DependencyRecord,
-    DocumentationClass, ExactOwnerKey, ExpressionOperation, ExternalVisibility, FunctionEffect,
-    Idempotency, LocalValueReference, Name, NamespaceClass, OwnerKey, OwnerRecord, PackageId,
+    AnnotationClass, DeclarationPayload, DeclarationRecord, DeclarationVisibility,
+    DependencyRecord, DocumentContent, DocumentationClass, DocumentationRecord, ExactOwnerKey,
+    ExpressionOperation, ExternalVisibility, FunctionEffect, Idempotency, LocalValueReference,
+    ModuleRecord, Name, NamespaceClass, OwnerHeader, OwnerKey, OwnerKind, OwnerRecord, PackageId,
     PackageRevisionDigest, RelationEdge, RelationEndpoint, RelationKind, RequirementReference,
     ResourceUnit, SemanticRoot, TypeForm, TypeObject, TypeObjectDigest, encode_owner,
     encode_type_object, extract_relations,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::persistent_map::{MapRoot, PageDigest};
-use crate::platform::semantic_id::{DeclarationId, RepositoryId, RevisionId};
+use crate::platform::semantic_id::{DeclarationId, DocumentationId, RepositoryId, RevisionId};
 use crate::platform::storage::directory::SealCheckpoint;
 use crate::platform::storage::object::{ObjectDomain, ObjectKey, StageOutcome};
 use crate::platform::storage::pack::{PackBuilder, PackMetadata};
@@ -2214,6 +2215,1188 @@ fn authored_reject_deletion_never_infers_an_owned_closure() {
         "change_delete_owned_children"
     );
     assert_eq!(created.repository.current().unwrap().head.revision, base);
+}
+
+#[test]
+fn authored_owned_closure_covers_every_owner_kind_with_complete_oracle() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let expected = logical.owners.keys().copied().collect::<BTreeSet<_>>();
+    assert_eq!(
+        logical
+            .owners
+            .values()
+            .map(OwnerRecord::kind)
+            .collect::<BTreeSet<_>>(),
+        OwnerKind::ALL.into_iter().collect::<BTreeSet<_>>()
+    );
+    let roots = logical
+        .owners
+        .iter()
+        .filter_map(|(owner, record)| {
+            matches!(record, OwnerRecord::Module(_) | OwnerRecord::Target(_)).then_some(*owner)
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(roots.len(), 3);
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let base = created.current.head.revision;
+    let request = AuthoredChangeSet {
+        base,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
+        changes: roots
+            .iter()
+            .map(|owner| AuthoredChange::DeleteOwner {
+                owner: OwnerSelector::Exact { owner: *owner },
+                policy: AuthoredDeletePolicy::OwnedClosure,
+            })
+            .collect(),
+    };
+
+    // Complete materialization is deliberately oracle-only. Production lowering selects the
+    // closure through point reads and exact reverse-relation prefixes.
+    let pinned = created.repository.view_current().expect("open exact base");
+    let lowering =
+        lower_authored_changes(&pinned, &pinned, &request).expect("lower complete owner matrix");
+    assert_eq!(
+        lowering.work.ownership_steps,
+        u64::try_from(expected.len() - roots.len()).unwrap()
+    );
+    let canonical = CanonicalDelta::normalize(&logical, lowering.edits)
+        .expect("normalize complete owner matrix deletion");
+    let candidate = KernelOverlay::new(&logical, &canonical).materialize_logical_oracle();
+    assert!(candidate.owners.is_empty());
+    assert_eq!(
+        candidate
+            .retirements
+            .keys()
+            .copied()
+            .collect::<BTreeSet<_>>(),
+        expected
+    );
+
+    let prepared = created
+        .repository
+        .prepare_authored_change(&request, PublicationOptions::default())
+        .expect("prepare complete owner matrix deletion");
+    assert_eq!(
+        prepared
+            .logical_plan
+            .retirements
+            .keys()
+            .copied()
+            .collect::<BTreeSet<_>>(),
+        expected
+    );
+    assert_eq!(
+        prepared.logical_plan.relations.removed,
+        created
+            .initial
+            .witness
+            .entries
+            .relations
+            .iter()
+            .copied()
+            .collect::<BTreeSet<_>>()
+    );
+    assert!(prepared.logical_plan.relations.added.is_empty());
+    let SemanticDiffBody::Change { owners, .. } = &prepared.publication.semantic_diff.body else {
+        panic!("owned closure must produce a semantic change")
+    };
+    assert_eq!(
+        owners
+            .iter()
+            .filter(|edit| edit.objects.after.is_none())
+            .map(|edit| edit.owner)
+            .collect::<BTreeSet<_>>(),
+        expected
+    );
+    created
+        .repository
+        .publish(&prepared.publication)
+        .expect("publish complete owner matrix deletion");
+    let reopened = GraphRepository::open(&destination)
+        .expect("reopen deleted authority")
+        .view_current()
+        .expect("open deleted revision");
+    for owner in expected {
+        assert!(reopened.owner(owner).unwrap().value.is_none());
+        let retirement = reopened
+            .retirement(owner)
+            .unwrap()
+            .value
+            .expect("every deleted stable owner has one retirement");
+        assert_eq!(retirement.last_live_revision, base);
+        assert_eq!(retirement.owner, owner);
+    }
+}
+
+#[test]
+fn authored_owned_closure_removes_operation_parameters_and_updates_one_surviving_parent() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let created = GraphRepository::create(
+        &destination,
+        &empty_snapshot(b"owned-closure-operation-parent"),
+        None,
+    )
+    .expect("create repository");
+    let create = AuthoredChangeSet {
+        base: created.current.head.revision,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
+        changes: vec![
+            AuthoredChange::CreateModule {
+                symbol: "$module".to_owned(),
+                name: Name::new("module").unwrap(),
+            },
+            AuthoredChange::CreateInterface {
+                symbol: "$interface".to_owned(),
+                module: ModuleSelector::Symbol {
+                    symbol: "$module".to_owned(),
+                },
+                name: Name::new("Interface").unwrap(),
+                visibility: DeclarationVisibility::Public,
+                operations: vec![
+                    AuthoredOperation {
+                        symbol: "$removed_operation".to_owned(),
+                        name: Name::new("removed").unwrap(),
+                        parameters: vec![AuthoredParameter {
+                            symbol: "$removed_parameter".to_owned(),
+                            name: Name::new("value").unwrap(),
+                            ty: AuthoredType::Unit {},
+                        }],
+                        result: AuthoredType::Unit {},
+                        idempotency: Idempotency::Idempotent,
+                        external_visibility: ExternalVisibility::None,
+                    },
+                    AuthoredOperation {
+                        symbol: "$surviving_operation".to_owned(),
+                        name: Name::new("surviving").unwrap(),
+                        parameters: Vec::new(),
+                        result: AuthoredType::Unit {},
+                        idempotency: Idempotency::Idempotent,
+                        external_visibility: ExternalVisibility::None,
+                    },
+                ],
+            },
+        ],
+    };
+    let prepared = created
+        .repository
+        .prepare_authored_change(&create, PublicationOptions::default())
+        .expect("prepare operation-parent fixture");
+    let interface = prepared.allocated["$interface"];
+    let removed_operation = prepared.allocated["$removed_operation"];
+    let removed_parameter = prepared.allocated["$removed_parameter"];
+    let surviving_operation = prepared.allocated["$surviving_operation"];
+    created
+        .repository
+        .publish(&prepared.publication)
+        .expect("publish operation-parent fixture");
+
+    let request = AuthoredChangeSet {
+        base: created.repository.current().unwrap().head.revision,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
+        changes: vec![AuthoredChange::DeleteOwner {
+            owner: OwnerSelector::Exact {
+                owner: removed_operation,
+            },
+            policy: AuthoredDeletePolicy::OwnedClosure,
+        }],
+    };
+    let prepared = created
+        .repository
+        .prepare_authored_change(&request, PublicationOptions::default())
+        .expect("prepare operation ownership closure");
+    let SemanticDiffBody::Change { owners, .. } = &prepared.publication.semantic_diff.body else {
+        panic!("operation closure must produce a semantic change")
+    };
+    let deleted = owners
+        .iter()
+        .filter(|edit| edit.objects.after.is_none())
+        .map(|edit| edit.owner)
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        deleted,
+        BTreeSet::from([removed_operation, removed_parameter])
+    );
+    assert_eq!(
+        owners
+            .iter()
+            .filter(|edit| edit.objects.before.is_some() && edit.objects.after.is_some())
+            .map(|edit| edit.owner)
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from([interface])
+    );
+    assert_eq!(
+        prepared
+            .logical_plan
+            .retirements
+            .keys()
+            .copied()
+            .collect::<BTreeSet<_>>(),
+        deleted
+    );
+    created
+        .repository
+        .publish(&prepared.publication)
+        .expect("publish operation ownership closure");
+    let view = created.repository.view_current().expect("open result");
+    assert!(view.owner(removed_operation).unwrap().value.is_none());
+    assert!(view.owner(removed_parameter).unwrap().value.is_none());
+    let interface = view
+        .owner(interface)
+        .unwrap()
+        .value
+        .expect("surviving interface");
+    let OwnerRecord::Declaration(interface) = interface else {
+        panic!("interface identity must retain a declaration")
+    };
+    let DeclarationPayload::Interface { operations } = interface.payload else {
+        panic!("surviving declaration must remain an interface")
+    };
+    let OwnerKey::Operation(surviving_operation) = surviving_operation else {
+        panic!("surviving operation identity must be operation-shaped")
+    };
+    assert_eq!(operations, vec![surviving_operation]);
+}
+
+#[test]
+fn authored_owned_closure_unions_overlap_and_rejects_invalid_roots_and_created_descendants() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let base = created.current.head.revision;
+    let second = logical
+        .owners
+        .iter()
+        .find_map(|(owner, record)| match record {
+            OwnerRecord::Module(module) if module.name.as_str() == "second" => Some(*owner),
+            _ => None,
+        })
+        .expect("second module");
+    let descendant = owner_named(&logical, "with_binding");
+    let expected = complete_ownership_descendants(&created.initial.witness, second);
+    let overlap = AuthoredChangeSet {
+        base,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
+        changes: vec![
+            AuthoredChange::DeleteOwner {
+                owner: OwnerSelector::Exact { owner: second },
+                policy: AuthoredDeletePolicy::OwnedClosure,
+            },
+            AuthoredChange::DeleteOwner {
+                owner: OwnerSelector::Exact { owner: descendant },
+                policy: AuthoredDeletePolicy::OwnedClosure,
+            },
+        ],
+    };
+    let prepared = created
+        .repository
+        .prepare_authored_change(&overlap, PublicationOptions::default())
+        .expect("overlapping roots form one deterministic union");
+    let SemanticDiffBody::Change { owners, .. } = &prepared.publication.semantic_diff.body else {
+        panic!("overlap must produce a semantic change")
+    };
+    assert_eq!(
+        owners
+            .iter()
+            .filter(|edit| edit.objects.after.is_none())
+            .map(|edit| edit.owner)
+            .collect::<BTreeSet<_>>(),
+        expected
+    );
+
+    let failures = [
+        (
+            "change_delete_owned_children",
+            vec![
+                AuthoredChange::DeleteOwner {
+                    owner: OwnerSelector::Exact { owner: second },
+                    policy: AuthoredDeletePolicy::OwnedClosure,
+                },
+                AuthoredChange::DeleteOwner {
+                    owner: OwnerSelector::Exact { owner: descendant },
+                    policy: AuthoredDeletePolicy::Reject,
+                },
+            ],
+        ),
+        (
+            "change_delete_duplicate",
+            vec![
+                AuthoredChange::DeleteOwner {
+                    owner: OwnerSelector::Exact { owner: second },
+                    policy: AuthoredDeletePolicy::OwnedClosure,
+                },
+                AuthoredChange::DeleteOwner {
+                    owner: OwnerSelector::Exact { owner: second },
+                    policy: AuthoredDeletePolicy::Reject,
+                },
+            ],
+        ),
+    ];
+    for (code, changes) in failures {
+        let request = AuthoredChangeSet {
+            base,
+            preconditions: Vec::new(),
+            budget: ChangeBudget::default(),
+            changes,
+        };
+        assert_eq!(
+            created
+                .repository
+                .prepare_authored_change(&request, PublicationOptions::default())
+                .expect_err("invalid overlapping root selection must reject")[0]
+                .code,
+            code
+        );
+    }
+
+    for owner in logical
+        .owners
+        .keys()
+        .copied()
+        .filter(|owner| matches!(owner, OwnerKey::Binding(_) | OwnerKey::Expression(_)))
+        .take(2)
+    {
+        let request = AuthoredChangeSet {
+            base,
+            preconditions: Vec::new(),
+            budget: ChangeBudget::default(),
+            changes: vec![AuthoredChange::DeleteOwner {
+                owner: OwnerSelector::Exact { owner },
+                policy: AuthoredDeletePolicy::OwnedClosure,
+            }],
+        };
+        assert_eq!(
+            created
+                .repository
+                .prepare_authored_change(&request, PublicationOptions::default())
+                .expect_err("expression-shaped public root must reject")[0]
+                .code,
+            "change_delete_expression_parent"
+        );
+    }
+
+    let OwnerKey::Declaration(record) = owner_named(&logical, "Payload") else {
+        panic!("Payload must be a declaration")
+    };
+    let created_descendant = AuthoredChangeSet {
+        base,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
+        changes: vec![
+            AuthoredChange::AddField {
+                record: DeclarationSelector::Id {
+                    declaration: record,
+                },
+                field: AuthoredField {
+                    symbol: "$created_then_closed".to_owned(),
+                    name: Name::new("created_then_closed").unwrap(),
+                    ty: AuthoredType::Unit {},
+                },
+            },
+            AuthoredChange::DeleteOwner {
+                owner: OwnerSelector::Exact {
+                    owner: OwnerKey::Declaration(record),
+                },
+                policy: AuthoredDeletePolicy::OwnedClosure,
+            },
+        ],
+    };
+    assert_eq!(
+        created
+            .repository
+            .prepare_authored_change(&created_descendant, PublicationOptions::default())
+            .expect_err("request-local descendants cannot disappear in a closure")[0]
+            .code,
+        "change_delete_created_owner"
+    );
+    assert_eq!(created.repository.current().unwrap().head.revision, base);
+}
+
+#[test]
+fn authored_owned_closure_follows_ownership_without_deleting_referenced_targets() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let created = GraphRepository::create(
+        &destination,
+        &empty_snapshot(b"owned-closure-reference-separation"),
+        None,
+    )
+    .expect("create repository");
+    let create = AuthoredChangeSet {
+        base: created.current.head.revision,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
+        changes: vec![
+            AuthoredChange::CreateModule {
+                symbol: "$module".to_owned(),
+                name: Name::new("module").unwrap(),
+            },
+            AuthoredChange::CreateFunction {
+                symbol: "$callee".to_owned(),
+                module: ModuleSelector::Symbol {
+                    symbol: "$module".to_owned(),
+                },
+                name: Name::new("callee").unwrap(),
+                visibility: DeclarationVisibility::Private,
+                type_parameters: Vec::new(),
+                parameters: Vec::new(),
+                result: AuthoredType::Unit {},
+                effect: AuthoredFunctionEffect::Pure {},
+                body: authored_expression(AuthoredExpressionOperation::Unit {}),
+            },
+            AuthoredChange::CreateFunction {
+                symbol: "$caller".to_owned(),
+                module: ModuleSelector::Symbol {
+                    symbol: "$module".to_owned(),
+                },
+                name: Name::new("caller").unwrap(),
+                visibility: DeclarationVisibility::Private,
+                type_parameters: Vec::new(),
+                parameters: Vec::new(),
+                result: AuthoredType::Unit {},
+                effect: AuthoredFunctionEffect::Pure {},
+                body: authored_expression(AuthoredExpressionOperation::Call {
+                    function: AuthoredDeclarationReference::Local {
+                        declaration: DeclarationSelector::Symbol {
+                            symbol: "$callee".to_owned(),
+                        },
+                    },
+                    type_arguments: Vec::new(),
+                    arguments: Vec::new(),
+                }),
+            },
+        ],
+    };
+    let prepared = created
+        .repository
+        .prepare_authored_change(&create, PublicationOptions::default())
+        .expect("prepare reference-separation fixture");
+    let module = prepared.allocated["$module"];
+    let callee = prepared.allocated["$callee"];
+    let caller = prepared.allocated["$caller"];
+    created
+        .repository
+        .publish(&prepared.publication)
+        .expect("publish reference-separation fixture");
+
+    let fixture_base = created.repository.current().unwrap().head.revision;
+    let callee_only = AuthoredChangeSet {
+        base: fixture_base,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
+        changes: vec![AuthoredChange::DeleteOwner {
+            owner: OwnerSelector::Exact { owner: callee },
+            policy: AuthoredDeletePolicy::OwnedClosure,
+        }],
+    };
+    assert_eq!(
+        created
+            .repository
+            .prepare_authored_change(&callee_only, PublicationOptions::default())
+            .expect_err("surviving caller must block callee closure deletion")[0]
+            .code,
+        "change_delete_live_reference"
+    );
+    let delete_both = AuthoredChangeSet {
+        base: fixture_base,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
+        changes: vec![
+            AuthoredChange::DeleteOwner {
+                owner: OwnerSelector::Exact { owner: callee },
+                policy: AuthoredDeletePolicy::OwnedClosure,
+            },
+            AuthoredChange::DeleteOwner {
+                owner: OwnerSelector::Exact { owner: caller },
+                policy: AuthoredDeletePolicy::OwnedClosure,
+            },
+        ],
+    };
+    created
+        .repository
+        .prepare_authored_change(&delete_both, PublicationOptions::default())
+        .expect("explicitly deleting the referrer must close the final candidate");
+
+    let delete = AuthoredChangeSet {
+        base: fixture_base,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
+        changes: vec![AuthoredChange::DeleteOwner {
+            owner: OwnerSelector::Exact { owner: caller },
+            policy: AuthoredDeletePolicy::OwnedClosure,
+        }],
+    };
+    let prepared = created
+        .repository
+        .prepare_authored_change(&delete, PublicationOptions::default())
+        .expect("outgoing reference must not expand semantic ownership");
+    created
+        .repository
+        .publish(&prepared.publication)
+        .expect("publish caller ownership closure");
+    let view = created
+        .repository
+        .view_current()
+        .expect("open deleted caller revision");
+    assert!(view.owner(caller).unwrap().value.is_none());
+    assert!(view.owner(callee).unwrap().value.is_some());
+    assert!(view.owner(module).unwrap().value.is_some());
+}
+
+#[test]
+fn authored_owned_closure_accepts_explicit_same_request_reference_repair() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let callee = owner_named(&logical, "callee");
+    let caller = owner_named(&logical, "caller");
+    let expected_callee_closure = complete_ownership_descendants(&created.initial.witness, callee);
+    let OwnerKey::Declaration(caller_id) = caller else {
+        panic!("caller must be a declaration")
+    };
+    let request = AuthoredChangeSet {
+        base: created.current.head.revision,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
+        changes: vec![
+            AuthoredChange::ReplaceFunctionBody {
+                function: DeclarationSelector::Id {
+                    declaration: caller_id,
+                },
+                body: AuthoredExpression {
+                    symbol: Some("$repaired_body".to_owned()),
+                    operation: AuthoredExpressionOperation::Unit {},
+                },
+            },
+            AuthoredChange::DeleteOwner {
+                owner: OwnerSelector::Exact { owner: callee },
+                policy: AuthoredDeletePolicy::OwnedClosure,
+            },
+        ],
+    };
+    let prepared = created
+        .repository
+        .prepare_authored_change(&request, PublicationOptions::default())
+        .expect("explicit candidate body repair must remove the surviving reference");
+    let repaired_body = prepared.allocated["$repaired_body"];
+    let SemanticDiffBody::Change { owners, .. } = &prepared.publication.semantic_diff.body else {
+        panic!("repair and closure deletion must produce a semantic change")
+    };
+    let removed = owners
+        .iter()
+        .filter(|edit| edit.objects.after.is_none())
+        .map(|edit| edit.owner)
+        .collect::<BTreeSet<_>>();
+    assert!(expected_callee_closure.is_subset(&removed));
+    created
+        .repository
+        .publish(&prepared.publication)
+        .expect("publish explicit reference repair and closure deletion");
+    let view = created
+        .repository
+        .view_current()
+        .expect("open repaired revision");
+    for owner in expected_callee_closure {
+        assert!(view.owner(owner).unwrap().value.is_none());
+    }
+    assert!(view.owner(caller).unwrap().value.is_some());
+    assert!(view.owner(repaired_body).unwrap().value.is_some());
+}
+
+#[test]
+fn authored_owned_closure_charges_independent_selection_admissions() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let base = created.current.head.revision;
+    let root = logical
+        .owners
+        .iter()
+        .find_map(|(owner, record)| match record {
+            OwnerRecord::Module(module) if module.name.as_str() == "second" => Some(*owner),
+            _ => None,
+        })
+        .expect("second module");
+    let request = |budget| AuthoredChangeSet {
+        base,
+        preconditions: Vec::new(),
+        budget,
+        changes: vec![AuthoredChange::DeleteOwner {
+            owner: OwnerSelector::Exact { owner: root },
+            policy: AuthoredDeletePolicy::OwnedClosure,
+        }],
+    };
+    let pinned = created.repository.view_current().expect("open exact base");
+    let baseline = lower_authored_changes(&pinned, &pinned, &request(ChangeBudget::default()))
+        .expect("baseline closure lowering");
+    assert!(baseline.work.ownership_steps > 0);
+    assert!(baseline.work.relation_edges_read > 0);
+    assert!(baseline.work.canonical.point_reads > 0);
+    assert!(baseline.work.witness.point_reads > 0);
+
+    type Exhaust = fn(&mut ChangeBudget);
+    let exhaustions: &[(Exhaust, &str)] = &[
+        (
+            |budget| budget.canonical_edits.maximum_owner_edits = 0,
+            "change_budget_canonical_owner_edits",
+        ),
+        (
+            |budget| budget.canonical_edits.maximum_retirement_edits = 0,
+            "change_budget_canonical_retirement_edits",
+        ),
+        (
+            |budget| budget.canonical_reads.maximum_point_reads = 0,
+            "change_budget_canonical_point_reads",
+        ),
+        (
+            |budget| budget.witness_reads.maximum_point_reads = 0,
+            "change_budget_witness_point_reads",
+        ),
+        (
+            |budget| budget.impact.maximum_ownership_steps = 0,
+            "change_budget_impact_ownership_steps",
+        ),
+        (
+            |budget| budget.impact.maximum_relation_edges = 0,
+            "change_budget_relation_edges",
+        ),
+        (
+            |budget| budget.impact.maximum_relation_fanout = 0,
+            "change_budget_relation_fanout",
+        ),
+    ];
+    for (exhaust, expected) in exhaustions {
+        let mut budget = ChangeBudget::default();
+        exhaust(&mut budget);
+        let diagnostic = lower_authored_changes(&pinned, &pinned, &request(budget))
+            .expect_err("closure selection admission must reject deterministically");
+        assert_eq!(diagnostic.class, DiagnosticClass::Resource);
+        assert_eq!(diagnostic.code, *expected);
+        assert_eq!(created.repository.current().unwrap().head.revision, base);
+    }
+}
+
+#[test]
+fn authored_owned_closure_plan_output_admissions_are_independent_and_nonpublishing() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let base = created.current.head.revision;
+    let root = logical
+        .owners
+        .iter()
+        .find_map(|(owner, record)| match record {
+            OwnerRecord::Module(module) if module.name.as_str() == "second" => Some(*owner),
+            _ => None,
+        })
+        .expect("second module");
+    let request = AuthoredChangeSet {
+        base,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
+        changes: vec![AuthoredChange::DeleteOwner {
+            owner: OwnerSelector::Exact { owner: root },
+            policy: AuthoredDeletePolicy::OwnedClosure,
+        }],
+    };
+    let normalized =
+        crate::platform::control::normalize_change_request(request, PublicationOptions::default())
+            .expect("normalize closure request");
+    let prepared = created
+        .repository
+        .prepare_authored_change(&normalized.semantic, normalized.options)
+        .expect("prepare ownership closure");
+    let plan =
+        crate::platform::control::LogicalChangePlan::new(normalized.request_commitment, &prepared)
+            .expect("construct ownership-closure plan");
+    let admitted = crate::platform::control::encode_logical_change_plan(&plan, |_| Ok(()))
+        .expect("encode admitted ownership-closure plan");
+    assert!(admitted.records > 1);
+    assert!(admitted.bytes > 1);
+
+    let record_error = crate::platform::control::encode_logical_change_plan_with_limits(
+        &plan,
+        |_| Ok(()),
+        u64::MAX,
+        admitted.records - 1,
+    )
+    .expect_err("record admission must reject a complete oversized plan");
+    assert_eq!(record_error.class, DiagnosticClass::Resource);
+    assert_eq!(record_error.code, "change_plan_output_record_budget");
+
+    let byte_error = crate::platform::control::encode_logical_change_plan_with_limits(
+        &plan,
+        |_| Ok(()),
+        admitted.bytes - 1,
+        u64::MAX,
+    )
+    .expect_err("byte admission must reject a complete oversized plan");
+    assert_eq!(byte_error.class, DiagnosticClass::Resource);
+    assert_eq!(byte_error.code, "change_plan_output_byte_budget");
+    assert_eq!(created.repository.current().unwrap().head.revision, base);
+}
+
+#[test]
+fn authored_owned_closure_rejects_inconsistent_ownership_and_relation_witnesses() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let base = created.repository.view_current().expect("open exact base");
+    let root = logical
+        .owners
+        .iter()
+        .find_map(|(owner, record)| match record {
+            OwnerRecord::Module(module) if module.name.as_str() == "second" => Some(*owner),
+            _ => None,
+        })
+        .expect("second module");
+    let request = AuthoredChangeSet {
+        base: created.current.head.revision,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
+        changes: vec![AuthoredChange::DeleteOwner {
+            owner: OwnerSelector::Exact { owner: root },
+            policy: AuthoredDeletePolicy::OwnedClosure,
+        }],
+    };
+    let reject = |witness: &crate::platform::witness::FullWitness, expected: &str| {
+        let diagnostic = lower_authored_changes(&base, witness, &request)
+            .expect_err("inconsistent accepted witness must reject closure deletion");
+        assert_eq!(diagnostic.class, DiagnosticClass::Corrupt);
+        assert_eq!(diagnostic.code, expected);
+        assert_eq!(
+            created.repository.current().unwrap().head.revision,
+            request.base
+        );
+    };
+
+    let mut missing = created.initial.witness.clone();
+    assert!(missing.entries.ownership.remove(&root).is_some());
+    reject(&missing, "change_delete_ownership_missing");
+
+    let mut wrong_parent = created.initial.witness.clone();
+    wrong_parent
+        .entries
+        .ownership
+        .get_mut(&root)
+        .expect("root ownership")
+        .parent = OwnershipParent::Owner(root);
+    reject(&wrong_parent, "change_delete_ownership_disagreement");
+
+    let mut foreign = created.initial.witness.clone();
+    let external_child = foreign
+        .entries
+        .reverse_relations
+        .iter_mut()
+        .find(|edge| {
+            edge.kind == RelationKind::DeclarationModule
+                && edge.target
+                    == RelationEndpoint::Owner(ExactOwnerKey {
+                        package: logical.root.package_id,
+                        owner: root,
+                    })
+        })
+        .expect("module-owned declaration relation");
+    let RelationEndpoint::Owner(mut source) = external_child.source else {
+        panic!("declaration ownership source must be an owner")
+    };
+    source.package = PackageId::migrate(b"foreign-ownership-package", 1);
+    external_child.source = RelationEndpoint::Owner(source);
+    foreign
+        .entries
+        .reverse_relations
+        .sort_unstable_by_key(|edge| (edge.target, edge.kind, edge.source));
+    reject(&foreign, "change_delete_ownership_package");
+
+    let mut relation_disagreement = created.initial.witness.clone();
+    relation_disagreement
+        .entries
+        .reverse_relations
+        .push(RelationEdge {
+            source: RelationEndpoint::Owner(ExactOwnerKey {
+                package: logical.root.package_id,
+                owner: root,
+            }),
+            kind: RelationKind::MemberDeclaration,
+            target: RelationEndpoint::Owner(ExactOwnerKey {
+                package: logical.root.package_id,
+                owner: root,
+            }),
+        });
+    relation_disagreement
+        .entries
+        .reverse_relations
+        .sort_unstable_by_key(|edge| (edge.target, edge.kind, edge.source));
+    reject(
+        &relation_disagreement,
+        "change_delete_relation_disagreement",
+    );
+}
+
+#[test]
+fn authored_owned_closure_selection_work_is_independent_of_unrelated_owner_count() {
+    const UNRELATED_MODULES: u64 = 2_000;
+    let temporary = tempfile::tempdir().expect("temporary locality repositories");
+    let small_snapshot = crate::platform::kernel::tests::witness_snapshot();
+    let mut large_snapshot = small_snapshot.clone();
+    for ordinal in 0..UNRELATED_MODULES {
+        let module = crate::platform::semantic_id::ModuleId::migrate(
+            b"owned-closure-unrelated-module",
+            ordinal,
+        );
+        let owner = OwnerKey::Module(module);
+        assert!(
+            large_snapshot
+                .owners
+                .insert(
+                    owner,
+                    OwnerRecord::Module(ModuleRecord {
+                        header: OwnerHeader::new(owner, OwnerKind::Module),
+                        name: Name::new(format!("unrelated_{ordinal:04}")).unwrap(),
+                    }),
+                )
+                .is_none()
+        );
+    }
+    large_snapshot.root.owners = MapRoot::from_parts(
+        PageDigest::from_bytes([201; 32]),
+        u64::try_from(large_snapshot.owners.len()).unwrap(),
+        crate::platform::persistent_map::MapContentDigest::from_bytes([202; 32]),
+    );
+    let root = small_snapshot
+        .owners
+        .iter()
+        .find_map(|(owner, record)| match record {
+            OwnerRecord::Module(module) if module.name.as_str() == "second" => Some(*owner),
+            _ => None,
+        })
+        .expect("selected locality root");
+    let small = GraphRepository::create(&temporary.path().join("small"), &small_snapshot, None)
+        .expect("create small locality repository");
+    let large = GraphRepository::create(&temporary.path().join("large"), &large_snapshot, None)
+        .expect("create large locality repository");
+    let run = |repository: &GraphRepository| {
+        let view = repository.view_current().expect("open locality base");
+        let request = AuthoredChangeSet {
+            base: view.revision(),
+            preconditions: Vec::new(),
+            budget: ChangeBudget::default(),
+            changes: vec![AuthoredChange::DeleteOwner {
+                owner: OwnerSelector::Exact { owner: root },
+                policy: AuthoredDeletePolicy::OwnedClosure,
+            }],
+        };
+        let lowering =
+            lower_authored_changes(&view, &view, &request).expect("lower local ownership closure");
+        let prepared = view
+            .prepare_authored_change(&request, PublicationOptions::default())
+            .expect("prepare local ownership closure");
+        (lowering, prepared)
+    };
+    let (small_lowering, small_prepared) = run(&small.repository);
+    let (large_lowering, large_prepared) = run(&large.repository);
+    let closure = complete_ownership_descendants(&small.initial.witness, root);
+    assert_eq!(
+        closure,
+        complete_ownership_descendants(&large.initial.witness, root)
+    );
+    assert_eq!(
+        small_lowering.work.ownership_steps,
+        large_lowering.work.ownership_steps
+    );
+    assert_eq!(
+        small_lowering.work.relation_edges_read,
+        large_lowering.work.relation_edges_read
+    );
+    assert_eq!(
+        small_lowering.work.canonical.point_reads,
+        large_lowering.work.canonical.point_reads
+    );
+    assert_eq!(
+        small_lowering.work.canonical.canonical_records_decoded,
+        large_lowering.work.canonical.canonical_records_decoded
+    );
+    assert_eq!(
+        small_lowering.work.witness.point_reads,
+        large_lowering.work.witness.point_reads
+    );
+    assert_eq!(
+        small_lowering.work.witness.witness_records_decoded,
+        large_lowering.work.witness.witness_records_decoded
+    );
+    let edit_counts = |edits: &[PrimitiveEdit]| {
+        edits
+            .iter()
+            .fold((0_u64, 0_u64), |counts, edit| match edit {
+                PrimitiveEdit::DeleteOwner { .. } => (counts.0 + 1, counts.1),
+                PrimitiveEdit::InsertRetirement { .. } => (counts.0, counts.1 + 1),
+                _ => counts,
+            })
+    };
+    assert_eq!(
+        edit_counts(&small_lowering.edits),
+        edit_counts(&large_lowering.edits)
+    );
+    assert_eq!(
+        small_prepared.publication.receipt.counts.owners_deleted,
+        large_prepared.publication.receipt.counts.owners_deleted
+    );
+    assert_eq!(
+        small_prepared
+            .publication
+            .receipt
+            .counts
+            .retirements_changed,
+        large_prepared
+            .publication
+            .receipt
+            .counts
+            .retirements_changed
+    );
+    assert_eq!(
+        small_prepared.logical_plan.relations.removed.len(),
+        large_prepared.logical_plan.relations.removed.len()
+    );
+    assert_eq!(
+        small_prepared.logical_plan.relations.added.len(),
+        large_prepared.logical_plan.relations.added.len()
+    );
+    let (owner_edits, retirement_edits) = edit_counts(&small_lowering.edits);
+    let metrics = format!(
+        "owned-closure-locality selected-roots=1 closure={} small-owners={} large-owners={} unrelated-owners={UNRELATED_MODULES} ownership-steps={} relation-edges={} canonical-point-reads={} canonical-records={} canonical-pages-small={} canonical-pages-large={} witness-point-reads={} witness-records={} witness-pages-small={} witness-pages-large={} owner-edits={owner_edits} retirement-edits={retirement_edits} removed-relations={} added-relations={} structural-owners={} semantic-owners={} selected-tests={} impact-reasons={}\n",
+        closure.len(),
+        small_snapshot.owners.len(),
+        large_snapshot.owners.len(),
+        small_lowering.work.ownership_steps,
+        small_lowering.work.relation_edges_read,
+        small_lowering.work.canonical.point_reads,
+        small_lowering.work.canonical.canonical_records_decoded,
+        small_lowering.work.canonical.map_pages_read,
+        large_lowering.work.canonical.map_pages_read,
+        small_lowering.work.witness.point_reads,
+        small_lowering.work.witness.witness_records_decoded,
+        small_lowering.work.witness.map_pages_read,
+        large_lowering.work.witness.map_pages_read,
+        small_prepared.logical_plan.relations.removed.len(),
+        small_prepared.logical_plan.relations.added.len(),
+        small_prepared.logical_plan.structurally_checked.len(),
+        small_prepared.logical_plan.semantically_checked.len(),
+        small_prepared.logical_plan.tests.len(),
+        small_prepared.logical_plan.reasons.len(),
+    );
+    eprint!("{metrics}");
+    if let Some(evidence_directory) =
+        std::env::var_os("LKJSCRIPT_OWNED_CLOSURE_EVIDENCE_DIR").map(std::path::PathBuf::from)
+    {
+        std::fs::create_dir_all(&evidence_directory)
+            .expect("create ownership-closure evidence directory");
+        std::fs::write(evidence_directory.join("locality-metrics.txt"), metrics)
+            .expect("retain ownership-closure locality metrics");
+    }
+}
+
+#[test]
+#[ignore = "release-scale ownership closure; run explicitly with --ignored --nocapture"]
+fn authored_owned_closure_scale_emits_complete_plan_under_default_admission() {
+    const DESCENDANTS: u64 = 1_500;
+
+    fn directory_bytes(path: &std::path::Path) -> u64 {
+        std::fs::read_dir(path)
+            .expect("read scale repository directory")
+            .map(|entry| {
+                let entry = entry.expect("read scale repository entry");
+                let metadata = entry.metadata().expect("read scale entry metadata");
+                if metadata.is_dir() {
+                    directory_bytes(&entry.path())
+                } else if metadata.is_file() {
+                    metadata.len()
+                } else {
+                    0
+                }
+            })
+            .sum()
+    }
+
+    let temporary = tempfile::tempdir().expect("temporary scale repository");
+    let destination = temporary.path().join("meaning");
+    let mut logical = empty_snapshot(b"owned-closure-scale");
+    let module = crate::platform::semantic_id::ModuleId::migrate(b"owned-closure-scale", 1);
+    let root = OwnerKey::Module(module);
+    logical.owners.insert(
+        root,
+        OwnerRecord::Module(ModuleRecord {
+            header: OwnerHeader::new(root, OwnerKind::Module),
+            name: Name::new("scale_root").unwrap(),
+        }),
+    );
+    let mut hierarchy = vec![root];
+    for ordinal in 0..DESCENDANTS {
+        let documentation = DocumentationId::migrate(b"owned-closure-scale-documentation", ordinal);
+        let owner = OwnerKey::Documentation(documentation);
+        let parent = hierarchy[usize::try_from(ordinal / 8).unwrap()];
+        assert!(
+            logical
+                .owners
+                .insert(
+                    owner,
+                    OwnerRecord::Documentation(DocumentationRecord {
+                        header: OwnerHeader::new(owner, OwnerKind::Documentation),
+                        owner: parent,
+                        class: DocumentationClass::Nonsemantic,
+                        content: DocumentContent::Inline(format!("scale record {ordinal:04}")),
+                    }),
+                )
+                .is_none()
+        );
+        hierarchy.push(owner);
+    }
+    logical.root.owners = MapRoot::from_parts(
+        PageDigest::from_bytes([211; 32]),
+        u64::try_from(logical.owners.len()).unwrap(),
+        crate::platform::persistent_map::MapContentDigest::from_bytes([212; 32]),
+    );
+    let bootstrap_started = std::time::Instant::now();
+    let created = GraphRepository::create(&destination, &logical, None)
+        .expect("create scale ownership repository");
+    let bootstrap_elapsed = bootstrap_started.elapsed();
+    let repository_before_plan = directory_bytes(&destination);
+    let request = AuthoredChangeSet {
+        base: created.current.head.revision,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
+        changes: vec![AuthoredChange::DeleteOwner {
+            owner: OwnerSelector::Exact { owner: root },
+            policy: AuthoredDeletePolicy::OwnedClosure,
+        }],
+    };
+    let normalized = crate::platform::control::normalize_change_request(
+        request,
+        PublicationOptions {
+            idempotency_key: Some("owned-closure-scale".to_owned()),
+            intent: Some("release scale evidence".to_owned()),
+        },
+    )
+    .expect("normalize scale closure request");
+    let plan_started = std::time::Instant::now();
+    let prepared = created
+        .repository
+        .prepare_authored_change(&normalized.semantic, normalized.options)
+        .expect("prepare scale ownership closure");
+    let plan =
+        crate::platform::control::LogicalChangePlan::new(normalized.request_commitment, &prepared)
+            .expect("construct scale ownership plan");
+    let mut plan_bytes = Vec::new();
+    let encoded = crate::platform::control::encode_logical_change_plan(&plan, |record| {
+        plan_bytes.extend_from_slice(record);
+        Ok(())
+    })
+    .expect("encode complete scale ownership plan");
+    let plan_elapsed = plan_started.elapsed();
+    let decoded =
+        crate::platform::control::decode_logical_change_plan(std::io::Cursor::new(&plan_bytes))
+            .expect("strictly decode scale ownership plan");
+    assert_eq!(decoded.token, encoded.token.to_string());
+    assert_eq!(decoded.counts.owners, DESCENDANTS + 1);
+    assert_eq!(decoded.counts.retirements, DESCENDANTS + 1);
+    assert_eq!(prepared.lowering_work.ownership_steps, DESCENDANTS);
+    assert_eq!(
+        prepared.publication.budget_work.canonical_edits.owner_edits,
+        DESCENDANTS + 1
+    );
+    assert_eq!(
+        prepared
+            .publication
+            .budget_work
+            .canonical_edits
+            .retirement_edits,
+        DESCENDANTS + 1
+    );
+    let repository_after_plan = directory_bytes(&destination);
+    assert_eq!(repository_after_plan, repository_before_plan);
+    let work = prepared.publication.budget_work;
+    let revision = prepared.publication.head.revision;
+    let plan_digest =
+        crate::platform::semantic_id::encode_hex(blake3::hash(&plan_bytes).as_bytes());
+    let apply_started = std::time::Instant::now();
+    let PublicationOutcome::Accepted { .. } = created
+        .repository
+        .publish(&prepared.publication)
+        .expect("publish scale ownership closure")
+    else {
+        panic!("scale ownership closure must advance HEAD exactly once")
+    };
+    let apply_elapsed = apply_started.elapsed();
+    let repository_after_apply = directory_bytes(&destination);
+    let reopened = GraphRepository::open(&destination)
+        .expect("reopen scale ownership repository")
+        .view_current()
+        .expect("open scale ownership result");
+    assert_eq!(reopened.revision(), revision);
+    assert_eq!(reopened.current().semantic_root.owners.entries(), 0);
+    assert_eq!(
+        reopened.current().semantic_root.retirements.entries(),
+        DESCENDANTS + 1
+    );
+    let peak_rss_kib = std::fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|status| {
+            status.lines().find_map(|line| {
+                line.strip_prefix("VmHWM:")
+                    .and_then(|value| value.split_whitespace().next())
+                    .and_then(|value| value.parse::<u64>().ok())
+            })
+        });
+    let metrics = format!(
+        "owned-closure-scale cache=cold topology=module-plus-8ary-inline-documentation-tree descendants={DESCENDANTS} closure={} revision={revision} bootstrap-wall-us={} plan-wall-us={} apply-wall-us={} cpu-time=external peak-rss-kib={} plan-records={} plan-bytes={} plan-blake3={} canonical-point-reads={} canonical-pages-read={} canonical-records={} witness-point-reads={} witness-pages-read={} witness-records={} ownership-steps={} relation-edges={} owner-edits={} retirement-edits={} validation-owners={} selected-tests={} staged-objects={} staged-pages={} staged-bytes={} repository-before-plan-bytes={} repository-after-plan-bytes={} repository-after-apply-bytes={}\n",
+        DESCENDANTS + 1,
+        bootstrap_elapsed.as_micros(),
+        plan_elapsed.as_micros(),
+        apply_elapsed.as_micros(),
+        peak_rss_kib.map_or_else(|| "unavailable".to_owned(), |value| value.to_string()),
+        decoded.records,
+        decoded.bytes,
+        plan_digest,
+        work.canonical_reads.point_reads,
+        work.canonical_reads.map_pages_read,
+        work.canonical_reads.canonical_records_decoded,
+        work.witness_reads.point_reads,
+        work.witness_reads.map_pages_read,
+        work.witness_reads.witness_records_decoded,
+        prepared.lowering_work.ownership_steps,
+        work.relation_edges,
+        work.canonical_edits.owner_edits,
+        work.canonical_edits.retirement_edits,
+        work.validation.owner_records,
+        work.tests.selected,
+        work.staging.objects,
+        work.staging.pages,
+        work.staging.bytes,
+        repository_before_plan,
+        repository_after_plan,
+        repository_after_apply,
+    );
+    eprint!("{metrics}");
+    if let Some(evidence_directory) =
+        std::env::var_os("LKJSCRIPT_OWNED_CLOSURE_EVIDENCE_DIR").map(std::path::PathBuf::from)
+    {
+        std::fs::create_dir_all(&evidence_directory).expect("create scale evidence directory");
+        std::fs::write(evidence_directory.join("scale.logical-plan"), &plan_bytes)
+            .expect("retain scale logical plan");
+        std::fs::write(evidence_directory.join("scale-metrics.txt"), metrics)
+            .expect("retain scale metrics");
+    }
 }
 
 #[test]
@@ -5392,7 +6575,7 @@ fn idempotency_reconciliation_survives_later_revisions_and_restart() {
 }
 
 #[test]
-fn deterministic_publication_interruptions_reopen_old_or_new_complete_head() {
+fn deterministic_owned_closure_publication_interruptions_reopen_old_or_new_complete_head() {
     for (ordinal, point, expects_new, leaves_head_stage) in [
         (0, PublicationPoint::BeforeObjectStage, false, false),
         (1, PublicationPoint::AfterFirstObjectStage, false, false),
@@ -5406,7 +6589,28 @@ fn deterministic_publication_interruptions_reopen_old_or_new_complete_head() {
         let logical = crate::platform::kernel::tests::witness_snapshot();
         let created =
             GraphRepository::create(&destination, &logical, None).expect("create repository");
-        let prepared = prepare_body_publication(&created, PublicationOptions::default());
+        let root = logical
+            .owners
+            .iter()
+            .find_map(|(owner, record)| match record {
+                OwnerRecord::Module(module) if module.name.as_str() == "second" => Some(*owner),
+                _ => None,
+            })
+            .expect("second module");
+        let request = AuthoredChangeSet {
+            base: created.current.head.revision,
+            preconditions: Vec::new(),
+            budget: ChangeBudget::default(),
+            changes: vec![AuthoredChange::DeleteOwner {
+                owner: OwnerSelector::Exact { owner: root },
+                policy: AuthoredDeletePolicy::OwnedClosure,
+            }],
+        };
+        let prepared = created
+            .repository
+            .prepare_authored_change(&request, PublicationOptions::default())
+            .expect("prepare interrupted ownership closure")
+            .publication;
         let error = created
             .repository
             .publish_with_fault(&prepared, point)
@@ -5867,6 +7071,34 @@ fn expression_using_binding(
             _ => None,
         })
         .expect("exact binding use")
+}
+
+fn complete_ownership_descendants(
+    witness: &crate::platform::witness::FullWitness,
+    root: OwnerKey,
+) -> BTreeSet<OwnerKey> {
+    witness
+        .entries
+        .ownership
+        .keys()
+        .copied()
+        .filter(|owner| {
+            let mut current = *owner;
+            for _ in 0..=witness.entries.ownership.len() {
+                if current == root {
+                    return true;
+                }
+                let Some(entry) = witness.entries.ownership.get(&current) else {
+                    return false;
+                };
+                let OwnershipParent::Owner(parent) = entry.parent else {
+                    return false;
+                };
+                current = parent;
+            }
+            false
+        })
+        .collect()
 }
 
 fn logical_plan_decode_error(bytes: &[u8]) -> String {

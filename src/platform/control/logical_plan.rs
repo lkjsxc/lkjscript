@@ -474,12 +474,42 @@ pub(crate) struct LogicalPlanEncoding {
 /// stream them to a private file stage, or collect a small test fixture.
 pub(crate) fn encode_logical_change_plan<F>(
     plan: &LogicalChangePlan<'_>,
-    mut emit: F,
+    emit: F,
 ) -> Result<LogicalPlanEncoding, Diagnostic>
 where
     F: FnMut(&[u8]) -> Result<(), Diagnostic>,
 {
-    let mut encoder = PlanEncoder::new(&mut emit);
+    encode_logical_change_plan_admitted(
+        plan,
+        emit,
+        MAXIMUM_LOGICAL_PLAN_BYTES,
+        MAXIMUM_LOGICAL_PLAN_RECORDS,
+    )
+}
+
+#[cfg(test)]
+pub(crate) fn encode_logical_change_plan_with_limits<F>(
+    plan: &LogicalChangePlan<'_>,
+    emit: F,
+    maximum_bytes: u64,
+    maximum_records: u64,
+) -> Result<LogicalPlanEncoding, Diagnostic>
+where
+    F: FnMut(&[u8]) -> Result<(), Diagnostic>,
+{
+    encode_logical_change_plan_admitted(plan, emit, maximum_bytes, maximum_records)
+}
+
+fn encode_logical_change_plan_admitted<F>(
+    plan: &LogicalChangePlan<'_>,
+    mut emit: F,
+    maximum_bytes: u64,
+    maximum_records: u64,
+) -> Result<LogicalPlanEncoding, Diagnostic>
+where
+    F: FnMut(&[u8]) -> Result<(), Diagnostic>,
+{
+    let mut encoder = PlanEncoder::new(&mut emit, maximum_bytes, maximum_records);
     encode_plan_body(plan, &mut encoder)?;
     let prepared = PreparedPlanCommitment(*encoder.hasher.finalize().as_bytes());
     let token = ChangePlanToken {
@@ -506,18 +536,22 @@ struct PlanEncoder<'a, F> {
     hasher: blake3::Hasher,
     bytes: u64,
     records: u64,
+    maximum_bytes: u64,
+    maximum_records: u64,
 }
 
 impl<F> PlanEncoder<'_, F>
 where
     F: FnMut(&[u8]) -> Result<(), Diagnostic>,
 {
-    fn new(emit: &mut F) -> PlanEncoder<'_, F> {
+    fn new(emit: &mut F, maximum_bytes: u64, maximum_records: u64) -> PlanEncoder<'_, F> {
         PlanEncoder {
             emit,
             hasher: blake3::Hasher::new_derive_key(PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN),
             bytes: 0,
             records: 0,
+            maximum_bytes,
+            maximum_records,
         }
     }
 
@@ -562,19 +596,21 @@ where
                 "logical plan record accounting overflowed",
             )
         })?;
-        if bytes > MAXIMUM_LOGICAL_PLAN_BYTES {
+        if bytes > self.maximum_bytes {
             return Err(plan_resource_error(
                 "change_plan_output_byte_budget",
                 format!(
-                    "logical plan requires more than the {MAXIMUM_LOGICAL_PLAN_BYTES}-byte complete-review budget"
+                    "logical plan requires more than the {}-byte complete-review budget",
+                    self.maximum_bytes
                 ),
             ));
         }
-        if records > MAXIMUM_LOGICAL_PLAN_RECORDS {
+        if records > self.maximum_records {
             return Err(plan_resource_error(
                 "change_plan_output_record_budget",
                 format!(
-                    "logical plan requires more than the {MAXIMUM_LOGICAL_PLAN_RECORDS}-record complete-review budget"
+                    "logical plan requires more than the {}-record complete-review budget",
+                    self.maximum_records
                 ),
             ));
         }
@@ -3029,7 +3065,11 @@ mod tests {
                 budget_bytes += u64::try_from(bytes.len()).unwrap();
                 Ok(())
             };
-            let mut encoder = PlanEncoder::new(&mut emit);
+            let mut encoder = PlanEncoder::new(
+                &mut emit,
+                MAXIMUM_LOGICAL_PLAN_BYTES,
+                MAXIMUM_LOGICAL_PLAN_RECORDS,
+            );
             encode_budget(ChangeBudget::default(), &mut encoder).unwrap();
         }
         total += budget_bytes;

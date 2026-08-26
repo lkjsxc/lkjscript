@@ -18,11 +18,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-3";
-pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-4";
-pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 4;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-4";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 4;
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-5";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 5;
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
-pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject"];
+pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
     ("private", DeclarationVisibility::Private),
     ("package", DeclarationVisibility::Package),
@@ -159,7 +160,7 @@ impl CompactChangeFieldForm {
             Self::FunctionEffect => "pure",
             Self::TypeReference => "unit|bool|i64|bytes|text|static-text|secret|@NAME",
             Self::ExpressionReference => "$NAME",
-            Self::DeletePolicy => "reject",
+            Self::DeletePolicy => "reject|owned-closure",
             Self::OwnerParent => "package|DOMAIN_HEX",
             Self::NamespaceClass => "change.namespace-class.name",
             Self::ExactPackage => "pkg_HEX",
@@ -1056,19 +1057,25 @@ impl Decoder {
             }),
             CompactChangeOperation::DeleteOwner => {
                 let policy = required(record, "policy")?;
-                if policy != "reject" {
-                    return Err(field_error(
-                        record,
-                        "policy",
-                        "change_delete_policy",
-                        format!("deletion policy must be reject; observed '{policy}'"),
-                    ));
-                }
+                let policy = match policy {
+                    "reject" => AuthoredDeletePolicy::Reject,
+                    "owned-closure" => AuthoredDeletePolicy::OwnedClosure,
+                    _ => {
+                        return Err(field_error(
+                            record,
+                            "policy",
+                            "change_delete_policy",
+                            format!(
+                                "deletion policy must be reject or owned-closure; observed '{policy}'"
+                            ),
+                        ));
+                    }
+                };
                 Ok(AuthoredChange::DeleteOwner {
                     owner: OwnerSelector::Exact {
                         owner: parse_field::<OwnerKey>(record, "owner")?,
                     },
-                    policy: AuthoredDeletePolicy::Reject,
+                    policy,
                 })
             }
             CompactChangeOperation::RenameOwner => Ok(AuthoredChange::RenameOwner {
@@ -1930,7 +1937,7 @@ mod tests {
     }
 
     #[test]
-    fn deletion_is_exact_and_reject_only() {
+    fn deletion_policies_are_exact_and_predecessor_forms_are_unknown() {
         let owner = OwnerKey::Module(ModuleId::migrate(b"compact-delete", 1));
         let input = format!(
             "request base={}\ndelete.owner owner={owner} policy=reject\n",
@@ -1945,14 +1952,28 @@ mod tests {
             }] if *observed == owner
         ));
 
-        let unsupported = format!(
+        let closure = format!(
             "request base={}\ndelete.owner owner={owner} policy=owned-closure\n",
             revision()
         );
-        assert_eq!(
-            decode_compact_change("delete.lk", unsupported.as_bytes()).unwrap_err()[0].code,
-            "change_delete_policy"
-        );
+        let decoded = decode_compact_change("delete.lk", closure.as_bytes()).unwrap();
+        assert!(matches!(
+            &decoded.semantic.changes[..],
+            [AuthoredChange::DeleteOwner {
+                owner: OwnerSelector::Exact { owner: observed },
+                policy: AuthoredDeletePolicy::OwnedClosure,
+            }] if *observed == owner
+        ));
+        for policy in ["cascade", "recursive", "deep"] {
+            let unsupported = format!(
+                "request base={}\ndelete.owner owner={owner} policy={policy}\n",
+                revision()
+            );
+            assert_eq!(
+                decode_compact_change("delete.lk", unsupported.as_bytes()).unwrap_err()[0].code,
+                "change_delete_policy"
+            );
+        }
         let predecessor = format!(
             "request base={}\ndelete.owner owner={owner} cascade=true policy=reject\n",
             revision()

@@ -17,10 +17,24 @@ pub(crate) struct CandidateRelations<'a, W: ?Sized> {
     package: PackageId,
     derived: &'a DerivedDelta,
     base: &'a W,
+    delta_index: Option<CandidateRelationDeltaIndex>,
     outgoing: BTreeMap<OwnerKey, Vec<RelationEdge>>,
     incoming: BTreeMap<OwnerKey, Vec<RelationEdge>>,
     incoming_packages: BTreeMap<PackageId, Vec<RelationEdge>>,
     work: WitnessReadWork,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct IndexedRelationDelta {
+    removed: Vec<RelationEdge>,
+    added: Vec<RelationEdge>,
+}
+
+#[derive(Debug, Default)]
+struct CandidateRelationDeltaIndex {
+    outgoing: BTreeMap<OwnerKey, IndexedRelationDelta>,
+    incoming: BTreeMap<OwnerKey, IndexedRelationDelta>,
+    incoming_packages: BTreeMap<PackageId, IndexedRelationDelta>,
 }
 
 impl<'a, W: WitnessBaseRead + ?Sized> CandidateRelations<'a, W> {
@@ -29,6 +43,7 @@ impl<'a, W: WitnessBaseRead + ?Sized> CandidateRelations<'a, W> {
             package,
             derived,
             base,
+            delta_index: None,
             outgoing: BTreeMap::new(),
             incoming: BTreeMap::new(),
             incoming_packages: BTreeMap::new(),
@@ -47,10 +62,6 @@ impl<'a, W: WitnessBaseRead + ?Sized> CandidateRelations<'a, W> {
         maximum_fanout: u64,
     ) -> Result<CandidateRelationRead, Diagnostic> {
         require_relation_capacity(maximum_work, maximum_fanout)?;
-        let source = RelationEndpoint::Owner(ExactOwnerKey {
-            package: self.package,
-            owner,
-        });
         let base = if let Some(cached) = self.outgoing.get(&owner) {
             cached.clone()
         } else {
@@ -68,12 +79,20 @@ impl<'a, W: WitnessBaseRead + ?Sized> CandidateRelations<'a, W> {
             self.outgoing.insert(owner, read.value.edges.clone());
             read.value.edges
         };
+        let index_work = self.ensure_delta_index(remaining_after_base(maximum_work, &base)?)?;
+        let delta = self
+            .delta_index
+            .as_ref()
+            .and_then(|index| index.outgoing.get(&owner))
+            .cloned()
+            .unwrap_or_default();
         self.apply_delta(
             base,
-            |edge| edge.source == source,
+            delta,
             "change_relation_forward_remove",
             maximum_work,
             maximum_fanout,
+            index_work,
         )
     }
 
@@ -84,10 +103,6 @@ impl<'a, W: WitnessBaseRead + ?Sized> CandidateRelations<'a, W> {
         maximum_fanout: u64,
     ) -> Result<CandidateRelationRead, Diagnostic> {
         require_relation_capacity(maximum_work, maximum_fanout)?;
-        let target = RelationEndpoint::Owner(ExactOwnerKey {
-            package: self.package,
-            owner,
-        });
         let base = if let Some(cached) = self.incoming.get(&owner) {
             cached.clone()
         } else {
@@ -105,12 +120,20 @@ impl<'a, W: WitnessBaseRead + ?Sized> CandidateRelations<'a, W> {
             self.incoming.insert(owner, read.value.edges.clone());
             read.value.edges
         };
+        let index_work = self.ensure_delta_index(remaining_after_base(maximum_work, &base)?)?;
+        let delta = self
+            .delta_index
+            .as_ref()
+            .and_then(|index| index.incoming.get(&owner))
+            .cloned()
+            .unwrap_or_default();
         self.apply_delta(
             base,
-            |edge| edge.target == target,
+            delta,
             "change_relation_reverse_remove",
             maximum_work,
             maximum_fanout,
+            index_work,
         )
     }
 
@@ -140,40 +163,68 @@ impl<'a, W: WitnessBaseRead + ?Sized> CandidateRelations<'a, W> {
                 .insert(package, read.value.edges.clone());
             read.value.edges
         };
+        let index_work = self.ensure_delta_index(remaining_after_base(maximum_work, &base)?)?;
+        let delta = self
+            .delta_index
+            .as_ref()
+            .and_then(|index| index.incoming_packages.get(&package))
+            .cloned()
+            .unwrap_or_default();
         self.apply_delta(
             base,
-            |edge| {
-                matches!(
-                    edge.target,
-                    RelationEndpoint::Owner(ExactOwnerKey {
-                        package: target_package,
-                        ..
-                    }) if target_package == package
-                )
-            },
+            delta,
             "change_relation_package_remove",
             maximum_work,
             maximum_fanout,
+            index_work,
         )
+    }
+
+    fn ensure_delta_index(&mut self, maximum_work: u64) -> Result<u64, Diagnostic> {
+        if self.delta_index.is_some() {
+            return Ok(0);
+        }
+        let removed = u64::try_from(self.derived.relations.removed.len()).unwrap_or(u64::MAX);
+        let added = u64::try_from(self.derived.relations.added.len()).unwrap_or(u64::MAX);
+        let relation_count = removed.saturating_add(added);
+        if relation_count > maximum_work {
+            return Err(relation_error(
+                DiagnosticClass::Resource,
+                "change_budget_relation_edges",
+                format!(
+                    "candidate relation delta indexing requires {relation_count} edge inspections with only {maximum_work} remaining"
+                ),
+            ));
+        }
+        let mut index = CandidateRelationDeltaIndex::default();
+        for edge in &self.derived.relations.removed {
+            index_relation_delta(&mut index, self.package, *edge, true);
+        }
+        for edge in &self.derived.relations.added {
+            index_relation_delta(&mut index, self.package, *edge, false);
+        }
+        self.delta_index = Some(index);
+        Ok(relation_count)
     }
 
     fn apply_delta(
         &self,
         base: impl IntoIterator<Item = RelationEdge>,
-        selected: impl Fn(&RelationEdge) -> bool,
+        delta: IndexedRelationDelta,
         missing_code: &'static str,
         maximum_work: u64,
         maximum_fanout: u64,
+        initial_work: u64,
     ) -> Result<CandidateRelationRead, Diagnostic> {
-        let mut edges_examined = 0_u64;
+        let mut edges_examined = initial_work;
         let mut relations = BTreeSet::new();
         for edge in base {
             charge_relation_edge(&mut edges_examined, maximum_work)?;
             insert_relation(&mut relations, edge, maximum_fanout)?;
         }
-        for edge in &self.derived.relations.removed {
+        for edge in delta.removed {
             charge_relation_edge(&mut edges_examined, maximum_work)?;
-            if selected(edge) && !relations.remove(edge) {
+            if !relations.remove(&edge) {
                 return Err(relation_error(
                     DiagnosticClass::Corrupt,
                     missing_code,
@@ -181,17 +232,58 @@ impl<'a, W: WitnessBaseRead + ?Sized> CandidateRelations<'a, W> {
                 ));
             }
         }
-        for edge in &self.derived.relations.added {
+        for edge in delta.added {
             charge_relation_edge(&mut edges_examined, maximum_work)?;
-            if selected(edge) {
-                insert_relation(&mut relations, *edge, maximum_fanout)?;
-            }
+            insert_relation(&mut relations, edge, maximum_fanout)?;
         }
         Ok(CandidateRelationRead {
             edges: relations.into_iter().collect(),
             edges_examined,
         })
     }
+}
+
+fn index_relation_delta(
+    index: &mut CandidateRelationDeltaIndex,
+    local_package: PackageId,
+    edge: RelationEdge,
+    removed: bool,
+) {
+    if let RelationEndpoint::Owner(ExactOwnerKey { package, owner }) = edge.source
+        && package == local_package
+    {
+        insert_indexed_relation(index.outgoing.entry(owner).or_default(), edge, removed);
+    }
+    if let RelationEndpoint::Owner(ExactOwnerKey { package, owner }) = edge.target {
+        if package == local_package {
+            insert_indexed_relation(index.incoming.entry(owner).or_default(), edge, removed);
+        }
+        insert_indexed_relation(
+            index.incoming_packages.entry(package).or_default(),
+            edge,
+            removed,
+        );
+    }
+}
+
+fn insert_indexed_relation(indexed: &mut IndexedRelationDelta, edge: RelationEdge, removed: bool) {
+    if removed {
+        indexed.removed.push(edge);
+    } else {
+        indexed.added.push(edge);
+    }
+}
+
+fn remaining_after_base(maximum_work: u64, base: &[RelationEdge]) -> Result<u64, Diagnostic> {
+    maximum_work
+        .checked_sub(u64::try_from(base.len()).unwrap_or(u64::MAX))
+        .ok_or_else(|| {
+            relation_error(
+                DiagnosticClass::Resource,
+                "change_budget_relation_edges",
+                "candidate base relation prefix exceeded the remaining edge budget",
+            )
+        })
 }
 
 fn insert_relation(
@@ -273,10 +365,9 @@ mod tests {
     use super::*;
     use crate::platform::semantic_id::DeclarationId;
     use crate::platform::witness::rebuild_full_witness;
-    use std::cell::Cell;
 
     #[test]
-    fn nonmatching_delta_scan_stops_before_exceeding_relation_budget() {
+    fn candidate_relation_delta_index_is_bounded_charged_once_and_preserves_fanout() {
         let snapshot = crate::platform::kernel::tests::witness_snapshot();
         let witness = rebuild_full_witness(&snapshot).expect("base witness");
         let package = snapshot.root.package_id;
@@ -300,23 +391,26 @@ mod tests {
                 target: selected_source,
             });
         }
-        let view = CandidateRelations::new(package, &derived, &witness);
-        let examined = Cell::new(0_u64);
-        let error = view
-            .apply_delta(
-                Vec::new(),
-                |edge| {
-                    examined.set(examined.get().saturating_add(1));
-                    edge.source == selected_source
-                },
-                "change_relation_test_remove",
-                2,
-                MAXIMUM_RELATION_PREFIX_ITEMS as u64,
-            )
-            .expect_err("the third nonmatching delta edge must exceed the budget");
+        let mut bounded = CandidateRelations::new(package, &derived, &witness);
+        let error = bounded
+            .outgoing(selected_owner, 2, MAXIMUM_RELATION_PREFIX_ITEMS as u64)
+            .expect_err("delta indexing must reject before exceeding the edge budget");
         assert_eq!(error.class, DiagnosticClass::Resource);
         assert_eq!(error.code, "change_budget_relation_edges");
-        assert_eq!(examined.get(), 2);
+
+        let mut indexed = CandidateRelations::new(package, &derived, &witness);
+        let first_read = indexed
+            .outgoing(selected_owner, 32, MAXIMUM_RELATION_PREFIX_ITEMS as u64)
+            .expect("the complete delta index accepts an exact edge-budget fit");
+        assert_eq!(first_read.edges_examined, 32);
+        assert!(first_read.edges.is_empty());
+        let indexed_owner =
+            OwnerKey::Declaration(DeclarationId::migrate(b"candidate-relation-nonmatching", 0));
+        let second_read = indexed
+            .outgoing(indexed_owner, 2, MAXIMUM_RELATION_PREFIX_ITEMS as u64)
+            .expect("a later endpoint reads only its indexed delta edge");
+        assert_eq!(second_read.edges_examined, 1);
+        assert_eq!(second_read.edges.len(), 1);
 
         let first = RelationEdge {
             source: selected_source,
@@ -339,26 +433,20 @@ mod tests {
             }),
             ..first
         };
+        let empty = DerivedDelta::default();
+        let view = CandidateRelations::new(package, &empty, &witness);
         assert_eq!(
             view.apply_delta(
                 [first, second],
-                |_| false,
+                IndexedRelationDelta::default(),
                 "change_relation_test_remove",
                 2,
                 1,
+                0,
             )
             .expect_err("the second endpoint edge must exceed one-edge fanout")
             .code,
             "change_budget_relation_fanout"
-        );
-
-        let mut production_view = CandidateRelations::new(package, &derived, &witness);
-        assert_eq!(
-            production_view
-                .outgoing(selected_owner, 2, MAXIMUM_RELATION_PREFIX_ITEMS as u64)
-                .expect_err("the bounded outgoing read must reject the same delta scan")
-                .code,
-            "change_budget_relation_edges"
         );
     }
 }

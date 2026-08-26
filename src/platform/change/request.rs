@@ -280,9 +280,10 @@ pub enum ParameterParentSelector {
     Operation { operation: OwnerSelector },
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AuthoredDeletePolicy {
     Reject,
+    OwnedClosure,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -403,6 +404,7 @@ pub struct AuthoredLoweringWork {
     pub preconditions_checked: u64,
     pub allocated_identities: u64,
     pub type_nodes_interned: u64,
+    pub ownership_steps: u64,
     pub relation_edges_read: u64,
     pub canonical: CanonicalReadWork,
     pub witness: WitnessReadWork,
@@ -417,6 +419,7 @@ impl AuthoredLoweringWork {
             usize::try_from(self.type_nodes_interned).unwrap_or(usize::MAX),
             self.canonical,
             self.witness,
+            self.ownership_steps,
             self.relation_edges_read,
         )
     }

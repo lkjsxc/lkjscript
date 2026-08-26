@@ -10,7 +10,7 @@ use crate::platform::kernel::{
     extract_owner_relations,
 };
 use crate::platform::witness::{
-    MAXIMUM_RELATION_PREFIX_ITEMS, OwnershipParent, aggregation_children,
+    MAXIMUM_RELATION_PREFIX_ITEMS, OwnershipParent, aggregation_children, ownership_contributions,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -22,11 +22,8 @@ pub(super) fn lower_deletions<
     lowerer: &mut AuthoredLowerer<'_, B, W>,
     deletions: impl IntoIterator<Item = (&'request OwnerSelector, &'request AuthoredDeletePolicy)>,
 ) -> Result<(), Diagnostic> {
-    let mut roots = BTreeSet::new();
+    let mut roots = BTreeMap::new();
     for (selector, policy) in deletions {
-        match policy {
-            AuthoredDeletePolicy::Reject => {}
-        }
         let root = lowerer.resolve_owner(selector)?;
         if matches!(root, OwnerKey::Binding(_) | OwnerKey::Expression(_)) {
             return Err(delete_error(
@@ -35,7 +32,7 @@ pub(super) fn lower_deletions<
             ));
         }
         require_accepted_owner(lowerer, root)?;
-        if !roots.insert(root) {
+        if roots.insert(root, *policy).is_some() {
             return Err(delete_error(
                 "change_delete_duplicate",
                 format!("owner {root:?} is selected for deletion more than once"),
@@ -47,25 +44,38 @@ pub(super) fn lower_deletions<
     }
 
     let candidate_external_children = index_candidate_external_children(lowerer);
-    for root in &roots {
-        let owned = current_owned_children(lowerer, *root, &candidate_external_children)?;
-        if !owned.is_empty() {
-            return Err(delete_error(
-                "change_delete_owned_children",
-                format!(
-                    "owner {root:?} owns {} identities; reject policy requires a leaf owner",
-                    owned.len()
-                ),
-            ));
+    let mut closure = BTreeSet::new();
+    let mut closure_roots = Vec::new();
+    for (root, policy) in &roots {
+        match policy {
+            AuthoredDeletePolicy::Reject => {
+                let owned = current_owned_children(lowerer, *root, &candidate_external_children)?;
+                if !owned.is_empty() {
+                    return Err(delete_error(
+                        "change_delete_owned_children",
+                        format!(
+                            "owner {root:?} owns {} identities; reject policy requires a leaf owner",
+                            owned.len()
+                        ),
+                    ));
+                }
+                lowerer.admit_owner_edit(*root)?;
+                lowerer.admit_retirement_edit(*root)?;
+                closure.insert(*root);
+                lowerer.check_budget("authored leaf deletion")?;
+            }
+            AuthoredDeletePolicy::OwnedClosure => closure_roots.push(*root),
         }
-        lowerer.admit_owner_edit(*root)?;
-        lowerer.admit_retirement_edit(*root)?;
-        lowerer.check_budget("authored leaf deletion")?;
     }
+    select_owned_closure(
+        lowerer,
+        closure_roots,
+        &candidate_external_children,
+        &mut closure,
+        "authored deletion ownership closure",
+    )?;
 
-    let closure = roots;
-
-    for root in &closure {
+    for root in roots.keys() {
         detach_root_from_live_parent(lowerer, *root, &closure)?;
     }
     reject_untouched_incoming_references(lowerer, &closure)?;
@@ -92,9 +102,28 @@ pub(super) fn retire_replaced_expression_tree<
         ));
     }
 
-    let candidate_external_children = index_candidate_external_children(lowerer);
     let mut closure = BTreeSet::new();
-    let mut frontier = VecDeque::from([root]);
+    let candidate_external_children = index_candidate_external_children(lowerer);
+    select_owned_closure(
+        lowerer,
+        [root],
+        &candidate_external_children,
+        &mut closure,
+        "function-body replacement ownership closure",
+    )?;
+
+    reject_untouched_incoming_references(lowerer, &closure)?;
+    retain_retirements_and_mark_deleted(lowerer, &closure)
+}
+
+fn select_owned_closure<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+    lowerer: &mut AuthoredLowerer<'_, B, W>,
+    roots: impl IntoIterator<Item = OwnerKey>,
+    candidate_external_children: &BTreeMap<OwnerKey, BTreeSet<OwnerKey>>,
+    closure: &mut BTreeSet<OwnerKey>,
+    phase: &str,
+) -> Result<(), Diagnostic> {
+    let mut frontier = roots.into_iter().collect::<VecDeque<_>>();
     while let Some(owner) = frontier.pop_front() {
         if closure.contains(&owner) {
             continue;
@@ -108,11 +137,9 @@ pub(super) fn retire_replaced_expression_tree<
                 frontier.push_back(child);
             }
         }
-        lowerer.check_budget("function-body replacement ownership closure")?;
+        lowerer.check_budget(phase)?;
     }
-
-    reject_untouched_incoming_references(lowerer, &closure)?;
-    retain_retirements_and_mark_deleted(lowerer, &closure)
+    Ok(())
 }
 
 fn require_accepted_owner<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
@@ -168,9 +195,18 @@ fn current_owned_children<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?S
             continue;
         }
         let source = local_relation_owner(lowerer, edge.source)?;
-        lowerer.require_owner(source)?;
-        let candidate = &lowerer.owners[&source].record;
-        if record_is_external_child_of(candidate, owner) {
+        let original = accepted_record(lowerer, source)?;
+        let working = &lowerer.owners[&source];
+        if !record_is_external_child_of(&original, owner) {
+            return Err(delete_corrupt(
+                "change_delete_ownership_disagreement",
+                format!(
+                    "ownership witness locates {source:?} under {owner:?}, but accepted canonical meaning does not reproduce that parent"
+                ),
+            ));
+        }
+        let candidate = &working.record;
+        if !working.deleted && record_is_external_child_of(candidate, owner) {
             children.insert(source);
         }
     }
@@ -179,6 +215,11 @@ fn current_owned_children<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?S
         children.extend(candidate_children);
     }
     children.remove(&owner);
+    lowerer.work.ownership_steps = lowerer
+        .work
+        .ownership_steps
+        .saturating_add(u64::try_from(children.len()).unwrap_or(u64::MAX));
+    lowerer.check_budget("authored ownership child traversal")?;
     Ok(children.into_iter().collect())
 }
 
@@ -469,6 +510,7 @@ fn reject_untouched_incoming_references<
     closure: &BTreeSet<OwnerKey>,
 ) -> Result<(), Diagnostic> {
     let mut candidate_relations = BTreeMap::<OwnerKey, Vec<RelationEdge>>::new();
+    let mut accepted_relations = BTreeMap::<OwnerKey, Vec<RelationEdge>>::new();
     let deleted_targets = closure
         .iter()
         .map(|owner| {
@@ -496,6 +538,18 @@ fn reject_untouched_incoming_references<
                     ));
                 }
             };
+            let source_relations =
+                accepted_relations_for(lowerer, &mut accepted_relations, source)?;
+            let target_relations =
+                accepted_relations_for(lowerer, &mut accepted_relations, *target)?;
+            if !source_relations.contains(&edge) && !target_relations.contains(&edge) {
+                return Err(delete_corrupt(
+                    "change_delete_relation_disagreement",
+                    format!(
+                        "incoming relation witness edge {edge:?} is not reproduced by accepted canonical owner {source:?}"
+                    ),
+                ));
+            }
             if closure.contains(&source) {
                 continue;
             }
@@ -539,6 +593,20 @@ fn reject_untouched_incoming_references<
     Ok(())
 }
 
+fn accepted_relations_for<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+    lowerer: &mut AuthoredLowerer<'_, B, W>,
+    cache: &mut BTreeMap<OwnerKey, Vec<RelationEdge>>,
+    owner: OwnerKey,
+) -> Result<Vec<RelationEdge>, Diagnostic> {
+    if let Some(relations) = cache.get(&owner) {
+        return Ok(relations.clone());
+    }
+    let record = accepted_record(lowerer, owner)?;
+    let relations = extract_relations_for_record(lowerer, owner, record, true)?;
+    cache.insert(owner, relations.clone());
+    Ok(relations)
+}
+
 fn candidate_relations_for<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     lowerer: &mut AuthoredLowerer<'_, B, W>,
     cache: &mut BTreeMap<OwnerKey, Vec<RelationEdge>>,
@@ -573,6 +641,15 @@ fn extract_candidate_relations<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead
         return Ok(Vec::new());
     }
     let record = working.record.clone();
+    extract_relations_for_record(lowerer, owner, record, false)
+}
+
+fn extract_relations_for_record<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+    lowerer: &mut AuthoredLowerer<'_, B, W>,
+    owner: OwnerKey,
+    record: OwnerRecord,
+    accepted: bool,
+) -> Result<Vec<RelationEdge>, Diagnostic> {
     let package = lowerer.base.package_id();
     let mut case_parents = BTreeMap::new();
     if let OwnerRecord::Expression(expression) = &record
@@ -583,8 +660,13 @@ fn extract_candidate_relations<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead
                 continue;
             }
             let case_owner = OwnerKey::Case(arm.case.case);
-            lowerer.require_owner(case_owner)?;
-            let parent = match &lowerer.owners[&case_owner].record {
+            let case_record = if accepted {
+                accepted_record(lowerer, case_owner)?
+            } else {
+                lowerer.require_owner(case_owner)?;
+                lowerer.owners[&case_owner].record.clone()
+            };
+            let parent = match case_record {
                 OwnerRecord::Case(record) => Some(record.declaration),
                 _ => None,
             };
@@ -620,6 +702,21 @@ fn extract_candidate_relations<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead
     )?;
     lowerer.check_budget("authored deletion final relation extraction")?;
     Ok(relations)
+}
+
+fn accepted_record<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
+    lowerer: &mut AuthoredLowerer<'_, B, W>,
+    owner: OwnerKey,
+) -> Result<OwnerRecord, Diagnostic> {
+    if !lowerer.owners.contains_key(&owner) {
+        require_accepted_owner(lowerer, owner)?;
+    }
+    lowerer.owners[&owner].original.clone().ok_or_else(|| {
+        delete_corrupt(
+            "change_delete_owner_cache",
+            "accepted relation verification lost its canonical owner record",
+        )
+    })
 }
 
 fn retain_retirements_and_mark_deleted<
@@ -687,6 +784,35 @@ fn base_parent<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
             format!("accepted owner {owner:?} has no exact base ownership witness"),
         )
     })?;
+    let original = lowerer.owners[&owner].original.as_ref().ok_or_else(|| {
+        delete_corrupt(
+            "change_delete_owner_cache",
+            "retirement lowering lost the accepted canonical owner record",
+        )
+    })?;
+    let mut canonical = ownership_contributions(original)?.get(&owner).copied();
+    if canonical.is_none()
+        && let OwnershipParent::Owner(parent) = entry.parent
+    {
+        if !lowerer.owners.contains_key(&parent) {
+            require_accepted_owner(lowerer, parent)?;
+        }
+        let parent = lowerer.owners[&parent].original.as_ref().ok_or_else(|| {
+            delete_corrupt(
+                "change_delete_owner_cache",
+                "retirement lowering lost the accepted canonical parent record",
+            )
+        })?;
+        canonical = ownership_contributions(parent)?.get(&owner).copied();
+    }
+    if canonical != Some(entry) {
+        return Err(delete_corrupt(
+            "change_delete_ownership_disagreement",
+            format!(
+                "accepted ownership witness for {owner:?} is not reproduced by canonical meaning"
+            ),
+        ));
+    }
     Ok(match entry.parent {
         OwnershipParent::Package => None,
         OwnershipParent::Owner(parent) => Some(parent),

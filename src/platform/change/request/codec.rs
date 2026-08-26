@@ -12,7 +12,7 @@ use crate::platform::kernel::{
 };
 use crate::platform::package::RunnerKind;
 
-const INTENT_MAGIC: [u8; 8] = *b"LKJACR04";
+const INTENT_MAGIC: [u8; 8] = *b"LKJACR05";
 const BUDGET_MAGIC: [u8; 8] = *b"LKJABG01";
 const MAXIMUM_BUDGET_BYTES: usize = 1_024;
 
@@ -669,6 +669,7 @@ impl Writer {
     fn delete_policy(&mut self, value: &AuthoredDeletePolicy) -> Result<(), Diagnostic> {
         match value {
             AuthoredDeletePolicy::Reject => self.tag(1),
+            AuthoredDeletePolicy::OwnedClosure => self.tag(2),
         }
     }
 
@@ -1431,8 +1432,29 @@ mod tests {
         assert_eq!(&first[..8], &INTENT_MAGIC);
         assert_eq!(
             crate::platform::semantic_id::encode_hex(blake3::hash(&first).as_bytes()),
-            "ceec8234ee421eb30e764bfc81a3a54cea5e3c61c03ac74f00b7dfd4ba0a97b4"
+            "74215ac970a6a25fde4bd736f47ee376f9c991b3928f4fb5dbfa9b2f35e88d8c"
         );
+    }
+
+    #[test]
+    fn deletion_policy_encoding_preserves_reject_tag_and_separates_owned_closure() {
+        let owner = OwnerKey::Module(ModuleId::migrate(b"authored-delete-policy", 1));
+        let request = |policy| AuthoredChangeSet {
+            base: revision(),
+            preconditions: Vec::new(),
+            changes: vec![AuthoredChange::DeleteOwner {
+                owner: OwnerSelector::Exact { owner },
+                policy,
+            }],
+            budget: ChangeBudget::default(),
+        };
+        let reject = canonical_authored_intent_bytes(&request(AuthoredDeletePolicy::Reject))
+            .expect("encode reject deletion");
+        let closure = canonical_authored_intent_bytes(&request(AuthoredDeletePolicy::OwnedClosure))
+            .expect("encode closure deletion");
+        assert_ne!(reject, closure);
+        assert_eq!(reject.last(), Some(&1));
+        assert_eq!(closure.last(), Some(&2));
     }
 
     #[test]

@@ -543,7 +543,22 @@ fn execute_normalized_change(
     } = request;
     let request_commitment = normalized.request_commitment;
     let repository = open_normalized_repository(project).map_err(single_diagnostic)?;
-    let prepared = repository.prepare_authored_change(&normalized.semantic, normalized.options)?;
+    let retry_base = if action == ChangeAction::Apply {
+        normalized
+            .options
+            .idempotency_key
+            .as_deref()
+            .map(|key| repository.view_idempotency_base(key, normalized.semantic.base))
+            .transpose()
+            .map_err(single_diagnostic)?
+            .flatten()
+    } else {
+        None
+    };
+    let prepared = match retry_base {
+        Some(view) => view.prepare_authored_change(&normalized.semantic, normalized.options)?,
+        None => repository.prepare_authored_change(&normalized.semantic, normalized.options)?,
+    };
     let logical_plan =
         LogicalChangePlan::new(request_commitment, &prepared).map_err(single_diagnostic)?;
     if action == ChangeAction::Plan {

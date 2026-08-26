@@ -932,6 +932,7 @@ impl ChangeBudgetWork {
         authored_type_nodes: usize,
         canonical_reads: CanonicalReadWork,
         witness_reads: WitnessReadWork,
+        ownership_steps: u64,
         relation_edges: u64,
     ) -> Self {
         Self {
@@ -941,6 +942,7 @@ impl ChangeBudgetWork {
             authored_type_nodes: count(authored_type_nodes),
             canonical_reads,
             witness_reads,
+            impact_ownership_steps: ownership_steps,
             relation_edges,
             ..Self::default()
         }

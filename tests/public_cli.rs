@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
 const APPLICATION: &str = "applications/lkjournal";
-const CLI_CONTRACT_VERSION: u64 = 8;
+const CLI_CONTRACT_VERSION: u64 = 9;
 
 fn binary() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_lkjscript"))
@@ -310,7 +310,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
     );
     assert_eq!(
         compact_field(change_contract, "request-commitment"),
-        Some("lkjscript-authored-change-codec-4")
+        Some("lkjscript-authored-change-codec-5")
     );
     assert_eq!(
         compact_field(change_contract, "prepared-plan"),
@@ -507,10 +507,14 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         compact_field(exact_reference, "syntax"),
         Some("pkg_HEX/decl_HEX")
     );
-    assert!(change_section.iter().any(|record| {
-        record.operation == "change.delete-policy"
-            && compact_field(record, "name") == Some("reject")
-    }));
+    assert_eq!(
+        change_section
+            .iter()
+            .filter(|record| record.operation == "change.delete-policy")
+            .filter_map(|record| compact_field(record, "name"))
+            .collect::<Vec<_>>(),
+        vec!["reject", "owned-closure"]
+    );
     assert!(change_section.iter().any(|record| {
         record.operation == "change.operation-field"
             && compact_field(record, "operation") == Some("delete.owner")
@@ -1669,24 +1673,14 @@ fn reviewed_change_plan_body_replacement_exports_exact_owned_relation_closure() 
         .iter()
         .find_map(|(symbol, identity)| (*symbol == "$message").then_some(*identity))
         .expect("allocated record identity");
-    for (name, request, code) in [
-        (
-            "reject-delete-policy",
-            format!(
-                "request base={accepted_revision}\n\
-                 delete.owner owner={record} policy=owned-closure\n"
-            ),
-            "change_delete_policy",
+    for (name, request, code) in [(
+        "reject-delete-cascade",
+        format!(
+            "request base={accepted_revision}\n\
+             delete.owner owner={record} cascade=true policy=reject\n"
         ),
-        (
-            "reject-delete-cascade",
-            format!(
-                "request base={accepted_revision}\n\
-                 delete.owner owner={record} cascade=true policy=reject\n"
-            ),
-            "change_field_unknown",
-        ),
-    ] {
+        "change_field_unknown",
+    )] {
         let request_path = temporary.path().join(format!("{name}.lkjc"));
         std::fs::write(&request_path, request).expect("unsupported deletion request");
         let rejected = compact_failure_output(command(&[
@@ -2394,31 +2388,32 @@ fn reviewed_change_plan_direct_and_record_export_match_and_apply_reprepares() {
         Some("renamed")
     );
 
-    let repeated = compact_failure_output_with_status(
-        command(&[
-            "--project",
-            path(&project),
-            "change",
-            "apply",
-            "rename.owner",
-            "--base",
-            &base,
-            "--owner",
-            &owner,
-            "--name",
-            "renamed",
-            "--idempotency",
-            "direct-rename-equality",
-            "--intent",
-            "transport-equality",
-            "--plan",
-            &plan,
-        ]),
-        7,
+    let repeated = compact_success(&[
+        "--project",
+        path(&project),
+        "change",
+        "apply",
+        "rename.owner",
+        "--base",
+        &base,
+        "--owner",
+        &owner,
+        "--name",
+        "renamed",
+        "--idempotency",
+        "direct-rename-equality",
+        "--intent",
+        "transport-equality",
+        "--plan",
+        &plan,
+    ]);
+    assert_eq!(
+        compact_field(compact_record(&repeated, "result"), "status"),
+        Some("already-accepted")
     );
     assert_eq!(
-        compact_field(compact_record(&repeated, "diagnostic"), "code"),
-        Some("change_authored_stale_base")
+        compact_field(compact_record(&repeated, "revision"), "result"),
+        Some(accepted.as_str())
     );
     assert_eq!(current_revision(&project), accepted);
 }
@@ -3365,6 +3360,569 @@ fn copied_binary_creates_normalized_minimal_projects_and_rejects_unsafe_destinat
         );
         assert!(!actual_parent.join("project").exists());
     }
+}
+
+#[test]
+fn copied_release_owned_closure_deletion_is_reviewed_atomic_and_reopenable() {
+    let temporary = tempfile::TempDir::new().expect("isolated owned-closure workspace");
+    let copied_binary = temporary.path().join("lkjscript");
+    copy_executable(&binary(), &copied_binary);
+    let project = temporary.path().join("project");
+    let created = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["new", path(&project), "--name", "closure-workflow"],
+    );
+    let initial = compact_field(compact_record(&created, "revision"), "id")
+        .expect("initial revision")
+        .to_owned();
+    let creation = format!(
+        "request base={initial} idempotency=closure-fixture-create\n\
+         create.module as=$alpha name=alpha\n\
+         create.module as=$beta name=beta\n\
+         create.record as=$payload module=$alpha name=Payload visibility=public\n\
+         add.field as=$first record=$payload name=first type=unit\n\
+         add.field as=$second record=$payload name=second type=unit\n\
+         type.named as=@payload-type declaration=$payload\n\
+         expression.local as=$body value=$parameter\n\
+         create.function as=$consumer module=$beta name=consumer visibility=public result=@payload-type effect=pure body=$body\n\
+         add.parameter as=$parameter function=$consumer name=payload type=@payload-type\n"
+    );
+    let creation_path = temporary.path().join("create.lkjc");
+    std::fs::write(&creation_path, creation).expect("write owned-closure fixture request");
+    let creation_plan = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "--input-file",
+            path(&creation_path),
+        ],
+    );
+    let creation_token = compact_field(compact_record(&creation_plan, "plan"), "token")
+        .expect("fixture plan token")
+        .to_owned();
+    let identities = creation_plan
+        .iter()
+        .filter(|record| record.operation == "identity")
+        .map(|record| {
+            (
+                compact_field(record, "symbol")
+                    .expect("identity symbol")
+                    .to_owned(),
+                compact_field(record, "id")
+                    .expect("identity value")
+                    .to_owned(),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    assert_eq!(identities.len(), 8);
+    let created_graph = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "apply",
+            "--input-file",
+            path(&creation_path),
+            "--plan",
+            &creation_token,
+        ],
+    );
+    let fixture_revision = compact_field(compact_record(&created_graph, "revision"), "result")
+        .expect("fixture revision")
+        .to_owned();
+    let alpha = &identities["$alpha"];
+    let beta = &identities["$beta"];
+    let payload = &identities["$payload"];
+    let consumer = &identities["$consumer"];
+
+    let unchanged = content_inventory(&project);
+    for (name, body, code) in [
+        (
+            "reject-non-leaf",
+            format!(
+                "request base={fixture_revision}\n\
+                 delete.owner owner={payload} policy=reject\n"
+            ),
+            "change_delete_owned_children",
+        ),
+        (
+            "reject-live-reference",
+            format!(
+                "request base={fixture_revision}\n\
+                 delete.owner owner={payload} policy=owned-closure\n"
+            ),
+            "change_delete_live_reference",
+        ),
+        (
+            "reject-cascade-field",
+            format!(
+                "request base={fixture_revision}\n\
+                 delete.owner owner={payload} policy=reject cascade=true\n"
+            ),
+            "change_field_unknown",
+        ),
+        (
+            "reject-cascade-policy",
+            format!(
+                "request base={fixture_revision}\n\
+                 delete.owner owner={payload} policy=cascade\n"
+            ),
+            "change_delete_policy",
+        ),
+        (
+            "reject-recursive-policy",
+            format!(
+                "request base={fixture_revision}\n\
+                 delete.owner owner={payload} policy=recursive\n"
+            ),
+            "change_delete_policy",
+        ),
+        (
+            "reject-deep-policy",
+            format!(
+                "request base={fixture_revision}\n\
+                 delete.owner owner={payload} policy=deep\n"
+            ),
+            "change_delete_policy",
+        ),
+        (
+            "reject-missing-policy",
+            format!(
+                "request base={fixture_revision}\n\
+                 delete.owner owner={payload}\n"
+            ),
+            "change_field_missing",
+        ),
+        (
+            "reject-duplicate-policy",
+            format!(
+                "request base={fixture_revision}\n\
+                 delete.owner owner={payload} policy=reject policy=owned-closure\n"
+            ),
+            "control_duplicate_field",
+        ),
+        (
+            "reject-foreign-owner-form",
+            format!(
+                "request base={fixture_revision}\n\
+                 delete.owner owner=pkg_00000000000000000000000000000001/{payload} policy=owned-closure\n"
+            ),
+            "change_field_value",
+        ),
+    ] {
+        let rejected_path = temporary.path().join(format!("{name}.lkjc"));
+        std::fs::write(&rejected_path, body).expect("write rejected closure request");
+        let rejected = compact_failure_output(command_at(
+            &copied_binary,
+            temporary.path(),
+            &[
+                "--project",
+                path(&project),
+                "change",
+                "plan",
+                "--input-file",
+                path(&rejected_path),
+            ],
+        ));
+        assert_eq!(
+            compact_field(compact_record(&rejected, "diagnostic"), "code"),
+            Some(code),
+            "{name}"
+        );
+        assert_eq!(content_inventory(&project), unchanged, "{name}");
+        assert_eq!(
+            current_revision_at(&copied_binary, temporary.path(), &project),
+            fixture_revision,
+            "{name}"
+        );
+    }
+
+    let stale_request = format!(
+        "request base={fixture_revision} idempotency=owned-closure-public-1 intent=reviewed-closure\n\
+         delete.owner owner={payload} policy=owned-closure\n\
+         delete.owner owner={consumer} policy=owned-closure\n"
+    );
+    let stale_request_path = temporary.path().join("stale-delete.lkjc");
+    std::fs::write(&stale_request_path, stale_request).expect("write stale deletion request");
+    let stale_plan = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "--input-file",
+            path(&stale_request_path),
+        ],
+    );
+    let stale_token = compact_field(compact_record(&stale_plan, "plan"), "token")
+        .expect("stale plan token")
+        .to_owned();
+    let rename_plan = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "rename.owner",
+            "--base",
+            &fixture_revision,
+            "--owner",
+            beta,
+            "--name",
+            "beta_live",
+        ],
+    );
+    let rename_token = compact_field(compact_record(&rename_plan, "plan"), "token")
+        .expect("base-advance plan")
+        .to_owned();
+    let renamed = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "apply",
+            "rename.owner",
+            "--base",
+            &fixture_revision,
+            "--owner",
+            beta,
+            "--name",
+            "beta_live",
+            "--plan",
+            &rename_token,
+        ],
+    );
+    let deletion_base = compact_field(compact_record(&renamed, "revision"), "result")
+        .expect("advanced deletion base")
+        .to_owned();
+    let before_stale_apply = content_inventory(&project);
+    let stale = compact_failure_output_with_status(
+        command_at(
+            &copied_binary,
+            temporary.path(),
+            &[
+                "--project",
+                path(&project),
+                "change",
+                "apply",
+                "--input-file",
+                path(&stale_request_path),
+                "--plan",
+                &stale_token,
+            ],
+        ),
+        7,
+    );
+    assert_eq!(
+        compact_field(compact_record(&stale, "diagnostic"), "code"),
+        Some("change_authored_stale_base")
+    );
+    assert_eq!(content_inventory(&project), before_stale_apply);
+    assert_eq!(
+        current_revision_at(&copied_binary, temporary.path(), &project),
+        deletion_base
+    );
+
+    let deletion = format!(
+        "request base={deletion_base} idempotency=owned-closure-public-1 intent=reviewed-closure\n\
+         delete.owner owner={payload} policy=owned-closure\n\
+         delete.owner owner={consumer} policy=owned-closure\n"
+    );
+    let deletion_path = temporary.path().join("delete.lkjc");
+    std::fs::write(&deletion_path, deletion).expect("write reviewed closure deletion");
+    let logical_plan = temporary.path().join("delete.logical-plan");
+    let before_plan = content_inventory(&project);
+    let planned = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "--input-file",
+            path(&deletion_path),
+            "--output",
+            path(&logical_plan),
+        ],
+    );
+    let plan = compact_field(compact_record(&planned, "plan"), "token")
+        .expect("reviewed closure plan")
+        .to_owned();
+    assert_eq!(plan.len(), 5 + 128);
+    assert_eq!(content_inventory(&project), before_plan);
+    assert_eq!(
+        compact_field(compact_record(&planned, "summary"), "deleted"),
+        Some("6")
+    );
+    assert_eq!(
+        compact_field(compact_record(&planned, "summary"), "retirements"),
+        Some("6")
+    );
+    let repeated_plan = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "--input-file",
+            path(&deletion_path),
+        ],
+    );
+    assert_eq!(
+        compact_field(compact_record(&repeated_plan, "plan"), "token"),
+        Some(plan.as_str())
+    );
+    let decoded = decode_logical_change_plan(BufReader::new(
+        File::open(&logical_plan).expect("open owned-closure logical plan"),
+    ))
+    .expect("strictly decode owned-closure logical plan");
+    assert_eq!(decoded.token.to_string(), plan);
+    let plan_records = parse_records(
+        "owned-closure logical plan",
+        &std::fs::read(&logical_plan).expect("read owned-closure logical plan"),
+    )
+    .expect("parse owned-closure logical plan records");
+    let expected_deleted = [
+        "$payload",
+        "$first",
+        "$second",
+        "$consumer",
+        "$parameter",
+        "$body",
+    ]
+    .into_iter()
+    .map(|symbol| identities[symbol].as_str())
+    .collect::<BTreeSet<_>>();
+    let planned_deleted = plan_records
+        .iter()
+        .filter(|record| {
+            record.operation == "logical-plan.owner"
+                && compact_field(record, "class-deleted") == Some("true")
+        })
+        .filter_map(|record| compact_field(record, "owner"))
+        .collect::<BTreeSet<_>>();
+    assert_eq!(planned_deleted, expected_deleted);
+    let planned_retirements = plan_records
+        .iter()
+        .filter(|record| {
+            record.operation == "logical-plan.retirement"
+                && compact_field(record, "before-present") == Some("false")
+                && compact_field(record, "after-present") == Some("true")
+        })
+        .filter_map(|record| compact_field(record, "owner"))
+        .collect::<BTreeSet<_>>();
+    assert_eq!(planned_retirements, expected_deleted);
+
+    let changed_intent = format!(
+        "request base={deletion_base} idempotency=owned-closure-public-1 intent=unreviewed-change\n\
+         delete.owner owner={payload} policy=owned-closure\n\
+         delete.owner owner={consumer} policy=owned-closure\n"
+    );
+    let mismatch = compact_failure_output(command_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "apply",
+            "--input",
+            &changed_intent,
+            "--plan",
+            &plan,
+        ],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&mismatch, "diagnostic"), "code"),
+        Some("change_request_commitment_mismatch")
+    );
+    assert_eq!(content_inventory(&project), before_plan);
+
+    let applied = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "apply",
+            "--input-file",
+            path(&deletion_path),
+            "--plan",
+            &plan,
+        ],
+    );
+    assert_eq!(compact_field(&applied[0], "status"), Some("accepted"));
+    let accepted = compact_field(compact_record(&applied, "revision"), "result")
+        .expect("owned-closure accepted revision")
+        .to_owned();
+
+    for (kind, owner) in [("record", payload), ("pure_function", consumer)] {
+        let absent = compact_failure_output(command_at(
+            &copied_binary,
+            temporary.path(),
+            &["--project", path(&project), "inspect", "owner", kind, owner],
+        ));
+        assert_eq!(
+            compact_field(compact_record(&absent, "diagnostic"), "code"),
+            Some("owner_not_found")
+        );
+    }
+    let status = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["--project", path(&project), "status"],
+    );
+    assert_eq!(
+        compact_field(compact_record(&status, "revision"), "id"),
+        Some(accepted.as_str())
+    );
+    for (owner, name) in [(alpha, "alpha"), (beta, "beta_live")] {
+        let inspected = compact_success_at(
+            &copied_binary,
+            temporary.path(),
+            &[
+                "--project",
+                path(&project),
+                "inspect",
+                "owner",
+                "module",
+                owner,
+            ],
+        );
+        assert_eq!(
+            compact_field(compact_record(&inspected, "revision"), "observed"),
+            Some(accepted.as_str())
+        );
+        assert_eq!(
+            compact_field(compact_record(&inspected, "owner"), "name"),
+            Some(name)
+        );
+        let relations = compact_success_at(
+            &copied_binary,
+            temporary.path(),
+            &[
+                "--project",
+                path(&project),
+                "query",
+                "relations",
+                owner,
+                "--direction",
+                "incoming",
+                "--kind",
+                "declaration_module",
+            ],
+        );
+        assert_eq!(
+            compact_field(compact_record(&relations, "summary"), "returned"),
+            Some("0")
+        );
+    }
+    let owners = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "owners",
+            "--limit",
+            "16",
+        ],
+    );
+    assert_eq!(
+        owners
+            .iter()
+            .filter(|record| record.operation == "owner")
+            .filter_map(|record| compact_field(record, "id"))
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from([alpha.as_str(), beta.as_str()])
+    );
+    for (name, parent) in [("Payload", alpha.as_str()), ("consumer", beta.as_str())] {
+        let found = compact_success_at(
+            &copied_binary,
+            temporary.path(),
+            &[
+                "--project",
+                path(&project),
+                "query",
+                "find",
+                "declaration",
+                name,
+                "--parent",
+                parent,
+            ],
+        );
+        assert_eq!(
+            compact_field(compact_record(&found, "summary"), "match"),
+            Some("false")
+        );
+    }
+    let deleted_parent = compact_failure_output(command_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "find",
+            "field",
+            "first",
+            "--parent",
+            payload,
+        ],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&deleted_parent, "diagnostic"), "code"),
+        Some("query_parent_not_found")
+    );
+
+    let before_replay = content_inventory(&project);
+    let replay = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "apply",
+            "--input-file",
+            path(&deletion_path),
+            "--plan",
+            &plan,
+        ],
+    );
+    assert_eq!(
+        compact_field(compact_record(&replay, "result"), "status"),
+        Some("already-accepted")
+    );
+    assert_eq!(
+        compact_field(compact_record(&replay, "revision"), "result"),
+        Some(accepted.as_str())
+    );
+    assert_eq!(content_inventory(&project), before_replay);
+    assert_eq!(
+        current_revision_at(&copied_binary, temporary.path(), &project),
+        accepted
+    );
+    assert!(!temporary.path().join("Cargo.toml").exists());
+    assert!(!project.join(".lkjscript").exists());
 }
 
 #[test]
