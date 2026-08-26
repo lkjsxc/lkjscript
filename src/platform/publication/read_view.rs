@@ -31,7 +31,7 @@ use crate::platform::package_transport::{
     PackageTransportClosureValidation,
 };
 use crate::platform::persistent_map::{
-    MapAdmission, MapError, MapErrorClass, MapRoot, MapWork, PersistentMap,
+    MapAdmission, MapError, MapErrorClass, MapRangeControl, MapRoot, MapWork, PersistentMap,
 };
 use crate::platform::semantic_id::RevisionId;
 use crate::platform::storage::contract::TARGET_PACK_BYTES;
@@ -49,7 +49,7 @@ use crate::platform::witness::{
     forward_relation_prefix, owner_key_bytes, reverse_relation_package_owner_prefix,
     reverse_relation_prefix, test_dependency_forward_prefix,
 };
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 
 pub const MAXIMUM_RELATION_READ_ITEMS: usize =
@@ -57,6 +57,7 @@ pub const MAXIMUM_RELATION_READ_ITEMS: usize =
 pub const MAXIMUM_TEST_DEPENDENCY_READ_ITEMS: usize = MAXIMUM_TEST_DEPENDENCY_PREFIX_ITEMS;
 const RELATION_LIMIT_STOP: &str = "publication_relation_limit_stop";
 const TEST_DEPENDENCY_LIMIT_STOP: &str = "publication_test_dependency_limit_stop";
+const QUERY_VISITOR_ABORT: &str = "publication_query_visitor_abort";
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct RepositoryReadWork {
@@ -118,6 +119,28 @@ struct RepositoryReadAdmission {
     store: StoreReadAdmission,
     maximum_canonical_records: u64,
     maximum_witness_records: u64,
+    canonical_code: &'static str,
+    witness_code: &'static str,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct RepositoryQueryAdmission {
+    pub map_pages: u64,
+    pub map_bytes: u64,
+    pub map_entries: u64,
+    pub catalog_lookups: u64,
+    pub store_objects: u64,
+    pub store_bytes: u64,
+    pub canonical_records: u64,
+    pub witness_records: u64,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(crate) struct RepositoryQueryRangeRead {
+    pub last_visited_key: Option<Vec<u8>>,
+    pub visited: u64,
+    pub returned: u64,
+    pub has_more: bool,
 }
 
 impl RepositoryReadAdmission {
@@ -137,6 +160,8 @@ impl RepositoryReadAdmission {
             }),
             maximum_canonical_records: admission.maximum_decoded_records,
             maximum_witness_records: 0,
+            canonical_code: "change_budget_canonical_decoded_records",
+            witness_code: "change_budget_witness_decoded_records",
         }
     }
 
@@ -156,6 +181,8 @@ impl RepositoryReadAdmission {
             }),
             maximum_canonical_records: 0,
             maximum_witness_records: admission.maximum_decoded_records,
+            canonical_code: "change_budget_canonical_decoded_records",
+            witness_code: "change_budget_witness_decoded_records",
         }
     }
 
@@ -165,6 +192,29 @@ impl RepositoryReadAdmission {
             store: StoreReadAdmission::unbounded(),
             maximum_canonical_records: u64::MAX,
             maximum_witness_records: u64::MAX,
+            canonical_code: "change_budget_canonical_decoded_records",
+            witness_code: "change_budget_witness_decoded_records",
+        }
+    }
+
+    const fn query(admission: RepositoryQueryAdmission) -> Self {
+        Self {
+            map: MapAdmission {
+                maximum_pages_read: admission.map_pages,
+                maximum_bytes_read: admission.map_bytes,
+                maximum_entries_visited: admission.map_entries,
+                maximum_pages_encoded: 0,
+                maximum_bytes_encoded: 0,
+            },
+            store: StoreReadAdmission::new(StoreReadLimits {
+                maximum_catalog_lookups: admission.catalog_lookups,
+                maximum_objects: admission.store_objects,
+                maximum_bytes: admission.store_bytes,
+            }),
+            maximum_canonical_records: admission.canonical_records,
+            maximum_witness_records: admission.witness_records,
+            canonical_code: "query_admission_canonical_records",
+            witness_code: "query_admission_witness_records",
         }
     }
 
@@ -172,7 +222,7 @@ impl RepositoryReadAdmission {
         admit_decoded_records(
             &mut self.maximum_canonical_records,
             records,
-            "change_budget_canonical_decoded_records",
+            self.canonical_code,
             "canonical records",
         )
     }
@@ -181,7 +231,7 @@ impl RepositoryReadAdmission {
         admit_decoded_records(
             &mut self.maximum_witness_records,
             records,
-            "change_budget_witness_decoded_records",
+            self.witness_code,
             "witness records",
         )
     }
@@ -476,6 +526,14 @@ impl RepositoryView {
 
     pub fn owner(&self, owner: OwnerKey) -> Result<RevisionRead<Option<OwnerRecord>>, Diagnostic> {
         self.owner_admitted(owner, &mut RepositoryReadAdmission::unbounded())
+    }
+
+    pub(crate) fn query_owner(
+        &self,
+        owner: OwnerKey,
+        admission: RepositoryQueryAdmission,
+    ) -> Result<RevisionRead<Option<OwnerRecord>>, Diagnostic> {
+        self.owner_admitted(owner, &mut RepositoryReadAdmission::query(admission))
     }
 
     fn owner_admitted(
@@ -1346,6 +1404,14 @@ impl RepositoryView {
         self.namespace_admitted(key, &mut RepositoryReadAdmission::unbounded())
     }
 
+    pub(crate) fn query_namespace(
+        &self,
+        key: &NamespaceKey,
+        admission: RepositoryQueryAdmission,
+    ) -> Result<RevisionRead<Option<OwnerKey>>, Diagnostic> {
+        self.namespace_admitted(key, &mut RepositoryReadAdmission::query(admission))
+    }
+
     fn namespace_admitted(
         &self,
         key: &NamespaceKey,
@@ -1401,6 +1467,122 @@ impl RepositoryView {
             value: read.value.map(|bound| bound.summary),
             work: read.work,
         })
+    }
+
+    pub(crate) fn visit_query_owners<F>(
+        &self,
+        exclusive_lower_bound: Option<&[u8]>,
+        kind: Option<OwnerKind>,
+        maximum_scan: u64,
+        maximum_items: u64,
+        query_admission: RepositoryQueryAdmission,
+        mut visitor: F,
+    ) -> Result<RevisionRead<RepositoryQueryRangeRead>, Diagnostic>
+    where
+        F: FnMut(OwnerKey, &OwnerRecord) -> Result<MapRangeControl, Diagnostic>,
+    {
+        if maximum_scan == 0 || maximum_items == 0 {
+            return Err(read_error(
+                DiagnosticClass::Resource,
+                "query_admission_logical_range",
+                "query range scan and item admission must both be positive",
+            ));
+        }
+        let mut admission = RepositoryReadAdmission::query(query_admission);
+        let shared_store_admission = RefCell::new(admission.store);
+        let reader = ObjectPageReader::new_shared_admission(&self.store, &shared_store_admission);
+        let mut map_work = MapWork::with_admission(admission.map);
+        let mut object_work = StoreWork::default();
+        let mut value = RepositoryQueryRangeRead::default();
+        let mut decoded_records = 0_u64;
+        let mut captured = None;
+        let range = PersistentMap::from_root(self.current.semantic_root.owners).for_each_range(
+            &reader,
+            &[],
+            exclusive_lower_bound,
+            &mut map_work,
+            |key, binding_bytes| {
+                let operation = (|| {
+                    if value.visited >= maximum_scan {
+                        return Ok(MapRangeControl::StopBefore);
+                    }
+                    let owner = EncodedOwnerKey::decode(key)?;
+                    let binding = decode_owner_binding(binding_bytes, owner)?;
+                    if kind.is_some_and(|expected| expected != binding.kind) {
+                        value.visited = checked_query_count(value.visited, "visited owners")?;
+                        value.last_visited_key = Some(key.to_vec());
+                        return Ok(MapRangeControl::Continue);
+                    }
+                    if value.returned >= maximum_items {
+                        return Ok(MapRangeControl::StopBefore);
+                    }
+                    let bytes = self
+                        .store
+                        .read_admitted(
+                            ObjectKey::from_digest(ObjectDomain::Owner, binding.object.bytes()),
+                            ObjectDomain::Owner.maximum_bytes(),
+                            &mut shared_store_admission.borrow_mut(),
+                            &mut object_work,
+                        )
+                        .map_err(store_diagnostic)?
+                        .ok_or_else(|| {
+                            read_error(
+                                DiagnosticClass::Corrupt,
+                                "query_owner_object_missing",
+                                "accepted owner binding references a missing owner object",
+                            )
+                        })?;
+                    admission.admit_canonical_records(1)?;
+                    let record = decode_owner(&bytes, owner, binding.kind, binding.object)?;
+                    decoded_records = checked_query_count(decoded_records, "canonical records")?;
+                    match visitor(owner, &record)? {
+                        MapRangeControl::Continue => {
+                            value.visited = checked_query_count(value.visited, "visited owners")?;
+                            value.returned =
+                                checked_query_count(value.returned, "returned owners")?;
+                            value.last_visited_key = Some(key.to_vec());
+                            Ok(MapRangeControl::Continue)
+                        }
+                        MapRangeControl::StopBefore => Ok(MapRangeControl::StopBefore),
+                    }
+                })();
+                operation.map_err(|diagnostic| {
+                    captured = Some(diagnostic);
+                    query_visitor_abort()
+                })
+            },
+        );
+        let range = match range {
+            Ok(range) => range,
+            Err(error) if error.code == QUERY_VISITOR_ABORT => {
+                return Err(match captured {
+                    Some(diagnostic) => diagnostic,
+                    None => read_error(
+                        DiagnosticClass::Corrupt,
+                        "query_visitor_diagnostic_missing",
+                        "query range aborted without its owning diagnostic",
+                    ),
+                });
+            }
+            Err(error) => return Err(map_diagnostic(error)),
+        };
+        if range.entries_visited != value.visited {
+            return Err(read_error(
+                DiagnosticClass::Corrupt,
+                "query_owner_range_count",
+                "owner range traversal disagrees with its logical visit count",
+            ));
+        }
+        value.has_more = range.has_more;
+        let mut work = RepositoryReadWork {
+            map: map_work,
+            store: reader.work(),
+            canonical_records_decoded: decoded_records,
+            witness_records_decoded: 0,
+            items_returned: value.returned,
+        };
+        add_query_store_work(&mut work.store, object_work)?;
+        Ok(self.read(value, work))
     }
 
     /// Explicit broad inventory for a clean normalized compilation.
@@ -1594,6 +1776,107 @@ impl RepositoryView {
             false,
             &mut RepositoryReadAdmission::unbounded(),
         )
+    }
+
+    pub(crate) fn visit_query_relations<F>(
+        &self,
+        endpoint: RelationEndpoint,
+        kind: Option<RelationKind>,
+        incoming: bool,
+        exclusive_lower_bound: Option<&[u8]>,
+        maximum_scan: u64,
+        maximum_items: u64,
+        query_admission: RepositoryQueryAdmission,
+        mut visitor: F,
+    ) -> Result<RevisionRead<RepositoryQueryRangeRead>, Diagnostic>
+    where
+        F: FnMut(RelationEdge) -> Result<MapRangeControl, Diagnostic>,
+    {
+        if maximum_scan == 0 || maximum_items == 0 {
+            return Err(read_error(
+                DiagnosticClass::Resource,
+                "query_admission_logical_range",
+                "query relation scan and item admission must both be positive",
+            ));
+        }
+        let mut admission = RepositoryReadAdmission::query(query_admission);
+        let prefix = if incoming {
+            reverse_relation_prefix(endpoint, kind)
+        } else {
+            forward_relation_prefix(endpoint, kind)
+        };
+        let root = if incoming {
+            self.current.witness.roots.reverse_relations
+        } else {
+            self.current.witness.roots.forward_relations
+        };
+        let reader = ObjectPageReader::new_admitted(&self.store, admission.store);
+        let mut map_work = MapWork::with_admission(admission.map);
+        let mut value = RepositoryQueryRangeRead::default();
+        let mut decoded_records = 0_u64;
+        let mut captured = None;
+        let range = PersistentMap::from_root(root).for_each_range(
+            &reader,
+            &prefix,
+            exclusive_lower_bound,
+            &mut map_work,
+            |key, relation_value| {
+                let operation = (|| {
+                    if value.visited >= maximum_scan || value.returned >= maximum_items {
+                        return Ok(MapRangeControl::StopBefore);
+                    }
+                    admission.admit_witness_records(1)?;
+                    let edge =
+                        decode_query_relation_entry(key, relation_value, endpoint, kind, incoming)?;
+                    decoded_records = checked_query_count(decoded_records, "witness records")?;
+                    match visitor(edge)? {
+                        MapRangeControl::Continue => {
+                            value.visited =
+                                checked_query_count(value.visited, "visited relations")?;
+                            value.returned =
+                                checked_query_count(value.returned, "returned relations")?;
+                            value.last_visited_key = Some(key.to_vec());
+                            Ok(MapRangeControl::Continue)
+                        }
+                        MapRangeControl::StopBefore => Ok(MapRangeControl::StopBefore),
+                    }
+                })();
+                operation.map_err(|diagnostic| {
+                    captured = Some(diagnostic);
+                    query_visitor_abort()
+                })
+            },
+        );
+        let range = match range {
+            Ok(range) => range,
+            Err(error) if error.code == QUERY_VISITOR_ABORT => {
+                return Err(match captured {
+                    Some(diagnostic) => diagnostic,
+                    None => read_error(
+                        DiagnosticClass::Corrupt,
+                        "query_visitor_diagnostic_missing",
+                        "query relation range aborted without its owning diagnostic",
+                    ),
+                });
+            }
+            Err(error) => return Err(map_diagnostic(error)),
+        };
+        if range.entries_visited != value.visited {
+            return Err(read_error(
+                DiagnosticClass::Corrupt,
+                "query_relation_range_count",
+                "relation range traversal disagrees with its logical visit count",
+            ));
+        }
+        value.has_more = range.has_more;
+        let work = RepositoryReadWork {
+            map: map_work,
+            store: reader.work(),
+            canonical_records_decoded: 0,
+            witness_records_decoded: decoded_records,
+            items_returned: value.returned,
+        };
+        Ok(self.read(value, work))
     }
 
     fn outgoing_relations_admitted(
@@ -2032,6 +2315,102 @@ fn map_diagnostic(error: MapError) -> Diagnostic {
         MapErrorClass::Store => DiagnosticClass::Infrastructure,
     };
     read_error(class, error.code, error.message)
+}
+
+fn decode_query_relation_entry(
+    key: &[u8],
+    value: &[u8],
+    endpoint: RelationEndpoint,
+    kind: Option<RelationKind>,
+    incoming: bool,
+) -> Result<RelationEdge, Diagnostic> {
+    if !value.is_empty() {
+        return Err(read_error(
+            DiagnosticClass::Corrupt,
+            "query_relation_value",
+            "relation witness entry has a nonempty canonical value",
+        ));
+    }
+    let edge = if incoming {
+        decode_reverse_relation_key(key)?
+    } else {
+        decode_forward_relation_key(key)?
+    };
+    let observed = if incoming { edge.target } else { edge.source };
+    if observed != endpoint || kind.is_some_and(|expected| edge.kind != expected) {
+        return Err(read_error(
+            DiagnosticClass::Corrupt,
+            "query_relation_prefix_binding",
+            "decoded relation disagrees with its selected endpoint or kind prefix",
+        ));
+    }
+    Ok(edge)
+}
+
+fn query_visitor_abort() -> MapError {
+    MapError {
+        class: MapErrorClass::Resource,
+        code: QUERY_VISITOR_ABORT,
+        message: "query range visitor stopped with a typed diagnostic".to_owned(),
+    }
+}
+
+fn checked_query_count(value: u64, dimension: &'static str) -> Result<u64, Diagnostic> {
+    value.checked_add(1).ok_or_else(|| {
+        read_error(
+            DiagnosticClass::Resource,
+            "query_work_overflow",
+            format!("query {dimension} count overflowed"),
+        )
+    })
+}
+
+fn add_query_store_work(total: &mut StoreWork, additional: StoreWork) -> Result<(), Diagnostic> {
+    total.catalog_lookups = checked_query_work_add(
+        total.catalog_lookups,
+        additional.catalog_lookups,
+        "catalog lookups",
+    )?;
+    total.packs_opened =
+        checked_query_work_add(total.packs_opened, additional.packs_opened, "packs opened")?;
+    total.objects_read =
+        checked_query_work_add(total.objects_read, additional.objects_read, "objects read")?;
+    total.objects_staged = checked_query_work_add(
+        total.objects_staged,
+        additional.objects_staged,
+        "objects staged",
+    )?;
+    total.objects_reused = checked_query_work_add(
+        total.objects_reused,
+        additional.objects_reused,
+        "objects reused",
+    )?;
+    total.bytes_read =
+        checked_query_work_add(total.bytes_read, additional.bytes_read, "store bytes read")?;
+    total.bytes_staged = checked_query_work_add(
+        total.bytes_staged,
+        additional.bytes_staged,
+        "store bytes staged",
+    )?;
+    total.pages_staged =
+        checked_query_work_add(total.pages_staged, additional.pages_staged, "pages staged")?;
+    total.packs_sealed =
+        checked_query_work_add(total.packs_sealed, additional.packs_sealed, "packs sealed")?;
+    Ok(())
+}
+
+fn checked_query_work_add(
+    total: u64,
+    additional: u64,
+    dimension: &'static str,
+) -> Result<u64, Diagnostic> {
+    total.checked_add(additional).ok_or_else(|| {
+        read_error(
+            DiagnosticClass::Resource,
+            "query_work_overflow",
+            format!("query {dimension} work overflowed"),
+        )
+    })
 }
 
 fn consume_full_oracle_work(consumed: &mut usize, additional: usize) -> Result<(), Diagnostic> {
@@ -2487,5 +2866,92 @@ fn witness_test_dependency_read(
             bytes_read: read.work.store.bytes_read,
             witness_records_decoded: read.work.witness_records_decoded,
         },
+    }
+}
+
+#[cfg(test)]
+mod query_read_tests {
+    use super::*;
+    use crate::platform::kernel::ExactOwnerKey;
+    use crate::platform::semantic_id::ModuleId;
+    use crate::platform::witness::{forward_relation_key, reverse_relation_key};
+
+    #[test]
+    fn query_relation_entry_strictly_revalidates_key_value_prefix_and_direction() {
+        let local_package = PackageId::migrate(b"query-relation-entry", 1);
+        let foreign_package = PackageId::migrate(b"query-relation-entry", 2);
+        let source = RelationEndpoint::Owner(ExactOwnerKey {
+            package: local_package,
+            owner: OwnerKey::Module(ModuleId::migrate(b"query-relation-entry", 3)),
+        });
+        let target = RelationEndpoint::Owner(ExactOwnerKey {
+            package: foreign_package,
+            owner: OwnerKey::Module(ModuleId::migrate(b"query-relation-entry", 4)),
+        });
+        let edge = RelationEdge {
+            source,
+            kind: RelationKind::FunctionCall,
+            target,
+        };
+        let forward = forward_relation_key(edge);
+        let reverse = reverse_relation_key(edge);
+        assert_eq!(
+            decode_query_relation_entry(
+                &forward,
+                &[],
+                source,
+                Some(RelationKind::FunctionCall),
+                false,
+            )
+            .expect("canonical outgoing relation"),
+            edge
+        );
+        assert_eq!(
+            decode_query_relation_entry(
+                &reverse,
+                &[],
+                target,
+                Some(RelationKind::FunctionCall),
+                true,
+            )
+            .expect("canonical incoming relation"),
+            edge
+        );
+        assert_eq!(
+            decode_query_relation_entry(&forward, &[1], source, None, false)
+                .expect_err("nonempty relation value")
+                .code,
+            "query_relation_value"
+        );
+        assert_eq!(
+            decode_query_relation_entry(&forward, &[], target, None, false)
+                .expect_err("wrong selected endpoint")
+                .code,
+            "query_relation_prefix_binding"
+        );
+        assert_eq!(
+            decode_query_relation_entry(
+                &forward,
+                &[],
+                source,
+                Some(RelationKind::NamedTypeUse),
+                false,
+            )
+            .expect_err("wrong selected kind")
+            .code,
+            "query_relation_prefix_binding"
+        );
+        let mut trailing = forward.clone();
+        trailing.push(0);
+        assert_eq!(
+            decode_query_relation_entry(&trailing, &[], source, None, false)
+                .expect_err("trailing relation bytes")
+                .code,
+            "witness_relation_trailing"
+        );
+        assert!(
+            decode_query_relation_entry(&[u8::MAX, 0], &[], source, None, false).is_err(),
+            "malformed endpoint domain must reject"
+        );
     }
 }

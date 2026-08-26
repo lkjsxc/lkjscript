@@ -17,8 +17,22 @@ pub struct ObjectPageStore<S> {
 /// placement outside the storage layer.
 pub struct ObjectPageReader<'a, S: ?Sized> {
     objects: &'a S,
-    admission: Option<RefCell<StoreReadAdmission>>,
+    admission: Option<PageReadAdmission<'a>>,
     work: RefCell<StoreWork>,
+}
+
+enum PageReadAdmission<'a> {
+    Owned(RefCell<StoreReadAdmission>),
+    Shared(&'a RefCell<StoreReadAdmission>),
+}
+
+impl PageReadAdmission<'_> {
+    fn cell(&self) -> &RefCell<StoreReadAdmission> {
+        match self {
+            Self::Owned(admission) => admission,
+            Self::Shared(admission) => admission,
+        }
+    }
 }
 
 impl<'a, S: ?Sized> ObjectPageReader<'a, S> {
@@ -34,7 +48,20 @@ impl<'a, S: ?Sized> ObjectPageReader<'a, S> {
     pub fn new_admitted(objects: &'a S, admission: StoreReadAdmission) -> Self {
         Self {
             objects,
-            admission: Some(RefCell::new(admission)),
+            admission: Some(PageReadAdmission::Owned(RefCell::new(admission))),
+            work: RefCell::new(StoreWork::default()),
+        }
+    }
+
+    /// Shares one aggregate object-store admission with canonical reads performed by the owning
+    /// revision-pinned operation between map visits.
+    pub(crate) fn new_shared_admission(
+        objects: &'a S,
+        admission: &'a RefCell<StoreReadAdmission>,
+    ) -> Self {
+        Self {
+            objects,
+            admission: Some(PageReadAdmission::Shared(admission)),
             work: RefCell::new(StoreWork::default()),
         }
     }
@@ -46,7 +73,7 @@ impl<'a, S: ?Sized> ObjectPageReader<'a, S> {
     pub fn remaining_read_admission(&self) -> Option<StoreReadLimits> {
         self.admission
             .as_ref()
-            .map(|admission| admission.borrow().remaining())
+            .map(|admission| admission.cell().borrow().remaining())
     }
 }
 
@@ -63,7 +90,7 @@ impl<S: ImmutableObjectStore + ?Sized> PageStore for ObjectPageReader<'_, S> {
             Some(admission) => self.objects.read_admitted(
                 key,
                 maximum_bytes,
-                &mut admission.borrow_mut(),
+                &mut admission.cell().borrow_mut(),
                 &mut work,
             ),
             None => self.objects.read(key, maximum_bytes, &mut work),

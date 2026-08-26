@@ -52,6 +52,34 @@ impl NamespaceClass {
             Self::Target => 10,
         }
     }
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Module => "module",
+            Self::Declaration => "declaration",
+            Self::TypeParameter => "type_parameter",
+            Self::Field => "field",
+            Self::Case => "case",
+            Self::Operation => "operation",
+            Self::Parameter => "parameter",
+            Self::Requirement => "requirement",
+            Self::Port => "port",
+            Self::Target => "target",
+        }
+    }
+
+    pub fn parse(value: &str) -> Result<Self, crate::platform::diagnostic::Diagnostic> {
+        Self::ALL
+            .into_iter()
+            .find(|class| class.name() == value)
+            .ok_or_else(|| {
+                crate::platform::diagnostic::Diagnostic::new(
+                    crate::platform::diagnostic::DiagnosticClass::Source,
+                    "kernel_namespace_class",
+                    format!("unknown semantic namespace class '{value}'"),
+                )
+            })
+    }
 }
 
 #[derive(Clone, Copy, Debug)]

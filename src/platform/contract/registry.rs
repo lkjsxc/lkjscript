@@ -16,8 +16,15 @@ use super::super::execution::CAPABILITY_GRANT_CONTRACT_VERSION;
 use super::super::graph::{ROOT_STORAGE_CONTRACT_IDENTITY, ROOT_STORAGE_CONTRACT_VERSION};
 use super::super::http::HTTP_ADAPTER_CONTRACT_VERSION;
 use super::super::json::JSON_CONTRACT_VERSION;
-use super::super::kernel::OwnerKind;
+use super::super::kernel::{NamespaceClass, OwnerKind, RelationKind};
 use super::super::meaning::{GRAPH_CONTRACT_IDENTITY, GRAPH_CONTRACT_VERSION, RelationRole};
+use super::super::normalized_query::{
+    DEFAULT_QUERY_ITEMS, DEFAULT_QUERY_OUTPUT_BYTES, MAXIMUM_QUERY_CONTINUATION_BYTES,
+    MAXIMUM_QUERY_ITEMS, MAXIMUM_QUERY_OUTPUT_BYTES, MINIMUM_QUERY_OUTPUT_BYTES,
+    QUERY_CONTINUATION_INTEGRITY_DOMAIN, QUERY_CONTINUATION_MAGIC_TEXT, QUERY_CONTRACT_IDENTITY,
+    QUERY_CONTRACT_VERSION, QUERY_OPERATION_DESCRIPTORS, QUERY_RESPONSE_FIELDS,
+    QUERY_SELECTOR_DIGEST_DOMAIN, QUERY_SELECTOR_FIELDS, QueryDirection,
+};
 use super::super::object::OBJECT_ADAPTER_CONTRACT_VERSION;
 use super::super::package::{PACKAGE_CONTRACT_VERSION, RunnerKind};
 use super::super::queue::DURABLE_QUEUE_CONTRACT_VERSION;
@@ -36,10 +43,7 @@ use super::super::semantic_fact::{
 };
 use super::super::semantic_merge::SEMANTIC_MERGE_CONTRACT_VERSION;
 use super::super::semantic_projection::REVIEW_PROJECTION_CONTRACT_VERSION;
-use super::super::semantic_query::{
-    MAXIMUM_BYTE_LIMIT, MAXIMUM_ITEM_LIMIT, MAXIMUM_QUERY_DEPTH, MAXIMUM_QUERY_FANOUT,
-    MAXIMUM_WORK_LIMIT, QUERY_CONTRACT_VERSION, QUERY_INDEX_CONTRACT_VERSION,
-};
+use super::super::semantic_query::QUERY_INDEX_CONTRACT_VERSION;
 use super::super::semantic_summary::{
     SEMANTIC_SUMMARY_CONTRACT_IDENTITY, SEMANTIC_SUMMARY_CONTRACT_VERSION,
     SEMANTIC_VALIDATOR_CONTRACT_IDENTITY,
@@ -56,7 +60,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-3";
 pub const REGISTRY_CONTRACT_VERSION: u16 = 3;
-pub const CLI_CONTRACT_VERSION: u16 = 6;
+pub const CLI_CONTRACT_VERSION: u16 = 7;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -487,13 +491,16 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
         ContractDescriptor {
             key: ContractKey::Query,
             name: "semantic query",
-            identity: "lkjscript-query-2",
+            identity: QUERY_CONTRACT_IDENTITY,
             version: QUERY_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::PublicProtocol,
             predecessor_policy: REJECT,
-            magic_values: NONE,
-            digest_domains: &[QUERY_DIGEST_DOMAIN, CONTINUATION_DIGEST_DOMAIN],
+            magic_values: &[QUERY_CONTINUATION_MAGIC_TEXT],
+            digest_domains: &[
+                QUERY_SELECTOR_DIGEST_DOMAIN,
+                QUERY_CONTINUATION_INTEGRITY_DOMAIN,
+            ],
         },
         ContractDescriptor {
             key: ContractKey::QueryIndex,
@@ -504,7 +511,12 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             authority: ContractAuthority::DerivedDisposable,
             predecessor_policy: REJECT,
             magic_values: &[QUERY_INDEX_MAGIC_TEXT],
-            digest_domains: &[QUERY_INDEX_DOMAIN, INDEX_DIGEST_DOMAIN],
+            digest_domains: &[
+                QUERY_INDEX_DOMAIN,
+                INDEX_DIGEST_DOMAIN,
+                QUERY_DIGEST_DOMAIN,
+                CONTINUATION_DIGEST_DOMAIN,
+            ],
         },
         ContractDescriptor {
             key: ContractKey::LocalQueryIndex,
@@ -954,6 +966,7 @@ pub enum ControlModel {
     InspectRequest,
     InspectResult,
     QueryRequest,
+    QueryResult,
     ChangeRequest,
     DraftRequest,
     HistoryRequest,
@@ -983,6 +996,7 @@ impl ControlModel {
             Self::InspectRequest => "inspect_request",
             Self::InspectResult => "inspect_result",
             Self::QueryRequest => "query_request",
+            Self::QueryResult => "query_result",
             Self::ChangeRequest => "change_request",
             Self::DraftRequest => "draft_request",
             Self::HistoryRequest => "history_request",
@@ -1033,14 +1047,9 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
             "Inspect a compact summary of one exact owner at the observed accepted revision.",
             "inspect owner KIND ID [--package PACKAGE]",
         ),
-        operation(
-            PublicOperation::Query,
-            "Select bounded owners, relations, context, and impact.",
-            "query owners|find|relations|callers|callees|types|capabilities|context|impact|request ...",
-            ControlModel::QueryRequest,
-            AuthorityEffect::None,
-            ProjectRequirement::Required,
-            BudgetProfile::BoundedRead,
+        query_operation(
+            "Enumerate live owners, resolve one exact namespace, or inspect one relation prefix at the current normalized revision.",
+            "query owners [--kind KIND] [--limit N] [--bytes N] [--continuation TOKEN] | query find CLASS NAME [--parent OWNER] | query relations OWNER|package --direction incoming|outgoing [--kind KIND] [--limit N] [--bytes N] [--continuation TOKEN]",
         ),
         operation(
             PublicOperation::Change,
@@ -1230,6 +1239,19 @@ const fn inspect_operation(purpose: &'static str, usage: &'static str) -> Operat
     }
 }
 
+const fn query_operation(purpose: &'static str, usage: &'static str) -> OperationDescriptor {
+    OperationDescriptor {
+        operation: PublicOperation::Query,
+        purpose,
+        usage,
+        request_model: ControlModel::QueryRequest,
+        response_model: ControlModel::QueryResult,
+        authority_effect: AuthorityEffect::None,
+        project_requirement: ProjectRequirement::Required,
+        default_budget: BudgetProfile::BoundedRead,
+    }
+}
+
 const fn runtime_operation(
     operation: PublicOperation,
     purpose: &'static str,
@@ -1346,39 +1368,46 @@ pub fn limit_descriptors() -> &'static [LimitDescriptor] {
             OverridePolicy::Fixed,
         ),
         limit(
+            "query_default_items",
+            DEFAULT_QUERY_ITEMS as usize,
+            LimitClass::DefaultPagination,
+            LimitUnit::Items,
+            OverridePolicy::Fixed,
+        ),
+        limit(
             "query_items",
-            MAXIMUM_ITEM_LIMIT,
+            MAXIMUM_QUERY_ITEMS as usize,
             LimitClass::ExplicitRequestBudget,
             LimitUnit::Items,
             OverridePolicy::RequestUpToMaximum,
         ),
         limit(
+            "query_default_bytes",
+            DEFAULT_QUERY_OUTPUT_BYTES,
+            LimitClass::DefaultPagination,
+            LimitUnit::Bytes,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "query_minimum_bytes",
+            MINIMUM_QUERY_OUTPUT_BYTES,
+            LimitClass::HostileDecoderSafety,
+            LimitUnit::Bytes,
+            OverridePolicy::Fixed,
+        ),
+        limit(
             "query_bytes",
-            MAXIMUM_BYTE_LIMIT,
+            MAXIMUM_QUERY_OUTPUT_BYTES,
             LimitClass::ExplicitRequestBudget,
             LimitUnit::Bytes,
             OverridePolicy::RequestUpToMaximum,
         ),
         limit(
-            "query_work",
-            MAXIMUM_WORK_LIMIT,
-            LimitClass::ExplicitRequestBudget,
-            LimitUnit::Work,
-            OverridePolicy::RequestUpToMaximum,
-        ),
-        limit(
-            "query_depth",
-            MAXIMUM_QUERY_DEPTH,
-            LimitClass::ExplicitRequestBudget,
-            LimitUnit::Depth,
-            OverridePolicy::RequestUpToMaximum,
-        ),
-        limit(
-            "query_fanout",
-            MAXIMUM_QUERY_FANOUT,
-            LimitClass::ExplicitRequestBudget,
-            LimitUnit::Items,
-            OverridePolicy::RequestUpToMaximum,
+            "query_continuation_bytes",
+            MAXIMUM_QUERY_CONTINUATION_BYTES,
+            LimitClass::HostileDecoderSafety,
+            LimitUnit::Bytes,
+            OverridePolicy::Fixed,
         ),
         limit(
             "transaction_operations",
@@ -2073,6 +2102,402 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             meaning: "Input uses a predecessor contract rejected by direct cutover.",
             retry: "Recreate the request or authority under the advertised current contract.",
         },
+        diagnostic(
+            "query_usage",
+            DiagnosticClass::Source,
+            "The normalized query action or positional grammar is incomplete.",
+            "Use the exact grammar reported by capabilities query.",
+        ),
+        diagnostic(
+            "query_unknown_action",
+            DiagnosticClass::Source,
+            "The query action is not one of owners, find, or relations.",
+            "Select one action reported by capabilities query.",
+        ),
+        diagnostic(
+            "query_unknown_option",
+            DiagnosticClass::Source,
+            "The selected query action does not accept this option.",
+            "Use only options reported for that action by capabilities query.",
+        ),
+        diagnostic(
+            "query_duplicate_option",
+            DiagnosticClass::Source,
+            "A finite query option was supplied more than once.",
+            "Supply the option exactly once.",
+        ),
+        diagnostic(
+            "query_invalid_owner_kind",
+            DiagnosticClass::Source,
+            "An owner-kind filter is outside the canonical owner-kind inventory.",
+            "Select one query.owner-kind value from capabilities query.",
+        ),
+        diagnostic(
+            "query_invalid_namespace_class",
+            DiagnosticClass::Source,
+            "An exact lookup class is outside the canonical namespace-class inventory.",
+            "Select one query.namespace-class value from capabilities query.",
+        ),
+        diagnostic(
+            "query_invalid_relation_kind",
+            DiagnosticClass::Source,
+            "A relation-kind filter is outside the canonical relation-kind inventory.",
+            "Select one query.relation-kind value from capabilities query.",
+        ),
+        diagnostic(
+            "query_invalid_direction",
+            DiagnosticClass::Source,
+            "A relation direction is not incoming or outgoing.",
+            "Supply one exact query.direction value.",
+        ),
+        diagnostic(
+            "query_invalid_owner_identity",
+            DiagnosticClass::Source,
+            "A query owner or parent has a malformed or foreign typed identity domain.",
+            "Use an exact owner identity returned by current query or change output.",
+        ),
+        diagnostic(
+            "query_parent_required",
+            DiagnosticClass::Source,
+            "A child namespace class has no exact parent selector.",
+            "Supply --parent with one live exact local owner.",
+        ),
+        diagnostic(
+            "query_parent_forbidden",
+            DiagnosticClass::Source,
+            "A package-root namespace class was supplied a parent.",
+            "Remove --parent for module or target lookup.",
+        ),
+        diagnostic(
+            "query_invalid_parent_domain",
+            DiagnosticClass::Source,
+            "The typed parent domain cannot own the requested namespace class.",
+            "Use a parent identity from the canonical class-parent inventory.",
+        ),
+        diagnostic(
+            "query_invalid_limit",
+            DiagnosticClass::Source,
+            "The query item limit is noncanonical or outside its public bound.",
+            "Supply a canonical integer within the reported query_items limit.",
+        ),
+        diagnostic(
+            "query_invalid_byte_limit",
+            DiagnosticClass::Source,
+            "The query output-byte limit is noncanonical or outside its public bound.",
+            "Supply a canonical integer within the reported query_bytes limit.",
+        ),
+        diagnostic(
+            "query_owner_not_found",
+            DiagnosticClass::Semantic,
+            "The exact local relation endpoint is not live at the observed revision.",
+            "Refresh owner discovery at current HEAD and retry.",
+        ),
+        diagnostic(
+            "query_parent_not_found",
+            DiagnosticClass::Semantic,
+            "The exact namespace parent is not live at the observed revision.",
+            "Refresh the parent identity and retry exact lookup.",
+        ),
+        diagnostic(
+            "query_continuation_oversized",
+            DiagnosticClass::Source,
+            "A query continuation exceeds its strict textual or decoded byte bound.",
+            "Restart the query without the foreign token.",
+        ),
+        diagnostic(
+            "query_continuation_malformed",
+            DiagnosticClass::Source,
+            "A query continuation is truncated or malformed.",
+            "Restart the query and use the exact emitted token.",
+        ),
+        diagnostic(
+            "query_continuation_noncanonical",
+            DiagnosticClass::Source,
+            "A query continuation is not canonical unpadded URL-safe base64.",
+            "Use the exact continuation text emitted by the executable.",
+        ),
+        diagnostic(
+            "query_continuation_integrity",
+            DiagnosticClass::Source,
+            "A query continuation integrity digest does not match its payload.",
+            "Restart the query without modifying the emitted token.",
+        ),
+        diagnostic(
+            "query_continuation_foreign",
+            DiagnosticClass::Source,
+            "A query continuation belongs to another repository or package.",
+            "Restart pagination in the selected project.",
+        ),
+        diagnostic(
+            "query_continuation_stale",
+            DiagnosticClass::Source,
+            "A query continuation is pinned to an accepted revision that is no longer HEAD.",
+            "Refresh status and restart the query at current HEAD.",
+        ),
+        diagnostic(
+            "query_continuation_mismatch",
+            DiagnosticClass::Source,
+            "A query continuation does not bind the normalized selector.",
+            "Use the token only with the same operation, endpoint, direction, and filter.",
+        ),
+        diagnostic(
+            "query_output_item_too_large",
+            DiagnosticClass::Resource,
+            "One compact owner or relation record cannot fit the selected output bound.",
+            "Increase --bytes within the reported maximum.",
+        ),
+        diagnostic(
+            "query_admission_exhausted",
+            DiagnosticClass::Resource,
+            "One dimension of bounded normalized repository reading was exhausted.",
+            "Request a smaller page or preserve the repository for locality inspection.",
+        ),
+        diagnostic(
+            "query_namespace_owner_disagreement",
+            DiagnosticClass::Corrupt,
+            "Committed namespace witness and canonical owner facts disagree.",
+            "Preserve the repository and run deep authority verification.",
+        ),
+        diagnostic(
+            "query_relation_prefix_binding",
+            DiagnosticClass::Corrupt,
+            "A committed relation key disagrees with its selected endpoint or kind prefix.",
+            "Preserve the repository and run deep authority verification.",
+        ),
+        diagnostic(
+            "query_option_value",
+            DiagnosticClass::Source,
+            "A query option is missing its required value.",
+            "Supply one value after the option using the focused query grammar.",
+        ),
+        diagnostic(
+            "query_unexpected_argument",
+            DiagnosticClass::Source,
+            "A positional token appears outside the selected finite query grammar.",
+            "Remove the token or place it in the advertised positional slot.",
+        ),
+        diagnostic(
+            "query_invalid_name",
+            DiagnosticClass::Source,
+            "An exact namespace name violates the canonical Name contract.",
+            "Supply one canonical case-sensitive semantic name.",
+        ),
+        diagnostic(
+            "query_missing_direction",
+            DiagnosticClass::Source,
+            "A relation query omitted its required direction.",
+            "Supply --direction incoming or --direction outgoing.",
+        ),
+        diagnostic(
+            "query_continuation_contract",
+            DiagnosticClass::Source,
+            "A continuation has a foreign magic, envelope, continuation, or query version.",
+            "Restart pagination using a token emitted by the current executable.",
+        ),
+        diagnostic(
+            "query_continuation_operation",
+            DiagnosticClass::Source,
+            "A continuation contains an unknown normalized query operation tag.",
+            "Restart pagination using the exact emitted token.",
+        ),
+        diagnostic(
+            "query_continuation_reserved_identity",
+            DiagnosticClass::Source,
+            "A continuation contains a reserved all-zero authority identity.",
+            "Discard the token and restart pagination.",
+        ),
+        diagnostic(
+            "query_continuation_resume_key",
+            DiagnosticClass::Source,
+            "A continuation contains a malformed or selector-inconsistent logical resume key.",
+            "Restart pagination using the exact token emitted for this selector.",
+        ),
+        diagnostic(
+            "query_continuation_trailing",
+            DiagnosticClass::Source,
+            "A continuation payload contains noncanonical trailing bytes.",
+            "Discard the token and restart pagination.",
+        ),
+        diagnostic(
+            "query_continuation_length",
+            DiagnosticClass::Resource,
+            "A canonical continuation length cannot be represented within its fixed contract.",
+            "Preserve the request and executable for contract inspection.",
+        ),
+        diagnostic(
+            "query_output_envelope_too_large",
+            DiagnosticClass::Resource,
+            "The selected output bound cannot hold the fixed revision-pinned response envelope.",
+            "Increase --bytes within the advertised query bounds.",
+        ),
+        diagnostic(
+            "query_output_byte_overflow",
+            DiagnosticClass::Resource,
+            "Query result-byte accounting overflowed its numeric domain.",
+            "Preserve the repository and request for resource-boundary inspection.",
+        ),
+        diagnostic(
+            "query_admission_map_pages",
+            DiagnosticClass::Resource,
+            "Normalized query exhausted its persistent-map page-read admission.",
+            "Request a smaller page or inspect unexpected map locality.",
+        ),
+        diagnostic(
+            "query_admission_map_bytes",
+            DiagnosticClass::Resource,
+            "Normalized query exhausted its persistent-map byte-read admission.",
+            "Request a smaller page or inspect unexpectedly large map pages.",
+        ),
+        diagnostic(
+            "query_admission_map_entries",
+            DiagnosticClass::Resource,
+            "Normalized query exhausted or overflowed its map-entry visit admission.",
+            "Request a smaller page or inspect unexpected logical scan work.",
+        ),
+        diagnostic(
+            "query_admission_catalog_lookups",
+            DiagnosticClass::Resource,
+            "Normalized query exhausted its object-catalog lookup admission.",
+            "Request a smaller page or inspect unexpected object locality.",
+        ),
+        diagnostic(
+            "query_admission_store_objects",
+            DiagnosticClass::Resource,
+            "Normalized query exhausted its object-read admission.",
+            "Request a smaller page or inspect unexpected canonical object reads.",
+        ),
+        diagnostic(
+            "query_admission_store_bytes",
+            DiagnosticClass::Resource,
+            "Normalized query exhausted its immutable-store byte admission.",
+            "Request a smaller page or inspect unexpectedly large canonical objects.",
+        ),
+        diagnostic(
+            "query_admission_canonical_records",
+            DiagnosticClass::Resource,
+            "Normalized query exhausted its canonical-record decode admission.",
+            "Request a smaller page or inspect unexpected canonical decoding.",
+        ),
+        diagnostic(
+            "query_admission_witness_records",
+            DiagnosticClass::Resource,
+            "Normalized query exhausted its witness-record decode admission.",
+            "Request a smaller page or inspect unexpected witness decoding.",
+        ),
+        diagnostic(
+            "query_required_map_page_missing",
+            DiagnosticClass::Corrupt,
+            "A required canonical or witness map page is absent from immutable storage.",
+            "Preserve the repository and run deep authority verification.",
+        ),
+        diagnostic(
+            "query_required_object_missing",
+            DiagnosticClass::Corrupt,
+            "A required accepted object is absent from immutable storage.",
+            "Preserve the repository and run deep authority verification.",
+        ),
+        diagnostic(
+            "query_namespace_owner_missing",
+            DiagnosticClass::Corrupt,
+            "A namespace witness references an owner absent from canonical authority.",
+            "Preserve the repository and run deep authority verification.",
+        ),
+        diagnostic(
+            "query_owner_object_missing",
+            DiagnosticClass::Corrupt,
+            "A canonical owner binding references a missing immutable owner object.",
+            "Preserve the repository and run deep authority verification.",
+        ),
+        diagnostic(
+            "query_owner_range_count",
+            DiagnosticClass::Corrupt,
+            "Owner range traversal and logical query accounting disagree.",
+            "Preserve the repository and executable for traversal inspection.",
+        ),
+        diagnostic(
+            "query_parent_owner_disagreement",
+            DiagnosticClass::Corrupt,
+            "A live namespace parent record disagrees with its canonical owner key.",
+            "Preserve the repository and run deep authority verification.",
+        ),
+        diagnostic(
+            "query_relation_range_count",
+            DiagnosticClass::Corrupt,
+            "Relation range traversal and logical query accounting disagree.",
+            "Preserve the repository and executable for traversal inspection.",
+        ),
+        diagnostic(
+            "query_relation_value",
+            DiagnosticClass::Corrupt,
+            "A committed relation witness has a nonempty noncanonical value.",
+            "Preserve the repository and run deep authority verification.",
+        ),
+        diagnostic(
+            "query_revision_binding",
+            DiagnosticClass::Corrupt,
+            "A query read failed to retain its pinned accepted revision.",
+            "Preserve the repository and executable for authority inspection.",
+        ),
+        diagnostic(
+            "query_admission_logical_range",
+            DiagnosticClass::Resource,
+            "An internal logical range was given an empty scan or item admission.",
+            "Preserve the request and executable for query-boundary inspection.",
+        ),
+        diagnostic(
+            "query_descriptor_action",
+            DiagnosticClass::Infrastructure,
+            "The executable query descriptor inventory contains an unimplemented action.",
+            "Use a matching executable and generated contract set.",
+        ),
+        diagnostic(
+            "query_output_record_configuration",
+            DiagnosticClass::Infrastructure,
+            "The fixed query envelope exceeds the global compact record capacity.",
+            "Use a matching executable and registry contract.",
+        ),
+        diagnostic(
+            "query_output_size_convergence",
+            DiagnosticClass::Infrastructure,
+            "Exact rendered-output byte reporting failed to reach its bounded fixed point.",
+            "Preserve the request and executable for renderer inspection.",
+        ),
+        diagnostic(
+            "query_record_limit",
+            DiagnosticClass::Resource,
+            "The compact response record capacity cannot hold a logical query item.",
+            "Reduce the requested page or inspect the global compact response limit.",
+        ),
+        diagnostic(
+            "query_response_field_inventory",
+            DiagnosticClass::Infrastructure,
+            "The query renderer attempted a field absent from its executable inventory.",
+            "Use matching executable and generated contracts.",
+        ),
+        diagnostic(
+            "query_scan_quantum",
+            DiagnosticClass::Resource,
+            "The derived owner scan quantum overflowed its numeric domain.",
+            "Preserve the request and executable for admission inspection.",
+        ),
+        diagnostic(
+            "query_selector_length",
+            DiagnosticClass::Resource,
+            "A normalized query selector exceeds its canonical length encoding.",
+            "Use a canonical bounded semantic name and selector.",
+        ),
+        diagnostic(
+            "query_visitor_diagnostic_missing",
+            DiagnosticClass::Corrupt,
+            "A bounded map visitor aborted without its owning typed diagnostic.",
+            "Preserve the repository and executable for traversal inspection.",
+        ),
+        diagnostic(
+            "query_work_overflow",
+            DiagnosticClass::Resource,
+            "One exact normalized query work counter overflowed.",
+            "Preserve the repository and request for resource-accounting inspection.",
+        ),
         DiagnosticDescriptor {
             code: "owner_selector_kind",
             class: DiagnosticClass::Source,
@@ -2236,6 +2661,7 @@ pub enum RegistrySection {
     Contracts,
     Operations,
     Change,
+    Query,
     Type,
     Expression,
     Owners,
@@ -2248,10 +2674,11 @@ pub enum RegistrySection {
 }
 
 impl RegistrySection {
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 13] = [
         Self::Contracts,
         Self::Operations,
         Self::Change,
+        Self::Query,
         Self::Type,
         Self::Expression,
         Self::Owners,
@@ -2268,6 +2695,7 @@ impl RegistrySection {
             Self::Contracts => "contracts",
             Self::Operations => "operations",
             Self::Change => "change",
+            Self::Query => "query",
             Self::Type => "type",
             Self::Expression => "expression",
             Self::Owners => "owners",
@@ -2537,6 +2965,133 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 records.push(compact_record(
                     "change.reference",
                     &[("name", name.to_owned()), ("syntax", syntax.to_owned())],
+                )?);
+            }
+        }
+        RegistrySection::Query => {
+            records.push(compact_record(
+                "query",
+                &[
+                    ("contract", QUERY_CONTRACT_IDENTITY.to_owned()),
+                    ("version", QUERY_CONTRACT_VERSION.to_string()),
+                    ("authority", "normalized-current-revision".to_owned()),
+                    ("ordering", "canonical-logical-key-v1".to_owned()),
+                    ("continuation", "stateless-exclusive-logical-key".to_owned()),
+                ],
+            )?);
+            for descriptor in QUERY_OPERATION_DESCRIPTORS {
+                records.push(compact_record(
+                    "query.operation",
+                    &[
+                        ("name", descriptor.action.to_owned()),
+                        ("command", descriptor.command.to_owned()),
+                        ("usage", descriptor.usage.to_owned()),
+                    ],
+                )?);
+                for (ordinal, positional) in descriptor.positionals.iter().enumerate() {
+                    records.push(compact_record(
+                        "query.positional",
+                        &[
+                            ("operation", descriptor.action.to_owned()),
+                            ("ordinal", ordinal.saturating_add(1).to_string()),
+                            ("name", (*positional).to_owned()),
+                        ],
+                    )?);
+                }
+                for option in descriptor.options {
+                    records.push(compact_record(
+                        "query.option",
+                        &[
+                            ("operation", descriptor.action.to_owned()),
+                            ("name", (*option).to_owned()),
+                            ("value", "required".to_owned()),
+                        ],
+                    )?);
+                }
+            }
+            for kind in OwnerKind::ALL {
+                records.push(compact_record(
+                    "query.owner-kind",
+                    &[("name", kind.name().to_owned())],
+                )?);
+            }
+            for class in NamespaceClass::ALL {
+                records.push(compact_record(
+                    "query.namespace-class",
+                    &[("name", class.name().to_owned())],
+                )?);
+            }
+            for kind in RelationKind::ALL {
+                records.push(compact_record(
+                    "query.relation-kind",
+                    &[("name", kind.name().to_owned())],
+                )?);
+            }
+            for direction in QueryDirection::ALL {
+                records.push(compact_record(
+                    "query.direction",
+                    &[("name", direction.name().to_owned())],
+                )?);
+            }
+            for (name, value, unit) in [
+                ("default-items", DEFAULT_QUERY_ITEMS.to_string(), "items"),
+                ("maximum-items", MAXIMUM_QUERY_ITEMS.to_string(), "items"),
+                (
+                    "minimum-output-bytes",
+                    MINIMUM_QUERY_OUTPUT_BYTES.to_string(),
+                    "bytes",
+                ),
+                (
+                    "default-output-bytes",
+                    DEFAULT_QUERY_OUTPUT_BYTES.to_string(),
+                    "bytes",
+                ),
+                (
+                    "maximum-output-bytes",
+                    MAXIMUM_QUERY_OUTPUT_BYTES.to_string(),
+                    "bytes",
+                ),
+                (
+                    "maximum-continuation-bytes",
+                    MAXIMUM_QUERY_CONTINUATION_BYTES.to_string(),
+                    "bytes",
+                ),
+            ] {
+                records.push(compact_record(
+                    "query.limit",
+                    &[
+                        ("name", name.to_owned()),
+                        ("value", value),
+                        ("unit", unit.to_owned()),
+                    ],
+                )?);
+            }
+            for (record, field) in QUERY_RESPONSE_FIELDS {
+                records.push(compact_record(
+                    "query.response-field",
+                    &[("record", record.to_owned()), ("name", field.to_owned())],
+                )?);
+            }
+            for (_record, field) in QUERY_SELECTOR_FIELDS {
+                records.push(compact_record(
+                    "query.selector-field",
+                    &[("name", field.to_owned())],
+                )?);
+            }
+            for field in [
+                "contract-version",
+                "query-version",
+                "repository",
+                "package",
+                "revision",
+                "operation",
+                "selector-digest",
+                "exclusive-resume-key",
+                "integrity-digest",
+            ] {
+                records.push(compact_record(
+                    "query.continuation-field",
+                    &[("name", field.to_owned())],
                 )?);
             }
         }

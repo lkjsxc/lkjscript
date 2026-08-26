@@ -19,7 +19,7 @@ use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::execution::{PreparedProgram, ReferenceInterpreter, RunPolicy, Vm};
 use super::json::{JsonLimits, decode_strict, decode_typed, encode_typed};
 use super::kernel::{Name, OwnerKey as KernelOwnerKey, OwnerKind as KernelOwnerKind, PackageId};
-use super::meaning::RelationRole;
+use super::normalized_query::{execute_normalized_query, parse_query_arguments};
 use super::package::RunnerKind;
 use super::project_creation::create_minimal_project;
 use super::project_discovery::discover_project;
@@ -32,20 +32,19 @@ use super::revision::{AffectedOwner, TransactionReceipt, ValidationFacts};
 use super::semantic_diff::diff_revisions;
 use super::semantic_digest::{ReceiptDigest, SemanticDiffDigest, TransactionDigest};
 use super::semantic_draft::SemanticDraftStore;
-use super::semantic_id::{DraftId, ModuleId, RepositoryId, RevisionId};
+use super::semantic_id::{DraftId, RepositoryId, RevisionId};
 use super::semantic_merge::{
     SEMANTIC_MERGE_CONTRACT_VERSION, SemanticMergeRequest, SemanticMergeResult,
     SemanticMergeStatus, merge_revisions,
 };
 use super::semantic_projection::{MAXIMUM_REVIEW_PROJECTION_BYTES, render_review_projection};
-use super::semantic_query::{OwnerKind, QueryBudget, SemanticQueryIndex};
+use super::semantic_query::{QueryBudget, SemanticQueryIndex};
 use super::semantic_transaction::{
     TransactionMode, TransactionRequest, TransactionResult, TransactionStatus,
 };
 use super::workspace::{DEFAULT_ORIENTATION_ITEMS, SemanticWorkspace};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::BTreeSet;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -93,7 +92,9 @@ pub fn execute(arguments: Vec<String>) -> Result<CliSuccess, Diagnostic> {
             "status uses the compact executable process boundary",
         )),
         PublicOperation::Inspect => inspect_command(&arguments[1..], project.as_deref()),
-        PublicOperation::Query => public_query_command(&arguments[1..], project.as_deref()),
+        PublicOperation::Query => Err(usage_error(
+            "query uses the compact normalized executable process boundary",
+        )),
         PublicOperation::Change => Err(usage_error(
             "change uses the compact executable process boundary",
         )),
@@ -707,6 +708,18 @@ pub fn execute_inspect_owner(arguments: Vec<String>) -> Result<Vec<u8>, Diagnost
     )
 }
 
+/// Executes the exhaustive normalized query grammar through one compact revision-pinned path.
+pub fn execute_query(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
+    let (arguments, project) = extract_global_project(arguments)?;
+    if arguments.first().map(String::as_str) != Some("query") {
+        return Err(usage_error("query dispatch requires the query command"));
+    }
+    let request = parse_query_arguments(&arguments[1..])?;
+    let repository = open_normalized_repository(project)?;
+    let view = repository.view_current()?;
+    execute_normalized_query(&repository, &view, &request)
+}
+
 /// Dispatches the complete released inspect family without falling back to predecessor JSON.
 /// Only exact coarse-owner summaries are current while other inspect actions remain removed.
 pub fn execute_inspect(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
@@ -1022,75 +1035,6 @@ fn deployment_inspect_command(arguments: &[String]) -> Result<CliSuccess, Diagno
     serialized("inspect.deployment", &decode_deployment(&bytes)?)
 }
 
-fn public_query_command(
-    arguments: &[String],
-    project: Option<&Path>,
-) -> Result<CliSuccess, Diagnostic> {
-    let action = arguments.first().map(String::as_str).ok_or_else(|| {
-        usage_error(
-            "query requires owners, find, relations, callers, callees, types, capabilities, context, impact, or request",
-        )
-    })?;
-    match action {
-        "owners" => owners_command(&arguments[1..], project),
-        "find" => find_command(&arguments[1..], project),
-        "relations" => relation_command(
-            "query.relations",
-            &arguments[1..],
-            project,
-            true,
-            true,
-            BTreeSet::new(),
-        ),
-        "callers" => relation_command(
-            "query.callers",
-            &arguments[1..],
-            project,
-            true,
-            false,
-            BTreeSet::from([RelationRole::Call]),
-        ),
-        "callees" => relation_command(
-            "query.callees",
-            &arguments[1..],
-            project,
-            false,
-            true,
-            BTreeSet::from([RelationRole::Call]),
-        ),
-        "types" => relation_command(
-            "query.types",
-            &arguments[1..],
-            project,
-            true,
-            true,
-            BTreeSet::from([
-                RelationRole::TypeUse,
-                RelationRole::FieldUse,
-                RelationRole::VariantConstruction,
-                RelationRole::VariantPattern,
-            ]),
-        ),
-        "capabilities" => relation_command(
-            "query.capabilities",
-            &arguments[1..],
-            project,
-            true,
-            true,
-            BTreeSet::from([
-                RelationRole::CapabilityInterface,
-                RelationRole::CapabilityOperation,
-            ]),
-        ),
-        "context" => context_command(&arguments[1..], project, false),
-        "impact" => context_command(&arguments[1..], project, true),
-        "request" => query_command(&arguments[1..], project),
-        other => Err(usage_error(format!(
-            "unknown query action '{other}'; use 'capabilities query'"
-        ))),
-    }
-}
-
 fn public_draft_command(
     arguments: &[String],
     project: Option<&Path>,
@@ -1167,6 +1111,12 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
         append_registry_summary(&mut output, &snapshot)?;
         let record = operation_record(descriptor).map_err(contract_registry_error)?;
         output.append_serialized_records(record.as_bytes())?;
+        if operation == PublicOperation::Query {
+            let section = snapshot.section(RegistrySection::Query).ok_or_else(|| {
+                internal_error("registered query operation has no focused registry section")
+            })?;
+            output.append_serialized_records(&section.bytes)?;
+        }
         return Ok(output.finish());
     }
 
@@ -1641,55 +1591,6 @@ fn dependency_stage_command(
     )
 }
 
-fn owners_command(arguments: &[String], project: Option<&Path>) -> Result<CliSuccess, Diagnostic> {
-    ensure_options(arguments, &query_value_options(["--kind", "--module"]), &[])?;
-    let kind = option_value(arguments, "--kind")?
-        .map(|value| OwnerKind::parse(&value))
-        .transpose()?;
-    let module = option_value(arguments, "--module")?
-        .map(|value| value.parse::<ModuleId>())
-        .transpose()?;
-    let workspace = open_workspace(project)?;
-    let index = query_index(&workspace, arguments)?;
-    let page = index.owners(
-        kind,
-        module,
-        option_value(arguments, "--continue")?.as_deref(),
-        query_budget(arguments)?,
-    )?;
-    serialized("query.owners", &page)
-}
-
-fn find_command(arguments: &[String], project: Option<&Path>) -> Result<CliSuccess, Diagnostic> {
-    let text = arguments
-        .first()
-        .filter(|value| !value.starts_with("--"))
-        .ok_or_else(|| usage_error("query find requires one search text"))?;
-    ensure_options(&arguments[1..], &query_value_options([]), &["--exact"])?;
-    let workspace = open_workspace(project)?;
-    let exact = flag_present(&arguments[1..], "--exact")?;
-    let continuation = option_value(&arguments[1..], "--continue")?;
-    let budget = query_budget(&arguments[1..])?;
-    let page = if exact {
-        let revision = selected_revision(&workspace, &arguments[1..])?;
-        SemanticQueryIndex::exact_find_revision(
-            workspace.repository(),
-            revision,
-            text,
-            continuation.as_deref(),
-            budget,
-        )?
-    } else {
-        query_index(&workspace, &arguments[1..])?.find(
-            text,
-            false,
-            continuation.as_deref(),
-            budget,
-        )?
-    };
-    serialized("query.find", &page)
-}
-
 fn show_command(arguments: &[String], project: Option<&Path>) -> Result<CliSuccess, Diagnostic> {
     let id = arguments
         .first()
@@ -1706,176 +1607,6 @@ fn show_command(arguments: &[String], project: Option<&Path>) -> Result<CliSucce
             flag_present(&arguments[1..], "--body")?,
         )?,
     )
-}
-
-fn relation_command(
-    command: &str,
-    arguments: &[String],
-    project: Option<&Path>,
-    incoming: bool,
-    outgoing: bool,
-    roles: BTreeSet<RelationRole>,
-) -> Result<CliSuccess, Diagnostic> {
-    let id = arguments
-        .first()
-        .filter(|value| !value.starts_with("--"))
-        .ok_or_else(|| usage_error(format!("{command} requires one exact owner ID")))?;
-    ensure_options(&arguments[1..], &query_value_options([]), &[])?;
-    let workspace = open_workspace(project)?;
-    let index = query_index(&workspace, &arguments[1..])?;
-    let page = index.relations(
-        id,
-        incoming,
-        outgoing,
-        &roles,
-        option_value(&arguments[1..], "--continue")?.as_deref(),
-        query_budget(&arguments[1..])?,
-    )?;
-    serialized(command, &page)
-}
-
-fn context_command(
-    arguments: &[String],
-    project: Option<&Path>,
-    impact: bool,
-) -> Result<CliSuccess, Diagnostic> {
-    ensure_options(arguments, &query_value_options(["--seed"]), &[])?;
-    let seeds = option_values(arguments, "--seed")?;
-    let workspace = open_workspace(project)?;
-    let index = query_index(&workspace, arguments)?;
-    let continuation = option_value(arguments, "--continue")?;
-    let page = if impact {
-        index.impact(&seeds, continuation.as_deref(), query_budget(arguments)?)?
-    } else {
-        index.context(&seeds, continuation.as_deref(), query_budget(arguments)?)?
-    };
-    serialized(
-        if impact {
-            "query.impact"
-        } else {
-            "query.context"
-        },
-        &page,
-    )
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ClosedQuery {
-    contract_version: u16,
-    #[serde(default)]
-    revision: Option<RevisionId>,
-    #[serde(default)]
-    continuation: Option<String>,
-    #[serde(default)]
-    budget: QueryBudget,
-    #[serde(flatten)]
-    selection: ClosedSelection,
-}
-
-#[derive(Deserialize)]
-#[serde(tag = "select", rename_all = "snake_case")]
-enum ClosedSelection {
-    Owners {
-        #[serde(default)]
-        kind: Option<OwnerKind>,
-        #[serde(default)]
-        module: Option<ModuleId>,
-    },
-    Find {
-        text: String,
-        #[serde(default)]
-        exact: bool,
-    },
-    Relations {
-        id: String,
-        incoming: bool,
-        outgoing: bool,
-        #[serde(default)]
-        roles: BTreeSet<RelationRole>,
-    },
-    Context {
-        seeds: Vec<String>,
-    },
-    Impact {
-        seeds: Vec<String>,
-    },
-}
-
-fn query_command(arguments: &[String], project: Option<&Path>) -> Result<CliSuccess, Diagnostic> {
-    let request = option_value(arguments, "--request")?
-        .ok_or_else(|| usage_error("query request requires --request JSON"))?;
-    ensure_options(arguments, &["--request"], &[])?;
-    let mut deserializer = serde_json::Deserializer::from_str(&request);
-    let request = ClosedQuery::deserialize(&mut deserializer).map_err(|error| {
-        Diagnostic::new(
-            DiagnosticClass::Source,
-            "semantic_query_request",
-            format!("query request is not strict current JSON: {error}"),
-        )
-    })?;
-    deserializer.end().map_err(|error| {
-        Diagnostic::new(
-            DiagnosticClass::Source,
-            "semantic_query_trailing",
-            format!("query request has trailing input: {error}"),
-        )
-    })?;
-    if request.contract_version != super::semantic_query::QUERY_CONTRACT_VERSION {
-        return Err(Diagnostic::new(
-            DiagnosticClass::Source,
-            "semantic_query_contract",
-            "query request uses an unknown contract",
-        ));
-    }
-    let workspace = open_workspace(project)?;
-    let index = match request.revision {
-        Some(revision) => SemanticQueryIndex::revision(workspace.repository(), revision)?,
-        None => SemanticQueryIndex::current(workspace.repository())?,
-    };
-    let result = match request.selection {
-        ClosedSelection::Owners { kind, module } => serde_json::to_value(index.owners(
-            kind,
-            module,
-            request.continuation.as_deref(),
-            request.budget,
-        )?)
-        .map_err(internal_json)?,
-        ClosedSelection::Find { text, exact } => serde_json::to_value(index.find(
-            &text,
-            exact,
-            request.continuation.as_deref(),
-            request.budget,
-        )?)
-        .map_err(internal_json)?,
-        ClosedSelection::Relations {
-            id,
-            incoming,
-            outgoing,
-            roles,
-        } => serde_json::to_value(index.relations(
-            &id,
-            incoming,
-            outgoing,
-            &roles,
-            request.continuation.as_deref(),
-            request.budget,
-        )?)
-        .map_err(internal_json)?,
-        ClosedSelection::Context { seeds } => serde_json::to_value(index.context(
-            &seeds,
-            request.continuation.as_deref(),
-            request.budget,
-        )?)
-        .map_err(internal_json)?,
-        ClosedSelection::Impact { seeds } => serde_json::to_value(index.impact(
-            &seeds,
-            request.continuation.as_deref(),
-            request.budget,
-        )?)
-        .map_err(internal_json)?,
-    };
-    success("query.request", result)
 }
 
 fn transaction_command(
@@ -2522,16 +2253,6 @@ fn restore_command(arguments: &[String], project: Option<&Path>) -> Result<CliSu
     )
 }
 
-fn query_index(
-    workspace: &SemanticWorkspace,
-    arguments: &[String],
-) -> Result<SemanticQueryIndex, Diagnostic> {
-    match option_value(arguments, "--revision")? {
-        Some(value) => SemanticQueryIndex::revision(workspace.repository(), value.parse()?),
-        None => SemanticQueryIndex::current(workspace.repository()),
-    }
-}
-
 fn selected_revision(
     workspace: &SemanticWorkspace,
     arguments: &[String],
@@ -2973,6 +2694,8 @@ fn io_error(code: &str, path: &Path, error: std::io::Error) -> Diagnostic {
 mod tests {
     use super::*;
     use crate::platform::control::parse_records;
+    use crate::platform::semantic_id::ModuleId;
+    use std::collections::BTreeSet;
 
     #[test]
     fn unknown_options_and_noncanonical_numbers_reject() {

@@ -136,6 +136,51 @@ impl RelationKind {
         Self::ALL.into_iter().find(|kind| kind.tag() == tag)
     }
 
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::DeclarationModule => "declaration_module",
+            Self::MemberDeclaration => "member_declaration",
+            Self::ParameterOperation => "parameter_operation",
+            Self::ExpressionParent => "expression_parent",
+            Self::ExpressionRoot => "expression_root",
+            Self::TypeParameterUse => "type_parameter_use",
+            Self::NamedTypeUse => "named_type_use",
+            Self::LocalValueReference => "local_value_reference",
+            Self::ConstantReference => "constant_reference",
+            Self::FunctionCall => "function_call",
+            Self::FunctionValue => "function_value",
+            Self::FunctionRequirement => "function_requirement",
+            Self::NominalFieldConstruction => "nominal_field_construction",
+            Self::NominalFieldAccess => "nominal_field_access",
+            Self::VariantConstruction => "variant_construction",
+            Self::VariantMatch => "variant_match",
+            Self::CapabilityInterface => "capability_interface",
+            Self::CapabilityOperation => "capability_operation",
+            Self::ComponentRequirement => "component_requirement",
+            Self::ComponentPort => "component_port",
+            Self::TargetComponent => "target_component",
+            Self::TargetPort => "target_port",
+            Self::TestExecutionDependency => "test_execution_dependency",
+            Self::DocumentationOwnership => "documentation_ownership",
+            Self::AnnotationOwnership => "annotation_ownership",
+            Self::PackageDependency => "package_dependency",
+            Self::VariantExhaustiveness => "variant_exhaustiveness",
+        }
+    }
+
+    pub fn parse(value: &str) -> Result<Self, Diagnostic> {
+        Self::ALL
+            .into_iter()
+            .find(|kind| kind.name() == value)
+            .ok_or_else(|| {
+                Diagnostic::new(
+                    DiagnosticClass::Source,
+                    "kernel_relation_kind",
+                    format!("unknown semantic relation kind '{value}'"),
+                )
+            })
+    }
+
     pub const fn propagation(self) -> PropagationClass {
         match self {
             Self::DeclarationModule

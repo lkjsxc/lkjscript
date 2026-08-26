@@ -35,6 +35,7 @@ pub mod json;
 pub(crate) mod kernel;
 pub mod language;
 pub mod meaning;
+pub(crate) mod normalized_query;
 pub mod object;
 pub mod package;
 #[allow(
@@ -99,7 +100,7 @@ pub use bootstrap::{
 };
 pub use cli::{
     CliSuccess, execute as execute_cli, execute_capabilities, execute_change, execute_inspect,
-    execute_inspect_owner, execute_new, execute_status,
+    execute_inspect_owner, execute_new, execute_query, execute_status,
 };
 pub use configuration::{
     CONFIGURATION_ADAPTER_CONTRACT_VERSION, ConfigurationAdapter, ConfigurationObservation,

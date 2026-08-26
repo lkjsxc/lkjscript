@@ -11,7 +11,7 @@ use lkjscript::platform::contract::{
 use lkjscript::platform::control::{CompactResponseLimits, CompactResponseWriter};
 use lkjscript::platform::{
     CLI_CONTRACT_VERSION, Diagnostic, PreparedDeployment, PublicOperation, execute_capabilities,
-    execute_change, execute_cli, execute_inspect, execute_new, execute_status,
+    execute_change, execute_cli, execute_inspect, execute_new, execute_query, execute_status,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -34,6 +34,9 @@ async fn main() -> ExitCode {
     }
     if compact_inspect_arguments(&arguments) {
         return compact_inspect(arguments);
+    }
+    if compact_query_arguments(&arguments) {
+        return compact_query(arguments);
     }
     if compact_change_arguments(&arguments) {
         return compact_change(arguments);
@@ -175,6 +178,32 @@ fn compact_inspect(arguments: Vec<String>) -> ExitCode {
             )),
         },
         Err(error) => write_compact_failure("inspect", &error),
+    }
+}
+
+fn compact_query_arguments(arguments: &[String]) -> bool {
+    let mut filtered = Vec::new();
+    let mut index = 0;
+    while index < arguments.len() {
+        if arguments[index] == "--project" {
+            index = index.saturating_add(2);
+        } else {
+            filtered.push(arguments[index].as_str());
+            index += 1;
+        }
+    }
+    filtered.first().copied() == Some("query")
+}
+
+fn compact_query(arguments: Vec<String>) -> ExitCode {
+    match execute_query(arguments) {
+        Ok(bytes) => match write_bytes(&bytes) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(_) => ExitCode::from(exit_status_for(
+                lkjscript::platform::DiagnosticClass::Infrastructure,
+            )),
+        },
+        Err(error) => write_compact_failure("query", &error),
     }
 }
 

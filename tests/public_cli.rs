@@ -7,13 +7,14 @@
 use lkjscript::platform::control::{CompactRecord, parse_records};
 use lkjscript::platform::{ProjectCreationReceipt, ProjectTemplate, create_project};
 use serde_json::Value;
+use std::collections::BTreeMap;
 use std::fs::{File, OpenOptions};
-use std::io;
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 
 const APPLICATION: &str = "applications/lkjournal";
-const CLI_CONTRACT_VERSION: u64 = 6;
+const CLI_CONTRACT_VERSION: u64 = 7;
 
 fn binary() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_lkjscript"))
@@ -150,7 +151,15 @@ fn compact_failure_output_with_status(output: Output, expected_status: i32) -> V
 }
 
 fn current_revision(project: &Path) -> String {
-    let status = compact_success(&["--project", path(project), "status"]);
+    current_revision_at(&binary(), Path::new(env!("CARGO_MANIFEST_DIR")), project)
+}
+
+fn current_revision_at(executable: &Path, directory: &Path, project: &Path) -> String {
+    let status = compact_success_at(
+        executable,
+        directory,
+        &["--project", path(project), "status"],
+    );
     compact_field(compact_record(&status, "revision"), "id")
         .expect("current revision")
         .to_owned()
@@ -179,6 +188,34 @@ fn predecessor_project(
     // Test-only setup for public operations that have not crossed to normalized authority yet.
     // Delete this fixture boundary when those operations cut over.
     create_project(destination, name, template).expect("predecessor fixture bootstrap")
+}
+
+fn content_inventory(root: &Path) -> BTreeMap<String, [u8; 32]> {
+    fn visit(root: &Path, directory: &Path, output: &mut BTreeMap<String, [u8; 32]>) {
+        let mut entries = std::fs::read_dir(directory)
+            .expect("read inventory directory")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("read inventory entries");
+        entries.sort_by_key(|entry| entry.file_name());
+        for entry in entries {
+            let path = entry.path();
+            let metadata = entry.metadata().expect("inventory metadata");
+            if metadata.is_dir() {
+                visit(root, &path, output);
+            } else if metadata.is_file() {
+                let relative = path
+                    .strip_prefix(root)
+                    .expect("inventory path under root")
+                    .to_string_lossy()
+                    .into_owned();
+                let bytes = std::fs::read(&path).expect("inventory file");
+                output.insert(relative, *blake3::hash(&bytes).as_bytes());
+            }
+        }
+    }
+    let mut output = BTreeMap::new();
+    visit(root, root, &mut output);
+    output
 }
 
 fn failure(arguments: &[&str]) -> Value {
@@ -334,6 +371,89 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         compact_field(type_reference, "syntax"),
         Some("unit|bool|i64|bytes|text|static-text|secret|@NAME")
     );
+    let query = compact_success(&["capabilities", "query"]);
+    assert_eq!(
+        query
+            .iter()
+            .filter(|record| record.operation == "query.operation")
+            .filter_map(|record| compact_field(record, "name"))
+            .collect::<Vec<_>>(),
+        vec!["owners", "find", "relations"]
+    );
+    assert!(query.iter().any(|record| {
+        record.operation == "query.owner-kind"
+            && compact_field(record, "name") == Some("expression")
+    }));
+    assert!(query.iter().any(|record| {
+        record.operation == "query.namespace-class"
+            && compact_field(record, "name") == Some("parameter")
+    }));
+    assert!(query.iter().any(|record| {
+        record.operation == "query.relation-kind"
+            && compact_field(record, "name") == Some("function_call")
+    }));
+    assert_eq!(
+        query
+            .iter()
+            .filter(|record| record.operation == "query.owner-kind")
+            .count(),
+        22
+    );
+    assert_eq!(
+        query
+            .iter()
+            .filter(|record| record.operation == "query.namespace-class")
+            .count(),
+        10
+    );
+    assert_eq!(
+        query
+            .iter()
+            .filter(|record| record.operation == "query.relation-kind")
+            .count(),
+        27
+    );
+    assert_eq!(
+        query
+            .iter()
+            .filter(|record| record.operation == "query.direction")
+            .count(),
+        2
+    );
+    assert_eq!(
+        query
+            .iter()
+            .filter(|record| record.operation == "query.response-field")
+            .count(),
+        35
+    );
+    assert_eq!(
+        query
+            .iter()
+            .filter(|record| record.operation == "query.selector-field")
+            .count(),
+        9
+    );
+    for (name, value) in [
+        ("default-items", "50"),
+        ("maximum-items", "10000"),
+        ("minimum-output-bytes", "1536"),
+        ("default-output-bytes", "65536"),
+        ("maximum-output-bytes", "4194304"),
+        ("maximum-continuation-bytes", "320"),
+    ] {
+        assert!(query.iter().any(|record| {
+            record.operation == "query.limit"
+                && compact_field(record, "name") == Some(name)
+                && compact_field(record, "value") == Some(value)
+        }));
+    }
+    assert!(!query.iter().any(|record| {
+        matches!(
+            compact_field(record, "name"),
+            Some("callers" | "callees" | "context" | "impact" | "request")
+        )
+    }));
     for field in change_section.iter().filter(|record| {
         matches!(
             record.operation.as_str(),
@@ -521,18 +641,19 @@ fn generated_contract_documents_match_executable() {
 }
 
 #[test]
-fn direct_cli_query_check_and_build_are_bounded() {
-    let found = success(&[
-        "--project",
-        APPLICATION,
-        "query",
-        "find",
-        "Web",
-        "--exact",
-        "--limit",
-        "5",
-    ]);
-    assert_eq!(found["result"]["items"][0]["kind"], "component");
+fn normalized_query_and_predecessor_check_build_are_dependency_closed() {
+    let normalized = tempfile::TempDir::new().expect("normalized query project");
+    let project = normalized.path().join("project");
+    compact_success(&["new", path(&project), "--name", "query-check"]);
+    let owners = compact_success(&["--project", path(&project), "query", "owners"]);
+    assert_eq!(
+        compact_field(compact_record(&owners, "summary"), "returned"),
+        Some("0")
+    );
+    assert_eq!(
+        compact_field(compact_record(&owners, "summary"), "truncated"),
+        Some("false")
+    );
 
     let tests = success(&["--project", APPLICATION, "check"]);
     assert_eq!(tests["result"]["passed"], 12);
@@ -549,6 +670,726 @@ fn direct_cli_query_check_and_build_are_bounded() {
     assert_eq!(
         compact_field(compact_record(&inspection, "diagnostic"), "code"),
         Some("predecessor_contract")
+    );
+}
+
+#[test]
+fn copied_binary_rediscovers_normalized_names_and_relations_without_query_writes() {
+    let temporary = tempfile::TempDir::new().expect("isolated normalized query workspace");
+    let copied_binary = temporary.path().join("lkjscript");
+    copy_executable(&binary(), &copied_binary);
+    let project = temporary.path().join("project");
+    let created = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["new", path(&project), "--name", "query-workflow"],
+    );
+    let initial_revision = compact_field(compact_record(&created, "revision"), "id")
+        .expect("initial normalized revision")
+        .to_owned();
+    let change = format!(
+        "request base={initial_revision} idempotency=query-workflow-create\n\
+         create.module as=$alpha name=alpha\n\
+         create.module as=$beta name=beta\n\
+         create.record as=$payload module=$alpha name=Payload visibility=public\n\
+         add.field as=$value record=$payload name=value type=unit\n\
+         expression.unit as=$callee-body\n\
+         create.function as=$callee module=$alpha name=callee visibility=public result=unit effect=pure body=$callee-body\n\
+         expression.call as=$call function=$callee\n\
+         create.function as=$caller module=$beta name=caller visibility=public result=unit effect=pure body=$call\n\
+         expression.call as=$call-two function=$callee\n\
+         create.function as=$other-caller module=$beta name=other_caller visibility=public result=unit effect=pure body=$call-two\n"
+    );
+    let change_path = temporary.path().join("create.lkjc");
+    std::fs::write(&change_path, change).expect("normalized query topology request");
+    let planned = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "--input-file",
+            path(&change_path),
+        ],
+    );
+    let plan = compact_field(compact_record(&planned, "plan"), "digest")
+        .expect("topology plan")
+        .to_owned();
+    let applied = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "apply",
+            "--input-file",
+            path(&change_path),
+            "--plan",
+            &plan,
+        ],
+    );
+    let accepted_revision = compact_field(compact_record(&applied, "revision"), "result")
+        .expect("accepted topology revision")
+        .to_owned();
+    drop(planned);
+    drop(applied);
+
+    let before_queries = content_inventory(&project);
+    let nested = project.join("ordinary/nested");
+    std::fs::create_dir_all(&nested).expect("nested normalized query directory");
+    let alpha = compact_success_at(
+        &copied_binary,
+        &nested,
+        &["query", "find", "module", "alpha"],
+    );
+    assert_eq!(
+        compact_field(compact_record(&alpha, "summary"), "match"),
+        Some("true")
+    );
+    let alpha_id = compact_field(compact_record(&alpha, "owner"), "id")
+        .expect("rediscovered alpha module")
+        .to_owned();
+    let beta = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "find",
+            "module",
+            "beta",
+        ],
+    );
+    let beta_id = compact_field(compact_record(&beta, "owner"), "id")
+        .expect("rediscovered beta module")
+        .to_owned();
+    let callee = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "find",
+            "declaration",
+            "callee",
+            "--parent",
+            &alpha_id,
+        ],
+    );
+    let callee_id = compact_field(compact_record(&callee, "owner"), "id")
+        .expect("rediscovered callee")
+        .to_owned();
+    let caller = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "find",
+            "declaration",
+            "caller",
+            "--parent",
+            &beta_id,
+        ],
+    );
+    let caller_id = compact_field(compact_record(&caller, "owner"), "id")
+        .expect("rediscovered caller")
+        .to_owned();
+    let payload = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "find",
+            "declaration",
+            "Payload",
+            "--parent",
+            &alpha_id,
+        ],
+    );
+    let payload_id = compact_field(compact_record(&payload, "owner"), "id")
+        .expect("rediscovered record")
+        .to_owned();
+    let field = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "find",
+            "field",
+            "value",
+            "--parent",
+            &payload_id,
+        ],
+    );
+    let field_id = compact_field(compact_record(&field, "owner"), "id")
+        .expect("rediscovered nested field")
+        .to_owned();
+
+    let first_page = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "owners",
+            "--limit",
+            "2",
+        ],
+    );
+    let stale_candidate = compact_field(compact_record(&first_page, "continuation"), "token")
+        .expect("first owner continuation")
+        .to_owned();
+    let mut owner_ids = first_page
+        .iter()
+        .filter(|record| record.operation == "owner")
+        .filter_map(|record| compact_field(record, "id"))
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    let mut continuation = Some(stale_candidate.clone());
+    while let Some(token) = continuation {
+        let page = compact_success_at(
+            &copied_binary,
+            temporary.path(),
+            &[
+                "--project",
+                path(&project),
+                "query",
+                "owners",
+                "--limit",
+                "3",
+                "--continuation",
+                &token,
+            ],
+        );
+        owner_ids.extend(
+            page.iter()
+                .filter(|record| record.operation == "owner")
+                .filter_map(|record| compact_field(record, "id"))
+                .map(str::to_owned),
+        );
+        continuation = page
+            .iter()
+            .find(|record| record.operation == "continuation")
+            .and_then(|record| compact_field(record, "token"))
+            .map(str::to_owned);
+    }
+    for recovered in [
+        &alpha_id,
+        &beta_id,
+        &callee_id,
+        &caller_id,
+        &payload_id,
+        &field_id,
+    ] {
+        assert!(owner_ids.contains(recovered));
+    }
+    let first_relations = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "relations",
+            &callee_id,
+            "--direction",
+            "incoming",
+            "--kind",
+            "function_call",
+            "--limit",
+            "1",
+        ],
+    );
+    let first_relation_token =
+        compact_field(compact_record(&first_relations, "continuation"), "token")
+            .expect("paginated incoming relation continuation")
+            .to_owned();
+    let remaining_relations = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "relations",
+            &callee_id,
+            "--direction",
+            "incoming",
+            "--kind",
+            "function_call",
+            "--limit",
+            "2",
+            "--continuation",
+            &first_relation_token,
+        ],
+    );
+    let calls = first_relations
+        .iter()
+        .chain(&remaining_relations)
+        .filter(|record| record.operation == "relation")
+        .collect::<Vec<_>>();
+    assert_eq!(calls.len(), 2);
+    assert!(
+        remaining_relations
+            .iter()
+            .all(|record| record.operation != "continuation")
+    );
+    for call in calls {
+        assert_eq!(compact_field(call, "kind"), Some("function_call"));
+        assert_eq!(
+            compact_field(call, "target-owner"),
+            Some(callee_id.as_str())
+        );
+        assert!(compact_field(call, "source-owner").is_some());
+    }
+    let outgoing = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "relations",
+            &caller_id,
+            "--direction",
+            "outgoing",
+            "--kind",
+            "declaration_module",
+        ],
+    );
+    assert_eq!(
+        compact_field(compact_record(&outgoing, "relation"), "target-owner"),
+        Some(beta_id.as_str())
+    );
+    for direction in ["incoming", "outgoing"] {
+        let package_relations = compact_success_at(
+            &copied_binary,
+            temporary.path(),
+            &[
+                "--project",
+                path(&project),
+                "query",
+                "relations",
+                "package",
+                "--direction",
+                direction,
+                "--kind",
+                "package_dependency",
+            ],
+        );
+        assert_eq!(
+            compact_field(compact_record(&package_relations, "summary"), "returned"),
+            Some("0")
+        );
+    }
+    let mismatched = compact_failure_output(command_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "owners",
+            "--kind",
+            "module",
+            "--continuation",
+            &stale_candidate,
+        ],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&mismatched, "diagnostic"), "code"),
+        Some("query_continuation_mismatch")
+    );
+    let malformed = compact_failure_output(command_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "owners",
+            "--continuation",
+            "qcont_bad!",
+        ],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&malformed, "diagnostic"), "code"),
+        Some("query_continuation_malformed")
+    );
+    let predecessor_token = compact_failure_output(command_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "owners",
+            "--continuation",
+            "cont_predecessor",
+        ],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&predecessor_token, "diagnostic"), "code"),
+        Some("predecessor_contract")
+    );
+    for (arguments, expected_code) in [
+        (
+            vec![
+                "--project",
+                path(&project),
+                "query",
+                "owners",
+                "--bytes",
+                "1",
+            ],
+            "query_invalid_byte_limit",
+        ),
+        (
+            vec![
+                "--project",
+                path(&project),
+                "query",
+                "owners",
+                "--continue",
+                &stale_candidate,
+            ],
+            "query_unknown_option",
+        ),
+        (
+            vec![
+                "--project",
+                path(&project),
+                "query",
+                "owners",
+                "--work",
+                "1",
+            ],
+            "query_unknown_option",
+        ),
+    ] {
+        let rejected =
+            compact_failure_output(command_at(&copied_binary, temporary.path(), &arguments));
+        assert_eq!(
+            compact_field(compact_record(&rejected, "diagnostic"), "code"),
+            Some(expected_code)
+        );
+    }
+    let absent_owner = if alpha_id == "mod_00000000000000000000000000000001" {
+        "mod_00000000000000000000000000000002"
+    } else {
+        "mod_00000000000000000000000000000001"
+    };
+    let absent_relation = compact_failure_output(command_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "relations",
+            absent_owner,
+            "--direction",
+            "outgoing",
+        ],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&absent_relation, "diagnostic"), "code"),
+        Some("query_owner_not_found")
+    );
+    let foreign_project = temporary.path().join("foreign");
+    compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["new", path(&foreign_project), "--name", "foreign"],
+    );
+    let foreign = compact_failure_output(command_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&foreign_project),
+            "query",
+            "owners",
+            "--continuation",
+            &stale_candidate,
+        ],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&foreign, "diagnostic"), "code"),
+        Some("query_continuation_foreign")
+    );
+    assert_eq!(content_inventory(&project), before_queries);
+    assert_eq!(
+        current_revision_at(&copied_binary, temporary.path(), &project),
+        accepted_revision
+    );
+
+    let rename_plan = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "rename.owner",
+            "--base",
+            &accepted_revision,
+            "--owner",
+            &callee_id,
+            "--name",
+            "renamed",
+        ],
+    );
+    let rename_digest = compact_field(compact_record(&rename_plan, "plan"), "digest")
+        .expect("rename plan")
+        .to_owned();
+    let renamed = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "apply",
+            "rename.owner",
+            "--base",
+            &accepted_revision,
+            "--owner",
+            &callee_id,
+            "--name",
+            "renamed",
+            "--plan",
+            &rename_digest,
+        ],
+    );
+    let renamed_revision = compact_field(compact_record(&renamed, "revision"), "result")
+        .expect("renamed revision")
+        .to_owned();
+    let after_rename = content_inventory(&project);
+    let old_name = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "find",
+            "declaration",
+            "callee",
+            "--parent",
+            &alpha_id,
+        ],
+    );
+    assert_eq!(
+        compact_field(compact_record(&old_name, "summary"), "match"),
+        Some("false")
+    );
+    let new_name = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "find",
+            "declaration",
+            "renamed",
+            "--parent",
+            &alpha_id,
+        ],
+    );
+    assert_eq!(
+        compact_field(compact_record(&new_name, "owner"), "id"),
+        Some(callee_id.as_str())
+    );
+    let stale = compact_failure_output(command_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "owners",
+            "--continuation",
+            &stale_candidate,
+        ],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&stale, "diagnostic"), "code"),
+        Some("query_continuation_stale")
+    );
+    assert_eq!(content_inventory(&project), after_rename);
+    assert_eq!(
+        current_revision_at(&copied_binary, temporary.path(), &project),
+        renamed_revision
+    );
+
+    for action in [
+        "callers",
+        "callees",
+        "types",
+        "capabilities",
+        "context",
+        "impact",
+        "request",
+    ] {
+        let rejected = compact_failure_output(command_at(
+            &copied_binary,
+            temporary.path(),
+            &["--project", path(&project), "query", action],
+        ));
+        assert_eq!(
+            compact_field(compact_record(&rejected, "diagnostic"), "code"),
+            Some("predecessor_contract")
+        );
+    }
+    for request_option in ["--request", "--request-file", "--file"] {
+        let rejected = compact_failure_output(command_at(
+            &copied_binary,
+            temporary.path(),
+            &[
+                "--project",
+                path(&project),
+                "query",
+                "request",
+                request_option,
+                "{}",
+            ],
+        ));
+        assert_eq!(
+            compact_field(compact_record(&rejected, "diagnostic"), "code"),
+            Some("predecessor_contract")
+        );
+    }
+    let predecessor = temporary.path().join("predecessor");
+    predecessor_project(&predecessor, "predecessor", ProjectTemplate::Command);
+    let rejected = compact_failure_output(command_at(
+        &copied_binary,
+        temporary.path(),
+        &["--project", path(&predecessor), "query", "owners"],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&rejected, "diagnostic"), "code"),
+        Some("predecessor_contract")
+    );
+}
+
+#[test]
+fn interrupted_copied_query_after_reads_and_rendering_writes_no_repository_bytes() {
+    let temporary = tempfile::TempDir::new().expect("isolated interrupted query workspace");
+    let copied_binary = temporary.path().join("lkjscript");
+    copy_executable(&binary(), &copied_binary);
+    let project = temporary.path().join("project");
+    let created = compact_success_at(
+        &copied_binary,
+        temporary.path(),
+        &["new", path(&project), "--name", "interrupted-query"],
+    );
+    let initial = compact_field(compact_record(&created, "revision"), "id")
+        .expect("interruption fixture revision")
+        .to_owned();
+    let mut request = format!("request base={initial}\n");
+    for ordinal in 0..1_000_u64 {
+        request.push_str(&format!(
+            "create.module as=$module-{ordinal:04} name=module_{ordinal:04}\n"
+        ));
+    }
+    let request_path = temporary.path().join("large-query-fixture.lkjc");
+    std::fs::write(&request_path, request).expect("large normalized query fixture request");
+
+    let planned = command_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "--input-file",
+            path(&request_path),
+        ],
+    );
+    assert!(planned.status.success(), "large query fixture plan failed");
+    assert!(planned.stderr.is_empty());
+    let planned_records =
+        parse_records("large fixture plan", &planned.stdout).expect("large fixture plan records");
+    let plan = compact_field(compact_record(&planned_records, "plan"), "digest")
+        .expect("large fixture plan digest")
+        .to_owned();
+    let applied = command_at(
+        &copied_binary,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "change",
+            "apply",
+            "--input-file",
+            path(&request_path),
+            "--plan",
+            &plan,
+        ],
+    );
+    assert!(applied.status.success(), "large query fixture apply failed");
+    assert!(applied.stderr.is_empty());
+    let applied_records =
+        parse_records("large fixture apply", &applied.stdout).expect("large fixture apply records");
+    let accepted = compact_field(compact_record(&applied_records, "revision"), "result")
+        .expect("large fixture accepted revision")
+        .to_owned();
+    drop(planned_records);
+    drop(applied_records);
+    drop(planned);
+    drop(applied);
+
+    let before = content_inventory(&project);
+    let mut child = Command::new(&copied_binary)
+        .args([
+            "--project",
+            path(&project),
+            "query",
+            "owners",
+            "--limit",
+            "1000",
+            "--bytes",
+            "4194304",
+        ])
+        .current_dir(temporary.path())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn interruptible copied query");
+    let mut stdout = child.stdout.take().expect("interruptible query stdout");
+    let mut first_output_byte = [0_u8; 1];
+    stdout
+        .read_exact(&mut first_output_byte)
+        .expect("query reached completed rendering and process output");
+    child
+        .kill()
+        .expect("large query must still be blocked on its unread compact output");
+    drop(stdout);
+    let interrupted = child
+        .wait_with_output()
+        .expect("wait for interrupted copied query");
+    assert!(!interrupted.status.success());
+    assert!(interrupted.stderr.is_empty());
+    assert_eq!(content_inventory(&project), before);
+    assert_eq!(
+        current_revision_at(&copied_binary, temporary.path(), &project),
+        accepted
     );
 }
 

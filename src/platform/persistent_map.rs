@@ -282,6 +282,22 @@ pub struct MapWork {
     admission: MapAdmission,
 }
 
+/// Controls one logical range visit without exposing physical page coordinates.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MapRangeControl {
+    /// The current logical entry was accepted and traversal may continue.
+    Continue,
+    /// The current logical entry was not accepted and traversal must stop before it.
+    StopBefore,
+}
+
+/// Exact logical outcome of a bounded range visit.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MapRangeRead {
+    pub entries_visited: u64,
+    pub has_more: bool,
+}
+
 impl Default for MapWork {
     fn default() -> Self {
         Self::with_admission(MapAdmission::unbounded())
@@ -2248,6 +2264,259 @@ where
     }
 }
 
+#[derive(Default)]
+struct RangeVisitState {
+    entries_visited: u64,
+    has_more: bool,
+}
+
+fn visit_range_entry<F>(
+    key: &[u8],
+    value: &[u8],
+    state: &mut RangeVisitState,
+    visitor: &mut F,
+) -> Result<(), MapError>
+where
+    F: FnMut(&[u8], &[u8]) -> Result<MapRangeControl, MapError>,
+{
+    match visitor(key, value)? {
+        MapRangeControl::Continue => {
+            state.entries_visited = state.entries_visited.checked_add(1).ok_or_else(|| {
+                map_error(
+                    MapErrorClass::Resource,
+                    "persistent_map_range_count",
+                    "range entry count overflowed",
+                )
+            })?;
+        }
+        MapRangeControl::StopBefore => state.has_more = true,
+    }
+    Ok(())
+}
+
+fn visit_range_loaded<S, F>(
+    store: &S,
+    page: &Page,
+    exclusive_lower_bound: Option<&[u8]>,
+    depth: usize,
+    work: &mut MapWork,
+    state: &mut RangeVisitState,
+    visitor: &mut F,
+) -> Result<(), MapError>
+where
+    S: PageStore + ?Sized,
+    F: FnMut(&[u8], &[u8]) -> Result<MapRangeControl, MapError>,
+{
+    ensure_depth(depth)?;
+    if state.has_more {
+        return Ok(());
+    }
+
+    let active_lower_bound = match exclusive_lower_bound {
+        None => None,
+        Some(lower_bound) => match page.prefix().cmp(lower_bound) {
+            std::cmp::Ordering::Greater => None,
+            std::cmp::Ordering::Equal => Some(lower_bound),
+            std::cmp::Ordering::Less if lower_bound.starts_with(page.prefix()) => Some(lower_bound),
+            std::cmp::Ordering::Less => {
+                skip_subtree(work, page.count())?;
+                return Ok(());
+            }
+        },
+    };
+
+    match page {
+        Page::Leaf { entries, .. } => {
+            let start = match active_lower_bound {
+                None => 0,
+                Some(lower_bound) => match search_entries(entries, lower_bound, work)? {
+                    Ok(index) => index.checked_add(1).ok_or_else(|| {
+                        map_error(
+                            MapErrorClass::Resource,
+                            "persistent_map_range_position",
+                            "exclusive range position overflowed",
+                        )
+                    })?,
+                    Err(index) => index,
+                },
+            };
+            for entry in &entries[start..] {
+                visit_range_entry(&entry.key, &entry.value, state, visitor)?;
+                if state.has_more {
+                    break;
+                }
+            }
+        }
+        Page::Branch {
+            prefix,
+            terminal,
+            children,
+            ..
+        } => {
+            if active_lower_bound.is_none() {
+                if let Some(value) = terminal {
+                    visit_range_entry(prefix, value, state, visitor)?;
+                }
+                for child in children {
+                    if state.has_more {
+                        break;
+                    }
+                    let child_page = load_page(store, child.digest, work)?;
+                    verify_child_link(prefix, child, &child_page)?;
+                    visit_range_loaded(store, &child_page, None, depth + 1, work, state, visitor)?;
+                }
+                return Ok(());
+            }
+
+            let lower_bound = active_lower_bound.ok_or_else(|| {
+                map_error(
+                    MapErrorClass::Corrupt,
+                    "persistent_map_range_lower_bound",
+                    "range traversal lost its active lower bound",
+                )
+            })?;
+            if lower_bound.len() == prefix.len() {
+                for child in children {
+                    if state.has_more {
+                        break;
+                    }
+                    let child_page = load_page(store, child.digest, work)?;
+                    verify_child_link(prefix, child, &child_page)?;
+                    visit_range_loaded(store, &child_page, None, depth + 1, work, state, visitor)?;
+                }
+                return Ok(());
+            }
+
+            let edge = *lower_bound.get(prefix.len()).ok_or_else(|| {
+                map_error(
+                    MapErrorClass::Corrupt,
+                    "persistent_map_range_descent",
+                    "range traversal lost the lower-bound branch byte",
+                )
+            })?;
+            let (start, equal_child) = match search_children(children, edge, work)? {
+                Ok(index) => (index, true),
+                Err(index) => (index, false),
+            };
+            for child in &children[..start] {
+                skip_subtree(work, child.count)?;
+            }
+            for (offset, child) in children[start..].iter().enumerate() {
+                if state.has_more {
+                    break;
+                }
+                let child_page = load_page(store, child.digest, work)?;
+                verify_child_link(prefix, child, &child_page)?;
+                let child_lower_bound = if equal_child && offset == 0 {
+                    Some(lower_bound)
+                } else {
+                    None
+                };
+                visit_range_loaded(
+                    store,
+                    &child_page,
+                    child_lower_bound,
+                    depth + 1,
+                    work,
+                    state,
+                    visitor,
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn visit_prefix_range_loaded<S, F>(
+    store: &S,
+    page: &Page,
+    requested: &[u8],
+    exclusive_lower_bound: Option<&[u8]>,
+    depth: usize,
+    work: &mut MapWork,
+    state: &mut RangeVisitState,
+    visitor: &mut F,
+) -> Result<(), MapError>
+where
+    S: PageStore + ?Sized,
+    F: FnMut(&[u8], &[u8]) -> Result<MapRangeControl, MapError>,
+{
+    ensure_depth(depth)?;
+    if page.prefix().starts_with(requested) {
+        return visit_range_loaded(
+            store,
+            page,
+            exclusive_lower_bound,
+            depth,
+            work,
+            state,
+            visitor,
+        );
+    }
+    if !requested.starts_with(page.prefix()) {
+        return Ok(());
+    }
+
+    match page {
+        Page::Leaf { entries, .. } => {
+            let prefix_start = match search_entries(entries, requested, work)? {
+                Ok(index) | Err(index) => index,
+            };
+            let lower_start = match exclusive_lower_bound {
+                None => 0,
+                Some(lower_bound) => match search_entries(entries, lower_bound, work)? {
+                    Ok(index) => index.checked_add(1).ok_or_else(|| {
+                        map_error(
+                            MapErrorClass::Resource,
+                            "persistent_map_range_position",
+                            "exclusive range position overflowed",
+                        )
+                    })?,
+                    Err(index) => index,
+                },
+            };
+            let start = prefix_start.max(lower_start);
+            for entry in &entries[start..] {
+                if !entry.key.starts_with(requested) {
+                    break;
+                }
+                visit_range_entry(&entry.key, &entry.value, state, visitor)?;
+                if state.has_more {
+                    break;
+                }
+            }
+        }
+        Page::Branch {
+            prefix, children, ..
+        } => {
+            let edge = *requested.get(prefix.len()).ok_or_else(|| {
+                map_error(
+                    MapErrorClass::Corrupt,
+                    "persistent_map_range_prefix_descent",
+                    "prefix range traversal lost the requested branch byte",
+                )
+            })?;
+            let Ok(index) = search_children(children, edge, work)? else {
+                return Ok(());
+            };
+            let child = &children[index];
+            let child_page = load_page(store, child.digest, work)?;
+            verify_child_link(prefix, child, &child_page)?;
+            visit_prefix_range_loaded(
+                store,
+                &child_page,
+                requested,
+                exclusive_lower_bound,
+                depth + 1,
+                work,
+                state,
+                visitor,
+            )?;
+        }
+    }
+    Ok(())
+}
+
 fn collect_loaded<S: PageStore + ?Sized>(
     store: &S,
     digest: PageDigest,
@@ -3229,6 +3498,44 @@ impl PersistentMap {
             work,
             &mut |key, value, _work| visitor(key, value),
         )
+    }
+
+    /// Visits a canonical key range without materializing the map or rescanning keys before an
+    /// exclusive logical lower bound. An empty prefix selects the complete map. `StopBefore`
+    /// leaves the current key unvisited and reports that more matching entries remain.
+    pub fn for_each_range<S, F>(
+        &self,
+        store: &S,
+        prefix: &[u8],
+        exclusive_lower_bound: Option<&[u8]>,
+        work: &mut MapWork,
+        mut visitor: F,
+    ) -> Result<MapRangeRead, MapError>
+    where
+        S: PageStore + ?Sized,
+        F: FnMut(&[u8], &[u8]) -> Result<MapRangeControl, MapError>,
+    {
+        validate_key(prefix)?;
+        if let Some(lower_bound) = exclusive_lower_bound {
+            validate_key(lower_bound)?;
+        }
+        let page = load_page(store, self.root.page, work)?;
+        verify_root(self.root, &page)?;
+        let mut state = RangeVisitState::default();
+        visit_prefix_range_loaded(
+            store,
+            &page,
+            prefix,
+            exclusive_lower_bound,
+            0,
+            work,
+            &mut state,
+            &mut visitor,
+        )?;
+        Ok(MapRangeRead {
+            entries_visited: state.entries_visited,
+            has_more: state.has_more,
+        })
     }
 
     pub fn insert<S: PageStore + ?Sized>(
@@ -4310,6 +4617,108 @@ mod tests {
     }
 
     #[test]
+    fn exclusive_range_matches_sorted_oracle_across_prefixes_and_bounds() {
+        let entries = [
+            (Vec::new(), b"root".to_vec()),
+            (b"a".to_vec(), b"a".to_vec()),
+            (b"aa".to_vec(), b"aa".to_vec()),
+            (b"ab".to_vec(), b"ab".to_vec()),
+            (b"b".to_vec(), b"b".to_vec()),
+            (b"ba".to_vec(), b"ba".to_vec()),
+            (vec![u8::MAX], b"last".to_vec()),
+        ];
+        let mut store = MemoryPageStore::default();
+        let map = PersistentMap::from_sorted(&mut store, entries.clone(), &mut MapWork::default())
+            .expect("range fixture");
+        let cases = [
+            (b"".as_slice(), None, 20_usize),
+            (b"".as_slice(), Some(b"".as_slice()), 20),
+            (b"".as_slice(), Some(b"a".as_slice()), 2),
+            (b"a".as_slice(), None, 2),
+            (b"a".as_slice(), Some(b"a".as_slice()), 1),
+            (b"a".as_slice(), Some(b"az".as_slice()), 3),
+            (b"b".as_slice(), Some(b"a".as_slice()), 1),
+            (b"b".as_slice(), Some(b"z".as_slice()), 3),
+            (b"missing".as_slice(), None, 0),
+        ];
+        for (prefix, lower_bound, limit) in cases {
+            let matching = entries
+                .iter()
+                .filter(|(key, _value)| {
+                    key.starts_with(prefix)
+                        && lower_bound.is_none_or(|lower_bound| key.as_slice() > lower_bound)
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            let expected = matching.iter().take(limit).cloned().collect::<Vec<_>>();
+            let mut actual = Vec::new();
+            let read = map
+                .for_each_range(
+                    &store,
+                    prefix,
+                    lower_bound,
+                    &mut MapWork::default(),
+                    |key, value| {
+                        if actual.len() == limit {
+                            return Ok(MapRangeControl::StopBefore);
+                        }
+                        actual.push((key.to_vec(), value.to_vec()));
+                        Ok(MapRangeControl::Continue)
+                    },
+                )
+                .expect("range traversal");
+            assert_eq!(actual, expected, "prefix={prefix:?} lower={lower_bound:?}");
+            assert_eq!(
+                read.entries_visited,
+                u64::try_from(expected.len()).expect("small expected range"),
+            );
+            assert_eq!(read.has_more, matching.len() > limit);
+        }
+    }
+
+    #[test]
+    fn exclusive_range_descends_from_a_late_logical_bound_without_prefix_rescan() {
+        let mut store = MemoryPageStore::default();
+        let map = PersistentMap::from_sorted(
+            &mut store,
+            (0..65_536_u32)
+                .map(|number| (number.to_be_bytes().to_vec(), number.to_le_bytes().to_vec())),
+            &mut MapWork::default(),
+        )
+        .expect("late range fixture");
+        let lower_bound = 60_000_u32.to_be_bytes();
+        let mut returned = Vec::new();
+        let mut work = MapWork::default();
+        let read = map
+            .for_each_range(&store, &[], Some(&lower_bound), &mut work, |key, _value| {
+                if returned.len() == 5 {
+                    return Ok(MapRangeControl::StopBefore);
+                }
+                returned.push(u32::from_be_bytes(key.try_into().map_err(|_| {
+                    map_error(
+                        MapErrorClass::Corrupt,
+                        "persistent_map_test_key",
+                        "numbered range key has the wrong width",
+                    )
+                })?));
+                Ok(MapRangeControl::Continue)
+            })
+            .expect("late range traversal");
+        assert_eq!(returned, vec![60_001, 60_002, 60_003, 60_004, 60_005]);
+        assert_eq!(read.entries_visited, 5);
+        assert!(read.has_more);
+        assert!(
+            work.pages_read < 12,
+            "late page opened too many pages: {work:?}"
+        );
+        assert!(
+            work.entries_visited < 2_048,
+            "late page decoded an earlier logical prefix: {work:?}"
+        );
+        assert!(work.entries_skipped >= 59_000);
+    }
+
+    #[test]
     fn randomized_sorted_batches_match_btree_and_full_map_oracles() {
         let (mut store, mut map) = empty();
         let mut oracle = BTreeMap::<Vec<u8>, Vec<u8>>::new();
@@ -4515,6 +4924,18 @@ mod tests {
                 .code,
             "persistent_map_page_missing"
         );
+        assert_eq!(
+            map.for_each_range(
+                &store,
+                &[],
+                None,
+                &mut MapWork::default(),
+                |_key, _value| Ok(MapRangeControl::Continue),
+            )
+            .expect_err("range traversal must reject a missing touched child")
+            .code,
+            "persistent_map_page_missing"
+        );
 
         let mut corrupt_store = MemoryPageStore::default();
         let corrupt_map = numbered_map(&mut corrupt_store, 0..20);
@@ -4530,6 +4951,19 @@ mod tests {
                     &mut MapWork::default()
                 )
                 .expect_err("foreign root bytes must reject")
+                .code,
+            "persistent_map_page_digest"
+        );
+        assert_eq!(
+            corrupt_map
+                .for_each_range(
+                    &corrupt_store,
+                    &[],
+                    None,
+                    &mut MapWork::default(),
+                    |_key, _value| Ok(MapRangeControl::Continue),
+                )
+                .expect_err("range traversal must reject foreign root bytes")
                 .code,
             "persistent_map_page_digest"
         );
