@@ -300,21 +300,21 @@ pub const MAXIMUM_LOGICAL_PLAN_RECORDS: u64 = FIXED_LOGICAL_PLAN_RECORDS
     + DEFAULT_SELECTED_TESTS
     + DEFAULT_IMPACT_REASONS;
 
-// These per-category encoded-record ceilings include operation/field framing and the longest
-// current typed text forms. The fixed allowance includes every singleton/budget record and the
-// worst-case escaped 4,096-byte intent. A unit test renders maximal supported values and guards
-// these derivations against vocabulary growth.
-const MAXIMUM_FIXED_RECORD_BYTES: u64 = 65_536;
-const MAXIMUM_ALLOCATION_RECORD_BYTES: u64 = 128;
-const MAXIMUM_OWNER_RECORD_BYTES: u64 = 1_024;
-const MAXIMUM_TYPE_RECORD_BYTES: u64 = 128;
-const MAXIMUM_DEPENDENCY_RECORD_BYTES: u64 = 1_024;
-const MAXIMUM_RETIREMENT_RECORD_BYTES: u64 = 2_048;
-const MAXIMUM_RELATION_RECORD_BYTES: u64 = 384;
-const MAXIMUM_SELECTION_RECORD_BYTES: u64 = 128;
-const MAXIMUM_REASON_RECORD_BYTES: u64 = 256;
+// These are the exact canonical byte maxima, including newline framing, for current default
+// admissions and current typed text forms. The fixed total includes every singleton/budget record
+// and the maximally escaped 4,096-byte intent. A unit test renders each maximum and requires exact
+// equality, so vocabulary or field-bound growth must deliberately revise this contract.
+const MAXIMUM_FIXED_RECORDS_BYTES: u64 = 27_551;
+const MAXIMUM_ALLOCATION_RECORD_BYTES: u64 = 111;
+const MAXIMUM_OWNER_RECORD_BYTES: u64 = 857;
+const MAXIMUM_TYPE_RECORD_BYTES: u64 = 111;
+const MAXIMUM_DEPENDENCY_RECORD_BYTES: u64 = 699;
+const MAXIMUM_RETIREMENT_RECORD_BYTES: u64 = 1_225;
+const MAXIMUM_RELATION_RECORD_BYTES: u64 = 331;
+const MAXIMUM_SELECTION_RECORD_BYTES: u64 = 85;
+const MAXIMUM_REASON_RECORD_BYTES: u64 = 206;
 
-pub const MAXIMUM_LOGICAL_PLAN_BYTES: u64 = MAXIMUM_FIXED_RECORD_BYTES
+pub const MAXIMUM_LOGICAL_PLAN_BYTES: u64 = MAXIMUM_FIXED_RECORDS_BYTES
     + DEFAULT_ALLOCATIONS * MAXIMUM_ALLOCATION_RECORD_BYTES
     + DEFAULT_OWNER_CHANGES * MAXIMUM_OWNER_RECORD_BYTES
     + DEFAULT_TYPE_ADDITIONS * MAXIMUM_TYPE_RECORD_BYTES
@@ -2833,15 +2833,15 @@ mod tests {
                 .saturating_add(budget.impact.maximum_affected_owners)
         );
         assert_eq!(MAXIMUM_LOGICAL_PLAN_RECORDS, 740_018);
-        assert_eq!(MAXIMUM_LOGICAL_PLAN_BYTES, 425_025_536);
+        assert_eq!(MAXIMUM_LOGICAL_PLAN_BYTES, 303_377_551);
 
         let owner = format!("annotation_{}", "f".repeat(32));
         let owner_object = format!("owner_object_{}", "f".repeat(64));
-        assert_record_ceiling(
+        assert_record_maximum(
             "logical-plan.allocation",
             &[
                 ("domain", "type_parameter"),
-                ("ordinal", "18446744073709551615"),
+                ("ordinal", "100000"),
                 ("owner", &owner),
             ],
             MAXIMUM_ALLOCATION_RECORD_BYTES,
@@ -2856,12 +2856,12 @@ mod tests {
         owner_fields[2].1 = &owner_object;
         owner_fields[3].1 = "true";
         owner_fields[4].1 = &owner_object;
-        assert_record_ceiling(
+        assert_record_maximum(
             "logical-plan.owner",
             &owner_fields,
             MAXIMUM_OWNER_RECORD_BYTES,
         );
-        assert_record_ceiling(
+        assert_record_maximum(
             "logical-plan.type-addition",
             &[("object", &format!("type_object_{}", "f".repeat(64)))],
             MAXIMUM_TYPE_RECORD_BYTES,
@@ -2870,7 +2870,7 @@ mod tests {
         let dependency_object = format!("dependency_object_{}", "f".repeat(64));
         let revision = format!("rev_{}", "f".repeat(64));
         let package_revision = format!("package_revision_{}", "f".repeat(64));
-        assert_record_ceiling(
+        assert_record_maximum(
             "logical-plan.dependency",
             &[
                 ("package", &package),
@@ -2888,13 +2888,13 @@ mod tests {
         let retirement_object = format!("retirement_object_{}", "f".repeat(64));
         let change = format!("change_{}", "f".repeat(64));
         let name = "x".repeat(crate::platform::kernel::contract::MAXIMUM_NAME_BYTES);
-        assert_record_ceiling(
+        assert_record_maximum(
             "logical-plan.retirement",
             &[
                 ("owner", &owner),
                 ("before-present", "true"),
                 ("before-object", &retirement_object),
-                ("before-kind", "documentation"),
+                ("before-kind", "type_parameter"),
                 ("before-name-present", "true"),
                 ("before-name", &name),
                 ("before-parent-present", "true"),
@@ -2903,7 +2903,7 @@ mod tests {
                 ("before-deletion-change", &change),
                 ("after-present", "true"),
                 ("after-object", &retirement_object),
-                ("after-kind", "documentation"),
+                ("after-kind", "type_parameter"),
                 ("after-name-present", "true"),
                 ("after-name", &name),
                 ("after-parent-present", "true"),
@@ -2913,7 +2913,7 @@ mod tests {
             ],
             MAXIMUM_RETIREMENT_RECORD_BYTES,
         );
-        assert_record_ceiling(
+        assert_record_maximum(
             "logical-plan.relation-removed",
             &[
                 ("source-package", &package),
@@ -2926,12 +2926,12 @@ mod tests {
             ],
             MAXIMUM_RELATION_RECORD_BYTES,
         );
-        assert_record_ceiling(
+        assert_record_maximum(
             "logical-plan.validation-structural",
             &[("owner", &owner)],
             MAXIMUM_SELECTION_RECORD_BYTES,
         );
-        assert_record_ceiling(
+        assert_record_maximum(
             "logical-plan.reason",
             &[
                 ("kind", "validation_dependency"),
@@ -2943,8 +2943,8 @@ mod tests {
             MAXIMUM_REASON_RECORD_BYTES,
         );
         let worst_controls =
-            "\u{1}".repeat(crate::platform::publication::contract::MAXIMUM_INTENT_BYTES);
-        assert_record_ceiling(
+            "\u{7f}".repeat(crate::platform::publication::contract::MAXIMUM_INTENT_BYTES);
+        assert_record_maximum(
             "logical-plan.controls",
             &[
                 ("idempotency-present", "true"),
@@ -2957,8 +2957,9 @@ mod tests {
                 ("intent-present", "true"),
                 ("intent", &worst_controls),
             ],
-            MAXIMUM_FIXED_RECORD_BYTES,
+            24_794,
         );
+        assert_eq!(maximum_fixed_record_bytes(), MAXIMUM_FIXED_RECORDS_BYTES);
     }
 
     fn one_record_commitment(operation: &str, fields: &[(&str, String)]) -> [u8; 32] {
@@ -2972,11 +2973,111 @@ mod tests {
         *hasher.finalize().as_bytes()
     }
 
-    fn assert_record_ceiling(operation: &str, fields: &[(&str, &str)], ceiling: u64) {
+    fn assert_record_maximum(operation: &str, fields: &[(&str, &str)], maximum: u64) {
         let record = render_record(operation, fields).unwrap();
-        assert!(
-            u64::try_from(record.len()).unwrap() <= ceiling,
-            "{operation}"
+        assert_eq!(u64::try_from(record.len()).unwrap(), maximum, "{operation}");
+    }
+
+    fn maximum_fixed_record_bytes() -> u64 {
+        let mut total = 0_u64;
+        let request = format!("request_{}", "f".repeat(64));
+        {
+            let mut add = |operation: &str, fields: &[(&str, &str)]| {
+                total += u64::try_from(render_record(operation, fields).unwrap().len()).unwrap();
+            };
+            add(
+                "logical-plan",
+                &[
+                    ("contract", LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY),
+                    ("version", "1"),
+                ],
+            );
+            add(
+                "logical-plan.contracts",
+                &[
+                    (
+                        "graph",
+                        crate::platform::kernel::contract::GRAPH_CONTRACT_IDENTITY,
+                    ),
+                    ("change", COMPACT_CHANGE_CONTRACT_IDENTITY),
+                    ("authored-request", AUTHORED_CHANGE_CODEC_IDENTITY),
+                    ("semantic-diff", SEMANTIC_DIFF_CONTRACT_IDENTITY),
+                    ("validator", SEMANTIC_VALIDATOR_CONTRACT_IDENTITY),
+                    ("plan-file", LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY),
+                ],
+            );
+            let repository = format!("repo_{}", "f".repeat(32));
+            let package = format!("pkg_{}", "f".repeat(32));
+            let revision = format!("rev_{}", "f".repeat(64));
+            let state = format!("semantic_state_{}", "f".repeat(64));
+            add(
+                "logical-plan.authority",
+                &[
+                    ("repository", &repository),
+                    ("package", &package),
+                    ("base", &revision),
+                    ("result", &revision),
+                    ("semantic-state", &state),
+                ],
+            );
+            add("logical-plan.request", &[("commitment", &request)]);
+        }
+
+        let mut budget_bytes = 0_u64;
+        {
+            let mut emit = |bytes: &[u8]| {
+                budget_bytes += u64::try_from(bytes.len()).unwrap();
+                Ok(())
+            };
+            let mut encoder = PlanEncoder::new(&mut emit);
+            encode_budget(ChangeBudget::default(), &mut encoder).unwrap();
+        }
+        total += budget_bytes;
+
+        let worst_controls =
+            "\u{7f}".repeat(crate::platform::publication::contract::MAXIMUM_INTENT_BYTES);
+        let idempotency =
+            "x".repeat(crate::platform::publication::contract::MAXIMUM_IDEMPOTENCY_KEY_BYTES);
+        let mut add = |operation: &str, fields: &[(&str, &str)]| {
+            total += u64::try_from(render_record(operation, fields).unwrap().len()).unwrap();
+        };
+        add(
+            "logical-plan.controls",
+            &[
+                ("idempotency-present", "true"),
+                ("idempotency", &idempotency),
+                ("intent-present", "true"),
+                ("intent", &worst_controls),
+            ],
         );
+        let transaction = format!("transaction_{}", "f".repeat(64));
+        let semantic_diff = format!("semantic_diff_{}", "f".repeat(64));
+        add(
+            "logical-plan.binding",
+            &[
+                ("transaction", &transaction),
+                ("semantic-diff", &semantic_diff),
+            ],
+        );
+        let six_digits = "999999";
+        add(
+            "logical-plan.counts",
+            &LOGICAL_PLAN_RECORD_DESCRIPTORS[27]
+                .fields
+                .iter()
+                .map(|field| (*field, six_digits))
+                .collect::<Vec<_>>(),
+        );
+        let prepared = format!("prepared_{}", "f".repeat(64));
+        let token = format!("plan_{}", "f".repeat(128));
+        add(
+            "logical-plan.digest",
+            &[
+                ("request", &request),
+                ("prepared", &prepared),
+                ("token", &token),
+            ],
+        );
+        total
     }
 }
