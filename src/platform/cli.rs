@@ -10,9 +10,10 @@ use super::contract::{
     registry_snapshot,
 };
 use super::control::{
-    ChangePlanDigest, CompactChangeOperation, CompactResponseLimits, CompactResponseWriter,
-    MAXIMUM_COMPACT_INPUT_BYTES, NormalizedChangeRequest, compact_change_operation_descriptor,
-    decode_compact_change, normalize_change_request,
+    ChangePlanToken, CompactChangeOperation, CompactResponseLimits, CompactResponseWriter,
+    LogicalChangePlan, LogicalPlanEncoding, MAXIMUM_COMPACT_INPUT_BYTES,
+    MAXIMUM_LOGICAL_PLAN_BYTES, NormalizedChangeRequest, compact_change_operation_descriptor,
+    decode_compact_change, encode_logical_change_plan, normalize_change_request,
 };
 use super::deployment::{MAXIMUM_DEPLOYMENT_BYTES, decode_deployment};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
@@ -335,8 +336,9 @@ enum ChangeAction {
 
 struct ChangeCommandRequest {
     normalized: NormalizedChangeRequest,
-    reviewed: Option<ChangePlanDigest>,
+    reviewed: Option<ChangePlanToken>,
     input_file: Option<String>,
+    output_file: Option<String>,
 }
 
 /// Plans or applies one transport-neutral authored request through the normalized repository
@@ -379,8 +381,12 @@ pub fn execute_change(arguments: Vec<String>) -> Result<Vec<u8>, Vec<Diagnostic>
         }
         None => decode_record_change(action, adapter_arguments)?,
     };
-    require_reviewed_change_plan(action, request.reviewed, request.normalized.plan)
-        .map_err(single_diagnostic)?;
+    require_reviewed_change_request(
+        action,
+        request.reviewed,
+        request.normalized.request_commitment,
+    )
+    .map_err(single_diagnostic)?;
     execute_normalized_change(project, action, request)
 }
 
@@ -389,7 +395,7 @@ fn decode_record_change(
     options: &[String],
 ) -> Result<ChangeCommandRequest, Vec<Diagnostic>> {
     let allowed = match action {
-        ChangeAction::Plan => &["--input", "--input-file"][..],
+        ChangeAction::Plan => &["--input", "--input-file", "--output"][..],
         ChangeAction::Apply => &["--input", "--input-file", "--plan"][..],
     };
     ensure_options(options, allowed, &[]).map_err(single_diagnostic)?;
@@ -431,13 +437,15 @@ fn decode_record_change(
     let normalized = decode_compact_change(&source, &bytes)?;
     let reviewed = option_value(options, "--plan")
         .map_err(single_diagnostic)?
-        .map(|value| value.parse::<ChangePlanDigest>())
+        .map(|value| value.parse::<ChangePlanToken>())
         .transpose()
         .map_err(single_diagnostic)?;
+    let output_file = option_value(options, "--output").map_err(single_diagnostic)?;
     Ok(ChangeCommandRequest {
         normalized,
         reviewed,
         input_file: Some(source),
+        output_file,
     })
 }
 
@@ -446,7 +454,14 @@ fn decode_direct_rename(
     options: &[String],
 ) -> Result<ChangeCommandRequest, Diagnostic> {
     let allowed = match action {
-        ChangeAction::Plan => &["--base", "--owner", "--name", "--idempotency", "--intent"][..],
+        ChangeAction::Plan => &[
+            "--base",
+            "--owner",
+            "--name",
+            "--idempotency",
+            "--intent",
+            "--output",
+        ][..],
         ChangeAction::Apply => &[
             "--base",
             "--owner",
@@ -480,31 +495,37 @@ fn decode_direct_rename(
     };
     let normalized = normalize_change_request(semantic, publication_options)?;
     let reviewed = option_value(options, "--plan")?
-        .map(|value| value.parse::<ChangePlanDigest>())
+        .map(|value| value.parse::<ChangePlanToken>())
         .transpose()?;
     Ok(ChangeCommandRequest {
         normalized,
         reviewed,
         input_file: None,
+        output_file: option_value(options, "--output")?,
     })
 }
 
-fn require_reviewed_change_plan(
+fn require_reviewed_change_request(
     action: ChangeAction,
-    reviewed: Option<ChangePlanDigest>,
-    expected: ChangePlanDigest,
+    reviewed: Option<ChangePlanToken>,
+    expected: super::control::ChangeRequestCommitment,
 ) -> Result<(), Diagnostic> {
     match (action, reviewed) {
         (ChangeAction::Plan, None) => Ok(()),
         (ChangeAction::Plan, Some(_)) => Err(usage_error("change plan does not accept --plan")),
         (ChangeAction::Apply, None) => Err(usage_error(
-            "change apply requires the exact --plan DIGEST returned by change plan",
+            "change apply requires the exact --plan TOKEN returned by change plan",
         )),
-        (ChangeAction::Apply, Some(reviewed)) if reviewed != expected => Err(Diagnostic::new(
-            DiagnosticClass::Semantic,
-            "change_plan_mismatch",
-            format!("reviewed plan {reviewed} does not match normalized input {expected}"),
-        )),
+        (ChangeAction::Apply, Some(reviewed)) if reviewed.request != expected => {
+            Err(Diagnostic::new(
+                DiagnosticClass::Semantic,
+                "change_request_commitment_mismatch",
+                format!(
+                    "reviewed request commitment {} does not match normalized input {expected}",
+                    reviewed.request
+                ),
+            ))
+        }
         (ChangeAction::Apply, Some(_)) => Ok(()),
     }
 }
@@ -514,18 +535,58 @@ fn execute_normalized_change(
     action: ChangeAction,
     request: ChangeCommandRequest,
 ) -> Result<Vec<u8>, Vec<Diagnostic>> {
+    let ChangeCommandRequest {
+        normalized,
+        reviewed,
+        input_file,
+        output_file,
+    } = request;
+    let request_commitment = normalized.request_commitment;
     let repository = open_normalized_repository(project).map_err(single_diagnostic)?;
-    let prepared = repository
-        .prepare_authored_change(&request.normalized.semantic, request.normalized.options)?;
+    let prepared = repository.prepare_authored_change(&normalized.semantic, normalized.options)?;
+    let logical_plan =
+        LogicalChangePlan::new(request_commitment, &prepared).map_err(single_diagnostic)?;
     if action == ChangeAction::Plan {
+        let (encoding, plan_output) = match output_file.as_deref() {
+            Some(path) => {
+                let (encoding, output) =
+                    write_logical_plan_output(repository.root(), Path::new(path), &logical_plan)
+                        .map_err(single_diagnostic)?;
+                (encoding, Some(output))
+            }
+            None => (
+                encode_logical_change_plan(&logical_plan, |_| Ok(())).map_err(single_diagnostic)?,
+                None,
+            ),
+        };
         return compact_change_response(
             &repository,
             &prepared,
             "prepared",
-            request.normalized.plan,
-            request.input_file.as_deref(),
+            encoding,
+            input_file.as_deref(),
+            plan_output.as_ref(),
         )
         .map_err(single_diagnostic);
+    }
+    let encoding =
+        encode_logical_change_plan(&logical_plan, |_| Ok(())).map_err(single_diagnostic)?;
+    let reviewed = reviewed.ok_or_else(|| {
+        single_diagnostic(Diagnostic::new(
+            DiagnosticClass::Infrastructure,
+            "change_reviewed_plan_missing",
+            "validated apply request lost its reviewed plan token",
+        ))
+    })?;
+    if reviewed.prepared != encoding.token.prepared {
+        return Err(single_diagnostic(Diagnostic::new(
+            DiagnosticClass::Semantic,
+            "change_prepared_plan_mismatch",
+            format!(
+                "reviewed prepared-plan commitment {} does not match reprepared logical plan {}",
+                reviewed.prepared, encoding.token.prepared
+            ),
+        )));
     }
     let outcome = repository
         .publish(&prepared.publication)
@@ -549,22 +610,210 @@ fn execute_normalized_change(
             )));
         }
     };
-    compact_change_response(
-        &repository,
-        &prepared,
-        status,
-        request.normalized.plan,
-        None,
+    compact_change_response(&repository, &prepared, status, encoding, None, None)
+        .map_err(single_diagnostic)
+}
+
+struct LogicalPlanOutputPublication {
+    path: String,
+    status: &'static str,
+    bytes: u64,
+    records: u64,
+}
+
+fn write_logical_plan_output(
+    project_root: &Path,
+    requested: &Path,
+    plan: &LogicalChangePlan<'_>,
+) -> Result<(LogicalPlanEncoding, LogicalPlanOutputPublication), Diagnostic> {
+    let file_name = requested
+        .file_name()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| usage_error("logical plan output requires a portable UTF-8 file name"))?;
+    let requested_parent = requested
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let parent = fs::canonicalize(requested_parent).map_err(|error| {
+        plan_output_io_error("change_plan_output_parent", requested_parent, error)
+    })?;
+    let target = parent.join(file_name);
+    let project = fs::canonicalize(project_root)
+        .map_err(|error| plan_output_io_error("change_plan_output_project", project_root, error))?;
+    if target.starts_with(&project) {
+        return Err(Diagnostic::new(
+            DiagnosticClass::Source,
+            "change_plan_output_project_path",
+            format!(
+                "logical plan output '{}' must be outside normalized project root '{}'",
+                target.display(),
+                project.display()
+            ),
+        ));
+    }
+    validate_plan_output_target(&target)?;
+
+    let temporary = parent.join(format!(".{file_name}.stage-{}", RepositoryId::generate()?));
+    let result = (|| {
+        let mut options = OpenOptions::new();
+        options.create_new(true).write(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options
+            .open(&temporary)
+            .map_err(|error| plan_output_io_error("change_plan_output_create", &target, error))?;
+        let encoding = encode_logical_change_plan(plan, |bytes| {
+            file.write_all(bytes)
+                .map_err(|error| plan_output_io_error("change_plan_output_write", &target, error))
+        })?;
+        file.sync_all()
+            .map_err(|error| plan_output_io_error("change_plan_output_sync", &target, error))?;
+        drop(file);
+
+        validate_plan_output_target(&target)?;
+        let unchanged = target.exists() && plan_output_files_equal(&temporary, &target)?;
+        let status = if unchanged {
+            fs::remove_file(&temporary).map_err(|error| {
+                plan_output_io_error("change_plan_output_stage_remove", &target, error)
+            })?;
+            "unchanged"
+        } else {
+            fs::rename(&temporary, &target).map_err(|error| {
+                plan_output_io_error("change_plan_output_publish", &target, error)
+            })?;
+            "published"
+        };
+        File::open(&parent)
+            .and_then(|directory| directory.sync_all())
+            .map_err(|error| {
+                plan_output_io_error("change_plan_output_parent_sync", &parent, error)
+            })?;
+        Ok((
+            encoding,
+            LogicalPlanOutputPublication {
+                path: target.display().to_string(),
+                status,
+                bytes: encoding.bytes,
+                records: encoding.records,
+            },
+        ))
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
+}
+
+fn validate_plan_output_target(path: &Path) -> Result<(), Diagnostic> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
+            Err(Diagnostic::new(
+                DiagnosticClass::Source,
+                "change_plan_output_type",
+                format!(
+                    "logical plan output '{}' is not an ordinary regular file",
+                    path.display()
+                ),
+            ))
+        }
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(plan_output_io_error(
+            "change_plan_output_metadata",
+            path,
+            error,
+        )),
+    }
+}
+
+fn plan_output_files_equal(left: &Path, right: &Path) -> Result<bool, Diagnostic> {
+    let right_metadata = fs::symlink_metadata(right).map_err(|error| {
+        plan_output_io_error("change_plan_output_compare_metadata", right, error)
+    })?;
+    if right_metadata.file_type().is_symlink() || !right_metadata.is_file() {
+        return Err(Diagnostic::new(
+            DiagnosticClass::Source,
+            "change_plan_output_type",
+            format!(
+                "logical plan output '{}' changed to a non-regular file before publication",
+                right.display()
+            ),
+        ));
+    }
+    if right_metadata.len() > MAXIMUM_LOGICAL_PLAN_BYTES {
+        return Err(Diagnostic::new(
+            DiagnosticClass::Resource,
+            "change_plan_output_existing_bytes",
+            format!(
+                "existing logical plan output '{}' exceeds the {MAXIMUM_LOGICAL_PLAN_BYTES}-byte comparison bound",
+                right.display()
+            ),
+        ));
+    }
+    let left_metadata = fs::metadata(left).map_err(|error| {
+        plan_output_io_error("change_plan_output_compare_metadata", left, error)
+    })?;
+    if left_metadata.len() != right_metadata.len() {
+        return Ok(false);
+    }
+    let mut left_file = File::open(left)
+        .map_err(|error| plan_output_io_error("change_plan_output_compare_open", left, error))?;
+    let mut right_file = File::open(right)
+        .map_err(|error| plan_output_io_error("change_plan_output_compare_open", right, error))?;
+    let mut left_buffer = [0_u8; 16 * 1_024];
+    let mut right_buffer = [0_u8; 16 * 1_024];
+    let mut compared = 0_u64;
+    loop {
+        let left_read = left_file.read(&mut left_buffer).map_err(|error| {
+            plan_output_io_error("change_plan_output_compare_read", left, error)
+        })?;
+        let right_read = right_file.read(&mut right_buffer).map_err(|error| {
+            plan_output_io_error("change_plan_output_compare_read", right, error)
+        })?;
+        compared = compared
+            .checked_add(u64::try_from(left_read.max(right_read)).unwrap_or(u64::MAX))
+            .ok_or_else(|| {
+                Diagnostic::new(
+                    DiagnosticClass::Resource,
+                    "change_plan_output_existing_bytes",
+                    "logical plan output comparison byte count overflowed",
+                )
+            })?;
+        if compared > MAXIMUM_LOGICAL_PLAN_BYTES {
+            return Err(Diagnostic::new(
+                DiagnosticClass::Resource,
+                "change_plan_output_existing_bytes",
+                "logical plan output changed beyond its bounded comparison size",
+            ));
+        }
+        if left_read != right_read || left_buffer[..left_read] != right_buffer[..right_read] {
+            return Ok(false);
+        }
+        if left_read == 0 {
+            return Ok(true);
+        }
+    }
+}
+
+fn plan_output_io_error(code: &str, path: &Path, error: std::io::Error) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticClass::Infrastructure,
+        code,
+        format!("logical plan output '{}' failed: {error}", path.display()),
     )
-    .map_err(single_diagnostic)
 }
 
 fn compact_change_response(
     repository: &GraphRepository,
     prepared: &PreparedAuthoredPublication,
     status: &str,
-    plan: ChangePlanDigest,
+    plan: LogicalPlanEncoding,
     input_file: Option<&str>,
+    plan_output: Option<&LogicalPlanOutputPublication>,
 ) -> Result<Vec<u8>, Diagnostic> {
     let publication = &prepared.publication;
     let [base] = publication.receipt.bases.as_slice() else {
@@ -612,7 +861,27 @@ fn compact_change_response(
             ("result", publication.head.revision.to_string()),
         ],
     )?;
-    append_compact_record(&mut output, "plan", &[("digest", plan.to_string())])?;
+    append_compact_record(
+        &mut output,
+        "plan",
+        &[
+            ("token", plan.token.to_string()),
+            ("request-commitment", plan.token.request.to_string()),
+            ("prepared-commitment", plan.token.prepared.to_string()),
+        ],
+    )?;
+    if let Some(plan_output) = plan_output {
+        append_compact_record(
+            &mut output,
+            "plan-output",
+            &[
+                ("path", plan_output.path.clone()),
+                ("status", plan_output.status.to_owned()),
+                ("bytes", plan_output.bytes.to_string()),
+                ("records", plan_output.records.to_string()),
+            ],
+        )?;
+    }
     append_compact_record(
         &mut output,
         "change",
@@ -681,7 +950,10 @@ fn compact_change_response(
     )?;
     append_compact_record(&mut output, "schema", &[("registry", registry.digest)])?;
     if status == "prepared" {
-        let mut next = vec![("kind", "apply".to_owned()), ("plan", plan.to_string())];
+        let mut next = vec![
+            ("kind", "apply".to_owned()),
+            ("plan", plan.token.to_string()),
+        ];
         if let Some(path) = input_file
             && path != "<change-input>"
         {
@@ -2758,7 +3030,7 @@ mod tests {
                 .expect("compact rename normalization");
             assert_eq!(direct.semantic, compact.semantic);
             assert_eq!(direct.options, compact.options);
-            assert_eq!(direct.plan, compact.plan);
+            assert_eq!(direct.request_commitment, compact.request_commitment);
             assert_eq!(
                 crate::platform::change::canonical_authored_intent_bytes(&direct.semantic)
                     .expect("direct canonical intent"),

@@ -23,7 +23,7 @@ use crate::platform::kernel::{
     Idempotency, LocalValueReference, Name, NamespaceClass, OwnerKey, OwnerRecord, PackageId,
     PackageRevisionDigest, RelationEdge, RelationEndpoint, RelationKind, RequirementReference,
     ResourceUnit, SemanticRoot, TypeForm, TypeObject, TypeObjectDigest, encode_owner,
-    encode_type_object,
+    encode_type_object, extract_relations,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::persistent_map::{MapRoot, PageDigest};
@@ -32,6 +32,7 @@ use crate::platform::storage::directory::SealCheckpoint;
 use crate::platform::storage::object::{ObjectDomain, ObjectKey, StageOutcome};
 use crate::platform::storage::pack::{PackBuilder, PackMetadata};
 use crate::platform::witness::{NamespaceKey, OwnershipParent};
+use std::collections::BTreeSet;
 
 #[test]
 fn repository_create_reopen_and_exact_current_reads_bind_every_object() {
@@ -2359,6 +2360,250 @@ fn authored_leaf_deletion_accepts_same_request_reference_repair() {
         panic!("replacement body must remain live")
     };
     assert!(matches!(body.operation, ExpressionOperation::Unit {}));
+}
+
+#[test]
+fn reviewed_change_plan_owned_body_closure_matches_complete_before_after_oracle() {
+    let temporary = tempfile::tempdir().expect("temporary reviewed-plan repository");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let function = owner_named(&created.initial.snapshot, "with_binding");
+    let OwnerKey::Declaration(function) = function else {
+        panic!("with_binding must be a function declaration")
+    };
+    let request = AuthoredChangeSet {
+        base: created.current.head.revision,
+        preconditions: Vec::new(),
+        budget: ChangeBudget::default(),
+        changes: vec![AuthoredChange::ReplaceFunctionBody {
+            function: DeclarationSelector::Id {
+                declaration: function,
+            },
+            body: AuthoredExpression {
+                symbol: Some("$replacement_body".to_owned()),
+                operation: AuthoredExpressionOperation::Unit {},
+            },
+        }],
+    };
+    let normalized = crate::platform::control::normalize_change_request(
+        request.clone(),
+        PublicationOptions::default(),
+    )
+    .expect("normalize reviewed request");
+
+    // This broad before/after reconstruction is deliberately disjoint from the logical-plan
+    // projection and remains an oracle-only path.
+    let pinned = created
+        .repository
+        .view_current()
+        .expect("open exact oracle base");
+    let lowering = lower_authored_changes(&pinned, &pinned, &request)
+        .expect("lower reviewed request for oracle");
+    let canonical = CanonicalDelta::normalize(&created.initial.snapshot, lowering.edits)
+        .expect("normalize reviewed oracle delta");
+    let overlay = KernelOverlay::new(&created.initial.snapshot, &canonical);
+    let candidate = overlay.materialize_logical_oracle();
+    let before_relations = extract_relations(
+        created.initial.snapshot.root.package_id,
+        &created.initial.snapshot.owners,
+        &created.initial.snapshot.types,
+        &created.initial.snapshot.dependencies,
+    )
+    .expect("extract complete before relations")
+    .into_iter()
+    .collect::<BTreeSet<_>>();
+    let after_relations = extract_relations(
+        candidate.root.package_id,
+        &candidate.owners,
+        &candidate.types,
+        &candidate.dependencies,
+    )
+    .expect("extract complete after relations")
+    .into_iter()
+    .collect::<BTreeSet<_>>();
+    let removed_relations = before_relations
+        .difference(&after_relations)
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let added_relations = after_relations
+        .difference(&before_relations)
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let removed_owners = created
+        .initial
+        .snapshot
+        .owners
+        .keys()
+        .filter(|owner| !candidate.owners.contains_key(owner))
+        .copied()
+        .collect::<BTreeSet<_>>();
+    assert!(
+        removed_owners
+            .iter()
+            .any(|owner| matches!(owner, OwnerKey::Binding(_)))
+    );
+    assert!(
+        removed_owners
+            .iter()
+            .any(|owner| matches!(owner, OwnerKey::Expression(_)))
+    );
+
+    let oracle_analysis = prepare_change_analysis(
+        &created.initial.snapshot,
+        &created.initial.witness,
+        canonical,
+    )
+    .expect("complete in-memory impact and validation oracle");
+    let prepared = created
+        .repository
+        .prepare_authored_change(&normalized.semantic, normalized.options)
+        .expect("prepare reviewed logical plan");
+    assert_eq!(prepared.logical_plan.relations.removed, removed_relations);
+    assert_eq!(prepared.logical_plan.relations.added, added_relations);
+    assert_eq!(
+        prepared.logical_plan.structurally_checked,
+        oracle_analysis.validation.structurally_checked
+    );
+    assert_eq!(
+        prepared.logical_plan.semantically_checked,
+        oracle_analysis.validation.semantically_checked
+    );
+    assert_eq!(
+        prepared.logical_plan.tests,
+        oracle_analysis.summaries.plan.tests
+    );
+    assert_eq!(
+        prepared.logical_plan.reasons,
+        oracle_analysis.summaries.plan.reasons
+    );
+    let SemanticDiffBody::Change { owners, .. } = &prepared.publication.semantic_diff.body else {
+        panic!("authored preparation must produce a change diff")
+    };
+    let exported_deletions = owners
+        .iter()
+        .filter(|entry| entry.objects.after.is_none())
+        .map(|entry| entry.owner)
+        .collect::<BTreeSet<_>>();
+    assert_eq!(exported_deletions, removed_owners);
+    assert_eq!(
+        prepared
+            .logical_plan
+            .retirements
+            .keys()
+            .copied()
+            .collect::<BTreeSet<_>>(),
+        removed_owners
+    );
+
+    let plan =
+        crate::platform::control::LogicalChangePlan::new(normalized.request_commitment, &prepared)
+            .expect("construct reviewed logical plan");
+    let mut bytes = Vec::new();
+    let encoded = crate::platform::control::encode_logical_change_plan(&plan, |record| {
+        bytes.extend_from_slice(record);
+        Ok(())
+    })
+    .expect("encode reviewed logical plan");
+    let decoded =
+        crate::platform::control::decode_logical_change_plan(std::io::Cursor::new(&bytes))
+            .expect("strictly decode reviewed logical plan");
+    assert_eq!(decoded.token, encoded.token.to_string());
+    assert_eq!(decoded.bytes, u64::try_from(bytes.len()).unwrap());
+
+    let canonical = String::from_utf8(bytes.clone()).expect("logical plan UTF-8");
+    let mut truncated = bytes.clone();
+    assert_eq!(truncated.pop(), Some(b'\n'));
+    assert_eq!(
+        logical_plan_decode_error(&truncated),
+        "change_plan_file_truncated"
+    );
+
+    let changed_body = canonical.replacen("intent-present=false", "intent-present=true", 1);
+    assert_ne!(changed_body, canonical);
+    assert_eq!(
+        logical_plan_decode_error(changed_body.as_bytes()),
+        "change_plan_file_digest"
+    );
+
+    let first_line_end = canonical.find('\n').expect("first logical plan record") + 1;
+    let duplicate_singleton = format!("{}{}", &canonical[..first_line_end], canonical);
+    assert_eq!(
+        logical_plan_decode_error(duplicate_singleton.as_bytes()),
+        "change_plan_file_singleton_duplicate"
+    );
+    let unknown = canonical.replacen("logical-plan ", "logical-plan.unknown ", 1);
+    assert_eq!(
+        logical_plan_decode_error(unknown.as_bytes()),
+        "change_plan_file_record_unknown"
+    );
+
+    let mut lines = canonical.lines().map(str::to_owned).collect::<Vec<_>>();
+    let owner_indexes = lines
+        .iter()
+        .enumerate()
+        .filter_map(|(index, line)| line.starts_with("logical-plan.owner ").then_some(index))
+        .collect::<Vec<_>>();
+    assert!(owner_indexes.len() >= 2);
+    lines.swap(owner_indexes[0], owner_indexes[1]);
+    let reordered = format!("{}\n", lines.join("\n"));
+    assert_eq!(
+        logical_plan_decode_error(reordered.as_bytes()),
+        "change_plan_file_owner_order"
+    );
+
+    let mut lines = canonical.lines().map(str::to_owned).collect::<Vec<_>>();
+    let owner_index = lines
+        .iter()
+        .position(|line| line.starts_with("logical-plan.owner "))
+        .expect("logical owner record");
+    let duplicate_owner = lines[owner_index].clone();
+    lines.insert(owner_index + 1, duplicate_owner);
+    let duplicated = format!("{}\n", lines.join("\n"));
+    assert_eq!(
+        logical_plan_decode_error(duplicated.as_bytes()),
+        "change_plan_file_owner_order"
+    );
+
+    let mut lines = canonical.lines().map(str::to_owned).collect::<Vec<_>>();
+    let counts_index = lines
+        .iter()
+        .position(|line| line.starts_with("logical-plan.counts "))
+        .expect("logical counts record");
+    lines.insert(
+        counts_index,
+        "logical-plan.compiler-unit owner=decl_00000000000000000000000000000001".to_owned(),
+    );
+    let operational_injection = format!("{}\n", lines.join("\n"));
+    assert_eq!(
+        logical_plan_decode_error(operational_injection.as_bytes()),
+        "change_plan_file_record_unknown"
+    );
+
+    let malformed_escape = canonical.replacen("intent=\"\"", "intent=\"", 1);
+    assert_eq!(
+        logical_plan_decode_error(malformed_escape.as_bytes()),
+        "control_quote_unclosed"
+    );
+    let mut wrong_trailer = canonical.clone().into_bytes();
+    let last_hex = wrong_trailer
+        .iter()
+        .rposition(|byte| byte.is_ascii_hexdigit())
+        .expect("digest trailer hexadecimal");
+    wrong_trailer[last_hex] = if wrong_trailer[last_hex] == b'0' {
+        b'1'
+    } else {
+        b'0'
+    };
+    assert_eq!(
+        logical_plan_decode_error(&wrong_trailer),
+        "change_plan_file_digest"
+    );
+    let trailing = format!("{canonical}logical-plan contract=trailing version=1\n");
+    assert_eq!(
+        logical_plan_decode_error(trailing.as_bytes()),
+        "change_plan_file_trailing"
+    );
 }
 
 #[test]
@@ -5622,4 +5867,10 @@ fn expression_using_binding(
             _ => None,
         })
         .expect("exact binding use")
+}
+
+fn logical_plan_decode_error(bytes: &[u8]) -> String {
+    crate::platform::control::decode_logical_change_plan(std::io::Cursor::new(bytes))
+        .expect_err("mutated logical plan must reject")
+        .code
 }

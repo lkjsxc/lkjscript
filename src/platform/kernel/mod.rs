@@ -40,7 +40,9 @@ pub use digest::{
     SemanticRootDigest, SemanticStateDigest, SequenceObjectDigest, TypeObjectDigest,
 };
 pub use expression::*;
-pub use id::{EncodedOwnerKey, ExactOwnerKey, OwnerHeader, OwnerKey, OwnerKind, PackageId};
+pub use id::{
+    EncodedOwnerKey, ExactOwnerKey, IdentityKind, OwnerHeader, OwnerKey, OwnerKind, PackageId,
+};
 pub(crate) use infer::{
     ExpressionRead, ExpressionValidationExhaustion, ExpressionValidationLimits,
     validate_expression_roots, validate_expression_roots_with_limits,

@@ -19,16 +19,16 @@ pub use creation::{
 pub use precondition::{AuthoredOwnerParent, AuthoredPrecondition};
 
 use super::{
-    CanonicalBaseRead, CanonicalReadWork, ChangeBudget, ChangeBudgetWork, PrimitiveEdit,
-    WitnessBaseRead, WitnessReadWork,
+    AuthoredAllocation, CanonicalBaseRead, CanonicalReadWork, ChangeBudget, ChangeBudgetWork,
+    PrimitiveEdit, WitnessBaseRead, WitnessReadWork,
 };
 use crate::platform::contract::registry::CHANGE_ALLOCATION_SEED_DOMAIN;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    ChangeDigest, DependencyObjectDigest, DependencyRecord, ModuleRecord, Name, NamespaceClass,
-    OwnerHeader, OwnerKey, OwnerKind, OwnerRecord, PackageId, PackageRevisionDigest,
-    RetirementRecord, TypeObject, TypeObjectDigest, TypeObjectInterner, encode_dependency,
-    encode_owner,
+    ChangeDigest, DependencyObjectDigest, DependencyRecord, EncodedOwnerKey, IdentityKind,
+    ModuleRecord, Name, NamespaceClass, OwnerHeader, OwnerKey, OwnerKind, OwnerRecord, PackageId,
+    PackageRevisionDigest, RetirementRecord, TypeObject, TypeObjectDigest, TypeObjectInterner,
+    encode_dependency, encode_owner,
 };
 use crate::platform::semantic_id::{
     AnnotationId, BindingId, CaseId, DeclarationId, DocumentationId, ExpressionId, FieldId,
@@ -348,6 +348,27 @@ impl SymbolKind {
         }
     }
 
+    const fn identity_kind(self) -> IdentityKind {
+        match self {
+            Self::Module => IdentityKind::Module,
+            Self::Declaration => IdentityKind::Declaration,
+            Self::TypeParameter => IdentityKind::TypeParameter,
+            Self::Field => IdentityKind::Field,
+            Self::Case => IdentityKind::Case,
+            Self::Operation => IdentityKind::Operation,
+            Self::FunctionParameter | Self::OperationParameter => IdentityKind::Parameter,
+            Self::LexicalBinding | Self::MatchPayloadBinding | Self::TransactionBinding => {
+                IdentityKind::Binding
+            }
+            Self::Expression => IdentityKind::Expression,
+            Self::Requirement => IdentityKind::Requirement,
+            Self::Port => IdentityKind::Port,
+            Self::Target => IdentityKind::Target,
+            Self::Documentation => IdentityKind::Documentation,
+            Self::Annotation => IdentityKind::Annotation,
+        }
+    }
+
     fn allocate(self, seed: &[u8], ordinal: u64) -> OwnerKey {
         match self {
             Self::Module => OwnerKey::Module(ModuleId::allocate(seed, ordinal)),
@@ -405,6 +426,8 @@ impl AuthoredLoweringWork {
 pub struct AuthoredLowering {
     pub edits: Vec<PrimitiveEdit>,
     pub allocated: BTreeMap<String, OwnerKey>,
+    pub allocations: Vec<AuthoredAllocation>,
+    pub dependency_befores: BTreeMap<PackageId, DependencyRecord>,
     pub work: AuthoredLoweringWork,
 }
 
@@ -451,14 +474,18 @@ pub fn lower_authored_changes<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead 
     let deletion_change = ChangeDigest::of(&request_bytes);
     let definition_count = definitions.len();
     let allocated = allocate_symbols(&seed, &definitions)?;
+    let allocations = logical_allocations(&definitions, &allocated)?;
     let mut lowerer = AuthoredLowerer::new(
         base,
         witness,
-        seed,
-        deletion_change,
-        allocated,
-        definitions,
-        budget,
+        AuthoredLoweringInputs {
+            allocation_seed: seed,
+            deletion_change,
+            allocated,
+            definitions,
+            allocations,
+            budget,
+        },
     )?;
     lowerer.work.operations_lowered = u64::try_from(request.changes.len()).unwrap_or(u64::MAX);
     lowerer.work.allocated_identities = u64::try_from(definition_count).unwrap_or(u64::MAX);
@@ -986,6 +1013,36 @@ fn allocate_symbols(
     Ok(allocated)
 }
 
+fn logical_allocations(
+    definitions: &BTreeMap<String, SymbolDefinition>,
+    allocated: &BTreeMap<String, OwnerKey>,
+) -> Result<Vec<AuthoredAllocation>, Diagnostic> {
+    let mut allocations = Vec::new();
+    allocations.try_reserve_exact(definitions.len()).map_err(|_| {
+        request_error(
+            DiagnosticClass::Resource,
+            "change_authored_allocation_records",
+            "request-local allocation record reservation failed within the declared identity budget",
+        )
+    })?;
+    for (symbol, definition) in definitions {
+        let owner = allocated.get(symbol).copied().ok_or_else(|| {
+            request_error(
+                DiagnosticClass::Corrupt,
+                "change_authored_allocation_projection",
+                "request-local allocation projection lost a normalized symbol",
+            )
+        })?;
+        allocations.push(AuthoredAllocation {
+            domain: definition.kind.identity_kind(),
+            ordinal: definition.ordinal,
+            owner,
+        });
+    }
+    sort_allocations(&mut allocations);
+    Ok(allocations)
+}
+
 pub(crate) fn canonical_authored_intent_bytes(
     request: &AuthoredChangeSet,
 ) -> Result<Vec<u8>, Diagnostic> {
@@ -1027,7 +1084,17 @@ struct WorkingOwner {
 
 struct WorkingDependency {
     before: Option<DependencyObjectDigest>,
+    original: Option<DependencyRecord>,
     record: Option<DependencyRecord>,
+}
+
+struct AuthoredLoweringInputs {
+    allocation_seed: [u8; 32],
+    deletion_change: ChangeDigest,
+    allocated: BTreeMap<String, OwnerKey>,
+    definitions: BTreeMap<String, SymbolDefinition>,
+    allocations: Vec<AuthoredAllocation>,
+    budget: ChangeBudget,
 }
 
 struct AuthoredLowerer<'a, B: ?Sized, W: ?Sized> {
@@ -1037,6 +1104,7 @@ struct AuthoredLowerer<'a, B: ?Sized, W: ?Sized> {
     deletion_change: ChangeDigest,
     allocated: BTreeMap<String, OwnerKey>,
     definitions: BTreeMap<String, SymbolDefinition>,
+    allocations: Vec<AuthoredAllocation>,
     owners: BTreeMap<OwnerKey, WorkingOwner>,
     owner_edits: BTreeSet<OwnerKey>,
     dependencies: BTreeMap<PackageId, WorkingDependency>,
@@ -1058,13 +1126,10 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
     fn new(
         base: &'a B,
         witness: &'a W,
-        allocation_seed: [u8; 32],
-        deletion_change: ChangeDigest,
-        allocated: BTreeMap<String, OwnerKey>,
-        definitions: BTreeMap<String, SymbolDefinition>,
-        budget: ChangeBudget,
+        inputs: AuthoredLoweringInputs,
     ) -> Result<Self, Diagnostic> {
-        let expression_symbol_count = definitions
+        let expression_symbol_count = inputs
+            .definitions
             .values()
             .filter(|definition| definition.kind == SymbolKind::Expression)
             .count();
@@ -1081,10 +1146,11 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         Ok(Self {
             base,
             witness,
-            allocation_seed,
-            deletion_change,
-            allocated,
-            definitions,
+            allocation_seed: inputs.allocation_seed,
+            deletion_change: inputs.deletion_change,
+            allocated: inputs.allocated,
+            definitions: inputs.definitions,
+            allocations: inputs.allocations,
             owners: BTreeMap::new(),
             owner_edits: BTreeSet::new(),
             dependencies: BTreeMap::new(),
@@ -1096,12 +1162,12 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             incoming_relations: BTreeMap::new(),
             base_types: BTreeMap::new(),
             types: TypeObjectInterner::with_maximum_objects(
-                usize::try_from(budget.authored.maximum_type_nodes).unwrap_or(usize::MAX),
+                usize::try_from(inputs.budget.authored.maximum_type_nodes).unwrap_or(usize::MAX),
             ),
             type_additions: BTreeSet::new(),
             next_anonymous_expression_ordinal,
             work: AuthoredLoweringWork::default(),
-            budget,
+            budget: inputs.budget,
         })
     }
 
@@ -1418,7 +1484,13 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             )
         })?;
         self.work.allocated_identities = allocated_identities;
-        Ok(ExpressionId::allocate(&self.allocation_seed, ordinal))
+        let expression = ExpressionId::allocate(&self.allocation_seed, ordinal);
+        self.allocations.push(AuthoredAllocation {
+            domain: IdentityKind::Expression,
+            ordinal,
+            owner: OwnerKey::Expression(expression),
+        });
+        Ok(expression)
     }
 
     fn namespace_owner(&mut self, key: NamespaceKey) -> Result<OwnerKey, Diagnostic> {
@@ -1516,6 +1588,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             package,
             WorkingDependency {
                 before,
+                original: None,
                 record: read.value,
             },
         );
@@ -1562,6 +1635,9 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 ),
             ));
         }
+        if working.before.is_some() && working.original.is_none() {
+            working.original = working.record.take();
+        }
         working.record = Some(record);
         Ok(())
     }
@@ -1573,12 +1649,17 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             .dependencies
             .get_mut(&package)
             .ok_or_else(dependency_cache_corrupt)?;
-        if working.record.take().is_none() {
+        if working.record.is_none() {
             return Err(request_error(
                 DiagnosticClass::Semantic,
                 "change_authored_dependency_missing",
                 format!("dependency package {package} is absent from the candidate change"),
             ));
+        }
+        if working.before.is_some() && working.original.is_none() {
+            working.original = working.record.take();
+        } else {
+            working.record = None;
         }
         Ok(())
     }
@@ -1702,12 +1783,20 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                 Some(_) => {}
             }
         }
+        let mut dependency_befores = BTreeMap::new();
         for (package, working) in self.dependencies {
-            match (working.before, working.record) {
+            let WorkingDependency {
+                before,
+                original,
+                record,
+            } = working;
+            match (before, record) {
                 (None, Some(record)) => edits.push(PrimitiveEdit::InsertDependency { record }),
                 (Some(before), Some(record)) => {
                     let (after, _) = encode_dependency(&record)?;
                     if before != after {
+                        let original = original.ok_or_else(dependency_before_corrupt)?;
+                        dependency_befores.insert(package, original);
                         edits.push(PrimitiveEdit::ReplaceDependency {
                             expected: before,
                             record,
@@ -1715,6 +1804,8 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
                     }
                 }
                 (Some(expected), None) => {
+                    let original = original.ok_or_else(dependency_before_corrupt)?;
+                    dependency_befores.insert(package, original);
                     edits.push(PrimitiveEdit::DeleteDependency { package, expected })
                 }
                 (None, None) => {}
@@ -1726,9 +1817,24 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         Ok(AuthoredLowering {
             edits,
             allocated: self.allocated,
+            allocations: {
+                sort_allocations(&mut self.allocations);
+                self.allocations
+            },
+            dependency_befores,
             work: self.work,
         })
     }
+}
+
+fn sort_allocations(allocations: &mut [AuthoredAllocation]) {
+    allocations.sort_unstable_by(|left, right| {
+        left.domain
+            .tag()
+            .cmp(&right.domain.tag())
+            .then_with(|| left.ordinal.cmp(&right.ordinal))
+            .then_with(|| EncodedOwnerKey::new(left.owner).cmp(&EncodedOwnerKey::new(right.owner)))
+    });
 }
 
 fn dependency_cache_corrupt() -> Diagnostic {
@@ -1736,6 +1842,14 @@ fn dependency_cache_corrupt() -> Diagnostic {
         DiagnosticClass::Corrupt,
         "change_authored_dependency_cache",
         "resolved dependency was not retained in the authored candidate overlay",
+    )
+}
+
+fn dependency_before_corrupt() -> Diagnostic {
+    request_error(
+        DiagnosticClass::Corrupt,
+        "change_authored_dependency_before",
+        "changed dependency lost its exact logical base binding",
     )
 }
 

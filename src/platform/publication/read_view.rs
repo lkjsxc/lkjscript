@@ -4,13 +4,14 @@ use super::{
     CurrentPublication, PreparedPublication, PublicationOptions, prepare_change_publication,
 };
 use crate::platform::change::{
-    AuthoredChangeSet, AuthoredLoweringWork, BoundOwnerSummary, BudgetedCanonicalBase,
-    BudgetedWitnessBase, CanonicalBaseRead, CanonicalDelta, CanonicalRead, CanonicalReadAdmission,
-    CanonicalReadWork, ChangeBudget, DerivedDelta, PrimitiveEdit, SummaryDelta,
-    TestDependencyDelta, WitnessBaseRead, WitnessMapAdmission, WitnessMapBase, WitnessMapUpdate,
-    WitnessRead, WitnessReadAdmission, WitnessReadWork, WitnessRelationRead,
-    WitnessTestDependencyRead, lower_authored_changes, prepare_change_analysis_with_budget,
-    update_witness_maps_from,
+    AuthoredAllocation, AuthoredChangeSet, AuthoredLoweringWork, BoundOwnerSummary,
+    BudgetedCanonicalBase, BudgetedWitnessBase, CanonicalBaseRead, CanonicalDelta, CanonicalRead,
+    CanonicalReadAdmission, CanonicalReadWork, ChangeBudget, DerivedDelta,
+    LogicalChangePlanEvidence, LogicalDependencyValues, LogicalRetirementValues,
+    PreparedChangeAnalysis, PrimitiveEdit, SummaryDelta, TestDependencyDelta, WitnessBaseRead,
+    WitnessMapAdmission, WitnessMapBase, WitnessMapUpdate, WitnessRead, WitnessReadAdmission,
+    WitnessReadWork, WitnessRelationRead, WitnessTestDependencyRead, lower_authored_changes,
+    prepare_change_analysis_with_budget, update_witness_maps_from,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
@@ -19,7 +20,7 @@ use crate::platform::kernel::{
     RelationEdge, RelationEndpoint, RelationKind, RetirementRecord, TypeObject, TypeObjectDigest,
     decode_dependency, decode_dependency_binding, decode_owner, decode_owner_binding,
     decode_retirement, decode_retirement_binding, decode_type_object, dependency_map_key,
-    owner_map_key, retirement_map_key,
+    encode_dependency, encode_retirement, owner_map_key, retirement_map_key,
 };
 use crate::platform::package_interface::{
     PackageInterfaceBuild, PackageInterfaceOwner, PackageInterfaceSelection,
@@ -400,6 +401,156 @@ pub struct PreparedAuthoredPublication {
     pub publication: PreparedPublication,
     pub allocated: BTreeMap<String, OwnerKey>,
     pub lowering_work: AuthoredLoweringWork,
+    pub logical_plan: LogicalChangePlanEvidence,
+}
+
+struct PreparedChangeWithAnalysis {
+    publication: PreparedPublication,
+    analysis: PreparedChangeAnalysis,
+}
+
+fn logical_plan_evidence(
+    mut analysis: PreparedChangeAnalysis,
+    allocations: Vec<AuthoredAllocation>,
+    mut dependency_befores: BTreeMap<PackageId, DependencyRecord>,
+) -> Result<LogicalChangePlanEvidence, Vec<Diagnostic>> {
+    if analysis.validation.structurally_checked != analysis.summaries.plan.structurally_checked
+        || analysis.validation.semantically_checked != analysis.summaries.plan.semantically_checked
+    {
+        return Err(vec![read_error(
+            DiagnosticClass::Corrupt,
+            "change_logical_plan_validation",
+            "prepared validation membership disagrees with its impact plan",
+        )]);
+    }
+    if analysis.validation.tests_selected
+        != u64::try_from(analysis.summaries.plan.tests.len()).unwrap_or(u64::MAX)
+    {
+        return Err(vec![read_error(
+            DiagnosticClass::Corrupt,
+            "change_logical_plan_tests",
+            "prepared validation test count disagrees with its selected graph tests",
+        )]);
+    }
+    if allocations.windows(2).any(|pair| {
+        pair[0]
+            .domain
+            .tag()
+            .cmp(&pair[1].domain.tag())
+            .then_with(|| pair[0].ordinal.cmp(&pair[1].ordinal))
+            .is_ge()
+    }) || allocations
+        .iter()
+        .any(|allocation| allocation.domain != allocation.owner.identity_kind())
+    {
+        return Err(vec![read_error(
+            DiagnosticClass::Corrupt,
+            "change_logical_plan_allocations",
+            "request-local allocations are not in canonical typed ordinal order",
+        )]);
+    }
+    if analysis
+        .summaries
+        .plan
+        .reasons
+        .windows(2)
+        .any(|pair| !pair[0].logical_cmp(&pair[1]).is_lt())
+    {
+        return Err(vec![read_error(
+            DiagnosticClass::Corrupt,
+            "change_logical_plan_reasons",
+            "impact reasons are not unique in canonical logical order",
+        )]);
+    }
+
+    let mut dependencies = BTreeMap::new();
+    for (package, edit) in std::mem::take(&mut analysis.canonical.dependencies) {
+        let before = dependency_befores.remove(&package);
+        let before_digest = before
+            .as_ref()
+            .map(encode_dependency)
+            .transpose()
+            .map_err(|diagnostic| vec![diagnostic])?
+            .map(|(digest, _)| digest);
+        let canonical_after_digest = edit.after.as_ref().map(|(digest, _)| *digest);
+        let after = edit.after.map(|(_, record)| record);
+        let after_digest = after
+            .as_ref()
+            .map(encode_dependency)
+            .transpose()
+            .map_err(|diagnostic| vec![diagnostic])?
+            .map(|(digest, _)| digest);
+        if before_digest != edit.before
+            || after_digest != canonical_after_digest
+            || before
+                .as_ref()
+                .is_some_and(|record| record.package != package)
+            || after
+                .as_ref()
+                .is_some_and(|record| record.package != package)
+        {
+            return Err(vec![read_error(
+                DiagnosticClass::Corrupt,
+                "change_logical_plan_dependency",
+                "logical dependency values disagree with the canonical dependency delta",
+            )]);
+        }
+        dependencies.insert(package, LogicalDependencyValues { before, after });
+    }
+    if !dependency_befores.is_empty() {
+        return Err(vec![read_error(
+            DiagnosticClass::Corrupt,
+            "change_logical_plan_dependency_before",
+            "authored lowering retained a dependency base value without a canonical edit",
+        )]);
+    }
+
+    let mut retirements = BTreeMap::new();
+    for (owner, edit) in std::mem::take(&mut analysis.canonical.retirements) {
+        if edit.before.is_some() {
+            return Err(vec![read_error(
+                DiagnosticClass::Corrupt,
+                "change_logical_plan_retirement_before",
+                "authored retirement replacement lacks a retained logical base value",
+            )]);
+        }
+        let canonical_after_digest = edit.after.as_ref().map(|(digest, _)| *digest);
+        let after = edit.after.map(|(_, record)| record);
+        let after_digest = after
+            .as_ref()
+            .map(encode_retirement)
+            .transpose()
+            .map_err(|diagnostic| vec![diagnostic])?
+            .map(|(digest, _)| digest);
+        if after_digest != canonical_after_digest
+            || after.as_ref().is_some_and(|record| record.owner != owner)
+        {
+            return Err(vec![read_error(
+                DiagnosticClass::Corrupt,
+                "change_logical_plan_retirement",
+                "logical retirement value disagrees with the canonical retirement delta",
+            )]);
+        }
+        retirements.insert(
+            owner,
+            LogicalRetirementValues {
+                before: None,
+                after,
+            },
+        );
+    }
+
+    Ok(LogicalChangePlanEvidence {
+        budget: analysis.budget,
+        allocations,
+        dependencies,
+        retirements,
+        relations: std::mem::take(&mut analysis.derived.relations),
+        structurally_checked: std::mem::take(&mut analysis.validation.structurally_checked),
+        semantically_checked: std::mem::take(&mut analysis.validation.semantically_checked),
+        tests: std::mem::take(&mut analysis.summaries.plan.tests),
+        reasons: std::mem::take(&mut analysis.summaries.plan.reasons),
+    })
 }
 
 /// One immutable catalog snapshot plus the exact accepted revision it was opened against.
@@ -443,6 +594,7 @@ impl RepositoryView {
             AuthoredLoweringWork::default(),
             ChangeBudget::default(),
         )
+        .map(|prepared| prepared.publication)
     }
 
     /// Resolves one strict authored request at this view's exact revision and prepares its one
@@ -467,16 +619,22 @@ impl RepositoryView {
         .map_err(|diagnostic| vec![diagnostic])?;
         let lowering = lower_authored_changes(&canonical, &witness, request)
             .map_err(|diagnostic| vec![diagnostic])?;
-        let publication = self.prepare_change_with_prior_work(
-            lowering.edits,
-            options,
-            lowering.work,
-            request.budget,
-        )?;
+        let crate::platform::change::AuthoredLowering {
+            edits,
+            allocated,
+            allocations,
+            dependency_befores,
+            work: lowering_work,
+        } = lowering;
+        let prepared =
+            self.prepare_change_with_prior_work(edits, options, lowering_work, request.budget)?;
+        let logical_plan =
+            logical_plan_evidence(prepared.analysis, allocations, dependency_befores)?;
         Ok(PreparedAuthoredPublication {
-            publication,
-            allocated: lowering.allocated,
-            lowering_work: lowering.work,
+            publication: prepared.publication,
+            allocated,
+            lowering_work,
+            logical_plan,
         })
     }
 
@@ -486,7 +644,7 @@ impl RepositoryView {
         options: PublicationOptions,
         prior_work: AuthoredLoweringWork,
         budget: ChangeBudget,
-    ) -> Result<PreparedPublication, Vec<Diagnostic>> {
+    ) -> Result<PreparedChangeWithAnalysis, Vec<Diagnostic>> {
         let canonical =
             BudgetedCanonicalBase::new(self, budget.canonical_reads, prior_work.canonical)
                 .map_err(|diagnostic| vec![diagnostic])?;
@@ -524,14 +682,18 @@ impl RepositoryView {
         )?;
         analysis.canonical_read_work.add(budget_reads.canonical);
         analysis.witness_read_work.add(prior_work.witness);
-        prepare_change_publication(
+        let publication = prepare_change_publication(
             self.current.accepted,
             self,
             self,
             &analysis,
             &self.store,
             options,
-        )
+        )?;
+        Ok(PreparedChangeWithAnalysis {
+            publication,
+            analysis,
+        })
     }
 
     pub fn owner(&self, owner: OwnerKey) -> Result<RevisionRead<Option<OwnerRecord>>, Diagnostic> {

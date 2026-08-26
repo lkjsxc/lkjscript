@@ -4,17 +4,17 @@
     reason = "the black-box test harness uses panic-on-failure assertions"
 )]
 
-use lkjscript::platform::control::{CompactRecord, parse_records};
+use lkjscript::platform::control::{CompactRecord, decode_logical_change_plan, parse_records};
 use lkjscript::platform::{ProjectCreationReceipt, ProjectTemplate, create_project};
 use serde_json::Value;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{File, OpenOptions};
-use std::io::{self, Read};
+use std::io::{self, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
 const APPLICATION: &str = "applications/lkjournal";
-const CLI_CONTRACT_VERSION: u64 = 7;
+const CLI_CONTRACT_VERSION: u64 = 8;
 
 fn binary() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_lkjscript"))
@@ -303,6 +303,35 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
     }
 
     let change_section = compact_success(&["capabilities", "--section", "change"]);
+    let change_contract = compact_record(&change_section, "change");
+    assert_eq!(
+        compact_field(change_contract, "plan-hex-characters"),
+        Some("128")
+    );
+    assert_eq!(
+        compact_field(change_contract, "request-commitment"),
+        Some("lkjscript-authored-change-codec-4")
+    );
+    assert_eq!(
+        compact_field(change_contract, "prepared-plan"),
+        Some("lkjscript-logical-change-plan-1")
+    );
+    assert_eq!(
+        compact_field(change_contract, "plan-output-action"),
+        Some("plan-only")
+    );
+    assert_eq!(
+        change_section
+            .iter()
+            .filter(|record| record.operation == "change.plan-record")
+            .count(),
+        29
+    );
+    assert!(change_section.iter().any(|record| {
+        record.operation == "change.plan-record-field"
+            && compact_field(record, "record") == Some("logical-plan.digest")
+            && compact_field(record, "name") == Some("token")
+    }));
     let operations = change_section
         .iter()
         .filter(|record| record.operation == "change.operation")
@@ -514,7 +543,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
     assert_eq!(
         compact_field(direct[0], "plan-usage"),
         Some(
-            "change plan rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT]"
+            "change plan rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT] [--output PATH]"
         )
     );
     assert_eq!(
@@ -572,7 +601,8 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
     let change_usage = compact_field(change_operation, "usage").expect("usage");
     assert!(change_usage.contains("change plan"));
     assert!(change_usage.contains("change apply"));
-    assert!(change_usage.contains("--plan DIGEST"));
+    assert!(change_usage.contains("--output PATH"));
+    assert!(change_usage.contains("--plan TOKEN"));
 
     let new_help = compact_success(&["capabilities", "new"]);
     let new_operation = compact_record(&new_help, "operation");
@@ -714,7 +744,7 @@ fn copied_binary_rediscovers_normalized_names_and_relations_without_query_writes
             path(&change_path),
         ],
     );
-    let plan = compact_field(compact_record(&planned, "plan"), "digest")
+    let plan = compact_field(compact_record(&planned, "plan"), "token")
         .expect("topology plan")
         .to_owned();
     let applied = compact_success_at(
@@ -1153,7 +1183,7 @@ fn copied_binary_rediscovers_normalized_names_and_relations_without_query_writes
             "renamed",
         ],
     );
-    let rename_digest = compact_field(compact_record(&rename_plan, "plan"), "digest")
+    let rename_digest = compact_field(compact_record(&rename_plan, "plan"), "token")
         .expect("rename plan")
         .to_owned();
     let renamed = compact_success_at(
@@ -1326,7 +1356,7 @@ fn interrupted_copied_query_after_reads_and_rendering_writes_no_repository_bytes
     assert!(planned.stderr.is_empty());
     let planned_records =
         parse_records("large fixture plan", &planned.stdout).expect("large fixture plan records");
-    let plan = compact_field(compact_record(&planned_records, "plan"), "digest")
+    let plan = compact_field(compact_record(&planned_records, "plan"), "token")
         .expect("large fixture plan digest")
         .to_owned();
     let applied = command_at(
@@ -1553,7 +1583,7 @@ fn copied_binary_rejects_the_predecessor_template_and_runs_a_predecessor_fixture
 }
 
 #[test]
-fn public_change_reuses_planned_allocation_and_replaces_an_existing_body() {
+fn reviewed_change_plan_body_replacement_exports_exact_owned_relation_closure() {
     let temporary = tempfile::TempDir::new().expect("temporary graph authority");
     let project = temporary.path().join("project");
     let created = compact_success(&["new", path(&project), "--name", "project"]);
@@ -1587,7 +1617,7 @@ fn public_change_reuses_planned_allocation_and_replaces_an_existing_body() {
         compact_field(compact_record(&planned, "revision"), "base"),
         Some(revision)
     );
-    let plan = compact_field(compact_record(&planned, "plan"), "digest")
+    let plan = compact_field(compact_record(&planned, "plan"), "token")
         .expect("reviewed plan")
         .to_owned();
     let planned_identities = planned
@@ -1710,11 +1740,11 @@ fn public_change_reuses_planned_allocation_and_replaces_an_existing_body() {
         "--input-file",
         path(&request_path),
         "--plan",
-        "plan_0000000000000000000000000000000000000000000000000000000000000000",
+        "plan_00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
     ]));
     assert_eq!(
         compact_field(compact_record(&mismatch, "diagnostic"), "code"),
-        Some("change_plan_mismatch")
+        Some("change_request_commitment_mismatch")
     );
 
     let stale_output = command(&[
@@ -1743,6 +1773,8 @@ fn public_change_reuses_planned_allocation_and_replaces_an_existing_body() {
     );
     let replacement_path = temporary.path().join("replacement.lkjc");
     std::fs::write(&replacement_path, replacement).expect("replacement change request");
+    let replacement_output = temporary.path().join("replacement.logical-plan");
+    let before_replacement_plan = content_inventory(&project);
     let replacement_plan = compact_success(&[
         "--project",
         path(&project),
@@ -1750,6 +1782,8 @@ fn public_change_reuses_planned_allocation_and_replaces_an_existing_body() {
         "plan",
         "--input-file",
         path(&replacement_path),
+        "--output",
+        path(&replacement_output),
     ]);
     assert_eq!(
         compact_field(compact_record(&replacement_plan, "summary"), "updated"),
@@ -1759,8 +1793,127 @@ fn public_change_reuses_planned_allocation_and_replaces_an_existing_body() {
         compact_field(compact_record(&replacement_plan, "summary"), "deleted"),
         Some("2")
     );
-    let replacement_digest = compact_field(compact_record(&replacement_plan, "plan"), "digest")
+    let replacement_digest = compact_field(compact_record(&replacement_plan, "plan"), "token")
         .expect("replacement plan digest");
+    assert_eq!(content_inventory(&project), before_replacement_plan);
+    assert_eq!(current_revision(&project), accepted_revision);
+    let decoded = decode_logical_change_plan(BufReader::new(
+        File::open(&replacement_output).expect("open replacement logical plan"),
+    ))
+    .expect("decode replacement logical plan");
+    assert_eq!(decoded.token, replacement_digest);
+    let replacement_records = parse_records(
+        "replacement logical plan",
+        &std::fs::read(&replacement_output).expect("read replacement logical plan"),
+    )
+    .expect("parse replacement logical plan records");
+    let old_read = planned_identities
+        .iter()
+        .find_map(|(symbol, identity)| (*symbol == "$read").then_some(*identity))
+        .expect("old local-reference expression");
+    let old_body = planned_identities
+        .iter()
+        .find_map(|(symbol, identity)| (*symbol == "$body").then_some(*identity))
+        .expect("old sequence body expression");
+    let parameter = planned_identities
+        .iter()
+        .find_map(|(symbol, identity)| (*symbol == "$value").then_some(*identity))
+        .expect("function parameter");
+    let replacement_owner = replacement_plan
+        .iter()
+        .find(|record| {
+            record.operation == "identity"
+                && compact_field(record, "symbol") == Some("$replacement")
+        })
+        .and_then(|record| compact_field(record, "id"))
+        .expect("replacement expression identity");
+    let deleted_owners = replacement_records
+        .iter()
+        .filter(|record| {
+            record.operation == "logical-plan.owner"
+                && compact_field(record, "class-deleted") == Some("true")
+        })
+        .filter_map(|record| compact_field(record, "owner"))
+        .collect::<BTreeSet<_>>();
+    assert_eq!(deleted_owners, BTreeSet::from([old_read, old_body]));
+    let created_owners = replacement_records
+        .iter()
+        .filter(|record| {
+            record.operation == "logical-plan.owner"
+                && compact_field(record, "class-created") == Some("true")
+        })
+        .filter_map(|record| compact_field(record, "owner"))
+        .collect::<BTreeSet<_>>();
+    assert_eq!(created_owners, BTreeSet::from([replacement_owner]));
+    let retired_owners = replacement_records
+        .iter()
+        .filter(|record| {
+            record.operation == "logical-plan.retirement"
+                && compact_field(record, "before-present") == Some("false")
+                && compact_field(record, "after-present") == Some("true")
+        })
+        .filter_map(|record| compact_field(record, "owner"))
+        .collect::<BTreeSet<_>>();
+    assert_eq!(retired_owners, BTreeSet::from([old_read, old_body]));
+    let removed_relations = replacement_records
+        .iter()
+        .filter(|record| record.operation == "logical-plan.relation-removed")
+        .map(|record| {
+            (
+                compact_field(record, "source-owner").unwrap(),
+                compact_field(record, "kind").unwrap(),
+                compact_field(record, "target-owner").unwrap(),
+            )
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        removed_relations,
+        BTreeSet::from([
+            (old_read, "expression_parent", old_body),
+            (old_read, "local_value_reference", parameter),
+            (old_body, "expression_root", function),
+        ])
+    );
+    let added_relations = replacement_records
+        .iter()
+        .filter(|record| record.operation == "logical-plan.relation-added")
+        .map(|record| {
+            (
+                compact_field(record, "source-owner").unwrap(),
+                compact_field(record, "kind").unwrap(),
+                compact_field(record, "target-owner").unwrap(),
+            )
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        added_relations,
+        BTreeSet::from([(replacement_owner, "expression_root", function)])
+    );
+
+    let presentation_only_request = format!(
+        "request base={accepted_revision}\n\
+         expression.text as=$different-local-label value=replaced\n\
+         replace.body function={function} body=$different-local-label\n"
+    );
+    let presentation_output = temporary.path().join("replacement-renamed.logical-plan");
+    let presentation_plan = compact_success(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "--input",
+        &presentation_only_request,
+        "--output",
+        path(&presentation_output),
+    ]);
+    assert_eq!(
+        compact_field(compact_record(&presentation_plan, "plan"), "token"),
+        Some(replacement_digest)
+    );
+    assert_eq!(
+        std::fs::read(&presentation_output).expect("renamed-label logical plan"),
+        std::fs::read(&replacement_output).expect("original-label logical plan")
+    );
     let replaced = compact_success(&[
         "--project",
         path(&project),
@@ -1847,7 +2000,7 @@ fn public_change_reuses_planned_allocation_and_replaces_an_existing_body() {
         compact_field(compact_record(&deletion_plan, "summary"), "updated"),
         Some("1")
     );
-    let deletion_digest = compact_field(compact_record(&deletion_plan, "plan"), "digest")
+    let deletion_digest = compact_field(compact_record(&deletion_plan, "plan"), "token")
         .expect("deletion plan digest");
     let deleted = compact_success(&[
         "--project",
@@ -1867,7 +2020,7 @@ fn public_change_reuses_planned_allocation_and_replaces_an_existing_body() {
 }
 
 #[test]
-fn direct_rename_matches_record_plans_and_applies_the_reviewed_typed_request() {
+fn reviewed_change_plan_direct_and_record_export_match_and_apply_reprepares() {
     let temporary = tempfile::TempDir::new().expect("temporary direct rename authority");
     let project = temporary.path().join("project");
     let created = compact_success(&["new", path(&project), "--name", "project"]);
@@ -1883,7 +2036,7 @@ fn direct_rename_matches_record_plans_and_applies_the_reviewed_typed_request() {
         &creation,
     ]);
     let creation_digest =
-        compact_field(compact_record(&creation_plan, "plan"), "digest").expect("creation plan");
+        compact_field(compact_record(&creation_plan, "plan"), "token").expect("creation plan");
     let created_module = compact_success(&[
         "--project",
         path(&project),
@@ -1934,7 +2087,7 @@ fn direct_rename_matches_record_plans_and_applies_the_reviewed_typed_request() {
     assert_eq!(record_output.stderr, direct_output.stderr);
     assert_eq!(record_output.stdout, direct_output.stdout);
     let without_controls = compact_success_output(record_output);
-    let plan_without_controls = compact_field(compact_record(&without_controls, "plan"), "digest")
+    let plan_without_controls = compact_field(compact_record(&without_controls, "plan"), "token")
         .expect("plan without controls")
         .to_owned();
 
@@ -1971,10 +2124,224 @@ fn direct_rename_matches_record_plans_and_applies_the_reviewed_typed_request() {
     assert_eq!(record_output.stderr, direct_output.stderr);
     assert_eq!(record_output.stdout, direct_output.stdout);
     let planned = compact_success_output(direct_output);
-    let plan = compact_field(compact_record(&planned, "plan"), "digest")
+    let plan = compact_field(compact_record(&planned, "plan"), "token")
         .expect("reviewed rename plan")
         .to_owned();
     assert_ne!(plan, plan_without_controls);
+
+    let before_plan_inventory = content_inventory(&project);
+    let record_plan_path = temporary.path().join("record.logical-plan");
+    let direct_plan_path = temporary.path().join("direct.logical-plan");
+    let record_export = compact_success(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "--input",
+        &record_with_controls,
+        "--output",
+        path(&record_plan_path),
+    ]);
+    let direct_export = compact_success(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "rename.owner",
+        "--base",
+        &base,
+        "--owner",
+        &owner,
+        "--name",
+        "renamed",
+        "--idempotency",
+        "direct-rename-equality",
+        "--intent",
+        "transport-equality",
+        "--output",
+        path(&direct_plan_path),
+    ]);
+    assert_eq!(
+        compact_field(compact_record(&record_export, "plan"), "token"),
+        Some(plan.as_str())
+    );
+    assert_eq!(
+        compact_field(compact_record(&direct_export, "plan"), "token"),
+        Some(plan.as_str())
+    );
+    assert_eq!(
+        compact_field(compact_record(&record_export, "plan-output"), "status"),
+        Some("published")
+    );
+    assert_eq!(
+        std::fs::read(&record_plan_path).expect("record plan file"),
+        std::fs::read(&direct_plan_path).expect("direct plan file")
+    );
+    let decoded = decode_logical_change_plan(BufReader::new(
+        File::open(&record_plan_path).expect("open logical plan"),
+    ))
+    .expect("strict logical plan decode");
+    assert_eq!(decoded.token, plan);
+    assert_eq!(
+        decoded.bytes.to_string(),
+        compact_field(compact_record(&record_export, "plan-output"), "bytes").unwrap()
+    );
+    assert_eq!(
+        decoded.records.to_string(),
+        compact_field(compact_record(&record_export, "plan-output"), "records").unwrap()
+    );
+    let unchanged_export = compact_success(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "--input",
+        &record_with_controls,
+        "--output",
+        path(&record_plan_path),
+    ]);
+    assert_eq!(
+        compact_field(compact_record(&unchanged_export, "plan-output"), "status"),
+        Some("unchanged")
+    );
+    assert_eq!(current_revision(&project), base);
+    assert_eq!(content_inventory(&project), before_plan_inventory);
+
+    std::fs::write(&record_plan_path, b"noncanonical old output")
+        .expect("replace review output fixture");
+    let republished = compact_success(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "--input",
+        &record_with_controls,
+        "--output",
+        path(&record_plan_path),
+    ]);
+    assert_eq!(
+        compact_field(compact_record(&republished, "plan-output"), "status"),
+        Some("published")
+    );
+    decode_logical_change_plan(BufReader::new(
+        File::open(&record_plan_path).expect("open republished logical plan"),
+    ))
+    .expect("republished logical plan is complete");
+
+    let inside_project = project.join("review.logical-plan");
+    let rejected_inside = compact_failure_output(command(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "--input",
+        &record_with_controls,
+        "--output",
+        path(&inside_project),
+    ]));
+    assert_eq!(
+        compact_field(compact_record(&rejected_inside, "diagnostic"), "code"),
+        Some("change_plan_output_project_path")
+    );
+    assert!(!inside_project.exists());
+
+    let directory_target = temporary.path().join("review-directory");
+    std::fs::create_dir(&directory_target).expect("plan output directory fixture");
+    let rejected_directory = compact_failure_output(command(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "--input",
+        &record_with_controls,
+        "--output",
+        path(&directory_target),
+    ]));
+    assert_eq!(
+        compact_field(compact_record(&rejected_directory, "diagnostic"), "code"),
+        Some("change_plan_output_type")
+    );
+
+    let missing_parent = temporary.path().join("absent/review.logical-plan");
+    let rejected_parent = compact_failure_output_with_status(
+        command(&[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "--input",
+            &record_with_controls,
+            "--output",
+            path(&missing_parent),
+        ]),
+        6,
+    );
+    assert_eq!(
+        compact_field(compact_record(&rejected_parent, "diagnostic"), "code"),
+        Some("change_plan_output_parent")
+    );
+    assert!(!missing_parent.exists());
+
+    #[cfg(unix)]
+    {
+        let protected = temporary.path().join("protected-output");
+        let symlink = temporary.path().join("review-symlink");
+        std::fs::write(&protected, b"protected").expect("protected output fixture");
+        std::os::unix::fs::symlink(&protected, &symlink).expect("plan output symlink fixture");
+        let rejected_symlink = compact_failure_output(command(&[
+            "--project",
+            path(&project),
+            "change",
+            "plan",
+            "--input",
+            &record_with_controls,
+            "--output",
+            path(&symlink),
+        ]));
+        assert_eq!(
+            compact_field(compact_record(&rejected_symlink, "diagnostic"), "code"),
+            Some("change_plan_output_type")
+        );
+        assert_eq!(
+            std::fs::read(&protected).expect("protected output remains"),
+            b"protected"
+        );
+    }
+    assert_eq!(current_revision(&project), base);
+    assert_eq!(content_inventory(&project), before_plan_inventory);
+
+    let mut wrong_prepared = plan.clone();
+    let replacement = if wrong_prepared.ends_with('0') {
+        '1'
+    } else {
+        '0'
+    };
+    wrong_prepared.pop();
+    wrong_prepared.push(replacement);
+    let rejected = compact_failure_output(command(&[
+        "--project",
+        path(&project),
+        "change",
+        "apply",
+        "rename.owner",
+        "--base",
+        &base,
+        "--owner",
+        &owner,
+        "--name",
+        "renamed",
+        "--idempotency",
+        "direct-rename-equality",
+        "--intent",
+        "transport-equality",
+        "--plan",
+        &wrong_prepared,
+    ]));
+    assert_eq!(
+        compact_field(compact_record(&rejected, "diagnostic"), "code"),
+        Some("change_prepared_plan_mismatch")
+    );
+    assert_eq!(current_revision(&project), base);
 
     let applied = compact_success(&[
         "--project",
@@ -2057,6 +2424,207 @@ fn direct_rename_matches_record_plans_and_applies_the_reviewed_typed_request() {
 }
 
 #[test]
+#[ignore = "release-scale fixture; run explicitly with --ignored --nocapture"]
+fn reviewed_change_plan_scale_streams_detail_beyond_stdout_envelope() {
+    const BACKGROUND_MODULES: usize = 500;
+    const PAYLOAD_TYPES: usize = 4_500;
+    const PRIMITIVES: [&str; 7] = [
+        "unit",
+        "bool",
+        "i64",
+        "bytes",
+        "text",
+        "static-text",
+        "secret",
+    ];
+
+    let temporary = tempfile::TempDir::new().expect("temporary logical-plan scale authority");
+    let project = temporary.path().join("project");
+    let created = compact_success(&["new", path(&project), "--name", "plan-scale"]);
+    let base = compact_field(compact_record(&created, "revision"), "id")
+        .expect("scale base revision")
+        .to_owned();
+
+    let mut request = format!("request base={base}\n");
+    let mut base_types = Vec::new();
+    for form in ["list", "option", "stream"] {
+        for primitive in PRIMITIVES {
+            let label = format!("@base-{:03}", base_types.len());
+            request.push_str(&format!("type.{form} as={label} item={primitive}\n"));
+            base_types.push(label);
+        }
+    }
+    for form in ["map", "result"] {
+        for left in PRIMITIVES {
+            for right in PRIMITIVES {
+                let label = format!("@base-{:03}", base_types.len());
+                let fields = if form == "map" {
+                    format!("key={left} value={right}")
+                } else {
+                    format!("ok={left} error={right}")
+                };
+                request.push_str(&format!("type.{form} as={label} {fields}\n"));
+                base_types.push(label);
+            }
+        }
+    }
+    let mut level = Vec::new();
+    for ordinal in 0..PAYLOAD_TYPES {
+        let label = format!("@payload-{ordinal:04}");
+        let left = &base_types[ordinal % base_types.len()];
+        let right = &base_types[(ordinal / base_types.len()) % base_types.len()];
+        request.push_str(&format!("type.map as={label} key={left} value={right}\n"));
+        level.push(label);
+    }
+    let mut join_ordinal = 0_usize;
+    while level.len() > 1 {
+        let mut next = Vec::with_capacity(level.len().div_ceil(2));
+        for pair in level.chunks(2) {
+            if let [left, right] = pair {
+                let label = format!("@join-{join_ordinal:04}");
+                request.push_str(&format!("type.result as={label} ok={left} error={right}\n"));
+                next.push(label);
+                join_ordinal += 1;
+            } else {
+                next.push(pair[0].clone());
+            }
+        }
+        level = next;
+    }
+    let root_type = level.pop().expect("scale type root");
+    for ordinal in 0..BACKGROUND_MODULES {
+        request.push_str(&format!(
+            "create.module as=$module-{ordinal:03} name=module_{ordinal:03}\n"
+        ));
+    }
+    request.push_str(&format!(
+        "create.record as=$record module=$module-000 name=Payload visibility=public\n\
+         add.field as=$field record=$record name=value type={root_type}\n"
+    ));
+    let request_path = temporary.path().join("scale.lkjc");
+    std::fs::write(&request_path, request).expect("scale request");
+    let before = content_inventory(&project);
+
+    let disabled_started = std::time::Instant::now();
+    let disabled = command(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "--input-file",
+        path(&request_path),
+    ]);
+    let disabled_elapsed = disabled_started.elapsed();
+    assert!(
+        disabled.status.success(),
+        "scale plan without export failed: {}",
+        String::from_utf8_lossy(&disabled.stdout)
+    );
+    assert!(disabled.stderr.is_empty());
+    let disabled_records =
+        parse_records("scale plan stdout", &disabled.stdout).expect("scale plan stdout records");
+    assert!(disabled_records.len() < 10_000);
+    assert_eq!(
+        disabled_records
+            .iter()
+            .filter(|record| record.operation == "identity")
+            .count(),
+        BACKGROUND_MODULES + 2
+    );
+    let token = compact_field(compact_record(&disabled_records, "plan"), "token")
+        .expect("scale plan token")
+        .to_owned();
+    assert_eq!(content_inventory(&project), before);
+
+    let plan_path = temporary.path().join("scale.logical-plan");
+    let enabled_started = std::time::Instant::now();
+    let enabled = command(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "--input-file",
+        path(&request_path),
+        "--output",
+        path(&plan_path),
+    ]);
+    let enabled_elapsed = enabled_started.elapsed();
+    assert!(
+        enabled.status.success(),
+        "scale plan with export failed: {}",
+        String::from_utf8_lossy(&enabled.stdout)
+    );
+    assert!(enabled.stderr.is_empty());
+    let enabled_records =
+        parse_records("scale export stdout", &enabled.stdout).expect("scale export stdout records");
+    assert!(enabled_records.len() < 10_000);
+    assert_eq!(
+        compact_field(compact_record(&enabled_records, "plan"), "token"),
+        Some(token.as_str())
+    );
+    let decoded = decode_logical_change_plan(BufReader::new(
+        File::open(&plan_path).expect("open scale logical plan"),
+    ))
+    .expect("strict scale logical-plan decode");
+    assert_eq!(decoded.token, token);
+    assert_eq!(decoded.counts.allocations, (BACKGROUND_MODULES + 2) as u64);
+    assert_eq!(decoded.counts.owners, (BACKGROUND_MODULES + 2) as u64);
+    assert!(decoded.bytes > enabled.stdout.len() as u64);
+    assert_eq!(content_inventory(&project), before);
+    assert_eq!(current_revision(&project), base);
+
+    let peak_rss_kib = std::fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|status| {
+            status.lines().find_map(|line| {
+                line.strip_prefix("VmHWM:")
+                    .and_then(|value| value.split_whitespace().next())
+                    .and_then(|value| value.parse::<u64>().ok())
+            })
+        });
+    eprintln!(
+        "reviewed-change-plan-scale background_modules={BACKGROUND_MODULES} payload_types={PAYLOAD_TYPES} join_types={join_ordinal} plan_types={} plan_records={} plan_bytes={} stdout_records={} stdout_bytes={} disabled_wall_us={} enabled_wall_us={} peak_rss_kib={} repository_bytes_written=0",
+        decoded.counts.types,
+        decoded.records,
+        decoded.bytes,
+        enabled_records.len(),
+        enabled.stdout.len(),
+        disabled_elapsed.as_micros(),
+        enabled_elapsed.as_micros(),
+        peak_rss_kib.map_or_else(|| "unavailable".to_owned(), |value| value.to_string()),
+    );
+    assert!(
+        decoded.records > 10_000,
+        "scale logical plan emitted only {} records",
+        decoded.records
+    );
+    assert!(
+        decoded.counts.types >= (PAYLOAD_TYPES * 2) as u64,
+        "scale logical plan retained only {} type additions",
+        decoded.counts.types
+    );
+    if let Some(evidence_directory) =
+        std::env::var_os("LKJSCRIPT_REVIEW_PLAN_EVIDENCE_DIR").map(PathBuf::from)
+    {
+        std::fs::create_dir_all(&evidence_directory).expect("create retained scale evidence");
+        std::fs::copy(&request_path, evidence_directory.join("scale-request.lkjc"))
+            .expect("retain scale request");
+        std::fs::copy(&plan_path, evidence_directory.join("scale.logical-plan"))
+            .expect("retain scale logical plan");
+        std::fs::write(
+            evidence_directory.join("scale-without-export.stdout"),
+            &disabled.stdout,
+        )
+        .expect("retain scale stdout without export");
+        std::fs::write(
+            evidence_directory.join("scale-with-export.stdout"),
+            &enabled.stdout,
+        )
+        .expect("retain scale stdout with export");
+    }
+}
+
+#[test]
 fn direct_rename_malformed_inputs_and_plan_mismatch_never_access_or_advance_authority() {
     let temporary = tempfile::TempDir::new().expect("temporary direct rejection authority");
     let project = temporary.path().join("project");
@@ -2071,7 +2639,7 @@ fn direct_rename_malformed_inputs_and_plan_mismatch_never_access_or_advance_auth
         "--input",
         &creation,
     ]);
-    let plan = compact_field(compact_record(&planned, "plan"), "digest").unwrap();
+    let plan = compact_field(compact_record(&planned, "plan"), "token").unwrap();
     let applied = compact_success(&[
         "--project",
         path(&project),
@@ -2261,9 +2829,18 @@ fn direct_rename_malformed_inputs_and_plan_mismatch_never_access_or_advance_auth
         2,
         &revision,
     );
-    let wrong_plan = "plan_0000000000000000000000000000000000000000000000000000000000000000";
+    let predecessor_plan = "plan_0000000000000000000000000000000000000000000000000000000000000000";
+    let predecessor = [apply.as_slice(), &["--plan", predecessor_plan]].concat();
+    assert_direct_rename_rejection(&project, &predecessor, "change_plan_length", 2, &revision);
+    let wrong_plan = "plan_00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
     let mismatched = [apply.as_slice(), &["--plan", wrong_plan]].concat();
-    assert_direct_rename_rejection(&project, &mismatched, "change_plan_mismatch", 2, &revision);
+    assert_direct_rename_rejection(
+        &project,
+        &mismatched,
+        "change_request_commitment_mismatch",
+        2,
+        &revision,
+    );
 
     let nonexistent = temporary.path().join("does-not-exist");
     let rejected = compact_failure_output(command(&[
@@ -2283,7 +2860,7 @@ fn direct_rename_malformed_inputs_and_plan_mismatch_never_access_or_advance_auth
     ]));
     assert_eq!(
         compact_field(compact_record(&rejected, "diagnostic"), "code"),
-        Some("change_plan_mismatch")
+        Some("change_request_commitment_mismatch")
     );
     assert!(!nonexistent.exists());
 }
@@ -2303,7 +2880,7 @@ fn direct_rename_stale_and_absent_exact_owners_leave_head_unchanged() {
         "--input",
         &creation,
     ]);
-    let creation_plan = compact_field(compact_record(&planned, "plan"), "digest").unwrap();
+    let creation_plan = compact_field(compact_record(&planned, "plan"), "token").unwrap();
     let applied = compact_success(&[
         "--project",
         path(&project),
@@ -2340,7 +2917,7 @@ fn direct_rename_stale_and_absent_exact_owners_leave_head_unchanged() {
         "--name",
         "first",
     ]);
-    let first_plan = compact_field(compact_record(&first, "plan"), "digest").unwrap();
+    let first_plan = compact_field(compact_record(&first, "plan"), "token").unwrap();
     let second = compact_success(&[
         "--project",
         path(&project),
@@ -2354,7 +2931,7 @@ fn direct_rename_stale_and_absent_exact_owners_leave_head_unchanged() {
         "--name",
         "second",
     ]);
-    let second_plan = compact_field(compact_record(&second, "plan"), "digest")
+    let second_plan = compact_field(compact_record(&second, "plan"), "token")
         .unwrap()
         .to_owned();
     let accepted = compact_success(&[
@@ -2445,7 +3022,7 @@ fn broad_change_results_are_bounded_and_expandable() {
         "--input-file",
         path(&request_path),
     ]);
-    let plan = compact_field(compact_record(&planned, "plan"), "digest").unwrap();
+    let plan = compact_field(compact_record(&planned, "plan"), "token").unwrap();
     assert_eq!(
         planned
             .iter()
@@ -2815,7 +3392,7 @@ fn copied_binary_direct_rename_completes_a_normalized_external_workflow() {
             &creation,
         ],
     );
-    let creation_plan = compact_field(compact_record(&planned, "plan"), "digest").unwrap();
+    let creation_plan = compact_field(compact_record(&planned, "plan"), "token").unwrap();
     let module = compact_success_at(
         &copied_binary,
         temporary.path(),
@@ -2842,6 +3419,7 @@ fn copied_binary_direct_rename_completes_a_normalized_external_workflow() {
     let base = compact_field(compact_record(&module, "revision"), "result")
         .unwrap()
         .to_owned();
+    let logical_plan = temporary.path().join("rename.logical-plan");
     let rename_plan = compact_success_at(
         &copied_binary,
         temporary.path(),
@@ -2857,9 +3435,20 @@ fn copied_binary_direct_rename_completes_a_normalized_external_workflow() {
             &owner,
             "--name",
             "after",
+            "--output",
+            path(&logical_plan),
         ],
     );
-    let plan = compact_field(compact_record(&rename_plan, "plan"), "digest").unwrap();
+    let plan = compact_field(compact_record(&rename_plan, "plan"), "token").unwrap();
+    let decoded = decode_logical_change_plan(BufReader::new(
+        File::open(&logical_plan).expect("open copied-binary logical plan"),
+    ))
+    .expect("strictly decode copied-binary logical plan");
+    assert_eq!(decoded.token, plan);
+    assert_eq!(
+        compact_field(compact_record(&rename_plan, "plan-output"), "status"),
+        Some("published")
+    );
     let renamed = compact_success_at(
         &copied_binary,
         temporary.path(),

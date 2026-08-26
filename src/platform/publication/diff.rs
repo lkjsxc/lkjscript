@@ -236,7 +236,7 @@ impl SemanticDiff {
     }
 }
 
-fn validate_owner_entry(entry: &OwnerDiffEntry) -> Result<(), Diagnostic> {
+pub(crate) fn validate_owner_entry(entry: &OwnerDiffEntry) -> Result<(), Diagnostic> {
     if matches!((entry.objects.before, entry.objects.after), (None, None)) {
         return Err(diff_error(
             DiagnosticClass::Corrupt,

@@ -2,12 +2,15 @@ use super::super::artifact::{ARTIFACT_CONTRACT_VERSION, PACKAGE_ARTIFACT_CONTRAC
 use super::super::bootstrap::BOOTSTRAP_CONTRACT_VERSION;
 use super::super::configuration::CONFIGURATION_ADAPTER_CONTRACT_VERSION;
 use super::super::control::{
-    CHANGE_PLAN_DIGEST_DOMAIN, COMPACT_CHANGE_CONTRACT_IDENTITY,
+    AUTHORED_CHANGE_CODEC_IDENTITY, AUTHORED_CHANGE_CODEC_VERSION,
+    CHANGE_REQUEST_COMMITMENT_DOMAIN, COMPACT_CHANGE_CONTRACT_IDENTITY,
     COMPACT_CHANGE_OPERATION_DESCRIPTORS, COMPACT_CHANGE_PRECONDITION_FIELDS,
     COMPACT_CHANGE_PRECONDITIONS, COMPACT_DECLARATION_VISIBILITIES, COMPACT_DELETE_POLICIES,
     COMPACT_EXPRESSION_FORMS, COMPACT_FUNCTION_EFFECTS, COMPACT_NAMESPACE_CLASSES,
     COMPACT_TYPE_FORMS, CompactChangeFieldForm, CompactChangeOperation,
-    MAXIMUM_COMPACT_INPUT_BYTES, render_record,
+    LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY, LOGICAL_CHANGE_PLAN_CONTRACT_VERSION,
+    LOGICAL_PLAN_RECORD_DESCRIPTORS, MAXIMUM_COMPACT_INPUT_BYTES, MAXIMUM_LOGICAL_PLAN_BYTES,
+    MAXIMUM_LOGICAL_PLAN_RECORDS, PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN, render_record,
 };
 use super::super::database::POSTGRES_ADAPTER_CONTRACT_VERSION;
 use super::super::deployment::DEPLOYMENT_CONTRACT_VERSION;
@@ -60,7 +63,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-3";
 pub const REGISTRY_CONTRACT_VERSION: u16 = 3;
-pub const CLI_CONTRACT_VERSION: u16 = 7;
+pub const CLI_CONTRACT_VERSION: u16 = 8;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -186,6 +189,8 @@ pub enum ContractKey {
     SemanticFacts,
     SemanticValidator,
     Change,
+    AuthoredChangeCodec,
+    LogicalChangePlan,
     Transaction,
     Query,
     QueryIndex,
@@ -230,6 +235,8 @@ impl ContractKey {
             Self::SemanticFacts => "semantic_facts",
             Self::SemanticValidator => "semantic_validator",
             Self::Change => "change",
+            Self::AuthoredChangeCodec => "authored_change_codec",
+            Self::LogicalChangePlan => "logical_change_plan",
             Self::Transaction => "transaction",
             Self::Query => "query",
             Self::QueryIndex => "query_index",
@@ -475,7 +482,32 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             authority: ContractAuthority::PublicProtocol,
             predecessor_policy: REJECT,
             magic_values: NONE,
-            digest_domains: &[CHANGE_ALLOCATION_SEED_DOMAIN, CHANGE_PLAN_DIGEST_DOMAIN],
+            digest_domains: NONE,
+        },
+        ContractDescriptor {
+            key: ContractKey::AuthoredChangeCodec,
+            name: "normalized authored change codec",
+            identity: AUTHORED_CHANGE_CODEC_IDENTITY,
+            version: AUTHORED_CHANGE_CODEC_VERSION,
+            stability: CURRENT,
+            authority: ContractAuthority::PublicProtocol,
+            predecessor_policy: REJECT,
+            magic_values: &["LKJACR04", "LKJABG01"],
+            digest_domains: &[
+                CHANGE_ALLOCATION_SEED_DOMAIN,
+                CHANGE_REQUEST_COMMITMENT_DOMAIN,
+            ],
+        },
+        ContractDescriptor {
+            key: ContractKey::LogicalChangePlan,
+            name: "logical change plan",
+            identity: LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY,
+            version: LOGICAL_CHANGE_PLAN_CONTRACT_VERSION,
+            stability: CURRENT,
+            authority: ContractAuthority::DerivedDisposable,
+            predecessor_policy: REJECT,
+            magic_values: NONE,
+            digest_domains: &[PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN],
         },
         ContractDescriptor {
             key: ContractKey::Transaction,
@@ -1053,8 +1085,8 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
         ),
         operation(
             PublicOperation::Change,
-            "Plan or atomically apply one typed semantic change through compact records or a direct operation.",
-            "change plan ((--input RECORDS | --input-file PATH) | rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT]) | change apply ((--input RECORDS | --input-file PATH) | rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT]) --plan DIGEST",
+            "Prepare, optionally export, or atomically apply one review-bound logical semantic change plan.",
+            "change plan ((--input RECORDS | --input-file PATH) | rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT]) [--output PATH] | change apply ((--input RECORDS | --input-file PATH) | rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT]) --plan TOKEN",
             ControlModel::ChangeRequest,
             AuthorityEffect::AcceptedOnCommit,
             ProjectRequirement::Required,
@@ -1365,6 +1397,20 @@ pub fn limit_descriptors() -> &'static [LimitDescriptor] {
             MAXIMUM_COMPACT_INPUT_BYTES,
             LimitClass::HostileDecoderSafety,
             LimitUnit::Bytes,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "logical_change_plan_bytes",
+            MAXIMUM_LOGICAL_PLAN_BYTES as usize,
+            LimitClass::DeterministicOperationBudget,
+            LimitUnit::Bytes,
+            OverridePolicy::Fixed,
+        ),
+        limit(
+            "logical_change_plan_records",
+            MAXIMUM_LOGICAL_PLAN_RECORDS as usize,
+            LimitClass::DeterministicOperationBudget,
+            LimitUnit::Records,
             OverridePolicy::Fixed,
         ),
         limit(
@@ -1937,32 +1983,356 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "change_plan_domain",
             DiagnosticClass::Source,
-            "A reviewed plan has the wrong typed digest prefix.",
-            "Use the exact plan_ digest returned by change plan.",
+            "A reviewed plan token has the wrong typed prefix.",
+            "Use the exact plan_ token returned by change plan.",
         ),
         diagnostic(
             "change_plan_length",
             DiagnosticClass::Source,
-            "A reviewed plan has the wrong digest length.",
-            "Use the complete plan_ digest returned by change plan.",
+            "A reviewed plan token has the wrong two-component length.",
+            "Use the complete 128-hex-character plan_ token returned by change plan.",
         ),
         diagnostic(
-            "change_plan_field_length",
+            "change_request_commitment_field_length",
             DiagnosticClass::Resource,
-            "A normalized plan field exceeds its digest length domain.",
+            "A normalized request field exceeds its commitment length domain.",
             "Reduce the request within the advertised compact input bounds.",
         ),
         diagnostic(
             "change_plan_hex",
             DiagnosticClass::Source,
-            "A reviewed plan has noncanonical hexadecimal bytes.",
-            "Use the lowercase plan_ digest returned by change plan.",
+            "A reviewed plan token has noncanonical hexadecimal bytes.",
+            "Use the lowercase plan_ token returned by change plan.",
         ),
         diagnostic(
-            "change_plan_mismatch",
+            "change_request_commitment_mismatch",
             DiagnosticClass::Semantic,
-            "Reviewed plan identity differs from the normalized input.",
-            "Re-run change plan for the exact input and review the new result.",
+            "The reviewed request commitment differs from normalized input.",
+            "Re-run change plan for the exact input before project discovery.",
+        ),
+        diagnostic(
+            "change_prepared_plan_mismatch",
+            DiagnosticClass::Semantic,
+            "The reviewed prepared-plan commitment differs from the reprepared logical plan.",
+            "Re-run change plan against the current exact base and review the complete logical plan.",
+        ),
+        diagnostic(
+            "change_plan_output_project_path",
+            DiagnosticClass::Source,
+            "A logical plan output target is at or below normalized project authority.",
+            "Choose an explicit review-file path outside the normalized project root.",
+        ),
+        diagnostic(
+            "change_plan_output_type",
+            DiagnosticClass::Source,
+            "A logical plan output target is a symlink or is not a regular file.",
+            "Choose an absent path or an existing ordinary regular file.",
+        ),
+        diagnostic(
+            "change_plan_output_existing_bytes",
+            DiagnosticClass::Resource,
+            "An existing logical plan output exceeds bounded comparison admission.",
+            "Remove the unrelated oversized file or choose another explicit output path.",
+        ),
+        diagnostic(
+            "change_plan_output_byte_budget",
+            DiagnosticClass::Resource,
+            "A complete logical plan exceeds its independent file-byte admission.",
+            "Reduce the semantic change; logical plan output is never truncated.",
+        ),
+        diagnostic(
+            "change_plan_output_record_budget",
+            DiagnosticClass::Resource,
+            "A complete logical plan exceeds its independent file-record admission.",
+            "Reduce the semantic change; logical plan output is never truncated.",
+        ),
+        diagnostic(
+            "change_plan_output_parent",
+            DiagnosticClass::Infrastructure,
+            "The logical plan output parent cannot be resolved.",
+            "Create and authorize the parent directory, then retry planning.",
+        ),
+        diagnostic(
+            "change_plan_output_project",
+            DiagnosticClass::Infrastructure,
+            "The normalized project root cannot be resolved for output isolation.",
+            "Preserve the project and repair its path before retrying.",
+        ),
+        diagnostic(
+            "change_plan_output_metadata",
+            DiagnosticClass::Infrastructure,
+            "Logical plan output target metadata cannot be inspected safely.",
+            "Repair target permissions or choose another path.",
+        ),
+        diagnostic(
+            "change_plan_output_create",
+            DiagnosticClass::Infrastructure,
+            "A unique private logical plan output stage cannot be created.",
+            "Repair parent permissions and retry; accepted authority was not changed.",
+        ),
+        diagnostic(
+            "change_plan_output_write",
+            DiagnosticClass::Infrastructure,
+            "Canonical logical plan records cannot be written to the private stage.",
+            "Repair filesystem capacity or permissions and retry planning.",
+        ),
+        diagnostic(
+            "change_plan_output_sync",
+            DiagnosticClass::Infrastructure,
+            "The complete private logical plan stage cannot be synchronized.",
+            "Repair the filesystem and retry; the target was not published.",
+        ),
+        diagnostic(
+            "change_plan_output_stage_remove",
+            DiagnosticClass::Infrastructure,
+            "An equal private logical plan stage cannot be removed.",
+            "Inspect the reported sibling stage and parent permissions before retrying.",
+        ),
+        diagnostic(
+            "change_plan_output_publish",
+            DiagnosticClass::Infrastructure,
+            "The synchronized logical plan stage cannot be atomically renamed.",
+            "Repair the target filesystem boundary and retry planning.",
+        ),
+        diagnostic(
+            "change_plan_output_parent_sync",
+            DiagnosticClass::Infrastructure,
+            "The logical plan output parent cannot be synchronized after publication.",
+            "Inspect the complete target file and filesystem durability before retrying.",
+        ),
+        diagnostic(
+            "change_plan_output_compare_metadata",
+            DiagnosticClass::Infrastructure,
+            "Logical plan stage or target metadata changed during bounded comparison.",
+            "Remove the external race and retry planning.",
+        ),
+        diagnostic(
+            "change_plan_output_compare_open",
+            DiagnosticClass::Infrastructure,
+            "A logical plan stage or target cannot be opened for bounded comparison.",
+            "Repair target permissions and retry planning.",
+        ),
+        diagnostic(
+            "change_plan_output_compare_read",
+            DiagnosticClass::Infrastructure,
+            "A logical plan stage or target cannot be read during bounded comparison.",
+            "Repair the filesystem and retry planning.",
+        ),
+        diagnostic(
+            "change_reviewed_plan_missing",
+            DiagnosticClass::Infrastructure,
+            "Validated apply dispatch lost its reviewed plan token.",
+            "Retain the failing request and use a verified executable.",
+        ),
+        diagnostic(
+            "change_logical_plan_authority",
+            DiagnosticClass::Corrupt,
+            "Prepared authority, semantic diff, receipt, and candidate identities disagree.",
+            "Preserve the repository and run deep doctor verification.",
+        ),
+        diagnostic(
+            "change_logical_plan_value_sets",
+            DiagnosticClass::Corrupt,
+            "Logical dependency or retirement values disagree with the prepared semantic diff.",
+            "Preserve the repository and run deep doctor verification.",
+        ),
+        diagnostic(
+            "change_logical_plan_validation_counts",
+            DiagnosticClass::Corrupt,
+            "Logical validation or test membership disagrees with receipt counts.",
+            "Preserve the repository and run deep doctor verification.",
+        ),
+        diagnostic(
+            "change_logical_plan_base",
+            DiagnosticClass::Corrupt,
+            "Prepared authored change does not bind one exact base.",
+            "Preserve the repository and run deep doctor verification.",
+        ),
+        diagnostic(
+            "change_logical_plan_diff",
+            DiagnosticClass::Corrupt,
+            "Prepared authored change does not contain a current semantic change diff.",
+            "Preserve the repository and run deep doctor verification.",
+        ),
+        diagnostic(
+            "change_logical_plan_allocations",
+            DiagnosticClass::Corrupt,
+            "Logical allocations are duplicated, foreign, or noncanonical.",
+            "Retain the request and use a verified executable.",
+        ),
+        diagnostic(
+            "change_logical_plan_reasons",
+            DiagnosticClass::Corrupt,
+            "Logical impact reasons are duplicated or noncanonical.",
+            "Preserve the repository and run deep doctor verification.",
+        ),
+        diagnostic(
+            "change_logical_plan_relations",
+            DiagnosticClass::Corrupt,
+            "A logical semantic relation is both removed and added.",
+            "Preserve the repository and run deep doctor verification.",
+        ),
+        diagnostic(
+            "change_logical_plan_order",
+            DiagnosticClass::Corrupt,
+            "Logical owner or relation facts do not use canonical contract order.",
+            "Retain the request and use a verified executable.",
+        ),
+        diagnostic(
+            "change_logical_plan_dependency",
+            DiagnosticClass::Corrupt,
+            "A logical dependency value disagrees with its exact object identity.",
+            "Preserve the repository and run deep doctor verification.",
+        ),
+        diagnostic(
+            "change_logical_plan_dependency_before",
+            DiagnosticClass::Corrupt,
+            "Authored lowering retained an unrelated dependency base value.",
+            "Retain the request and use a verified executable.",
+        ),
+        diagnostic(
+            "change_logical_plan_retirement",
+            DiagnosticClass::Corrupt,
+            "A logical retirement value disagrees with its exact object identity.",
+            "Preserve the repository and run deep doctor verification.",
+        ),
+        diagnostic(
+            "change_logical_plan_retirement_before",
+            DiagnosticClass::Corrupt,
+            "Authored preparation lacks a required logical retirement base value.",
+            "Retain the request and use a verified executable.",
+        ),
+        diagnostic(
+            "change_logical_plan_validation",
+            DiagnosticClass::Corrupt,
+            "Prepared validation membership disagrees with its impact plan.",
+            "Preserve the repository and run deep doctor verification.",
+        ),
+        diagnostic(
+            "change_logical_plan_tests",
+            DiagnosticClass::Corrupt,
+            "Prepared selected tests disagree with validation evidence.",
+            "Preserve the repository and run deep doctor verification.",
+        ),
+        diagnostic(
+            "change_plan_file_read",
+            DiagnosticClass::Source,
+            "A logical plan file stream cannot be read completely.",
+            "Supply a readable complete canonical plan file.",
+        ),
+        diagnostic(
+            "change_plan_file_truncated",
+            DiagnosticClass::Source,
+            "A logical plan file ends inside a physical record.",
+            "Regenerate or recopy the complete canonical plan file.",
+        ),
+        diagnostic(
+            "change_plan_file_record_bytes",
+            DiagnosticClass::Resource,
+            "One logical plan record exceeds the compact-record byte bound.",
+            "Reject the file and regenerate it with the current executable.",
+        ),
+        diagnostic(
+            "change_plan_file_byte_budget",
+            DiagnosticClass::Resource,
+            "A logical plan file exceeds its complete decoder byte admission.",
+            "Reject the file; logical plan files are never truncated.",
+        ),
+        diagnostic(
+            "change_plan_file_record_budget",
+            DiagnosticClass::Resource,
+            "A logical plan file exceeds its complete decoder record admission.",
+            "Reject the file; logical plan files are never truncated.",
+        ),
+        diagnostic(
+            "change_plan_file_record_unknown",
+            DiagnosticClass::Source,
+            "A logical plan file contains an unknown or operational record.",
+            "Regenerate the file using the current closed plan contract.",
+        ),
+        diagnostic(
+            "change_plan_file_fields",
+            DiagnosticClass::Source,
+            "A logical plan record has unknown, missing, duplicate, or misordered fields.",
+            "Regenerate the file using the current closed plan contract.",
+        ),
+        diagnostic(
+            "change_plan_file_order",
+            DiagnosticClass::Source,
+            "Logical plan records are not in canonical contract order.",
+            "Regenerate the file; reordering review facts is noncanonical.",
+        ),
+        diagnostic(
+            "change_plan_file_singleton_duplicate",
+            DiagnosticClass::Source,
+            "A singleton logical plan record is duplicated.",
+            "Remove the duplicate by regenerating the canonical plan file.",
+        ),
+        diagnostic(
+            "change_plan_file_canonical",
+            DiagnosticClass::Source,
+            "A logical plan record is not canonically escaped or framed.",
+            "Regenerate the plan file rather than editing its compact bytes.",
+        ),
+        diagnostic(
+            "change_plan_file_contract",
+            DiagnosticClass::Source,
+            "A logical plan file uses a predecessor or foreign contract.",
+            "Regenerate the plan with the current executable.",
+        ),
+        diagnostic(
+            "change_plan_file_contracts",
+            DiagnosticClass::Source,
+            "A logical plan file names foreign interpretation contracts.",
+            "Regenerate the plan against current graph and validation contracts.",
+        ),
+        diagnostic(
+            "change_plan_file_counts",
+            DiagnosticClass::Source,
+            "Logical plan summary counts disagree with exact preceding records.",
+            "Reject the file and regenerate it from the authored request.",
+        ),
+        diagnostic(
+            "change_plan_file_digest",
+            DiagnosticClass::Source,
+            "Logical plan body, commitments, and token disagree.",
+            "Reject the mutated file and regenerate it from the authored request.",
+        ),
+        diagnostic(
+            "change_plan_file_trailing",
+            DiagnosticClass::Source,
+            "A logical plan file contains records after its digest trailer.",
+            "Reject the file and retain only the complete canonical plan through its trailer.",
+        ),
+        diagnostic(
+            "change_plan_file_owner_order",
+            DiagnosticClass::Source,
+            "Logical owner facts are duplicated or out of canonical typed order.",
+            "Regenerate the plan file without editing exact owner records.",
+        ),
+        diagnostic(
+            "change_plan_file_relation_order",
+            DiagnosticClass::Source,
+            "Logical relation facts are duplicated or out of canonical order.",
+            "Regenerate the plan file without editing exact relation records.",
+        ),
+        diagnostic(
+            "change_plan_file_owner_consistency",
+            DiagnosticClass::Source,
+            "Logical owner classes or dimensions disagree with the exact binding change.",
+            "Reject the file and regenerate it from the prepared candidate.",
+        ),
+        diagnostic(
+            "change_plan_file_dependency_object",
+            DiagnosticClass::Source,
+            "A logical dependency value disagrees with its object identity.",
+            "Reject the file and regenerate it from the prepared candidate.",
+        ),
+        diagnostic(
+            "change_plan_file_retirement_object",
+            DiagnosticClass::Source,
+            "A logical retirement value disagrees with its object identity.",
+            "Reject the file and regenerate it from the prepared candidate.",
         ),
         diagnostic(
             "change_authored_stale_base",
@@ -1971,10 +2341,28 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Refresh status and rebuild the request against the observed revision.",
         ),
         diagnostic(
+            "change_authored_allocation_records",
+            DiagnosticClass::Resource,
+            "Logical allocation-record reservation failed within declared admission.",
+            "Reduce allocated identities or available memory and retry planning.",
+        ),
+        diagnostic(
+            "change_authored_allocation_projection",
+            DiagnosticClass::Corrupt,
+            "Authored lowering lost a normalized request-local allocation.",
+            "Retain the request and use a verified executable.",
+        ),
+        diagnostic(
+            "change_authored_dependency_before",
+            DiagnosticClass::Corrupt,
+            "Authored dependency lowering lost its exact base binding.",
+            "Preserve the repository and run deep doctor verification.",
+        ),
+        diagnostic(
             "change_stale_base",
             DiagnosticClass::Semantic,
             "HEAD changed after preparation and before publication.",
-            "Refresh status, re-plan the request, and review its new plan digest.",
+            "Refresh status, re-plan the request, and review its new plan token.",
         ),
         diagnostic(
             "change_expression_inventory",
@@ -2853,8 +3241,33 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ),
                     ("request-record", "request".to_owned()),
                     ("plan-prefix", "plan_".to_owned()),
+                    ("plan-hex-characters", "128".to_owned()),
+                    (
+                        "request-commitment",
+                        AUTHORED_CHANGE_CODEC_IDENTITY.to_owned(),
+                    ),
+                    (
+                        "prepared-plan",
+                        LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY.to_owned(),
+                    ),
+                    ("plan-output-action", "plan-only".to_owned()),
                 ],
             )?);
+            for descriptor in LOGICAL_PLAN_RECORD_DESCRIPTORS {
+                records.push(compact_record(
+                    "change.plan-record",
+                    &[("name", descriptor.name.to_owned())],
+                )?);
+                for field in descriptor.fields {
+                    records.push(compact_record(
+                        "change.plan-record-field",
+                        &[
+                            ("record", descriptor.name.to_owned()),
+                            ("name", (*field).to_owned()),
+                        ],
+                    )?);
+                }
+            }
             for descriptor in COMPACT_CHANGE_OPERATION_DESCRIPTORS {
                 records.push(compact_record(
                     "change.operation",

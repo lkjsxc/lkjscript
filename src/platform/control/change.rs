@@ -19,7 +19,9 @@ use std::fmt;
 use std::str::FromStr;
 
 pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-3";
-pub const CHANGE_PLAN_DIGEST_DOMAIN: &str = "lkjscript.change-plan.v4";
+pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change-codec-4";
+pub const AUTHORED_CHANGE_CODEC_VERSION: u16 = 4;
+pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
     ("private", DeclarationVisibility::Private),
@@ -492,7 +494,7 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
             },
         ],
         direct: Some(CompactChangeDirectOperation {
-            plan_usage: "change plan rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT]",
+            plan_usage: "change plan rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT] [--output PATH]",
             apply_usage: "change apply rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT] --plan PLAN",
         }),
     },
@@ -677,50 +679,32 @@ pub const COMPACT_EXPRESSION_FORMS: &[&str] = &[
 ];
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub(crate) struct ChangePlanDigest([u8; 32]);
+pub(crate) struct ChangeRequestCommitment([u8; 32]);
 
-impl fmt::Display for ChangePlanDigest {
+impl ChangeRequestCommitment {
+    pub(crate) const fn from_bytes(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    pub(crate) const fn bytes(self) -> [u8; 32] {
+        self.0
+    }
+}
+
+impl fmt::Display for ChangeRequestCommitment {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("plan_")?;
+        formatter.write_str("request_")?;
         formatter.write_str(&crate::platform::semantic_id::encode_hex(&self.0))
     }
 }
 
-impl FromStr for ChangePlanDigest {
-    type Err = Diagnostic;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        let encoded = value.strip_prefix("plan_").ok_or_else(|| {
-            Diagnostic::new(
-                DiagnosticClass::Source,
-                "change_plan_domain",
-                "reviewed plan digest must start with 'plan_'",
-            )
-        })?;
-        if encoded.len() != 64 {
-            return Err(Diagnostic::new(
-                DiagnosticClass::Source,
-                "change_plan_length",
-                "reviewed plan digest must contain 64 lowercase hexadecimal characters",
-            ));
-        }
-        let mut bytes = [0_u8; 32];
-        for (index, pair) in encoded.as_bytes().as_chunks::<2>().0.iter().enumerate() {
-            let high = lower_hex(pair[0]).ok_or_else(|| invalid_plan_hex(encoded))?;
-            let low = lower_hex(pair[1]).ok_or_else(|| invalid_plan_hex(encoded))?;
-            bytes[index] = (high << 4) | low;
-        }
-        Ok(Self(bytes))
-    }
-}
-
 /// One transport-neutral public request. Semantic operations remain owned by the change engine;
-/// publication options and the reviewed-plan digest remain operational control data.
+/// publication options and the request commitment remain operational control data.
 #[derive(Clone, Debug)]
 pub(crate) struct NormalizedChangeRequest {
     pub semantic: AuthoredChangeSet,
     pub options: PublicationOptions,
-    pub plan: ChangePlanDigest,
+    pub request_commitment: ChangeRequestCommitment,
 }
 
 pub(crate) fn decode_compact_change(
@@ -1435,43 +1419,27 @@ pub(crate) fn normalize_change_request(
             "intent exceeds its 4096-byte operational bound",
         ));
     }
-    let plan = compact_change_plan_digest(&semantic, &options)?;
+    let request_commitment = change_request_commitment(&semantic, &options)?;
     Ok(NormalizedChangeRequest {
         semantic,
         options,
-        plan,
+        request_commitment,
     })
 }
 
-fn compact_change_plan_digest(
+fn change_request_commitment(
     request: &AuthoredChangeSet,
     options: &PublicationOptions,
-) -> Result<ChangePlanDigest, Diagnostic> {
+) -> Result<ChangeRequestCommitment, Diagnostic> {
     let intent = crate::platform::change::canonical_authored_intent_bytes(request)?;
     let budget = crate::platform::change::canonical_authored_budget_bytes(request.budget)?;
-    let mut hasher = blake3::Hasher::new_derive_key(CHANGE_PLAN_DIGEST_DOMAIN);
-    hash_digest_field(&mut hasher, COMPACT_CHANGE_CONTRACT_IDENTITY.as_bytes())?;
+    let mut hasher = blake3::Hasher::new_derive_key(CHANGE_REQUEST_COMMITMENT_DOMAIN);
+    hash_digest_field(&mut hasher, AUTHORED_CHANGE_CODEC_IDENTITY.as_bytes())?;
     hash_digest_field(&mut hasher, &intent)?;
     hash_digest_field(&mut hasher, &budget)?;
     hash_optional_digest_field(&mut hasher, options.idempotency_key.as_deref())?;
     hash_optional_digest_field(&mut hasher, options.intent.as_deref())?;
-    Ok(ChangePlanDigest(*hasher.finalize().as_bytes()))
-}
-
-const fn lower_hex(value: u8) -> Option<u8> {
-    match value {
-        b'0'..=b'9' => Some(value - b'0'),
-        b'a'..=b'f' => Some(value - b'a' + 10),
-        _ => None,
-    }
-}
-
-fn invalid_plan_hex(value: &str) -> Diagnostic {
-    Diagnostic::new(
-        DiagnosticClass::Source,
-        "change_plan_hex",
-        format!("reviewed plan digest '{value}' is not canonical lowercase hexadecimal"),
-    )
+    Ok(ChangeRequestCommitment(*hasher.finalize().as_bytes()))
 }
 
 fn hash_optional_digest_field(
@@ -1494,8 +1462,8 @@ fn hash_digest_field(hasher: &mut blake3::Hasher, value: &[u8]) -> Result<(), Di
     let length = u64::try_from(value.len()).map_err(|_| {
         Diagnostic::new(
             DiagnosticClass::Resource,
-            "change_plan_field_length",
-            "normalized plan field exceeds its digest length domain",
+            "change_request_commitment_field_length",
+            "normalized request commitment field exceeds its digest length domain",
         )
     })?;
     hasher.update(&length.to_be_bytes());
@@ -1920,7 +1888,7 @@ mod tests {
             Some("connected-1")
         );
         let repeated = decode_compact_change("other.lk", input.as_bytes()).unwrap();
-        assert_eq!(decoded.plan, repeated.plan);
+        assert_eq!(decoded.request_commitment, repeated.request_commitment);
     }
 
     #[test]
@@ -2121,7 +2089,7 @@ mod tests {
     }
 
     #[test]
-    fn reviewed_plan_binds_budget_and_operational_options() {
+    fn reviewed_change_plan_request_commitment_binds_budget_and_operational_options() {
         let input = format!(
             "request base={}\ncreate.module as=$module name=module\n",
             revision()
@@ -2131,8 +2099,8 @@ mod tests {
         let mut budget_changed = decoded.semantic.clone();
         budget_changed.budget.canonical_reads.maximum_bytes -= 1;
         assert_ne!(
-            decoded.plan,
-            compact_change_plan_digest(&budget_changed, &decoded.options).unwrap()
+            decoded.request_commitment,
+            change_request_commitment(&budget_changed, &decoded.options).unwrap()
         );
 
         let options_changed = PublicationOptions {
@@ -2140,8 +2108,8 @@ mod tests {
             intent: None,
         };
         assert_ne!(
-            decoded.plan,
-            compact_change_plan_digest(&decoded.semantic, &options_changed).unwrap()
+            decoded.request_commitment,
+            change_request_commitment(&decoded.semantic, &options_changed).unwrap()
         );
     }
 }

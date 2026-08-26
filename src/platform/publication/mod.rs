@@ -16,6 +16,7 @@ mod repository;
 mod revision;
 mod transaction;
 
+pub(crate) use diff::validate_owner_entry;
 pub use diff::{
     DependencyDiffEntry, OwnerChangeClass, OwnerDiffEntry, RetirementDiffEntry, SemanticDiff,
     SemanticDiffBody, SummaryDimensions,

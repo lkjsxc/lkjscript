@@ -8,9 +8,11 @@ use super::{
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    ExactOwnerKey, OwnerKey, OwnerKind, PropagationClass, RelationEndpoint, RelationKind,
+    EncodedOwnerKey, ExactOwnerKey, OwnerKey, OwnerKind, PropagationClass, RelationEndpoint,
+    RelationKind,
 };
 use crate::platform::witness::{OwnerSummary, OwnershipEntry, OwnershipParent};
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -73,12 +75,67 @@ pub enum ImpactReasonKind {
     TestBehavior,
 }
 
+impl ImpactReasonKind {
+    pub const ALL: [Self; 4] = [
+        Self::DirectSemanticChange,
+        Self::DependencyBinding,
+        Self::ValidationDependency,
+        Self::TestBehavior,
+    ];
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::DirectSemanticChange => "direct_semantic_change",
+            Self::DependencyBinding => "dependency_binding",
+            Self::ValidationDependency => "validation_dependency",
+            Self::TestBehavior => "test_behavior",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|kind| kind.name() == value)
+    }
+
+    const fn order(self) -> u8 {
+        match self {
+            Self::DirectSemanticChange => 1,
+            Self::DependencyBinding => 2,
+            Self::ValidationDependency => 3,
+            Self::TestBehavior => 4,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct ImpactReason {
     pub kind: ImpactReasonKind,
     pub source: OwnerKey,
     pub target: OwnerKey,
     pub relation: Option<RelationKind>,
+}
+
+impl ImpactReason {
+    pub fn logical_cmp(&self, other: &Self) -> Ordering {
+        self.kind
+            .order()
+            .cmp(&other.kind.order())
+            .then_with(|| {
+                EncodedOwnerKey::new(self.source).cmp(&EncodedOwnerKey::new(other.source))
+            })
+            .then_with(|| {
+                EncodedOwnerKey::new(self.target).cmp(&EncodedOwnerKey::new(other.target))
+            })
+            .then_with(|| relation_order(self.relation).cmp(&relation_order(other.relation)))
+    }
+}
+
+fn relation_order(relation: Option<RelationKind>) -> usize {
+    relation.map_or(0, |relation| {
+        RelationKind::ALL
+            .iter()
+            .position(|candidate| *candidate == relation)
+            .map_or(usize::MAX, |index| index.saturating_add(1))
+    })
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -400,8 +457,9 @@ pub(crate) fn plan_impact_and_summaries_with_admission<
     }
     plan.work.witness_reads = ownership.work();
     plan.work.witness_reads.add(relations.work());
-    plan.reasons.sort_unstable();
-    plan.reasons.dedup();
+    plan.reasons.sort_unstable_by(ImpactReason::logical_cmp);
+    plan.reasons
+        .dedup_by(|left, right| left.logical_cmp(right).is_eq());
     let final_relation_limit = remaining_relations(
         admission.maximum_relation_edges,
         initial

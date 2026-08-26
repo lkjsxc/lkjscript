@@ -11,6 +11,7 @@ mod budget;
 mod delta;
 mod derived;
 mod impact;
+mod logical_plan;
 mod overlay;
 mod prepare;
 mod relation_view;
@@ -42,6 +43,9 @@ pub use derived::{DerivedDelta, DerivedValueEdit, RelationDelta, derive_local_de
 pub use impact::{
     ImpactPlan, ImpactReason, ImpactReasonKind, ImpactWork, PlannedSummaries,
     SummaryDimensionChange, plan_impact_and_summaries, summary_dimension_change,
+};
+pub use logical_plan::{
+    AuthoredAllocation, LogicalChangePlanEvidence, LogicalDependencyValues, LogicalRetirementValues,
 };
 pub use overlay::KernelOverlay;
 pub use prepare::{
