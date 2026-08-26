@@ -70,9 +70,12 @@ unknown-entry counts, and an integrity-bound plan digest. It deliberately report
 `destructive_ready: false` and names missing revision-pin, active-reader-lease, and
 registered-backup-root authority; it never deletes data.
 
-Compact change contract `lkjscript-change-records-3` is the released change boundary. `change
-plan` and `change apply --plan DIGEST` share the normalized typed lowering and publication path,
-require an explicit revision, and return deterministic bounded records. The exposed subset has 13
+Compact change contract `lkjscript-change-records-3` is the released authored-request boundary.
+`change plan [--output PATH]` and `change apply --plan TOKEN` share the normalized typed lowering
+and publication path, require an explicit revision, and return deterministic bounded records. The
+current `plan_` token contains one 32-byte pre-repository request commitment and one 32-byte
+prepared logical-plan commitment; predecessor request-only tokens are rejected. The exposed
+subset has 13
 semantic operations, 49 operation fields, 15 type forms, and 10 expression forms listed by focused
 capabilities. One exhaustive typed descriptor inventory owns every operation's ordered fields,
 required/optional classification, form token, and direct-form marker; decoding and registry
@@ -83,9 +86,9 @@ Connected creation and flat expression edges allocate identities in one request;
 body replacement retires the prior expression/binding closure. The private authored JSON adapter
 and generated schema were deleted, and predecessor JSON change requests reject without advancing
 HEAD. An explicit bounded codec with fixed tags, big-endian lengths, and typed fixed-width
-identities owns normalized request hashing. Request-local label spelling, operational budgets,
-idempotency keys, and intent do not perturb durable allocations; the reviewed plan separately binds
-the exact budget and operational options. Authored operation and list order remains
+identities owns the request commitment. Request-local label spelling, operational budgets,
+idempotency keys, and intent do not perturb durable allocations; the request commitment binds the
+exact budget and operational options. Authored operation and list order remains
 allocation-significant even when lowering stores a collection as keyed graph relations.
 `change plan rename.owner --base REVISION --owner OWNER --name NAME` and the corresponding apply
 form with the exact reviewed `--plan` accept one exact typed owner plus optional idempotency and
@@ -93,10 +96,22 @@ intent. This direct adapter and its equivalent compact record request converge t
 transport-neutral typed request and publication options before plan comparison, repository access,
 preparation, response rendering, or publication. The other 12 public operations remain
 record-only.
-Exact leaf-owner deletion requires `policy=reject`; it never infers an ownership closure. Reviewed
-owned-closure deletion remains unsupported until impact output binds every removed owner and
-relation. The executable registry publishes its exact required field forms. A leaf with live
-references remains rejected unless the same reviewed request removes those exact relations.
+
+Authored preparation now returns one typed logical review projection beside the prepared
+publication. Contract `lkjscript-logical-change-plan-1` streams exact candidate/base/state
+bindings, label-free allocation ordinals, semantic owner/type/dependency/retirement changes,
+removed/added relations, validation owners, selected tests, reasons, and counts through the same
+canonical encoder used for its prepared commitment. The optional external file is bounded to
+740,018 records and 303,377,551 bytes, is written by private sibling stage plus synchronization and
+atomic rename, and is strictly decodable. It never enters repository state. Witness edits, summary
+refresh, compiler units, physical layout, receipt work, paths, and timing remain operational
+evidence outside review identity.
+
+Exact leaf-owner deletion requires `policy=reject`; it never infers an ownership closure. Public
+owned-closure deletion remains unsupported even though the logical plan now supplies its exact
+removed-owner/relation review prerequisite. The executable registry publishes its exact required
+field forms. A leaf with live references remains rejected unless the same reviewed request removes
+those exact relations.
 Seven semantic preconditions are public: exact owner existence, absence, name, and parent;
 namespace absence and exact binding; and exact dependency binding by package, semantic revision,
 and logical package revision. Physical roots and encoded or derived object digests are not accepted

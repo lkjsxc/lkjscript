@@ -1,0 +1,137 @@
+{
+  "evidence_contract_version": 1,
+  "campaign": "202608261448-review-bound-logical-change-plan",
+  "captured_utc": "2026-08-26T08:21:18Z",
+  "source": {
+    "implementation_commit": "b8a1cf3bc8e8a21c8b188f4d6613ec1e4bfb81e4",
+    "implementation_tree": "646f753b713b7c45e0f5607ab26ec26226167673",
+    "branch": "main",
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+    "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+    "platform": "Linux 7.0.0-29-generic x86_64 GNU/Linux",
+    "logical_cpus": 16,
+    "page_bytes": 4096,
+    "release_binary": {
+      "path": "target/release/lkjscript",
+      "bytes": 17861664,
+      "sha256": "21bb0fc9643a5f6f3845d180cbac17ecfc324b2b5f4ebe284a5adb31530535c2"
+    },
+    "release_test_binary": {
+      "bytes": 4626952,
+      "sha256": "9f98030eabcaddbf45d9363a14dd10263aed0232368cb6bd43b537bcc1fbdd4f"
+    }
+  },
+  "classification": {
+    "build_profile": "release",
+    "build_cache": "incremental release recompile followed by a new test process",
+    "filesystem_cache": "uncontrolled",
+    "sample_count": 1,
+    "cpu_time": "unavailable because /usr/bin/time is absent",
+    "filesystem_syscall_count": "unavailable",
+    "provider_telemetry": "unavailable",
+    "retry_count": 0
+  },
+  "scale_fixture": {
+    "construction": "public compact change request produced by the first-party release integration test",
+    "request_records": 9621,
+    "request_bytes": 549876,
+    "authored_operations": 502,
+    "topology": {
+      "background_modules": 500,
+      "records": 1,
+      "fields": 1,
+      "base_type_fragments": 119,
+      "payload_type_fragments": 4500,
+      "join_type_fragments": 4499,
+      "maximum_type_depth": "bounded balanced topology; exact depth not instrumented"
+    },
+    "logical_plan": {
+      "admission_maximum_records": 740018,
+      "admission_maximum_bytes": 303377551,
+      "maximum_record_bytes": 65536,
+      "allocations": 502,
+      "owner_changes": 502,
+      "type_additions": 9125,
+      "dependency_changes": 0,
+      "retirement_changes": 0,
+      "relations_removed": 0,
+      "relations_added": 2,
+      "structural_validation_owners": 502,
+      "semantic_validation_owners": 2,
+      "selected_tests": 0,
+      "impact_reasons": 2,
+      "records": 10655,
+      "bytes": 1491596,
+      "prepared_commitment": "prepared_2b24868a22fa812637caf8bddd2769cd5496501563edf6061c40f66771c84a66",
+      "sha256": "deee3b335fb09a2d879f21443dff18667b4f9ba86aba6375aa494e0f802cb256"
+    },
+    "without_export": {
+      "wall_microseconds": 2362221,
+      "stdout_records": 512,
+      "stdout_bytes": 35681,
+      "stdout_sha256": "e1a73c3464dcd919827bb9b2b36fafc2aaa1202cd76ae81e21ae66396b202598"
+    },
+    "with_export": {
+      "wall_microseconds": 2385771,
+      "stdout_records": 513,
+      "stdout_bytes": 35778,
+      "stdout_sha256": "42fecb47436220f601ef9350120750347934ac3faf7ca158c03f9e2c248aa63d",
+      "output_bytes_written": 1491596,
+      "explicit_sync_points_in_writer": 2,
+      "sync_syscall_count": "unavailable"
+    },
+    "peak_rss_kib": 4792,
+    "peak_rss_source": "Linux /proc/self/status VmHWM for the release test process",
+    "repository_bytes_written": 0,
+    "repository_proof": "exact path-to-content-digest inventory and HEAD equal before, after no-export, and after export",
+    "command": "LKJSCRIPT_REVIEW_PLAN_EVIDENCE_DIR=.artifacts/campaign-202608261448/scale cargo test --release --locked --test public_cli reviewed_change_plan_scale_streams_detail_beyond_stdout_envelope -- --ignored --nocapture",
+    "command_count": 3,
+    "artifacts": {
+      "request": {
+        "path": ".artifacts/campaign-202608261448/scale/scale-request.lkjc",
+        "sha256": "c3730cceae4f03538610b010391e17b42ded7e458a8b15053dea6779c73c47ef"
+      },
+      "plan": {
+        "path": ".artifacts/campaign-202608261448/scale/scale.logical-plan",
+        "sha256": "deee3b335fb09a2d879f21443dff18667b4f9ba86aba6375aa494e0f802cb256"
+      },
+      "log": {
+        "path": ".artifacts/campaign-202608261448/plan-scale-release.log",
+        "bytes": 671,
+        "sha256": "f98d86a9bfdaa02282f7241d81a73215f49139922e3219ee9ff5555975ab467e"
+      }
+    }
+  },
+  "small_workflow": {
+    "description": "copied release binary, direct rename plan with external output, then apply",
+    "plan_wall_microseconds": 7190,
+    "apply_wall_microseconds": 15108,
+    "plan_stdout_bytes": 1732,
+    "plan_stdout_records": 11,
+    "apply_stdout_bytes": 1416,
+    "apply_stdout_records": 9,
+    "plan_file_bytes": 3721,
+    "plan_file_records": 20,
+    "repository_bytes_before_plan": 9586,
+    "repository_bytes_after_plan": 9586,
+    "repository_inventory_equal": true,
+    "command_count": 5,
+    "retry_count": 0,
+    "plan_file_sha256": "ed72353067942e99c79ec7d832075a4af0298b95bffc083351bb9dbba7a981ab",
+    "plan_stdout_sha256": "d4cfdb9f35d1d7f351d1e18ce58cadcd12c2d4a3d879789cba4ef1bf6819cfc9",
+    "apply_stdout_sha256": "7550a1ee4594cb371708ee0bca015128a026bec6b3afb3a601a3ab09bfbe1110",
+    "receipt": "receipt_object_15171f6e5d4cb43657e6a699a511029879d36037a53a6c9ffb8c758703d98df3",
+    "raw_log": {
+      "path": ".artifacts/campaign-202608261448/small-workflow-final.log",
+      "bytes": 797,
+      "sha256": "a0ecfe47b2ea14722aeda282c60db756d502de43bb600787d561a9aaeddbef79"
+    }
+  },
+  "limitations": [
+    "The scale observation is one topology and one warm-filesystem-cache sample, not a distribution.",
+    "VmHWM is process-wide and does not isolate export-only memory; code structure and bounded sink tests prove no complete-file byte buffer.",
+    "CPU time, exact filesystem calls, and per-sync latency were unavailable.",
+    "The current harness has no two-layout accepted-repository fixture for end-to-end physical page/pack independence; lower-level logical-state, persistent-map, token exclusion, and label-independence tests remain the retained evidence.",
+    "No provider-token, cache, request, cost, or monetary claim is made."
+  ]
+}

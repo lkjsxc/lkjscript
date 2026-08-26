@@ -156,8 +156,9 @@ spelling.
 
 ## Public change protocol
 
-`change plan (--input RECORDS | --input-file PATH)` and `change apply ... --plan DIGEST` accept flat
-UTF-8 records under contract `lkjscript-change-records-3`. A request begins with exactly one
+`change plan (--input RECORDS | --input-file PATH) [--output PATH]` and
+`change apply ... --plan TOKEN` accept flat UTF-8 records under contract
+`lkjscript-change-records-3`. A request begins with exactly one
 `request base=REVISION` record and may add bounded `idempotency` and nonsemantic `intent` fields.
 Every later record is a closed semantic precondition, operation, type fragment, expression
 fragment, or indexed edge. There is no indentation meaning, implicit scalar typing, duplicate
@@ -166,7 +167,7 @@ field, macro, include, or JSON fallback.
 The same public command also provides one direct single-operation adapter:
 
 ```text
-change plan rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT]
+change plan rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT] [--output PATH]
 change apply rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT] --plan PLAN
 ```
 
@@ -175,13 +176,45 @@ Direct flags construct the same typed authored request and publication options a
 `request` plus `rename.owner` record pair; they do not synthesize or reparse compact text.
 
 `plan` parses, resolves fragments, lowers to the typed authored model, allocates request-local
-identities, performs impact analysis and validation, and returns a `plan_` digest plus the predicted
-revision, semantic diff, compact counts, validation work, allocation map, and predicted receipt and
-revision-record identities. It publishes nothing and reports no durable receipt path. `apply`
-renormalizes and reprepares the input through the same path, rejects a mismatched reviewed digest
-before project discovery or repository access, and then atomically publishes or reports a stale
-base without partial visibility. Both transports require an explicit exact base, and direct and
-record inputs converge before plan comparison, preparation, response rendering, or publication.
+identities, and prepares the candidate exactly once through canonical delta construction, impact
+analysis, validation, and required test selection. It returns one canonical `plan_` token followed
+by 128 lowercase hexadecimal characters. The first 64 characters are the request commitment to
+normalized authored intent, exact declared budgets, idempotency, and intent; the second 64 are the
+prepared-plan commitment to the canonical logical-plan records. The former 64-character
+request-only token is a predecessor contract and is rejected.
+
+`apply` strictly parses the token, renormalizes the authored request, and compares the request
+component before project discovery or repository access. Only an equal request is opened and
+reprepared against its exact base. Apply renders the same logical plan and compares the prepared
+component before calling `GraphRepository::publish`; the existing publication-lock base recheck
+then either advances HEAD once or reports stale authority. Request and prepared-plan mismatches are
+distinct diagnostics and never publish. Both adapters converge before either commitment,
+repository access, preparation, response rendering, or publication.
+
+With `--output`, plan streams contract `lkjscript-logical-change-plan-1` to an external canonical
+file while hashing the same pre-trailer records. Its closed records bind interpreting contracts,
+repository/package/base/result/state identities, request controls, transaction and semantic-diff
+summaries, typed allocation ordinals, every exact owner/type/dependency/retirement change, every
+removed and added relation, structural and semantic validation owners, selected tests, sorted
+logical impact reasons, and derived counts. The final non-hashed record repeats both commitments
+and the complete token. Exhaustive record and field vocabulary is executable-owned by
+`capabilities --section change`, not duplicated here.
+
+Witness edit programs, summary refresh, compiler units, cache/storage layout, staged objects,
+receipt/revision object digests, timing, filesystem paths, output status, and request-local symbol
+spelling are operational or presentation facts and do not enter the prepared-plan commitment.
+The strict streaming decoder rejects unknown, duplicate, noncanonical, out-of-order, malformed,
+foreign-domain, overflowing, truncated, trailing, or digest-inconsistent input.
+
+Plan output has an independent ceiling of 740,018 records and 303,377,551 bytes, with at most
+65,536 bytes per physical record. Those ceilings cover every logical fact selectable under the
+default change admissions; a request using a larger internal admission can prepare successfully
+but its explicit output fails rather than truncates if this separate boundary is exceeded. The
+writer rejects targets at or below the project root, symlinks and non-regular targets; uses one
+private sibling stage, synchronization, atomic rename, and parent synchronization; reports
+`unchanged` for byte-identical existing output; and removes only its own failed stage. Output path
+and publication status affect neither commitment. Planning and output failure leave repository
+content and HEAD unchanged, and the plan file is never an apply input or accepted authority.
 
 The executable sections `capabilities --section change`, `type`, and `expression` are the only
 public vocabulary owner. The current compact subset includes module, record, variant, pure
@@ -219,13 +252,15 @@ Selectors lower to typed exact references before validation; record spelling is 
 graph authority.
 
 Allocation is deterministic from repository, exact base, and normalized authored intent;
-operational budgets, idempotency, and intent are bound by the reviewed plan without perturbing
+operational budgets, idempotency, and intent are bound by the request commitment without perturbing
 allocated identities. Plan and apply return equal complete symbol maps. Function-body replacement
-retires the exact old expression/binding ownership closure in the same semantic change. Raw JSON,
+retires the exact old expression/binding ownership closure in the same semantic change, and the
+logical plan lists each removed owner and relation explicitly. Raw JSON,
 the former `--request`/`--request-file` grammar, and `--dry-run`/`--commit` are rejected before
-publication. Owned-closure deletion remains unavailable until an exported typed impact plan lists
-and binds every removed owner and relation. Large external value files, direct forms for the other
-12 operations, and broad result export are not yet exposed by this subset.
+publication. Public owned-closure deletion remains unavailable; this plan contract supplies its
+review-evidence prerequisite but does not define cascade policy or reference repair. Large
+external value files, direct forms for the other 12 operations, and broad result export are not yet
+exposed by this subset.
 
 ## Drafts, history, and packages
 

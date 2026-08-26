@@ -19,6 +19,24 @@ The result and its stateless logical continuation are transient projections. Thi
 enter the predecessor workspace/query engine, reconstruct the complete graph, or read or write a
 query index. The larger retained pipeline below still serves out-of-scope predecessor consumers.
 
+Normalized authored change has a separate review boundary:
+
+```text
+records or direct flags -> typed authored request -> request commitment
+                        -> revision-pinned authored preparation
+                        -> prepared publication + typed logical review evidence
+                        -> one canonical record stream -> prepared-plan commitment
+                           plan: optional external atomic file, no repository write
+                           apply: compare both components -> GraphRepository::publish
+```
+
+Change analysis owns canonical and relation deltas, impact selection, and validation/test facts.
+Authored preparation moves the selected exact facts into the logical review projection beside the
+generic prepared publication. Control owns request/token/plan codecs; CLI owns paths and bounded
+responses; publication remains independent of request-local labels and owns the only HEAD
+visibility point. Witness maintenance, summary refresh, compiler scheduling, and storage staging
+remain internal operational work rather than review records.
+
 ```text
 direct CLI / strict authored change / exact transaction
                          │
@@ -63,7 +81,7 @@ direct CLI / strict authored change / exact transaction
 | Layer | Current owner | Owns | Excludes |
 |---|---|---|---|
 | Canonical authority | `meaning.rs`, `graph.rs`, `revision.rs`, `repository.rs` | graph contract 4, stable semantic owners, persistent root pages, immutable revisions, semantic certificate, exact publication | source coordinates as authority, index bytes, bytecode, host handles |
-| Public development | `cli.rs`, `normalized_query.rs`, normalized publication/change modules | direct CLI v7, concise change v3, normalized query v3, revision-pinned compact reads | predecessor query aliases and request documents, raw storage edits |
+| Public development | `cli.rs`, `normalized_query.rs`, normalized publication/change modules | direct CLI v8, concise change v3, logical change plan v1, normalized query v3, revision-pinned compact reads | predecessor query aliases and request documents, raw storage edits |
 | Offline bootstrap | `bootstrap.rs` plus the embedded standard artifact | `new`, minimal/command recipes, built-in inspection/export, staged first publication | mutable template authority, network registry |
 | Derived semantics | `semantic_summary.rs`, private `semantic_query.rs` | persisted disposable module summaries, revision-bound reverse dependencies, invalidation-frontier oracle, private predecessor query indexes | normalized public query authority, a second accepted graph, an independent writer |
 | Review and recovery | `semantic_projection.rs`, repository backup/restore/retention preview | deterministic review, segmented exact backup, atomic restore, read-only cleanup inventory | writable text authority, canonical deletion |
@@ -114,7 +132,11 @@ fully validates the complete candidate.
 
 Either path produces one prepared validation bound to base root, result root, changed modules,
 updated module summaries, persistent semantic-fact root delta, semantic certificate, and
-validation facts. Eligible local preparation also carries a disposable exact-owner/name index
+validation facts. Authored preparation additionally retains the exact canonical owner/type/
+dependency/retirement delta, relation delta, structural and semantic validation owners, selected
+tests, and logical reasons as a typed review projection. It does not recompute those facts or make
+generic bootstrap publication depend on authored-control types. Eligible local preparation also
+carries a disposable exact-owner/name index
 delta bound to the same base and result. It loads or rebuilds the base revision's
 certificate-matching semantic-fact manifest, path-copies exact summary/test/reverse-fact edits,
 and rebinds the manifest to the predicted revision. Under

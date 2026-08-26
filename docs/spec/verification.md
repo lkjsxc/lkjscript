@@ -21,6 +21,14 @@ reference interpreter walks validated operation structures. Every graph-owned pa
 actual and expected expressions through both tiers, requires tier equality, then requires expected
 value equality. A missing, skipped, unavailable, exhausted, cancelled, or unrun check is not pass.
 
+Reviewed semantic changes retain an implementation-disjoint before/after oracle. Complete
+canonical reconstruction and relation extraction derive exact owner, type, dependency, retirement,
+and relation deltas without consulting the logical-plan encoder. Body-replacement fixtures compare
+the complete old owned expression/binding subtree and all removed/added relations with exported
+records. Complete validation and test-dependency analysis separately check exported structural and
+semantic owners, selected tests, and reasons. Mirroring production `ImpactPlan` is not by itself an
+oracle or a minimality proof.
+
 ## Profiles
 
 The contributor-only `lkjscript-dev check` command is the executable verification owner. Invoke it
@@ -65,10 +73,25 @@ draft separation/rebase, deterministic backup/restore, read-only retention-previ
 plan stability, predecessor rejection, and public output bounds. Retention-preview tests assert
 `destructive_ready: false`; they are not garbage-collection or compaction evidence.
 
+The logical-plan codec additionally requires one-field commitment sensitivity for every exported
+record category; strict token length/case/domain tests; canonical re-encoding; and rejection of
+truncation, mutation, malformed escaping, unknown or duplicate records/fields, keyed duplicates,
+wrong order, foreign typed identities, invalid optionality, overflow, an operational-record
+injection, trailer disagreement, and records after the trailer. Public tests prove direct/record
+byte equality, request mismatch before project discovery, prepared mismatch before publication,
+unchanged HEAD on output/mismatch failures, atomic external output behavior, predecessor-token
+rejection, and copied-release-binary plan/export/apply/inspect use.
+
 Scale evidence must name exact generated topology, revision, toolchain, platform, command, cold or
 warm cache state, wall/CPU/memory where available, storage growth, output bytes, semantic work
 counts, and limitations. Limit increases may not substitute for correcting a superlinear
 algorithm.
+
+Logical-plan scale evidence compares export disabled and enabled for the same request, crosses the
+10,000-record compact stdout envelope in the external plan file, strictly decodes the result, and
+proves an exact repository inventory and HEAD remain unchanged. The encoder must pass each
+canonical record directly through one checked meter, BLAKE3 state, and optional file sink; a full
+plan byte buffer or duplicate full fact sets is a verification failure.
 
 ## Claims
 

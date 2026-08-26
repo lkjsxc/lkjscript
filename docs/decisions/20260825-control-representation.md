@@ -7,7 +7,8 @@ Date: 2026-08-25 UTC.
 Partially implemented. Flat records, complete field discovery for the 13-operation public subset,
 normalized plan/apply, connected creation, flat expression edges, exact body replacement, compact
 output, predecessor JSON rejection, an explicit normalized request codec, label-independent
-allocation, and direct `rename.owner` flags are public. Broader authored-operation coverage,
+allocation, direct `rename.owner` flags, and a review-bound two-component logical plan are public.
+Broader authored-operation coverage,
 external large-value inputs, direct forms selected by maintained workflows, and complete workflow
 measurements remain required before the grammar is frozen.
 
@@ -30,7 +31,7 @@ program authority.
 - Use one deterministic escaping rule shared with compact result records.
 - Use `$name` for request-local semantic allocations and `@name` for notation-only type,
   expression, and member fragments. Symbol spelling is removed during normalization; typed ordinal
-  references, not labels, enter the normalized request digest.
+  references, not labels, enter canonical authored bytes and the request commitment.
 - Declare flat fragments in a mechanically resolvable order. A connected multi-owner change remains
   one request; expression and type trees do not require nested JSON braces.
 - Parse independent physical UTF-8 records with input-byte, record, record-byte, field, name, value,
@@ -41,7 +42,8 @@ program authority.
   optional projections.
 - Provide direct flags for common single operations, lowering to the same typed normalization and
   preparation path.
-- Bind every plan and apply to the exact semantic base and normalized request digest. Physical
+- Bind every plan and apply to the exact semantic base, normalized request commitment, and
+  prepared logical-plan commitment. Physical
   package transport, idempotency, and operational output choices remain typed control fields but do
   not enter accepted semantic meaning.
 - Retain JSON only as an explicit bounded projection for a demonstrated external integration. Do
@@ -67,6 +69,9 @@ program authority.
   names, required/optional status, typed forms, and direct-form discovery for the public subset.
 - Completed: expose direct `rename.owner` as a sibling adapter to the compact record decoder; both
   construct the same typed request and publication options before planning or repository access.
+- Completed: replace the request-only reviewed token with a request commitment plus a canonical
+  prepared-plan commitment, optional external plan output, strict decoding, and comparison before
+  publication.
 - Author connected expression subtrees through flat fragments rather than a low-level single-node
   replacement field.
 
@@ -102,9 +107,11 @@ names and forms. Parser source locations are retained only through planning and 
 Accepted graph bytes and revision identity are independent of the compact representation. Durable
 allocation hashes only normalized authored intent plus repository identity. Authored record and
 list order is allocation-significant, including where lowering stores keyed graph relations; this
-avoids a hidden second traversal and keeps operation ordering locally repairable. The reviewed plan
-also binds the exact multidimensional budget, idempotency key, and intent without making those
-fields semantic meaning. Before grammar freeze, reverse this ordering choice only if complete
+avoids a hidden second traversal and keeps operation ordering locally repairable. The request
+commitment binds the exact multidimensional budget, idempotency key, and intent without making
+those fields semantic meaning. The prepared-plan commitment separately binds exact semantic
+effects and exported validation/test scope while excluding replaceable operational strategy.
+Before grammar freeze, reverse this ordering choice only if complete
 workflow evidence shows material identity churn from harmless model reordering; reversal requires
 one explicit normalized request view and a new allocation-seed contract domain.
 
@@ -117,7 +124,7 @@ one explicit normalized request view and a new allocation-seed contract domain.
   without HEAD movement, complete old-body ownership retirement, and direct exact-owner rename
   from plan through inspection without repository source or a Rust toolchain.
 - Direct/record differential tests cover identical canonical authored bytes and byte-identical plan
-  responses with omitted or equal idempotency and intent. Direct malformed, absent-owner, stale,
+  tokens/files with omitted or equal idempotency and intent. Direct malformed, absent-owner, stale,
   and wrong-plan cases retain HEAD; wrong-plan rejection precedes project discovery.
 - Codec tests retain a golden authored-intent digest, prove label-renaming equality, budget
   separation, semantic-field and list-order sensitivity, undefined-symbol rejection, and depth

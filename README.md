@@ -78,9 +78,14 @@ create.module as=$notes name=notes
 create.record as=$note module=$notes name=Note visibility=public
 add.field as=$text record=$note name=text type=text
 EOF
-lkjscript --project ./hello change plan --input-file change.lkjc
+lkjscript --project ./hello change plan --input-file change.lkjc --output ./change.logical-plan
 lkjscript --project ./hello change apply --input-file change.lkjc --plan plan_...
 ```
+
+The returned token is `plan_` plus a request commitment and a prepared logical-plan commitment.
+The optional canonical file lists exact semantic effects and validation/test scope for review; it
+is external derived evidence, cannot be imported as program authority, and is not an apply input.
+Run `lkjscript capabilities --section change` for its exhaustive record vocabulary and limits.
 
 After publication, the executable can rediscover the allocated identities without the change
 receipt. Replace each placeholder with the exact ID or continuation returned by the preceding
@@ -118,9 +123,11 @@ lkjscript --project ./hello change apply rename.owner \
 Direct `--owner` is an exact `OwnerKey`; it does not accept a name or request-local symbol. Add
 equal `--idempotency KEY` and `--intent TEXT` values to both commands when those controls are used.
 
-`change plan` parses, normalizes, allocates, analyzes, and validates without publication.
-`change apply` reparses and reprepares the same typed request, requires the exact returned `plan_`
-digest, and publishes only after rechecking its explicit base. Raw JSON change requests and the
+`change plan` parses, normalizes, allocates, analyzes, and validates without publication. Optional
+`--output PATH` atomically writes the complete bounded logical plan outside the project and reports
+`published` or `unchanged`. `change apply` checks the token's request component before project
+discovery, reparses and reprepares the same typed request, checks its prepared-plan component, and
+publishes only after rechecking the explicit base. Raw JSON change requests and the
 former `--request`, `--dry-run`, and `--commit` grammar are rejected. The currently exposed compact
 operation/type/expression subset is discoverable from `capabilities --section change`, `type`, and
 `expression`; change discovery reports all 13 operations, all 49 operation fields and their forms,

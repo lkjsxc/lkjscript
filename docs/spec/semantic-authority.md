@@ -120,9 +120,10 @@ boundary for an existing normalized repository. The current normalized CLI entry
 publish are:
 
 - `new DEST --template minimal`, which creates initial authority in a private sibling stage; and
-- `change apply ... --plan DIGEST`, which publishes one exactly reviewed prepared change.
+- `change apply ... --plan TOKEN`, which publishes one exactly reviewed prepared change.
 
-`change plan`, status, inspection, normalized query, and capability discovery do not publish.
+`change plan`, including optional external logical-plan output, status, inspection, normalized
+query, and capability discovery do not publish.
 Draft, history merge, restore, package, check, build, run, review, service, worker, and doctor still
 target predecessor authority and cannot mutate a normalized repository; their normalized cutover
 remains required.
@@ -137,10 +138,21 @@ explicit multidimensional work budgets, but those are not public grammar until t
 public workflows exist.
 
 Plan and apply use the same parser, typed lowering, impact analysis, validation, predicted revision,
-semantic diff, and allocation path. Apply reparses and reprepares the request and requires the exact
-`plan_` digest before publication. Function-body replacement updates the function and retires its
-complete prior expression/binding ownership closure; it never leaves live unowned nodes. A stale or
-invalid request publishes nothing.
+semantic diff, and allocation path. The canonical `plan_` token combines a request commitment that
+can be checked before repository discovery with a prepared-plan commitment over the complete
+logical review projection. Apply reparses, checks the request component, reprepares the request,
+and checks the prepared component before publication. Function-body replacement updates the
+function and retires its complete prior expression/binding ownership closure; the logical plan
+lists those exact owner and relation removals and never leaves live unowned nodes. A stale,
+mismatched, exhausted, corrupt, or invalid request publishes nothing.
+
+The optional logical-plan file is deterministic derived evidence, not repository state or a second
+program authority. Its commitment covers exact semantic effects and exported validation/test
+scope. Request-local labels, witness maintenance, summary refresh, compiler scheduling, staged
+storage, physical roots/pages/packs, receipt work, timing, and filesystem paths remain outside
+review identity. Apply never trusts or imports file bytes: it recomputes the plan from accepted
+authority and the authored request. A complete external file may survive an interruption after its
+atomic rename without implying that HEAD advanced.
 
 Prepared publication binds the repository, package, exact base revision, canonical semantic root,
 dependency bindings, validation contract and evidence, semantic diff, transaction, and publication

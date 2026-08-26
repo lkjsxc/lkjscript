@@ -12,6 +12,38 @@ The historical environment was Linux `7.0.0-29-generic` x86-64, `rustc 1.96.0`, 
 CPU time, peak RSS, provider tokens/cache/requests/retries, and monetary telemetry were unavailable.
 No token or monetary result is inferred from byte counts.
 
+## Current review-bound logical-plan export
+
+At implementation commit `b8a1cf3bc8e8a21c8b188f4d6613ec1e4bfb81e4`, the explicit release-scale
+test prepared the same public change with export disabled and enabled. Its 9,621-record request
+created 500 empty background modules plus one record/field whose balanced type topology contained
+119 base, 4,500 payload, and 4,499 join fragments. The resulting logical plan contained 502 owner
+changes, 9,125 type additions, two added relations, 502 structural-validation owners, two
+semantic-validation owners, and two reasons; it selected no tests.
+
+| Observation | Export disabled | Export enabled |
+|---|---:|---:|
+| plan wall | 2.362 s | 2.386 s |
+| compact stdout | 35,681 bytes / 512 records | 35,778 bytes / 513 records |
+| external plan | none | 1,491,596 bytes / 10,655 records |
+| repository bytes written | 0 | 0 |
+
+The external plan crosses the compact response's 10,000-record boundary without raising that
+boundary or truncating detail. Linux `VmHWM` reported 4,792 KiB for the new release test process.
+The encoder renders each record once through a checked meter, BLAKE3 state, and optional
+file sink; it does not retain the complete file or clone the exported fact sets. The enabled sample
+adds one file synchronization and one parent-directory synchronization in the owned writer path;
+exact filesystem syscall telemetry was unavailable.
+
+A copied release binary also measured one direct rename: planning plus a 3,721-byte/20-record plan
+file took 7.190 ms, apply took 15.108 ms, and the project remained exactly 9,586 bytes with an equal
+path/content inventory across planning. These are single warm-cache observations, not latency or
+memory distributions. CPU time was unavailable because `/usr/bin/time` is absent; filesystem cache
+state was uncontrolled. Raw structured evidence, exact artifact SHA-256 values, commands, and
+limitations are retained in
+`docs/evidence/20260826-review-bound-logical-change-plan.json`; raw logs and files are under
+`.artifacts/campaign-202608261448/`.
+
 ## Current normalized semantic query locality
 
 At implementation commit `8ea897f7307d9726e57710c833a1596a9dd74127`, the release test

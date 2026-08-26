@@ -1,23 +1,25 @@
 # Evidence-gated roadmap
 
-Implemented work is intentionally absent. Meaning graph contract 4, direct CLI v7, binary-only
-minimal project creation, normalized change v3, normalized owner/name/relation query v3, batched
-persistent Merkle maps, exact-ID imports and targets, authenticated semantic-fact maps, four local
-transaction classes, and explicit rank-1 generics are current architecture.
+Implemented work is intentionally absent. Meaning graph contract 4, direct CLI v8, binary-only
+minimal project creation, normalized change v3 with review-bound logical plan v1, normalized
+owner/name/relation query v3, batched persistent Merkle maps, exact-ID imports and targets,
+authenticated semantic-fact maps, four local transaction classes, and explicit rank-1 generics are
+current architecture.
 
 Each remaining item requires a named maintained consumer, exact contract, independent oracle,
 measured reversal gate, and dependency-closed cutover/deletion plan.
 
-1. **Normalized command template and `check`/`build`/`run` maintained-consumer cutover.**
+1. **Public owned-closure deletion.** Consume the exact logical plan's removed-owner and
+   removed-relation evidence without implicit cascade or ambiguous reference repair. Define
+   closure selection, reject/repair policy, preconditions, diagnostics, and complete before/after
+   oracles as one destructive-semantic cutover. Do not infer closure from counts or operational
+   witness edits.
+2. **Normalized command template and `check`/`build`/`run` maintained-consumer cutover.**
    Define a normalized command recipe, migrate the standard package and `lkjournal` through one
    coherent dependency closure, and route the three released commands to normalized compiler and
    execution authority. Remove the predecessor bootstrap recipe, embedded-artifact assumptions,
    public readers, fixtures, and query-specific verification dependencies only after copied-binary
    clean/incremental and bytecode/reference equality pass.
-2. **Exact change-plan impact detail, then public impact projection.** Bind affected semantic
-   dimensions, owners, relations, validation scope, and deletion closure to the exact normalized
-   candidate plan. Expose a bounded read projection only after plan/apply use the same evidence.
-   Do not reintroduce generic `query impact OWNER` without a candidate change.
 3. **Bounded context traversal.** Select an explicit traversal contract and independently justify
    either a replay-safe stateless continuation or an explicit bounded output file. Prove canonical
    ordering, revision/selector binding, cancellation, locality, and full-oracle equality before
