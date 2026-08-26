@@ -28,10 +28,11 @@ An unknown command or option fails with the `cli_usage` diagnostic; no compatibi
 performed.
 
 The normalized public slice reads and writes accepted meaning only through `GraphRepository` APIs.
-Normalized `new` and `change apply` are its current accepted-authority operations. Draft, merge,
-restore, package, compiler, runtime, and deployment commands still target predecessor authority
-until direct cutover; their output cannot alter a normalized repository. Package staging, review,
-artifact output, query indexes, logs, and runtime deployments are not accepted program authority.
+Normalized `new` and `change apply` are its current accepted-authority operations; `status`, exact
+owner inspection, and normalized query are revision-pinned reads. Draft, merge, restore, package,
+compiler, runtime, and deployment commands still target predecessor authority until direct
+cutover; their output cannot alter a normalized repository. Package staging, review, artifact
+output, query indexes, logs, and runtime deployments are not accepted program authority.
 
 ## Direct command groups
 
@@ -71,13 +72,14 @@ reproduction compares the exported bytes with the maintained standard artifact.
 
 ## Finite response contract
 
-`capabilities`, normalized `new`, `status`, exact `inspect owner`, and `change` write deterministic
-compact line records and no stderr for a classified finite outcome. Records use one closed
-operation followed by unique `field=value` assignments and one escaping rule. Success begins with
-`result status=... command=...`; failure begins with `result status=failure` and contains bounded
-`diagnostic` records with class, code, message, and available source location. Remaining finite
-commands retain their predecessor JSON envelope only until direct cutover. Compact output excludes
-stack traces, complete schemas, passing-test lists, secrets, and child logs.
+`capabilities`, normalized `new`, `status`, exact `inspect owner`, `query`, and `change` write
+deterministic compact line records and no stderr for a classified finite outcome. Records use one
+closed operation followed by unique `field=value` assignments and one escaping rule. Success
+begins with `result status=... command=...`; failure begins with `result status=failure` and
+contains bounded `diagnostic` records with class, code, message, and available source location.
+Remaining finite commands retain their predecessor JSON envelope only until direct cutover.
+Compact output excludes stack traces, complete schemas, passing-test lists, secrets, and child
+logs.
 
 The hard finite-response limit is 4 MiB. Large bodies require explicit selection; growing results
 use budgets and continuations or publish bytes to an explicit output file. Project-bound reads
@@ -95,21 +97,62 @@ shutdown or failure.
 ## Inspection, queries, and bounds
 
 Normalized `status` covers project orientation, and `inspect owner KIND ID [--package PACKAGE]`
-reads one exact coarse owner summary at the observed revision. Other inspect and query actions are
-currently rejected for normalized repositories rather than falling back to predecessor readers.
-The eventual bounded relation, name, context, and impact query surface remains a cutover blocker.
-Owner selection uses typed stable identities; a name is a locator, not continuity.
+reads one exact coarse owner summary at the observed revision. Normalized query contract 3 has this
+exhaustive grammar:
 
-Growing queries have item, byte, work, depth, and fanout budgets. Defaults are 50 items, 64 KiB,
-100,000 work, depth 4, and fanout 1,000. Current hostile/resource maxima are 10,000 items, 4 MiB,
-10,000,000 work, depth 32, and fanout 10,000. Exhaustion is explicit and does not alter meaning.
+```text
+query owners [--kind KIND] [--limit N] [--bytes N] [--continuation TOKEN]
+query find CLASS NAME [--parent OWNER]
+query relations OWNER|package --direction incoming|outgoing [--kind KIND] [--limit N] [--bytes N] [--continuation TOKEN]
+```
 
-Ordering is independent of hash iteration and physical index position. A continuation binds the
-query contract, exact revision, normalized query, and cursor with a domain-separated integrity
-check. Changed or malformed inputs reject. Query indexes are disposable state. The broad relation
-index is revision-bound; exact owner/name queries use content-addressed local-index v3 shards named
-by a revision/root-bound manifest. Local accepted changes update touched exact shards by delta.
-Missing or corrupt state rebuilds from canonical authority.
+`capabilities query` is the executable-owned inventory for the three actions, accepted options,
+owner kinds, namespace classes, relation kinds, directions, limits, response fields, selector
+fields, and continuation metadata. `owners` reads live canonical owner bindings in encoded typed-ID
+order. An optional exact kind filter may produce an empty page with a continuation; its resume key
+is the last owner key visited so every page progresses. Named owner projections reproduce the
+canonical namespace class, name, and package or exact owner parent. Unnamed owners receive no
+synthesized name.
+
+`find` performs one case-sensitive canonical `Name` lookup in the committed namespace witness.
+Module and target classes are package-root and forbid `--parent`; every child namespace class
+requires one exact local parent of an admissible typed kind. Absence is a successful `match=false`
+result. A witness match is returned only after the live canonical owner reproduces the same owner
+key, class, parent, and name. Missing required evidence or disagreement is corruption, not a cache
+miss or no-match. Names remain mutable locators; stable typed owner identities express continuity.
+
+`relations` requires one direction and selects either one live exact local owner or the current
+package endpoint. Incoming reads use the committed reverse relation witness and outgoing reads use
+the forward witness. An exact kind filter narrows the map prefix. Keys, endpoint, direction, kind,
+and canonical empty values are revalidated while reading. Results retain separate package and
+owner endpoint fields, including exact foreign endpoints already present in accepted relations;
+query never opens an ambient foreign repository. A nonexistent local owner is a semantic failure,
+not an empty page.
+
+Every success names the project path and name, repository, package, exact observed revision,
+normalized query digest, registry digest, logical summary, and dimension-separated work. Reported
+work keeps map pages, map bytes, map entries, catalog lookups, store objects, store bytes,
+canonical records, witness records, and rendered output bytes separate. There is no public or
+internal scalar query work/fuel budget. The default page is 50 items and 64 KiB. Item limits are 1
+through 10,000; output limits are 1,536 bytes through 4 MiB and remain subject to the global compact
+response bounds. Resource exhaustion is typed and never alters repository state.
+
+Paged order is the canonical logical owner or relation key order, independent of hash iteration,
+insertion history, files, page coordinates, and cached indexes. A stateless `qcont_` continuation
+is at most 320 bytes and canonically binds query and continuation versions, repository, package,
+exact revision, operation, normalized selector and ordering digest, exclusive logical resume key,
+and a distinct integrity digest. Item and byte limits are excluded so a resumed page may select new
+valid limits. Malformed, padded, oversized, foreign, selector-mismatched, or stale tokens reject
+before semantic map traversal. No continuation file, session, daemon, cache record, or mutable
+cursor is created.
+
+Ordinary normalized query never reconstructs the complete graph, invokes the full relation oracle,
+rebuilds an index, repairs witness data, writes derived files, or advances HEAD. Complete canonical
+reconstruction and relation extraction remain independent test and doctor oracles. The predecessor
+actions `callers`, `callees`, `types`, `capabilities`, `context`, `impact`, and `request`, their JSON
+or file request forms, and predecessor continuations are rejected. Context traversal, generic
+impact, fuzzy search, historical revision query, and saved queries are not available under another
+spelling.
 
 ## Public change protocol
 

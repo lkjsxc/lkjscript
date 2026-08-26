@@ -122,9 +122,10 @@ publish are:
 - `new DEST --template minimal`, which creates initial authority in a private sibling stage; and
 - `change apply ... --plan DIGEST`, which publishes one exactly reviewed prepared change.
 
-`change plan`, status, inspection, and capability discovery do not publish. Draft, history merge,
-restore, package, check, build, run, review, service, worker, and doctor still target predecessor
-authority and cannot mutate a normalized repository; their normalized cutover remains required.
+`change plan`, status, inspection, normalized query, and capability discovery do not publish.
+Draft, history merge, restore, package, check, build, run, review, service, worker, and doctor still
+target predecessor authority and cannot mutate a normalized repository; their normalized cutover
+remains required.
 
 A compact-record request carries an exact base, optional idempotency key, ordered high-level
 changes, and bounded nonsemantic intent. Direct `rename.owner` flags carry the equivalent exact
@@ -148,6 +149,20 @@ base, makes immutable semantic and evidence objects durable, publishes their bin
 HEAD once. HEAD locates both accepted meaning and the exact durable acceptance binding. Rebuilding
 derived witness maps, summaries, indexes, packs, or validation evidence does not silently change
 semantic meaning identity.
+
+Normalized public query opens one immutable current `RepositoryView` and retains its repository,
+package, and accepted-revision binding for the operation. Owner enumeration reads canonical owner
+bindings and owner objects. Exact name lookup uses the committed namespace witness only as a
+bounded locator, then requires the selected live canonical owner to reproduce the namespace key.
+Relation lookup reads the committed forward or reverse relation witness and strictly revalidates
+each selected key and empty value. These authenticated witnesses are required accepted read
+evidence, not independently editable meaning. Missing or inconsistent required evidence is
+corruption and is never silently rebuilt by query.
+
+Query results, query digests, and stateless logical continuations are transient projections. They
+cannot advance HEAD, create a draft, write an index, persist a cursor, or authorize a foreign
+repository read. Full canonical reconstruction and canonical relation extraction remain
+implementation-disjoint verification oracles rather than ordinary query dependencies.
 
 ## Outcomes, ordering, and failure
 

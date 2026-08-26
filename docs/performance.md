@@ -1,15 +1,57 @@
 # Performance and economy evidence
 
-Measurements are observations, not promises. Unless a row explicitly says otherwise, the retained
-numbers below predate meaning graph contracts 2, 3, and 4, persistent root pages, direct CLI v4, exact
-ID imports/targets, and explicit generics. They are historical baselines and must not be presented
-as current-contract performance. Two graph-4 release workflows at 10,000 empty background modules
-are retained below on opposite sides of the semantic-fact cutover; no current distribution,
-million-owner, or complete-service performance receipt exists yet.
+Measurements are observations, not promises. The normalized-query section is current for query
+contract 3 at its named commit. Unless another row explicitly says otherwise, the remaining
+numbers predate meaning graph contracts 2, 3, and 4, persistent root pages, direct CLI v7, exact-ID
+imports/targets, normalized query, or explicit generics. Those rows are historical baselines and
+must not be presented as current-contract performance. Two graph-4 release workflows at 10,000
+empty background modules are retained below on opposite sides of the semantic-fact cutover; no
+current distribution, million-owner, or complete-service performance receipt exists yet.
 
 The historical environment was Linux `7.0.0-29-generic` x86-64, `rustc 1.96.0`, Cargo 1.96.0.
 CPU time, peak RSS, provider tokens/cache/requests/retries, and monetary telemetry were unavailable.
 No token or monetary result is inferred from byte counts.
+
+## Current normalized semantic query locality
+
+At implementation commit `8ea897f7307d9726e57710c833a1596a9dd74127`, the release test
+`ten_thousand_owner_and_high_fanout_relation_pages_remain_logically_local` constructed 10,000
+live normalized owners and 9,999 canonical relations across persistent-map page boundaries. The
+fixture uses the normalized first-party in-process builder so public request generation does not
+dominate the locality measurement; an independent copied-release-binary test covers public
+correctness and no-write behavior.
+
+The command was `cargo test --release --locked --lib
+ten_thousand_owner_and_high_fanout_relation_pages_remain_logically_local -- --nocapture`. It ran
+on Linux `7.0.0-29-generic` x86-64 with Rust/Cargo 1.98.0, a warm release build, and a new
+test process. The process completed in 0.754 seconds real, 0.461 seconds user, and 0.170 seconds
+system time; Linux `VmHWM` reported 77,660 KiB peak RSS. `/usr/bin/time` was unavailable,
+so Bash's process timer supplied CPU time. Filesystem cache state was uncontrolled.
+
+| Scenario | Wall | Output bytes / records | Returned | Map pages / bytes / entries | Catalog / objects / store bytes | Canonical / witness | Continuation |
+|---|---:|---:|---:|---:|---:|---:|---|
+| first owner page | 707 us | 1,680 / 13 | 5 | 4 / 23,693 / 39 | 9 / 9 / 24,366 | 5 / 0 | yes |
+| middle owner page | 595 us | 1,724 / 13 | 5 | 3 / 24,070 / 48 | 8 / 8 / 24,815 | 5 / 0 | yes |
+| terminal owner page | 539 us | 1,472 / 12 | 5 | 3 / 23,422 / 36 | 8 / 8 / 24,167 | 5 / 0 | no |
+| empty filtered owner page | 909 us | 969 / 8 | 0 | 10 / 38,171 / 295 | 10 / 10 / 38,171 | 0 / 0 | yes |
+| resumed empty filtered page | 856 us | 966 / 8 | 0 | 9 / 36,982 / 275 | 9 / 9 / 36,982 | 0 / 0 | yes |
+| exact namespace find | 731 us | 857 / 8 | 1 | 9 / 28,674 / 137 | 11 / 11 / 28,900 | 2 / 1 | no |
+| first kind-prefixed relation page | 528 us | 2,229 / 13 | 5 | 4 / 22,543 / 39 | 5 / 5 / 22,620 | 1 / 5 | yes |
+| middle kind-prefixed relation page | 527 us | 2,229 / 13 | 5 | 4 / 22,753 / 49 | 5 / 5 / 22,830 | 1 / 5 | yes |
+
+Executable assertions bind exact find to bounded point reads, descend continuation pages from the
+exclusive logical lower bound, cap entries visited by the selected scan quantum plus lookahead,
+use a relation-kind map prefix, forbid the full reconstruction and query-index writer paths, and
+compare full pagination with an independently sorted canonical oracle. Both the fixture counter
+and repository inventory report zero repository bytes written. Raw structured evidence is
+retained at `docs/evidence/20260826-normalized-query-scale-10000.json`; the full log is
+`.artifacts/campaign-202608260032/query-scale-release.log`, SHA-256
+`a0b809e5ee6d27485bffd3286924c7ab5c1c92f72cd1a3af86f75b59f10b4f2e`.
+
+This is one topology and one warm-build/process-cold observation, not a latency or memory
+distribution. It does not establish cold-cache, million-owner, filesystem-call, or full public
+fixture-construction performance. Output bytes are not provider tokens, API requests, or monetary
+cost.
 
 ## Historical source and predecessor baselines
 
@@ -42,10 +84,8 @@ were used for build, review, and backup.
 | `lkjournal semantic text-project` | 14.639 ms | 630 | 1,328,003 |
 | `lkjournal semantic backup` | 11.141 ms | 476 | 160,697 |
 
-Those spellings remain here only to identify the historical evidence. Current commands are direct
-CLI-v3 operations such as `inspect status`, `inspect project`, `query find`, `check`,
-`build`, `review`, `backup`, and `doctor --deep`; substituting new names into old rows would
-fabricate a current measurement.
+Those spellings remain here only to identify the historical evidence. Substituting current CLI-v7
+names or normalized query semantics into old rows would fabricate a current measurement.
 
 At that point canonical standard authority was 21,062 bytes and canonical `lkjournal` authority
 was 160,419 bytes. Disposable query indexes added 50,858 and 790,720 bytes respectively. Those

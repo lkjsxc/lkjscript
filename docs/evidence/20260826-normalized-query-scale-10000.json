@@ -1,0 +1,216 @@
+{
+  "evidence_contract_version": 1,
+  "campaign": "202608260032-normalized-semantic-query-cutover",
+  "captured_utc": "2026-08-26T04:30:10Z",
+  "source": {
+    "commit": "8ea897f7307d9726e57710c833a1596a9dd74127",
+    "branch": "main",
+    "tracked_code": "exactly source commit; preserved user AGENTS.md work and the campaign prompt did not affect the binary",
+    "command": "cargo test --release --locked --lib ten_thousand_owner_and_high_fanout_relation_pages_remain_logically_local -- --nocapture",
+    "release_binary": {
+      "path": "target/release/lkjscript",
+      "bytes": 17656448,
+      "sha256": "10e523046a433eab1dcfdf8ddd1c202e6649c6330d712a1d00a5b167ee8c9b8e"
+    },
+    "release_test_binary": {
+      "bytes": 20597512,
+      "sha256": "c02c693e645161307cbcebca60f63e513cefbbf6aff0bca94ca237870b8b449d"
+    },
+    "rustc": "rustc 1.98.0",
+    "cargo": "cargo 1.98.0",
+    "platform": "Linux 7.0.0-29-generic x86_64 GNU/Linux",
+    "logical_cpus": 16,
+    "page_bytes": 4096
+  },
+  "classification": {
+    "binary_build": "warm release build",
+    "process": "new test process",
+    "filesystem_cache": "uncontrolled",
+    "sample_count": 1,
+    "provider_telemetry": "unavailable",
+    "fsync_count": "unavailable"
+  },
+  "fixture": {
+    "live_owners": 10000,
+    "canonical_relations": 9999,
+    "topology": "mixed owner kinds with a high-fanout canonical relation set crossing persistent-map pages",
+    "construction": "normalized first-party in-process builder",
+    "public_correctness_companion": "copied_binary_rediscovers_normalized_names_and_relations_without_query_writes"
+  },
+  "process": {
+    "real_seconds": 0.754,
+    "user_seconds": 0.461,
+    "system_seconds": 0.170,
+    "peak_rss_kib": 77660,
+    "peak_rss_source": "Linux VmHWM",
+    "cpu_time_source": "Bash built-in time; /usr/bin/time unavailable"
+  },
+  "observations": [
+    {
+      "scenario": "owner-first",
+      "wall_microseconds": 707,
+      "output_bytes": 1680,
+      "output_records": 13,
+      "returned": 5,
+      "continuation": true,
+      "work": {
+        "map_pages_read": 4,
+        "map_bytes_read": 23693,
+        "map_entries_visited": 39,
+        "catalog_lookups": 9,
+        "store_objects_read": 9,
+        "store_bytes_read": 24366,
+        "canonical_records_decoded": 5,
+        "witness_records_decoded": 0
+      }
+    },
+    {
+      "scenario": "owner-middle",
+      "wall_microseconds": 595,
+      "output_bytes": 1724,
+      "output_records": 13,
+      "returned": 5,
+      "continuation": true,
+      "work": {
+        "map_pages_read": 3,
+        "map_bytes_read": 24070,
+        "map_entries_visited": 48,
+        "catalog_lookups": 8,
+        "store_objects_read": 8,
+        "store_bytes_read": 24815,
+        "canonical_records_decoded": 5,
+        "witness_records_decoded": 0
+      }
+    },
+    {
+      "scenario": "owner-terminal",
+      "wall_microseconds": 539,
+      "output_bytes": 1472,
+      "output_records": 12,
+      "returned": 5,
+      "continuation": false,
+      "work": {
+        "map_pages_read": 3,
+        "map_bytes_read": 23422,
+        "map_entries_visited": 36,
+        "catalog_lookups": 8,
+        "store_objects_read": 8,
+        "store_bytes_read": 24167,
+        "canonical_records_decoded": 5,
+        "witness_records_decoded": 0
+      }
+    },
+    {
+      "scenario": "owner-filter-empty-progress",
+      "wall_microseconds": 909,
+      "output_bytes": 969,
+      "output_records": 8,
+      "returned": 0,
+      "continuation": true,
+      "work": {
+        "map_pages_read": 10,
+        "map_bytes_read": 38171,
+        "map_entries_visited": 295,
+        "catalog_lookups": 10,
+        "store_objects_read": 10,
+        "store_bytes_read": 38171,
+        "canonical_records_decoded": 0,
+        "witness_records_decoded": 0
+      }
+    },
+    {
+      "scenario": "owner-filter-empty-resume",
+      "wall_microseconds": 856,
+      "output_bytes": 966,
+      "output_records": 8,
+      "returned": 0,
+      "continuation": true,
+      "work": {
+        "map_pages_read": 9,
+        "map_bytes_read": 36982,
+        "map_entries_visited": 275,
+        "catalog_lookups": 9,
+        "store_objects_read": 9,
+        "store_bytes_read": 36982,
+        "canonical_records_decoded": 0,
+        "witness_records_decoded": 0
+      }
+    },
+    {
+      "scenario": "find-exact",
+      "wall_microseconds": 731,
+      "output_bytes": 857,
+      "output_records": 8,
+      "returned": 1,
+      "continuation": false,
+      "work": {
+        "map_pages_read": 9,
+        "map_bytes_read": 28674,
+        "map_entries_visited": 137,
+        "catalog_lookups": 11,
+        "store_objects_read": 11,
+        "store_bytes_read": 28900,
+        "canonical_records_decoded": 2,
+        "witness_records_decoded": 1
+      }
+    },
+    {
+      "scenario": "relation-first-kind-prefix",
+      "wall_microseconds": 528,
+      "output_bytes": 2229,
+      "output_records": 13,
+      "returned": 5,
+      "continuation": true,
+      "work": {
+        "map_pages_read": 4,
+        "map_bytes_read": 22543,
+        "map_entries_visited": 39,
+        "catalog_lookups": 5,
+        "store_objects_read": 5,
+        "store_bytes_read": 22620,
+        "canonical_records_decoded": 1,
+        "witness_records_decoded": 5
+      }
+    },
+    {
+      "scenario": "relation-middle-kind-prefix",
+      "wall_microseconds": 527,
+      "output_bytes": 2229,
+      "output_records": 13,
+      "returned": 5,
+      "continuation": true,
+      "work": {
+        "map_pages_read": 4,
+        "map_bytes_read": 22753,
+        "map_entries_visited": 49,
+        "catalog_lookups": 5,
+        "store_objects_read": 5,
+        "store_bytes_read": 22830,
+        "canonical_records_decoded": 1,
+        "witness_records_decoded": 5
+      }
+    }
+  ],
+  "assertions": {
+    "exact_find_uses_bounded_point_paths": true,
+    "continuation_descends_from_exclusive_lower_bound": true,
+    "entries_visited_bounded_by_scan_quantum_and_lookahead": true,
+    "relation_kind_uses_map_prefix": true,
+    "ordinary_query_full_reconstruction_calls": 0,
+    "ordinary_query_index_writer_calls": 0,
+    "full_pagination_equals_independent_oracle": true,
+    "repository_bytes_written": 0
+  },
+  "artifact": {
+    "path": ".artifacts/campaign-202608260032/query-scale-release.log",
+    "bytes": 3087,
+    "sha256": "a0b809e5ee6d27485bffd3286924c7ab5c1c92f72cd1a3af86f75b59f10b4f2e"
+  },
+  "limitations": [
+    "This is one topology and one sample, not a latency or memory distribution.",
+    "The release build was warm and filesystem cache state was uncontrolled.",
+    "The scale fixture is in-process; a separate copied-release-binary workflow proves the public process contract.",
+    "No cold-cache, filesystem-call, fsync, 100000-owner, or million-owner observation was retained.",
+    "Output bytes are not provider tokens, API requests, cache usage, or monetary cost."
+  ]
+}

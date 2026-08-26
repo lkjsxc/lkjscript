@@ -1,6 +1,6 @@
 # Current status
 
-Status date: 2026-08-25 UTC. This file describes implemented checkout reality. Timings and sizes
+Status date: 2026-08-26 UTC. This file describes implemented checkout reality. Timings and sizes
 from predecessor contracts are historical and remain in `docs/performance.md`.
 
 ## Maintained authorities and consumers
@@ -41,7 +41,7 @@ Unknown contracts and fields, malformed tagged identities, duplicate/noncanonica
 bytes, checksum mismatch, foreign IDs, and configured exhaustion reject at their owning boundary.
 Graph-1/2/3 roots, root-storage-1 manifests, artifact-2/3 and package-object-1/2 bytes,
 backup-1/2/3 bytes, transaction-2/3 requests, CLI-v2/3 routing, change-v1/2 requests, draft-v3
-objects, and query-v1 requests are not current readers.
+objects, and query-v1/2 requests and continuations are not current readers.
 
 ## Direct CLI and binary-only bootstrap
 
@@ -57,7 +57,9 @@ safe directory using a private sibling stage and one visibility rename. It rejec
 command template. A copied executable can discover contracts, create a minimal normalized project,
 read status, create meaning through compact records, plan/apply direct `rename.owner`, and inspect
 the renamed exact owner without a repository checkout, Rust toolchain, network, or external
-bootstrap artifact.
+bootstrap artifact. The copied executable can also discard the allocation response, recover live
+owner identities by canonical namespace or bounded enumeration, and inspect incoming and outgoing
+committed relations.
 Check, build, run, service, worker, package, history, draft, review, backup, restore, and doctor
 still use predecessor authority and cannot consume that new project yet.
 
@@ -100,6 +102,25 @@ namespace absence and exact binding; and exact dependency binding by package, se
 and logical package revision. Physical roots and encoded or derived object digests are not accepted
 as caller intent. Parent guards read canonical meaning instead of derived ownership; present
 namespace witness entries are checked against canonical owner meaning.
+
+Normalized query contract `lkjscript-query-3` is the sole released `query` path. Its exhaustive
+actions are `owners`, `find`, and `relations`; focused capabilities enumerate their options,
+22 owner kinds, 10 namespace classes, 27 relation kinds, two directions, limits, response fields,
+selector fields, and continuation metadata. All three operations open one current immutable
+`GraphRepository` view. Owner pages read canonical owner bindings, exact find uses the committed
+namespace witness as a bounded locator and revalidates canonical meaning, and relation pages read
+the committed forward or reverse relation witness. Results are compact, deterministic, and bound
+to the exact observed revision.
+
+Owner and relation pages use stateless `qcont_` logical continuations bound to repository,
+package, revision, operation, normalized selector, and exclusive logical resume key. Limits may
+change between pages without changing selection. Public query has separate item and output-byte
+limits and reports map pages/bytes/entries, catalog lookups, store objects/bytes, canonical records,
+witness records, and rendered output bytes separately. It never reconstructs the complete graph,
+rebuilds an index, persists a continuation, or writes repository data. Removed callers/callees,
+types, capabilities, context, impact, JSON request/file forms, and predecessor continuations reject
+without fallback. Context traversal, generic impact, fuzzy search, and historical query remain
+unimplemented.
 
 ## Persistent root, validation, and derived state
 
@@ -147,14 +168,12 @@ canonical modules, while a rebuilt certificate mismatch is corruption. This is n
 frontier-driven validation: only the four transaction classes above use local preparation. The
 complete validator and packed reconstruction remain the trusted oracles.
 
-Query indexes remain disposable. Exact owner/name index v3 uses revision-independent,
-content-addressed shards and one revision/root-bound manifest containing 256 owner and 256 name
-shard slots. The four local transaction profiles update only touched shards and reuse every
-unchanged digest; a body-only edit writes no new exact-index object. Initial and full-candidate
-publication seed the exact generation from graph values already in memory. Missing/corrupt state
-rebuilds without changing meaning. The broad relation index remains revision-bound and lazy;
-building it reconstructs canonical modules, accepted changes do not delta-update it, and project
-orientation still reconstructs all logical root entries.
+The predecessor exact owner/name index v3 and broad relation index remain private disposable state
+for exact out-of-scope workspace, semantic diff, legacy inspect, semantic change/transaction, and
+predecessor repository consumers. The local transaction profiles update touched exact-index shards;
+the broad index remains revision-bound and lazy. Missing or corrupt private index state may rebuild
+without changing meaning. Neither index is advertised by or reachable from normalized public query,
+and neither is required for its correctness.
 
 Build reconstructs the exact package closure and produces a deterministic graph-native artifact.
 There is no incremental compiler-unit cache yet. Deep doctor is exhaustive over retained
@@ -221,6 +240,14 @@ The semantic-fact cutover content passed 17/17 fresh gates with no reuse in 116.
 changes as `8ec09e24efc9968d900cfd3a4fa9ef63035a06d8`. The final handoff, rather than this mutable
 status document, owns the later checkpoint-commit and fresh-checkout receipt identities.
 
+Normalized query verification includes a copied release executable that creates and changes a
+normalized project, discards allocation output before rediscovery, pages owners and relations,
+renames while preserving identity, rejects stale and foreign continuations and predecessor input,
+and proves query leaves HEAD and the repository content inventory unchanged. A separate
+10,000-owner/9,999-relation release test retains exact locality and resource observations in
+`docs/evidence/20260826-normalized-query-scale-10000.json`; it observed zero repository bytes
+written and 77,660 KiB peak RSS for the test process. This is one fixture, not a distribution.
+
 ## Current limits and unproved properties
 
 - The stored root has no explicit module-count field ceiling, but complete logical
@@ -239,9 +266,14 @@ status document, owns the later checkpoint-commit and fresh-checkout receipt ide
   is bounded to 10,000 revisions. No authority larger than the predecessor 128 MiB bundle has yet
   been retained as scale evidence. Restore verifies every entry and deep retained structure before
   visibility but does not rerun the complete cross-package semantic validator.
-- Query-index single objects are bounded to 128 MiB, 2,000,000 owners, and 10,000,000 relations.
-  Semantic-fact keys and values use the persistent-map 256-byte/48-KiB boundaries and 64-KiB
-  hostile page decoder bound; these are physical object boundaries, not project count ceilings.
+- Public normalized owner/relation pages default to 50 items and 64 KiB and allow at most 10,000
+  items and 4 MiB. Compact output has a 1,536-byte minimum sufficient for its fixed envelope;
+  `qcont_` tokens are bounded to 320 bytes. These are public operation boundaries, not project
+  count ceilings.
+- Private predecessor query-index single objects are bounded to 128 MiB, 2,000,000 owners, and
+  10,000,000 relations. Semantic-fact keys and values use the persistent-map 256-byte/48-KiB
+  boundaries and 64-KiB hostile page decoder bound; these are physical object boundaries for
+  out-of-scope consumers, not normalized public query limits.
 - Imports, targets, exports, and declaration references are exact-ID bound; module and declaration
   rename are local. Declaration move is not a concise change-v3 form and exact references still
   carry their owning module ID, so no declaration-move locality claim is made.
@@ -256,8 +288,9 @@ status document, owns the later checkpoint-commit and fresh-checkout receipt ide
 - No stdio agent session is implemented. Standalone commands remain correct. Provider token,
   cached-token, retry, and monetary telemetry is unavailable; output bytes are not token or cost
   estimates.
-- One commit-bound graph-4/fact-3 10,000-background-module public workflow is retained. It is not a
-  distribution. A 100,000-module attempt produced no retained result after its execution output
-  became unavailable, and no million-owner workflow was run. RSS, CPU, fsync, dense-fanout, and
+- One commit-bound graph-4/fact-3 10,000-background-module public workflow and one normalized-query
+  10,000-owner/9,999-relation locality fixture are retained. Neither is a distribution. A
+  100,000-module attempt produced no retained result after its execution output became unavailable,
+  and no million-owner workflow was run. Complete-workflow RSS, CPU, fsync, topology breadth, and
   long-history evidence remains incomplete. Historical graph-1 rows are labeled in
   `docs/performance.md`.

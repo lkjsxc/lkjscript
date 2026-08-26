@@ -8,10 +8,10 @@ truth. The physical root is a fixed manifest over six immutable path-compressed 
 the complete logical graph remains the reconstruction and validation oracle.
 
 The released executable currently provides a binary-only normalized vertical slice for discovery,
-minimal project creation, status, exact owner inspection, and semantic change planning and
-publication. Check, build, run, service, worker, package, history, draft, review, backup, restore,
-and doctor still use predecessor authority and are not yet available for a newly created normalized
-project. This limitation is tracked by the active public-cutover campaign.
+minimal project creation, status, exact owner inspection, bounded owner/name/relation query, and
+semantic change planning and publication. Check, build, run, service, worker, package, history,
+draft, review, backup, restore, and doctor still use predecessor authority and are not yet available
+for a newly created normalized project. The remaining cutovers are tracked in the roadmap.
 
 The verified bootstrap is stable Rust 2024 on Linux x86-64.
 
@@ -20,6 +20,10 @@ The verified bootstrap is stable Rust 2024 on Linux x86-64.
 Discover the exact current CLI contract and create a minimal accepted project:
 
 ```sh
+mkdir -p /tmp/lkjscript-demo
+cp /path/to/released/lkjscript /tmp/lkjscript-demo/lkjscript
+cd /tmp/lkjscript-demo
+export PATH="$PWD:$PATH"
 lkjscript capabilities
 lkjscript capabilities new
 lkjscript new ./hello --template minimal --name hello
@@ -32,6 +36,8 @@ components, constructs the complete repository in a private sibling stage, and m
 with one rename after durable publication. The current normalized command accepts only the
 `minimal` template, which creates an empty package. It prints compact records naming the project,
 repository, package, semantic root, accepted revision, and durable publication receipt.
+After the copy, this normalized workflow needs no source checkout, Cargo invocation, network, or
+external data file other than an authored change record.
 
 The embedded standard package is inspectable and exportable:
 
@@ -46,18 +52,19 @@ maintained standard package during repository verification.
 ## Inspect and change meaning
 
 Global `--project PATH` selects a project explicitly; from inside a normalized project, discovery
-also walks ordinary parent directories without following symbolic links. Current normalized reads
-are deliberately narrow:
+also walks ordinary parent directories without following symbolic links:
 
 ```sh
 lkjscript --project ./hello status
 lkjscript --project ./hello inspect owner module mod_...
+lkjscript capabilities query
+lkjscript --project ./hello query owners --limit 20
 ```
 
-`capabilities`, normalized `new`, `status`, exact `inspect`, and `change` emit deterministic compact
-line records. Finite predecessor commands still emit JSON until their direct cutover. Compact
-responses have independent record and byte bounds and identify the exact observed revision where
-applicable.
+`capabilities`, normalized `new`, `status`, exact `inspect`, `query`, and `change` emit
+deterministic compact line records. Finite predecessor commands still emit JSON until their direct
+cutover. Compact responses have independent record and byte bounds and identify the exact observed
+revision where applicable.
 
 One compact `change` file may create connected meaning with request-local symbols. Definitions and
 flat expression/type fragments are checked in their identity domains, and allocated identities are
@@ -74,6 +81,29 @@ EOF
 lkjscript --project ./hello change plan --input-file change.lkjc
 lkjscript --project ./hello change apply --input-file change.lkjc --plan plan_...
 ```
+
+After publication, the executable can rediscover the allocated identities without the change
+receipt. Replace each placeholder with the exact ID or continuation returned by the preceding
+query:
+
+```sh
+lkjscript --project ./hello query find module notes
+lkjscript --project ./hello query find declaration Note --parent mod_...
+lkjscript --project ./hello query find field text --parent decl_...
+lkjscript --project ./hello query owners --kind declaration --limit 2
+lkjscript --project ./hello query owners --kind declaration --limit 5 \
+  --continuation qcont_...
+lkjscript --project ./hello query relations decl_... \
+  --direction outgoing --kind declaration_module
+lkjscript --project ./hello query relations mod_... \
+  --direction incoming --kind declaration_module
+```
+
+Query reads only the current accepted revision. It emits canonical compact records, creates no
+index or continuation file, and never changes HEAD. A continuation is bound to the repository,
+package, exact revision, direction, filter, and logical resume key; restart the query after an
+accepted change. Fuzzy search, historical query, context traversal, generic impact, JSON query
+requests, and the former callers/callees aliases are intentionally absent.
 
 For a common single-owner edit, the direct adapter constructs the same typed request without a
 record file. Replace the placeholders with the exact accepted revision and exact typed owner ID:
@@ -132,11 +162,11 @@ otherwise local path broad. Either path prepares once; publication rechecks the 
 delta, summary delta, and authenticated certificate without repeating semantic validation. The
 complete validator and packed reconstruction remain full oracles.
 
-Exact owner/name queries use local-index contract 3: a small revision/root-bound manifest selects
-content-addressed shards, and the four local transaction profiles rewrite only touched buckets.
-Body-only changes reuse every shard. Initial and complete-candidate publication seed the same
-derived index from graph values already in memory. The broad relation index remains lazy and
-rebuildable rather than delta-maintained.
+Normalized public query reads canonical owner bindings and committed namespace/relation witness
+maps through one revision-pinned `GraphRepository` view; it has no correctness dependency on a
+query index and never invokes complete graph reconstruction. The predecessor local and broad query
+indexes remain private only for exact out-of-scope workspace, diff, legacy inspect, change,
+transaction, and repository consumers pending their own cutovers.
 
 ## Review, history, and recovery
 
