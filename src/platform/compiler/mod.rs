@@ -17,6 +17,11 @@ mod lower;
 pub(crate) mod manifest;
 pub(crate) mod unit;
 
+pub(crate) use artifact::{
+    ARTIFACT_BUNDLE_CHECKSUM_DOMAIN, ARTIFACT_BUNDLE_DIGEST_DOMAIN, ARTIFACT_BUNDLE_END_MAGIC,
+    ARTIFACT_BUNDLE_MAGIC, ARTIFACT_CLOSURE_DIGEST_DOMAIN, ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
+    ARTIFACT_MANIFEST_MAGIC,
+};
 pub use artifact::{
     ARTIFACT_BUNDLE_CONTRACT_IDENTITY, ARTIFACT_CONTRACT_VERSION,
     ARTIFACT_MANIFEST_CONTRACT_IDENTITY, ArtifactBundleDigest, ArtifactClosureDigest,
@@ -34,10 +39,14 @@ pub use manifest::{
     COMPILATION_MANIFEST_CONTRACT_IDENTITY, COMPILATION_MANIFEST_CONTRACT_VERSION,
     CompilationBinding, CompilationManifest, CompilationManifestDigest, CompilerUnitObjectDigest,
 };
+pub(crate) use manifest::{COMPILATION_MANIFEST_ENVELOPE_DOMAIN, COMPILATION_MANIFEST_MAGIC};
 pub use unit::{
     BYTECODE_CONTRACT_IDENTITY, BYTECODE_CONTRACT_VERSION, COMPILER_UNIT_CONTRACT_IDENTITY,
     COMPILER_UNIT_CONTRACT_VERSION, CompilationPayload, CompilationSource, CompilationUnit,
     CompilationUnitKey, CompiledCode, CompiledInstruction, OptimizationPolicy,
+};
+pub(crate) use unit::{
+    COMPILER_UNIT_ENVELOPE_DOMAIN, COMPILER_UNIT_KEY_DOMAIN, COMPILER_UNIT_MAGIC,
 };
 
 #[cfg(test)]

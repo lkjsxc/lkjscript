@@ -2,8 +2,8 @@
 
 use super::*;
 use crate::platform::kernel::{
-    CaseRecord, FieldRecord, OperationRecord, PortImplementation, PortRecord, RequirementRecord,
-    ResourceLimit, TypeParameterRecord,
+    CaseRecord, FieldRecord, ImplementationName, OperationRecord, PortImplementation, PortRecord,
+    RequirementRecord, ResourceLimit, TypeParameterRecord,
 };
 
 pub(in crate::platform::change::request) fn collect_mutation_symbols(
@@ -496,7 +496,7 @@ fn lower_set_external_contract<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead
     lowerer: &mut AuthoredLowerer<'_, B, W>,
     selector: &DeclarationSelector,
     result: &AuthoredType,
-    implementation: &Name,
+    implementation: &ImplementationName,
 ) -> Result<(), Diagnostic> {
     let declaration = lowerer.resolve_declaration(selector)?;
     let result = lowerer.lower_type(result)?;

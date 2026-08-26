@@ -1,4 +1,4 @@
-//! Private immutable-store contract facts pending executable-registry cutover.
+//! Current Graph 5 immutable-store contract facts.
 
 pub const OBJECT_STORE_CONTRACT_IDENTITY: &str = "lkjscript-immutable-object-store-1";
 pub const PACK_CONTRACT_IDENTITY: &str = "lkjscript-immutable-object-pack-1";

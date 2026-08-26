@@ -7,6 +7,7 @@ use super::contract::{
 use super::digest::{BlobObjectDigest, OwnerObjectDigest, TypeObjectDigest};
 use super::expression::{ExpressionOperation, ExpressionRecord, TextValue};
 use super::id::{OwnerHeader, OwnerKey, OwnerKind};
+use super::implementation::ImplementationName;
 use super::name::Name;
 use super::reference::{
     DeclarationReference, OperationReference, PortReference, RequirementReference,
@@ -344,14 +345,14 @@ pub struct ExternalDeclaration {
     pub type_parameters: Vec<TypeParameterId>,
     pub parameters: Vec<ParameterId>,
     pub result: TypeObjectDigest,
-    pub implementation: Name,
+    pub implementation: ImplementationName,
 }
 
 impl ExternalDeclaration {
     fn validate_local(&self) -> Result<(), Diagnostic> {
         validate_ordered_unique("external type parameters", &self.type_parameters, true)?;
         validate_ordered_unique("external parameters", &self.parameters, true)?;
-        validate_names([&self.implementation])
+        Ok(())
     }
 }
 

@@ -2205,8 +2205,8 @@ mod tests {
     use crate::platform::control::{CompactRecord, parse_records};
     use crate::platform::kernel::{
         DeclarationPayload, DeclarationRecord, DeclarationVisibility, ExternalDeclaration,
-        KernelSnapshot, ModuleRecord, OwnerHeader, OwnerRecord, TypeForm, encode_owner,
-        extract_relations,
+        ImplementationName, KernelSnapshot, ModuleRecord, OwnerHeader, OwnerRecord, TypeForm,
+        encode_owner, extract_relations,
     };
     use crate::platform::semantic_id::{DeclarationId, ModuleId};
     use crate::platform::storage::object::{ObjectDomain, ObjectKey};
@@ -3133,7 +3133,7 @@ mod tests {
                         type_parameters: Vec::new(),
                         parameters: Vec::new(),
                         result: unit_type,
-                        implementation: Name::new("scale_host")
+                        implementation: ImplementationName::new("scale_host")
                             .expect("scale external implementation"),
                     }),
                 }),

@@ -85,6 +85,12 @@ pub struct CreatedRepository {
 }
 
 #[derive(Clone, Debug)]
+pub struct InitialPackageTransport {
+    pub digest: crate::platform::kernel::PackageTransportDigest,
+    pub packs: Vec<Vec<u8>>,
+}
+
+#[derive(Clone, Debug)]
 pub struct PackageTransportStageReceipt {
     pub package: crate::platform::kernel::PackageId,
     pub semantic_revision: crate::platform::semantic_id::RevisionId,
@@ -209,6 +215,19 @@ impl GraphRepository {
         logical: &KernelSnapshot,
         intent: Option<String>,
     ) -> Result<CreatedRepository, Diagnostic> {
+        Self::create_with_package_transports(destination, logical, intent, &[])
+    }
+
+    /// Creates one privately staged repository whose first accepted revision may bind exact
+    /// dependency package transports. The transports are fully validated and made durable inside
+    /// the private repository before initial semantic preparation; neither the repository nor a
+    /// partial dependency selection is externally visible before the final directory rename.
+    pub fn create_with_package_transports(
+        destination: &Path,
+        logical: &KernelSnapshot,
+        intent: Option<String>,
+        package_transports: &[InitialPackageTransport],
+    ) -> Result<CreatedRepository, Diagnostic> {
         let destination = canonical_new_destination(destination)?;
         let parent = destination.parent().ok_or_else(|| {
             repository_error(
@@ -226,7 +245,17 @@ impl GraphRepository {
             root: stage.clone(),
         };
         let result = (|| {
-            let preparation_store = PackDirectoryStore::open(&stage).map_err(store_diagnostic)?;
+            let root_directory = open_directory(&stage)?;
+            let mut preparation_store =
+                PackDirectoryStore::open(&stage).map_err(store_diagnostic)?;
+            for package_transport in package_transports {
+                let _ = install_package_transport(
+                    &root_directory,
+                    &mut preparation_store,
+                    package_transport.digest,
+                    &package_transport.packs,
+                )?;
+            }
             let initial = prepare_initial_publication(logical, &preparation_store, intent)
                 .map_err(collapse_diagnostics)?;
             drop(preparation_store);
@@ -322,16 +351,6 @@ impl GraphRepository {
         digest: crate::platform::kernel::PackageTransportDigest,
         packs: &[Vec<u8>],
     ) -> Result<PackageTransportStageReceipt, Diagnostic> {
-        if packs.is_empty() || packs.len() > MAXIMUM_PACKAGE_TRANSPORT_PACKS {
-            return Err(repository_error(
-                DiagnosticClass::Resource,
-                "publication_package_transport_pack_count",
-                format!(
-                    "package transport must contain 1 through {MAXIMUM_PACKAGE_TRANSPORT_PACKS} immutable packs"
-                ),
-            ));
-        }
-        preflight_package_transport_packs(packs)?;
         let root_directory = open_directory(&self.root)?;
         let lock = open_lock(&root_directory)?;
         FileExt::lock_exclusive(&lock)
@@ -344,143 +363,7 @@ impl GraphRepository {
                 "Graph 5 repository has no accepted HEAD",
             )
         })?;
-        let mut work = StoreWork::default();
-        let root_key = ObjectKey::from_digest(ObjectDomain::PackageTransport, digest.bytes());
-        let outcome = if store
-            .contains(root_key, &mut work)
-            .map_err(store_diagnostic)?
-        {
-            StageOutcome::Reused
-        } else {
-            StageOutcome::Inserted
-        };
-        let mut input_keys = BTreeSet::new();
-        let mut stage = ObjectStage::new(&store);
-        for pack in packs {
-            let metadata = PackMetadata::decode(pack, true).map_err(store_diagnostic)?;
-            metadata.verify_all(pack).map_err(store_diagnostic)?;
-            for entry in &metadata.entries {
-                if !input_keys.insert(entry.key) {
-                    return Err(repository_error(
-                        DiagnosticClass::Corrupt,
-                        "publication_package_transport_duplicate",
-                        "package transport repeats one immutable object key",
-                    ));
-                }
-                let bytes = metadata
-                    .read(pack, entry.key, entry.key.domain.maximum_bytes())
-                    .map_err(store_diagnostic)?
-                    .ok_or_else(|| {
-                        repository_error(
-                            DiagnosticClass::Corrupt,
-                            "publication_package_transport_entry",
-                            "verified package pack lost one indexed object",
-                        )
-                    })?;
-                stage
-                    .stage(entry.key, &bytes, &mut work)
-                    .map_err(store_diagnostic)?;
-            }
-        }
-        let root_bytes = stage
-            .read(
-                root_key,
-                ObjectDomain::PackageTransport.maximum_bytes(),
-                &mut work,
-            )
-            .map_err(store_diagnostic)?
-            .ok_or_else(|| {
-                repository_error(
-                    DiagnosticClass::Semantic,
-                    "publication_package_transport_root",
-                    "package transport omits its exact root transport manifest",
-                )
-            })?;
-        let transport = PackageTransport::decode(&root_bytes, digest)?;
-        let revision_key = ObjectKey::from_digest(
-            ObjectDomain::PackageRevision,
-            transport.package_revision.bytes(),
-        );
-        let revision_bytes = stage
-            .read(
-                revision_key,
-                ObjectDomain::PackageRevision.maximum_bytes(),
-                &mut work,
-            )
-            .map_err(store_diagnostic)?
-            .ok_or_else(|| {
-                repository_error(
-                    DiagnosticClass::Semantic,
-                    "publication_package_transport_revision",
-                    "package transport omits its exact logical package revision",
-                )
-            })?;
-        let revision = PackageRevision::decode(&revision_bytes, transport.package_revision)?;
-        let validated = resolve_package_transport_closure(
-            &stage,
-            &store,
-            transport.package_revision,
-            Some(PackageTransportBinding {
-                package_revision: transport.package_revision,
-                transport: digest,
-            }),
-            None,
-            &mut work,
-        )?;
-        if validated.root_transport != transport || validated.root_revision != revision {
-            return Err(repository_error(
-                DiagnosticClass::Corrupt,
-                "publication_package_stage_validation",
-                "staged package revision or transport changed during closure validation",
-            ));
-        }
-        let mut expected_keys = validated.root_interface.reachable_objects;
-        expected_keys.insert(root_key);
-        expected_keys.insert(revision_key);
-        expected_keys.insert(ObjectKey::from_digest(
-            ObjectDomain::SemanticRoot,
-            transport.semantic_root.bytes(),
-        ));
-        if input_keys != expected_keys {
-            return Err(repository_error(
-                DiagnosticClass::Corrupt,
-                "publication_package_transport_reachability",
-                "package transport contains missing or unreachable immutable objects",
-            ));
-        }
-        for (key, bytes) in stage.into_objects() {
-            store
-                .stage(key, &bytes, &mut work)
-                .map_err(store_diagnostic)?;
-        }
-        let seal = store
-            .seal_staged(TARGET_PACK_BYTES, &mut work)
-            .map_err(store_diagnostic)?;
-        let verified = resolve_package_transport_closure(
-            &store,
-            &store,
-            transport.package_revision,
-            Some(PackageTransportBinding {
-                package_revision: transport.package_revision,
-                transport: digest,
-            }),
-            None,
-            &mut work,
-        )?;
-        if verified.root_transport != transport || verified.root_revision != revision {
-            return Err(repository_error(
-                DiagnosticClass::Corrupt,
-                "publication_package_stage_verify",
-                "sealed package revision or transport disagrees with validated staging bytes",
-            ));
-        }
-        let previous_transport = replace_package_transport_binding(
-            &root_directory,
-            &store,
-            transport.package_revision,
-            digest,
-            &mut work,
-        )?;
+        let installed = install_package_transport(&root_directory, &mut store, digest, packs)?;
         let after = read_current_optional(&root_directory, &store)?.ok_or_else(|| {
             repository_error(
                 DiagnosticClass::Corrupt,
@@ -496,15 +379,15 @@ impl GraphRepository {
             ));
         }
         Ok(PackageTransportStageReceipt {
-            package: revision.package,
-            semantic_revision: revision.revision.revision_id()?,
-            package_revision: transport.package_revision,
+            package: installed.revision.package,
+            semantic_revision: installed.revision.revision.revision_id()?,
+            package_revision: installed.transport.package_revision,
             package_transport: digest,
-            previous_transport,
-            outcome,
-            seal,
+            previous_transport: installed.previous_transport,
+            outcome: installed.outcome,
+            seal: installed.seal,
             current_revision: after.head.revision,
-            work,
+            work: installed.work,
         })
     }
 
@@ -1801,6 +1684,178 @@ fn validate_package_transport_candidate_capacity(candidate_count: usize) -> Resu
         ));
     }
     Ok(())
+}
+
+struct InstalledPackageTransport {
+    revision: PackageRevision,
+    transport: PackageTransport,
+    previous_transport: Option<crate::platform::kernel::PackageTransportDigest>,
+    outcome: StageOutcome,
+    seal: SealReceipt,
+    work: StoreWork,
+}
+
+fn install_package_transport(
+    root_directory: &File,
+    store: &mut PackDirectoryStore,
+    digest: crate::platform::kernel::PackageTransportDigest,
+    packs: &[Vec<u8>],
+) -> Result<InstalledPackageTransport, Diagnostic> {
+    if packs.is_empty() || packs.len() > MAXIMUM_PACKAGE_TRANSPORT_PACKS {
+        return Err(repository_error(
+            DiagnosticClass::Resource,
+            "publication_package_transport_pack_count",
+            format!(
+                "package transport must contain 1 through {MAXIMUM_PACKAGE_TRANSPORT_PACKS} immutable packs"
+            ),
+        ));
+    }
+    preflight_package_transport_packs(packs)?;
+    let mut work = StoreWork::default();
+    let root_key = ObjectKey::from_digest(ObjectDomain::PackageTransport, digest.bytes());
+    let outcome = if store
+        .contains(root_key, &mut work)
+        .map_err(store_diagnostic)?
+    {
+        StageOutcome::Reused
+    } else {
+        StageOutcome::Inserted
+    };
+    let mut input_keys = BTreeSet::new();
+    let mut stage = ObjectStage::new(&*store);
+    for pack in packs {
+        let metadata = PackMetadata::decode(pack, true).map_err(store_diagnostic)?;
+        metadata.verify_all(pack).map_err(store_diagnostic)?;
+        for entry in &metadata.entries {
+            if !input_keys.insert(entry.key) {
+                return Err(repository_error(
+                    DiagnosticClass::Corrupt,
+                    "publication_package_transport_duplicate",
+                    "package transport repeats one immutable object key",
+                ));
+            }
+            let bytes = metadata
+                .read(pack, entry.key, entry.key.domain.maximum_bytes())
+                .map_err(store_diagnostic)?
+                .ok_or_else(|| {
+                    repository_error(
+                        DiagnosticClass::Corrupt,
+                        "publication_package_transport_entry",
+                        "verified package pack lost one indexed object",
+                    )
+                })?;
+            stage
+                .stage(entry.key, &bytes, &mut work)
+                .map_err(store_diagnostic)?;
+        }
+    }
+    let root_bytes = stage
+        .read(
+            root_key,
+            ObjectDomain::PackageTransport.maximum_bytes(),
+            &mut work,
+        )
+        .map_err(store_diagnostic)?
+        .ok_or_else(|| {
+            repository_error(
+                DiagnosticClass::Semantic,
+                "publication_package_transport_root",
+                "package transport omits its exact root transport manifest",
+            )
+        })?;
+    let transport = PackageTransport::decode(&root_bytes, digest)?;
+    let revision_key = ObjectKey::from_digest(
+        ObjectDomain::PackageRevision,
+        transport.package_revision.bytes(),
+    );
+    let revision_bytes = stage
+        .read(
+            revision_key,
+            ObjectDomain::PackageRevision.maximum_bytes(),
+            &mut work,
+        )
+        .map_err(store_diagnostic)?
+        .ok_or_else(|| {
+            repository_error(
+                DiagnosticClass::Semantic,
+                "publication_package_transport_revision",
+                "package transport omits its exact logical package revision",
+            )
+        })?;
+    let revision = PackageRevision::decode(&revision_bytes, transport.package_revision)?;
+    let validated = resolve_package_transport_closure(
+        &stage,
+        &*store,
+        transport.package_revision,
+        Some(PackageTransportBinding {
+            package_revision: transport.package_revision,
+            transport: digest,
+        }),
+        None,
+        &mut work,
+    )?;
+    if validated.root_transport != transport || validated.root_revision != revision {
+        return Err(repository_error(
+            DiagnosticClass::Corrupt,
+            "publication_package_stage_validation",
+            "staged package revision or transport changed during closure validation",
+        ));
+    }
+    let mut expected_keys = validated.root_interface.reachable_objects;
+    expected_keys.insert(root_key);
+    expected_keys.insert(revision_key);
+    expected_keys.insert(ObjectKey::from_digest(
+        ObjectDomain::SemanticRoot,
+        transport.semantic_root.bytes(),
+    ));
+    if input_keys != expected_keys {
+        return Err(repository_error(
+            DiagnosticClass::Corrupt,
+            "publication_package_transport_reachability",
+            "package transport contains missing or unreachable immutable objects",
+        ));
+    }
+    for (key, bytes) in stage.into_objects() {
+        store
+            .stage(key, &bytes, &mut work)
+            .map_err(store_diagnostic)?;
+    }
+    let seal = store
+        .seal_staged(TARGET_PACK_BYTES, &mut work)
+        .map_err(store_diagnostic)?;
+    let verified = resolve_package_transport_closure(
+        &*store,
+        &*store,
+        transport.package_revision,
+        Some(PackageTransportBinding {
+            package_revision: transport.package_revision,
+            transport: digest,
+        }),
+        None,
+        &mut work,
+    )?;
+    if verified.root_transport != transport || verified.root_revision != revision {
+        return Err(repository_error(
+            DiagnosticClass::Corrupt,
+            "publication_package_stage_verify",
+            "sealed package revision or transport disagrees with validated staging bytes",
+        ));
+    }
+    let previous_transport = replace_package_transport_binding(
+        root_directory,
+        &*store,
+        transport.package_revision,
+        digest,
+        &mut work,
+    )?;
+    Ok(InstalledPackageTransport {
+        revision,
+        transport,
+        previous_transport,
+        outcome,
+        seal,
+        work,
+    })
 }
 
 fn replace_package_transport_binding(

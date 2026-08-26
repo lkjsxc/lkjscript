@@ -1,5 +1,13 @@
-use super::super::artifact::{ARTIFACT_CONTRACT_VERSION, PACKAGE_ARTIFACT_CONTRACT_VERSION};
-use super::super::bootstrap::BOOTSTRAP_CONTRACT_VERSION;
+use super::super::artifact::ARTIFACT_CONTRACT_VERSION as FROZEN_SERVICE_ARTIFACT_VERSION;
+use super::super::compiler::{
+    ARTIFACT_BUNDLE_CHECKSUM_DOMAIN, ARTIFACT_BUNDLE_CONTRACT_IDENTITY,
+    ARTIFACT_BUNDLE_DIGEST_DOMAIN, ARTIFACT_CLOSURE_DIGEST_DOMAIN, ARTIFACT_CONTRACT_VERSION,
+    ARTIFACT_MANIFEST_CONTRACT_IDENTITY, ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
+    BYTECODE_CONTRACT_IDENTITY, BYTECODE_CONTRACT_VERSION, COMPILATION_MANIFEST_CONTRACT_IDENTITY,
+    COMPILATION_MANIFEST_CONTRACT_VERSION, COMPILATION_MANIFEST_ENVELOPE_DOMAIN,
+    COMPILER_UNIT_CONTRACT_IDENTITY, COMPILER_UNIT_CONTRACT_VERSION, COMPILER_UNIT_ENVELOPE_DOMAIN,
+    COMPILER_UNIT_KEY_DOMAIN,
+};
 use super::super::configuration::CONFIGURATION_ADAPTER_CONTRACT_VERSION;
 use super::super::control::{
     AUTHORED_CHANGE_CODEC_IDENTITY, AUTHORED_CHANGE_CODEC_VERSION,
@@ -17,11 +25,10 @@ use super::super::database::POSTGRES_ADAPTER_CONTRACT_VERSION;
 use super::super::deployment::DEPLOYMENT_CONTRACT_VERSION;
 use super::super::diagnostic::DiagnosticClass;
 use super::super::execution::CAPABILITY_GRANT_CONTRACT_VERSION;
-use super::super::graph::{ROOT_STORAGE_CONTRACT_IDENTITY, ROOT_STORAGE_CONTRACT_VERSION};
 use super::super::http::HTTP_ADAPTER_CONTRACT_VERSION;
 use super::super::json::JSON_CONTRACT_VERSION;
+use super::super::kernel::contract::{GRAPH_CONTRACT_IDENTITY, GRAPH_CONTRACT_VERSION};
 use super::super::kernel::{NamespaceClass, OwnerKind, RelationKind};
-use super::super::meaning::{GRAPH_CONTRACT_IDENTITY, GRAPH_CONTRACT_VERSION, RelationRole};
 use super::super::normalized_query::{
     DEFAULT_QUERY_ITEMS, DEFAULT_QUERY_OUTPUT_BYTES, MAXIMUM_QUERY_CONTINUATION_BYTES,
     MAXIMUM_QUERY_ITEMS, MAXIMUM_QUERY_OUTPUT_BYTES, MINIMUM_QUERY_OUTPUT_BYTES,
@@ -30,41 +37,42 @@ use super::super::normalized_query::{
     QUERY_SELECTOR_DIGEST_DOMAIN, QUERY_SELECTOR_FIELDS, QueryDirection,
 };
 use super::super::object::OBJECT_ADAPTER_CONTRACT_VERSION;
-use super::super::package::{PACKAGE_CONTRACT_VERSION, RunnerKind};
-use super::super::queue::DURABLE_QUEUE_CONTRACT_VERSION;
-use super::super::repository::{
-    BACKUP_CONTRACT_VERSION, BACKUP_SEGMENT_ENTRY_LIMIT, MAXIMUM_BACKUP_MANIFEST_BYTES,
-    MAXIMUM_BACKUP_SEGMENT_BYTES, RETENTION_CONTRACT_VERSION,
+use super::super::package::RunnerKind;
+use super::super::package_interface::{
+    PACKAGE_INTERFACE_CONTRACT_IDENTITY, PACKAGE_INTERFACE_CONTRACT_VERSION,
+    PACKAGE_INTERFACE_ENVELOPE_DOMAIN,
 };
-use super::super::revision::{RECEIPT_CONTRACT_VERSION, REVISION_CONTRACT_VERSION};
+use super::super::package_transport::{
+    PACKAGE_REVISION_CONTRACT_IDENTITY, PACKAGE_REVISION_CONTRACT_VERSION,
+    PACKAGE_REVISION_ENVELOPE_DOMAIN, PACKAGE_TRANSPORT_CONTRACT_IDENTITY,
+    PACKAGE_TRANSPORT_CONTRACT_VERSION, PACKAGE_TRANSPORT_ENVELOPE_DOMAIN,
+    PACKAGE_TRANSPORT_SELECTION_CONTRACT_IDENTITY, PACKAGE_TRANSPORT_SELECTION_CONTRACT_VERSION,
+    PACKAGE_TRANSPORT_SELECTION_ENVELOPE_DOMAIN,
+};
+use super::super::project_creation::{
+    PROJECT_CREATION_CONTRACT_IDENTITY, PROJECT_CREATION_CONTRACT_VERSION,
+};
+use super::super::publication::contract::{
+    RECEIPT_CONTRACT_IDENTITY, RECEIPT_CONTRACT_VERSION, RECEIPT_ENVELOPE_DOMAIN,
+    REVISION_CONTRACT_IDENTITY, REVISION_CONTRACT_VERSION, REVISION_ENVELOPE_DOMAIN,
+    REVISION_IDENTITY_DIGEST_DOMAIN, SEMANTIC_DIFF_CONTRACT_IDENTITY,
+    SEMANTIC_DIFF_CONTRACT_VERSION, SEMANTIC_DIFF_ENVELOPE_DOMAIN, TRANSACTION_CONTRACT_IDENTITY,
+    TRANSACTION_CONTRACT_VERSION, TRANSACTION_ENVELOPE_DOMAIN,
+};
+use super::super::queue::DURABLE_QUEUE_CONTRACT_VERSION;
 use super::super::runtime::RESIDENT_RUNTIME_CONTRACT_VERSION;
 use super::super::secrets::{SECRET_CATALOG_CONTRACT_VERSION, SECRET_VERIFIER_CONTRACT_VERSION};
 use super::super::security::SECURITY_ADAPTER_CONTRACT_VERSION;
-use super::super::semantic_diff::SEMANTIC_DIFF_CONTRACT_VERSION;
-use super::super::semantic_draft::DRAFT_CONTRACT_VERSION;
-use super::super::semantic_fact::{
-    SEMANTIC_FACT_CONTRACT_IDENTITY, SEMANTIC_FACT_CONTRACT_VERSION,
-};
-use super::super::semantic_merge::SEMANTIC_MERGE_CONTRACT_VERSION;
-use super::super::semantic_projection::REVIEW_PROJECTION_CONTRACT_VERSION;
-use super::super::semantic_query::QUERY_INDEX_CONTRACT_VERSION;
-use super::super::semantic_summary::{
-    SEMANTIC_SUMMARY_CONTRACT_IDENTITY, SEMANTIC_SUMMARY_CONTRACT_VERSION,
-    SEMANTIC_VALIDATOR_CONTRACT_IDENTITY,
-};
-use super::super::semantic_transaction::{
-    MAXIMUM_TRANSACTION_AFFECTED_OWNERS, MAXIMUM_TRANSACTION_OPERATIONS, MAXIMUM_TRANSACTION_WORK,
-    TRANSACTION_CONTRACT_VERSION,
-};
+use super::super::storage::contract as storage_contract;
 use super::super::stream::STREAM_CONTRACT_VERSION;
+use super::super::witness::contract as witness_contract;
 use super::super::worker::WORKER_RUNNER_CONTRACT_VERSION;
-use super::super::workspace::WORKSPACE_CONTRACT_VERSION;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-3";
 pub const REGISTRY_CONTRACT_VERSION: u16 = 3;
-pub const CLI_CONTRACT_VERSION: u16 = 9;
+pub const CLI_CONTRACT_VERSION: u16 = 10;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -88,12 +96,6 @@ pub(crate) const IDENTITY_MIGRATION_DIGEST_DOMAIN: &str =
     "lkjscript.semantic-identity.migration.v1";
 pub(crate) const REQUEST_LOCAL_IDENTITY_DIGEST_DOMAIN: &str =
     "lkjscript.semantic-identity.request-local-allocation.v1";
-pub(crate) const REVIEW_PROJECTION_DIGEST_DOMAIN: &str = "lkjscript.semantic-review-projection.v1";
-pub(crate) const LOCAL_INDEX_BUCKET_DIGEST_DOMAIN: &str =
-    "lkjscript.semantic-local-index-bucket.v1";
-pub(crate) const CONTINUATION_DIGEST_DOMAIN: &str = "lkjscript.semantic-continuation.v1";
-pub(crate) const QUERY_DIGEST_DOMAIN: &str = "lkjscript.semantic-query.v1";
-pub(crate) const CLEANUP_CANDIDATE_DIGEST_DOMAIN: &str = "lkjscript.cleanup-candidate.v1";
 
 const fn magic_bytes(value: &str) -> [u8; 8] {
     let bytes = value.as_bytes();
@@ -132,35 +134,10 @@ pub(crate) const RECEIPT_DOMAIN: &str = "lkjscript.transaction-receipt-envelope.
 const HEAD_MAGIC_TEXT: &str = "LKJHEAD4";
 pub(crate) const HEAD_MAGIC: [u8; 8] = magic_bytes(HEAD_MAGIC_TEXT);
 pub(crate) const HEAD_DOMAIN: &str = "lkjscript.semantic-head-envelope.v4";
-const BACKUP_MAGIC_TEXT: &str = "LKJBKP04";
-pub(crate) const BACKUP_MAGIC: [u8; 8] = magic_bytes(BACKUP_MAGIC_TEXT);
-pub(crate) const BACKUP_DIGEST_DOMAIN: &str = "lkjscript.semantic-backup.v4";
-const BACKUP_SEGMENT_MAGIC_TEXT: &str = "LKJBKS04";
-pub(crate) const BACKUP_SEGMENT_MAGIC: [u8; 8] = magic_bytes(BACKUP_SEGMENT_MAGIC_TEXT);
-pub(crate) const BACKUP_SEGMENT_DIGEST_DOMAIN: &str = "lkjscript.semantic-backup-segment.v4";
-pub(crate) const BACKUP_SEGMENT_REFERENCE_DIGEST_DOMAIN: &str =
-    "lkjscript.semantic-backup-segment-reference.v4";
-pub(crate) const BACKUP_ENTRY_DIGEST_DOMAIN: &str = "lkjscript.semantic-backup-entry.v4";
-const DRAFT_MAGIC_TEXT: &str = "LKJDRF04";
-pub(crate) const DRAFT_MAGIC: [u8; 8] = magic_bytes(DRAFT_MAGIC_TEXT);
-pub(crate) const DRAFT_DIGEST_DOMAIN: &str = "lkjscript.semantic-draft.v4";
 const FACT_MANIFEST_MAGIC_TEXT: &str = "LKJSFI03";
 pub(crate) const FACT_MANIFEST_MAGIC: [u8; 8] = magic_bytes(FACT_MANIFEST_MAGIC_TEXT);
 pub(crate) const FACT_MANIFEST_DOMAIN: &str = "lkjscript.semantic-fact-manifest.v3";
 pub(crate) const SEMANTIC_CERTIFICATE_DOMAIN: &str = "lkjscript.semantic-certificate.v3";
-const QUERY_INDEX_MAGIC_TEXT: &str = "LKJIDX02";
-pub(crate) const QUERY_INDEX_MAGIC: [u8; 8] = magic_bytes(QUERY_INDEX_MAGIC_TEXT);
-pub(crate) const QUERY_INDEX_DOMAIN: &str = "lkjscript.semantic-query-index.v2";
-pub(crate) const LOCAL_INDEX_CONTRACT_VERSION: u16 = 3;
-const LOCAL_MANIFEST_MAGIC_TEXT: &str = "LKJIXM03";
-pub(crate) const LOCAL_MANIFEST_MAGIC: [u8; 8] = magic_bytes(LOCAL_MANIFEST_MAGIC_TEXT);
-const LOCAL_OWNER_MAGIC_TEXT: &str = "LKJIXO03";
-pub(crate) const LOCAL_OWNER_MAGIC: [u8; 8] = magic_bytes(LOCAL_OWNER_MAGIC_TEXT);
-const LOCAL_NAME_MAGIC_TEXT: &str = "LKJIXN03";
-pub(crate) const LOCAL_NAME_MAGIC: [u8; 8] = magic_bytes(LOCAL_NAME_MAGIC_TEXT);
-pub(crate) const LOCAL_MANIFEST_DOMAIN: &str = "lkjscript.semantic-local-index-manifest.v3";
-pub(crate) const LOCAL_OWNER_DOMAIN: &str = "lkjscript.semantic-local-owner-index.v3";
-pub(crate) const LOCAL_NAME_DOMAIN: &str = "lkjscript.semantic-local-name-index.v3";
 const SUMMARY_MAGIC_TEXT: &str = "LKJSUM03";
 pub(crate) const SUMMARY_MAGIC: [u8; 8] = magic_bytes(SUMMARY_MAGIC_TEXT);
 pub(crate) const SUMMARY_ENVELOPE_DOMAIN: &str = "lkjscript.semantic-summary-envelope.v3";
@@ -183,7 +160,9 @@ pub enum ContractKey {
     Registry,
     Cli,
     MeaningGraph,
-    PersistentRoot,
+    ImmutableObjectStore,
+    ImmutablePack,
+    ObjectCatalog,
     Revision,
     Receipt,
     SemanticSummary,
@@ -194,18 +173,18 @@ pub enum ContractKey {
     LogicalChangePlan,
     Transaction,
     Query,
-    QueryIndex,
-    LocalQueryIndex,
-    Draft,
     Diff,
-    Merge,
-    ReviewProjection,
-    Artifact,
-    PackageArtifact,
-    Backup,
-    Bootstrap,
-    Retention,
-    PackageDescriptor,
+    ArtifactManifest,
+    ArtifactBundle,
+    FrozenServiceArtifact,
+    ProjectCreation,
+    PackageRevision,
+    PackageInterface,
+    PackageTransport,
+    PackageTransportSelection,
+    CompilationManifest,
+    CompilerUnit,
+    Bytecode,
     Deployment,
     ConfigurationAdapter,
     PostgresAdapter,
@@ -220,7 +199,6 @@ pub enum ContractKey {
     SecurityAdapter,
     Stream,
     WorkerRunner,
-    Workspace,
 }
 
 impl ContractKey {
@@ -229,7 +207,9 @@ impl ContractKey {
             Self::Registry => "registry",
             Self::Cli => "cli",
             Self::MeaningGraph => "meaning_graph",
-            Self::PersistentRoot => "persistent_root",
+            Self::ImmutableObjectStore => "immutable_object_store",
+            Self::ImmutablePack => "immutable_pack",
+            Self::ObjectCatalog => "object_catalog",
             Self::Revision => "revision",
             Self::Receipt => "receipt",
             Self::SemanticSummary => "semantic_summary",
@@ -240,18 +220,18 @@ impl ContractKey {
             Self::LogicalChangePlan => "logical_change_plan",
             Self::Transaction => "transaction",
             Self::Query => "query",
-            Self::QueryIndex => "query_index",
-            Self::LocalQueryIndex => "local_query_index",
-            Self::Draft => "draft",
             Self::Diff => "diff",
-            Self::Merge => "merge",
-            Self::ReviewProjection => "review_projection",
-            Self::Artifact => "artifact",
-            Self::PackageArtifact => "package_artifact",
-            Self::Backup => "backup",
-            Self::Bootstrap => "bootstrap",
-            Self::Retention => "retention",
-            Self::PackageDescriptor => "package_descriptor",
+            Self::ArtifactManifest => "artifact_manifest",
+            Self::ArtifactBundle => "artifact_bundle",
+            Self::FrozenServiceArtifact => "frozen_service_artifact",
+            Self::ProjectCreation => "project_creation",
+            Self::PackageRevision => "package_revision",
+            Self::PackageInterface => "package_interface",
+            Self::PackageTransport => "package_transport",
+            Self::PackageTransportSelection => "package_transport_selection",
+            Self::CompilationManifest => "compilation_manifest",
+            Self::CompilerUnit => "compiler_unit",
+            Self::Bytecode => "bytecode",
             Self::Deployment => "deployment",
             Self::ConfigurationAdapter => "configuration_adapter",
             Self::PostgresAdapter => "postgres_adapter",
@@ -266,7 +246,6 @@ impl ContractKey {
             Self::SecurityAdapter => "security_adapter",
             Self::Stream => "stream",
             Self::WorkerRunner => "worker_runner",
-            Self::Workspace => "workspace",
         }
     }
 }
@@ -275,12 +254,14 @@ impl ContractKey {
 #[serde(rename_all = "snake_case")]
 pub enum ContractStability {
     Current,
+    Frozen,
 }
 
 impl ContractStability {
     pub const fn name(self) -> &'static str {
         match self {
             Self::Current => "current",
+            Self::Frozen => "frozen",
         }
     }
 }
@@ -361,8 +342,8 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
         },
         ContractDescriptor {
             key: ContractKey::Cli,
-            name: "command line protocol",
-            identity: "lkjscript-cli-4",
+            name: "normalized command line protocol",
+            identity: "lkjscript-cli-10",
             version: CLI_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::PublicProtocol,
@@ -372,107 +353,175 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
         },
         ContractDescriptor {
             key: ContractKey::MeaningGraph,
-            name: "meaning graph",
+            name: "normalized meaning graph",
             identity: GRAPH_CONTRACT_IDENTITY,
             version: GRAPH_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::CanonicalMeaning,
             predecessor_policy: REJECT,
-            magic_values: &[LOGICAL_ROOT_MAGIC_TEXT, MODULE_MAGIC_TEXT],
+            magic_values: &["LKJOWN05", "LKJTYP05", "LKJSMR01", "LKJDEP05", "LKJRET05"],
             digest_domains: &[
-                LOGICAL_ROOT_DIGEST_DOMAIN,
-                MODULE_DIGEST_DOMAIN,
-                MODULE_OBJECT_DIGEST_DOMAIN,
-                IDENTITY_MIGRATION_DIGEST_DOMAIN,
-                REQUEST_LOCAL_IDENTITY_DIGEST_DOMAIN,
+                super::super::kernel::contract::OWNER_ENVELOPE_DOMAIN,
+                super::super::kernel::contract::TYPE_OBJECT_ENVELOPE_DOMAIN,
+                super::super::kernel::contract::ROOT_ENVELOPE_DOMAIN,
+                super::super::kernel::contract::DEPENDENCY_ENVELOPE_DOMAIN,
+                super::super::kernel::contract::RETIREMENT_ENVELOPE_DOMAIN,
+                super::super::kernel::contract::OWNER_OBJECT_DIGEST_DOMAIN,
+                super::super::kernel::contract::TYPE_OBJECT_DIGEST_DOMAIN,
+                super::super::kernel::contract::BLOB_OBJECT_DIGEST_DOMAIN,
+                super::super::kernel::contract::SEQUENCE_OBJECT_DIGEST_DOMAIN,
+                super::super::kernel::contract::SEMANTIC_ROOT_DIGEST_DOMAIN,
+                super::super::kernel::contract::SEMANTIC_STATE_DIGEST_DOMAIN,
+                super::super::kernel::contract::DEPENDENCY_OBJECT_DIGEST_DOMAIN,
+                super::super::kernel::contract::RETIREMENT_OBJECT_DIGEST_DOMAIN,
+                super::super::kernel::contract::CHANGE_DIGEST_DOMAIN,
+                super::super::kernel::contract::PACKAGE_ID_MIGRATION_DOMAIN,
             ],
         },
+        simple_contract(
+            ContractKey::ImmutableObjectStore,
+            "immutable object store",
+            storage_contract::OBJECT_STORE_CONTRACT_IDENTITY,
+            1,
+            ContractAuthority::CanonicalMeaning,
+        ),
         ContractDescriptor {
-            key: ContractKey::PersistentRoot,
-            name: "persistent graph root",
-            identity: ROOT_STORAGE_CONTRACT_IDENTITY,
-            version: ROOT_STORAGE_CONTRACT_VERSION,
+            key: ContractKey::ImmutablePack,
+            name: "immutable object pack",
+            identity: storage_contract::PACK_CONTRACT_IDENTITY,
+            version: storage_contract::PACK_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::CanonicalMeaning,
             predecessor_policy: REJECT,
-            magic_values: &[STORED_ROOT_MAGIC_TEXT, MAP_PAGE_MAGIC_TEXT],
+            magic_values: &["LKJPAK01", "LKJIDX01", "LKJEND01"],
             digest_domains: &[
-                STORED_ROOT_DIGEST_DOMAIN,
-                ROOT_OBJECT_DIGEST_DOMAIN,
-                MAP_PAGE_DIGEST_DOMAIN,
-                MAP_PAGE_CHECKSUM_DOMAIN,
-                MAP_CONTENT_DIGEST_DOMAIN,
+                storage_contract::PACK_NONCE_DOMAIN,
+                storage_contract::PACK_ID_DOMAIN,
+                storage_contract::PACK_ENTRY_CHECKSUM_DOMAIN,
+                storage_contract::PACK_INDEX_CHECKSUM_DOMAIN,
+                storage_contract::PACK_CHECKSUM_DOMAIN,
+            ],
+        },
+        ContractDescriptor {
+            key: ContractKey::ObjectCatalog,
+            name: "rebuildable object catalog",
+            identity: storage_contract::CATALOG_CONTRACT_IDENTITY,
+            version: storage_contract::CATALOG_CONTRACT_VERSION,
+            stability: CURRENT,
+            authority: ContractAuthority::DerivedDisposable,
+            predecessor_policy: REJECT,
+            magic_values: &["LKJCAT01", "LKJCEND1"],
+            digest_domains: &[
+                storage_contract::CATALOG_CHECKSUM_DOMAIN,
+                storage_contract::CATALOG_GENERATION_DOMAIN,
             ],
         },
         ContractDescriptor {
             key: ContractKey::Revision,
-            name: "revision record",
-            identity: "lkjscript-revision-4",
+            name: "accepted revision",
+            identity: REVISION_CONTRACT_IDENTITY,
             version: REVISION_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::AcceptedHistory,
             predecessor_policy: REJECT,
-            magic_values: &[REVISION_MAGIC_TEXT, HEAD_MAGIC_TEXT],
+            magic_values: &["LKJREV07", "LKJHEAD7"],
             digest_domains: &[
-                REVISION_DOMAIN,
-                HEAD_DOMAIN,
-                REVISION_RECORD_DIGEST_DOMAIN,
-                SEMANTIC_REVISION_DIGEST_DOMAIN,
+                REVISION_ENVELOPE_DOMAIN,
+                super::super::publication::contract::HEAD_ENVELOPE_DOMAIN,
+                REVISION_IDENTITY_DIGEST_DOMAIN,
+                storage_contract::REVISION_OBJECT_DIGEST_DOMAIN,
             ],
         },
         ContractDescriptor {
             key: ContractKey::Receipt,
-            name: "transaction receipt",
-            identity: "lkjscript-receipt-3",
+            name: "publication receipt",
+            identity: RECEIPT_CONTRACT_IDENTITY,
             version: RECEIPT_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::AcceptedHistory,
             predecessor_policy: REJECT,
-            magic_values: &[RECEIPT_MAGIC_TEXT],
-            digest_domains: &[RECEIPT_DOMAIN, RECEIPT_DIGEST_DOMAIN],
+            magic_values: &["LKJRCPT5"],
+            digest_domains: &[
+                RECEIPT_ENVELOPE_DOMAIN,
+                storage_contract::RECEIPT_OBJECT_DIGEST_DOMAIN,
+            ],
+        },
+        ContractDescriptor {
+            key: ContractKey::Transaction,
+            name: "normalized semantic transaction",
+            identity: TRANSACTION_CONTRACT_IDENTITY,
+            version: TRANSACTION_CONTRACT_VERSION,
+            stability: CURRENT,
+            authority: ContractAuthority::AcceptedHistory,
+            predecessor_policy: REJECT,
+            magic_values: &["LKJTXN05"],
+            digest_domains: &[
+                TRANSACTION_ENVELOPE_DOMAIN,
+                storage_contract::TRANSACTION_OBJECT_DIGEST_DOMAIN,
+            ],
+        },
+        ContractDescriptor {
+            key: ContractKey::Diff,
+            name: "accepted semantic diff",
+            identity: SEMANTIC_DIFF_CONTRACT_IDENTITY,
+            version: SEMANTIC_DIFF_CONTRACT_VERSION,
+            stability: CURRENT,
+            authority: ContractAuthority::AcceptedHistory,
+            predecessor_policy: REJECT,
+            magic_values: &["LKJDIFF3"],
+            digest_domains: &[
+                SEMANTIC_DIFF_ENVELOPE_DOMAIN,
+                storage_contract::SEMANTIC_DIFF_OBJECT_DIGEST_DOMAIN,
+            ],
         },
         ContractDescriptor {
             key: ContractKey::SemanticSummary,
-            name: "semantic summary",
-            identity: SEMANTIC_SUMMARY_CONTRACT_IDENTITY,
-            version: SEMANTIC_SUMMARY_CONTRACT_VERSION,
+            name: "owner validation summary",
+            identity: witness_contract::OWNER_SUMMARY_CONTRACT_IDENTITY,
+            version: witness_contract::OWNER_SUMMARY_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::RequiredWitness,
             predecessor_policy: REJECT,
-            magic_values: &[SUMMARY_MAGIC_TEXT],
+            magic_values: &["LKJSUM05"],
             digest_domains: &[
-                SUMMARY_ENVELOPE_DOMAIN,
-                SUMMARY_INPUT_DIGEST_DOMAIN,
-                PUBLIC_SIGNATURE_DIGEST_DOMAIN,
-                DECLARATION_SIGNATURE_DIGEST_DOMAIN,
-                DECLARATION_IMPLEMENTATION_DIGEST_DOMAIN,
-                DECLARATION_EFFECT_DIGEST_DOMAIN,
-                MODULE_IMPLEMENTATION_DIGEST_DOMAIN,
-                SUMMARY_DEPENDENCY_DIGEST_DOMAIN,
-                SUMMARY_RECORD_DIGEST_DOMAIN,
+                witness_contract::OWNER_SUMMARY_ENVELOPE_DOMAIN,
+                witness_contract::OWNER_SUMMARY_DIGEST_DOMAIN,
+                witness_contract::INTERFACE_DIGEST_DOMAIN,
+                witness_contract::IMPLEMENTATION_DIGEST_DOMAIN,
+                witness_contract::TYPE_DIGEST_DOMAIN,
+                witness_contract::EFFECT_DIGEST_DOMAIN,
+                witness_contract::CAPABILITY_DIGEST_DOMAIN,
+                witness_contract::RELATION_DIGEST_DOMAIN,
+                witness_contract::PRESENTATION_DIGEST_DOMAIN,
+                witness_contract::TEST_DIGEST_DOMAIN,
+                witness_contract::VALIDATION_DEPENDENCY_DIGEST_DOMAIN,
             ],
         },
         ContractDescriptor {
             key: ContractKey::SemanticFacts,
-            name: "semantic fact witness",
-            identity: SEMANTIC_FACT_CONTRACT_IDENTITY,
-            version: SEMANTIC_FACT_CONTRACT_VERSION,
+            name: "validation witness",
+            identity: witness_contract::WITNESS_CONTRACT_IDENTITY,
+            version: witness_contract::WITNESS_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::RequiredWitness,
             predecessor_policy: REJECT,
-            magic_values: &[FACT_MANIFEST_MAGIC_TEXT],
-            digest_domains: &[FACT_MANIFEST_DOMAIN, SEMANTIC_CERTIFICATE_DOMAIN],
+            magic_values: &["LKJWIT02"],
+            digest_domains: &[
+                witness_contract::WITNESS_ENVELOPE_DOMAIN,
+                witness_contract::VALIDATION_WITNESS_DIGEST_DOMAIN,
+                witness_contract::VALIDATION_CERTIFICATE_DIGEST_DOMAIN,
+            ],
         },
         ContractDescriptor {
             key: ContractKey::SemanticValidator,
             name: "semantic validator",
-            identity: SEMANTIC_VALIDATOR_CONTRACT_IDENTITY,
-            version: 3,
+            identity: witness_contract::VALIDATOR_CONTRACT_IDENTITY,
+            version: 5,
             stability: CURRENT,
             authority: ContractAuthority::RequiredWitness,
             predecessor_policy: REJECT,
             magic_values: NONE,
-            digest_domains: &[VALIDATOR_DIGEST_DOMAIN],
+            digest_domains: &[witness_contract::VALIDATOR_CONTRACT_DIGEST_DOMAIN],
         },
         ContractDescriptor {
             key: ContractKey::Change,
@@ -511,19 +560,8 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             digest_domains: &[PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN],
         },
         ContractDescriptor {
-            key: ContractKey::Transaction,
-            name: "normalized semantic transaction",
-            identity: "lkjscript-transaction-4",
-            version: TRANSACTION_CONTRACT_VERSION,
-            stability: CURRENT,
-            authority: ContractAuthority::PublicProtocol,
-            predecessor_policy: REJECT,
-            magic_values: NONE,
-            digest_domains: &[TRANSACTION_DIGEST_DOMAIN],
-        },
-        ContractDescriptor {
             key: ContractKey::Query,
-            name: "semantic query",
+            name: "normalized semantic query",
             identity: QUERY_CONTRACT_IDENTITY,
             version: QUERY_CONTRACT_VERSION,
             stability: CURRENT,
@@ -536,68 +574,10 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             ],
         },
         ContractDescriptor {
-            key: ContractKey::QueryIndex,
-            name: "broad semantic query index",
-            identity: "lkjscript-query-index-2",
-            version: QUERY_INDEX_CONTRACT_VERSION,
-            stability: CURRENT,
-            authority: ContractAuthority::DerivedDisposable,
-            predecessor_policy: REJECT,
-            magic_values: &[QUERY_INDEX_MAGIC_TEXT],
-            digest_domains: &[
-                QUERY_INDEX_DOMAIN,
-                INDEX_DIGEST_DOMAIN,
-                QUERY_DIGEST_DOMAIN,
-                CONTINUATION_DIGEST_DOMAIN,
-            ],
-        },
-        ContractDescriptor {
-            key: ContractKey::LocalQueryIndex,
-            name: "local exact query index",
-            identity: "lkjscript-local-query-index-3",
-            version: 3,
-            stability: CURRENT,
-            authority: ContractAuthority::DerivedDisposable,
-            predecessor_policy: REJECT,
-            magic_values: &[
-                LOCAL_MANIFEST_MAGIC_TEXT,
-                LOCAL_OWNER_MAGIC_TEXT,
-                LOCAL_NAME_MAGIC_TEXT,
-            ],
-            digest_domains: &[
-                LOCAL_MANIFEST_DOMAIN,
-                LOCAL_OWNER_DOMAIN,
-                LOCAL_NAME_DOMAIN,
-                LOCAL_INDEX_BUCKET_DIGEST_DOMAIN,
-            ],
-        },
-        ContractDescriptor {
-            key: ContractKey::Draft,
-            name: "semantic draft",
-            identity: "lkjscript-draft-4",
-            version: DRAFT_CONTRACT_VERSION,
-            stability: CURRENT,
-            authority: ContractAuthority::Operational,
-            predecessor_policy: REJECT,
-            magic_values: &[DRAFT_MAGIC_TEXT],
-            digest_domains: &[DRAFT_DIGEST_DOMAIN],
-        },
-        ContractDescriptor {
-            key: ContractKey::Diff,
-            name: "semantic diff",
-            identity: "lkjscript-diff-2",
-            version: SEMANTIC_DIFF_CONTRACT_VERSION,
-            stability: CURRENT,
-            authority: ContractAuthority::PublicProtocol,
-            predecessor_policy: REJECT,
-            magic_values: NONE,
-            digest_domains: &[SEMANTIC_DIFF_DIGEST_DOMAIN],
-        },
-        ContractDescriptor {
-            key: ContractKey::Merge,
-            name: "semantic merge",
-            identity: "lkjscript-merge-2",
-            version: SEMANTIC_MERGE_CONTRACT_VERSION,
+            key: ContractKey::ProjectCreation,
+            name: "typed project creation recipe",
+            identity: PROJECT_CREATION_CONTRACT_IDENTITY,
+            version: PROJECT_CREATION_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::PublicProtocol,
             predecessor_policy: REJECT,
@@ -605,88 +585,138 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             digest_domains: NONE,
         },
         ContractDescriptor {
-            key: ContractKey::ReviewProjection,
-            name: "review projection",
-            identity: "lkjscript-review-projection-2",
-            version: REVIEW_PROJECTION_CONTRACT_VERSION,
+            key: ContractKey::PackageRevision,
+            name: "package revision",
+            identity: PACKAGE_REVISION_CONTRACT_IDENTITY,
+            version: PACKAGE_REVISION_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::DerivedDisposable,
             predecessor_policy: REJECT,
-            magic_values: NONE,
-            digest_domains: &[REVIEW_PROJECTION_DIGEST_DOMAIN],
+            magic_values: &["LKJPKR01"],
+            digest_domains: &[
+                PACKAGE_REVISION_ENVELOPE_DOMAIN,
+                super::super::kernel::contract::PACKAGE_REVISION_DIGEST_DOMAIN,
+            ],
         },
         ContractDescriptor {
-            key: ContractKey::Artifact,
-            name: "graph artifact bundle",
-            identity: "lkjscript-artifact-4",
+            key: ContractKey::PackageInterface,
+            name: "package interface owner",
+            identity: PACKAGE_INTERFACE_CONTRACT_IDENTITY,
+            version: PACKAGE_INTERFACE_CONTRACT_VERSION,
+            stability: CURRENT,
+            authority: ContractAuthority::DerivedDisposable,
+            predecessor_policy: REJECT,
+            magic_values: &["LKJPIF03"],
+            digest_domains: &[
+                PACKAGE_INTERFACE_ENVELOPE_DOMAIN,
+                super::super::kernel::contract::PACKAGE_INTERFACE_DIGEST_DOMAIN,
+                storage_contract::PACKAGE_INTERFACE_OWNER_DIGEST_DOMAIN,
+            ],
+        },
+        ContractDescriptor {
+            key: ContractKey::PackageTransport,
+            name: "package transport",
+            identity: PACKAGE_TRANSPORT_CONTRACT_IDENTITY,
+            version: PACKAGE_TRANSPORT_CONTRACT_VERSION,
+            stability: CURRENT,
+            authority: ContractAuthority::DerivedDisposable,
+            predecessor_policy: REJECT,
+            magic_values: &["LKJPKT01"],
+            digest_domains: &[
+                PACKAGE_TRANSPORT_ENVELOPE_DOMAIN,
+                super::super::kernel::contract::PACKAGE_TRANSPORT_DIGEST_DOMAIN,
+            ],
+        },
+        ContractDescriptor {
+            key: ContractKey::PackageTransportSelection,
+            name: "repository package transport selection",
+            identity: PACKAGE_TRANSPORT_SELECTION_CONTRACT_IDENTITY,
+            version: PACKAGE_TRANSPORT_SELECTION_CONTRACT_VERSION,
+            stability: CURRENT,
+            authority: ContractAuthority::Operational,
+            predecessor_policy: REJECT,
+            magic_values: &["LKJPTS01"],
+            digest_domains: &[PACKAGE_TRANSPORT_SELECTION_ENVELOPE_DOMAIN],
+        },
+        ContractDescriptor {
+            key: ContractKey::CompilationManifest,
+            name: "revision-bound compilation manifest",
+            identity: COMPILATION_MANIFEST_CONTRACT_IDENTITY,
+            version: COMPILATION_MANIFEST_CONTRACT_VERSION,
+            stability: CURRENT,
+            authority: ContractAuthority::DerivedDisposable,
+            predecessor_policy: REJECT,
+            magic_values: &["LKJCMF03"],
+            digest_domains: &[
+                COMPILATION_MANIFEST_ENVELOPE_DOMAIN,
+                storage_contract::COMPILATION_MANIFEST_DIGEST_DOMAIN,
+            ],
+        },
+        ContractDescriptor {
+            key: ContractKey::CompilerUnit,
+            name: "normalized compiler unit",
+            identity: COMPILER_UNIT_CONTRACT_IDENTITY,
+            version: COMPILER_UNIT_CONTRACT_VERSION,
+            stability: CURRENT,
+            authority: ContractAuthority::DerivedDisposable,
+            predecessor_policy: REJECT,
+            magic_values: &["LKJCUN01"],
+            digest_domains: &[
+                COMPILER_UNIT_ENVELOPE_DOMAIN,
+                COMPILER_UNIT_KEY_DOMAIN,
+                storage_contract::COMPILER_UNIT_DIGEST_DOMAIN,
+            ],
+        },
+        simple_contract(
+            ContractKey::Bytecode,
+            "normalized typed bytecode",
+            BYTECODE_CONTRACT_IDENTITY,
+            BYTECODE_CONTRACT_VERSION,
+            ContractAuthority::DerivedDisposable,
+        ),
+        ContractDescriptor {
+            key: ContractKey::ArtifactManifest,
+            name: "normalized artifact manifest",
+            identity: ARTIFACT_MANIFEST_CONTRACT_IDENTITY,
             version: ARTIFACT_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::Runtime,
             predecessor_policy: REJECT,
-            magic_values: &[ARTIFACT_MAGIC_TEXT],
-            digest_domains: &[ARTIFACT_DOMAIN, ARTIFACT_OBJECT_DIGEST_DOMAIN],
-        },
-        ContractDescriptor {
-            key: ContractKey::PackageArtifact,
-            name: "package artifact object",
-            identity: "lkjscript-package-artifact-3",
-            version: PACKAGE_ARTIFACT_CONTRACT_VERSION,
-            stability: CURRENT,
-            authority: ContractAuthority::Runtime,
-            predecessor_policy: REJECT,
-            magic_values: &[PACKAGE_ARTIFACT_MAGIC_TEXT],
-            digest_domains: &[PACKAGE_ARTIFACT_DOMAIN],
-        },
-        ContractDescriptor {
-            key: ContractKey::Backup,
-            name: "repository backup",
-            identity: "lkjscript-backup-4",
-            version: BACKUP_CONTRACT_VERSION,
-            stability: CURRENT,
-            authority: ContractAuthority::Operational,
-            predecessor_policy: REJECT,
-            magic_values: &[BACKUP_MAGIC_TEXT, BACKUP_SEGMENT_MAGIC_TEXT],
+            magic_values: &["LKJAMF10"],
             digest_domains: &[
-                BACKUP_DIGEST_DOMAIN,
-                BACKUP_SEGMENT_DIGEST_DOMAIN,
-                BACKUP_SEGMENT_REFERENCE_DIGEST_DOMAIN,
-                BACKUP_ENTRY_DIGEST_DOMAIN,
-                BACKUP_OBJECT_DIGEST_DOMAIN,
+                ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
+                storage_contract::ARTIFACT_MANIFEST_DIGEST_DOMAIN,
             ],
         },
         ContractDescriptor {
-            key: ContractKey::Bootstrap,
-            name: "project bootstrap",
-            identity: "lkjscript-bootstrap-2",
-            version: BOOTSTRAP_CONTRACT_VERSION,
+            key: ContractKey::ArtifactBundle,
+            name: "normalized artifact bundle",
+            identity: ARTIFACT_BUNDLE_CONTRACT_IDENTITY,
+            version: ARTIFACT_CONTRACT_VERSION,
             stability: CURRENT,
-            authority: ContractAuthority::PublicProtocol,
+            authority: ContractAuthority::Runtime,
             predecessor_policy: REJECT,
-            magic_values: NONE,
-            digest_domains: NONE,
+            magic_values: &["LKJART10", "LKJAEN10"],
+            digest_domains: &[
+                ARTIFACT_BUNDLE_DIGEST_DOMAIN,
+                ARTIFACT_BUNDLE_CHECKSUM_DOMAIN,
+                ARTIFACT_CLOSURE_DIGEST_DOMAIN,
+            ],
         },
         ContractDescriptor {
-            key: ContractKey::Retention,
-            name: "retention preview",
-            identity: "lkjscript-retention-1",
-            version: RETENTION_CONTRACT_VERSION,
-            stability: CURRENT,
-            authority: ContractAuthority::Operational,
-            predecessor_policy: REJECT,
-            magic_values: NONE,
-            digest_domains: &[CLEANUP_PLAN_DIGEST_DOMAIN, CLEANUP_CANDIDATE_DIGEST_DOMAIN],
+            key: ContractKey::FrozenServiceArtifact,
+            name: "frozen predecessor service artifact bundle",
+            identity: "lkjscript-artifact-4",
+            version: FROZEN_SERVICE_ARTIFACT_VERSION,
+            stability: ContractStability::Frozen,
+            authority: ContractAuthority::Runtime,
+            predecessor_policy: PredecessorPolicy::NotApplicable,
+            magic_values: &[ARTIFACT_MAGIC_TEXT],
+            digest_domains: &[ARTIFACT_DOMAIN, ARTIFACT_OBJECT_DIGEST_DOMAIN],
         },
-        simple_contract_with_domains(
-            ContractKey::PackageDescriptor,
-            "package descriptor",
-            "lkjscript-package-descriptor-1",
-            PACKAGE_CONTRACT_VERSION,
-            ContractAuthority::PublicProtocol,
-            &[PACKAGE_REVISION_DIGEST_DOMAIN],
-        ),
         simple_contract(
             ContractKey::Deployment,
-            "deployment descriptor",
+            "frozen-artifact deployment descriptor",
             "lkjscript-deployment-1",
             DEPLOYMENT_CONTRACT_VERSION,
             ContractAuthority::Deployment,
@@ -721,7 +751,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
         ),
         simple_contract(
             ContractKey::Json,
-            "JSON value",
+            "bounded JSON value adapter",
             "lkjscript-json-1",
             JSON_CONTRACT_VERSION,
             ContractAuthority::PublicProtocol,
@@ -742,7 +772,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
         ),
         simple_contract(
             ContractKey::ResidentRuntime,
-            "resident runtime",
+            "frozen-artifact resident runtime",
             "lkjscript-resident-runtime-1",
             RESIDENT_RUNTIME_CONTRACT_VERSION,
             ContractAuthority::Runtime,
@@ -782,13 +812,6 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             WORKER_RUNNER_CONTRACT_VERSION,
             ContractAuthority::Runtime,
         ),
-        simple_contract(
-            ContractKey::Workspace,
-            "semantic workspace",
-            "lkjscript-workspace-3",
-            WORKSPACE_CONTRACT_VERSION,
-            ContractAuthority::PublicProtocol,
-        ),
     ];
     CONTRACTS
 }
@@ -813,27 +836,6 @@ const fn simple_contract(
     }
 }
 
-const fn simple_contract_with_domains(
-    key: ContractKey,
-    name: &'static str,
-    identity: &'static str,
-    version: u16,
-    authority: ContractAuthority,
-    digest_domains: &'static [&'static str],
-) -> ContractDescriptor {
-    ContractDescriptor {
-        key,
-        name,
-        identity,
-        version,
-        stability: ContractStability::Current,
-        authority,
-        predecessor_policy: PredecessorPolicy::Reject,
-        magic_values: &[],
-        digest_domains,
-    }
-}
-
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PublicOperation {
@@ -843,40 +845,28 @@ pub enum PublicOperation {
     Inspect,
     Query,
     Change,
-    Draft,
-    History,
     Package,
     Check,
     Build,
     Run,
     Serve,
     Worker,
-    Review,
-    Backup,
-    Restore,
-    Doctor,
 }
 
 impl PublicOperation {
-    pub const ALL: [Self; 18] = [
+    pub const ALL: [Self; 12] = [
         Self::Capabilities,
         Self::New,
         Self::Status,
         Self::Inspect,
         Self::Query,
         Self::Change,
-        Self::Draft,
-        Self::History,
         Self::Package,
         Self::Check,
         Self::Build,
         Self::Run,
         Self::Serve,
         Self::Worker,
-        Self::Review,
-        Self::Backup,
-        Self::Restore,
-        Self::Doctor,
     ];
 
     pub const fn name(self) -> &'static str {
@@ -887,18 +877,12 @@ impl PublicOperation {
             Self::Inspect => "inspect",
             Self::Query => "query",
             Self::Change => "change",
-            Self::Draft => "draft",
-            Self::History => "history",
             Self::Package => "package",
             Self::Check => "check",
             Self::Build => "build",
             Self::Run => "run",
             Self::Serve => "serve",
             Self::Worker => "worker",
-            Self::Review => "review",
-            Self::Backup => "backup",
-            Self::Restore => "restore",
-            Self::Doctor => "doctor",
         }
     }
 
@@ -915,11 +899,8 @@ pub enum AuthorityEffect {
     None,
     Accepted,
     AcceptedOnCommit,
-    DraftOrAccepted,
-    Operational,
     ExternalOutput,
     ExternalRuntime,
-    OperationalIndexesOnly,
     OptionalExternalOutput,
 }
 
@@ -929,11 +910,8 @@ impl AuthorityEffect {
             Self::None => "none",
             Self::Accepted => "accepted",
             Self::AcceptedOnCommit => "accepted_on_commit",
-            Self::DraftOrAccepted => "draft_or_accepted",
-            Self::Operational => "operational",
             Self::ExternalOutput => "external_output",
             Self::ExternalRuntime => "external_runtime",
-            Self::OperationalIndexesOnly => "operational_indexes_only",
             Self::OptionalExternalOutput => "optional_external_output",
         }
     }
@@ -945,8 +923,6 @@ pub enum ProjectRequirement {
     None,
     Destination,
     Required,
-    RequiredByAction,
-    RequiredForStage,
     DescriptorBound,
 }
 
@@ -956,8 +932,6 @@ impl ProjectRequirement {
             Self::None => "none",
             Self::Destination => "destination",
             Self::Required => "required",
-            Self::RequiredByAction => "required_by_action",
-            Self::RequiredForStage => "required_for_stage",
             Self::DescriptorBound => "descriptor_bound",
         }
     }
@@ -1001,19 +975,17 @@ pub enum ControlModel {
     QueryRequest,
     QueryResult,
     ChangeRequest,
-    DraftRequest,
-    HistoryRequest,
     PackageRequest,
+    PackageResult,
     CheckRequest,
+    CheckResult,
     BuildRequest,
+    BuildResult,
     RunRequest,
+    RunResult,
     ServeRequest,
     WorkerRequest,
-    ReviewRequest,
-    BackupRequest,
-    RestoreRequest,
-    DoctorRequest,
-    CliSuccess,
+    CompactResult,
     RuntimeEvent,
 }
 
@@ -1031,19 +1003,17 @@ impl ControlModel {
             Self::QueryRequest => "query_request",
             Self::QueryResult => "query_result",
             Self::ChangeRequest => "change_request",
-            Self::DraftRequest => "draft_request",
-            Self::HistoryRequest => "history_request",
             Self::PackageRequest => "package_request",
+            Self::PackageResult => "package_result",
             Self::CheckRequest => "check_request",
+            Self::CheckResult => "check_result",
             Self::BuildRequest => "build_request",
+            Self::BuildResult => "build_result",
             Self::RunRequest => "run_request",
+            Self::RunResult => "run_result",
             Self::ServeRequest => "serve_request",
             Self::WorkerRequest => "worker_request",
-            Self::ReviewRequest => "review_request",
-            Self::BackupRequest => "backup_request",
-            Self::RestoreRequest => "restore_request",
-            Self::DoctorRequest => "doctor_request",
-            Self::CliSuccess => "cli_success",
+            Self::CompactResult => "compact_result",
             Self::RuntimeEvent => "runtime_event",
         }
     }
@@ -1069,8 +1039,8 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
             "capabilities [COMMAND] [--known-registry DIGEST] [--section SECTION] [--known-section SECTION=DIGEST] [--output PATH] [--generate-docs DIR] [--verify-generated DIR]",
         ),
         new_operation(
-            "Create fresh normalized semantic authority atomically in an absent or empty safe destination.",
-            "new DEST [--template minimal] [--name NAME]",
+            "Create fresh normalized semantic authority atomically at one absent safe destination.",
+            "new DEST [--template minimal|command] [--name NAME]",
         ),
         status_operation(
             "Report the exact current semantic authority and its durable acceptance evidence.",
@@ -1088,43 +1058,25 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
             PublicOperation::Change,
             "Prepare, optionally export, or atomically apply one review-bound logical semantic change plan.",
             "change plan ((--input RECORDS | --input-file PATH) | rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT]) [--output PATH] | change apply ((--input RECORDS | --input-file PATH) | rename.owner --base REVISION --owner OWNER --name NAME [--idempotency KEY] [--intent TEXT]) --plan TOKEN",
-            ControlModel::ChangeRequest,
+            (ControlModel::ChangeRequest, ControlModel::CompactResult),
             AuthorityEffect::AcceptedOnCommit,
             ProjectRequirement::Required,
             BudgetProfile::SemanticChange,
-        ),
-        operation(
-            PublicOperation::Draft,
-            "Create, inspect, append, rebase, publish, or drop non-executable work.",
-            "draft create|status|append|rebase|publish|drop ...",
-            ControlModel::DraftRequest,
-            AuthorityEffect::DraftOrAccepted,
-            ProjectRequirement::Required,
-            BudgetProfile::SemanticChange,
-        ),
-        operation(
-            PublicOperation::History,
-            "List, inspect, diff, or merge exact revisions.",
-            "history list|show|diff|merge ...",
-            ControlModel::HistoryRequest,
-            AuthorityEffect::AcceptedOnCommit,
-            ProjectRequirement::Required,
-            BudgetProfile::BoundedRead,
         ),
         operation(
             PublicOperation::Package,
-            "Stage an exact dependency or inspect/export a built-in package.",
-            "package stage PATH | package builtin inspect|export ...",
-            ControlModel::PackageRequest,
-            AuthorityEffect::Operational,
-            ProjectRequirement::RequiredForStage,
+            "Inspect or export the executable's one exact built-in standard dependency.",
+            "package builtin inspect | package builtin export --kind transport|artifact --output PATH",
+            (ControlModel::PackageRequest, ControlModel::PackageResult),
+            AuthorityEffect::OptionalExternalOutput,
+            ProjectRequirement::None,
             BudgetProfile::Maintenance,
         ),
         operation(
             PublicOperation::Check,
             "Run graph-owned tests through production and independent execution.",
             "check",
-            ControlModel::CheckRequest,
+            (ControlModel::CheckRequest, ControlModel::CheckResult),
             AuthorityEffect::None,
             ProjectRequirement::Required,
             BudgetProfile::Runtime,
@@ -1132,68 +1084,32 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
         operation(
             PublicOperation::Build,
             "Build a deterministic graph-native artifact.",
-            "build [--output PATH]",
-            ControlModel::BuildRequest,
+            "build --output PATH",
+            (ControlModel::BuildRequest, ControlModel::BuildResult),
             AuthorityEffect::ExternalOutput,
             ProjectRequirement::Required,
             BudgetProfile::Build,
         ),
         operation(
             PublicOperation::Run,
-            "Run a pure command, batch, or test target through both execution tiers.",
+            "Run a pure command target through production and independent execution.",
             "run TARGET [--arguments JSON]",
-            ControlModel::RunRequest,
+            (ControlModel::RunRequest, ControlModel::RunResult),
             AuthorityEffect::None,
             ProjectRequirement::Required,
             BudgetProfile::Runtime,
         ),
         runtime_operation(
             PublicOperation::Serve,
-            "Run one plaintext HTTP deployment with bounded shutdown.",
+            "Run one plaintext HTTP deployment from the separately frozen artifact-4 boundary.",
             "serve --deployment DESCRIPTOR",
             ControlModel::ServeRequest,
         ),
         runtime_operation(
             PublicOperation::Worker,
-            "Run one bounded worker deployment.",
+            "Run one bounded worker deployment from the separately frozen artifact-4 boundary.",
             "worker --deployment DESCRIPTOR",
             ControlModel::WorkerRequest,
-        ),
-        operation(
-            PublicOperation::Review,
-            "Write a deterministic non-authoritative review projection.",
-            "review [--revision REV] [--output PATH]",
-            ControlModel::ReviewRequest,
-            AuthorityEffect::ExternalOutput,
-            ProjectRequirement::Required,
-            BudgetProfile::BoundedRead,
-        ),
-        operation(
-            PublicOperation::Backup,
-            "Capture one exact reachable canonical authority bundle.",
-            "backup [--output PATH]",
-            ControlModel::BackupRequest,
-            AuthorityEffect::ExternalOutput,
-            ProjectRequirement::Required,
-            BudgetProfile::Maintenance,
-        ),
-        operation(
-            PublicOperation::Restore,
-            "Verify and atomically restore a canonical authority bundle.",
-            "restore --backup PATH (--output PROJECT | --project PROJECT)",
-            ControlModel::RestoreRequest,
-            AuthorityEffect::Accepted,
-            ProjectRequirement::Destination,
-            BudgetProfile::Maintenance,
-        ),
-        operation(
-            PublicOperation::Doctor,
-            "Validate authority or preview exact retained/reclaimable storage.",
-            "doctor [--deep] | doctor cleanup",
-            ControlModel::DoctorRequest,
-            AuthorityEffect::OperationalIndexesOnly,
-            ProjectRequirement::Required,
-            BudgetProfile::Maintenance,
         ),
     ];
     OPERATIONS
@@ -1203,7 +1119,7 @@ const fn operation(
     operation: PublicOperation,
     purpose: &'static str,
     usage: &'static str,
-    request_model: ControlModel,
+    models: (ControlModel, ControlModel),
     authority_effect: AuthorityEffect,
     project_requirement: ProjectRequirement,
     default_budget: BudgetProfile,
@@ -1212,8 +1128,8 @@ const fn operation(
         operation,
         purpose,
         usage,
-        request_model,
-        response_model: ControlModel::CliSuccess,
+        request_model: models.0,
+        response_model: models.1,
         authority_effect,
         project_requirement,
         default_budget,
@@ -1454,48 +1370,6 @@ pub fn limit_descriptors() -> &'static [LimitDescriptor] {
             MAXIMUM_QUERY_CONTINUATION_BYTES,
             LimitClass::HostileDecoderSafety,
             LimitUnit::Bytes,
-            OverridePolicy::Fixed,
-        ),
-        limit(
-            "transaction_operations",
-            MAXIMUM_TRANSACTION_OPERATIONS,
-            LimitClass::ExplicitRequestBudget,
-            LimitUnit::Items,
-            OverridePolicy::RequestUpToMaximum,
-        ),
-        limit(
-            "transaction_work",
-            MAXIMUM_TRANSACTION_WORK,
-            LimitClass::ExplicitRequestBudget,
-            LimitUnit::Work,
-            OverridePolicy::RequestUpToMaximum,
-        ),
-        limit(
-            "transaction_affected_owners",
-            MAXIMUM_TRANSACTION_AFFECTED_OWNERS,
-            LimitClass::ExplicitRequestBudget,
-            LimitUnit::Items,
-            OverridePolicy::RequestUpToMaximum,
-        ),
-        limit(
-            "backup_manifest_bytes",
-            MAXIMUM_BACKUP_MANIFEST_BYTES,
-            LimitClass::HostileDecoderSafety,
-            LimitUnit::Bytes,
-            OverridePolicy::Fixed,
-        ),
-        limit(
-            "backup_segment_bytes",
-            MAXIMUM_BACKUP_SEGMENT_BYTES,
-            LimitClass::HostileDecoderSafety,
-            LimitUnit::Bytes,
-            OverridePolicy::Fixed,
-        ),
-        limit(
-            "backup_segment_entries",
-            BACKUP_SEGMENT_ENTRY_LIMIT,
-            LimitClass::ImplementationLimitation,
-            LimitUnit::Items,
             OverridePolicy::Fixed,
         ),
     ];
@@ -1895,7 +1769,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "change_precondition_namespace_witness",
             DiagnosticClass::Corrupt,
             "A derived namespace entry disagrees with its canonical owner record.",
-            "Preserve the repository and run deep doctor verification.",
+            "Preserve the repository and report the exact diagnostic; do not retry a write.",
         ),
         diagnostic(
             "change_precondition_dependency_binding",
@@ -1955,43 +1829,43 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "change_delete_owner_cache",
             DiagnosticClass::Corrupt,
             "Deletion preparation lost a selected canonical owner.",
-            "Preserve the repository and run deep doctor verification.",
+            "Preserve the repository and report the exact diagnostic; do not retry a write.",
         ),
         diagnostic(
             "change_delete_ownership_endpoint",
             DiagnosticClass::Corrupt,
             "An ownership relation has an invalid endpoint domain.",
-            "Preserve the repository and run deep doctor verification.",
+            "Preserve the repository and report the exact diagnostic; do not retry a write.",
         ),
         diagnostic(
             "change_delete_ownership_missing",
             DiagnosticClass::Corrupt,
             "An accepted owner has no exact ownership witness.",
-            "Preserve the repository and run deep doctor verification.",
+            "Preserve the repository and report the exact diagnostic; do not retry a write.",
         ),
         diagnostic(
             "change_delete_ownership_disagreement",
             DiagnosticClass::Corrupt,
             "An ownership witness is not reproduced by accepted canonical meaning.",
-            "Preserve the repository and run deep doctor verification.",
+            "Preserve the repository and report the exact diagnostic; do not retry a write.",
         ),
         diagnostic(
             "change_delete_ownership_package",
             DiagnosticClass::Corrupt,
             "An ownership relation crosses a foreign package boundary.",
-            "Preserve the repository and run deep doctor verification.",
+            "Preserve the repository and report the exact diagnostic; do not retry a write.",
         ),
         diagnostic(
             "change_delete_relation_disagreement",
             DiagnosticClass::Corrupt,
             "An incoming relation witness is not reproduced by accepted canonical meaning.",
-            "Preserve the repository and run deep doctor verification.",
+            "Preserve the repository and report the exact diagnostic; do not retry a write.",
         ),
         diagnostic(
             "change_delete_revision",
             DiagnosticClass::Corrupt,
             "Deletion preparation has no exact accepted base revision.",
-            "Preserve the repository and run deep doctor verification.",
+            "Preserve the repository and report the exact diagnostic; do not retry a write.",
         ),
         diagnostic(
             "change_plan_domain",
@@ -2141,31 +2015,31 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "change_logical_plan_authority",
             DiagnosticClass::Corrupt,
             "Prepared authority, semantic diff, receipt, and candidate identities disagree.",
-            "Preserve the repository and run deep doctor verification.",
+            "Preserve the repository and report the exact diagnostic; do not retry a write.",
         ),
         diagnostic(
             "change_logical_plan_value_sets",
             DiagnosticClass::Corrupt,
             "Logical dependency or retirement values disagree with the prepared semantic diff.",
-            "Preserve the repository and run deep doctor verification.",
+            "Preserve the repository and report the exact diagnostic; do not retry a write.",
         ),
         diagnostic(
             "change_logical_plan_validation_counts",
             DiagnosticClass::Corrupt,
             "Logical validation or test membership disagrees with receipt counts.",
-            "Preserve the repository and run deep doctor verification.",
+            "Preserve the repository and report the exact diagnostic; do not retry a write.",
         ),
         diagnostic(
             "change_logical_plan_base",
             DiagnosticClass::Corrupt,
             "Prepared authored change does not bind one exact base.",
-            "Preserve the repository and run deep doctor verification.",
+            "Preserve the repository and report the exact diagnostic; do not retry a write.",
         ),
         diagnostic(
             "change_logical_plan_diff",
             DiagnosticClass::Corrupt,
             "Prepared authored change does not contain a current semantic change diff.",
-            "Preserve the repository and run deep doctor verification.",
+            "Preserve the repository and report the exact diagnostic; do not retry a write.",
         ),
         diagnostic(
             "change_logical_plan_allocations",
@@ -2177,13 +2051,13 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "change_logical_plan_reasons",
             DiagnosticClass::Corrupt,
             "Logical impact reasons are duplicated or noncanonical.",
-            "Preserve the repository and run deep doctor verification.",
+            "Preserve the repository and report the exact diagnostic; do not retry a write.",
         ),
         diagnostic(
             "change_logical_plan_relations",
             DiagnosticClass::Corrupt,
             "A logical semantic relation is both removed and added.",
-            "Preserve the repository and run deep doctor verification.",
+            "Preserve the repository and report the exact diagnostic; do not retry a write.",
         ),
         diagnostic(
             "change_logical_plan_order",
@@ -2195,7 +2069,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "change_logical_plan_dependency",
             DiagnosticClass::Corrupt,
             "A logical dependency value disagrees with its exact object identity.",
-            "Preserve the repository and run deep doctor verification.",
+            "Preserve the repository and report the exact diagnostic; do not retry a write.",
         ),
         diagnostic(
             "change_logical_plan_dependency_before",
@@ -2207,7 +2081,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "change_logical_plan_retirement",
             DiagnosticClass::Corrupt,
             "A logical retirement value disagrees with its exact object identity.",
-            "Preserve the repository and run deep doctor verification.",
+            "Preserve the repository and report the exact diagnostic; do not retry a write.",
         ),
         diagnostic(
             "change_logical_plan_retirement_before",
@@ -2219,13 +2093,13 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "change_logical_plan_validation",
             DiagnosticClass::Corrupt,
             "Prepared validation membership disagrees with its impact plan.",
-            "Preserve the repository and run deep doctor verification.",
+            "Preserve the repository and report the exact diagnostic; do not retry a write.",
         ),
         diagnostic(
             "change_logical_plan_tests",
             DiagnosticClass::Corrupt,
             "Prepared selected tests disagree with validation evidence.",
-            "Preserve the repository and run deep doctor verification.",
+            "Preserve the repository and report the exact diagnostic; do not retry a write.",
         ),
         diagnostic(
             "change_plan_file_read",
@@ -2369,7 +2243,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "change_authored_dependency_before",
             DiagnosticClass::Corrupt,
             "Authored dependency lowering lost its exact base binding.",
-            "Preserve the repository and run deep doctor verification.",
+            "Preserve the repository and report the exact diagnostic; do not retry a write.",
         ),
         diagnostic(
             "change_stale_base",
@@ -3037,11 +2911,18 @@ pub struct TemplateDescriptor {
 }
 
 pub fn template_descriptors() -> &'static [TemplateDescriptor] {
-    const TEMPLATES: &[TemplateDescriptor] = &[TemplateDescriptor {
-        name: "minimal",
-        purpose: "Create the smallest normalized accepted project authority.",
-        creates_command_target: false,
-    }];
+    const TEMPLATES: &[TemplateDescriptor] = &[
+        TemplateDescriptor {
+            name: "minimal",
+            purpose: "Create the smallest normalized accepted project authority.",
+            creates_command_target: false,
+        },
+        TemplateDescriptor {
+            name: "command",
+            purpose: "Create a tested pure command with one exact built-in standard dependency.",
+            creates_command_target: true,
+        },
+    ];
     TEMPLATES
 }
 
@@ -3546,9 +3427,9 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
             }
         }
         RegistrySection::Relations => {
-            for role in RelationRole::ALL {
+            for role in RelationKind::ALL {
                 records.push(compact_record(
-                    "relation.role",
+                    "relation.kind",
                     &[("name", role.name().to_owned())],
                 )?);
             }

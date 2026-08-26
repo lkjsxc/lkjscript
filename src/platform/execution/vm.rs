@@ -1,7 +1,6 @@
 use super::capability::BoundTransaction;
 use super::{BoundCapabilities, Instruction, PreparedFunction, PreparedProgram};
 use crate::platform::semantic::OwnerId;
-use crate::platform::semantic_id::ExpressionId;
 use crate::platform::value::{MapKey, Value};
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -162,21 +161,6 @@ impl<'a> Vm<'a> {
                 ExecutionFailureClass::Infrastructure,
                 "vm_function_missing",
                 "prepared semantic function is absent",
-            )
-        })?;
-        self.invoke_inner(function, arguments, None, &ExecutionControl::uncancelled())
-    }
-
-    pub(crate) fn invoke_test_expression(
-        &self,
-        expression: &ExpressionId,
-        arguments: Vec<Value>,
-    ) -> Result<(Value, RunObservation), ExecutionError> {
-        let function = self.program.test_expression(expression).ok_or_else(|| {
-            ExecutionError::new(
-                ExecutionFailureClass::Infrastructure,
-                "vm_test_expression_missing",
-                format!("prepared test expression '{expression}' is absent"),
             )
         })?;
         self.invoke_inner(function, arguments, None, &ExecutionControl::uncancelled())

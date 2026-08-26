@@ -2,14 +2,27 @@
 
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::kernel::{
-    KernelSnapshot, Name, PackageId, SemanticRoot, SemanticRootDigest, SemanticStateDigest,
+    ComparisonPolicy, DeclarationPayload, DeclarationRecord, DeclarationReference,
+    DeclarationVisibility, DependencyRecord, ExpressionOperation, ExpressionRecord,
+    FunctionDeclaration, FunctionEffect, KernelSnapshot, Name, OwnerHeader, OwnerKey, OwnerKind,
+    OwnerRecord, PackageId, PortImplementation, PortRecord, PortReference, SemanticRoot,
+    SemanticRootDigest, SemanticStateDigest, TargetRecord, TextValue, TypeForm, TypeObjectInterner,
+    validate_full,
 };
+use super::package::RunnerKind;
 use super::persistent_map::{MapContentDigest, MapRoot, PageDigest};
-use super::publication::{GraphRepository, ReceiptObjectDigest, RevisionObjectDigest};
-use super::semantic_id::{RepositoryId, RevisionId};
+use super::publication::{
+    GraphRepository, InitialPackageTransport, ReceiptObjectDigest, RevisionObjectDigest,
+};
+use super::semantic_id::{
+    DeclarationId, ExpressionId, ModuleId, PortId, RepositoryId, RevisionId, TargetId,
+};
 use std::collections::BTreeMap;
 use std::fs::{self, File};
 use std::path::{Component, Path, PathBuf};
+
+pub const PROJECT_CREATION_CONTRACT_IDENTITY: &str = "lkjscript-project-creation-1";
+pub const PROJECT_CREATION_CONTRACT_VERSION: u16 = 1;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MinimalProjectCreation {
@@ -22,6 +35,11 @@ pub struct MinimalProjectCreation {
     pub semantic_root: SemanticRootDigest,
     pub revision_record: RevisionObjectDigest,
     pub receipt: ReceiptObjectDigest,
+    pub template: &'static str,
+    pub owners: u64,
+    pub dependencies: u64,
+    pub targets: u64,
+    pub tests: u64,
 }
 
 pub fn create_minimal_project(
@@ -31,6 +49,13 @@ pub fn create_minimal_project(
     create_minimal_project_before_publish(destination, package_name, |_| Ok(()))
 }
 
+pub fn create_command_project(
+    destination: &Path,
+    package_name: &str,
+) -> Result<MinimalProjectCreation, Diagnostic> {
+    create_project_before_publish(destination, package_name, command_recipe, |_| Ok(()))
+}
+
 fn create_minimal_project_before_publish<F>(
     destination: &Path,
     package_name: &str,
@@ -38,6 +63,27 @@ fn create_minimal_project_before_publish<F>(
 ) -> Result<MinimalProjectCreation, Diagnostic>
 where
     F: FnOnce(&Path) -> Result<(), Diagnostic>,
+{
+    create_project_before_publish(destination, package_name, minimal_recipe, before_publish)
+}
+
+struct ProjectRecipe {
+    snapshot: KernelSnapshot,
+    transports: Vec<InitialPackageTransport>,
+    template: &'static str,
+    targets: u64,
+    tests: u64,
+}
+
+fn create_project_before_publish<F, R>(
+    destination: &Path,
+    package_name: &str,
+    recipe: R,
+    before_publish: F,
+) -> Result<MinimalProjectCreation, Diagnostic>
+where
+    F: FnOnce(&Path) -> Result<(), Diagnostic>,
+    R: FnOnce(RepositoryId, PackageId, Name) -> Result<ProjectRecipe, Diagnostic>,
 {
     let destination = safe_destination(destination)?;
     let parent = destination.parent().ok_or_else(|| {
@@ -50,13 +96,23 @@ where
     let package_name = Name::new(package_name)?;
     let repository = RepositoryId::generate()?;
     let package = PackageId::generate()?;
-    let logical = empty_snapshot(repository, package, package_name.clone());
+    let recipe = recipe(repository, package, package_name.clone())?;
+    validate_full(&recipe.snapshot).map_err(|diagnostics| {
+        diagnostics.into_iter().next().unwrap_or_else(|| {
+            creation_error(
+                DiagnosticClass::Corrupt,
+                "new_recipe_validation",
+                "typed project recipe failed without an exact diagnostic",
+            )
+        })
+    })?;
     let private = parent.join(format!(".lkjscript-project-stage-{repository}"));
 
-    let created = GraphRepository::create(
+    let created = GraphRepository::create_with_package_transports(
         &private,
-        &logical,
-        Some("public minimal project bootstrap".to_owned()),
+        &recipe.snapshot,
+        Some(format!("public {} project bootstrap", recipe.template)),
+        &recipe.transports,
     )?;
     if let Err(error) = before_publish(&destination) {
         remove_owned_stage(&private);
@@ -97,7 +153,257 @@ where
         semantic_root: current.accepted.semantic_root,
         revision_record: current.head.record,
         receipt: current.accepted.receipt,
+        template: recipe.template,
+        owners: recipe.snapshot.owners.len() as u64,
+        dependencies: recipe.snapshot.dependencies.len() as u64,
+        targets: recipe.targets,
+        tests: recipe.tests,
     })
+}
+
+fn minimal_recipe(
+    repository: RepositoryId,
+    package: PackageId,
+    package_name: Name,
+) -> Result<ProjectRecipe, Diagnostic> {
+    Ok(ProjectRecipe {
+        snapshot: empty_snapshot(repository, package, package_name),
+        transports: Vec::new(),
+        template: "minimal",
+        targets: 0,
+        tests: 0,
+    })
+}
+
+fn command_recipe(
+    repository: RepositoryId,
+    package: PackageId,
+    package_name: Name,
+) -> Result<ProjectRecipe, Diagnostic> {
+    let standard = super::builtin_standard::BuiltinStandard::load()?;
+    let (text_from_static, static_text_type, text_type) = standard.command_text_signature()?;
+    let seed = repository.bytes();
+    let module = ModuleId::migrate(&seed, 0);
+    let function = DeclarationId::migrate(&seed, 0);
+    let component = DeclarationId::migrate(&seed, 1);
+    let test = DeclarationId::migrate(&seed, 2);
+    let literal = ExpressionId::migrate(&seed, 0);
+    let body = ExpressionId::migrate(&seed, 1);
+    let test_actual = ExpressionId::migrate(&seed, 2);
+    let test_expected = ExpressionId::migrate(&seed, 3);
+    let port = PortId::migrate(&seed, 0);
+    let target = TargetId::migrate(&seed, 0);
+
+    let mut interner = TypeObjectInterner::default();
+    let local_text = interner.intern(TypeForm::Text)?;
+    if local_text != text_type
+        || !matches!(
+            standard
+                .interface_types
+                .get(&static_text_type)
+                .map(|value| &value.form),
+            Some(TypeForm::StaticText)
+        )
+    {
+        return Err(creation_error(
+            DiagnosticClass::Corrupt,
+            "new_command_standard_types",
+            "built-in standard primitive types disagree with canonical Graph 5 types",
+        ));
+    }
+    let function_type = interner.intern(TypeForm::Function {
+        parameters: Vec::new(),
+        result: text_type,
+    })?;
+
+    let mut owners = BTreeMap::new();
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Module(super::kernel::ModuleRecord {
+            header: OwnerHeader::new(OwnerKey::Module(module), OwnerKind::Module),
+            name: Name::new("application")?,
+        }),
+    )?;
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Expression(ExpressionRecord::new(
+            literal,
+            ExpressionOperation::StaticText {
+                value: TextValue::Inline {
+                    text: "hello".to_owned(),
+                },
+            },
+        )?),
+    )?;
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Expression(ExpressionRecord::new(
+            body,
+            ExpressionOperation::Call {
+                function: text_from_static,
+                type_arguments: Vec::new(),
+                arguments: vec![literal],
+            },
+        )?),
+    )?;
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Declaration(DeclarationRecord {
+            header: OwnerHeader::new(OwnerKey::Declaration(function), OwnerKind::PureFunction),
+            module,
+            name: Name::new("greet")?,
+            visibility: DeclarationVisibility::Private,
+            payload: DeclarationPayload::Function(FunctionDeclaration {
+                type_parameters: Vec::new(),
+                parameters: Vec::new(),
+                result: text_type,
+                effect: FunctionEffect::Pure,
+                body,
+            }),
+        }),
+    )?;
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Port(PortRecord {
+            header: OwnerHeader::new(OwnerKey::Port(port), OwnerKind::Port),
+            declaration: component,
+            name: Name::new("main")?,
+            function_type,
+            implementation: PortImplementation::Function(DeclarationReference {
+                package,
+                declaration: function,
+            }),
+        }),
+    )?;
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Declaration(DeclarationRecord {
+            header: OwnerHeader::new(OwnerKey::Declaration(component), OwnerKind::Component),
+            module,
+            name: Name::new("application")?,
+            visibility: DeclarationVisibility::Package,
+            payload: DeclarationPayload::Component {
+                requirements: Vec::new(),
+                ports: vec![port],
+            },
+        }),
+    )?;
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Target(TargetRecord {
+            header: OwnerHeader::new(OwnerKey::Target(target), OwnerKind::Target),
+            name: Name::new("main")?,
+            component: DeclarationReference {
+                package,
+                declaration: component,
+            },
+            port: PortReference { package, port },
+            runner: RunnerKind::Command,
+        }),
+    )?;
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Expression(ExpressionRecord::new(
+            test_actual,
+            ExpressionOperation::Call {
+                function: DeclarationReference {
+                    package,
+                    declaration: function,
+                },
+                type_arguments: Vec::new(),
+                arguments: Vec::new(),
+            },
+        )?),
+    )?;
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Expression(ExpressionRecord::new(
+            test_expected,
+            ExpressionOperation::Text {
+                value: TextValue::Inline {
+                    text: "hello".to_owned(),
+                },
+            },
+        )?),
+    )?;
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Declaration(DeclarationRecord {
+            header: OwnerHeader::new(OwnerKey::Declaration(test), OwnerKind::Test),
+            module,
+            name: Name::new("main-returns-hello")?,
+            visibility: DeclarationVisibility::Private,
+            payload: DeclarationPayload::Test {
+                actual: test_actual,
+                expected: test_expected,
+                comparison: ComparisonPolicy::Exact,
+            },
+        }),
+    )?;
+
+    let dependency = DependencyRecord {
+        graph_contract_version: super::kernel::contract::GRAPH_CONTRACT_VERSION,
+        package: standard.package,
+        semantic_revision: standard.semantic_revision,
+        package_revision: standard.package_revision,
+    };
+    let dependency_interfaces = BTreeMap::from([(
+        standard.package_revision,
+        standard
+            .interface_owners
+            .iter()
+            .map(|(owner, value)| (*owner, value.record.clone()))
+            .collect(),
+    )]);
+    let dependency_types = standard.interface_types.clone();
+    let owners_len = owners.len();
+    Ok(ProjectRecipe {
+        snapshot: KernelSnapshot {
+            root: SemanticRoot {
+                graph_contract_version: super::kernel::contract::GRAPH_CONTRACT_VERSION,
+                repository_id: repository,
+                package_id: package,
+                package_name,
+                owners: placeholder_map(owners_len),
+                dependencies: placeholder_map(1),
+                retirements: placeholder_map(0),
+            },
+            owners,
+            types: interner.into_objects(),
+            dependency_interfaces,
+            dependency_types,
+            blobs: BTreeMap::new(),
+            dependencies: BTreeMap::from([(standard.package, dependency)]),
+            retirements: BTreeMap::new(),
+        },
+        transports: vec![standard.transport()],
+        template: "command",
+        targets: 1,
+        tests: 1,
+    })
+}
+
+fn insert_owner(
+    owners: &mut BTreeMap<OwnerKey, OwnerRecord>,
+    record: OwnerRecord,
+) -> Result<(), Diagnostic> {
+    let owner = record.owner();
+    if owners.insert(owner, record).is_some() {
+        return Err(creation_error(
+            DiagnosticClass::Corrupt,
+            "new_recipe_owner_duplicate",
+            format!("typed project recipe repeats owner {owner}"),
+        ));
+    }
+    Ok(())
+}
+
+fn placeholder_map(entries: usize) -> MapRoot {
+    MapRoot::from_parts(
+        PageDigest::from_bytes([0; 32]),
+        u64::try_from(entries).unwrap_or(u64::MAX),
+        MapContentDigest::from_bytes([0; 32]),
+    )
 }
 
 fn empty_snapshot(
@@ -203,12 +509,11 @@ fn safe_destination(destination: &Path) -> Result<PathBuf, Diagnostic> {
                 destination.display()
             ),
         )),
-        Ok(_) if directory_is_empty(&destination)? => Ok(destination),
         Ok(_) => Err(creation_error(
             DiagnosticClass::Source,
             "new_destination_not_empty",
             format!(
-                "project destination '{}' is not empty",
+                "project destination '{}' already exists",
                 destination.display()
             ),
         )),
@@ -279,33 +584,6 @@ fn reject_symlinked_path(path: &Path) -> Result<(), Diagnostic> {
     Ok(())
 }
 
-fn directory_is_empty(path: &Path) -> Result<bool, Diagnostic> {
-    let mut entries = fs::read_dir(path).map_err(|error| {
-        creation_error(
-            DiagnosticClass::Infrastructure,
-            "new_destination_read",
-            format!(
-                "project destination '{}' could not be read: {error}",
-                path.display()
-            ),
-        )
-    })?;
-    entries
-        .next()
-        .transpose()
-        .map(|entry| entry.is_none())
-        .map_err(|error| {
-            creation_error(
-                DiagnosticClass::Infrastructure,
-                "new_destination_read",
-                format!(
-                    "project destination '{}' could not be read: {error}",
-                    path.display()
-                ),
-            )
-        })
-}
-
 fn predecessor_project(path: &Path) -> bool {
     [path.join(".lkjscript"), path.join("lkjscript.package.json")]
         .into_iter()
@@ -342,6 +620,35 @@ fn creation_error(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn command_recipe_prepares_checks_and_runs_through_both_normalized_tiers() {
+        let temporary = tempfile::TempDir::new().expect("temporary command parent");
+        let destination = temporary.path().join("command");
+        let created = create_command_project(&destination, "command").expect("command project");
+        assert_eq!(created.template, "command");
+        assert_eq!(created.dependencies, 1);
+        assert_eq!(created.targets, 1);
+        assert_eq!(created.tests, 1);
+
+        let prepared = super::super::normalized_lifecycle::prepare_application(&destination)
+            .expect("prepare normalized command");
+        let control = super::super::execution::ExecutionControl::default();
+        let checked = prepared.check(&control).expect("check command graph tests");
+        assert_eq!(checked.passed, 8);
+        assert_eq!(checked.failed, 0);
+        assert_eq!(checked.differential, "equal");
+        let run = prepared
+            .run(
+                &Name::new("main").expect("target name"),
+                b"[]",
+                super::super::execution::normalized::NormalizedCommandPolicy::default(),
+                &control,
+            )
+            .expect("run normalized command");
+        assert_eq!(run.result_json, b"\"hello\"");
+        assert_eq!(run.differential, "equal");
+    }
 
     #[test]
     fn failed_visibility_rename_removes_only_the_owned_private_stage() {

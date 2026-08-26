@@ -96,7 +96,7 @@ pub enum AuthoredChange {
         type_parameters: Vec<AuthoredTypeParameter>,
         parameters: Vec<AuthoredParameter>,
         result: AuthoredType,
-        implementation: Name,
+        implementation: crate::platform::kernel::ImplementationName,
     },
     CreateConstant {
         symbol: String,
@@ -182,7 +182,7 @@ pub enum AuthoredChange {
     SetExternalContract {
         external: DeclarationSelector,
         result: AuthoredType,
-        implementation: Name,
+        implementation: crate::platform::kernel::ImplementationName,
     },
     SetFieldType {
         field: OwnerSelector,

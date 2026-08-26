@@ -19,7 +19,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 fn program() -> Arc<PreparedProgram> {
-    let bytes = include_bytes!("../applications/lkjournal/lkjournal.lkja");
+    let bytes =
+        include_bytes!("../applications/lkjournal/frozen-service/lkjournal-artifact-v4.lkja");
     Arc::new(
         PreparedProgram::prepare(load_artifact(bytes).expect("maintained service artifact"))
             .expect("prepared maintained service"),

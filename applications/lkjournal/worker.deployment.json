@@ -1,6 +1,6 @@
 {
   "contract_version": 1,
-  "artifact": "lkjournal.lkja",
+  "artifact": "frozen-service/lkjournal-artifact-v4.lkja",
   "target": "work",
   "listen": null,
   "runtime": {

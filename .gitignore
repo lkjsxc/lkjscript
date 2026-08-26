@@ -16,3 +16,7 @@ __pycache__/
 **/.lkjscript/meaning/LOCK
 **/.lkjscript/meaning/indexes/
 **/.lkjscript/meaning/drafts/
+**/LOCK
+**/catalog/
+**/derived/
+**/staging/

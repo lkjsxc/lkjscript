@@ -1231,11 +1231,31 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 "pure expression calls a task function",
             ));
         }
-        if !signature.requirements.is_subset(&context.requirements) {
-            return Err(type_error(
-                "kernel_type_task_requirement",
-                "task call requires an unavailable exact capability requirement",
-            ));
+        for required in &signature.requirements {
+            if context.requirements.contains(required) {
+                continue;
+            }
+            let required_record = self.requirement_record(*required)?;
+            let mut covered = false;
+            for available in &context.requirements {
+                let available_record = self.requirement_record(*available)?;
+                if available_record.name == required_record.name
+                    && available_record.interface == required_record.interface
+                    && required_record
+                        .operations
+                        .iter()
+                        .all(|operation| available_record.operations.contains(operation))
+                {
+                    covered = true;
+                    break;
+                }
+            }
+            if !covered {
+                return Err(type_error(
+                    "kernel_type_task_requirement",
+                    "task call requires an unavailable capability alias, interface, or operation",
+                ));
+            }
         }
         Ok(())
     }

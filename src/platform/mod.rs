@@ -5,16 +5,16 @@
 //! derived consumers.
 
 pub mod artifact;
-pub mod bootstrap;
+pub(crate) mod builtin_standard;
 #[allow(
     dead_code,
-    reason = "Graph 5 generic changes remain private until repository publication cuts over"
+    reason = "the typed engine includes tested forms not yet exposed by the closed CLI registry"
 )]
 pub(crate) mod change;
 pub mod cli;
 #[allow(
     dead_code,
-    reason = "normalized Graph 5 compiler units remain private until artifact and runtime cutover"
+    reason = "normalized compiler internals are process-private behind lifecycle preparation"
 )]
 pub(crate) mod compiler;
 pub mod configuration;
@@ -30,22 +30,24 @@ mod intrinsic_contract;
 pub mod json;
 #[allow(
     dead_code,
-    reason = "Graph 5 remains private until its dependency-closed direct public cutover"
+    reason = "the current semantic kernel is process-private behind typed public adapters"
 )]
 pub(crate) mod kernel;
 pub mod language;
 pub mod meaning;
+pub(crate) mod normalized_lifecycle;
 pub(crate) mod normalized_query;
 pub mod object;
+pub(crate) mod owned_output;
 pub mod package;
 #[allow(
     dead_code,
-    reason = "Graph 5 package interfaces remain private until repository publication cuts over"
+    reason = "package interfaces are internal exact dependency contracts"
 )]
 pub(crate) mod package_interface;
 #[allow(
     dead_code,
-    reason = "normalized package transport remains private until repository publication cuts over"
+    reason = "package transport is internal to exact built-in dependency handling"
 )]
 pub(crate) mod package_transport;
 pub(crate) mod packed;
@@ -54,30 +56,22 @@ pub(crate) mod project_creation;
 pub(crate) mod project_discovery;
 #[allow(
     dead_code,
-    reason = "Graph 5 publication remains private until repository cutover"
+    reason = "publication is reachable only through typed process-boundary operations"
 )]
 pub(crate) mod publication;
 pub mod queue;
-pub mod repository;
 pub mod revision;
 pub mod runtime;
 pub mod secrets;
 pub mod security;
 pub mod semantic;
-pub mod semantic_change;
-pub mod semantic_diff;
 pub mod semantic_digest;
-pub mod semantic_draft;
 pub mod semantic_fact;
 pub mod semantic_id;
-pub mod semantic_merge;
-pub mod semantic_projection;
-pub mod semantic_query;
 pub mod semantic_summary;
-pub mod semantic_transaction;
 #[allow(
     dead_code,
-    reason = "packed Graph 5 storage remains private until repository publication cuts over"
+    reason = "storage implementations remain private behind GraphRepository"
 )]
 pub(crate) mod storage;
 pub mod stream;
@@ -85,22 +79,18 @@ mod syntax;
 pub mod value;
 #[allow(
     dead_code,
-    reason = "Graph 5 validation witness remains private until repository publication cuts over"
+    reason = "validation witnesses are internal accepted evidence, not a public authoring API"
 )]
 pub(crate) mod witness;
 pub mod worker;
-pub mod workspace;
 
 #[cfg(test)]
 pub(crate) use artifact::build_artifact;
-pub use artifact::{ARTIFACT_CONTRACT_VERSION, ArtifactReceipt, LoadedArtifact, load_artifact};
-pub use bootstrap::{
-    BOOTSTRAP_CONTRACT_VERSION, BuiltinPackageInfo, ProjectCreationReceipt, ProjectTemplate,
-    builtin_package_info, create_project, export_builtin_standard,
-};
+pub use artifact::{ARTIFACT_CONTRACT_VERSION, LoadedArtifact, load_artifact};
 pub use cli::{
-    CliSuccess, execute as execute_cli, execute_capabilities, execute_change, execute_inspect,
-    execute_inspect_owner, execute_new, execute_query, execute_status,
+    execute_build, execute_capabilities, execute_change, execute_check, execute_inspect,
+    execute_inspect_owner, execute_new, execute_package_builtin, execute_query, execute_run,
+    execute_status,
 };
 pub use configuration::{
     CONFIGURATION_ADAPTER_CONTRACT_VERSION, ConfigurationAdapter, ConfigurationObservation,
@@ -157,13 +147,6 @@ pub use queue::{
     DURABLE_QUEUE_CONTRACT_VERSION, DurableQueueAdapter, JobLease, JobSnapshot, JobState,
     QueueLimits,
 };
-pub use repository::{
-    BACKUP_CONTRACT_VERSION, BACKUP_SEGMENT_ENTRY_LIMIT, BackupReceipt, CurrentBinding,
-    CurrentRevision, DependencyArtifactObject, DoctorReport, InitialPublication,
-    MAXIMUM_BACKUP_MANIFEST_BYTES, MAXIMUM_BACKUP_SEGMENT_BYTES, PublicationOutcome,
-    RETENTION_CONTRACT_VERSION, ReconstructedRevision, RestoreReceipt, RetentionReport,
-    RevisionSnapshot, SemanticRepository,
-};
 pub use revision::{
     AffectedOwner, ParentRevision, ReceiptStatus, RevisionCore, RevisionRecord, SemanticHead,
     TransactionReceipt, ValidationFacts,
@@ -187,44 +170,14 @@ pub use semantic::{
     ExactDependency, ExactGraphDependency, OwnerId, ResolvedType, ValidatedModule,
     ValidatedPackage, validate_graph_package,
 };
-pub use semantic_change::{
-    AllocatedIdentity, CHANGE_CONTRACT_VERSION, Change, ChangeRequest, ChangeResult,
-    ExpressionForm, TypeForm, TypeParameterForm,
-};
-pub use semantic_diff::{
-    SEMANTIC_DIFF_CONTRACT_VERSION, SemanticChangeClass, SemanticDiffReport, SemanticDiffStatus,
-    SemanticOwnerChange, SemanticOwnerState, diff_revisions,
-};
 pub use semantic_digest::{
     ArtifactDigest, BackupDigest, CleanupDigest, IndexDigest, ModuleObjectDigest, ReceiptDigest,
     RevisionRecordDigest, RootObjectDigest, SemanticDiffDigest, TransactionDigest,
-};
-pub use semantic_draft::{
-    DRAFT_CONTRACT_VERSION, DraftConflict, DraftConflictKind, DraftHole, DraftMutationReceipt,
-    DraftRebaseResult, DraftRecord, DraftSummary, SemanticDraftStore,
 };
 pub use semantic_id::{
     AnnotationId, BindingId, CaseId, ConflictId, DeclarationId, DocumentationId, DraftId,
     ExpressionId, FieldId, ModuleId, OperationId, ParameterId, PortId, RepositoryId, RequirementId,
     RevisionId, TargetId, TypeParameterId,
-};
-pub use semantic_merge::{
-    MAXIMUM_MERGE_CONFLICTS, SEMANTIC_MERGE_CONTRACT_VERSION, SemanticMergeConflict,
-    SemanticMergeConflictKind, SemanticMergeRequest, SemanticMergeResult, SemanticMergeStatus,
-    merge_revisions,
-};
-pub use semantic_projection::{
-    MAXIMUM_REVIEW_PROJECTION_BYTES, REVIEW_PROJECTION_CONTRACT_VERSION, ReviewProjectionReceipt,
-    render_review_projection,
-};
-pub use semantic_query::{
-    ContextItem, OwnerDetail, OwnerKind, OwnerSummary, QueryBudget, QueryPage, QueryStatus,
-    RelationView, SemanticQueryIndex,
-};
-pub use semantic_transaction::{
-    MAXIMUM_TRANSACTION_AFFECTED_OWNERS, MAXIMUM_TRANSACTION_OPERATIONS, MAXIMUM_TRANSACTION_WORK,
-    SemanticOperation, SemanticPrecondition, TransactionBudget, TransactionMode,
-    TransactionRequest, TransactionResult, TransactionStatus, execute_transaction,
 };
 pub use stream::{
     ByteStreamAdapter, ByteStreamProducer, STREAM_CONTRACT_VERSION, StreamLease, StreamLimits,
@@ -235,7 +188,3 @@ pub use syntax::SourceSpan;
 pub(crate) use syntax::{SourceLimits, parse_source};
 pub use value::{MapKey, ResourceId, ResourceKind, Value, ValueError, value_matches_type};
 pub use worker::{WORKER_RUNNER_CONTRACT_VERSION, WorkerApplication, WorkerLimits, WorkerReceipt};
-pub use workspace::{
-    DependencyOrientation, ModuleOrientation, SemanticWorkspace, TargetOrientation,
-    WORKSPACE_CONTRACT_VERSION, WorkspaceOrientation, WorkspaceStatus,
-};

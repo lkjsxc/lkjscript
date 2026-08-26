@@ -1,9 +1,9 @@
-//! Deterministic graph-native package-closure artifacts.
+//! Strict frozen artifact-4 loading for the isolated service and worker runtime.
 //!
 //! An artifact contains independently integrity-protected package objects. Each package object
 //! embeds a canonical graph root, its packed module shards, and the exact accepted revision and
-//! receipt. Compilation and execution consume those graph records directly; textual input is
-//! neither stored nor reparsed here.
+//! receipt. This module is read-only in production; current Graph 5 builds use compiler artifact
+//! contract 10 instead.
 
 use super::contract::registry::{
     ARTIFACT_DOMAIN, ARTIFACT_MAGIC, PACKAGE_ARTIFACT_DOMAIN as PACKAGE_DOMAIN,
@@ -38,6 +38,7 @@ use super::semantic_id::{RepositoryId, TargetId};
 #[cfg(test)]
 use super::semantic_summary::build_module_summary;
 use bincode::{Decode, Encode};
+#[cfg(test)]
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -47,6 +48,7 @@ pub const MAXIMUM_ARTIFACT_BYTES: usize = 128 * 1_048_576;
 pub const MAXIMUM_ARTIFACT_PACKAGES: usize = 1_024;
 const MAXIMUM_PACKAGE_ARTIFACT_BYTES: usize = 128 * 1_048_576;
 
+#[cfg(test)]
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ArtifactReceipt {
@@ -141,6 +143,7 @@ pub(crate) struct GraphPackageArtifact {
 }
 
 impl GraphPackageArtifact {
+    #[cfg(test)]
     fn encode(&self) -> Result<Vec<u8>, Diagnostic> {
         self.validate_shape()?;
         packed::encode(
@@ -196,23 +199,6 @@ impl GraphPackageArtifact {
             .iter()
             .map(|dependency| dependency.artifact)
     }
-}
-
-pub(crate) fn encode_package_object(
-    revision: RevisionRecord,
-    receipt: TransactionReceipt,
-    root: GraphRoot,
-    modules: Vec<MeaningModule>,
-) -> Result<(ArtifactDigest, Vec<u8>), Diagnostic> {
-    let object = GraphPackageArtifact {
-        contract_version: PACKAGE_ARTIFACT_CONTRACT_VERSION,
-        revision,
-        receipt,
-        root,
-        modules,
-    };
-    let bytes = object.encode()?;
-    Ok((ArtifactDigest::of(&bytes), bytes))
 }
 
 #[cfg(test)]
@@ -293,19 +279,7 @@ pub(crate) fn build_artifact(
     encode_bundle(root_object.digest, objects)
 }
 
-pub fn build_artifact_from_objects(
-    root: ArtifactDigest,
-    objects: BTreeMap<ArtifactDigest, Vec<u8>>,
-) -> Result<(Vec<u8>, ArtifactReceipt), Diagnostic> {
-    encode_bundle(
-        root,
-        objects
-            .into_iter()
-            .map(|(digest, bytes)| ArtifactObject { digest, bytes })
-            .collect(),
-    )
-}
-
+#[cfg(test)]
 fn encode_bundle(
     root: ArtifactDigest,
     mut objects: Vec<ArtifactObject>,
@@ -364,7 +338,7 @@ pub fn load_artifact(bytes: &[u8]) -> Result<LoadedArtifact, Diagnostic> {
         return Err(artifact_error(
             DiagnosticClass::Source,
             "artifact_contract",
-            "artifact does not use the current graph-native contract",
+            "artifact does not use the supported frozen service contract",
         ));
     }
     let bundle: ArtifactBundle = packed::decode(
@@ -377,28 +351,13 @@ pub fn load_artifact(bytes: &[u8]) -> Result<LoadedArtifact, Diagnostic> {
     load_bundle_objects(bundle.root, &bundle.objects, ArtifactDigest::of(bytes))
 }
 
-pub(crate) fn decode_package_object(bytes: &[u8]) -> Result<GraphPackageArtifact, Diagnostic> {
-    GraphPackageArtifact::decode(bytes)
-}
-
-pub(crate) fn load_package_object_closure(
-    root: ArtifactDigest,
-    objects: BTreeMap<ArtifactDigest, Vec<u8>>,
-) -> Result<LoadedArtifact, Diagnostic> {
-    let artifact_objects = objects
-        .into_iter()
-        .map(|(digest, bytes)| ArtifactObject { digest, bytes })
-        .collect::<Vec<_>>();
-    load_bundle_objects(root, &artifact_objects, ArtifactDigest::of(&root.bytes()))
-}
-
 fn validate_bundle_shape(bundle: &ArtifactBundle) -> Result<(), Diagnostic> {
     if bundle.contract_version != ARTIFACT_CONTRACT_VERSION {
         return Err(artifact_error(
             DiagnosticClass::Source,
             "artifact_contract",
             format!(
-                "artifact contract {} is not current contract {ARTIFACT_CONTRACT_VERSION}",
+                "artifact contract {} is not supported frozen contract {ARTIFACT_CONTRACT_VERSION}",
                 bundle.contract_version
             ),
         ));

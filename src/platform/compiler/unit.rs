@@ -3,8 +3,8 @@
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     BlobObjectDigest, CaseReference, ComparisonPolicy, DeclarationReference, ExternalVisibility,
-    FieldReference, Idempotency, Name, OperationReference, OwnerKey, OwnerKind, PackageId,
-    PortReference, RequirementReference, ResourceLimit, TypeObjectDigest,
+    FieldReference, Idempotency, ImplementationName, Name, OperationReference, OwnerKey, OwnerKind,
+    PackageId, PortReference, RequirementReference, ResourceLimit, TypeObjectDigest,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::semantic_id::{ParameterId, TypeParameterId};
@@ -145,7 +145,7 @@ pub enum CompilationPayload {
     },
     External {
         signature: CompiledSignature,
-        implementation: Name,
+        implementation: ImplementationName,
     },
     Function {
         signature: CompiledSignature,

@@ -611,6 +611,7 @@ mod tests {
                 maximum_stderr_bytes: 1024,
                 stdout_path: run.join("gate.stdout.log"),
                 stderr_path: run.join("gate.stderr.log"),
+                unavailable_exit_code: None,
             },
             temporary.path(),
         );

@@ -20,11 +20,11 @@ use crate::platform::diagnostic::DiagnosticClass;
 use crate::platform::kernel::{
     AnnotationClass, DeclarationPayload, DeclarationRecord, DeclarationVisibility,
     DependencyRecord, DocumentContent, DocumentationClass, DocumentationRecord, ExactOwnerKey,
-    ExpressionOperation, ExternalVisibility, FunctionEffect, Idempotency, LocalValueReference,
-    ModuleRecord, Name, NamespaceClass, OwnerHeader, OwnerKey, OwnerKind, OwnerRecord, PackageId,
-    PackageRevisionDigest, RelationEdge, RelationEndpoint, RelationKind, RequirementReference,
-    ResourceUnit, SemanticRoot, TypeForm, TypeObject, TypeObjectDigest, encode_owner,
-    encode_type_object, extract_relations,
+    ExpressionOperation, ExternalVisibility, FunctionEffect, Idempotency, ImplementationName,
+    LocalValueReference, ModuleRecord, Name, NamespaceClass, OwnerHeader, OwnerKey, OwnerKind,
+    OwnerRecord, PackageId, PackageRevisionDigest, RelationEdge, RelationEndpoint, RelationKind,
+    RequirementReference, ResourceUnit, SemanticRoot, TypeForm, TypeObject, TypeObjectDigest,
+    encode_owner, encode_type_object, extract_relations,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::persistent_map::{MapRoot, PageDigest};
@@ -78,6 +78,68 @@ fn repository_create_reopen_and_exact_current_reads_bind_every_object() {
     assert_eq!(current.transaction, created.current.transaction);
     assert_eq!(current.semantic_diff, created.current.semantic_diff);
     assert_eq!(current.accepted, created.current.accepted);
+}
+
+#[test]
+fn repository_creation_installs_exact_dependency_transport_before_initial_publication() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let source = GraphRepository::create(
+        &temporary.path().join("source"),
+        &empty_snapshot(b"initial-dependency-source"),
+        None,
+    )
+    .expect("source repository");
+    let exported = source
+        .repository
+        .export_package_transport()
+        .expect("source package transport");
+    let mut target_snapshot = empty_snapshot(b"initial-dependency-target");
+    let dependency = DependencyRecord {
+        graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+        package: exported.revision.package,
+        semantic_revision: exported.revision.revision.revision_id().unwrap(),
+        package_revision: exported.revision_digest,
+    };
+    target_snapshot
+        .dependencies
+        .insert(dependency.package, dependency.clone());
+    target_snapshot.dependency_interfaces.insert(
+        dependency.package_revision,
+        std::collections::BTreeMap::new(),
+    );
+    target_snapshot.root.dependencies = MapRoot::from_parts(
+        PageDigest::from_bytes([0; 32]),
+        1,
+        crate::platform::persistent_map::MapContentDigest::from_bytes([0; 32]),
+    );
+
+    let destination = temporary.path().join("target");
+    let created = GraphRepository::create_with_package_transports(
+        &destination,
+        &target_snapshot,
+        Some("dependency-bearing initial publication".to_owned()),
+        &[InitialPackageTransport {
+            digest: exported.transport_digest,
+            packs: exported.packs,
+        }],
+    )
+    .expect("dependency-bearing repository creation");
+
+    assert_eq!(created.current.semantic_root.dependencies.entries(), 1);
+    assert_eq!(
+        created
+            .repository
+            .view_current()
+            .unwrap()
+            .dependency(dependency.package)
+            .unwrap()
+            .value,
+        Some(dependency)
+    );
+    assert_eq!(
+        created.current.receipt.status,
+        PublicationStatus::ProjectCreated
+    );
 }
 
 #[test]
@@ -5248,7 +5310,7 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
                         symbol: "$external_type".to_owned(),
                     },
                 },
-                implementation: Name::new("identity_host").unwrap(),
+                implementation: ImplementationName::new("identity_host").unwrap(),
             },
             AuthoredChange::CreateInterface {
                 symbol: "$interface".to_owned(),
@@ -5596,7 +5658,7 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
                         symbol: "$external_u".to_owned(),
                     },
                 },
-                implementation: Name::new("identity_host_v2").unwrap(),
+                implementation: ImplementationName::new("identity_host_v2").unwrap(),
             },
             AuthoredChange::SetFunctionContract {
                 function: DeclarationSelector::Id {

@@ -13,8 +13,8 @@ use crate::platform::compiler::unit::{
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     BlobObjectDigest, CaseReference, ComparisonPolicy, DeclarationReference, EncodedOwnerKey,
-    ExternalVisibility, FieldReference, Idempotency, Name, OperationReference, OwnerKey,
-    OwnerRecord, PackageId, PortReference, RequirementReference, ResourceLimit,
+    ExternalVisibility, FieldReference, Idempotency, ImplementationName, Name, OperationReference,
+    OwnerKey, OwnerRecord, PackageId, PortReference, RequirementReference, ResourceLimit,
     SemanticStateDigest, TypeObject, TypeObjectDigest, decode_type_object,
 };
 use crate::platform::package::RunnerKind;
@@ -138,7 +138,7 @@ pub struct NormalizedVariantJump {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NormalizedFunctionBody {
     Code(NormalizedCode),
-    External(Name),
+    External(ImplementationName),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -407,9 +407,18 @@ impl RuntimeIndexes {
                         )?);
                     }
                 }
-                CompilationPayload::External { .. }
-                | CompilationPayload::Function { .. }
-                | CompilationPayload::Constant { .. } => {
+                CompilationPayload::External { signature, .. }
+                | CompilationPayload::Function { signature, .. } => {
+                    function_refs.insert(reference);
+                    for requirement in &signature.task_requirements {
+                        requirement_refs.insert(index_copy(
+                            &unit.tables.requirements,
+                            *requirement,
+                            "normalized task requirement",
+                        )?);
+                    }
+                }
+                CompilationPayload::Constant { .. } => {
                     function_refs.insert(reference);
                 }
                 CompilationPayload::Component {
@@ -746,68 +755,41 @@ fn prepare_variants(
 }
 
 fn prepare_requirements(
-    units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
+    _units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
     indexes: &RuntimeIndexes,
     runtime_owners: &RuntimeOwnerMap,
 ) -> Result<Vec<NormalizedRequirement>, Diagnostic> {
     let mut requirements = vec![None; indexes.requirements.len()];
-    for unit in units.values() {
-        let CompilationPayload::Component {
-            requirements: compiled,
-            ..
-        } = &unit.payload
+    for (reference, index) in &indexes.requirements {
+        let OwnerRecord::Requirement(record) = exact_runtime_owner(
+            runtime_owners,
+            reference.package,
+            OwnerKey::Requirement(reference.requirement),
+            "requirement",
+        )?
         else {
-            continue;
+            return Err(runtime_corrupt(
+                "normalized_requirement_owner_kind",
+                "requirement runtime metadata has another owner kind",
+            ));
         };
-        for requirement in compiled {
-            let reference = index_copy(
-                &unit.tables.requirements,
-                requirement.requirement,
-                "normalized requirement",
-            )?;
-            let index = required_index(&indexes.requirements, reference, "requirement")?;
-            let interface = index_copy(
-                &unit.tables.declarations,
-                requirement.interface,
-                "normalized requirement interface",
-            )?;
-            let operations = requirement
-                .operations
-                .iter()
-                .map(|operation| {
-                    let reference = index_copy(
-                        &unit.tables.operations,
-                        *operation,
-                        "normalized requirement operation",
-                    )?;
-                    required_index(&indexes.operations, reference, "operation")
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            let OwnerRecord::Requirement(record) = exact_runtime_owner(
-                runtime_owners,
-                reference.package,
-                OwnerKey::Requirement(reference.requirement),
-                "component requirement",
-            )?
-            else {
-                return Err(runtime_corrupt(
-                    "normalized_requirement_owner_kind",
-                    "component requirement runtime metadata has another owner kind",
-                ));
-            };
-            let value = NormalizedRequirement {
-                reference,
-                name: record.name.clone(),
-                interface,
-                operations: operations.into(),
-                limits: requirement.limits.clone().into(),
-            };
-            if requirements[index.0 as usize].replace(value).is_some() {
-                return Err(runtime_corrupt(
-                    "normalized_requirement_duplicate",
-                    "one exact requirement has multiple runtime definitions",
-                ));
-            }
+        let operations = record
+            .operations
+            .iter()
+            .map(|operation| required_index(&indexes.operations, *operation, "operation"))
+            .collect::<Result<Vec<_>, _>>()?;
+        let value = NormalizedRequirement {
+            reference: *reference,
+            name: record.name.clone(),
+            interface: record.interface,
+            operations: operations.into(),
+            limits: record.limits.clone().into(),
+        };
+        if requirements[index.0 as usize].replace(value).is_some() {
+            return Err(runtime_corrupt(
+                "normalized_requirement_duplicate",
+                "one exact requirement has multiple runtime definitions",
+            ));
         }
     }
     finish_dense(requirements, "requirement")

@@ -17,6 +17,9 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const SERVICE_CONTRACT_VERSION: u32 = 1;
 const POSTGRES_IMAGE: &str = "postgres:16-alpine";
+const FROZEN_SERVICE_ARTIFACT_RELATIVE: &str = "frozen-service/lkjournal-artifact-v4.lkja";
+const FROZEN_SERVICE_ARTIFACT_SHA256: &str =
+    "d0a57a74161903a302472cbd8997762434b64cc58bd8ae36577b9ba31d2f96a3";
 const MAXIMUM_COMMAND_STDOUT_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_COMMAND_STDERR_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_RUNNER_STDOUT_BYTES: u64 = 16 * 1024 * 1024;
@@ -340,10 +343,10 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
     let repository = repository_root()?;
     let (receipt, published) = execute(&repository, &options)?;
     print_summary(&repository, &options, &receipt, &published)?;
-    Ok(if receipt.status == ServiceStatus::Passed {
-        0
-    } else {
-        1
+    Ok(match receipt.status {
+        ServiceStatus::Passed => 0,
+        ServiceStatus::Failed => 1,
+        ServiceStatus::Unavailable => 2,
     })
 }
 
@@ -363,12 +366,15 @@ fn execute(
     let workflow = (|| {
         let binary = resolve_input_file(repository, &options.binary, "runner binary")?;
         binary_proof = Some(proof_input(repository, &binary)?);
-        let artifact = repository.join("applications/lkjournal/lkjournal.lkja");
-        artifact_proof = Some(proof_required_file(
+        let artifact = repository
+            .join("applications/lkjournal")
+            .join(FROZEN_SERVICE_ARTIFACT_RELATIVE);
+        artifact_proof = Some(proof_required_file_with_sha256(
             repository,
             &artifact,
             MAXIMUM_ARTIFACT_BYTES,
-            "maintained application artifact",
+            "frozen service artifact",
+            FROZEN_SERVICE_ARTIFACT_SHA256,
         )?);
         run_acceptance(&mut context, &binary)
     })();
@@ -460,6 +466,7 @@ impl ServiceContext {
             maximum_stderr_bytes: request.maximum_stderr_bytes,
             stdout_path: stdout_path.clone(),
             stderr_path: stderr_path.clone(),
+            unavailable_exit_code: None,
         };
         let mut observation = match request.stdin {
             Some((path, maximum)) => {
@@ -530,6 +537,7 @@ impl ServiceContext {
             maximum_stderr_bytes: MAXIMUM_RUNNER_STDERR_BYTES,
             stdout_path: stdout_path.clone(),
             stderr_path: stderr_path.clone(),
+            unavailable_exit_code: None,
         };
         let repository = self.repository.clone();
         let control = ProcessControl::default();
@@ -784,12 +792,15 @@ fn run_acceptance(
     binary: &Path,
 ) -> Result<ServiceResult, ServiceFailure> {
     let application = context.repository.join("applications/lkjournal");
-    let artifact_source = application.join("lkjournal.lkja");
+    let artifact_source = application.join(FROZEN_SERVICE_ARTIFACT_RELATIVE);
     let service_source = application.join("service.deployment.json");
     let worker_source = application.join("worker.deployment.json");
     let artifact_bytes = process::read_bounded(&artifact_source, MAXIMUM_ARTIFACT_BYTES)
         .map_err(|error| ServiceFailure::infrastructure("artifact_read", error))?;
-    let artifact_path = context.run_directory.join("lkjournal.lkja");
+    let artifact_directory = context.run_directory.join("frozen-service");
+    fs::create_dir(&artifact_directory)
+        .map_err(|error| ServiceFailure::infrastructure("artifact_directory", error))?;
+    let artifact_path = context.run_directory.join(FROZEN_SERVICE_ARTIFACT_RELATIVE);
     evidence::publish(&artifact_path, &artifact_bytes)
         .map_err(|error| ServiceFailure::infrastructure("artifact_stage", error))?;
     context.retain(&artifact_path)?;
@@ -1812,10 +1823,12 @@ fn write_descriptor(
     let object = descriptor.as_object_mut().ok_or_else(|| {
         ServiceFailure::failed("descriptor_shape", "deployment descriptor is not an object")
     })?;
-    object.insert(
-        "artifact".to_owned(),
-        Value::String("lkjournal.lkja".to_owned()),
-    );
+    if object.get("artifact").and_then(Value::as_str) != Some(FROZEN_SERVICE_ARTIFACT_RELATIVE) {
+        return Err(ServiceFailure::failed(
+            "descriptor_artifact_boundary",
+            "maintained deployment descriptor does not bind the frozen service artifact",
+        ));
+    }
     if let Some(port) = port {
         object.insert(
             "listen".to_owned(),
@@ -2077,6 +2090,26 @@ fn proof_required_file(
     }
     evidence::proof(path, evidence::relative(repository, path))
         .map_err(|error| ServiceFailure::infrastructure("fixture_proof", error))
+}
+
+fn proof_required_file_with_sha256(
+    repository: &Path,
+    path: &Path,
+    maximum: u64,
+    label: &str,
+    expected_sha256: &str,
+) -> Result<FileProof, ServiceFailure> {
+    let bytes = process::read_bounded(path, maximum).map_err(|error| {
+        ServiceFailure::unavailable("maintained_fixture_absent", format!("{label}: {error}"))
+    })?;
+    let observed = sha256_hex(&bytes);
+    if observed != expected_sha256 {
+        return Err(ServiceFailure::failed(
+            "frozen_service_artifact_digest",
+            format!("{label} SHA-256 {observed} does not match {expected_sha256}"),
+        ));
+    }
+    proof_required_file(repository, path, maximum, label)
 }
 
 fn new_run_directory(repository: &Path) -> Result<PathBuf, DevError> {

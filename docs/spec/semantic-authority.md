@@ -1,223 +1,123 @@
-# Meaning-graph authority
+# Semantic authority
 
-Status: normative. Logical contract: `lkjscript-meaning-graph-4`. Physical root contract:
-`lkjscript-persistent-root-2`. Public change contract: version 3. Internal transaction contract:
-version 4.
+Status: normative. Current accepted meaning contract: `lkjscript-meaning-graph-5`. Current revision,
+receipt, and transaction contracts are versions 7, 5, and 5. The executable-generated
+[contract table](../generated/contracts.md) owns the complete current identity catalog.
 
-## Owned authority
+## Sole editable authority
 
-An accepted lkjscript program is exactly one validated typed meaning-graph revision. The graph owns
-repository and package metadata, modules and namespaces, declarations, explicit types and
-expressions, imports/exports, components, ports, capability requirements, tests, retained semantic
-relations, documentation, annotations, targets, exact dependencies, and continuity tombstones.
+An accepted lkjscript program is exactly one complete validated typed Graph 5 revision selected by
+the repository's atomic `HEAD`. The graph owns package metadata, typed semantic owners, interned
+types, exact references, namespaces, relations, dependencies, components, ports, targets, tests,
+documentation, annotations, and retirements.
 
-Names are mutable locators and presentation. Stable semantic IDs express continuity. Content
-digests identify exact bytes in one domain. Revision IDs identify accepted history nodes. Physical
-page coordinates, compiler indexes, runtime handles, rendered coordinates, summaries, caches,
-deployment grants, secrets, and live resources do not become program authority. Reachable map-page
-bytes are the canonical physical encoding committed by the accepted root, but their paths are not
-semantic owner identity.
+Source text, compact authored records, request-local symbols, logical plans, package transports,
+indexes, witnesses, compiler caches, artifacts, generated documentation, deployment descriptors,
+names, runtime handles, logs, receipts outside accepted history, and host resources are not
+separately editable program authorities.
 
-Maintained lkjscript source files and package descriptors are forbidden. A review file is a
-non-authoritative projection and has no apply path. The embedded standard artifact is exact
-derived bootstrap data, not mutable authority. A backup transports accepted authority but is not a
-writer until verified restore publishes it.
+Names are mutable locators. Typed stable identities express continuity. Logical semantic
+references bind the appropriate exact package and owner identities; they do not acquire meaning
+from names, module coordinates, physical map positions, or Rust representation. Content digests,
+semantic revision IDs, dense runtime indexes, and filesystem paths occupy separate domains.
 
-## Logical and physical models
+## Logical model and validation
 
-The logical `GraphRoot` contains one repository ID, one package ID and name, and deterministic
-sets of module references, exact dependency bindings, targets, and tombstones. Each module
-reference binds a module ID and current name to an immutable module object. Module objects own
-declarations, stable member identities, typed operation trees, documentation, annotations, and
-sorted semantic relations.
+A semantic snapshot contains one repository/package root and canonical typed maps for all owner,
+type, dependency, namespace, relation, test, target, and retirement records. Every map key and
+record validates its identity domain and owning relation. Canonical order is independent of hash
+iteration, authored spelling, physical page layout, pack boundaries, and repository location.
 
-The accepted revision does not encode those root sets as one flat physical vector. Its
-`StoredGraphRoot` is a bounded manifest with exact metadata and six persistent map roots:
+The complete reconstruction oracle verifies:
 
-- module ID to module object reference;
-- module name to module ID;
-- package ID to exact dependency binding;
-- dependency alias to package ID;
-- target ID to target binding; and
-- typed tombstone identity to tombstone.
+- ownership, reachability, uniqueness, namespaces, visibility, and retirements;
+- type structure, generic substitution, expressions, bindings, and function effects;
+- exact local and dependency references and package interfaces;
+- components, requirements, ports, targets, tests, and comparison policy; and
+- forward/reverse relation witnesses and validation evidence against canonical meaning.
 
-The maps use canonical immutable path-compressed Merkle radix pages. Equal logical maps produce
-equal page/root digests independent of insertion history. Physical pages are integrity objects, not
-semantic owners. Full logical reconstruction remains the independent representation used by deep
-doctor and complete validation.
+Missing required accepted meaning or inconsistent witness bindings are corruption. A disposable
+cache miss is never allowed to select or repair semantics silently.
 
-Validation and canonical relations bind stable owner identities. Imports store exact package and
-module IDs, targets store exact module/component/port IDs, and types and value references store
-exact package/module/declaration IDs. Exports are declaration-ID sets, and constant references are
-distinct from lexical variables. Module and declaration rename therefore update their owning
-module plus persistent name/summary paths; importer objects and targets remain unchanged.
+## Repository and accepted history
 
-## Identity domains
+Immutable semantic objects and persistent-map pages are stored in content-addressed packs. The
+catalog is a rebuildable physical locator. `HEAD` binds the repository, accepted revision record,
+semantic state/root, witness/certificate, transaction, diff, and receipt. Physical packing and
+catalog paths do not enter logical semantic state.
 
-Stable IDs have closed textual prefixes and packed tags. Foreign domains reject even when display
-bytes coincide. Creation never silently reuses an ID; deletion records a typed tombstone when
-continuity requires it. Clone creates new identities. Exact restore preserves historical identity.
+Accepted writes name an exact base, prepare and validate a complete result, write immutable data
+durably, and expose one atomic `HEAD` visibility point. A revision is accepted only as a whole.
+Stale, malformed, invalid, exhausted, cancelled, corrupt, interrupted, or failed work cannot
+partially advance authority. After uncertain visibility, a caller reads `HEAD` and retained exact
+acceptance evidence before retrying.
 
-| Domain | Text prefix | Continuity consumer |
-|---|---|---|
-| repository | `repo_` | accepted store and exact restore |
-| module | `mod_` | rename and namespace continuity |
-| declaration | `decl_` | rename, move, references, diff/merge |
-| type parameter | `typeparam_` | generic substitution and rename |
-| field | `field_` | record evolution |
-| variant case | `case_` | variant evolution |
-| interface operation | `op_` | capability operation evolution |
-| value parameter | `param_` | signature member continuity |
-| binding | `bind_` | selected body rewrites |
-| expression site | `expr_` | exact expression selection |
-| requirement | `req_` | component capability continuity |
-| component port | `port_` | target binding |
-| target | `target_` | deployment selection |
-| documentation | `doc_` | retained documentation continuity |
-| annotation | `annotation_` | retained annotation continuity |
-| draft | `draft_` | non-executable work authority |
-| conflict | `conflict_` | one typed merge-conflict report |
+`GraphRepository::publish` is the sole normal existing-project writer. The released accepted-write
+operations are:
 
-Revision IDs use the content-derived `rev_` domain. Package IDs, object digests, map-page digests,
-compiler indexes, runtime handles, and temporary local symbols remain separate domains.
+- `new`, which constructs initial Graph 5 authority in a private sibling and exposes it once; and
+- `change apply`, which publishes one exactly reviewed prepared semantic change.
 
-Production project identities use fresh allocation. A current compact-change request may define a
-typed local symbol beginning with `$` and refer to it later in the same ordered request. Stable
-allocation is deterministically bound to repository, exact base, normalized request, domain, and
-request order. The public change result returns the complete local-symbol map. Duplicate, forward,
-ambiguous, or
-foreign-domain use rejects; exact replay preserves allocation.
+`change plan`, status, inspect, query, package inspection/export, check, build, run, capabilities,
+and all their failure paths do not advance accepted authority.
 
-## Revisions, drafts, and accepted history
+## Reviewed authored changes
 
-A revision core binds its current contract versions, repository ID, zero to two exact parent
-revision/record pairs, persistent root digest, semantic certificate, semantic diff digest, and
-transaction digest. The certificate is the revision-independent digest of the exact persistent
-summary-binding, test-owner, and typed reverse-edge map roots. Its domain-separated digest is the
-revision ID. A revision record binds that core to one receipt. HEAD binds the repository, revision,
-and record digest and is the single accepted visibility point. Persisted summary objects, fact
-pages, and manifests remain disposable; the certificate authenticates their rebuild against
-canonical meaning rather than promoting them to a second graph.
+Every public mutation lowers to typed semantic intent before validation. Plan and apply share
+strict decoding, normalization, deterministic allocation, exact-base reads, ownership/reference
+analysis, impact and selected-test calculation, complete candidate validation, and logical-result
+construction.
 
-Accepted revisions are complete: they contain no holes or conflicts, and every reference resolves
-within the exact dependency closure. Names, scopes, types, generic substitution, effects,
-capabilities, components, targets, tests, identities, and canonical relations validate.
+A reviewed token binds two separate commitments: normalized authored intent and every semantic,
+validation, and test claim offered for review. Apply checks the intent commitment before project
+access, reprepares against the exact base, checks the prepared commitment, and only then enters the
+publication boundary. Optional logical-plan bytes are deterministic external evidence and are
+never an apply input.
 
-History is an immutable DAG. Ordinary accepted publication has one parent, merge publication has
-two unique canonically ordered parents, and bootstrap has none. Bounded intent belongs to the
-receipt and is nonsemantic.
+Request-local labels, operational budgets, witness maintenance, compiler scheduling, cache state,
+storage packing, receipt paths, timing, and physical work observations do not enter logical plan
+identity. They may affect admission or reporting but not accepted program meaning.
 
-A draft is separate packed non-executable authority. It binds one repository, exact base,
-generation, ordered transactions and preconditions, typed holes, closed conflicts, and bounded
-intent. Draft mutation cannot alter HEAD. A draft with holes or conflicts cannot build, run, serve,
-start a worker, or publish. Rebase is explicit; drop cannot affect accepted authority.
+## Dependencies, compilation, and artifacts
 
-## Sole normal writer and publication
+An accepted dependency binding names exact package, semantic revision, logical package revision,
+and public interface meaning. Package transport is strict immutable dependency transport, not an
+authoring language. The current released resolver accepts only the exact built-in standard
+dependency and rejects missing, foreign, stale, malformed, or additional dependency closure.
 
-Normalized program mutations lower one typed `AuthoredChangeSet` through deterministic identity
-allocation, primitive edits, canonical deltas, derived witness deltas, impact selection, incremental
-validation, and required full-oracle policy. `GraphRepository::publish` is the sole visibility
-boundary for an existing normalized repository. The current normalized CLI entry points that can
-publish are:
+Compiler manifests, compiler units, and cache heads are derived from exact accepted authority. A
+cache may be reused only when repository, accepted revision/state, compiler contract, options, unit
+map, and object closure match. Missing cache state clean-builds. Invalid cache state is reported and
+replaced by a clean build; it can never select semantics.
 
-- `new DEST --template minimal`, which creates initial authority in a private sibling stage; and
-- `change apply ... --plan TOKEN`, which publishes one exactly reviewed prepared change.
+After an accepted `change apply`, an incremental cache update may use an exact base cache and the
+in-memory prepared compiler impact. Publication is complete first. Incremental failure is reported
+as derived-state status and cannot roll back, relabel, or invalidate the accepted semantic result.
+No durable compiler-impact journal is authority.
 
-`change plan`, including optional external logical-plan output, status, inspection, normalized
-query, and capability discovery do not publish.
-Draft, history merge, restore, package, check, build, run, review, service, worker, and doctor still
-target predecessor authority and cannot mutate a normalized repository; their normalized cutover
-remains required.
+Artifact contract 10 is immutable derived runtime input. Its manifest binds exact repository,
+root package, semantic revision/state, dependency package revisions, compiler and bytecode
+contracts, and object closure. Strict artifact validation precedes output publication or execution.
+Equal authority, dependencies, compiler contracts, and options produce equal bytes.
 
-A compact-record request carries an exact base, optional idempotency key, ordered high-level
-changes, and bounded nonsemantic intent. Direct `rename.owner` flags carry the equivalent exact
-base, exact typed owner, name, and optional controls. Both adapters construct one transport-neutral
-`AuthoredChangeSet` plus publication options before reviewed-plan comparison or repository access.
-The public vocabulary and current subset are executable-derived from `capabilities --section
-change`, `type`, and `expression`. The typed engine retains additional private operations and
-explicit multidimensional work budgets, but those are not public grammar until their complete
-public workflows exist.
+## Execution and service separation
 
-Plan and apply use the same parser, typed lowering, impact analysis, validation, predicted revision,
-semantic diff, and allocation path. The canonical `plan_` token combines a request commitment that
-can be checked before repository discovery with a prepared-plan commitment over the complete
-logical review projection. Apply reparses, checks the request component, reprepares the request,
-and checks the prepared component before publication. Function-body replacement updates the
-function and retires its complete prior expression/binding ownership closure. Public
-`delete.owner policy=owned-closure` uses that same semantic-ownership selector for an admissible
-exact root after earlier request mutations have formed the candidate. It follows canonical
-aggregation and external-parent meaning only, never arbitrary references or physical reachability.
-A surviving reference rejects unless another explicit operation in the same reviewed request
-removes it. The logical plan lists the exact owner, retirement, parent, and relation effects and
-never leaves live unowned nodes. A stale, mismatched, exhausted, corrupt, or invalid request
-publishes nothing.
+Normalized graph tests and pure command targets execute through both production bytecode and an
+implementation-disjoint canonical reference interpreter. Both read the same exact accepted
+revision and artifact closure. A disagreement is failure. Live external effects are never
+duplicated to obtain a differential result.
 
-An exact idempotent apply retry may reopen the immutable base recorded by an already accepted key,
-but it must reprepare the complete request and reproduce both reviewed commitments. The locked
-publication decision then returns the existing accepted binding; it never advances HEAD again.
+`serve` and `worker` currently consume an explicitly digest-pinned frozen artifact-4 file and
+external deployment descriptors. That read-only artifact runtime does not open editable Graph 4
+authority, produce a current artifact, or establish normalized service completion.
 
-The optional logical-plan file is deterministic derived evidence, not repository state or a second
-program authority. Its commitment covers exact semantic effects and exported validation/test
-scope. Request-local labels, witness maintenance, summary refresh, compiler scheduling, staged
-storage, physical roots/pages/packs, receipt work, timing, and filesystem paths remain outside
-review identity. Apply never trusts or imports file bytes: it recomputes the plan from accepted
-authority and the authored request. A complete external file may survive an interruption after its
-atomic rename without implying that HEAD advanced.
+## Compatibility and security
 
-Prepared publication binds the repository, package, exact base revision, canonical semantic root,
-dependency bindings, validation contract and evidence, semantic diff, transaction, and publication
-receipt in separate typed digest domains. Under the publication lock, the repository rechecks the
-base, makes immutable semantic and evidence objects durable, publishes their bindings, and advances
-HEAD once. HEAD locates both accepted meaning and the exact durable acceptance binding. Rebuilding
-derived witness maps, summaries, indexes, packs, or validation evidence does not silently change
-semantic meaning identity.
+Graph 4 repository markers are rejected before mutation, cache work, or derived output. There is
+no graph edition, migration command, compatibility flag, fallback reader, dual dispatch, or dual
+write. Arbitrary user Graph 4 conversion is not supported.
 
-Normalized public query opens one immutable current `RepositoryView` and retains its repository,
-package, and accepted-revision binding for the operation. Owner enumeration reads canonical owner
-bindings and owner objects. Exact name lookup uses the committed namespace witness only as a
-bounded locator, then requires the selected live canonical owner to reproduce the namespace key.
-Relation lookup reads the committed forward or reverse relation witness and strictly revalidates
-each selected key and empty value. These authenticated witnesses are required accepted read
-evidence, not independently editable meaning. Missing or inconsistent required evidence is
-corruption and is never silently rebuilt by query.
-
-Query results, query digests, and stateless logical continuations are transient projections. They
-cannot advance HEAD, create a draft, write an index, persist a cursor, or authorize a foreign
-repository read. Full canonical reconstruction and canonical relation extraction remain
-implementation-disjoint verification oracles rather than ordinary query dependencies.
-
-## Outcomes, ordering, and failure
-
-Changes execute in request order after strict decoding and precondition evaluation. Canonical sets
-and diagnostics use deterministic order. Compact results distinguish prepared, accepted, already
-accepted, stale base, source or semantic invalidity, resource exhaustion, corruption, and
-infrastructure failure. Stale-base failures use process exit 7; other classes retain the executable
-exit mapping. Diagnostics carry a stable code and available physical record location.
-
-Validation, planning, query, stale input, rejection, no-change, and failed restore publish nothing.
-An uncertain visibility failure requires reading current HEAD and retained receipts before retrying;
-blind replay is forbidden.
-
-## Bounds and security assumptions
-
-Request, object, decoder, expression-depth, transaction-work, affected-owner, and finite-output
-bounds are checked before untrusted growth. Persistent map keys are at most 256 bytes, values at
-most 48 KiB, target leaf pages 16 KiB, and hostile page inputs 64 KiB; larger semantic data must
-remain in independently addressed objects. These are storage/decoder limits, not public counts of
-modules in a package.
-
-Current logical module and transaction containers still have implementation bounds documented in
-`docs/status.md`. Growing public results paginate or write to an explicit output. Raising a bound
-does not substitute for incremental algorithms.
-
-The local operator, executable, host OS, and filesystem durability behavior are trusted. The model
-does not claim hostile-code isolation, encrypted storage, authenticated artifact provenance,
-distributed consensus, or multi-tenant publication.
-
-## Compatibility and non-goals
-
-There is no compatibility edition, alias, fallback reader, writable text syntax, storage-record
-authoring API, ambient dependency resolution, or network registry in the authority contract. A
-future graph-contract change requires direct reconstruction, complete maintained-consumer cutover,
-predecessor rejection, and deletion of the former current reader. Git history may retain historical
-bytes; current execution does not interpret them.
+All paths, authored files, transports, artifacts, caches, continuations, deployment descriptors,
+and runtime inputs are hostile bounded boundaries. The system does not claim hostile-code
+sandboxing, multi-tenant isolation, encrypted graph storage, signed artifacts, distributed
+consensus, or transport encryption.

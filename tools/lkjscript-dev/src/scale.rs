@@ -324,6 +324,7 @@ impl Runner {
                 maximum_stderr_bytes: MAXIMUM_STDERR_BYTES,
                 stdout_path: stdout_path.clone(),
                 stderr_path: stderr_path.clone(),
+                unavailable_exit_code: None,
             },
             &self.repository,
         );

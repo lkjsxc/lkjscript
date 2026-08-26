@@ -1,13 +1,13 @@
-//! Prepared component execution shared by command, test, interactive, service, and worker runners.
+//! Frozen artifact-4 execution retained for the isolated service and worker runtime.
 
 mod capability;
 mod compiler;
 mod intrinsic;
 #[allow(
     dead_code,
-    reason = "the normalized runtime remains private until maintained runners migrate"
+    reason = "normalized adapters extend beyond the released pure command and test runners"
 )]
-mod normalized;
+pub(crate) mod normalized;
 mod reference;
 mod vm;
 
@@ -84,7 +84,6 @@ pub struct PreparedTest {
 pub struct PreparedProgram {
     artifact: Arc<LoadedArtifact>,
     functions: BTreeMap<OwnerId, PreparedFunction>,
-    test_expressions: BTreeMap<ExpressionId, PreparedFunction>,
     components: BTreeMap<OwnerId, PreparedComponent>,
     targets: BTreeMap<String, PreparedTarget>,
     tests: Vec<PreparedTest>,
@@ -94,7 +93,6 @@ impl PreparedProgram {
     pub fn prepare(artifact: LoadedArtifact) -> Result<Self, Diagnostic> {
         let artifact = Arc::new(artifact);
         let mut functions = BTreeMap::new();
-        let mut test_expressions = BTreeMap::new();
         let mut tests = Vec::new();
         for package in artifact.packages.values() {
             for module in &package.modules {
@@ -205,33 +203,8 @@ impl PreparedProgram {
                             );
                         }
                         Declaration::Test(test) => {
-                            let test_owner =
-                                module.owner(&package.descriptor.package_id, &test.name)?;
                             let actual = module.expression_id(&test.name, &[0])?;
                             let expected = module.expression_id(&test.name, &[1])?;
-                            for (owner, expression) in
-                                [(actual, &test.actual), (expected, &test.expected)]
-                            {
-                                let compiled =
-                                    compiler::compile_function(&artifact, &[], expression)?;
-                                test_expressions.insert(
-                                    owner,
-                                    PreparedFunction {
-                                        signature: FunctionSignature {
-                                            owner: test_owner.clone(),
-                                            type_parameters: Vec::new(),
-                                            parameters: Vec::new(),
-                                            result: super::semantic::ResolvedType::Unit,
-                                            task_capabilities: Vec::new(),
-                                            external_implementation: None,
-                                        },
-                                        parameters: Vec::new(),
-                                        compiled: Some(compiled),
-                                        external_implementation: None,
-                                        source: Some(expression.clone()),
-                                    },
-                                );
-                            }
                             tests.push(PreparedTest {
                                 package: package.descriptor.package_id.clone(),
                                 module: module.module.name.clone(),
@@ -427,7 +400,6 @@ impl PreparedProgram {
         Ok(Self {
             artifact,
             functions,
-            test_expressions,
             components,
             targets,
             tests,
@@ -465,10 +437,6 @@ impl PreparedProgram {
 
     pub(crate) fn function(&self, owner: &OwnerId) -> Option<&PreparedFunction> {
         self.functions.get(owner)
-    }
-
-    pub(crate) fn test_expression(&self, expression: &ExpressionId) -> Option<&PreparedFunction> {
-        self.test_expressions.get(expression)
     }
 
     pub(crate) fn call_intrinsic(

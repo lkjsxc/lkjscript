@@ -1,119 +1,106 @@
-# Packages, modules, components, and targets
+# Packages, components, targets, and artifacts
 
-Status: normative for meaning graph contract 4, package artifact contract 3, and executable artifact
-contract 4.
+Status: normative for Graph 5, package transport 1, compiler/bytecode contracts, and artifact 10.
+Exact current identities are executable-derived in the generated
+[contract table](../generated/contracts.md).
 
-## Repositories, packages, and modules
+## Packages and exact dependencies
 
-One repository owns one root package and its accepted revision DAG. Repository ID, package ID,
-package name, revision ID, persistent root digest, artifact digest, and filesystem location are
-separate domains.
+One Graph 5 repository owns one root package. Repository ID, package ID, mutable package name,
+semantic revision/state, logical package revision, package transport, public interface, artifact
+manifest/bundle, compiler indexes, and filesystem location are distinct domains.
 
-A package owns exact metadata, modules, dependencies, targets, and exported meaning. A module owns
-one namespace, imports, exports, documentation, annotations, declarations, identities, and
-relations. Package/module names are mutable locators. Module IDs survive rename; declaration IDs
-survive rename and move.
+A package owns typed modules and other semantic owners, exact dependencies, components, ports,
+targets, tests, documentation, and annotations. Stable identities survive supported rename and
+move operations. Exact references bind package and typed owner identities, never ambient names or
+physical object locations.
 
-Semantic relations bind exact stable package/module/declaration/member identities after validation.
-Canonical imports bind exact package and module IDs while retaining only a module-local alias.
-Canonical targets bind exact module, component declaration, and port IDs. Module rename therefore
-updates the module object and name map without rewriting importers or targets. Exports bind
-declaration IDs and expression references bind exact package/module/declaration IDs. Declaration
-rename therefore updates only its owning module and derived name/summary entries; callers retain
-the exact binding.
+An accepted dependency records exact package ID, semantic revision, logical package revision, and
+public interface binding. The dependency's package transport carries the complete validated public
+meaning and exact transitive selection required to install that binding. It is immutable transport,
+not editable source or an alternate package repository.
 
-Imports resolve only within the root package or an explicitly aliased exact dependency. Visibility
-and exports validate over stable owners. Mutable tags, ambient directories, current working
-directory lookup, undeclared network state, credentials, and latest-version resolution are
-forbidden in accepted builds.
+Dependency resolution is closed and deterministic. The current released application lifecycle
+accepts either no dependencies or the one exact built-in standard dependency. Missing, extra,
+foreign, stale, truncated, duplicate, noncanonical, or interface-inconsistent closure rejects
+before compilation or execution. There is no current general package registry, mutable tag,
+ambient directory lookup, network resolution, or implicit upgrade.
 
-## Exact dependencies and built-ins
+## Built-in standard material
 
-A dependency binding contains alias, immutable package ID, exact semantic revision ID, and exact
-graph-artifact digest. Before add or replace, `package stage PATH` verifies the package artifact
-closure and stores its immutable objects as unreachable operational data. A committed change-v3
-`add_dependency` or `replace_dependency` makes the exact binding authoritative with the root.
-`remove_dependency` rejects while accepted meaning still uses it.
+`packages/standard` is the sole maintained owner of two generated assets:
 
-Graph artifacts contain a sorted unique closure of packed package objects. Every package object
-binds its revision record, receipt, canonical logical graph root, and module set; artifact transport
-is deliberately independent of repository page coordinates and packing. Artifact identity commits
-to exact closure and compiler-facing contracts. Artifacts contain requirements, never deployment
-grants, secrets, live resources, or host paths.
+- an exact package transport used to create and validate dependent Graph 5 repositories; and
+- an exact artifact-10 bundle used to link and execute the dependency.
 
-The executable carries one exact standard artifact for offline bootstrap. It is derived from the
-maintained `packages/standard` authority and cannot be replaced by an ambient file.
-`package builtin inspect` exposes its contract/package/revision/artifact/digest/size;
-`package builtin export --output PATH` exports identical checked bytes. A command-template
-project binds that exact package through the same dependency contract used by any project.
+The executable embeds both. Initialization strictly decodes each asset and verifies agreement on
+package identity, semantic revision/state, logical package revision, public interface, compiler
+contracts, artifact identity, and closure. Public inspect/export can observe or copy the exact
+bytes but cannot replace them. Product verification regenerates the maintained files and compares
+them byte for byte.
 
-## Components, requirements, and ports
+The command project recipe resolves the public standard identity declaration from this validated
+interface, stores an exact declaration reference, and installs the exact transport. It does not
+retain name-only runtime resolution.
 
-A component is a graph-owned declaration grouping typed ports and capability requirements. A
-requirement binds a stable requirement ID, local alias, exact interface, and operation set. A port
-binds stable port ID, name, exact external parameter/result shape, and one graph-owned named
-function expression. Components contain no deployment credentials or live adapters.
+## Components, requirements, ports, and targets
 
-The same component/port model covers command, HTTP, interactive, batch, worker, test, and related
-runner kinds where their entry contracts align. Runner kind is target metadata, not a language
-edition. A target has stable ID and name, exact module/component/port identities, and one runner
-kind. Current names are derived for inspection. Validation rejects foreign identities, stale
-caller-supplied expected-name preconditions, requirement mismatch, or incompatible port shape.
+A component is graph meaning that groups stable requirements and ports. A requirement binds one
+stable ID, exact interface declaration, exact operation set, and resource limits. A port binds a
+stable ID, function type, and exact function or expression implementation. Credentials, live
+adapters, sockets, and deployment topology are excluded.
 
-Pure generic functions are instantiated explicitly before use in a port or another expression.
-Named function values carry stable declaration provenance and no closure environment. Task ports
-may bind named task functions only through component validation with their declared requirements;
-generic task functions and captured closures are not allowed.
+A target binds stable target identity and mutable target name to exact component and port
+identities plus one runner kind. The released `run` command accepts only a pure command target.
+Tests are graph-owned actual/expected expressions with exact comparison policy. Task functions may
+name exact requirements; artifact linking retains their exact requirement owner closure without
+treating a use by multiple task functions as duplicate semantic definition.
+
+Validation rejects foreign domains, absent or retired owners, invalid type/effect shape,
+requirement widening, unavailable operations, incompatible ports, and runner mismatch before
+publication or execution.
+
+## Compilation and artifact closure
+
+Each selected semantic compiler owner lowers to a strict compiler-unit object. A compilation
+manifest binds repository, exact revision/state, compiler and bytecode contracts, deterministic
+optimization policy, and the complete unit map. Exact-current cache reuse requires every binding;
+cache state is disposable and never enters semantic or package identity.
+
+Artifact contract 10 links the root compilation with strictly loaded dependency artifacts. Its
+manifest binds:
+
+- root repository, package, accepted revision, and semantic state;
+- every dependency package and logical revision;
+- compiler, unit, optimization, and bytecode contracts;
+- exact package interfaces and compiler-unit roots;
+- exact runtime-owner metadata required by compiled relocations; and
+- the complete immutable object closure and bundle checksum.
+
+Artifact order and bytes are deterministic. The strict decoder checks bounds before allocation and
+rejects unknown magic/version, noncanonical ordering, duplicates, foreign identity domains,
+unresolved relocations, incorrect owner semantics, missing or extra objects, digest disagreement,
+truncation, and trailing input.
+
+Artifacts contain semantic requirements but never deployment grants, credentials, runtime handles,
+host paths, or accepted repository visibility. An artifact is a derived executable input, not a
+writer of Graph 5 authority.
 
 ## Preparation, execution, and deployment
 
-Artifact preparation resolves every target, component, port, function, explicit type application,
-test, and capability requirement to compact runtime indexes while retaining semantic provenance.
-Prepared indexes and specialization choices are derived and never enter stable graph identity.
-Bytecode and semantic reference execution must agree.
+`NormalizedProgram` maps exact artifact owners and compiler operands to compact process-local
+indexes. These dense indexes are replaceable and do not become stable identities. Pure command and
+test execution must agree with the canonical repository reference interpreter.
 
 A deployment descriptor is external operational authority. It selects an exact artifact and target,
-binds requirement aliases to generic adapters and secret/configuration sources, sets resource
-limits, and supplies runner topology. The artifact declares requirements; deployment grants
-authority. A descriptor cannot change accepted program meaning.
+binds requirement aliases to generic adapters and secret/configuration sources, and sets resource
+limits/topology. Application routes, SQL, authorization, representations, object keys, and queue
+transitions belong in graph meaning; Rust owns generic host mechanisms.
 
-Generic Rust adapters must not contain application routes, schemas, authorization roles, SQL/table
-policy, object keys, retry/domain transitions, or rendering policy. Every live resource is owned,
-bounded, cancellable, and closed under the runtime contract.
+Current `serve` and `worker` descriptors select the separately named frozen artifact-4 file. That
+runtime is read-only and does not open an editable predecessor repository. Artifact 10 deployment
+and effectful reference/replay closure remain a future cutover.
 
-The HTTP adapter listens in plaintext. PostgreSQL connects with `NoTls`. lkjscript does not plan
-HTTP TLS termination, PostgreSQL TLS, certificate parsing/management/rotation, ACME, or speculative
-TLS capability hooks. Encrypted transport requires an appropriate external trusted boundary or a
-different adapter outside current scope. That boundary does not provide hostile-code or
-multi-tenant isolation.
-
-## Maintained packages
-
-`packages/standard` is graph-authored exact dependency meaning. It declares reusable typed
-interfaces and closed external functions for core values, HTTP, JSON, PostgreSQL, configuration,
-secrets, clock, randomness, identifiers, password hashing, streams, objects, and queues. Its
-generic pure identity function is a maintained consumer of explicit rank-1 type parameters.
-
-`applications/lkjournal` is the maintained service package. It binds the exact standard revision
-and package artifact. Routes, SQL, migrations, authentication/authorization, JSON/HTML
-representation, object naming/publication, and queue/job transitions remain graph meaning. Its
-`serve` target selects `service.Web/request`; its `work` target selects
-`worker.Worker/run`.
-
-The command bootstrap is an additional ordinary consumer: it calls the exact built-in standard
-identity function with explicit `Text` and owns a graph test, component, port, and command target.
-No private Rust application builder or external template artifact is required at runtime.
-
-## Ordering, failure, persistence, and non-goals
-
-Modules, dependencies, exports, targets, requirements, ports, and artifact objects use canonical
-deterministic order. Unknown/foreign IDs, dependency mismatch, unexported use, stale locator,
-capability widening, invalid runner shape, corrupt artifact, and resource exhaustion reject before
-accepted publication or runtime admission.
-
-Accepted package/dependency/component/target meaning persists in the graph. Package staging,
-embedded bytes, prepared indexes, deployments, grants, secrets, and live resources do not.
-
-There is no online registry, mutable-tag resolution, implicit dependency upgrade, application-
-specific native policy, hidden source macro, TLS subsystem, or certificate capability in this
-contract.
+The HTTP listener is plaintext and PostgreSQL uses `NoTls`. Encrypted transport requires an
+external trusted boundary or a future explicitly selected adapter; no TLS or certificate machinery
+is implied by the component model.

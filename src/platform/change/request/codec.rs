@@ -371,7 +371,7 @@ impl Writer {
                     writer.parameter(value, definitions)
                 })?;
                 self.authored_type(result, definitions, 1)?;
-                self.name(implementation)
+                self.string(implementation.as_str())
             }
             AuthoredChange::CreateConstant {
                 symbol,
@@ -533,7 +533,7 @@ impl Writer {
                 self.tag(22)?;
                 self.declaration_selector(external, definitions)?;
                 self.authored_type(result, definitions, 1)?;
-                self.name(implementation)
+                self.string(implementation.as_str())
             }
             AuthoredChange::SetFieldType { field, ty } => {
                 self.tag(23)?;

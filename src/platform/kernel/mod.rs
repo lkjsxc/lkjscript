@@ -1,12 +1,11 @@
-//! Private Graph Contract 5 semantic kernel under construction.
+//! Current Graph 5 semantic kernel behind the typed process boundary.
 //!
-//! This module is deliberately not wired to repository opening or public commands yet. It owns
-//! the normalized records and independent oracles that must be complete before the direct public
-//! cutover. Graph Contract 4 remains the accepted public authority until that cutover.
+//! These normalized records and complete oracles own current program meaning. The module remains
+//! crate-private so Rust representation is not elevated into the public language contract.
 
 #![allow(
     unused_imports,
-    reason = "private Graph 5 exports become crate consumers at the direct cutover"
+    reason = "closed kernel exports include independent test oracles and future typed adapters"
 )]
 
 mod codec;
@@ -14,6 +13,7 @@ pub mod contract;
 mod digest;
 mod expression;
 mod id;
+mod implementation;
 mod infer;
 mod interface;
 mod name;
@@ -43,6 +43,7 @@ pub use expression::*;
 pub use id::{
     EncodedOwnerKey, ExactOwnerKey, IdentityKind, OwnerHeader, OwnerKey, OwnerKind, PackageId,
 };
+pub use implementation::ImplementationName;
 pub(crate) use infer::{
     ExpressionRead, ExpressionValidationExhaustion, ExpressionValidationLimits,
     validate_expression_roots, validate_expression_roots_with_limits,

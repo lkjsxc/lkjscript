@@ -1012,6 +1012,7 @@ pub(crate) enum RuntimeOwnerExpectation {
         operations: Vec<OperationReference>,
         limits: Vec<ResourceLimit>,
     },
+    TaskRequirement,
     Port {
         declaration: DeclarationId,
         function_type: TypeObjectDigest,
@@ -1038,7 +1039,7 @@ impl RuntimeOwnerExpectation {
             Self::Case { .. } => OwnerKind::Case,
             Self::Operation { .. } => OwnerKind::Operation,
             Self::Parameter { .. } => OwnerKind::Parameter,
-            Self::Requirement { .. } => OwnerKind::Requirement,
+            Self::Requirement { .. } | Self::TaskRequirement { .. } => OwnerKind::Requirement,
             Self::Port { .. } => OwnerKind::Port,
             Self::Target { .. } => OwnerKind::Target,
         }
@@ -1092,6 +1093,7 @@ impl RuntimeOwnerExpectation {
                     && record.operations == *operations
                     && record.limits == *limits
             }
+            (Self::TaskRequirement, OwnerRecord::Requirement(_)) => true,
             (
                 Self::Port {
                     declaration,
@@ -1372,6 +1374,19 @@ fn insert_signature_expectations(
             unit,
         )?;
     }
+    for requirement in &signature.task_requirements {
+        let reference = table_value(
+            &unit.tables.requirements,
+            *requirement,
+            "task signature requirement reference",
+        )?;
+        require_local_reference(package, reference.package, "task signature requirement")?;
+        insert_runtime_expectation(
+            expected,
+            (package, OwnerKey::Requirement(reference.requirement)),
+            RuntimeOwnerExpectation::TaskRequirement,
+        )?;
+    }
     Ok(())
 }
 
@@ -1397,12 +1412,32 @@ fn insert_runtime_expectation(
     key: (PackageId, OwnerKey),
     value: RuntimeOwnerExpectation,
 ) -> Result<(), Diagnostic> {
-    if expected.insert(key, value).is_some() {
-        return Err(artifact_error(
-            DiagnosticClass::Corrupt,
-            "artifact_runtime_owner_duplicate",
-            "one stable runtime owner is defined by multiple compiler-unit records",
-        ));
+    match expected.entry(key) {
+        std::collections::btree_map::Entry::Vacant(entry) => {
+            entry.insert(value);
+        }
+        std::collections::btree_map::Entry::Occupied(_)
+            if matches!(&value, RuntimeOwnerExpectation::TaskRequirement) =>
+        {
+            // A task signature names the exact requirement it may use. Multiple task signatures
+            // may name one component-owned requirement, so the signature contributes a closure
+            // requirement rather than a second semantic definition.
+        }
+        std::collections::btree_map::Entry::Occupied(mut entry)
+            if matches!(entry.get(), RuntimeOwnerExpectation::TaskRequirement)
+                && matches!(&value, RuntimeOwnerExpectation::Requirement { .. }) =>
+        {
+            // The component unit carries the complete defining semantics and supersedes the
+            // closure-only expectation regardless of stable owner ordering.
+            entry.insert(value);
+        }
+        std::collections::btree_map::Entry::Occupied(_) => {
+            return Err(artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_runtime_owner_duplicate",
+                "one stable runtime owner is defined by multiple compiler-unit records",
+            ));
+        }
     }
     Ok(())
 }
@@ -2129,6 +2164,13 @@ fn validate_unit_relocations(
             CompilationPayload::External { signature, .. }
             | CompilationPayload::Function { signature, .. } => {
                 type_parameters.extend(signature.type_parameters.iter().copied());
+                for requirement in &signature.task_requirements {
+                    requirements.insert(table_value(
+                        &unit.tables.requirements,
+                        *requirement,
+                        "task signature requirement relocation",
+                    )?);
+                }
             }
             CompilationPayload::Constant { .. }
             | CompilationPayload::Test { .. }
@@ -2136,41 +2178,55 @@ fn validate_unit_relocations(
         }
     }
     for unit in units.values() {
-        if unit
+        let missing = unit
             .tables
             .declarations
             .iter()
-            .any(|reference| !declarations.contains(&(reference.package, reference.declaration)))
-            || unit
-                .tables
-                .fields
-                .iter()
-                .any(|reference| !fields.contains(reference))
-            || unit
-                .tables
-                .cases
-                .iter()
-                .any(|reference| !cases.contains(reference))
-            || unit
-                .tables
-                .requirements
-                .iter()
-                .any(|reference| !requirements.contains(reference))
-            || unit
-                .tables
-                .operations
-                .iter()
-                .any(|reference| !operations.contains(reference))
-            || unit
-                .tables
-                .ports
-                .iter()
-                .any(|reference| !ports.contains(reference))
-        {
+            .find(|reference| !declarations.contains(&(reference.package, reference.declaration)))
+            .map(|reference| format!("declaration {reference:?}"))
+            .or_else(|| {
+                unit.tables
+                    .fields
+                    .iter()
+                    .find(|reference| !fields.contains(reference))
+                    .map(|reference| format!("field {reference:?}"))
+            })
+            .or_else(|| {
+                unit.tables
+                    .cases
+                    .iter()
+                    .find(|reference| !cases.contains(reference))
+                    .map(|reference| format!("case {reference:?}"))
+            })
+            .or_else(|| {
+                unit.tables
+                    .requirements
+                    .iter()
+                    .find(|reference| !requirements.contains(reference))
+                    .map(|reference| format!("requirement {reference:?}"))
+            })
+            .or_else(|| {
+                unit.tables
+                    .operations
+                    .iter()
+                    .find(|reference| !operations.contains(reference))
+                    .map(|reference| format!("operation {reference:?}"))
+            })
+            .or_else(|| {
+                unit.tables
+                    .ports
+                    .iter()
+                    .find(|reference| !ports.contains(reference))
+                    .map(|reference| format!("port {reference:?}"))
+            });
+        if let Some(missing) = missing {
             return Err(artifact_error(
                 DiagnosticClass::Corrupt,
                 "artifact_unit_relocation_missing",
-                "compiler-unit relocation does not resolve inside the exact artifact package closure",
+                format!(
+                    "compiler unit {:?} has unresolved {missing} relocation inside the exact artifact package closure",
+                    unit.source
+                ),
             ));
         }
     }

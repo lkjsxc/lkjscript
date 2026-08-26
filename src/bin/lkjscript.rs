@@ -10,8 +10,9 @@ use lkjscript::platform::contract::{
 };
 use lkjscript::platform::control::{CompactResponseLimits, CompactResponseWriter};
 use lkjscript::platform::{
-    CLI_CONTRACT_VERSION, Diagnostic, PreparedDeployment, PublicOperation, execute_capabilities,
-    execute_change, execute_cli, execute_inspect, execute_new, execute_query, execute_status,
+    Diagnostic, PreparedDeployment, PublicOperation, execute_build, execute_capabilities,
+    execute_change, execute_check, execute_inspect, execute_new, execute_package_builtin,
+    execute_query, execute_run, execute_status,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -41,6 +42,18 @@ async fn main() -> ExitCode {
     if compact_change_arguments(&arguments) {
         return compact_change(arguments);
     }
+    if compact_project_command(&arguments, "check") {
+        return compact_check(arguments);
+    }
+    if compact_project_command(&arguments, "build") {
+        return compact_build(arguments);
+    }
+    if compact_project_command(&arguments, "run") {
+        return compact_run(arguments);
+    }
+    if compact_project_command(&arguments, "package") {
+        return compact_package_builtin(arguments);
+    }
     let operation = arguments
         .first()
         .and_then(|value| PublicOperation::parse(value));
@@ -48,12 +61,12 @@ async fn main() -> ExitCode {
         operation,
         Some(PublicOperation::Serve | PublicOperation::Worker)
     ) {
-        return cli(arguments);
+        return unknown_operation(&arguments);
     }
     let outcome = match operation {
         Some(PublicOperation::Serve) => serve(&arguments[1..]).await,
         Some(PublicOperation::Worker) => worker(&arguments[1..]).await,
-        _ => return cli(arguments),
+        _ => return unknown_operation(&arguments),
     };
     match outcome {
         Ok(()) => ExitCode::SUCCESS,
@@ -225,19 +238,69 @@ fn compact_change(arguments: Vec<String>) -> ExitCode {
     }
 }
 
-fn cli(arguments: Vec<String>) -> ExitCode {
-    match execute_cli(arguments) {
-        Ok(receipt) => {
-            let exit = receipt.process_exit_code();
-            if write_json(&receipt).is_err() {
-                return ExitCode::from(exit_status_for(
-                    lkjscript::platform::DiagnosticClass::Infrastructure,
-                ));
-            }
-            ExitCode::from(exit)
+fn compact_project_command(arguments: &[String], command: &str) -> bool {
+    let mut index = 0;
+    while index < arguments.len() {
+        if arguments[index] == "--project" {
+            index = index.saturating_add(2);
+        } else {
+            return arguments[index] == command;
         }
-        Err(error) => write_failure(&error, CLI_CONTRACT_VERSION),
     }
+    false
+}
+
+fn compact_check(arguments: Vec<String>) -> ExitCode {
+    compact_finite("check", execute_check(arguments))
+}
+
+fn compact_build(arguments: Vec<String>) -> ExitCode {
+    compact_finite("build", execute_build(arguments))
+}
+
+fn compact_run(arguments: Vec<String>) -> ExitCode {
+    compact_finite("run", execute_run(arguments))
+}
+
+fn compact_package_builtin(arguments: Vec<String>) -> ExitCode {
+    compact_finite("package", execute_package_builtin(arguments))
+}
+
+fn compact_finite(command: &str, result: Result<Vec<u8>, Diagnostic>) -> ExitCode {
+    match result {
+        Ok(bytes) => match write_bytes(&bytes) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(_) => ExitCode::from(exit_status_for(
+                lkjscript::platform::DiagnosticClass::Infrastructure,
+            )),
+        },
+        Err(error) => write_compact_failure(command, &error),
+    }
+}
+
+fn unknown_operation(arguments: &[String]) -> ExitCode {
+    let mut index = 0_usize;
+    let mut operation = None;
+    while index < arguments.len() {
+        if arguments[index] == "--project" {
+            index = index.saturating_add(2);
+        } else {
+            operation = Some(arguments[index].as_str());
+            break;
+        }
+    }
+    let message = operation.map_or_else(
+        || "missing operation; use 'capabilities'".to_owned(),
+        |value| format!("unknown operation '{value}'; use 'capabilities'"),
+    );
+    write_compact_failure(
+        "cli",
+        &Diagnostic::new(
+            lkjscript::platform::DiagnosticClass::Source,
+            "cli_usage",
+            message,
+        ),
+    )
 }
 
 fn write_failure(error: &Diagnostic, contract_version: u16) -> ExitCode {

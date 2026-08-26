@@ -4,8 +4,8 @@ use super::*;
 use crate::platform::kernel::{
     AnnotationClass, AnnotationRecord, AnnotationValue, CaseRecord, DocumentContent,
     DocumentationClass, DocumentationRecord, ExternalDeclaration, ExternalVisibility, FieldRecord,
-    Idempotency, OperationRecord, PortImplementation, PortRecord, RequirementRecord, ResourceLimit,
-    ResourceUnit, TargetRecord,
+    Idempotency, ImplementationName, OperationRecord, PortImplementation, PortRecord,
+    RequirementRecord, ResourceLimit, ResourceUnit, TargetRecord,
 };
 use crate::platform::package::RunnerKind;
 
@@ -341,7 +341,7 @@ pub(in crate::platform::change::request) fn lower_external<
     type_parameters: &[AuthoredTypeParameter],
     parameters: &[AuthoredParameter],
     result: &AuthoredType,
-    implementation: &Name,
+    implementation: &ImplementationName,
 ) -> Result<(), Diagnostic> {
     let declaration = lowerer.declaration_symbol(symbol)?;
     let module = lowerer.resolve_module(module)?;

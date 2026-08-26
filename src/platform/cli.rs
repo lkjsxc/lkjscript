@@ -1,13 +1,12 @@
 //! Strict, bounded public graph-native command projection.
 
-use super::artifact::{MAXIMUM_ARTIFACT_BYTES, load_artifact};
-use super::bootstrap::{builtin_package_info, export_builtin_standard};
+use super::artifact::MAXIMUM_ARTIFACT_BYTES;
 use super::change::{AuthoredChange, AuthoredChangeSet, OwnerSelector};
+use super::compiler::{build_incremental, load_current_compilation};
 use super::contract::{
-    CLI_CONTRACT_VERSION, MAXIMUM_CLI_RESPONSE_BYTES, MAXIMUM_CLI_RESPONSE_RECORDS,
-    MAXIMUM_TRANSACTION_REQUEST_BYTES, PublicOperation, RegistrySection, RegistrySnapshot,
-    generated_documents, operation_descriptors, operation_record, outcome_exit_status,
-    registry_snapshot,
+    MAXIMUM_CLI_RESPONSE_BYTES, MAXIMUM_CLI_RESPONSE_RECORDS, PublicOperation, RegistrySection,
+    RegistrySnapshot, diagnostic_class_name, generated_documents, operation_descriptors,
+    operation_record, registry_snapshot,
 };
 use super::control::{
     ChangePlanToken, CompactChangeOperation, CompactResponseLimits, CompactResponseWriter,
@@ -15,112 +14,23 @@ use super::control::{
     MAXIMUM_LOGICAL_PLAN_BYTES, NormalizedChangeRequest, compact_change_operation_descriptor,
     decode_compact_change, encode_logical_change_plan, normalize_change_request,
 };
-use super::deployment::{MAXIMUM_DEPLOYMENT_BYTES, decode_deployment};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
-use super::execution::{PreparedProgram, ReferenceInterpreter, RunPolicy, Vm};
-use super::json::{JsonLimits, decode_strict, decode_typed, encode_typed};
+use super::execution::ExecutionControl;
+use super::execution::normalized::NormalizedCommandPolicy;
 use super::kernel::{Name, OwnerKey as KernelOwnerKey, OwnerKind as KernelOwnerKind, PackageId};
+use super::normalized_lifecycle::{PreparedApplication, prepare_repository};
 use super::normalized_query::{execute_normalized_query, parse_query_arguments};
-use super::package::RunnerKind;
-use super::project_creation::create_minimal_project;
+use super::owned_output::publish_create_new;
+use super::project_creation::{create_command_project, create_minimal_project};
 use super::project_discovery::discover_project;
 use super::publication::{
     GraphRepository, PreparedAuthoredPublication, PublicationOptions,
     PublicationOutcome as GraphPublicationOutcome,
 };
-use super::repository::SemanticRepository;
-use super::revision::{AffectedOwner, TransactionReceipt, ValidationFacts};
-use super::semantic_diff::diff_revisions;
-use super::semantic_digest::{ReceiptDigest, SemanticDiffDigest, TransactionDigest};
-use super::semantic_draft::SemanticDraftStore;
-use super::semantic_id::{DraftId, RepositoryId, RevisionId};
-use super::semantic_merge::{
-    SEMANTIC_MERGE_CONTRACT_VERSION, SemanticMergeRequest, SemanticMergeResult,
-    SemanticMergeStatus, merge_revisions,
-};
-use super::semantic_projection::{MAXIMUM_REVIEW_PROJECTION_BYTES, render_review_projection};
-use super::semantic_query::{QueryBudget, SemanticQueryIndex};
-use super::semantic_transaction::{
-    TransactionMode, TransactionRequest, TransactionResult, TransactionStatus,
-};
-use super::workspace::{DEFAULT_ORIENTATION_ITEMS, SemanticWorkspace};
-use serde::{Deserialize, Serialize};
-use serde_json::json;
+use super::semantic_id::{RepositoryId, RevisionId};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::time::Instant;
-
-const MAXIMUM_INLINE_AFFECTED_OWNERS: usize = 64;
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct CliSuccess {
-    pub contract_version: u16,
-    pub ok: bool,
-    pub status: &'static str,
-    pub command: String,
-    pub result: serde_json::Value,
-}
-
-impl CliSuccess {
-    pub fn process_exit_code(&self) -> u8 {
-        outcome_exit_status(self.status)
-    }
-}
-
-pub fn execute(arguments: Vec<String>) -> Result<CliSuccess, Diagnostic> {
-    let (arguments, project) = extract_global_project(arguments)?;
-    if arguments.is_empty() {
-        return Err(usage_error(
-            "capabilities uses the compact executable process boundary",
-        ));
-    }
-    let command = PublicOperation::parse(&arguments[0]).ok_or_else(|| {
-        usage_error(format!(
-            "unknown command '{}'; use 'capabilities'",
-            arguments[0]
-        ))
-    })?;
-    match command {
-        PublicOperation::Capabilities => Err(usage_error(
-            "capabilities uses the compact executable process boundary",
-        )),
-        PublicOperation::New => Err(usage_error(
-            "new uses the compact executable process boundary",
-        )),
-        PublicOperation::Status => Err(usage_error(
-            "status uses the compact executable process boundary",
-        )),
-        PublicOperation::Inspect => inspect_command(&arguments[1..], project.as_deref()),
-        PublicOperation::Query => Err(usage_error(
-            "query uses the compact normalized executable process boundary",
-        )),
-        PublicOperation::Change => Err(usage_error(
-            "change uses the compact executable process boundary",
-        )),
-        PublicOperation::Draft => public_draft_command(&arguments[1..], project.as_deref()),
-        PublicOperation::History => public_history_command(&arguments[1..], project.as_deref()),
-        PublicOperation::Package => package_command(&arguments[1..], project.as_deref()),
-        PublicOperation::Check => {
-            exact_arguments(&arguments, 1, "check")?;
-            let workspace = open_workspace(project.as_deref())?;
-            run_package_tests(&workspace.prepare()?)
-        }
-        PublicOperation::Build => build_command(&arguments[1..], project.as_deref()),
-        PublicOperation::Run => run_target_command(&arguments[1..], project.as_deref()),
-        PublicOperation::Serve | PublicOperation::Worker => Err(usage_error(format!(
-            "'{}' is a resident runner command and must use the executable process boundary",
-            command.name()
-        ))),
-        PublicOperation::Review => {
-            text_projection_command("review", &arguments[1..], project.as_deref())
-        }
-        PublicOperation::Backup => backup_command("backup", &arguments[1..], project.as_deref()),
-        PublicOperation::Restore => restore_command(&arguments[1..], project.as_deref()),
-        PublicOperation::Doctor => doctor_command(&arguments[1..], project.as_deref()),
-    }
-}
 
 pub fn execute_new(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
     let destination = arguments
@@ -130,16 +40,9 @@ pub fn execute_new(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
     ensure_options(&arguments[1..], &["--template", "--name"], &[])?;
     let template =
         option_value(&arguments[1..], "--template")?.unwrap_or_else(|| "minimal".to_owned());
-    if template == "command" {
-        return Err(Diagnostic::new(
-            DiagnosticClass::Source,
-            "predecessor_contract",
-            "the command template belongs to predecessor authority; normalized standard-package and command-target bootstrap are not available yet",
-        ));
-    }
-    if template != "minimal" {
+    if template != "minimal" && template != "command" {
         return Err(usage_error(format!(
-            "unknown normalized project template '{template}'; expected minimal"
+            "unknown normalized project template '{template}'; expected minimal or command"
         )));
     }
     let package_name = option_value(&arguments[1..], "--name")?.unwrap_or_else(|| {
@@ -154,7 +57,11 @@ pub fn execute_new(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
             "new requires --name when the destination name is not valid UTF-8",
         ));
     }
-    let created = create_minimal_project(Path::new(destination), &package_name)?;
+    let created = if template == "command" {
+        create_command_project(Path::new(destination), &package_name)?
+    } else {
+        create_minimal_project(Path::new(destination), &package_name)?
+    };
     let mut output = compact_response_writer()?;
     append_compact_record(
         &mut output,
@@ -169,7 +76,7 @@ pub fn execute_new(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
         "project",
         &[
             ("path", created.project.display().to_string()),
-            ("template", "minimal".to_owned()),
+            ("template", created.template.to_owned()),
             ("name", created.package_name.as_str().to_owned()),
         ],
     )?;
@@ -210,9 +117,11 @@ pub fn execute_new(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
         &mut output,
         "summary",
         &[
-            ("owners", "0".to_owned()),
-            ("dependencies", "0".to_owned()),
+            ("owners", created.owners.to_string()),
+            ("dependencies", created.dependencies.to_string()),
             ("retirements", "0".to_owned()),
+            ("targets", created.targets.to_string()),
+            ("tests", created.tests.to_string()),
         ],
     )?;
     append_compact_record(
@@ -223,6 +132,243 @@ pub fn execute_new(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
             ("command", "lkjscript capabilities inspect".to_owned()),
         ],
     )?;
+    Ok(output.finish())
+}
+
+pub fn execute_check(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
+    let (arguments, project) = extract_global_project(arguments)?;
+    if arguments.as_slice() != ["check"] {
+        return Err(usage_error("check accepts no additional arguments"));
+    }
+    let repository = open_normalized_repository(project)?;
+    let prepared = prepare_repository(repository)?;
+    let checked = prepared.check(&ExecutionControl::default())?;
+    let mut output = compact_response_writer()?;
+    append_compact_record(
+        &mut output,
+        "result",
+        &[
+            ("status", "success".to_owned()),
+            ("command", "check".to_owned()),
+        ],
+    )?;
+    append_lifecycle_records(&mut output, &prepared)?;
+    append_compact_record(
+        &mut output,
+        "tests",
+        &[
+            ("passed", checked.passed.to_string()),
+            ("failed", checked.failed.to_string()),
+            ("differential", checked.differential.to_owned()),
+            (
+                "production-instructions",
+                checked.production_instructions.to_string(),
+            ),
+            (
+                "reference-expressions",
+                checked.reference_expressions.to_string(),
+            ),
+        ],
+    )?;
+    Ok(output.finish())
+}
+
+pub fn execute_build(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
+    let (arguments, project) = extract_global_project(arguments)?;
+    if arguments.first().map(String::as_str) != Some("build") {
+        return Err(usage_error("build requires the build operation name"));
+    }
+    ensure_options(&arguments[1..], &["--output"], &[])?;
+    let output_path = required_option(&arguments[1..], "--output")?;
+    let repository = open_normalized_repository(project)?;
+    let prepared = prepare_repository(repository)?;
+    let publication = publish_create_new(
+        Path::new(&output_path),
+        &prepared.artifact_bytes,
+        MAXIMUM_ARTIFACT_BYTES + 50,
+        "normalized graph artifact",
+    )?;
+    let mut output = compact_response_writer()?;
+    append_compact_record(
+        &mut output,
+        "result",
+        &[
+            ("status", "success".to_owned()),
+            ("command", "build".to_owned()),
+        ],
+    )?;
+    append_lifecycle_records(&mut output, &prepared)?;
+    append_compact_record(
+        &mut output,
+        "output",
+        &[
+            ("path", publication.path.display().to_string()),
+            ("bytes", publication.bytes.to_string()),
+            ("visibility", publication.visibility.to_owned()),
+            ("durability", publication.durability.to_owned()),
+            ("stage-cleanup", publication.stage_cleanup.to_owned()),
+        ],
+    )?;
+    Ok(output.finish())
+}
+
+pub fn execute_run(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
+    let (arguments, project) = extract_global_project(arguments)?;
+    if arguments.first().map(String::as_str) != Some("run") {
+        return Err(usage_error("run requires the run operation name"));
+    }
+    let target = arguments
+        .get(1)
+        .filter(|value| !value.starts_with("--"))
+        .ok_or_else(|| usage_error("run requires one target name"))?;
+    ensure_options(&arguments[2..], &["--arguments"], &[])?;
+    let encoded_arguments =
+        option_value(&arguments[2..], "--arguments")?.unwrap_or_else(|| "[]".to_owned());
+    let repository = open_normalized_repository(project)?;
+    let prepared = prepare_repository(repository)?;
+    let run = prepared.run(
+        &Name::new(target.clone())?,
+        encoded_arguments.as_bytes(),
+        NormalizedCommandPolicy::default(),
+        &ExecutionControl::default(),
+    )?;
+    let result = String::from_utf8(run.result_json).map_err(|_| {
+        Diagnostic::new(
+            DiagnosticClass::Corrupt,
+            "run_result_utf8",
+            "normalized typed result is not canonical UTF-8 JSON",
+        )
+    })?;
+    let mut output = compact_response_writer()?;
+    append_compact_record(
+        &mut output,
+        "result",
+        &[
+            ("status", "success".to_owned()),
+            ("command", "run".to_owned()),
+        ],
+    )?;
+    append_lifecycle_records(&mut output, &prepared)?;
+    append_compact_record(
+        &mut output,
+        "execution",
+        &[
+            ("target", run.target.as_str().to_owned()),
+            ("value", result),
+            ("differential", run.differential.to_owned()),
+            (
+                "production-instructions",
+                run.production.instructions.to_string(),
+            ),
+            (
+                "reference-expressions",
+                run.reference.expressions.to_string(),
+            ),
+        ],
+    )?;
+    Ok(output.finish())
+}
+
+pub fn execute_package_builtin(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
+    let (arguments, project) = extract_global_project(arguments)?;
+    if project.is_some() {
+        return Err(usage_error("package builtin does not accept --project"));
+    }
+    if arguments.first().map(String::as_str) != Some("package")
+        || arguments.get(1).map(String::as_str) != Some("builtin")
+    {
+        return Err(usage_error("package requires the exact builtin action"));
+    }
+    let action = arguments.get(2).map(String::as_str).unwrap_or("inspect");
+    let standard = super::builtin_standard::BuiltinStandard::load()?;
+    let mut output = compact_response_writer()?;
+    append_compact_record(
+        &mut output,
+        "result",
+        &[
+            ("status", "success".to_owned()),
+            ("command", format!("package.builtin.{action}")),
+        ],
+    )?;
+    append_compact_record(
+        &mut output,
+        "package",
+        &[
+            ("id", standard.package.to_string()),
+            ("revision", standard.semantic_revision.to_string()),
+            ("package-revision", standard.package_revision.to_string()),
+            ("transport", standard.package_transport.to_string()),
+            (
+                "artifact-manifest",
+                standard.artifact.manifest_digest.to_string(),
+            ),
+            (
+                "artifact-bundle",
+                standard.artifact.bundle_digest.to_string(),
+            ),
+        ],
+    )?;
+    match action {
+        "inspect" => {
+            exact_arguments(&arguments, 3, "package builtin inspect")?;
+            append_compact_record(
+                &mut output,
+                "interface",
+                &[
+                    ("owners", standard.interface_owners.len().to_string()),
+                    ("types", standard.interface_types.len().to_string()),
+                    (
+                        "transport-bytes",
+                        standard.transport_bytes().len().to_string(),
+                    ),
+                    (
+                        "artifact-bytes",
+                        standard.artifact_bytes().len().to_string(),
+                    ),
+                ],
+            )?;
+        }
+        "export" => {
+            ensure_options(&arguments[3..], &["--kind", "--output"], &[])?;
+            let kind = required_option(&arguments[3..], "--kind")?;
+            let path = required_option(&arguments[3..], "--output")?;
+            let (bytes, maximum, digest) = match kind.as_str() {
+                "transport" => (
+                    standard.transport_bytes(),
+                    MAXIMUM_ARTIFACT_BYTES + 50,
+                    standard.package_transport.to_string(),
+                ),
+                "artifact" => (
+                    standard.artifact_bytes(),
+                    MAXIMUM_ARTIFACT_BYTES + 50,
+                    standard.artifact.bundle_digest.to_string(),
+                ),
+                _ => {
+                    return Err(usage_error(
+                        "package builtin export --kind expects transport or artifact",
+                    ));
+                }
+            };
+            let publication =
+                publish_create_new(Path::new(&path), bytes, maximum, "built-in standard asset")?;
+            append_compact_record(
+                &mut output,
+                "output",
+                &[
+                    ("kind", kind),
+                    ("path", publication.path.display().to_string()),
+                    ("bytes", publication.bytes.to_string()),
+                    ("digest", digest),
+                    ("visibility", publication.visibility.to_owned()),
+                    ("durability", publication.durability.to_owned()),
+                    ("stage-cleanup", publication.stage_cleanup.to_owned()),
+                ],
+            )?;
+        }
+        _ => {
+            return Err(usage_error("package builtin accepts inspect or export"));
+        }
+    }
     Ok(output.finish())
 }
 
@@ -581,6 +727,7 @@ fn execute_normalized_change(
             encoding,
             input_file.as_deref(),
             plan_output.as_ref(),
+            None,
         )
         .map_err(single_diagnostic);
     }
@@ -603,12 +750,51 @@ fn execute_normalized_change(
             ),
         )));
     }
+    // The cache is disposable derived state. Capture an exact base binding while the prepared
+    // publication is still in memory, but never let cache discovery or maintenance decide the
+    // semantic publication outcome.
+    let base_cache = match load_current_compilation(&repository) {
+        Ok(Some(compilation)) => DerivedCacheHandoff::Available(compilation.digest),
+        Ok(None) => DerivedCacheHandoff::Unavailable,
+        Err(diagnostic) => DerivedCacheHandoff::Failed(diagnostic),
+    };
     let outcome = repository
         .publish(&prepared.publication)
         .map_err(single_diagnostic)?;
-    let status = match &outcome {
-        GraphPublicationOutcome::Accepted { .. } => "accepted",
-        GraphPublicationOutcome::AlreadyAccepted { .. } => "already-accepted",
+    let (status, cache) = match &outcome {
+        GraphPublicationOutcome::Accepted { .. } => {
+            let cache = match base_cache {
+                DerivedCacheHandoff::Available(base) => {
+                    match build_incremental(&repository, base, &prepared.publication) {
+                        Ok(receipt) => DerivedCacheObservation {
+                            status: "updated",
+                            manifest: Some(receipt.manifest_digest.to_string()),
+                            compiled: Some(receipt.units_compiled),
+                            reused: Some(receipt.units_reused),
+                            removed: Some(receipt.units_removed),
+                            diagnostic: None,
+                        },
+                        Err(diagnostic) => DerivedCacheObservation::failed(diagnostic),
+                    }
+                }
+                DerivedCacheHandoff::Unavailable => DerivedCacheObservation::unavailable(),
+                DerivedCacheHandoff::Failed(diagnostic) => {
+                    DerivedCacheObservation::failed(diagnostic)
+                }
+            };
+            ("accepted", cache)
+        }
+        GraphPublicationOutcome::AlreadyAccepted { .. } => (
+            "already-accepted",
+            DerivedCacheObservation {
+                status: "not-attempted-replay",
+                manifest: None,
+                compiled: None,
+                reused: None,
+                removed: None,
+                diagnostic: None,
+            },
+        ),
         GraphPublicationOutcome::Stale { expected, current } => {
             return Err(single_diagnostic(Diagnostic::new(
                 DiagnosticClass::Semantic,
@@ -625,8 +811,58 @@ fn execute_normalized_change(
             )));
         }
     };
-    compact_change_response(&repository, &prepared, status, encoding, None, None)
-        .map_err(single_diagnostic)
+    compact_change_response(
+        &repository,
+        &prepared,
+        status,
+        encoding,
+        None,
+        None,
+        Some(&cache),
+    )
+    .map_err(single_diagnostic)
+}
+
+enum DerivedCacheHandoff {
+    Available(super::compiler::CompilationManifestDigest),
+    Unavailable,
+    Failed(Diagnostic),
+}
+
+struct DerivedCacheObservation {
+    status: &'static str,
+    manifest: Option<String>,
+    compiled: Option<u64>,
+    reused: Option<u64>,
+    removed: Option<u64>,
+    diagnostic: Option<(String, String)>,
+}
+
+impl DerivedCacheObservation {
+    fn unavailable() -> Self {
+        Self {
+            status: "not-available",
+            manifest: None,
+            compiled: None,
+            reused: None,
+            removed: None,
+            diagnostic: None,
+        }
+    }
+
+    fn failed(diagnostic: Diagnostic) -> Self {
+        Self {
+            status: "failed",
+            manifest: None,
+            compiled: None,
+            reused: None,
+            removed: None,
+            diagnostic: Some((
+                diagnostic_class_name(diagnostic.class).to_owned(),
+                diagnostic.code,
+            )),
+        }
+    }
 }
 
 struct LogicalPlanOutputPublication {
@@ -829,6 +1065,7 @@ fn compact_change_response(
     plan: LogicalPlanEncoding,
     input_file: Option<&str>,
     plan_output: Option<&LogicalPlanOutputPublication>,
+    cache: Option<&DerivedCacheObservation>,
 ) -> Result<Vec<u8>, Diagnostic> {
     let publication = &prepared.publication;
     let [base] = publication.receipt.bases.as_slice() else {
@@ -963,6 +1200,26 @@ fn compact_change_response(
             ("revision-record", publication.revision_digest.to_string()),
         ],
     )?;
+    if let Some(cache) = cache {
+        let mut fields = vec![("status", cache.status.to_owned())];
+        if let Some(manifest) = &cache.manifest {
+            fields.push(("manifest", manifest.clone()));
+        }
+        if let Some(compiled) = cache.compiled {
+            fields.push(("compiled", compiled.to_string()));
+        }
+        if let Some(reused) = cache.reused {
+            fields.push(("reused", reused.to_string()));
+        }
+        if let Some(removed) = cache.removed {
+            fields.push(("removed", removed.to_string()));
+        }
+        if let Some((class, code)) = &cache.diagnostic {
+            fields.push(("diagnostic-class", class.clone()));
+            fields.push(("diagnostic-code", code.clone()));
+        }
+        append_compact_record(&mut output, "derived-cache", &fields)?;
+    }
     append_compact_record(&mut output, "schema", &[("registry", registry.digest)])?;
     if status == "prepared" {
         let mut next = vec![
@@ -1256,123 +1513,6 @@ fn owner_inspection_error(
     message: impl Into<String>,
 ) -> Diagnostic {
     Diagnostic::new(class, code, message)
-}
-
-fn builtin_command(arguments: &[String]) -> Result<CliSuccess, Diagnostic> {
-    match arguments.first().map(String::as_str) {
-        Some("inspect") => {
-            exact_arguments(arguments, 1, "builtin inspect")?;
-            serialized("builtin.inspect", &builtin_package_info()?)
-        }
-        Some("export") => {
-            let output = option_value(&arguments[1..], "--output")?
-                .ok_or_else(|| usage_error("builtin export requires --output PATH"))?;
-            ensure_options(&arguments[1..], &["--output"], &[])?;
-            let (package, bytes) = export_builtin_standard(Path::new(&output))?;
-            success(
-                "builtin.export",
-                json!({"package": package, "output": output, "bytes": bytes}),
-            )
-        }
-        Some(other) => Err(usage_error(format!(
-            "unknown builtin action '{other}'; expected inspect or export"
-        ))),
-        None => Err(usage_error("builtin requires inspect or export")),
-    }
-}
-
-fn inspect_command(arguments: &[String], project: Option<&Path>) -> Result<CliSuccess, Diagnostic> {
-    let action = arguments.first().map(String::as_str).ok_or_else(|| {
-        usage_error("inspect requires status, project, owner, targets, artifact, or revision")
-    })?;
-    match action {
-        "status" => {
-            exact_arguments(arguments, 1, "inspect status")?;
-            let workspace = open_workspace(project)?;
-            serialized("inspect.status", &workspace.status()?)
-        }
-        "project" => {
-            let limit = optional_usize(&arguments[1..], "--limit", DEFAULT_ORIENTATION_ITEMS)?;
-            ensure_options(&arguments[1..], &["--limit"], &[])?;
-            let workspace = open_workspace(project)?;
-            serialized("inspect.project", &workspace.orient(limit)?)
-        }
-        "owner" => show_command(&arguments[1..], project),
-        "targets" => targets_command(&arguments[1..], project),
-        "artifact" => artifact_inspect_command(&arguments[1..]),
-        "deployment" => deployment_inspect_command(&arguments[1..]),
-        "revision" => revision_show_command(&arguments[1..], project),
-        other => Err(usage_error(format!(
-            "unknown inspect action '{other}'; use 'capabilities inspect'"
-        ))),
-    }
-}
-
-fn deployment_inspect_command(arguments: &[String]) -> Result<CliSuccess, Diagnostic> {
-    if arguments.len() != 1 {
-        return Err(usage_error(
-            "inspect deployment requires one descriptor path",
-        ));
-    }
-    let bytes = read_bounded(
-        Path::new(&arguments[0]),
-        MAXIMUM_DEPLOYMENT_BYTES,
-        "deployment descriptor",
-    )?;
-    serialized("inspect.deployment", &decode_deployment(&bytes)?)
-}
-
-fn public_draft_command(
-    arguments: &[String],
-    project: Option<&Path>,
-) -> Result<CliSuccess, Diagnostic> {
-    let action = arguments.first().map(String::as_str).ok_or_else(|| {
-        usage_error("draft requires create, status, append, rebase, publish, or drop")
-    })?;
-    match action {
-        "create" => draft_create_command(&arguments[1..], project),
-        "status" => draft_status_command(&arguments[1..], project),
-        "append" => transaction_command(&arguments[1..], project, TransactionMode::Apply),
-        "rebase" => draft_rebase_command(&arguments[1..], project),
-        "publish" => draft_publish_command(&arguments[1..], project),
-        "drop" => draft_drop_command(&arguments[1..], project),
-        other => Err(usage_error(format!(
-            "unknown draft action '{other}'; use 'capabilities draft'"
-        ))),
-    }
-}
-
-fn public_history_command(
-    arguments: &[String],
-    project: Option<&Path>,
-) -> Result<CliSuccess, Diagnostic> {
-    let action = arguments
-        .first()
-        .map(String::as_str)
-        .ok_or_else(|| usage_error("history requires list, show, diff, or merge"))?;
-    match action {
-        "list" => history_command(&arguments[1..], project),
-        "show" => revision_show_command(&arguments[1..], project),
-        "diff" => diff_command(&arguments[1..], project),
-        "merge" => merge_command(&arguments[1..], project),
-        other => Err(usage_error(format!(
-            "unknown history action '{other}'; use 'capabilities history'"
-        ))),
-    }
-}
-
-fn package_command(arguments: &[String], project: Option<&Path>) -> Result<CliSuccess, Diagnostic> {
-    let action = arguments
-        .first()
-        .map(String::as_str)
-        .ok_or_else(|| usage_error("package requires stage or builtin"))?;
-    match action {
-        "stage" => dependency_stage_command(&arguments[1..], project),
-        "builtin" => builtin_command(&arguments[1..]),
-        other => Err(usage_error(format!(
-            "unknown package action '{other}'; use 'capabilities package'"
-        ))),
-    }
 }
 
 pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
@@ -1740,6 +1880,55 @@ fn append_file_record(
     )
 }
 
+fn append_lifecycle_records(
+    output: &mut CompactResponseWriter,
+    prepared: &PreparedApplication,
+) -> Result<(), Diagnostic> {
+    append_compact_record(
+        output,
+        "authority",
+        &[
+            ("repository", prepared.repository_id.to_string()),
+            ("package", prepared.package.to_string()),
+            ("revision", prepared.revision.to_string()),
+            ("state", prepared.semantic_state.to_string()),
+        ],
+    )?;
+    let mut compilation = vec![
+        ("cache", prepared.cache_profile.name().to_owned()),
+        ("manifest", prepared.compilation.to_string()),
+        ("compiled", prepared.units_compiled.to_string()),
+        ("reused", prepared.units_reused.to_string()),
+        ("removed", prepared.units_removed.to_string()),
+    ];
+    if let Some(diagnostic) = &prepared.cache_recovery {
+        compilation.push((
+            "recovered-class",
+            diagnostic_class_name(diagnostic.class).to_owned(),
+        ));
+        compilation.push(("recovered-code", diagnostic.code.clone()));
+    }
+    append_compact_record(output, "compilation", &compilation)?;
+    append_compact_record(
+        output,
+        "artifact",
+        &[
+            ("manifest", prepared.artifact_manifest.to_string()),
+            ("bundle", prepared.artifact_bundle.to_string()),
+            ("bytes", prepared.artifact_bytes.len().to_string()),
+            ("packages", prepared.link_work.packages.to_string()),
+            (
+                "closure-objects",
+                prepared.link_work.closure_objects.to_string(),
+            ),
+            (
+                "compiler-units",
+                prepared.program.work.compiler_units.to_string(),
+            ),
+        ],
+    )
+}
+
 fn append_capability_record(
     output: &mut CompactResponseWriter,
     operation: &str,
@@ -1829,756 +2018,6 @@ fn contract_registry_error(message: String) -> Diagnostic {
     )
 }
 
-fn dependency_stage_command(
-    arguments: &[String],
-    project: Option<&Path>,
-) -> Result<CliSuccess, Diagnostic> {
-    if arguments.len() != 1 {
-        return Err(usage_error(
-            "package stage requires one graph artifact path",
-        ));
-    }
-    let bytes = read_bounded(
-        Path::new(&arguments[0]),
-        MAXIMUM_ARTIFACT_BYTES + 50,
-        "graph dependency artifact",
-    )?;
-    let artifact = load_artifact(&bytes)?;
-    let workspace = open_workspace(project)?;
-    let mut staged = 0usize;
-    for digest in artifact.package_artifacts.values() {
-        let package = artifact.package_object(*digest).ok_or_else(|| {
-            Diagnostic::new(
-                DiagnosticClass::Corrupt,
-                "semantic_dependency_object_missing",
-                "validated artifact closure lost one exact package object",
-            )
-        })?;
-        workspace
-            .repository()
-            .write_artifact_object(*digest, package)?;
-        staged = staged.checked_add(1).ok_or_else(|| {
-            Diagnostic::new(
-                DiagnosticClass::Resource,
-                "semantic_dependency_count",
-                "dependency package object count overflowed",
-            )
-        })?;
-    }
-    success(
-        "package.stage",
-        json!({
-            "status": "staged",
-            "package_id": artifact.root_package_id,
-            "semantic_revision": artifact.root_revision,
-            "artifact": artifact.root_package_artifact,
-            "objects": staged,
-            "current_revision": workspace.status()?.revision,
-        }),
-    )
-}
-
-fn show_command(arguments: &[String], project: Option<&Path>) -> Result<CliSuccess, Diagnostic> {
-    let id = arguments
-        .first()
-        .filter(|value| !value.starts_with("--"))
-        .ok_or_else(|| usage_error("inspect owner requires one exact owner ID"))?;
-    ensure_options(&arguments[1..], &["--revision"], &["--body"])?;
-    let workspace = open_workspace(project)?;
-    serialized(
-        "inspect.owner",
-        &SemanticQueryIndex::show_revision(
-            workspace.repository(),
-            selected_revision(&workspace, &arguments[1..])?,
-            id,
-            flag_present(&arguments[1..], "--body")?,
-        )?,
-    )
-}
-
-fn transaction_command(
-    arguments: &[String],
-    project: Option<&Path>,
-    mode: TransactionMode,
-) -> Result<CliSuccess, Diagnostic> {
-    ensure_options(arguments, &["--request", "--request-file"], &[])?;
-    let inline = option_value(arguments, "--request")?;
-    let file = option_value(arguments, "--request-file")?;
-    let bytes = match (inline, file) {
-        (Some(value), None) => {
-            if value.len() > MAXIMUM_TRANSACTION_REQUEST_BYTES {
-                return Err(Diagnostic::new(
-                    DiagnosticClass::Resource,
-                    "semantic_transaction_request_limit",
-                    format!(
-                        "transaction request exceeds {MAXIMUM_TRANSACTION_REQUEST_BYTES} bytes"
-                    ),
-                ));
-            }
-            value.into_bytes()
-        }
-        (None, Some(path)) => read_bounded(
-            Path::new(&path),
-            MAXIMUM_TRANSACTION_REQUEST_BYTES,
-            "semantic transaction request",
-        )?,
-        (Some(_), Some(_)) => {
-            return Err(usage_error(
-                "supply exactly one of --request or --request-file",
-            ));
-        }
-        (None, None) => {
-            return Err(usage_error(
-                "semantic transaction requires --request JSON or --request-file PATH",
-            ));
-        }
-    };
-    let mut deserializer = serde_json::Deserializer::from_slice(&bytes);
-    let request = TransactionRequest::deserialize(&mut deserializer).map_err(|error| {
-        Diagnostic::new(
-            DiagnosticClass::Source,
-            "semantic_transaction_request",
-            format!("transaction request is not strict current JSON: {error}"),
-        )
-    })?;
-    deserializer.end().map_err(|error| {
-        Diagnostic::new(
-            DiagnosticClass::Source,
-            "semantic_transaction_trailing",
-            format!("transaction request has trailing input: {error}"),
-        )
-    })?;
-    let workspace = open_workspace(project)?;
-    if request.draft.is_some() {
-        let drafts = SemanticDraftStore::new(workspace.repository());
-        return match mode {
-            TransactionMode::Apply => serialized("draft.append", &drafts.append(&request)?),
-            TransactionMode::Plan | TransactionMode::Validate => transaction_result(
-                if mode == TransactionMode::Plan {
-                    "draft.plan"
-                } else {
-                    "draft.validate"
-                },
-                &drafts.evaluate(&request, mode)?,
-            ),
-        };
-    }
-    Err(usage_error(
-        "draft append requires a transaction request bound to one draft",
-    ))
-}
-
-fn draft_create_command(
-    arguments: &[String],
-    project: Option<&Path>,
-) -> Result<CliSuccess, Diagnostic> {
-    ensure_options(arguments, &["--base", "--intent"], &[])?;
-    let base = option_value(arguments, "--base")?
-        .map(|value| value.parse::<RevisionId>())
-        .transpose()?;
-    let intent = option_value(arguments, "--intent")?;
-    let workspace = open_workspace(project)?;
-    serialized(
-        "draft.create",
-        &SemanticDraftStore::new(workspace.repository()).create(base, intent)?,
-    )
-}
-
-fn draft_status_command(
-    arguments: &[String],
-    project: Option<&Path>,
-) -> Result<CliSuccess, Diagnostic> {
-    if arguments.len() != 1 {
-        return Err(usage_error("draft status requires one draft ID"));
-    }
-    let id = arguments[0].parse::<DraftId>()?;
-    let workspace = open_workspace(project)?;
-    serialized(
-        "draft.status",
-        &SemanticDraftStore::new(workspace.repository()).status(id)?,
-    )
-}
-
-fn draft_drop_command(
-    arguments: &[String],
-    project: Option<&Path>,
-) -> Result<CliSuccess, Diagnostic> {
-    if arguments.len() != 1 {
-        return Err(usage_error("draft drop requires one draft ID"));
-    }
-    let id = arguments[0].parse::<DraftId>()?;
-    let workspace = open_workspace(project)?;
-    SemanticDraftStore::new(workspace.repository()).drop(id)?;
-    success(
-        "draft.drop",
-        json!({
-            "status": "draft_dropped",
-            "draft": id,
-            "revision": workspace.repository().current_binding()?.head.revision,
-        }),
-    )
-}
-
-fn draft_rebase_command(
-    arguments: &[String],
-    project: Option<&Path>,
-) -> Result<CliSuccess, Diagnostic> {
-    let id = arguments
-        .first()
-        .filter(|value| !value.starts_with("--"))
-        .ok_or_else(|| usage_error("draft rebase requires one draft ID"))?
-        .parse::<DraftId>()?;
-    ensure_options(&arguments[1..], &["--base"], &[])?;
-    let base = option_value(&arguments[1..], "--base")?
-        .ok_or_else(|| usage_error("draft rebase requires --base REV"))?
-        .parse::<RevisionId>()?;
-    let workspace = open_workspace(project)?;
-    serialized(
-        "draft.rebase",
-        &SemanticDraftStore::new(workspace.repository()).rebase(id, base)?,
-    )
-}
-
-fn draft_publish_command(
-    arguments: &[String],
-    project: Option<&Path>,
-) -> Result<CliSuccess, Diagnostic> {
-    let id = arguments
-        .first()
-        .filter(|value| !value.starts_with("--"))
-        .ok_or_else(|| usage_error("draft publish requires one draft ID"))?
-        .parse::<DraftId>()?;
-    ensure_options(&arguments[1..], &["--idempotency-key"], &[])?;
-    let idempotency_key = option_value(&arguments[1..], "--idempotency-key")?;
-    let workspace = open_workspace(project)?;
-    transaction_result(
-        "draft.publish",
-        &SemanticDraftStore::new(workspace.repository()).publish(id, idempotency_key)?,
-    )
-}
-
-fn targets_command(arguments: &[String], project: Option<&Path>) -> Result<CliSuccess, Diagnostic> {
-    let limit = optional_usize(arguments, "--limit", DEFAULT_ORIENTATION_ITEMS)?;
-    ensure_options(arguments, &["--limit"], &[])?;
-    let workspace = open_workspace(project)?;
-    let orientation = workspace.orient(limit)?;
-    success(
-        "inspect.targets",
-        json!({
-            "revision": orientation.revision,
-            "returned_items": orientation.targets.len(),
-            "total_items": orientation.target_count,
-            "truncated": orientation.target_count > orientation.targets.len(),
-            "items": orientation.targets,
-        }),
-    )
-}
-
-fn build_command(arguments: &[String], project: Option<&Path>) -> Result<CliSuccess, Diagnostic> {
-    ensure_options(arguments, &["--output"], &[])?;
-    let workspace = open_workspace(project)?;
-    let output = option_value(arguments, "--output")?
-        .map(PathBuf::from)
-        .unwrap_or_else(|| workspace.root().join("target/application.lkja"));
-    let (bytes, receipt) = workspace.build_artifact()?;
-    let publication = write_derived_output(
-        &output,
-        &bytes,
-        MAXIMUM_ARTIFACT_BYTES + 50,
-        "graph artifact",
-    )?;
-    success(
-        "build",
-        json!({
-            "receipt": receipt,
-            "output": output.display().to_string(),
-            "publication": publication,
-        }),
-    )
-}
-
-fn run_package_tests(program: &PreparedProgram) -> Result<CliSuccess, Diagnostic> {
-    let mut production_instructions = 0u64;
-    let mut oracle_instructions = 0u64;
-    let mut production_elapsed_nanoseconds = 0u64;
-    let mut oracle_elapsed_nanoseconds = 0u64;
-    for test in program.tests() {
-        let production_started = Instant::now();
-        let (actual, actual_observation) = Vm::new(program, RunPolicy::default())
-            .invoke_test_expression(&test.actual, Vec::new())
-            .map_err(execution_diagnostic)?;
-        let (expected, expected_observation) = Vm::new(program, RunPolicy::default())
-            .invoke_test_expression(&test.expected, Vec::new())
-            .map_err(execution_diagnostic)?;
-        production_elapsed_nanoseconds = production_elapsed_nanoseconds.saturating_add(
-            u64::try_from(production_started.elapsed().as_nanos()).unwrap_or(u64::MAX),
-        );
-        let oracle_started = Instant::now();
-        let (oracle_actual, oracle_actual_observation) =
-            ReferenceInterpreter::new(program, RunPolicy::default())
-                .invoke_test_expression(&test.actual, Vec::new())
-                .map_err(execution_diagnostic)?;
-        let (oracle_expected, oracle_expected_observation) =
-            ReferenceInterpreter::new(program, RunPolicy::default())
-                .invoke_test_expression(&test.expected, Vec::new())
-                .map_err(execution_diagnostic)?;
-        oracle_elapsed_nanoseconds = oracle_elapsed_nanoseconds
-            .saturating_add(u64::try_from(oracle_started.elapsed().as_nanos()).unwrap_or(u64::MAX));
-        production_instructions = production_instructions
-            .saturating_add(actual_observation.instructions)
-            .saturating_add(expected_observation.instructions);
-        oracle_instructions = oracle_instructions
-            .saturating_add(oracle_actual_observation.instructions)
-            .saturating_add(oracle_expected_observation.instructions);
-        let actual = actual.canonical_json();
-        let expected = expected.canonical_json();
-        let oracle_actual = oracle_actual.canonical_json();
-        let oracle_expected = oracle_expected.canonical_json();
-        if actual != oracle_actual || expected != oracle_expected {
-            return Err(Diagnostic::new(
-                DiagnosticClass::Infrastructure,
-                "semantic_test_differential",
-                format!(
-                    "production and oracle execution disagree for {}::{}::{}",
-                    test.package.as_str(),
-                    test.module,
-                    test.name
-                ),
-            ));
-        }
-        if actual != expected || oracle_actual != oracle_expected {
-            return Err(Diagnostic::new(
-                DiagnosticClass::Semantic,
-                "semantic_test_failed",
-                format!(
-                    "test {}::{}::{} did not equal its expected value",
-                    test.package.as_str(),
-                    test.module,
-                    test.name
-                ),
-            ));
-        }
-    }
-    success(
-        "check",
-        json!({
-            "revision": program.artifact().root_revision,
-            "passed": program.tests().len(),
-            "failed": 0,
-            "production_tier": "bytecode_v1",
-            "oracle_tier": "semantic_reference_v1",
-            "production_instructions": production_instructions,
-            "oracle_instructions": oracle_instructions,
-            "production_elapsed_nanoseconds": production_elapsed_nanoseconds,
-            "oracle_elapsed_nanoseconds": oracle_elapsed_nanoseconds,
-            "differential": "equal",
-        }),
-    )
-}
-
-fn artifact_inspect_command(arguments: &[String]) -> Result<CliSuccess, Diagnostic> {
-    if arguments.len() != 1 {
-        return Err(usage_error("inspect artifact requires one artifact path"));
-    }
-    let bytes = read_bounded(
-        Path::new(&arguments[0]),
-        MAXIMUM_ARTIFACT_BYTES + 50,
-        "graph artifact",
-    )?;
-    let artifact = load_artifact(&bytes)?;
-    let program = PreparedProgram::prepare(artifact)?;
-    let packages = program
-        .artifact()
-        .packages
-        .values()
-        .map(|package| {
-            json!({
-                "package_id": package.descriptor.package_id,
-                "name": package.descriptor.name,
-                "semantic_revision": package.accepted_revision,
-                "package_artifact": program.artifact().package_artifacts.get(&package.descriptor.package_id),
-                "modules": package.modules.iter().map(|module| json!({
-                    "id": module.module_id,
-                    "name": module.module.name,
-                })).collect::<Vec<_>>(),
-            })
-        })
-        .collect::<Vec<_>>();
-    let targets = program
-        .targets()
-        .values()
-        .map(|target| {
-            let requirements = program
-                .components()
-                .get(&target.component)
-                .map(|component| component.requirements.keys().cloned().collect::<Vec<_>>())
-                .unwrap_or_default();
-            json!({
-                "name": target.name,
-                "runner": target.runner,
-                "component": target.component,
-                "port": target.port.name,
-                "parameters": target.port.signature.parameters,
-                "result": target.port.signature.result,
-                "requirements": requirements,
-            })
-        })
-        .collect::<Vec<_>>();
-    success(
-        "inspect.artifact",
-        json!({
-            "artifact_digest": program.artifact().artifact_digest,
-            "root_package_artifact": program.artifact().root_package_artifact,
-            "root_package_id": program.artifact().root_package_id,
-            "root_revision": program.artifact().root_revision,
-            "packages": packages,
-            "targets": targets,
-        }),
-    )
-}
-
-fn text_projection_command(
-    command: &str,
-    arguments: &[String],
-    project: Option<&Path>,
-) -> Result<CliSuccess, Diagnostic> {
-    ensure_options(arguments, &["--revision", "--output"], &[])?;
-    let workspace = open_workspace(project)?;
-    let revision = option_value(arguments, "--revision")?
-        .map(|value| value.parse())
-        .transpose()?;
-    let output = option_value(arguments, "--output")?
-        .map(PathBuf::from)
-        .unwrap_or_else(|| workspace.root().join("target/meaning-review.json"));
-    let (bytes, receipt) = render_review_projection(workspace.repository(), revision)?;
-    let publication = write_derived_output(
-        &output,
-        &bytes,
-        MAXIMUM_REVIEW_PROJECTION_BYTES + 1,
-        "semantic review projection",
-    )?;
-    success(
-        command,
-        json!({
-            "receipt": receipt,
-            "output": output.display().to_string(),
-            "publication": publication,
-            "importable": false,
-            "recovery_command": "lkjscript backup --output target/meaning-backup.lkjb",
-        }),
-    )
-}
-
-fn run_target_command(
-    arguments: &[String],
-    project: Option<&Path>,
-) -> Result<CliSuccess, Diagnostic> {
-    let target_name = arguments
-        .first()
-        .filter(|value| !value.starts_with("--"))
-        .ok_or_else(|| usage_error("run requires one target name"))?;
-    ensure_options(&arguments[1..], &["--arguments"], &[])?;
-    let encoded_arguments =
-        option_value(&arguments[1..], "--arguments")?.unwrap_or_else(|| "[]".to_owned());
-    let workspace = open_workspace(project)?;
-    let program = workspace.prepare()?;
-    let target = program.target(target_name)?;
-    if !matches!(
-        target.runner,
-        RunnerKind::Command | RunnerKind::Batch | RunnerKind::Test
-    ) {
-        return Err(usage_error(format!(
-            "target '{}' uses {:?} runner; use its topology-specific command",
-            target.name, target.runner
-        )));
-    }
-    let component = program
-        .components()
-        .get(&target.component)
-        .ok_or_else(|| internal_error("target component disappeared"))?;
-    if !component.requirements.is_empty() {
-        return Err(Diagnostic::new(
-            DiagnosticClass::Capability,
-            "target_grants_required",
-            "effectful target requires an exact deployment descriptor",
-        ));
-    }
-    let json_arguments = decode_strict(encoded_arguments.as_bytes(), JsonLimits::default())?;
-    let items = json_arguments.as_array().ok_or_else(|| {
-        Diagnostic::new(
-            DiagnosticClass::Source,
-            "target_arguments_array",
-            "target arguments must be one JSON array",
-        )
-    })?;
-    if items.len() != target.port.signature.parameters.len() {
-        return Err(Diagnostic::new(
-            DiagnosticClass::Source,
-            "target_argument_count",
-            format!(
-                "target expects {} arguments; {} were supplied",
-                target.port.signature.parameters.len(),
-                items.len()
-            ),
-        ));
-    }
-    let values = items
-        .iter()
-        .zip(&target.port.signature.parameters)
-        .map(|(value, ty)| {
-            let bytes = serde_json::to_vec(value).map_err(internal_json)?;
-            decode_typed(
-                &bytes,
-                ty,
-                &program.artifact().packages,
-                JsonLimits::default(),
-            )
-        })
-        .collect::<Result<Vec<_>, Diagnostic>>()?;
-    let (value, production) = Vm::new(&program, RunPolicy::default())
-        .invoke(&target.port.function, values.clone())
-        .map_err(execution_diagnostic)?;
-    let (reference, oracle) = ReferenceInterpreter::new(&program, RunPolicy::default())
-        .invoke(&target.port.function, values)
-        .map_err(execution_diagnostic)?;
-    if value.canonical_json() != reference.canonical_json() {
-        return Err(Diagnostic::new(
-            DiagnosticClass::Infrastructure,
-            "target_differential",
-            "production and reference execution disagree",
-        ));
-    }
-    let result_bytes = encode_typed(
-        &value,
-        &target.port.signature.result,
-        &program.artifact().packages,
-        JsonLimits::default(),
-    )?;
-    let result = decode_strict(&result_bytes, JsonLimits::default())?;
-    success(
-        "run",
-        json!({
-            "revision": program.artifact().root_revision,
-            "target": target.name,
-            "result": result,
-            "production": production,
-            "oracle": oracle,
-            "differential": "equal",
-        }),
-    )
-}
-
-fn history_command(arguments: &[String], project: Option<&Path>) -> Result<CliSuccess, Diagnostic> {
-    ensure_options(arguments, &["--limit", "--before"], &[])?;
-    let limit = optional_usize(arguments, "--limit", 50)?;
-    let before = option_value(arguments, "--before")?
-        .map(|value| value.parse::<RevisionId>())
-        .transpose()?;
-    let workspace = open_workspace(project)?;
-    let records = workspace.repository().history(before, limit)?;
-    success(
-        "history.list",
-        json!({
-            "revision": workspace.status()?.revision,
-            "returned_items": records.len(),
-            "items": records,
-        }),
-    )
-}
-
-fn diff_command(arguments: &[String], project: Option<&Path>) -> Result<CliSuccess, Diagnostic> {
-    ensure_options(
-        arguments,
-        &query_value_options(["--base", "--result", "--offset"]),
-        &[],
-    )?;
-    let base = option_value(arguments, "--base")?
-        .ok_or_else(|| usage_error("history diff requires --base REV"))?
-        .parse::<RevisionId>()?;
-    let result = option_value(arguments, "--result")?
-        .ok_or_else(|| usage_error("history diff requires --result REV"))?
-        .parse::<RevisionId>()?;
-    let offset = optional_usize(arguments, "--offset", 0)?;
-    let workspace = open_workspace(project)?;
-    serialized(
-        "history.diff",
-        &diff_revisions(
-            workspace.repository(),
-            base,
-            result,
-            offset,
-            query_budget(arguments)?,
-        )?,
-    )
-}
-
-fn merge_command(arguments: &[String], project: Option<&Path>) -> Result<CliSuccess, Diagnostic> {
-    ensure_options(
-        arguments,
-        &["--base", "--left", "--right", "--work", "--intent"],
-        &["--apply"],
-    )?;
-    let revision = |name: &str| -> Result<RevisionId, Diagnostic> {
-        option_value(arguments, name)?
-            .ok_or_else(|| usage_error(format!("history merge requires {name} REV")))?
-            .parse()
-    };
-    let request = SemanticMergeRequest {
-        contract_version: SEMANTIC_MERGE_CONTRACT_VERSION,
-        base_revision: revision("--base")?,
-        left_revision: revision("--left")?,
-        right_revision: revision("--right")?,
-        maximum_work: optional_usize(
-            arguments,
-            "--work",
-            super::repository::MAXIMUM_HISTORY_ITEMS,
-        )?,
-        intent: option_value(arguments, "--intent")?,
-    };
-    let workspace = open_workspace(project)?;
-    merge_result(
-        "history.merge",
-        &merge_revisions(
-            workspace.repository(),
-            &request,
-            flag_present(arguments, "--apply")?,
-        )?,
-    )
-}
-
-fn revision_show_command(
-    arguments: &[String],
-    project: Option<&Path>,
-) -> Result<CliSuccess, Diagnostic> {
-    if arguments.len() != 1 {
-        return Err(usage_error("history show requires one exact revision ID"));
-    }
-    let revision = arguments[0].parse::<RevisionId>()?;
-    let workspace = open_workspace(project)?;
-    let snapshot = workspace.repository().reconstruct_revision(revision)?;
-    success(
-        "history.show",
-        json!({
-            "record": snapshot.record,
-            "receipt": snapshot.receipt,
-            "root": {
-                "repository_id": snapshot.root.repository_id,
-                "package_id": snapshot.root.package_id,
-                "package_name": snapshot.root.package_name,
-                "modules": snapshot.root.modules.len(),
-                "dependencies": snapshot.root.dependencies.len(),
-                "targets": snapshot.root.targets.len(),
-                "tombstones": snapshot.root.tombstones.len(),
-            },
-        }),
-    )
-}
-
-fn doctor_command(arguments: &[String], project: Option<&Path>) -> Result<CliSuccess, Diagnostic> {
-    if arguments.first().map(String::as_str) == Some("cleanup") {
-        exact_arguments(arguments, 1, "doctor cleanup")?;
-        let workspace = open_workspace(project)?;
-        return serialized(
-            "doctor.cleanup",
-            &workspace.repository().retention_preview()?,
-        );
-    }
-    ensure_options(arguments, &[], &["--deep"])?;
-    let workspace = open_workspace(project)?;
-    serialized(
-        "doctor",
-        &workspace
-            .repository()
-            .doctor(flag_present(arguments, "--deep")?)?,
-    )
-}
-
-fn backup_command(
-    command: &str,
-    arguments: &[String],
-    project: Option<&Path>,
-) -> Result<CliSuccess, Diagnostic> {
-    ensure_options(arguments, &["--output"], &[])?;
-    let workspace = open_workspace(project)?;
-    let output = option_value(arguments, "--output")?
-        .map(PathBuf::from)
-        .unwrap_or_else(|| workspace.root().join("target/meaning-backup.lkjb"));
-    let receipt = workspace.repository().backup_to(&output)?;
-    success(
-        command,
-        json!({
-            "receipt": receipt,
-            "output": output.display().to_string(),
-            "publication": "published",
-        }),
-    )
-}
-
-fn restore_command(arguments: &[String], project: Option<&Path>) -> Result<CliSuccess, Diagnostic> {
-    ensure_options(arguments, &["--backup", "--output"], &[])?;
-    let backup = option_value(arguments, "--backup")?
-        .ok_or_else(|| usage_error("restore requires --backup PATH"))?;
-    let explicit_output = option_value(arguments, "--output")?.map(PathBuf::from);
-    if explicit_output.is_some() && project.is_some() {
-        return Err(usage_error(
-            "restore accepts either --output or global --project, not both",
-        ));
-    }
-    let output = explicit_output
-        .or_else(|| project.map(Path::to_path_buf))
-        .ok_or_else(|| usage_error("restore requires --output PROJECT or --project PROJECT"))?;
-    let output = fs::canonicalize(&output)
-        .map_err(|error| io_error("semantic_restore_output", &output, error))?;
-    let (repository, receipt) =
-        SemanticRepository::restore_backup_from(&output, Path::new(&backup))?;
-    success(
-        "restore",
-        json!({
-            "receipt": receipt,
-            "status": SemanticWorkspace::open(repository.project_root())?.status()?,
-        }),
-    )
-}
-
-fn selected_revision(
-    workspace: &SemanticWorkspace,
-    arguments: &[String],
-) -> Result<RevisionId, Diagnostic> {
-    match option_value(arguments, "--revision")? {
-        Some(value) => value.parse(),
-        None => Ok(workspace.status()?.revision),
-    }
-}
-
-fn query_budget(arguments: &[String]) -> Result<QueryBudget, Diagnostic> {
-    QueryBudget {
-        maximum_items: optional_usize(arguments, "--limit", QueryBudget::default().maximum_items)?,
-        maximum_bytes: optional_usize(arguments, "--bytes", QueryBudget::default().maximum_bytes)?,
-        maximum_work: optional_usize(arguments, "--work", QueryBudget::default().maximum_work)?,
-        maximum_depth: optional_usize(arguments, "--depth", QueryBudget::default().maximum_depth)?,
-        maximum_fanout: optional_usize(
-            arguments,
-            "--fanout",
-            QueryBudget::default().maximum_fanout,
-        )?,
-    }
-    .validate()
-}
-
-fn query_value_options<const N: usize>(extra: [&str; N]) -> Vec<&str> {
-    let mut values = vec![
-        "--revision",
-        "--limit",
-        "--bytes",
-        "--work",
-        "--depth",
-        "--fanout",
-        "--continue",
-    ];
-    values.extend(extra);
-    values
-}
-
 fn extract_global_project(
     arguments: Vec<String>,
 ) -> Result<(Vec<String>, Option<PathBuf>), Diagnostic> {
@@ -2639,24 +2078,6 @@ fn option_values(arguments: &[String], name: &str) -> Result<Vec<String>, Diagno
     Ok(values)
 }
 
-fn optional_usize(arguments: &[String], name: &str, default: usize) -> Result<usize, Diagnostic> {
-    option_value(arguments, name)?
-        .map(|value| parse_usize(&value, name))
-        .transpose()
-        .map(|value| value.unwrap_or(default))
-}
-
-fn flag_present(arguments: &[String], name: &str) -> Result<bool, Diagnostic> {
-    let count = arguments
-        .iter()
-        .filter(|value| value.as_str() == name)
-        .count();
-    if count > 1 {
-        return Err(usage_error(format!("{name} may be supplied only once")));
-    }
-    Ok(count == 1)
-}
-
 fn ensure_options(arguments: &[String], valued: &[&str], flags: &[&str]) -> Result<(), Diagnostic> {
     let mut index = 0;
     while index < arguments.len() {
@@ -2687,24 +2108,6 @@ fn exact_arguments(arguments: &[String], expected: usize, command: &str) -> Resu
         )));
     }
     Ok(())
-}
-
-fn open_workspace(project: Option<&Path>) -> Result<SemanticWorkspace, Diagnostic> {
-    SemanticWorkspace::open(&project_or_current(project)?)
-}
-
-fn project_or_current(project: Option<&Path>) -> Result<PathBuf, Diagnostic> {
-    let path = match project {
-        Some(path) => path.to_path_buf(),
-        None => std::env::current_dir().map_err(|error| {
-            Diagnostic::new(
-                DiagnosticClass::Infrastructure,
-                "semantic_current_directory",
-                format!("current directory is unavailable: {error}"),
-            )
-        })?,
-    };
-    fs::canonicalize(&path).map_err(|error| io_error("semantic_project_path", &path, error))
 }
 
 fn write_derived_output(
@@ -2788,185 +2191,12 @@ fn read_bounded(path: &Path, maximum: usize, label: &str) -> Result<Vec<u8>, Dia
     Ok(bytes)
 }
 
-fn parse_usize(value: &str, label: &str) -> Result<usize, Diagnostic> {
-    if value.is_empty()
-        || (value.len() > 1 && value.starts_with('0'))
-        || !value.bytes().all(|byte| byte.is_ascii_digit())
-    {
-        return Err(usage_error(format!(
-            "{label} must be a canonical unsigned integer"
-        )));
-    }
-    value
-        .parse::<usize>()
-        .map_err(|_| usage_error(format!("{label} is outside the supported range")))
-}
-
-fn serialized(command: &str, value: &impl Serialize) -> Result<CliSuccess, Diagnostic> {
-    success(command, serde_json::to_value(value).map_err(internal_json)?)
-}
-
-#[derive(Serialize)]
-#[serde(deny_unknown_fields)]
-struct TransactionCliProjection<'a> {
-    contract_version: u16,
-    graph_contract: &'static str,
-    repository_id: RepositoryId,
-    requested_base: RevisionId,
-    observed_current: RevisionId,
-    status: TransactionStatus,
-    transaction: TransactionDigest,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    semantic_diff: Option<SemanticDiffDigest>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    predicted_revision: Option<RevisionId>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    published_revision: Option<RevisionId>,
-    affected_owner_count: usize,
-    affected_owners: &'a [AffectedOwner],
-    affected_owners_truncated: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    receipt: Option<TransactionReceiptProjection<'a>>,
-    diagnostics: &'a [Diagnostic],
-}
-
-#[derive(Serialize)]
-#[serde(deny_unknown_fields)]
-struct TransactionReceiptProjection<'a> {
-    digest: ReceiptDigest,
-    result: RevisionId,
-    semantic_diff: SemanticDiffDigest,
-    validation: &'a ValidationFacts,
-    expansion: String,
-}
-
-fn transaction_result(command: &str, value: &TransactionResult) -> Result<CliSuccess, Diagnostic> {
-    let (status, ok) = match value.status {
-        TransactionStatus::Planned => ("planned", true),
-        TransactionStatus::Validated => ("validated", true),
-        TransactionStatus::AcceptedChange => ("accepted_change", true),
-        TransactionStatus::Replayed => ("replayed", true),
-        TransactionStatus::SemanticNoChange => ("semantic_no_change", true),
-        TransactionStatus::StaleBase => ("stale_base", false),
-        TransactionStatus::PreconditionFailed => ("precondition_failed", false),
-        TransactionStatus::ForeignIdentity => ("foreign_identity", false),
-        TransactionStatus::InvalidGraph => ("invalid_graph", false),
-        TransactionStatus::ResourceExhausted => ("resource_exhausted", false),
-    };
-    let affected_limit = value
-        .affected_owners
-        .len()
-        .min(MAXIMUM_INLINE_AFFECTED_OWNERS);
-    let receipt = value
-        .receipt
-        .as_ref()
-        .map(transaction_receipt_projection)
-        .transpose()?;
-    let projection = TransactionCliProjection {
-        contract_version: value.contract_version,
-        graph_contract: value.graph_contract,
-        repository_id: value.repository_id,
-        requested_base: value.requested_base,
-        observed_current: value.observed_current,
-        status: value.status,
-        transaction: value.transaction,
-        semantic_diff: value.semantic_diff,
-        predicted_revision: value.predicted_revision,
-        published_revision: value.published_revision,
-        affected_owner_count: value.affected_owners.len(),
-        affected_owners: &value.affected_owners[..affected_limit],
-        affected_owners_truncated: affected_limit != value.affected_owners.len(),
-        receipt,
-        diagnostics: &value.diagnostics,
-    };
-    outcome(
-        command,
-        status,
-        ok,
-        serde_json::to_value(projection).map_err(internal_json)?,
-    )
-}
-
-fn transaction_receipt_projection(
-    receipt: &TransactionReceipt,
-) -> Result<TransactionReceiptProjection<'_>, Diagnostic> {
-    Ok(TransactionReceiptProjection {
-        digest: receipt.digest()?,
-        result: receipt.result,
-        semantic_diff: receipt.semantic_diff,
-        validation: &receipt.validation,
-        expansion: format!("history show {}", receipt.result),
-    })
-}
-
-fn merge_result(command: &str, value: &SemanticMergeResult) -> Result<CliSuccess, Diagnostic> {
-    let (status, ok) = match value.status {
-        SemanticMergeStatus::Ready => ("ready", true),
-        SemanticMergeStatus::Conflicted => ("conflicted", false),
-        SemanticMergeStatus::AcceptedChange => ("accepted_change", true),
-        SemanticMergeStatus::SemanticNoChange => ("semantic_no_change", true),
-        SemanticMergeStatus::StaleHead => ("stale_head", false),
-    };
-    outcome(
-        command,
-        status,
-        ok,
-        serde_json::to_value(value).map_err(internal_json)?,
-    )
-}
-
-fn success(command: &str, result: serde_json::Value) -> Result<CliSuccess, Diagnostic> {
-    outcome(command, "success", true, result)
-}
-
-fn outcome(
-    command: &str,
-    status: &'static str,
-    ok: bool,
-    result: serde_json::Value,
-) -> Result<CliSuccess, Diagnostic> {
-    let response = CliSuccess {
-        contract_version: CLI_CONTRACT_VERSION,
-        ok,
-        status,
-        command: command.to_owned(),
-        result,
-    };
-    let bytes = serde_json::to_vec(&response).map_err(internal_json)?;
-    if bytes.len().saturating_add(1) > MAXIMUM_CLI_RESPONSE_BYTES {
-        return Err(Diagnostic::new(
-            DiagnosticClass::Resource,
-            "cli_output_budget",
-            format!("command response exceeds the hard {MAXIMUM_CLI_RESPONSE_BYTES}-byte bound"),
-        ));
-    }
-    Ok(response)
-}
-
-fn execution_diagnostic(error: super::execution::ExecutionError) -> Diagnostic {
-    let class = match error.class {
-        super::execution::ExecutionFailureClass::Trap => DiagnosticClass::Semantic,
-        super::execution::ExecutionFailureClass::Capability
-        | super::execution::ExecutionFailureClass::PossibleVisibility => {
-            DiagnosticClass::Capability
-        }
-        super::execution::ExecutionFailureClass::Resource => DiagnosticClass::Resource,
-        super::execution::ExecutionFailureClass::Cancelled => DiagnosticClass::Cancelled,
-        super::execution::ExecutionFailureClass::Infrastructure => DiagnosticClass::Infrastructure,
-    };
-    Diagnostic::new(class, error.code, error.message)
-}
-
 fn usage_error(message: impl Into<String>) -> Diagnostic {
     Diagnostic::new(DiagnosticClass::Source, "cli_usage", message)
 }
 
 fn internal_error(message: impl Into<String>) -> Diagnostic {
     Diagnostic::new(DiagnosticClass::Infrastructure, "cli_internal", message)
-}
-
-fn internal_json(error: serde_json::Error) -> Diagnostic {
-    internal_error(format!("machine JSON projection failed: {error}"))
 }
 
 fn io_error(code: &str, path: &Path, error: std::io::Error) -> Diagnostic {
@@ -2985,10 +2215,9 @@ mod tests {
     use std::collections::BTreeSet;
 
     #[test]
-    fn unknown_options_and_noncanonical_numbers_reject() {
-        assert!(execute(vec!["unknown".to_owned()]).is_err());
-        assert!(parse_usize("01", "limit").is_err());
+    fn unknown_options_reject_before_repository_access() {
         assert!(ensure_options(&["--wat".to_owned()], &["--limit"], &[]).is_err());
+        assert!(execute_package_builtin(vec!["package".to_owned(), "stage".to_owned()]).is_err());
     }
 
     #[test]

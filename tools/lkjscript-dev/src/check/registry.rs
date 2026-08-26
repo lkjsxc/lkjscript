@@ -33,6 +33,12 @@ impl GateRegistry {
                     gate.name
                 )));
             }
+            if gate.unavailable_exit_code == Some(0) {
+                return Err(DevError::infrastructure(format!(
+                    "gate '{}' cannot classify successful exit code zero as unavailable",
+                    gate.name
+                )));
+            }
         }
         let registry = Self { gates, indices };
         registry.validate_dependencies()?;
@@ -75,6 +81,7 @@ impl GateRegistry {
                 dependencies: gate.dependencies.clone(),
                 command: gate.identity_command().to_vec(),
                 cacheable: gate.cacheable,
+                unavailable_exit_code: gate.unavailable_exit_code,
             });
         }
         Ok(DagManifest {
@@ -107,6 +114,7 @@ impl GateRegistry {
             maximum_stdout_bytes: u64,
             maximum_stderr_bytes: u64,
             cacheable: bool,
+            unavailable_exit_code: Option<i32>,
             required_outputs: Vec<String>,
         }
         let gates = self
@@ -120,6 +128,7 @@ impl GateRegistry {
                 maximum_stdout_bytes: gate.maximum_stdout_bytes,
                 maximum_stderr_bytes: gate.maximum_stderr_bytes,
                 cacheable: gate.cacheable,
+                unavailable_exit_code: gate.unavailable_exit_code,
                 required_outputs: gate
                     .required_outputs
                     .iter()
@@ -263,7 +272,8 @@ pub(crate) fn base_registry(
     })?;
     let binary = repository.join("target/release/lkjscript");
     let standard = outputs.join("standard.lkja");
-    let builtin = outputs.join("builtin-standard.lkja");
+    let builtin_artifact = outputs.join("builtin-standard.lkja");
+    let builtin_transport = outputs.join("builtin-standard.lkjp");
     let application = outputs.join("lkjournal.lkja");
     let mut gates = vec![
         cargo_gate("fmt", &["fmt", "--all", "--", "--check"], &[]),
@@ -311,6 +321,20 @@ pub(crate) fn base_registry(
     );
     release.required_outputs.push(binary.clone());
     gates.push(release);
+    gates.push(cargo_gate(
+        "release_command_lifecycle",
+        &[
+            "test",
+            "--locked",
+            "--release",
+            "--test",
+            "public_cli",
+            "copied_binary_completes_normalized_standard_dependent_command_lifecycle",
+            "--",
+            "--exact",
+        ],
+        &["release_build"],
+    ));
 
     let mut self_test = Gate::new(
         "checker_self_test",
@@ -354,7 +378,7 @@ pub(crate) fn base_registry(
             "--verify-generated".to_owned(),
             path_string(&repository.join("docs/generated")),
         ],
-        &["release_build"],
+        &["release_command_lifecycle"],
     ));
     gates.push(project_gate(
         "standard_package_test",
@@ -368,19 +392,6 @@ pub(crate) fn base_registry(
         "applications/lkjournal",
         &["check"],
     ));
-    gates.push(project_gate(
-        "standard_deep_doctor",
-        &binary,
-        "packages/standard",
-        &["doctor", "--deep"],
-    ));
-    gates.push(project_gate(
-        "application_deep_doctor",
-        &binary,
-        "applications/lkjournal",
-        &["doctor", "--deep"],
-    ));
-
     gates.push(output_gate(
         "standard_artifact_build",
         vec![
@@ -404,7 +415,7 @@ pub(crate) fn base_registry(
     gates.push(compare_gate(
         "standard_artifact_compare",
         &standard,
-        &repository.join("applications/lkjournal/dependencies/standard.lkja"),
+        &repository.join("packages/standard/generated/standard.lkja"),
         "standard_artifact_build",
     ));
     gates.push(output_gate(
@@ -414,24 +425,58 @@ pub(crate) fn base_registry(
             "package".to_owned(),
             "builtin".to_owned(),
             "export".to_owned(),
+            "--kind".to_owned(),
+            "artifact".to_owned(),
             "--output".to_owned(),
-            path_string(&builtin),
+            path_string(&builtin_artifact),
         ],
         vec![
             path_string(&binary),
             "package".to_owned(),
             "builtin".to_owned(),
             "export".to_owned(),
+            "--kind".to_owned(),
+            "artifact".to_owned(),
             "--output".to_owned(),
             "$RUN/outputs/builtin-standard.lkja".to_owned(),
         ],
-        &builtin,
+        &builtin_artifact,
     ));
     gates.push(compare_gate(
         "builtin_package_compare",
-        &builtin,
-        &repository.join("applications/lkjournal/dependencies/standard.lkja"),
+        &builtin_artifact,
+        &repository.join("packages/standard/generated/standard.lkja"),
         "builtin_package_export",
+    ));
+    gates.push(output_gate(
+        "builtin_transport_export",
+        vec![
+            path_string(&binary),
+            "package".to_owned(),
+            "builtin".to_owned(),
+            "export".to_owned(),
+            "--kind".to_owned(),
+            "transport".to_owned(),
+            "--output".to_owned(),
+            path_string(&builtin_transport),
+        ],
+        vec![
+            path_string(&binary),
+            "package".to_owned(),
+            "builtin".to_owned(),
+            "export".to_owned(),
+            "--kind".to_owned(),
+            "transport".to_owned(),
+            "--output".to_owned(),
+            "$RUN/outputs/builtin-standard.lkjp".to_owned(),
+        ],
+        &builtin_transport,
+    ));
+    gates.push(compare_gate(
+        "builtin_transport_compare",
+        &builtin_transport,
+        &repository.join("packages/standard/generated/standard.lkjp"),
+        "builtin_transport_export",
     ));
     gates.push(output_gate(
         "application_artifact_build",
@@ -456,7 +501,7 @@ pub(crate) fn base_registry(
     gates.push(compare_gate(
         "application_artifact_compare",
         &application,
-        &repository.join("applications/lkjournal/lkjournal.lkja"),
+        &repository.join("applications/lkjournal/generated/lkjournal.lkja"),
         "application_artifact_build",
     ));
 
@@ -469,7 +514,7 @@ pub(crate) fn base_registry(
             path_string(&binary),
             "--machine".to_owned(),
         ],
-        &["release_build"],
+        &["release_command_lifecycle"],
     );
     service.identity_command = Some(vec![
         "$HARNESS".to_owned(),
@@ -479,6 +524,7 @@ pub(crate) fn base_registry(
         "--machine".to_owned(),
     ]);
     service.cacheable = false;
+    service.unavailable_exit_code = Some(2);
     gates.push(service);
     gates.push(gate(
         "diff_check",
@@ -508,15 +554,16 @@ pub(crate) fn profile(name: &str) -> Option<Vec<String>> {
             "fmt",
             "rust_only_tooling",
             "release_build",
+            "release_command_lifecycle",
             "contract_registry_conformance",
             "standard_package_test",
             "application_package_test",
-            "standard_deep_doctor",
-            "application_deep_doctor",
             "standard_artifact_build",
             "standard_artifact_compare",
             "builtin_package_export",
             "builtin_package_compare",
+            "builtin_transport_export",
+            "builtin_transport_compare",
             "application_artifact_build",
             "application_artifact_compare",
             "diff_check",
@@ -525,6 +572,7 @@ pub(crate) fn profile(name: &str) -> Option<Vec<String>> {
             "fmt",
             "rust_only_tooling",
             "release_build",
+            "release_command_lifecycle",
             "service_acceptance",
             "diff_check",
         ],
@@ -535,15 +583,16 @@ pub(crate) fn profile(name: &str) -> Option<Vec<String>> {
             "clippy",
             "workspace_tests",
             "release_build",
+            "release_command_lifecycle",
             "contract_registry_conformance",
             "standard_package_test",
             "application_package_test",
-            "standard_deep_doctor",
-            "application_deep_doctor",
             "standard_artifact_build",
             "standard_artifact_compare",
             "builtin_package_export",
             "builtin_package_compare",
+            "builtin_transport_export",
+            "builtin_transport_compare",
             "application_artifact_build",
             "application_artifact_compare",
             "service_acceptance",
@@ -567,7 +616,7 @@ fn project_gate(name: &str, binary: &Path, project: &str, arguments: &[&str]) ->
         project.to_owned(),
     ];
     command.extend(arguments.iter().map(|value| (*value).to_owned()));
-    gate(name, command, &["release_build"])
+    gate(name, command, &["release_command_lifecycle"])
 }
 
 fn output_gate(
@@ -576,7 +625,7 @@ fn output_gate(
     identity_command: Vec<String>,
     output: &Path,
 ) -> Gate {
-    let mut gate = gate(name, command, &["release_build"]);
+    let mut gate = gate(name, command, &["release_command_lifecycle"]);
     gate.identity_command = Some(identity_command);
     gate.cacheable = false;
     gate.required_outputs.push(output.to_path_buf());
@@ -640,6 +689,10 @@ mod tests {
         let first = Gate::new("first", vec!["true".to_owned()]);
         let second = Gate::new("second", vec!["true".to_owned()]);
         assert!(GateRegistry::new(vec![first, second]).is_err());
+
+        let mut impossible_unavailable = Gate::new("impossible", vec!["true".to_owned()]);
+        impossible_unavailable.unavailable_exit_code = Some(0);
+        assert!(GateRegistry::new(vec![impossible_unavailable]).is_err());
     }
 
     #[test]
@@ -669,10 +722,17 @@ mod tests {
             .expect("first maintained registry");
         let second = base_registry(temporary.path(), &second_run, Path::new("/bin/true"))
             .expect("second maintained registry");
-        assert_eq!(first.gates.len(), 22);
+        assert_eq!(first.gates.len(), 23);
         for profile_name in ["focused", "product", "service", "full"] {
             let requested = profile(profile_name).expect("maintained profile");
             assert!(requested.iter().any(|name| name == "rust_only_tooling"));
+            if profile_name != "focused" {
+                assert!(
+                    requested
+                        .iter()
+                        .any(|name| name == "release_command_lifecycle")
+                );
+            }
             assert!(
                 !first
                     .closure(&requested)

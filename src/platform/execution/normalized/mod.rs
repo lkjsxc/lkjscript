@@ -18,5 +18,10 @@ mod value;
 mod vm;
 mod worker;
 
+pub(crate) use prepare::NormalizedProgram;
+pub(crate) use runner::{
+    NormalizedCommandPolicy, NormalizedCommandReceipt, NormalizedTestReceipt, run_graph_tests,
+    run_pure_command,
+};
 #[cfg(test)]
 mod tests;

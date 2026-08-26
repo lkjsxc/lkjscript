@@ -1,6 +1,51 @@
 # Performance and economy evidence
 
-Measurements are observations, not promises. The normalized-query section is current for query
+Measurements are observations, not promises.
+
+## Current normalized command lifecycle
+
+Campaign `202608270014` measured release binaries after a warm build on Linux
+`7.0.0-29-generic` x86-64 with Rust/Cargo 1.98.0. Each child ran in a minimal ordinary environment;
+the lifecycle used no Cargo or network. `lkjscript-dev measure` retained bounded stdout/stderr,
+monotonic wall time, Linux `/proc` CPU ticks, and `VmHWM`. CPU has 10 ms resolution and the 10 ms
+poller may conservatively miss a shorter transient RSS peak. Filesystem cache state was
+uncontrolled and no command was retried.
+
+| Workflow | Wall | CPU | Peak RSS | Compiler work | Result |
+|---|---:|---:|---:|---|---|
+| command project creation | 80.423 ms | 10 ms | 9,664 KiB | not applicable | 10 owners, 1 dependency, 1 target, 1 test |
+| first command check | 84.583 ms | 50 ms | 10,936 KiB | 4 compiled / 0 reused | 8 tests equal; 188,916-byte artifact |
+| clean command build | 66.519 ms | 30 ms | 10,812 KiB | 4 / 0 | SHA-256 `bdccb1fa22509c7da7e741c3417466a8b40fa1168b8684d83c07e40d2183f0a8` |
+| exact-current command build | 70.566 ms | 40 ms | 10,776 KiB | 0 / 4 | byte-equal to clean build |
+| accepted presentation rename + cache handoff | 36.533 ms | below one tick | 9,648 KiB | 0 / 4 / 0 removed | accepted; cache `updated` |
+| post-change exact-current build | 71.967 ms | 40 ms | 10,848 KiB | 0 / 4 | 188,949 bytes |
+| post-change clean rebuild | 66.631 ms | 40 ms | 10,916 KiB | 4 / 0 | byte-equal, SHA-256 `d7a6fb977e967148fd243b9d4896cc21d6e7c853ab69b9b3e24d771e52e32aef` |
+| pure command run | 60.980 ms | 40 ms | 10,368 KiB | 0 / 4 | `"hello"`; 3 VM instructions / 2 reference expressions; equal |
+| standard clean check | 1,099.775 ms | 1,060 ms | 11,540 KiB | 60 / 0 | 7 tests equal; 572 objects |
+| standard clean build | 1,105.521 ms | 1,040 ms | 11,980 KiB | 60 / 0 | maintained 182,596 bytes equal |
+| `lkjournal` clean check | 597.420 ms | 560 ms | 17,092 KiB | 60 / 0 | 12 tests equal; 2 packages / 2,280 objects |
+| `lkjournal` clean build | 555.658 ms | 510 ms | 16,300 KiB | 60 / 0 | maintained 685,766 bytes equal |
+
+The exact-current sample did less semantic compilation work (zero units compiled versus four) but
+was not faster in this single uncontrolled-cache timing; no latency improvement is claimed. The
+post-change presentation edit selected zero compiler units, reused all four root units, and
+produced the same compilation manifest and artifact bytes as a clean rebuild. Maintained standard
+and `lkjournal` clean outputs exactly matched their checked-in owners.
+
+The lifecycle response currently exposes semantic/compiler/link/artifact work but not aggregate
+repository/cache bytes or exact synchronization syscall counts. Successful artifact receipts did
+report synchronized visibility and removed owned stages. Provider token, cache, request, retry, and
+monetary telemetry was unavailable and is not inferred.
+
+Structured evidence is
+[`202608270014-normalized-command-lifecycle.json`](evidence/202608270014-normalized-command-lifecycle.json).
+Raw observations and bounded logs are under
+`.artifacts/campaign/202608270014/performance/work-KCVcbb/`; each structured row retains its
+observation SHA-256. These are single samples, not latency or topology distributions.
+
+## Earlier evidence
+
+The normalized-query section below is current for query
 contract 3 at its named commit. Unless another row explicitly says otherwise, the remaining
 numbers predate meaning graph contracts 2, 3, and 4, persistent root pages, direct CLI v7, exact-ID
 imports/targets, normalized query, or explicit generics. Those rows are historical baselines and

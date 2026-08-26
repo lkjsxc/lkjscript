@@ -1,247 +1,186 @@
 # Current architecture
 
-This document maps the implemented graph-to-runtime system. Normative behavior belongs to
-`docs/spec/`; current limitations belong to `docs/status.md`.
+This document maps implemented layers and dependency direction. Normative behavior belongs under
+`docs/spec/`; exact executable identities belong in the generated
+[contract table](generated/contracts.md).
 
-The exact current identities for the named layers below are generated from the executable
-[contract registry](generated/contracts.md).
+## Current development path
 
-Normalized public query has one dependency direction:
-
-```text
-released argv -> exhaustive query descriptors -> typed normalized request
-              -> normalized project discovery -> revision-pinned RepositoryView
-              -> canonical owner map / committed namespace and relation witnesses
-              -> typed page and multidimensional work -> compact records
-```
-
-The result and its stateless logical continuation are transient projections. This path does not
-enter the predecessor workspace/query engine, reconstruct the complete graph, or read or write a
-query index. The larger retained pipeline below still serves out-of-scope predecessor consumers.
-
-Normalized authored change has a separate review boundary:
+All released finite graph and command operations converge on Graph 5 authority:
 
 ```text
-records or direct flags -> typed authored request -> request commitment
-                        -> revision-pinned authored preparation
-                        -> post-mutation candidate -> shared ownership-closure selector
-                        -> prepared publication + typed logical review evidence
-                        -> one canonical record stream -> prepared-plan commitment
-                           plan: optional external atomic file, no repository write
-                           apply: compare both components -> GraphRepository::publish
+argv / compact records / bounded JSON arguments
+                     │
+                     ▼
+       exhaustive executable registry and typed adapters
+                     │
+                     ▼
+ current project discovery ── rejects predecessor markers
+                     │
+                     ▼
+       GraphRepository / exact RepositoryView
+          │ reads                         │ accepted change
+          ▼                               ▼
+ status / inspect / query       prepare complete candidate
+                                 + logical review evidence
+                                           │
+                                           ▼
+                              immutable data, then atomic HEAD
 ```
 
-Change analysis owns canonical and relation deltas, impact selection, and validation/test facts.
-One bounded selector in authored deletion lowering serves both function-body replacement and public
-`delete.owner policy=owned-closure`; canonical owners define aggregate children and accepted
-external-parent relations locate attachments. Witnesses are revalidated locators, never a second
-ownership authority. Candidate relation analysis indexes one admitted derived delta by exact
-source/target endpoint before repeated impact queries, avoiding a complete delta rescan per owner.
-Authored preparation moves the selected exact facts into the logical review projection beside the
-generic prepared publication. Control owns request/token/plan codecs; CLI owns paths and bounded
-responses; publication remains independent of request-local labels and owns the only HEAD
-visibility point. Witness maintenance, summary refresh, compiler scheduling, and storage staging
-remain internal operational work rather than review records.
+`GraphRepository` is the sole normal accepted-authority writer. Public adapters never write raw
+storage objects. Names and compact syntax are locators or transport; stable typed keys and the
+accepted semantic graph own continuity and meaning.
+
+The command lifecycle continues from the same exact repository view:
 
 ```text
-direct CLI / strict authored change / exact transaction
-                         │
-                         ▼
-           typed stable-ID meaning graph
-                         │
-       ┌─────────────────┴─────────────────┐
-       ▼                                   ▼
- body / create / either rename  all other changes:
- local preparation              complete preparation
-       └─────────────────┬─────────────────┘
-                         │  complete validator + packed oracle retained
-                         │
-                         ▼
- immutable modules + six persistent Merkle maps
-                         │
-       revision + receipt + one durable atomic HEAD
-                         │
-       ┌─────────────────┼──────────────────────┐
-       ▼                 ▼                      ▼
- private predecessor  persisted derived      deterministic
- query indexes        summaries/reverse      review/backup
-       │                 │
-       │          authenticated by the
-       │          revision certificate
-       └─────────────────┬──────────────────────┘
-                         ▼
-              graph-native package artifact
-                         │
-              ┌──────────┴──────────┐
-              ▼                     ▼
-     prepared bytecode      semantic reference oracle
-              └────── differential tests ──────┘
-                         │
-              component/port runtime
-                         │
-              typed deployment grants
-                         │
-               generic bounded adapters
+GraphRepository / exact accepted revision
+          │
+          ├─ exact built-in transport selection and interface validation
+          │
+          ├─ exact-current compiler cache ──┐
+          │                                 ├─ compilation manifest + units
+          └─ clean normalized compilation ──┘
+                                             │
+                    exact dependency artifacts + linker
+                                             │
+                                 strict artifact-10 loader
+                                             │
+                                  dense NormalizedProgram
+                                   ┌─────────┼─────────┐
+                                   ▼         ▼         ▼
+                              graph tests  artifact  pure command
+                              VM/reference  output   VM/reference
 ```
 
-| Layer | Current owner | Owns | Excludes |
+One `normalized_lifecycle` preparation function owns repository binding, the supported exact
+dependency closure, cache selection/recovery, compilation, linking, artifact validation, dense
+preparation, and typed observations. `check`, `build`, and `run` do not duplicate compiler or
+linker decisions.
+
+## Layer ownership
+
+| Layer | Primary code | Owns | Does not own |
 |---|---|---|---|
-| Canonical authority | `meaning.rs`, `graph.rs`, `revision.rs`, `repository.rs` | graph contract 4, stable semantic owners, persistent root pages, immutable revisions, semantic certificate, exact publication | source coordinates as authority, index bytes, bytecode, host handles |
-| Public development | `cli.rs`, `normalized_query.rs`, normalized publication/change modules | direct CLI v9, concise change v4, logical change plan v1, normalized query v3, revision-pinned compact reads | predecessor query aliases and request documents, raw storage edits |
-| Offline bootstrap | `bootstrap.rs` plus the embedded standard artifact | `new`, minimal/command recipes, built-in inspection/export, staged first publication | mutable template authority, network registry |
-| Derived semantics | `semantic_summary.rs`, private `semantic_query.rs` | persisted disposable module summaries, revision-bound reverse dependencies, invalidation-frontier oracle, private predecessor query indexes | normalized public query authority, a second accepted graph, an independent writer |
-| Review and recovery | `semantic_projection.rs`, repository backup/restore/retention preview | deterministic review, segmented exact backup, atomic restore, read-only cleanup inventory | writable text authority, canonical deletion |
-| Compiler and artifact | `artifact.rs`, `execution/` | exact graph closure, explicit generic substitution, preparation, bytecode | credentials and deployment grants |
-| Component model | graph-owned components, ports, requirements, targets | typed entries and required operation sets | sockets and application-specific native dispatch |
-| Runtime | `runtime.rs`, `http.rs`, `worker.rs`, `stream.rs` | admission, task ownership, execution, cancellation, shutdown | routes, SQL, authorization, object keys, queue transitions |
-| Capabilities | `execution/capability.rs` and generic adapters | requirement/grant equality, operation accounting, resource mechanics | domain permission policy |
-| Deployment | `deployment.rs` and strict deployment JSON | concrete adapters, secret bindings, limits, listener topology | program meaning and artifact authority |
-| Repository verification | contributor-only `lkjscript-dev check` | dependency DAG, bounded parallel gates, exact input fingerprints, fresh/reused evidence, bounded logs | accepted program authority and provider-cost inference |
+| Executable protocol | `src/bin/lkjscript.rs`, `platform/contract`, `platform/cli.rs`, `platform/control` | closed operations and grammar, compact models, response bounds, exit mapping | semantic records or repository layout |
+| Current authority | `platform/kernel`, `platform/publication`, `platform/witness`, `platform/storage` | typed Graph 5 meaning, full validation, immutable packs, exact revisions/receipts, one atomic `HEAD` | compiler caches, artifacts, deployment |
+| Authored change | `platform/change`, logical-plan control | typed intent, allocation, ownership closure, impact/test selection, reviewed semantic effects | publication visibility or derived cache identity |
+| Query | `platform/normalized_query`, publication read views | revision-pinned owner, namespace, and relation reads with logical continuations | mutable cursors or repair |
+| Package boundary | `platform/package_interface`, `platform/package_transport`, `platform/builtin_standard` | exact public interfaces, closure transport, one validated embedded standard dependency | a general registry or ambient resolver |
+| Compiler/cache | `platform/compiler` | deterministic compiler units, exact manifest, clean/incremental derived cache, linker, artifact 10 | accepted semantic identity |
+| Normalized execution | `platform/execution/normalized` | dense runtime indexes, VM, canonical reference interpreter, tests and pure commands | semantic publication or live deployment grants |
+| Derived output | `platform/owned_output` | bounded synchronized create-new file publication | overwrite or semantic visibility |
+| Frozen service runtime | `platform/artifact.rs`, legacy `platform/execution`, deployment/adapters | strict read-only artifact-4 loading and current service/worker host mechanics | editable Graph 4 authority or current builds |
+| Contributor verification | `tools/lkjscript-dev` | gate DAG, fingerprints, classifications, logs, receipts, product/service evidence | product authority |
 
-## Authority, identity, and history
+The old `SemanticWorkspace`, predecessor repository writer, drafts, history/diff/merge workflows,
+backup/restore, review projection, and query indexes have no current consumer and are deleted. Old
+meaning/artifact/runtime types remain only where the frozen artifact-4 service boundary or an
+implementation-disjoint test oracle requires them.
 
-The sole accepted program authority is a graph-contract-4 revision. Its logical model contains
-repository/package metadata, modules, exact dependencies, targets, tombstones, declarations,
-types, expressions, relations, tests, components, and requirements. The physical
-`StoredGraphRoot` is a bounded manifest containing six `MapRoot` values: modules by stable ID,
-module names to IDs, dependencies by package ID, dependency aliases to package IDs, targets by
-stable ID, and tombstones by typed identity. Those roots address canonical immutable
-path-compressed Merkle radix pages. Module bodies remain independently content-addressed objects.
+## Authority, identity, and storage
 
-Repository, module, declaration, type-parameter, field, case, operation, parameter, binding,
-expression, port, requirement, target, documentation, annotation, draft, and revision IDs use
-distinct tagged domains. Names are mutable locators and indexed presentation. Canonical imports
-bind exact package/module IDs, exports bind declaration IDs, typed expressions bind exact
-package/module/declaration references, and targets bind exact module/component/port IDs. Module
-and declaration rename are therefore local and do not rewrite importers or callers.
+A Graph 5 snapshot owns repository and package identity, package name, typed owners, interned type
+objects, exact dependency bindings, namespace and relation witnesses, tests, targets, and
+retirements. Stable owner domains remain distinct; a module ID cannot be decoded as a declaration
+ID even if its payload bytes coincide. Exact semantic references do not carry mutable module or
+declaration names.
 
-Accepted history is an immutable DAG. A revision binds exact parents, root digest, semantic
-certificate, transaction digest, semantic diff, and receipt. The certificate authenticates the
-exact roots of three graph-derived persistent fact maps without promoting their disposable pages
-or manifest to program authority. Drafts are separate non-executable authority tied to one base. Holes
-and conflicts cannot enter accepted HEAD. Review projections, embedded artifacts, index bytes,
-compiler state, and deployment descriptors do not become accepted authority.
+Logical semantic state is independent of repository identity and physical map partitioning. The
+canonical full reconstruction validates all owner records, types, scopes, effects, capabilities,
+relations, components, ports, targets, tests, dependency interfaces, and reachability. Sparse
+change preparation and point reads retain that complete reconstruction as an independent oracle.
 
-## Publication and physical locality
+On disk, immutable typed objects and persistent-map pages are sealed into bounded packs. A catalog
+maps content keys to physical pack entries and is rebuildable from verified pack contents. `HEAD`
+binds one exact repository, revision record, semantic state, root, witness, and acceptance
+evidence. Canonical data is synchronized before the separately atomic `HEAD` visibility change.
+Missing disposable staging directories may be recreated; missing or inconsistent accepted packs,
+objects, or `HEAD` bindings are corruption.
 
-Authored non-deletion mutations form one candidate before deletion lowering. Reject-policy roots
-must be candidate leaves; owned-closure roots traverse only canonical semantic children and exact
-external-parent relations. Multiple roots share one sorted union, descendants with deleted parents
-need no separate detachment, and each accepted owner is retired exactly once. Candidate incoming
-relations are extracted after explicit same-request edits; any surviving source that still targets
-the union rejects before canonical publication. Closure discovery uses point reads and bounded
-witness prefixes, never complete graph reconstruction. The ordinary full preparation path may
-still perform broader downstream validation, which remains separate from closure selection work.
+Package transports stored under `PACKAGE-TRANSPORTS` are exact immutable dependency inputs selected
+by accepted dependency records. They are not a second package authoring format. The maintained
+standard and `lkjournal` roots contain only this Graph 5 layout.
 
-Preparation has local and complete paths. A precondition-free request may prepare locally when it
-contains only eligible pure-function body replacements, only independent module creations, only
-module renames, or only declaration renames. Body replacement resolves owners through the
-revision-bound query index, validates selected modules plus recursively imported local
-dependencies, and records removed nested identities as tombstone-map deltas. Independent creation
-validates only the new empty modules. Module rename uses exact ID/name lookup and validates renamed
-modules plus outgoing imports; importers and targets are not loaded or rewritten. Declaration
-rename changes only owning modules and their summaries; exact-reference callers are not rewritten.
-If eligibility cannot be proved, including mixed operations and every request with preconditions,
-preparation reconstructs the logical graph, applies the transaction, canonicalizes relations, and
-fully validates the complete candidate.
+## Publication and derived cache handoff
 
-Either path produces one prepared validation bound to base root, result root, changed modules,
-updated module summaries, persistent semantic-fact root delta, semantic certificate, and
-validation facts. Authored preparation additionally retains the exact canonical owner/type/
-dependency/retirement delta, relation delta, structural and semantic validation owners, selected
-tests, and logical reasons as a typed review projection. It does not recompute those facts or make
-generic bootstrap publication depend on authored-control types. Eligible local preparation also
-carries a disposable exact-owner/name index
-delta bound to the same base and result. It loads or rebuilds the base revision's
-certificate-matching semantic-fact manifest, path-copies exact summary/test/reverse-fact edits,
-and rebinds the manifest to the predicted revision. Under
-the write lock publication rereads HEAD, rejects a changed base, replays the root delta, verifies
-the prepared result and certificate bindings, and does not repeat semantic validation. It writes
-immutable changed-module/page/root/receipt/revision objects and disposable summary/index bytes
-before replacing HEAD once. Exact-index content objects precede their manifest; a cache-write
-failure cannot change or prevent canonical publication. On Linux, new object data and directory
-metadata are flushed with `syncfs` before the separately synchronized HEAD stage and rename. Other
-targets use per-file synchronization.
+`change plan` lowers authored input to one typed request, reads an exact base, allocates stable
+identities deterministically, prepares a complete candidate and witness delta, selects validation
+and tests, and produces logical review records. `change apply` repeats that path, checks both token
+commitments, enters the publication lock, rechecks the base, writes immutable accepted objects,
+and changes `HEAD` once.
 
-The persistent root eliminates a monolithic module-reference payload as the physical accepted root:
-equal maps have equal roots independent of insertion history, exact ID/name lookup traverses a
-bounded path, and changed map paths are structurally shared. This is physical root locality, not a
-claim that preparation is generally incremental. The four local classes avoid complete logical
-reconstruction when their required disposable indexes are present. Missing semantic or private
-predecessor query indexes may rebuild broadly, and every fallback path still clones reconstructed
-logical vectors.
+Before publication, apply may observe an exact base compilation manifest. Only after accepted
+authority is visible does it pass the in-memory `PreparedPublication.compiler_units` to
+`build_incremental`. The cache writer has its own staging, lock, exact binding validation, and
+atomic `CURRENT` head. Incremental failure is a derived-state observation; it never changes the
+already accepted response. No compiler-impact journal is durable semantic state.
 
-Root-delta mutation retains every generated path page in a private overlay, including a page whose
-exact bytes already exist as an unreachable physical object. Final extraction walks only generated
-pages reachable from changed map roots and skips unchanged map roots and accepted-base subtrees.
-The publication lock, exact accepted base, and typed logical delta are the trust boundary: reused
-subtree references originate in digest-checked accepted-base pages, while every generated page is
-decoded, link-checked, and digest-checked before it is written. Ordinary local publication therefore
-does not walk all persistent pages. External damage to an untouched accepted-base subtree can remain
-latent until that subtree is read or deep doctor performs the exhaustive walk.
+Lifecycle preparation accepts a cache only when repository, revision, semantic state, compiler
+contract, optimization policy, unit closure, and object digests agree. A missing cache clean-builds.
+A malformed or inconsistent cache is reported, then clean-built and replaced. Clean and
+incremental manifests and artifacts are compared in tests.
 
-Deep doctor walks accepted history, verifies reachable module, map-page, root, receipt, and revision
-bindings, reconstructs logical roots/module shape, and loads or rebuilds the private predecessor
-query indexes and semantic indexes. The rebuilt semantic certificate must equal the value in the
-current revision.
-It does not currently rerun full cross-package semantic validation for every historical revision. Initial
-publication runs complete direct-plus-packed validation, while restore verifies every entry and
-runs deep structural/history doctor before visibility. Restore does not yet rerun the complete
-cross-package semantic validator; copied-binary acceptance separately checks the restored fixture.
-Focused differential tests retain the full oracle.
+## Built-in dependency and project recipe
 
-Backup contract 4 writes a manifest and bounded index segments, then copies canonical payload
-objects one at a time. It includes HEAD's revision DAG, roots, pages, modules, receipts, exact
-dependency artifacts, and live drafts; it excludes disposable indexes. Backup and restore retain
-an O(object-count) sorted key set, so the payload path is segmented but not fully bounded-memory.
-`doctor cleanup` uses the same HEAD-parent and live-draft-base reachability policy for a read-only
-count-and-digest preview. It cannot delete and always reports `destructive_ready: false` until
-revision pins, active-reader leases, and registered backup roots become explicit. Private
-predecessor query indexes are disposable and rebuildable; normalized public query neither opens nor
-repairs them.
+`packages/standard` owns two generated assets: a package transport for dependency installation and
+an artifact-10 bundle for linking/execution. `builtin_standard` embeds both, strictly loads them,
+and checks package, semantic revision, logical package revision, interface, and artifact identities
+for agreement. Public inspection/export exposes the exact bytes without permitting replacement.
 
-## Summaries, queries, compiler, and runtime
+The command recipe constructs typed meaning directly. It resolves the public standard identity
+function through the validated built-in interface and stores an exact declaration reference. It
+then creates the package, application module, private pure function, component, port, target, and
+test through ordinary Graph 5 initial publication. There is no source template, migration reader,
+path lookup, or network fetch.
 
-The executable [contract registry](generated/contracts.md) owns the current summary, fact, and
-validator identities. The summary contract encodes per-module public signatures, implementations,
-effects, tests, and typed dependency edges, bound to exact module content, package, and validator
-contract. The semantic-fact contract persists summary bindings, test owners, and flat typed reverse edges as
-three path-compressed Merkle maps. Summary objects live below `indexes/semantic/summaries`, fact
-pages below `indexes/semantic/pages`, and each revision has one disposable `facts.lkix` manifest.
-The change classifier and bounded invalidation frontier distinguish unchanged,
-private-implementation, and public-signature changes. Local transaction paths delta-update the
-maps and revisions authenticate their roots through `semantic_certificate`. This does not provide
-general frontier-driven validation: the four admitted transaction classes are selected
-explicitly, while all other changes use complete preparation. The complete validator remains the
-fallback and differential oracle.
+## Artifact and execution boundaries
 
-Normalized public query is owned by `normalized_query.rs`, with repository adapters in
-`publication/read_view.rs`. One immutable current view reads canonical owners, uses the committed
-namespace witness as a bounded exact-name locator, and reads relation prefixes from committed
-forward/reverse witnesses. Persistent-map traversal descends from an exclusive logical lower bound;
-canonical key order and continuation meaning do not depend on page order or insertion history.
-Complete reconstruction and relation extraction are independent verification oracles.
+Artifact contract 10 binds the root repository/package/revision/state, every dependency package
+revision, compiler and bytecode contracts, compiler-unit maps, runtime owner metadata, public
+interfaces, and exact immutable closure. The decoder rejects predecessor magic, noncanonical
+order, duplicates, foreign bindings, missing relocation owners, corrupt objects, trailing input,
+and configured count/byte exhaustion before execution.
 
-The predecessor `SemanticQueryIndex` retains a revision-bound broad relation index and local
-exact-index contract 3 only for exact out-of-scope workspace, diff, legacy inspect, change,
-transaction, and repository consumers. Its content-addressed owner/name shards and lazy broad
-index may rebuild from predecessor canonical authority. They do not own registry query contract 3,
-public parser behavior, compact rendering, or normalized correctness. Broad relation-index delta
-maintenance remains deferred with those consumers rather than with public query.
+`NormalizedProgram` maps exact semantic owners and compiler operands to dense process-local
+indexes. These indexes and runtime handles are replaceable and never become semantic identity.
+Pure commands and graph tests execute once in bytecode and once in the independently implemented
+reference interpreter with shared explicit limits; disagreement is failure. Live effects are not
+duplicated for differential acceptance.
 
-Pure functions may declare explicit rank-1 type parameters with stable identities. Direct calls
-and named pure function values require explicit type arguments, and `invoke` applies such a value.
-Validation performs deterministic substitution; bytecode and the semantic reference interpreter
-agree. There are no constraints, inference, generic task functions, lexical closures, or captured
-environments.
+Build output uses a sibling stage, file synchronization, create-new hard-link visibility, parent
+directory synchronization, and cleanup of only its owned stage. Existing files, directories,
+symlinks, invalid parents, and byte-limit exhaustion reject without a partial visible artifact.
 
-One component/port model covers command, HTTP, interactive, batch, worker, and test runners.
-Artifacts contain typed requirements, never grants or credentials. Deployment binds exact
-requirements to generic adapters. The HTTP listener is plaintext and PostgreSQL uses `NoTls`.
-Encrypted transport belongs at an external trusted boundary or a different adapter; lkjscript does
-not plan TLS termination, PostgreSQL TLS, certificate management, ACME, or speculative TLS hooks.
-That boundary does not provide hostile-code or multi-tenant isolation.
+## Frozen service separation
 
-The source parser and source semantic builder remain Rust-test fixtures and independent oracle
-material only. They cannot open, publish, build, or execute a maintained project and are not a
-public authoring path.
+The retained service path is intentionally outside the current compiler/artifact pipeline:
+
+```text
+deployment descriptor
+      + frozen-service/lkjournal-artifact-v4.lkja (exact digest)
+      + environment and generic host adapters
+                         │
+                         ▼
+             legacy prepared artifact runtime
+                         │
+                  serve / worker
+```
+
+`PreparedDeployment::load` consumes descriptor, artifact, environment, and adapters only. The
+service harness copies those inputs to an isolated directory and verifies the frozen artifact
+digest before launch. It never opens `applications/lkjournal` as editable authority. A later
+campaign must move effectful deployment to artifact 10 before normalized service completion can be
+claimed.
+
+## Security and replaceability
+
+All external records, paths, transports, artifacts, cache objects, descriptors, JSON values, and
+adapter inputs are hostile boundaries with independent limits. Diagnostics preserve stable class
+and code without exposing secrets or large payloads. Runtime resources are scoped and released on
+success, failure, cancellation, exhaustion, and shutdown.
+
+The HTTP listener is plaintext and PostgreSQL uses `NoTls`. TLS termination, encrypted graph
+storage, hostile-code sandboxing, multi-tenant isolation, artifact signatures, distributed
+consensus, JIT/AOT, custom allocation, and a resident authoring daemon are not implemented.

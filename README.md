@@ -1,75 +1,82 @@
 # lkjscript
 
-`lkjscript` is a meaning-oriented programming language and capability-oriented application
-platform. The canonical authority for every accepted program is one revisioned typed meaning
-graph under `lkjscript-meaning-graph-4`. Names, review text, indexes, artifacts, bytecode, runtime
-handles, and deployment bindings are projections or consumers; none is a second editable program
-truth. The physical root is a fixed manifest over six immutable path-compressed Merkle maps, while
-the complete logical graph remains the reconstruction and validation oracle.
+`lkjscript` is a meaning-oriented programming language and application platform. One accepted
+revision of a typed Graph 5 repository is the sole editable authority for a program. Names are
+mutable locators; stable typed identities preserve continuity. Source text, compact requests,
+indexes, compiler caches, artifacts, deployment descriptors, and runtime handles are projections
+or consumers rather than alternate program truths.
 
-The released executable currently provides a binary-only normalized vertical slice for discovery,
-minimal project creation, status, exact owner inspection, bounded owner/name/relation query, and
-semantic change planning and publication. Check, build, run, service, worker, package, history,
-draft, review, backup, restore, and doctor still use predecessor authority and are not yet available
-for a newly created normalized project. The remaining cutovers are tracked in the roadmap.
+The released executable supports an offline command-application lifecycle through one copied
+binary. It creates Graph 5 projects, inspects and changes accepted meaning, runs graph-owned tests,
+builds deterministic artifact-10 bundles, and executes pure command targets through both the
+production VM and an implementation-disjoint semantic reference interpreter.
 
 The verified bootstrap is stable Rust 2024 on Linux x86-64.
 
 ## Start from one binary
 
-Discover the exact current CLI contract and create a minimal accepted project:
+Copy a release executable outside the checkout and create a useful command project:
 
 ```sh
 mkdir -p /tmp/lkjscript-demo
 cp /path/to/released/lkjscript /tmp/lkjscript-demo/lkjscript
 cd /tmp/lkjscript-demo
-export PATH="$PWD:$PATH"
-lkjscript capabilities
-lkjscript capabilities new
-lkjscript new ./hello --template minimal --name hello
-lkjscript --project ./hello status
-lkjscript capabilities change
+./lkjscript capabilities
+./lkjscript new ./hello --template command --name hello
+./lkjscript --project ./hello status
+./lkjscript --project ./hello check
+./lkjscript --project ./hello build --output ./hello.lkja
+./lkjscript --project ./hello run main
 ```
 
-`new` accepts an absent or empty ordinary directory. It rejects nonempty destinations and symlink
-components, constructs the complete repository in a private sibling stage, and makes it visible
-with one rename after durable publication. The current normalized command accepts only the
-`minimal` template, which creates an empty package. It prints compact records naming the project,
-repository, package, semantic root, accepted revision, and durable publication receipt.
-After the copy, this normalized workflow needs no source checkout, Cargo invocation, network, or
-external data file other than an authored change record.
+The final command returns the typed text value `"hello"`. The command recipe owns one application
+module, a private pure implementation, a component and port, target `main`, one graph-owned test,
+and an exact dependency on the built-in standard package. It contains Graph 5 authority only and
+does not read the checkout, Cargo, the network, or an external template. Use `--template minimal`
+for an empty dependency-free package.
 
-The embedded standard package is inspectable and exportable:
+Project creation accepts an absent or empty ordinary destination. It rejects invalid names,
+nonempty destinations, non-directory parents, and symlink path components before visibility. The
+repository is built and synchronized in a private sibling stage, then made visible by one rename.
+
+`check`, `build`, and `run` share exact project discovery, dependency resolution, compilation,
+artifact linking/loading, and dense runtime preparation. `check` runs every graph-owned test
+through both execution tiers. `build` requires an explicit absent output path and never replaces a
+file, directory, or symlink. `run` accepts a pure command target and the strict bounded JSON-array
+argument adapter:
 
 ```sh
-lkjscript package builtin inspect
-lkjscript package builtin export --output ./standard.lkja
+./lkjscript --project ./hello run main --arguments '[]'
 ```
 
-Its bytes are integrity checked as an ordinary graph-native artifact and reproduced from the
-maintained standard package during repository verification.
+All three operations identify the exact observed revision and leave accepted `HEAD` unchanged.
 
 ## Inspect and change meaning
 
-Global `--project PATH` selects a project explicitly; from inside a normalized project, discovery
-also walks ordinary parent directories without following symbolic links:
+Global `--project PATH` selects a repository. From within a repository, discovery also walks
+ordinary parent directories without following symbolic links:
 
 ```sh
-lkjscript --project ./hello status
-lkjscript --project ./hello inspect owner module mod_...
-lkjscript capabilities query
-lkjscript --project ./hello query owners --limit 20
+./lkjscript --project ./hello query find module application
+./lkjscript --project ./hello query owners --limit 20
+./lkjscript --project ./hello inspect owner module mod_...
 ```
 
-`capabilities`, normalized `new`, `status`, exact `inspect`, `query`, and `change` emit
-deterministic compact line records. Finite predecessor commands still emit JSON until their direct
-cutover. Compact responses have independent record and byte bounds and identify the exact observed
-revision where applicable.
+Queries read canonical owner bindings and committed namespace/relation witnesses at one revision.
+Growing results use bounded pages and revision-bound `qcont_` continuations; query never writes a
+cursor, index, or semantic revision.
 
-One compact `change` file may create connected meaning with request-local symbols. Definitions and
-flat expression/type fragments are checked in their identity domains, and allocated identities are
-returned in both plan and apply results; there is no separate preallocation step. For example,
-replace `rev_...` with the exact revision returned by `status`:
+Changes are typed semantic intent. For a direct rename, use the exact revision and owner returned
+by `status` and `query`:
+
+```sh
+./lkjscript --project ./hello change plan rename.owner \
+  --base rev_... --owner mod_... --name application-renamed
+./lkjscript --project ./hello change apply rename.owner \
+  --base rev_... --owner mod_... --name application-renamed --plan plan_...
+```
+
+Larger changes use strict compact records:
 
 ```sh
 cat >change.lkjc <<'EOF'
@@ -78,157 +85,66 @@ create.module as=$notes name=notes
 create.record as=$note module=$notes name=Note visibility=public
 add.field as=$text record=$note name=text type=text
 EOF
-lkjscript --project ./hello change plan --input-file change.lkjc --output ./change.logical-plan
-lkjscript --project ./hello change apply --input-file change.lkjc --plan plan_...
+./lkjscript --project ./hello change plan --input-file change.lkjc \
+  --output ./change.logical-plan
+./lkjscript --project ./hello change apply --input-file change.lkjc --plan plan_...
 ```
 
-The returned token is `plan_` plus a request commitment and a prepared logical-plan commitment.
-The optional canonical file lists exact semantic effects and validation/test scope for review; it
-is external derived evidence, cannot be imported as program authority, and is not an apply input.
-Run `lkjscript capabilities --section change` for its exhaustive record vocabulary and limits.
+Plan and apply share parsing, normalization, allocation, impact analysis, validation, selected
+tests, and logical-result construction. The reviewed token binds both the request and its complete
+logical semantic effects. The optional plan file is external evidence and is never imported as
+authority. Apply reprepares against the exact base under the publication protocol.
 
-After publication, the executable can rediscover the allocated identities without the change
-receipt. Replace each placeholder with the exact ID or continuation returned by the preceding
-query:
+After an accepted change, the executable may update an exact base compiler cache while the
+prepared publication remains in memory. Cache status is reported separately. Cache failure cannot
+roll back or misreport an accepted semantic revision; the next lifecycle command clean-builds and
+replaces invalid derived state.
+
+Run focused discovery for exhaustive current grammar, limits, and response fields:
 
 ```sh
-lkjscript --project ./hello query find module notes
-lkjscript --project ./hello query find declaration Note --parent mod_...
-lkjscript --project ./hello query find field text --parent decl_...
-lkjscript --project ./hello query owners --kind declaration --limit 2
-lkjscript --project ./hello query owners --kind declaration --limit 5 \
-  --continuation qcont_...
-lkjscript --project ./hello query relations decl_... \
-  --direction outgoing --kind declaration_module
-lkjscript --project ./hello query relations mod_... \
-  --direction incoming --kind declaration_module
+./lkjscript capabilities change
+./lkjscript capabilities query
+./lkjscript capabilities check
+./lkjscript capabilities build
+./lkjscript capabilities run
 ```
 
-Query reads only the current accepted revision. It emits canonical compact records, creates no
-index or continuation file, and never changes HEAD. A continuation is bound to the repository,
-package, exact revision, direction, filter, and logical resume key; restart the query after an
-accepted change. Fuzzy search, historical query, context traversal, generic impact, JSON query
-requests, and the former callers/callees aliases are intentionally absent.
+## Built-in standard package
 
-Delete an exact semantic owner and everything it owns only after reviewing the complete effect.
-Replace the revision and declaration identity with values returned by status/query:
+The executable embeds one exact package transport and one exact artifact-10 bundle generated from
+`packages/standard`:
 
 ```sh
-cat >delete-note.lkjc <<'EOF'
-request base=rev_... idempotency=delete-note intent=remove-note-record
-delete.owner owner=decl_... policy=owned-closure
-EOF
-lkjscript --project ./hello change plan --input-file delete-note.lkjc \
-  --output ./delete-note.logical-plan
-less ./delete-note.logical-plan
-lkjscript --project ./hello change apply --input-file delete-note.lkjc --plan plan_...
+./lkjscript package builtin inspect
+./lkjscript package builtin export --kind transport --output ./standard.lkjp
+./lkjscript package builtin export --kind artifact --output ./standard.lkja
 ```
 
-`owned-closure` follows semantic ownership, so record fields, attached documentation/annotations,
-and any owned expression/binding subtree are included; it does not follow arbitrary references or
-physical object reachability. A surviving reference rejects the request. Remove that relation with
-an explicit earlier operation, or explicitly delete its source as another root in the same request;
-the engine never repairs or cascades across references. Use `policy=reject` for exact leaf-only
-deletion. There is no deletion flag adapter, and predecessor `cascade`, `recursive`, and `deep`
-spellings are rejected.
+Both assets are strictly decoded and cross-checked at initialization. Product verification
+regenerates their maintained owners and compares the bytes exactly. The built-in is not a general
+package registry and never performs ambient path or network resolution.
 
-For a common single-owner edit, the direct adapter constructs the same typed request without a
-record file. Replace the placeholders with the exact accepted revision and exact typed owner ID:
+## Maintained consumers
+
+The standard package and `lkjournal` are Graph 5 repositories and use the same lifecycle:
 
 ```sh
-lkjscript --project ./hello change plan rename.owner \
-  --base rev_... --owner mod_... --name renamed
-lkjscript --project ./hello change apply rename.owner \
-  --base rev_... --owner mod_... --name renamed --plan plan_...
+./target/release/lkjscript --project packages/standard check
+./target/release/lkjscript --project packages/standard build \
+  --output /tmp/standard-current.lkja
+./target/release/lkjscript --project applications/lkjournal check
+./target/release/lkjscript --project applications/lkjournal build \
+  --output /tmp/lkjournal-current.lkja
 ```
 
-Direct `--owner` is an exact `OwnerKey`; it does not accept a name or request-local symbol. Add
-equal `--idempotency KEY` and `--intent TEXT` values to both commands when those controls are used.
+Their checked-in files under `generated/` are deterministic current outputs. The standard artifact
+and transport also own the executable's built-in bytes.
 
-`change plan` parses, normalizes, allocates, analyzes, and validates without publication. Optional
-`--output PATH` atomically writes the complete bounded logical plan outside the project and reports
-`published` or `unchanged`. `change apply` checks the token's request component before project
-discovery, reparses and reprepares the same typed request, checks its prepared-plan component, and
-publishes only after rechecking the explicit base. Raw JSON change requests and the
-former `--request`, `--dry-run`, and `--commit` grammar are rejected. The currently exposed compact
-operation/type/expression subset is discoverable from `capabilities --section change`, `type`, and
-`expression`; change discovery reports all 13 operations, all 49 operation fields and their forms,
-and the sole direct operation's exact usage. The broader typed engine remains private until each
-form has a complete public workflow.
-
-Pure functions support explicit rank-1 type parameters. Calls and named function values provide
-their type arguments explicitly; `invoke` applies a named function value. The graph stores stable
-type-parameter identities, and validation, bytecode, and the semantic reference interpreter agree
-on substitution. There is no type-class constraint system, type-argument inference, generic task
-function, lexical closure, or captured environment.
-
-Graph contract 4 uses exact package/module identities in canonical imports, exact
-module/component/port identities in targets, and exact package/module/declaration identities in
-types, calls, named function values, constants, requirements, and exports. Lexical variables and
-constant references are distinct forms. Module and declaration rename therefore update only the
-stable owner and persistent name/summary paths; importer objects are unchanged. Exact references
-may use a request-local symbol, a local `decl_` identity, or the discoverable
-`exact:PACKAGE/mod_ID/decl_ID` selector.
-
-The executable registry owns the current semantic-summary, semantic-fact, and validator identities;
-see [the generated contract table](docs/generated/contracts.md). The summary contract defines
-integrity-bound, rebuildable module summaries for public signatures, implementations, types, calls,
-effects, capabilities, deployment, and tests. The semantic-fact contract stores exact summary
-bindings, graph-owned test owners, and typed reverse
-dependency edges in three persistent Merkle maps. Content-addressed summaries, map pages, and one
-revision/root-bound manifest are disposable acceleration. Every accepted revision commits to a
-constant-size, revision-independent certificate over the exact fact roots; missing or malformed
-cache bytes rebuild, and a rebuilt certificate mismatch is canonical corruption rather than an
-alternate meaning.
-
-Four precondition-free transaction classes have local preparation: eligible pure-function body
-replacements validate their recursive import dependency slice, independent module creation
-validates only the new empty modules, and module/declaration rename validates the renamed owners
-plus their outgoing import dependencies. Structurally different pure bodies publish exact removed
-identity tombstones in the same root delta. Every other change still reconstructs, canonicalizes,
-and validates the complete logical candidate. Missing disposable indexes can also make an
-otherwise local path broad. Either path prepares once; publication rechecks the exact base, root
-delta, summary delta, and authenticated certificate without repeating semantic validation. The
-complete validator and packed reconstruction remain full oracles.
-
-Normalized public query reads canonical owner bindings and committed namespace/relation witness
-maps through one revision-pinned `GraphRepository` view; it has no correctness dependency on a
-query index and never invokes complete graph reconstruction. The predecessor local and broad query
-indexes remain private only for exact out-of-scope workspace, diff, legacy inspect, change,
-transaction, and repository consumers pending their own cutovers.
-
-## Review, history, and recovery
-
-```sh
-lkjscript --project ./hello history list --limit 20
-lkjscript --project ./hello review --output ./hello.review.json
-lkjscript --project ./hello backup --output ./hello.lkjb
-mkdir ./restored
-lkjscript restore --backup ./hello.lkjb --output ./restored
-lkjscript --project ./restored doctor --deep
-lkjscript --project ./restored doctor cleanup
-```
-
-The review projection is deterministic, span-free, explicitly non-authoritative, and has no apply
-path. Backup contract 4 writes a segmented directory (the `.lkjb` suffix is only a locator),
-copying canonical entries one at a time under integrity-bound manifest segments. Restore verifies
-each entry and the exact retained closure in a private stage before making the restored repository
-visible. Backup/restore still retain an O(object-count) sorted key set in memory; this is segmented
-payload transfer, not a fully bounded-memory pack. Derived query and semantic indexes rebuild
-rather than becoming backup authority.
-
-`doctor cleanup` is a read-only retention preview rooted at HEAD's parent DAG plus every live
-draft base DAG. It reports retained/reclaimable/derived counts, unknown entries, and an exact plan
-digest, but always returns `destructive_ready: false` because revision pins, active-reader leases,
-and registered backup roots are not represented. No garbage collector or canonical deletion
-command exists.
-
-## Run lkjournal
-
-`applications/lkjournal` is the maintained service consumer. Its graph owns routes, SQL,
-migrations, authentication and authorization, JSON schemas, rendering, object publication, and
-queue transitions. Rust owns generic protocol, execution, database, object-store, cryptographic,
-deployment, and runner mechanics only.
+`serve` and `worker` are deliberately separate. They currently load the explicitly named frozen
+artifact-4 file under `applications/lkjournal/frozen-service/` plus deployment descriptors and
+host adapters. They do not open an editable project repository, and the frozen artifact is not a
+current build output or evidence of normalized service completion:
 
 ```sh
 export LKJOURNAL_DATABASE_URL='postgresql://operator:password@127.0.0.1/lkjournal'
@@ -238,17 +154,25 @@ cd applications/lkjournal
 ../../target/release/lkjscript worker --deployment worker.deployment.json
 ```
 
-The HTTP listener is plaintext and the PostgreSQL adapter uses `NoTls`. lkjscript does not plan to
-implement TLS termination, PostgreSQL TLS, certificate management, or ACME. Deployments that need
-encrypted transport must place an appropriate external trusted transport boundary around these
-adapters; that boundary does not make the runtime a hostile-code or multi-tenant sandbox.
+The HTTP listener is plaintext and PostgreSQL uses `NoTls`; encrypted transport requires an
+external trusted boundary.
 
-See [applications/lkjournal/README.md](applications/lkjournal/README.md) for application behavior
-and operator constraints.
+## Public surface and compatibility
+
+The executable registry is the exhaustive owner of current operations, request/response models,
+contracts, limits, diagnostics, and security nonclaims. See the generated
+[contract table](docs/generated/contracts.md) and [operation table](docs/generated/operations.md).
+Finite outcomes use deterministic bounded compact records and keep stderr empty.
+
+Predecessor Graph 4 repositories are rejected before mutation or cache work. Removed operations
+such as `draft`, `history`, general package staging, `review`, `backup`, `restore`, and `doctor` are
+absent from discovery and receive the ordinary `cli_usage` failure. There is no compatibility
+flag, legacy mode, migration command, graph edition, fallback reader, or dual write.
 
 ## Build and verify the repository
 
-Application users need only the executable. Repository contributors can build and verify it with:
+Application users need only the executable. Contributors use the repository-owned verification
+profiles:
 
 ```sh
 cargo build --workspace --release --locked
@@ -259,14 +183,14 @@ cargo run --locked -p lkjscript-dev -- check service
 cargo run --locked -p lkjscript-dev -- check full
 ```
 
-Successful gates print one aggregate result and a receipt path while retaining bounded child logs
-under `.artifacts/lkjscript-dev/check/`. Reusable gates identify fresh versus reused evidence by exact inputs;
-the authoritative `full` profile requires fresh execution.
+The harness records exact fingerprints, classifications, receipts, and bounded child logs under
+`.artifacts/lkjscript-dev/check/`. The authoritative `full` profile requires fresh gates.
 
-Normative contracts live under [docs/spec](docs/spec). Current implementation and limits are in
-[docs/status.md](docs/status.md), the layer map is [docs/architecture.md](docs/architecture.md),
-and reproduced observations are [docs/performance.md](docs/performance.md).
+Normative contracts live under [docs/spec](docs/spec), current facts and limitations in
+[docs/status.md](docs/status.md), the dependency map in
+[docs/architecture.md](docs/architecture.md), and measurements in
+[docs/performance.md](docs/performance.md).
 
 The platform does not claim hostile-code sandboxing, multi-tenant isolation, distributed
-consensus, encrypted graph storage, artifact signatures, or production portability beyond the
-verified Linux x86-64 environment.
+consensus, encrypted graph storage, artifact signatures, or portability beyond its verified
+environment.

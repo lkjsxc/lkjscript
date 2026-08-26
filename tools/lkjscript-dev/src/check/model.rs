@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
-pub(crate) const CHECK_CONTRACT_VERSION: u32 = 4;
+pub(crate) const CHECK_CONTRACT_VERSION: u32 = 5;
 pub(crate) const CACHE_CONTRACT_VERSION: u32 = 2;
 pub(crate) const DEFAULT_TIMEOUT: Duration = Duration::from_secs(3_600);
 pub(crate) const DEFAULT_MAXIMUM_STREAM_BYTES: u64 = 64 * 1024 * 1024;
@@ -26,6 +26,7 @@ pub(crate) struct Gate {
     pub(crate) maximum_stderr_bytes: u64,
     pub(crate) cacheable: bool,
     pub(crate) required_outputs: Vec<PathBuf>,
+    pub(crate) unavailable_exit_code: Option<i32>,
 }
 
 impl Gate {
@@ -40,6 +41,7 @@ impl Gate {
             maximum_stderr_bytes: DEFAULT_MAXIMUM_STREAM_BYTES,
             cacheable: true,
             required_outputs: Vec::new(),
+            unavailable_exit_code: None,
         }
     }
 
@@ -241,6 +243,7 @@ pub(crate) struct DagNode {
     pub(crate) dependencies: Vec<String>,
     pub(crate) command: Vec<String>,
     pub(crate) cacheable: bool,
+    pub(crate) unavailable_exit_code: Option<i32>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

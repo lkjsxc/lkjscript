@@ -144,7 +144,9 @@ impl PackDirectoryStore {
         let root_directory = open_directory(root, "pack_store_root")?;
         let packs_directory = open_child_directory(&root_directory, PACKS_DIRECTORY)?;
         let catalog_directory = open_child_directory(&root_directory, CATALOG_DIRECTORY)?;
-        let staging_directory = open_child_directory(&root_directory, STAGING_DIRECTORY)?;
+        // Staging contains no accepted or derived identity and is intentionally absent from a
+        // checked-in repository. Recreate that disposable boundary on first local open.
+        let staging_directory = ensure_child_directory(&root_directory, STAGING_DIRECTORY)?;
         Self::load(
             root.to_path_buf(),
             root_directory,

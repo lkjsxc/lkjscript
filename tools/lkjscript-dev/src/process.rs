@@ -72,6 +72,7 @@ pub(crate) struct ProcessSpec {
     pub(crate) maximum_stderr_bytes: u64,
     pub(crate) stdout_path: PathBuf,
     pub(crate) stderr_path: PathBuf,
+    pub(crate) unavailable_exit_code: Option<i32>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -114,12 +115,30 @@ pub(crate) struct ProcessObservation {
     pub(crate) signal: Option<i32>,
     pub(crate) reason: Option<String>,
     pub(crate) elapsed_nanoseconds: u64,
+    #[serde(default)]
+    pub(crate) cpu_nanoseconds: Option<u64>,
+    #[serde(default)]
+    pub(crate) peak_rss_kib: Option<u64>,
     pub(crate) stdout_limit_bytes: u64,
     pub(crate) stderr_limit_bytes: u64,
     pub(crate) stdout_limit_exhausted: bool,
     pub(crate) stderr_limit_exhausted: bool,
     pub(crate) stdout: FileProof,
     pub(crate) stderr: FileProof,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct ProcessResources {
+    cpu_nanoseconds: Option<u64>,
+    peak_rss_kib: Option<u64>,
+}
+
+#[derive(Debug)]
+struct ProcessCompletion {
+    status: ProcessStatus,
+    exit_code: Option<i32>,
+    signal: Option<i32>,
+    reason: Option<String>,
 }
 
 pub(crate) fn run(specification: &ProcessSpec, repository: &Path) -> ProcessObservation {
@@ -197,10 +216,13 @@ fn run_inner(
                 specification,
                 repository,
                 started,
-                ProcessStatus::Unavailable,
-                None,
-                None,
-                Some("command_not_found".to_owned()),
+                ProcessCompletion {
+                    status: ProcessStatus::Unavailable,
+                    exit_code: None,
+                    signal: None,
+                    reason: Some("command_not_found".to_owned()),
+                },
+                ProcessResources::default(),
             );
         }
         Err(error) => {
@@ -242,7 +264,9 @@ fn run_inner(
 
     let mut terminal_reason = None;
     let mut sent_control = CONTROL_NONE;
+    let mut resources = ProcessResources::default();
     let exit_status = loop {
+        sample_linux_process(child.id(), &mut resources);
         if let Some(status) = child.try_wait().map_err(|error| {
             DevError::infrastructure(format!(
                 "poll child '{}': {error}",
@@ -318,6 +342,15 @@ fn run_inner(
             )),
         ),
         None if exit_status.success() => (ProcessStatus::Passed, None),
+        None if specification
+            .unavailable_exit_code
+            .is_some_and(|expected| exit_status.code() == Some(expected)) =>
+        {
+            (
+                ProcessStatus::Unavailable,
+                Some("configured_unavailable_exit".to_owned()),
+            )
+        }
         None if exit_status.signal().is_some() => {
             (ProcessStatus::Signaled, Some("signal".to_owned()))
         }
@@ -327,10 +360,13 @@ fn run_inner(
         specification,
         repository,
         started,
-        status,
-        exit_status.code(),
-        exit_status.signal(),
-        reason,
+        ProcessCompletion {
+            status,
+            exit_code: exit_status.code(),
+            signal: exit_status.signal(),
+            reason,
+        },
+        resources,
     )
 }
 
@@ -427,23 +463,25 @@ fn observation(
     specification: &ProcessSpec,
     repository: &Path,
     started: Instant,
-    status: ProcessStatus,
-    exit_code: Option<i32>,
-    signal: Option<i32>,
-    reason: Option<String>,
+    completion: ProcessCompletion,
+    resources: ProcessResources,
 ) -> Result<ProcessObservation, DevError> {
-    let stdout_limit_exhausted = reason
+    let stdout_limit_exhausted = completion
+        .reason
         .as_deref()
         .is_some_and(|value| value == "stdout_limit" || value == "stdout_and_stderr_limit");
-    let stderr_limit_exhausted = reason
+    let stderr_limit_exhausted = completion
+        .reason
         .as_deref()
         .is_some_and(|value| value == "stderr_limit" || value == "stdout_and_stderr_limit");
     Ok(ProcessObservation {
-        status,
-        exit_code,
-        signal,
-        reason,
+        status: completion.status,
+        exit_code: completion.exit_code,
+        signal: completion.signal,
+        reason: completion.reason,
         elapsed_nanoseconds: duration_nanoseconds(started.elapsed()),
+        cpu_nanoseconds: resources.cpu_nanoseconds,
+        peak_rss_kib: resources.peak_rss_kib,
         stdout_limit_bytes: specification.maximum_stdout_bytes,
         stderr_limit_bytes: specification.maximum_stderr_bytes,
         stdout_limit_exhausted,
@@ -483,12 +521,54 @@ fn infrastructure_observation(
         signal: None,
         reason: Some(format!("{}:{}", error.kind(), error.message())),
         elapsed_nanoseconds: duration_nanoseconds(started.elapsed()),
+        cpu_nanoseconds: None,
+        peak_rss_kib: None,
         stdout_limit_bytes: specification.maximum_stdout_bytes,
         stderr_limit_bytes: specification.maximum_stderr_bytes,
         stdout_limit_exhausted: false,
         stderr_limit_exhausted: false,
         stdout,
         stderr,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn sample_linux_process(process_id: u32, resources: &mut ProcessResources) {
+    let process_root = PathBuf::from(format!("/proc/{process_id}"));
+    if let Ok(status) = std::fs::read_to_string(process_root.join("status")) {
+        let resident = status.lines().find_map(|line| {
+            line.strip_prefix("VmHWM:")
+                .or_else(|| line.strip_prefix("VmRSS:"))
+                .and_then(|value| value.split_whitespace().next())
+                .and_then(|value| value.parse::<u64>().ok())
+        });
+        if let Some(resident) = resident {
+            resources.peak_rss_kib = Some(
+                resources
+                    .peak_rss_kib
+                    .map_or(resident, |current| current.max(resident)),
+            );
+        }
+    }
+    if let Ok(stat) = std::fs::read_to_string(process_root.join("stat"))
+        && let Some(command_end) = stat.rfind(')')
+    {
+        let mut fields = stat[command_end + 1..].split_whitespace();
+        let user_ticks = fields.nth(11).and_then(|value| value.parse::<u64>().ok());
+        let system_ticks = fields.next().and_then(|value| value.parse::<u64>().ok());
+        if let (Some(user_ticks), Some(system_ticks)) = (user_ticks, system_ticks) {
+            let ticks = u128::from(user_ticks.saturating_add(system_ticks));
+            let frequency = u128::from(rustix::param::clock_ticks_per_second());
+            if let Some(nanoseconds) = ticks.saturating_mul(1_000_000_000).checked_div(frequency)
+                && let Ok(nanoseconds) = u64::try_from(nanoseconds)
+            {
+                resources.cpu_nanoseconds = Some(
+                    resources
+                        .cpu_nanoseconds
+                        .map_or(nanoseconds, |current| current.max(nanoseconds)),
+                );
+            }
+        }
     }
 }
 
@@ -654,6 +734,7 @@ mod tests {
             maximum_stderr_bytes: maximum,
             stdout_path: temporary.path().join("stdout.log"),
             stderr_path: temporary.path().join("stderr.log"),
+            unavailable_exit_code: None,
         }
     }
 
@@ -672,6 +753,43 @@ mod tests {
         assert_eq!(result.status, ProcessStatus::Failed);
         assert_eq!(result.exit_code, Some(1));
         assert_eq!(result.stdout.kind, evidence::FileKind::File);
+    }
+
+    #[test]
+    fn configured_exit_is_classified_as_unavailable() {
+        let temporary = tempfile::tempdir().expect("temporary process directory");
+        let mut child = specification(
+            &temporary,
+            vec!["/bin/false".to_owned()],
+            Duration::from_secs(2),
+            1024,
+        );
+        child.unavailable_exit_code = Some(1);
+        let result = run(&child, temporary.path());
+        assert_eq!(result.status, ProcessStatus::Unavailable);
+        assert_eq!(result.exit_code, Some(1));
+        assert_eq!(
+            result.reason.as_deref(),
+            Some("configured_unavailable_exit")
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn child_observation_samples_cpu_and_peak_resident_memory() {
+        let temporary = tempfile::tempdir().expect("temporary process directory");
+        let result = run(
+            &specification(
+                &temporary,
+                vec!["/bin/sleep".to_owned(), "0.03".to_owned()],
+                Duration::from_secs(2),
+                1024,
+            ),
+            temporary.path(),
+        );
+        assert_eq!(result.status, ProcessStatus::Passed);
+        assert!(result.cpu_nanoseconds.is_some());
+        assert!(result.peak_rss_kib.is_some_and(|value| value > 0));
     }
 
     #[test]

@@ -57,10 +57,10 @@ enum BindingContainerKind {
     Transaction,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct BindingContainer {
     expression: ExpressionId,
-    scope_root: ExpressionId,
+    scope_roots: Vec<ExpressionId>,
     kind: BindingContainerKind,
 }
 
@@ -646,13 +646,23 @@ impl FullValidator<'_> {
     ) {
         match operation {
             ExpressionOperation::Let { bindings, body } => {
-                for binding in bindings {
+                for (index, binding) in bindings.iter().enumerate() {
+                    let mut scope_roots = bindings[index.saturating_add(1)..]
+                        .iter()
+                        .filter_map(|binding| {
+                            match self.snapshot.owners.get(&OwnerKey::Binding(*binding)) {
+                                Some(OwnerRecord::Binding(record)) => record.value,
+                                _ => None,
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    scope_roots.push(*body);
                     self.binding_containers
                         .entry(*binding)
                         .or_default()
                         .push(BindingContainer {
                             expression,
-                            scope_root: *body,
+                            scope_roots,
                             kind: BindingContainerKind::Let,
                         });
                 }
@@ -663,7 +673,7 @@ impl FullValidator<'_> {
                         self.binding_containers.entry(binding).or_default().push(
                             BindingContainer {
                                 expression,
-                                scope_root: arm.body,
+                                scope_roots: vec![arm.body],
                                 kind: BindingContainerKind::MatchPayload,
                             },
                         );
@@ -676,7 +686,7 @@ impl FullValidator<'_> {
                     .or_default()
                     .push(BindingContainer {
                         expression,
-                        scope_root: *body,
+                        scope_roots: vec![*body],
                         kind: BindingContainerKind::Transaction,
                     });
             }
@@ -1060,7 +1070,9 @@ impl FullValidator<'_> {
                 if !self.requirement_allows(*requirement, *operation) {
                     self.error(
                         "kernel_full_capability_operation",
-                        "capability operation is outside the requirement's exact interface or allowed-operation set",
+                        format!(
+                            "capability operation {operation:?} is outside requirement {requirement:?}'s exact interface or allowed-operation set"
+                        ),
                     );
                 }
             }
@@ -1127,7 +1139,7 @@ impl FullValidator<'_> {
                 let Some(containers) = self.binding_containers.get(&binding) else {
                     return;
                 };
-                let Some(container) = containers.first().copied() else {
+                let Some(container) = containers.first().cloned() else {
                     return;
                 };
                 let expected = match reference {
@@ -1142,7 +1154,11 @@ impl FullValidator<'_> {
                         "local reference uses the wrong binding domain",
                     );
                 }
-                if !self.is_expression_descendant(expression, container.scope_root) {
+                if !container
+                    .scope_roots
+                    .iter()
+                    .any(|scope_root| self.is_expression_descendant(expression, *scope_root))
+                {
                     self.error(
                         "kernel_full_lexical_scope",
                         format!("expression {expression} uses binding {binding} outside its scope"),
@@ -1220,10 +1236,23 @@ impl FullValidator<'_> {
             (OwnerKey::Parameter(id), OwnerRecord::Operation(operation)) => {
                 operation.parameters.contains(&id)
             }
-            (OwnerKey::Requirement(id), OwnerRecord::Declaration(declaration)) => matches!(
-                &declaration.payload,
-                DeclarationPayload::Component { requirements, .. } if requirements.contains(&id)
-            ),
+            (OwnerKey::Requirement(id), OwnerRecord::Declaration(declaration)) => {
+                match &declaration.payload {
+                    DeclarationPayload::Component { requirements, .. } => {
+                        requirements.contains(&id)
+                    }
+                    DeclarationPayload::Function(function) => match &function.effect {
+                        FunctionEffect::Task { requirements } => {
+                            requirements.iter().any(|reference| {
+                                reference.package == self.snapshot.root.package_id
+                                    && reference.requirement == id
+                            })
+                        }
+                        FunctionEffect::Pure => false,
+                    },
+                    _ => false,
+                }
+            }
             (OwnerKey::Port(id), OwnerRecord::Declaration(declaration)) => matches!(
                 &declaration.payload,
                 DeclarationPayload::Component { ports, .. } if ports.contains(&id)
@@ -1433,12 +1462,17 @@ impl FullValidator<'_> {
             if current == scope_root {
                 return true;
             }
-            let Some([ExpressionParent::Expression(parent)]) =
-                self.expression_parents.get(&current).map(Vec::as_slice)
-            else {
-                return false;
-            };
-            current = *parent;
+            match self.expression_parents.get(&current).map(Vec::as_slice) {
+                Some([ExpressionParent::Expression(parent)]) => current = *parent,
+                Some([ExpressionParent::Root(OwnerKey::Binding(binding))]) => {
+                    let Some([container]) = self.binding_containers.get(binding).map(Vec::as_slice)
+                    else {
+                        return false;
+                    };
+                    current = container.expression;
+                }
+                _ => return false,
+            }
         }
         false
     }

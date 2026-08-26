@@ -43,9 +43,9 @@ pub use receipt::{
     ValidationProfile, WorkObservation,
 };
 pub use repository::{
-    CreatedRepository, CurrentPublication, GraphRepository, PackageTransportStageReceipt,
-    PublicationOutcome, PublicationPoint, ReconciliationResult, ReconciliationStatus,
-    ReconciliationWork,
+    CreatedRepository, CurrentPublication, GraphRepository, InitialPackageTransport,
+    PackageTransportStageReceipt, PublicationOutcome, PublicationPoint, ReconciliationResult,
+    ReconciliationStatus, ReconciliationWork,
 };
 pub use revision::{
     AcceptedBinding, HeadRecord, ParentRevision, PublicationBinding, RevisionCore, RevisionRecord,

@@ -3,6 +3,7 @@
 use super::capability::{
     NormalizedCapabilities, NormalizedCapabilityTransaction, validate_outcome,
 };
+use super::codec::{decode_typed, encode_typed};
 use super::prepare::{
     NormalizedCode, NormalizedEntryPoint, NormalizedFieldSelector, NormalizedFunctionBody,
     NormalizedInstruction, NormalizedProgram, NormalizedTarget,
@@ -12,7 +13,8 @@ use super::value::{
     FunctionIndex, NormalizedMapKey, NormalizedRecord, NormalizedValue, RequirementIndex,
 };
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
-use crate::platform::kernel::{DeclarationReference, Name};
+use crate::platform::json::JsonLimits;
+use crate::platform::kernel::{DeclarationReference, ImplementationName, Name};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -58,7 +60,9 @@ pub type NormalizedTestInvocation = (NormalizedInvocation, NormalizedInvocation)
 pub trait NormalizedHost: Send + Sync {
     fn call(
         &self,
-        implementation: &Name,
+        program: &NormalizedProgram,
+        function: &super::prepare::NormalizedFunction,
+        implementation: &ImplementationName,
         arguments: Vec<NormalizedValue>,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError>;
@@ -70,12 +74,14 @@ pub struct CoreNormalizedHost;
 impl NormalizedHost for CoreNormalizedHost {
     fn call(
         &self,
-        implementation: &Name,
+        program: &NormalizedProgram,
+        function: &super::prepare::NormalizedFunction,
+        implementation: &ImplementationName,
         arguments: Vec<NormalizedValue>,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
         control.check()?;
-        call_core_intrinsic(implementation.as_str(), arguments)
+        call_core_intrinsic(program, function, implementation.as_str(), arguments)
     }
 }
 
@@ -684,7 +690,13 @@ impl Machine<'_> {
             NormalizedFunctionBody::Code(code) => self.call_code(code.clone(), arguments),
             NormalizedFunctionBody::External(implementation) => {
                 self.observation.external_calls = self.observation.external_calls.saturating_add(1);
-                let value = self.host.call(implementation, arguments, self.control)?;
+                let value = self.host.call(
+                    self.program,
+                    function,
+                    implementation,
+                    arguments,
+                    self.control,
+                )?;
                 self.charge_external_value(&value)?;
                 self.push(value)
             }
@@ -1167,6 +1179,8 @@ fn map_key_bytes(key: &NormalizedMapKey) -> u64 {
 }
 
 fn call_core_intrinsic(
+    program: &NormalizedProgram,
+    function: &super::prepare::NormalizedFunction,
     implementation: &str,
     arguments: Vec<NormalizedValue>,
 ) -> Result<NormalizedValue, ExecutionError> {
@@ -1200,11 +1214,63 @@ fn call_core_intrinsic(
             let (left, right) = i64_pair(arguments)?;
             Ok(NormalizedValue::Bool(left == right))
         }
+        "core.i64.less" | "core.i64.less-equal" => {
+            let (left, right) = i64_pair(arguments)?;
+            Ok(NormalizedValue::Bool(
+                if implementation == "core.i64.less" {
+                    left < right
+                } else {
+                    left <= right
+                },
+            ))
+        }
+        "core.i64.to-text" => {
+            let [NormalizedValue::I64(value)] = arguments.as_slice() else {
+                return Err(type_error("integer formatter received a foreign value"));
+            };
+            Ok(NormalizedValue::text(value.to_string()))
+        }
+        "core.i64.parse" => {
+            let [NormalizedValue::Text(value)] = arguments.as_slice() else {
+                return Err(type_error("integer parser received a foreign value"));
+            };
+            parse_normalized_i64(value)
+                .map(NormalizedValue::I64)
+                .ok_or_else(|| {
+                    trap_error(
+                        "normalized_integer_parse",
+                        "text is not a canonical signed 64-bit integer",
+                    )
+                })
+        }
+        "core.i64.parse-result" => {
+            let [NormalizedValue::Text(value)] = arguments.as_slice() else {
+                return Err(type_error("integer parser received a foreign value"));
+            };
+            let parsed = parse_normalized_i64(value);
+            normalized_structural_record([
+                ("valid", NormalizedValue::Bool(parsed.is_some())),
+                ("value", NormalizedValue::I64(parsed.unwrap_or_default())),
+            ])
+        }
         "core.bool.not" => {
             let [NormalizedValue::Bool(value)] = arguments.as_slice() else {
                 return Err(type_error("boolean intrinsic received a foreign value"));
             };
             Ok(NormalizedValue::Bool(!value))
+        }
+        "core.bool.and" | "core.bool.or" => {
+            let [NormalizedValue::Bool(left), NormalizedValue::Bool(right)] = arguments.as_slice()
+            else {
+                return Err(type_error("boolean intrinsic received a foreign value"));
+            };
+            Ok(NormalizedValue::Bool(
+                if implementation == "core.bool.and" {
+                    *left && *right
+                } else {
+                    *left || *right
+                },
+            ))
         }
         "core.text.concat" => {
             let [NormalizedValue::Text(left), NormalizedValue::Text(right)] = arguments.as_slice()
@@ -1229,6 +1295,177 @@ fn call_core_intrinsic(
             };
             Ok(NormalizedValue::Bool(left == right))
         }
+        "core.text.contains" | "core.text.starts-with" => {
+            let [NormalizedValue::Text(value), NormalizedValue::Text(part)] = arguments.as_slice()
+            else {
+                return Err(type_error("text predicate received a foreign value"));
+            };
+            Ok(NormalizedValue::Bool(
+                if implementation == "core.text.contains" {
+                    value.contains(part.as_ref())
+                } else {
+                    value.starts_with(part.as_ref())
+                },
+            ))
+        }
+        "core.text.length" => {
+            let [NormalizedValue::Text(value)] = arguments.as_slice() else {
+                return Err(type_error("text length received a foreign value"));
+            };
+            Ok(NormalizedValue::I64(normalized_length(value.len())?))
+        }
+        "core.text.empty" => {
+            let [NormalizedValue::Text(value)] = arguments.as_slice() else {
+                return Err(type_error("text emptiness received a foreign value"));
+            };
+            Ok(NormalizedValue::Bool(value.is_empty()))
+        }
+        "core.text.from-static" => {
+            let [NormalizedValue::StaticText(value)] = arguments.as_slice() else {
+                return Err(type_error(
+                    "static-text conversion received a foreign value",
+                ));
+            };
+            Ok(NormalizedValue::text(value.clone()))
+        }
+        "core.html.escape-text" => {
+            let [NormalizedValue::Text(value)] = arguments.as_slice() else {
+                return Err(type_error("HTML escaping received a foreign value"));
+            };
+            let mut escaped = String::with_capacity(value.len());
+            for character in value.chars() {
+                match character {
+                    '&' => escaped.push_str("&amp;"),
+                    '<' => escaped.push_str("&lt;"),
+                    '>' => escaped.push_str("&gt;"),
+                    '"' => escaped.push_str("&quot;"),
+                    '\'' => escaped.push_str("&#39;"),
+                    _ => escaped.push(character),
+                }
+            }
+            Ok(NormalizedValue::text(escaped))
+        }
+        "core.json.string" => {
+            let [NormalizedValue::Text(value)] = arguments.as_slice() else {
+                return Err(type_error("JSON string encoding received a foreign value"));
+            };
+            serde_json::to_string(value.as_ref())
+                .map(NormalizedValue::text)
+                .map_err(|_| {
+                    runtime_error(
+                        "normalized_json_string_encode",
+                        "JSON string encoding failed",
+                    )
+                })
+        }
+        "core.json.encode" => {
+            let [value] = arguments.as_slice() else {
+                return Err(type_error("typed JSON encoding received a foreign arity"));
+            };
+            let parameter = function.parameters.first().ok_or_else(|| {
+                runtime_error(
+                    "normalized_json_signature",
+                    "typed JSON encoder has no exact parameter type",
+                )
+            })?;
+            encode_typed(program, value, parameter.ty, JsonLimits::default())
+                .map(NormalizedValue::bytes)
+                .map_err(normalized_json_error)
+        }
+        "core.json.decode-or" => {
+            let [NormalizedValue::Bytes(bytes), fallback] = arguments.as_slice() else {
+                return Err(type_error("typed JSON decoding received foreign values"));
+            };
+            let fallback_type = function.parameters.get(1).ok_or_else(|| {
+                runtime_error(
+                    "normalized_json_signature",
+                    "typed JSON decoder has no exact fallback type",
+                )
+            })?;
+            let decoded = decode_typed(program, bytes, fallback_type.ty, JsonLimits::default());
+            let (valid, value, error) = match decoded {
+                Ok(value) => (true, value, String::new()),
+                Err(error) => (false, fallback.clone(), error.code),
+            };
+            normalized_structural_record([
+                ("error", NormalizedValue::text(error)),
+                ("valid", NormalizedValue::Bool(valid)),
+                ("value", value),
+            ])
+        }
+        "core.http.bearer-token" => normalized_bearer_token(program, &arguments),
+        "core.bytes.from-text" => {
+            let [NormalizedValue::Text(value)] = arguments.as_slice() else {
+                return Err(type_error("text-to-bytes received a foreign value"));
+            };
+            Ok(NormalizedValue::bytes(value.as_bytes()))
+        }
+        "core.bytes.to-text" => {
+            let [NormalizedValue::Bytes(value)] = arguments.as_slice() else {
+                return Err(type_error("bytes-to-text received a foreign value"));
+            };
+            let value = std::str::from_utf8(value).map_err(|_| {
+                trap_error(
+                    "normalized_bytes_utf8",
+                    "bytes are not a valid UTF-8 text encoding",
+                )
+            })?;
+            Ok(NormalizedValue::text(value))
+        }
+        "core.bytes.concat" => {
+            let [NormalizedValue::Bytes(left), NormalizedValue::Bytes(right)] =
+                arguments.as_slice()
+            else {
+                return Err(type_error("byte concatenation received foreign values"));
+            };
+            let length = left.len().checked_add(right.len()).ok_or_else(|| {
+                resource_error(
+                    "normalized_bytes_length",
+                    "byte concatenation length overflowed",
+                )
+            })?;
+            let mut value = Vec::with_capacity(length);
+            value.extend_from_slice(left);
+            value.extend_from_slice(right);
+            Ok(NormalizedValue::bytes(value))
+        }
+        "core.bytes.length" => {
+            let [NormalizedValue::Bytes(value)] = arguments.as_slice() else {
+                return Err(type_error("byte length received a foreign value"));
+            };
+            Ok(NormalizedValue::I64(normalized_length(value.len())?))
+        }
+        "core.bytes.to-hex" => {
+            let [NormalizedValue::Bytes(value)] = arguments.as_slice() else {
+                return Err(type_error("hex encoding received a foreign value"));
+            };
+            let capacity = value.len().checked_mul(2).ok_or_else(|| {
+                resource_error("normalized_text_length", "hex output length overflowed")
+            })?;
+            let mut output = String::with_capacity(capacity);
+            const HEX: &[u8; 16] = b"0123456789abcdef";
+            for byte in value.iter().copied() {
+                output.push(char::from(HEX[usize::from(byte >> 4)]));
+                output.push(char::from(HEX[usize::from(byte & 0x0f)]));
+            }
+            Ok(NormalizedValue::text(output))
+        }
+        "core.bytes.equal" => {
+            let [NormalizedValue::Bytes(left), NormalizedValue::Bytes(right)] =
+                arguments.as_slice()
+            else {
+                return Err(type_error("byte equality received foreign values"));
+            };
+            Ok(NormalizedValue::Bool(left == right))
+        }
+        "core.bytes.blake3" => {
+            let [NormalizedValue::Bytes(value)] = arguments.as_slice() else {
+                return Err(type_error("BLAKE3 hashing received a foreign value"));
+            };
+            Ok(NormalizedValue::bytes(
+                blake3::hash(value).as_bytes().to_vec(),
+            ))
+        }
         "core.value.equal" => {
             let [left, right] = arguments.as_slice() else {
                 return Err(type_error("value equality received a foreign arity"));
@@ -1244,11 +1481,205 @@ fn call_core_intrinsic(
             })?;
             Ok(NormalizedValue::I64(length))
         }
+        "core.list.get" => {
+            let [NormalizedValue::List(values), NormalizedValue::I64(index)] = arguments.as_slice()
+            else {
+                return Err(type_error("list lookup received foreign values"));
+            };
+            let index = usize::try_from(*index).map_err(|_| {
+                trap_error(
+                    "normalized_list_index",
+                    "list index is negative or excessive",
+                )
+            })?;
+            values
+                .get(index)
+                .cloned()
+                .ok_or_else(|| trap_error("normalized_list_index", "list index is out of bounds"))
+        }
+        "core.list.append" => {
+            let [NormalizedValue::List(values), value] = arguments.as_slice() else {
+                return Err(type_error("list append received foreign values"));
+            };
+            let capacity = values.len().checked_add(1).ok_or_else(|| {
+                resource_error("normalized_list_length", "list length overflowed")
+            })?;
+            let mut output = Vec::with_capacity(capacity);
+            output.extend(values.iter().cloned());
+            output.push(value.clone());
+            Ok(NormalizedValue::List(Arc::new(output)))
+        }
+        "core.map.length" => {
+            let [NormalizedValue::Map(values)] = arguments.as_slice() else {
+                return Err(type_error("map length received a foreign value"));
+            };
+            Ok(NormalizedValue::I64(normalized_length(values.len())?))
+        }
+        "core.map.get" | "core.map.contains" | "core.map.get-or" | "core.map.insert" => {
+            normalized_map_intrinsic(implementation, arguments)
+        }
         _ => Err(runtime_error(
             "normalized_intrinsic_missing",
             "normalized host has no implementation for the exact external declaration",
         )),
     }
+}
+
+fn parse_normalized_i64(value: &str) -> Option<i64> {
+    let digits = value.strip_prefix('-').unwrap_or(value);
+    if value.is_empty()
+        || digits.is_empty()
+        || !digits.bytes().all(|byte| byte.is_ascii_digit())
+        || (digits.len() > 1 && digits.starts_with('0'))
+        || value == "-0"
+    {
+        return None;
+    }
+    value.parse().ok()
+}
+
+fn normalized_length(length: usize) -> Result<i64, ExecutionError> {
+    i64::try_from(length).map_err(|_| {
+        resource_error(
+            "normalized_value_length",
+            "value length exceeds signed 64-bit range",
+        )
+    })
+}
+
+fn normalized_structural_record<const N: usize>(
+    fields: [(&str, NormalizedValue); N],
+) -> Result<NormalizedValue, ExecutionError> {
+    let mut fields = fields
+        .into_iter()
+        .map(|(name, value)| {
+            Name::new(name.to_owned())
+                .map(|name| (name, value))
+                .map_err(|_| {
+                    runtime_error(
+                        "normalized_intrinsic_field",
+                        "intrinsic field name is invalid",
+                    )
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    fields.sort_by(|left, right| left.0.cmp(&right.0));
+    Ok(NormalizedValue::Record(NormalizedRecord::Structural {
+        fields: Arc::new(fields),
+    }))
+}
+
+fn normalized_record_field<'a>(
+    program: &NormalizedProgram,
+    record: &'a NormalizedRecord,
+    name: &str,
+) -> Option<&'a NormalizedValue> {
+    match record {
+        NormalizedRecord::Structural { fields } => fields
+            .iter()
+            .find_map(|(candidate, value)| (candidate.as_str() == name).then_some(value)),
+        NormalizedRecord::Nominal { layout, fields } => program
+            .records
+            .get(layout.0 as usize)?
+            .fields
+            .iter()
+            .position(|field| field.name.as_str() == name)
+            .and_then(|index| fields.get(index)),
+    }
+}
+
+fn normalized_bearer_token(
+    program: &NormalizedProgram,
+    arguments: &[NormalizedValue],
+) -> Result<NormalizedValue, ExecutionError> {
+    let [NormalizedValue::List(headers)] = arguments else {
+        return Err(type_error(
+            "bearer-token extraction received a foreign value",
+        ));
+    };
+    let mut token = None;
+    for header in headers.iter() {
+        let NormalizedValue::Record(record) = header else {
+            return Err(type_error("bearer-token header is not a record"));
+        };
+        let (Some(NormalizedValue::Text(name)), Some(NormalizedValue::Bytes(value))) = (
+            normalized_record_field(program, record, "name"),
+            normalized_record_field(program, record, "value"),
+        ) else {
+            return Err(type_error("bearer-token header has foreign fields"));
+        };
+        if !name.eq_ignore_ascii_case("authorization") {
+            continue;
+        }
+        if token.is_some() {
+            return Ok(NormalizedValue::text(""));
+        }
+        let Ok(value) = std::str::from_utf8(value) else {
+            return Ok(NormalizedValue::text(""));
+        };
+        let Some(value) = value.strip_prefix("Bearer ") else {
+            return Ok(NormalizedValue::text(""));
+        };
+        if value.is_empty()
+            || value.len() > 512
+            || !value.bytes().all(|byte| byte.is_ascii_graphic())
+        {
+            return Ok(NormalizedValue::text(""));
+        }
+        token = Some(value.to_owned());
+    }
+    Ok(NormalizedValue::text(token.unwrap_or_default()))
+}
+
+fn normalized_map_intrinsic(
+    implementation: &str,
+    arguments: Vec<NormalizedValue>,
+) -> Result<NormalizedValue, ExecutionError> {
+    let values = match arguments.first() {
+        Some(NormalizedValue::Map(values)) => values,
+        _ => return Err(type_error("map intrinsic received a foreign map")),
+    };
+    let key = arguments
+        .get(1)
+        .cloned()
+        .and_then(NormalizedMapKey::from_value)
+        .ok_or_else(|| {
+            trap_error(
+                "normalized_map_key",
+                "map key is not a deterministically ordered primitive",
+            )
+        })?;
+    match implementation {
+        "core.map.get" if arguments.len() == 2 => values
+            .get(&key)
+            .cloned()
+            .ok_or_else(|| trap_error("normalized_map_key_absent", "map lookup key is absent")),
+        "core.map.contains" if arguments.len() == 2 => {
+            Ok(NormalizedValue::Bool(values.contains_key(&key)))
+        }
+        "core.map.get-or" if arguments.len() == 3 => Ok(values
+            .get(&key)
+            .cloned()
+            .unwrap_or_else(|| arguments[2].clone())),
+        "core.map.insert" if arguments.len() == 3 => {
+            let mut output = values.as_ref().clone();
+            output.insert(key, arguments[2].clone());
+            Ok(NormalizedValue::Map(Arc::new(output)))
+        }
+        _ => Err(type_error("map intrinsic received a foreign arity")),
+    }
+}
+
+fn normalized_json_error(error: crate::platform::diagnostic::Diagnostic) -> ExecutionError {
+    ExecutionError::new(
+        if error.class == crate::platform::diagnostic::DiagnosticClass::Resource {
+            ExecutionFailureClass::Resource
+        } else {
+            ExecutionFailureClass::Infrastructure
+        },
+        error.code,
+        "typed JSON operation failed",
+    )
 }
 
 pub(crate) fn normalized_equal(

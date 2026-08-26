@@ -2,119 +2,124 @@
 
 Status: normative.
 
-## Correctness oracles
+## Independent correctness mechanisms
 
-Canonical decoding and deep reconstruction ignore disposable indexes. Full semantic validation
-reconstructs names, scopes, types, effects, capabilities, components, targets, tests, and retained
-relations from root/module objects. Incremental/query acceleration must agree with that route.
+Graph 5 full reconstruction and validation is the complete semantic oracle. Sparse repository
+reads, witness-maintained changes, package interfaces, compiler selection, and query projection
+must agree with it. Physical pack/catalog layout, persistent-map partitioning, derived cache state,
+and request spelling are normalized away only when they are not semantic.
 
-Meaning graph 4 revision contract 4 authenticates semantic-fact contract 3 Merkle roots with a
-semantic certificate. Content-addressed summaries, fact pages, and the revision-bound fact
-manifest remain disposable: missing or malformed bytes rebuild from canonical modules, while a
-rebuilt certificate mismatch is canonical corruption. Focused differential tests compare the four current local preparation
-classes—eligible pure-body replacement, independent empty-module creation, module rename, and
-declaration rename—with complete canonicalization and validation. This is not evidence for general incremental
-validation; every other transaction class keeps complete preparation.
+Production execution uses normalized bytecode and dense indexes. The canonical reference
+interpreter independently reads accepted semantic owners and evaluates their typed structures.
+Every pure command and graph-owned test used for acceptance requires production/reference equality
+before comparing the expected value. Skipped, unavailable, cancelled, exhausted, or unrun work is
+not a pass. Live effects are not duplicated for differential evidence.
 
-Execution has two implementation-disjoint tiers: prepared bytecode is production; the semantic
-reference interpreter walks validated operation structures. Every graph-owned package test runs
-actual and expected expressions through both tiers, requires tier equality, then requires expected
-value equality. A missing, skipped, unavailable, exhausted, cancelled, or unrun check is not pass.
+Migration evidence for maintained consumers compares a sorted generation-neutral projection of
+predecessor and Graph 5 meaning, including identity continuity, declarations/members, type and
+expression ownership, relations, dependencies/interfaces, components/ports/targets, tests,
+documentation/annotations, retirements, counts, and digest. Migration tooling is temporary and
+must be deleted after materialization. The retained projection is evidence, never authority.
 
-Reviewed semantic changes retain an implementation-disjoint before/after oracle. Complete
-canonical reconstruction and relation extraction derive exact owner, type, dependency, retirement,
-and relation deltas without consulting the logical-plan encoder. Body-replacement fixtures compare
-the complete old owned expression/binding subtree and all removed/added relations with exported
-records. Owned-closure deletion fixtures derive expected descendants from complete accepted
-ownership facts and cover every owner shape, rather than invoking the production selector to form
-their expectation. Complete validation and test-dependency analysis separately check exported
-structural and semantic owners, selected tests, and reasons. Mirroring production `ImpactPlan` is
-not by itself an oracle or a minimality proof.
+Built-in evidence has two independent byte owners: maintained standard package generation and the
+embedded executable assets. Product verification exports both package transport and artifact and
+requires exact byte equality with the generated maintained files.
 
-## Profiles
+## Command lifecycle requirements
 
-The contributor-only `lkjscript-dev check` command is the executable verification owner. Invoke it
-as `cargo run --locked -p lkjscript-dev -- check PROFILE`. `focused` runs formatting, locked library and
-public integration tests, and diff checks. `changed` is selection convenience and widens
-uncertainty. `product` builds release and checks maintained packages, deep doctors, and artifact /
-built-in reproduction. `service` runs release-build and isolated PostgreSQL service/worker
-acceptance. `full` adds Clippy, all workspace targets, checker self-tests, every product gate, and
-service acceptance, and never treats a prior receipt as a fresh pass.
+A release executable copied to an isolated directory must complete:
 
-Independent ready nodes may run in parallel only when they do not mutate an executable another
-node can launch. The DAG serializes debug executable producers before public/workspace tests and
-requires formatting before compiler-producing gates. Checker self-test owns this dependency
-contract so an `ETXTBSY` race cannot be normalized as flakiness.
+```text
+capabilities -> new command -> status / inspect / query
+             -> reviewed change plan/apply -> check
+             -> deterministic build -> pure run
+```
 
-Successful checks emit one aggregate JSON line and a receipt locator. Each gate retains bounded
-stdout/stderr separately under `.artifacts/lkjscript-dev/check`. Failure returns bounded excerpts and exact log
-locations. Passing test names and child logs are not printed by default.
+The environment must not supply Cargo, a checkout-relative asset, network dependency, external
+template, or predecessor repository. The recipe must contain an exact standard dependency and
+graph-owned test.
 
-## Receipt rules
+Verification must prove:
 
-A transaction receipt canonically binds repository, base/result, transaction digest, semantic diff
-digest, affected owners, validation profile and facts, optional idempotency key, and bounded
-nonsemantic intent. It is part of accepted history.
+- check, build, run, query, and every failure path leave semantic `HEAD` unchanged;
+- two clean/equivalent builds and exact-current-cache builds produce identical artifact bytes;
+- representative post-publication incremental compilation equals a clean rebuild;
+- missing cache clean-builds and corrupt/stale/foreign cache never selects wrong meaning;
+- a cache failure after accepted publication is reported separately from acceptance;
+- output conflict, file/directory/symlink targets, invalid parents, interruption, and exhaustion
+  do not publish partial output or modify existing paths;
+- malformed, truncated, duplicate, noncanonical, overflowing, foreign-identity, and trailing
+  transport/artifact/argument inputs reject before execution or visible output;
+- stale and competing semantic publication accepts at most one exact base result; and
+- predecessor markers and removed commands never enter alternate dispatch.
 
-Build, test, service, backup, restore, review projection, doctor, and verification receipts are
-evidence or derived outputs, not accepted program meaning. They must bind exact semantic revision,
-tool/contract identity, exact relevant inputs, status, counts, output/log locators, and honest
-limitations. Volatile elapsed time, platform facts, and operator labels never enter semantic
-revision identity.
+Test names and retained evidence must map these properties to exact mechanisms. An internal unit
+fixture alone is not copied-binary or maintained-consumer completion.
 
-Pass reuse is permitted only when every semantic and operational input is proven identical and the
-active profile permits discovery. Final publication verification remains fresh. Current `full`
-does not reuse a prior pass.
+## Maintained consumers and service boundary
 
-## Required adversarial coverage
+The standard package and `lkjournal` must open as Graph 5, check through normalized differential
+execution, build deterministic artifact 10, and match their checked-in generated assets. Exact
+package, target, test, dependency, and public-interface inventories must be retained in migration
+or lifecycle evidence.
 
-Tests cover unknown contracts, foreign identity domains, duplicate/trailing/excess input, checked
-allocation, corrupt object bytes, missing/corrupt derived indexes, stale base, no-change,
-precondition failure, idempotent replay, interrupted publication boundaries, two-parent history,
-draft separation/rebase, deterministic backup/restore, read-only retention-preview reachability and
-plan stability, predecessor rejection, and public output bounds. Retention-preview tests assert
-`destructive_ready: false`; they are not garbage-collection or compaction evidence.
+Service verification separately copies the frozen artifact-4 input and deployment descriptors to
+an isolated run, checks the artifact's exact digest, launches `serve`/`worker`, and exercises the
+maintained external workflow. It must audit that no project marker or repository path is opened.
+A passed frozen service gate proves retained service behavior only; it does not prove normalized
+artifact-10 deployment.
 
-Reviewed ownership-closure deletion additionally requires leaf-policy compatibility, complete
-owner-kind and attachment coverage, disjoint and overlapping roots, forbidden expression/binding
-roots, request-local descendant rejection, ownership-versus-reference separation, unchanged and
-explicitly repaired referrers, one exact retirement per deleted owner, and exact surviving-parent
-updates. Separate fixtures exhaust owner, retirement, canonical/witness read, ownership, relation,
-fanout, and logical-plan output admissions; inject inconsistent ownership and relation witnesses;
-and prove every failure leaves HEAD unchanged. Deterministic publication fault points reopen either
-the complete old revision or the complete accepted result, never partial authority.
+If PostgreSQL/container/environment prerequisites are absent, service is `unavailable` with an
+exact reason. Unavailable is never rewritten as pass or silently omitted.
 
-The logical-plan codec additionally requires one-field commitment sensitivity for every exported
-record category; strict token length/case/domain tests; canonical re-encoding; and rejection of
-truncation, mutation, malformed escaping, unknown or duplicate records/fields, keyed duplicates,
-wrong order, foreign typed identities, invalid optionality, overflow, an operational-record
-injection, trailer disagreement, and records after the trailer. Public tests prove direct/record
-byte equality, request mismatch before project discovery, prepared mismatch before publication,
-unchanged HEAD on output/mismatch failures, atomic external output behavior, predecessor-token
-rejection, and copied-release-binary plan/export/apply/inspect use.
+## Verification profiles and receipts
 
-Scale evidence must name exact generated topology, revision, toolchain, platform, command, cold or
-warm cache state, wall/CPU/memory where available, storage growth, output bytes, semantic work
-counts, and limitations. Limit increases may not substitute for correcting a superlinear
-algorithm.
+The contributor owner is:
 
-Ownership-closure locality compares the same selected root and closure with and without a large
-unrelated owner population. Root count, closure owners, ownership and relation steps, canonical and
-witness point reads/decoded records, owner and retirement edits, and closure-derived plan facts
-must remain equal. Persistent-map pages may differ and complete downstream validation may remain
-broad when its current policy requires it; those dimensions are reported separately. A scale
-fixture must export and strictly decode the complete plan, apply, reopen, and remain within the
-declared default admissions without turning output bytes into token or cost claims.
+```sh
+cargo run --locked -p lkjscript-dev -- check PROFILE
+```
 
-Logical-plan scale evidence compares export disabled and enabled for the same request, crosses the
-10,000-record compact stdout envelope in the external plan file, strictly decodes the result, and
-proves an exact repository inventory and HEAD remain unchanged. The encoder must pass each
-canonical record directly through one checked meter, BLAKE3 state, and optional file sink; a full
-plan byte buffer or duplicate full fact sets is a verification failure.
+`focused` runs narrow format/library/public checks. `changed` selects by exact changed inputs and
+widening rules. `product` builds release and verifies copied-binary workflows, maintained Graph 5
+consumers, generated docs, and built-in/generated assets. `service` owns isolated frozen service
+acceptance. `full` owns formatting, lints, workspace targets, all tests, release/product/service
+classification, and diff checks; final full evidence must be fresh.
 
-## Claims
+The harness owns gate dependencies, exact fingerprints, bounded child logs, required outputs,
+timeouts, and fresh/reused/skipped/unavailable/failed classification. Reuse is valid only when the
+harness proves every semantic and operational input identical and the profile permits it. Final
+product and full verification run after final code, generated assets, evidence, and documentation.
 
-Performance, security, portability, provider-token, and monetary claims require retained evidence.
-Output bytes are not token counts. When provider input/cached/output/request/retry/cost telemetry is
-unavailable, evidence says unavailable and makes no savings claim. Fresh-checkout evidence is
-platform-specific and does not imply portability.
+Receipts and logs are derived evidence. They bind command, exact inputs, toolchain/platform,
+dependencies, classification, output paths/digests, and limitations. They never enter semantic
+revision identity. Large logs remain under `.artifacts`; tracked evidence contains concise
+structured summaries and digests.
+
+## Performance evidence
+
+Release measurements cover copied command creation, first check, clean build, exact-current build,
+post-change incremental plus equal clean rebuild, pure run, standard clean check/build, and
+`lkjournal` clean check/build.
+
+Measurements keep wall time, CPU time, peak RSS, semantic inventory, compiler units compiled/
+reused/removed, linked packages, artifact objects/bytes, repository/cache I/O when observed,
+output records/bytes, synchronization/visibility operations when observed, retries, and unavailable
+dimensions separate. Cache state, build warmth, filesystem, toolchain, and environment are named.
+Bytes and time are not provider-token, request, retry, cache-hit, or monetary telemetry.
+
+Exact-current reuse must perform less semantic compilation work than clean build. Incremental work
+must remain bounded by prepared compiler impact and persistent-map locator costs. No absolute
+latency target is implied, and retained regressions require explanation rather than speculative
+optimization.
+
+## Claims and handoff
+
+Completion reports exact focused/product/full/service commands and classification, commit SHAs,
+receipt/log/artifact paths and SHA-256 digests, deviations and evidence, measurements, known
+limitations, working-tree state, and push status. Stale, reused when fresh was required, skipped,
+unavailable, or failed evidence cannot be described as passed.
+
+Security, portability, scale, artifact provenance, provider-token, and monetary claims require
+direct retained evidence. The current verified environment does not imply portability or hostile-
+code isolation.

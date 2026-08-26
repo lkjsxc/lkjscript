@@ -8,7 +8,6 @@ use crate::platform::language::{
     Binding, DeclarationReference, Expression, MapEntry, MatchArm, RecordField,
 };
 use crate::platform::semantic::OwnerId;
-use crate::platform::semantic_id::ExpressionId;
 use crate::platform::value::{MapKey, Value};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -33,21 +32,6 @@ impl<'a> ReferenceInterpreter<'a> {
                 ExecutionFailureClass::Infrastructure,
                 "reference_function_missing",
                 "prepared semantic function is absent",
-            )
-        })?;
-        self.invoke_prepared(function, arguments)
-    }
-
-    pub(crate) fn invoke_test_expression(
-        &self,
-        expression: &ExpressionId,
-        arguments: Vec<Value>,
-    ) -> Result<(Value, RunObservation), ExecutionError> {
-        let function = self.program.test_expression(expression).ok_or_else(|| {
-            ExecutionError::new(
-                ExecutionFailureClass::Infrastructure,
-                "reference_test_expression_missing",
-                format!("prepared test expression '{expression}' is absent"),
             )
         })?;
         self.invoke_prepared(function, arguments)

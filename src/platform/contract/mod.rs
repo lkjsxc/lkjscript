@@ -12,7 +12,7 @@ pub use registry::{
     OverridePolicy, PredecessorPolicy, ProjectRequirement, PublicOperation,
     REGISTRY_CONTRACT_IDENTITY, REGISTRY_CONTRACT_VERSION, RegistrySection,
     RegistrySectionSnapshot, RegistrySnapshot, TemplateDescriptor, contract_descriptors,
-    diagnostic_descriptors, exit_status_descriptors, exit_status_for, limit_descriptors, nonclaims,
-    operation_descriptors, operation_record, outcome_exit_status, registry_snapshot,
-    template_descriptors,
+    diagnostic_class_name, diagnostic_descriptors, exit_status_descriptors, exit_status_for,
+    limit_descriptors, nonclaims, operation_descriptors, operation_record, outcome_exit_status,
+    registry_snapshot, template_descriptors,
 };

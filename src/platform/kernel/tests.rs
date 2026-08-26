@@ -257,7 +257,8 @@ fn prototype_snapshot() -> (KernelSnapshot, FixtureIds) {
                 type_parameters: vec![type_parameter],
                 parameters: Vec::new(),
                 result: unit_type,
-                implementation: name("identity_host"),
+                implementation: ImplementationName::new("identity_host")
+                    .expect("fixture implementation"),
             }),
         }),
     );

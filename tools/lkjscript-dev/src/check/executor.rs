@@ -270,6 +270,7 @@ fn execute_fresh(
             maximum_stderr_bytes: gate.maximum_stderr_bytes,
             stdout_path: stdout_path.clone(),
             stderr_path: stderr_path.clone(),
+            unavailable_exit_code: gate.unavailable_exit_code,
         },
         repository,
     );
