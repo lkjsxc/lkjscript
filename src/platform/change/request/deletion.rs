@@ -132,7 +132,7 @@ fn select_owned_closure<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Siz
         lowerer.admit_retirement_edit(owner)?;
         require_accepted_owner(lowerer, owner)?;
         closure.insert(owner);
-        for child in current_owned_children(lowerer, owner, &candidate_external_children)? {
+        for child in current_owned_children(lowerer, owner, candidate_external_children)? {
             if !closure.contains(&child) {
                 frontier.push_back(child);
             }

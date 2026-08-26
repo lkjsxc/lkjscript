@@ -67,7 +67,7 @@ This supports the scoped claim that closure discovery depends on the selected ow
 relation evidence plus persistent-map locator costs, not every unrelated owner. The page difference
 is retained rather than normalized away. The test log is
 `.artifacts/campaign/202608261834/scale/locality-test.log` (SHA-256
-`df6757d255e707bebf9771d083a2f2e641842916ff44c7d69b9b9926c0905ad5`); its bounded metrics file
+`18137641b0c7d2d3e44a1b09034d108092b38d8d9e0caa25ba5f5636507a2e0a`); its bounded metrics file
 has SHA-256 `fee3e87ca3fd43f117e7569093fdb92e12081a2332c4b247f0f513de14167974`.
 
 The final release-scale command was:
@@ -95,19 +95,19 @@ revision was `rev_bcc8e8c9332cc23ba05da01583a254a3466148421990171f0b74e1cd056159
 | validation owners / selected tests | 1,501 / 0 |
 | staged objects / pages / bytes | 1,766 / 259 / 700,032 |
 | repository bytes before plan / after plan / after apply | 2,239,880 / 2,239,880 / 3,297,220 |
-| bootstrap / plan / apply wall | 136.394 ms / 1.940953 s / 43.928 ms |
-| process peak RSS | 31,084 KiB |
+| bootstrap / plan / apply wall | 135.939 ms / 1.906293 s / 50.253 ms |
+| process peak RSS | 30,880 KiB |
 
 The complete plan's BLAKE3 digest is
 `d002769ee456ca065edb4e1b3e435046da2c791560a9e62c935923feef96a2d1`; its retained file SHA-256
 is `a1db4c0663a6af010ba505a3e51c54fd5ebe7e96745ff81c25b3d8b85226e21c`. The final test log and
 metrics SHA-256 values are respectively
-`5930d6011073b464c05c2f85214a948d461442fb1242dd56757fb00f5edd744a` and
-`b095498b6471bbc86400cbc4bdbb392c20131218ac3c7f29e95d6c56cda308e7`.
+`5a8dfddbd2aa111100bfceccce794c8748b52b8e60919e34824f1724dea39ac6` and
+`ad6e5076a22271993fe9551b4b8f71ad6579a1899768c314b2f9b28b651c626a`.
 
 Filesystem cache state was uncontrolled; “fresh” describes the repository, not the host cache.
 Linux `VmHWM` is process-wide. The optimized target was warm from the preceding focused release
-run; Bash reported 2.293 seconds real, 1.930 user, and 0.244 system for the final test command.
+run; Bash reported 2.264 seconds real, 1.884 user, and 0.279 system for the final test command.
 Per-test CPU time and exact filesystem syscall/synchronization counts were unavailable. This is one
 admitted topology, not a maximum-size, latency-distribution, wide-fanout, or million-owner claim. An
 exploratory 2,001-owner form exhausted the unchanged witness-byte admission, so it is not reported

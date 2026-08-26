@@ -924,31 +924,6 @@ pub struct ChangeBudgetWork {
     pub staging: StagingBudgetWork,
 }
 
-impl ChangeBudgetWork {
-    pub(crate) fn authored(
-        operations: usize,
-        preconditions: usize,
-        allocated_identities: usize,
-        authored_type_nodes: usize,
-        canonical_reads: CanonicalReadWork,
-        witness_reads: WitnessReadWork,
-        ownership_steps: u64,
-        relation_edges: u64,
-    ) -> Self {
-        Self {
-            authored_operations: count(operations),
-            preconditions_checked: count(preconditions),
-            allocated_identities: count(allocated_identities),
-            authored_type_nodes: count(authored_type_nodes),
-            canonical_reads,
-            witness_reads,
-            impact_ownership_steps: ownership_steps,
-            relation_edges,
-            ..Self::default()
-        }
-    }
-}
-
 pub(crate) struct ChangeBudgetMeter {
     budget: ChangeBudget,
     work: ChangeBudgetWork,

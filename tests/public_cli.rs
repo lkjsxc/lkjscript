@@ -1673,34 +1673,29 @@ fn reviewed_change_plan_body_replacement_exports_exact_owned_relation_closure() 
         .iter()
         .find_map(|(symbol, identity)| (*symbol == "$message").then_some(*identity))
         .expect("allocated record identity");
-    for (name, request, code) in [(
-        "reject-delete-cascade",
-        format!(
-            "request base={accepted_revision}\n\
-             delete.owner owner={record} cascade=true policy=reject\n"
-        ),
-        "change_field_unknown",
-    )] {
-        let request_path = temporary.path().join(format!("{name}.lkjc"));
-        std::fs::write(&request_path, request).expect("unsupported deletion request");
-        let rejected = compact_failure_output(command(&[
-            "--project",
-            path(&project),
-            "change",
-            "plan",
-            "--input-file",
-            path(&request_path),
-        ]));
-        assert_eq!(
-            compact_field(compact_record(&rejected, "diagnostic"), "code"),
-            Some(code)
-        );
-        let after_rejection = compact_success(&["--project", path(&project), "status"]);
-        assert_eq!(
-            compact_field(compact_record(&after_rejection, "revision"), "id"),
-            Some(accepted_revision.as_str())
-        );
-    }
+    let cascade_request = format!(
+        "request base={accepted_revision}\n\
+         delete.owner owner={record} cascade=true policy=reject\n"
+    );
+    let cascade_request_path = temporary.path().join("reject-delete-cascade.lkjc");
+    std::fs::write(&cascade_request_path, cascade_request).expect("unsupported deletion request");
+    let rejected = compact_failure_output(command(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "--input-file",
+        path(&cascade_request_path),
+    ]));
+    assert_eq!(
+        compact_field(compact_record(&rejected, "diagnostic"), "code"),
+        Some("change_field_unknown")
+    );
+    let after_rejection = compact_success(&["--project", path(&project), "status"]);
+    assert_eq!(
+        compact_field(compact_record(&after_rejection, "revision"), "id"),
+        Some(accepted_revision.as_str())
+    );
     let rejected_delete = format!(
         "request base={accepted_revision}\n\
          delete.owner owner={record} policy=reject\n"

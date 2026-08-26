@@ -412,16 +412,17 @@ pub struct AuthoredLoweringWork {
 
 impl AuthoredLoweringWork {
     pub(crate) fn budget_work(self) -> ChangeBudgetWork {
-        ChangeBudgetWork::authored(
-            usize::try_from(self.operations_lowered).unwrap_or(usize::MAX),
-            usize::try_from(self.preconditions_checked).unwrap_or(usize::MAX),
-            usize::try_from(self.allocated_identities).unwrap_or(usize::MAX),
-            usize::try_from(self.type_nodes_interned).unwrap_or(usize::MAX),
-            self.canonical,
-            self.witness,
-            self.ownership_steps,
-            self.relation_edges_read,
-        )
+        ChangeBudgetWork {
+            authored_operations: self.operations_lowered,
+            preconditions_checked: self.preconditions_checked,
+            allocated_identities: self.allocated_identities,
+            authored_type_nodes: self.type_nodes_interned,
+            canonical_reads: self.canonical,
+            witness_reads: self.witness,
+            impact_ownership_steps: self.ownership_steps,
+            relation_edges: self.relation_edges_read,
+            ..ChangeBudgetWork::default()
+        }
     }
 }
 
