@@ -2427,11 +2427,16 @@ where
     Ok(())
 }
 
+#[derive(Clone, Copy)]
+struct PrefixRangeSelector<'a> {
+    prefix: &'a [u8],
+    exclusive_lower_bound: Option<&'a [u8]>,
+}
+
 fn visit_prefix_range_loaded<S, F>(
     store: &S,
     page: &Page,
-    requested: &[u8],
-    exclusive_lower_bound: Option<&[u8]>,
+    selector: PrefixRangeSelector<'_>,
     depth: usize,
     work: &mut MapWork,
     state: &mut RangeVisitState,
@@ -2442,27 +2447,27 @@ where
     F: FnMut(&[u8], &[u8]) -> Result<MapRangeControl, MapError>,
 {
     ensure_depth(depth)?;
-    if page.prefix().starts_with(requested) {
+    if page.prefix().starts_with(selector.prefix) {
         return visit_range_loaded(
             store,
             page,
-            exclusive_lower_bound,
+            selector.exclusive_lower_bound,
             depth,
             work,
             state,
             visitor,
         );
     }
-    if !requested.starts_with(page.prefix()) {
+    if !selector.prefix.starts_with(page.prefix()) {
         return Ok(());
     }
 
     match page {
         Page::Leaf { entries, .. } => {
-            let prefix_start = match search_entries(entries, requested, work)? {
+            let prefix_start = match search_entries(entries, selector.prefix, work)? {
                 Ok(index) | Err(index) => index,
             };
-            let lower_start = match exclusive_lower_bound {
+            let lower_start = match selector.exclusive_lower_bound {
                 None => 0,
                 Some(lower_bound) => match search_entries(entries, lower_bound, work)? {
                     Ok(index) => index.checked_add(1).ok_or_else(|| {
@@ -2477,7 +2482,7 @@ where
             };
             let start = prefix_start.max(lower_start);
             for entry in &entries[start..] {
-                if !entry.key.starts_with(requested) {
+                if !entry.key.starts_with(selector.prefix) {
                     break;
                 }
                 visit_range_entry(&entry.key, &entry.value, state, visitor)?;
@@ -2489,7 +2494,7 @@ where
         Page::Branch {
             prefix, children, ..
         } => {
-            let edge = *requested.get(prefix.len()).ok_or_else(|| {
+            let edge = *selector.prefix.get(prefix.len()).ok_or_else(|| {
                 map_error(
                     MapErrorClass::Corrupt,
                     "persistent_map_range_prefix_descent",
@@ -2505,8 +2510,7 @@ where
             visit_prefix_range_loaded(
                 store,
                 &child_page,
-                requested,
-                exclusive_lower_bound,
+                selector,
                 depth + 1,
                 work,
                 state,
@@ -3525,8 +3529,10 @@ impl PersistentMap {
         visit_prefix_range_loaded(
             store,
             &page,
-            prefix,
-            exclusive_lower_bound,
+            PrefixRangeSelector {
+                prefix,
+                exclusive_lower_bound,
+            },
             0,
             work,
             &mut state,

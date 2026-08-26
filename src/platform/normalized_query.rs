@@ -11,7 +11,8 @@ use super::kernel::{
 };
 use super::persistent_map::MapRangeControl;
 use super::publication::{
-    GraphRepository, RepositoryQueryAdmission, RepositoryReadWork, RepositoryView,
+    GraphRepository, RepositoryQueryAdmission, RepositoryReadWork, RepositoryRelationQueryRange,
+    RepositoryView,
 };
 use super::semantic_id::{RepositoryId, RevisionId, encode_hex};
 use super::witness::{
@@ -1523,12 +1524,14 @@ fn execute_relations(
     let mut relations = Vec::new();
     let mut item_bytes = 0_usize;
     let relation_read = view.visit_query_relations(
-        endpoint,
-        kind,
-        direction == QueryDirection::Incoming,
-        resume_key,
-        request.limits.items,
-        logical_item_limit,
+        RepositoryRelationQueryRange {
+            endpoint,
+            kind,
+            incoming: direction == QueryDirection::Incoming,
+            exclusive_lower_bound: resume_key,
+            maximum_scan: request.limits.items,
+            maximum_items: logical_item_limit,
+        },
         remaining_admission(total_admission, &work)?,
         |edge| {
             let record_bytes = compact_record_bytes("relation", &relation_fields(edge))?;
@@ -1604,7 +1607,7 @@ fn continuation_for_range(
 fn owner_scan_quantum(items: u64) -> Result<u64, Diagnostic> {
     items
         .checked_mul(4)
-        .map(|value| value.max(256).min(MAXIMUM_QUERY_ITEMS))
+        .map(|value| value.clamp(256, MAXIMUM_QUERY_ITEMS))
         .ok_or_else(|| {
             Diagnostic::new(
                 DiagnosticClass::Resource,
@@ -1990,10 +1993,12 @@ fn fixed_response_reserve(
     maximum_map_work.pages_read = u64::MAX;
     maximum_map_work.bytes_read = u64::MAX;
     maximum_map_work.entries_visited = u64::MAX;
-    let mut maximum_store_work = super::storage::object::StoreWork::default();
-    maximum_store_work.catalog_lookups = u64::MAX;
-    maximum_store_work.objects_read = u64::MAX;
-    maximum_store_work.bytes_read = u64::MAX;
+    let maximum_store_work = super::storage::object::StoreWork {
+        catalog_lookups: u64::MAX,
+        objects_read: u64::MAX,
+        bytes_read: u64::MAX,
+        ..super::storage::object::StoreWork::default()
+    };
     append_work_record(
         &mut writer,
         &RepositoryReadWork {
@@ -3068,15 +3073,17 @@ mod tests {
         let caller = named_owner(&snapshot, "caller");
         let error = view
             .visit_query_relations(
-                RelationEndpoint::Owner(ExactOwnerKey {
-                    package: snapshot.root.package_id,
-                    owner: caller,
-                }),
-                None,
-                false,
-                None,
-                4,
-                4,
+                RepositoryRelationQueryRange {
+                    endpoint: RelationEndpoint::Owner(ExactOwnerKey {
+                        package: snapshot.root.package_id,
+                        owner: caller,
+                    }),
+                    kind: None,
+                    incoming: false,
+                    exclusive_lower_bound: None,
+                    maximum_scan: 4,
+                    maximum_items: 4,
+                },
                 RepositoryQueryAdmission {
                     witness_records: 0,
                     ..baseline
@@ -3355,7 +3362,7 @@ mod tests {
         .expect("scale relation oracle")
         .into_iter()
         .filter(|edge| edge.target == endpoint)
-        .map(|edge| reverse_relation_key(edge))
+        .map(reverse_relation_key)
         .collect::<Vec<_>>();
         relation_keys.sort();
         assert_eq!(relation_keys.len(), 9_999);
@@ -3390,12 +3397,14 @@ mod tests {
         let mut observed_relations = Vec::new();
         let relation_page = view
             .visit_query_relations(
-                endpoint,
-                None,
-                true,
-                Some(&relation_lower),
-                6,
-                5,
+                RepositoryRelationQueryRange {
+                    endpoint,
+                    kind: None,
+                    incoming: true,
+                    exclusive_lower_bound: Some(&relation_lower),
+                    maximum_scan: 6,
+                    maximum_items: 5,
+                },
                 query_admission(6, 5).expect("relation scale admission"),
                 |edge| {
                     observed_relations.push(reverse_relation_key(edge));

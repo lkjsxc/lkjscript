@@ -135,6 +135,16 @@ pub(crate) struct RepositoryQueryAdmission {
     pub witness_records: u64,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct RepositoryRelationQueryRange<'a> {
+    pub endpoint: RelationEndpoint,
+    pub kind: Option<RelationKind>,
+    pub incoming: bool,
+    pub exclusive_lower_bound: Option<&'a [u8]>,
+    pub maximum_scan: u64,
+    pub maximum_items: u64,
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(crate) struct RepositoryQueryRangeRead {
     pub last_visited_key: Option<Vec<u8>>,
@@ -1780,18 +1790,21 @@ impl RepositoryView {
 
     pub(crate) fn visit_query_relations<F>(
         &self,
-        endpoint: RelationEndpoint,
-        kind: Option<RelationKind>,
-        incoming: bool,
-        exclusive_lower_bound: Option<&[u8]>,
-        maximum_scan: u64,
-        maximum_items: u64,
+        query: RepositoryRelationQueryRange<'_>,
         query_admission: RepositoryQueryAdmission,
         mut visitor: F,
     ) -> Result<RevisionRead<RepositoryQueryRangeRead>, Diagnostic>
     where
         F: FnMut(RelationEdge) -> Result<MapRangeControl, Diagnostic>,
     {
+        let RepositoryRelationQueryRange {
+            endpoint,
+            kind,
+            incoming,
+            exclusive_lower_bound,
+            maximum_scan,
+            maximum_items,
+        } = query;
         if maximum_scan == 0 || maximum_items == 0 {
             return Err(read_error(
                 DiagnosticClass::Resource,

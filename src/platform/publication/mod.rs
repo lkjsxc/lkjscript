@@ -34,7 +34,9 @@ pub use read_view::{
     PreparedAuthoredPublication, RelationRead, RepositoryReadWork, RepositoryView, RevisionRead,
     RevisionWitnessMapUpdate, TestDependencyRead,
 };
-pub(crate) use read_view::{RepositoryQueryAdmission, RepositoryQueryRangeRead};
+pub(crate) use read_view::{
+    RepositoryQueryAdmission, RepositoryQueryRangeRead, RepositoryRelationQueryRange,
+};
 pub use receipt::{
     ChangeCounts, FullOracleStatus, PublicationReceipt, PublicationStatus, ValidationEvidence,
     ValidationProfile, WorkObservation,
