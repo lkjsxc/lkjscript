@@ -24,6 +24,7 @@ Normalized authored change has a separate review boundary:
 ```text
 records or direct flags -> typed authored request -> request commitment
                         -> revision-pinned authored preparation
+                        -> post-mutation candidate -> shared ownership-closure selector
                         -> prepared publication + typed logical review evidence
                         -> one canonical record stream -> prepared-plan commitment
                            plan: optional external atomic file, no repository write
@@ -31,6 +32,11 @@ records or direct flags -> typed authored request -> request commitment
 ```
 
 Change analysis owns canonical and relation deltas, impact selection, and validation/test facts.
+One bounded selector in authored deletion lowering serves both function-body replacement and public
+`delete.owner policy=owned-closure`; canonical owners define aggregate children and accepted
+external-parent relations locate attachments. Witnesses are revalidated locators, never a second
+ownership authority. Candidate relation analysis indexes one admitted derived delta by exact
+source/target endpoint before repeated impact queries, avoiding a complete delta rescan per owner.
 Authored preparation moves the selected exact facts into the logical review projection beside the
 generic prepared publication. Control owns request/token/plan codecs; CLI owns paths and bounded
 responses; publication remains independent of request-local labels and owns the only HEAD
@@ -81,7 +87,7 @@ direct CLI / strict authored change / exact transaction
 | Layer | Current owner | Owns | Excludes |
 |---|---|---|---|
 | Canonical authority | `meaning.rs`, `graph.rs`, `revision.rs`, `repository.rs` | graph contract 4, stable semantic owners, persistent root pages, immutable revisions, semantic certificate, exact publication | source coordinates as authority, index bytes, bytecode, host handles |
-| Public development | `cli.rs`, `normalized_query.rs`, normalized publication/change modules | direct CLI v8, concise change v3, logical change plan v1, normalized query v3, revision-pinned compact reads | predecessor query aliases and request documents, raw storage edits |
+| Public development | `cli.rs`, `normalized_query.rs`, normalized publication/change modules | direct CLI v9, concise change v4, logical change plan v1, normalized query v3, revision-pinned compact reads | predecessor query aliases and request documents, raw storage edits |
 | Offline bootstrap | `bootstrap.rs` plus the embedded standard artifact | `new`, minimal/command recipes, built-in inspection/export, staged first publication | mutable template authority, network registry |
 | Derived semantics | `semantic_summary.rs`, private `semantic_query.rs` | persisted disposable module summaries, revision-bound reverse dependencies, invalidation-frontier oracle, private predecessor query indexes | normalized public query authority, a second accepted graph, an independent writer |
 | Review and recovery | `semantic_projection.rs`, repository backup/restore/retention preview | deterministic review, segmented exact backup, atomic restore, read-only cleanup inventory | writable text authority, canonical deletion |
@@ -117,6 +123,15 @@ and conflicts cannot enter accepted HEAD. Review projections, embedded artifacts
 compiler state, and deployment descriptors do not become accepted authority.
 
 ## Publication and physical locality
+
+Authored non-deletion mutations form one candidate before deletion lowering. Reject-policy roots
+must be candidate leaves; owned-closure roots traverse only canonical semantic children and exact
+external-parent relations. Multiple roots share one sorted union, descendants with deleted parents
+need no separate detachment, and each accepted owner is retired exactly once. Candidate incoming
+relations are extracted after explicit same-request edits; any surviving source that still targets
+the union rejects before canonical publication. Closure discovery uses point reads and bounded
+witness prefixes, never complete graph reconstruction. The ordinary full preparation path may
+still perform broader downstream validation, which remains separate from closure selection work.
 
 Preparation has local and complete paths. A precondition-free request may prepare locally when it
 contains only eligible pure-function body replacements, only independent module creations, only

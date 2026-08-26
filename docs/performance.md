@@ -44,6 +44,77 @@ limitations are retained in
 `docs/evidence/20260826-review-bound-logical-change-plan.json`; raw logs and files are under
 `.artifacts/campaign-202608261448/`.
 
+## Current reviewed ownership-closure deletion
+
+Campaign `202608261834` implemented the public closure path beginning at commit
+`7afa63ea3643905745986a355721aa46cc80af67`. Measurements used Linux
+`7.0.0-29-generic` x86-64 with Rust/Cargo 1.98.0. The retained locality test prepared the same
+13-owner closure once in a 43-owner graph and once after adding 2,000 unrelated modules. Closure
+selection observed equal logical work in both repositories:
+
+| Dimension | 43 owners | 2,043 owners |
+|---|---:|---:|
+| selected roots / closure owners | 1 / 13 | 1 / 13 |
+| ownership steps / relation edges | 12 / 45 | 12 / 45 |
+| canonical point reads / decoded records | 14 / 14 | 14 / 14 |
+| witness point reads / decoded records | 26 / 28 | 26 / 28 |
+| owner edits / retirement edits | 13 / 13 | 13 / 13 |
+| removed / added plan relations | 15 / 0 | 15 / 0 |
+| structural / semantic / test owners | 13 / 12 / 1 | 13 / 12 / 1 |
+| canonical / witness map pages | 13 / 26 | 27 / 40 |
+
+This supports the scoped claim that closure discovery depends on the selected ownership and exact
+relation evidence plus persistent-map locator costs, not every unrelated owner. The page difference
+is retained rather than normalized away. The test log is
+`.artifacts/campaign/202608261834/scale/locality-test.log` (SHA-256
+`df6757d255e707bebf9771d083a2f2e641842916ff44c7d69b9b9926c0905ad5`); its bounded metrics file
+has SHA-256 `fee3e87ca3fd43f117e7569093fdb92e12081a2332c4b247f0f513de14167974`.
+
+The final release-scale command was:
+
+```sh
+LKJSCRIPT_OWNED_CLOSURE_EVIDENCE_DIR=.artifacts/campaign/202608261834/scale \
+  cargo test --locked --release --lib \
+  authored_owned_closure_scale_emits_complete_plan_under_default_admission \
+  -- --ignored --nocapture
+```
+
+It created a fresh normalized repository containing one module and a shallow 8-ary tree of 1,500
+inline-documentation descendants, selected the module, exported and strictly decoded the complete
+plan, applied it, and reopened the accepted result under default admissions. The exact result
+revision was `rev_bcc8e8c9332cc23ba05da01583a254a3466148421990171f0b74e1cd05615915`.
+
+| Observation | Value |
+|---|---:|
+| closure owners / ownership steps | 1,501 / 1,500 |
+| plan records / bytes | 6,021 / 2,797,359 |
+| canonical point reads / pages / records | 7,506 / 19,769 / 6,005 |
+| witness point reads / pages / records | 13,509 / 38,705 / 13,507 |
+| relation edges | 12,000 |
+| owner / retirement edits | 1,501 / 1,501 |
+| validation owners / selected tests | 1,501 / 0 |
+| staged objects / pages / bytes | 1,766 / 259 / 700,032 |
+| repository bytes before plan / after plan / after apply | 2,239,880 / 2,239,880 / 3,297,220 |
+| bootstrap / plan / apply wall | 136.394 ms / 1.940953 s / 43.928 ms |
+| process peak RSS | 31,084 KiB |
+
+The complete plan's BLAKE3 digest is
+`d002769ee456ca065edb4e1b3e435046da2c791560a9e62c935923feef96a2d1`; its retained file SHA-256
+is `a1db4c0663a6af010ba505a3e51c54fd5ebe7e96745ff81c25b3d8b85226e21c`. The final test log and
+metrics SHA-256 values are respectively
+`5930d6011073b464c05c2f85214a948d461442fb1242dd56757fb00f5edd744a` and
+`b095498b6471bbc86400cbc4bdbb392c20131218ac3c7f29e95d6c56cda308e7`.
+
+Filesystem cache state was uncontrolled; “fresh” describes the repository, not the host cache.
+Linux `VmHWM` is process-wide. The optimized target was warm from the preceding focused release
+run; Bash reported 2.293 seconds real, 1.930 user, and 0.244 system for the final test command.
+Per-test CPU time and exact filesystem syscall/synchronization counts were unavailable. This is one
+admitted topology, not a maximum-size, latency-distribution, wide-fanout, or million-owner claim. An
+exploratory 2,001-owner form exhausted the unchanged witness-byte admission, so it is not reported
+as a pass. The measured initial candidate-relation path also rescanned the complete derived delta
+per endpoint; the final implementation replaces it with one bounded, once-charged deterministic
+index, with a focused exact-fit/exhaustion regression test.
+
 ## Current normalized semantic query locality
 
 At implementation commit `8ea897f7307d9726e57710c833a1596a9dd74127`, the release test

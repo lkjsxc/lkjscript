@@ -110,6 +110,28 @@ package, exact revision, direction, filter, and logical resume key; restart the 
 accepted change. Fuzzy search, historical query, context traversal, generic impact, JSON query
 requests, and the former callers/callees aliases are intentionally absent.
 
+Delete an exact semantic owner and everything it owns only after reviewing the complete effect.
+Replace the revision and declaration identity with values returned by status/query:
+
+```sh
+cat >delete-note.lkjc <<'EOF'
+request base=rev_... idempotency=delete-note intent=remove-note-record
+delete.owner owner=decl_... policy=owned-closure
+EOF
+lkjscript --project ./hello change plan --input-file delete-note.lkjc \
+  --output ./delete-note.logical-plan
+less ./delete-note.logical-plan
+lkjscript --project ./hello change apply --input-file delete-note.lkjc --plan plan_...
+```
+
+`owned-closure` follows semantic ownership, so record fields, attached documentation/annotations,
+and any owned expression/binding subtree are included; it does not follow arbitrary references or
+physical object reachability. A surviving reference rejects the request. Remove that relation with
+an explicit earlier operation, or explicitly delete its source as another root in the same request;
+the engine never repairs or cascades across references. Use `policy=reject` for exact leaf-only
+deletion. There is no deletion flag adapter, and predecessor `cascade`, `recursive`, and `deep`
+spellings are rejected.
+
 For a common single-owner edit, the direct adapter constructs the same typed request without a
 record file. Replace the placeholders with the exact accepted revision and exact typed owner ID:
 

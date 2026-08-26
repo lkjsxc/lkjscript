@@ -81,10 +81,11 @@ continuity requires it. Clone creates new identities. Exact restore preserves hi
 Revision IDs use the content-derived `rev_` domain. Package IDs, object digests, map-page digests,
 compiler indexes, runtime handles, and temporary local symbols remain separate domains.
 
-Production project identities use fresh allocation. A change-v3 request may define a typed local
-symbol beginning with `$` and refer to it later in the same ordered request. Stable allocation is
-deterministically bound to repository, exact base, normalized request, domain, and request order.
-The public change result returns the complete local-symbol map. Duplicate, forward, ambiguous, or
+Production project identities use fresh allocation. A current compact-change request may define a
+typed local symbol beginning with `$` and refer to it later in the same ordered request. Stable
+allocation is deterministically bound to repository, exact base, normalized request, domain, and
+request order. The public change result returns the complete local-symbol map. Duplicate, forward,
+ambiguous, or
 foreign-domain use rejects; exact replay preserves allocation.
 
 ## Revisions, drafts, and accepted history
@@ -142,9 +143,18 @@ semantic diff, and allocation path. The canonical `plan_` token combines a reque
 can be checked before repository discovery with a prepared-plan commitment over the complete
 logical review projection. Apply reparses, checks the request component, reprepares the request,
 and checks the prepared component before publication. Function-body replacement updates the
-function and retires its complete prior expression/binding ownership closure; the logical plan
-lists those exact owner and relation removals and never leaves live unowned nodes. A stale,
-mismatched, exhausted, corrupt, or invalid request publishes nothing.
+function and retires its complete prior expression/binding ownership closure. Public
+`delete.owner policy=owned-closure` uses that same semantic-ownership selector for an admissible
+exact root after earlier request mutations have formed the candidate. It follows canonical
+aggregation and external-parent meaning only, never arbitrary references or physical reachability.
+A surviving reference rejects unless another explicit operation in the same reviewed request
+removes it. The logical plan lists the exact owner, retirement, parent, and relation effects and
+never leaves live unowned nodes. A stale, mismatched, exhausted, corrupt, or invalid request
+publishes nothing.
+
+An exact idempotent apply retry may reopen the immutable base recorded by an already accepted key,
+but it must reprepare the complete request and reproduce both reviewed commitments. The locked
+publication decision then returns the existing accepted binding; it never advances HEAD again.
 
 The optional logical-plan file is deterministic derived evidence, not repository state or a second
 program authority. Its commitment covers exact semantic effects and exported validation/test

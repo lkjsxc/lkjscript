@@ -44,9 +44,10 @@ compatibility parser has no current consumer and would add state or dual contrac
 Changing any exported logical record changes the prepared component. Harmless local-symbol
 renaming, output location, or excluded operational work does not. Apply can reject a request
 mismatch without project I/O and distinguishes it from a prepared-plan mismatch. Plan output can
-remain after interruption without implying accepted publication. Public owned-closure deletion is
-still absent, but it can now consume an exact reviewed removed-owner/relation set in a later
-dependency-closed campaign.
+remain after interruption without implying accepted publication. Public owned-closure deletion now
+consumes this boundary: its exact union of removed owners, retirements, surviving-parent edits,
+relations, validation owners, tests, and reasons is represented by logical-plan contract 1 and
+recomputed before apply.
 
 ## Reversal conditions
 

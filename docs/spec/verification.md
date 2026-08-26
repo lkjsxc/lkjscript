@@ -25,9 +25,11 @@ Reviewed semantic changes retain an implementation-disjoint before/after oracle.
 canonical reconstruction and relation extraction derive exact owner, type, dependency, retirement,
 and relation deltas without consulting the logical-plan encoder. Body-replacement fixtures compare
 the complete old owned expression/binding subtree and all removed/added relations with exported
-records. Complete validation and test-dependency analysis separately check exported structural and
-semantic owners, selected tests, and reasons. Mirroring production `ImpactPlan` is not by itself an
-oracle or a minimality proof.
+records. Owned-closure deletion fixtures derive expected descendants from complete accepted
+ownership facts and cover every owner shape, rather than invoking the production selector to form
+their expectation. Complete validation and test-dependency analysis separately check exported
+structural and semantic owners, selected tests, and reasons. Mirroring production `ImpactPlan` is
+not by itself an oracle or a minimality proof.
 
 ## Profiles
 
@@ -73,6 +75,15 @@ draft separation/rebase, deterministic backup/restore, read-only retention-previ
 plan stability, predecessor rejection, and public output bounds. Retention-preview tests assert
 `destructive_ready: false`; they are not garbage-collection or compaction evidence.
 
+Reviewed ownership-closure deletion additionally requires leaf-policy compatibility, complete
+owner-kind and attachment coverage, disjoint and overlapping roots, forbidden expression/binding
+roots, request-local descendant rejection, ownership-versus-reference separation, unchanged and
+explicitly repaired referrers, one exact retirement per deleted owner, and exact surviving-parent
+updates. Separate fixtures exhaust owner, retirement, canonical/witness read, ownership, relation,
+fanout, and logical-plan output admissions; inject inconsistent ownership and relation witnesses;
+and prove every failure leaves HEAD unchanged. Deterministic publication fault points reopen either
+the complete old revision or the complete accepted result, never partial authority.
+
 The logical-plan codec additionally requires one-field commitment sensitivity for every exported
 record category; strict token length/case/domain tests; canonical re-encoding; and rejection of
 truncation, mutation, malformed escaping, unknown or duplicate records/fields, keyed duplicates,
@@ -86,6 +97,14 @@ Scale evidence must name exact generated topology, revision, toolchain, platform
 warm cache state, wall/CPU/memory where available, storage growth, output bytes, semantic work
 counts, and limitations. Limit increases may not substitute for correcting a superlinear
 algorithm.
+
+Ownership-closure locality compares the same selected root and closure with and without a large
+unrelated owner population. Root count, closure owners, ownership and relation steps, canonical and
+witness point reads/decoded records, owner and retirement edits, and closure-derived plan facts
+must remain equal. Persistent-map pages may differ and complete downstream validation may remain
+broad when its current policy requires it; those dimensions are reported separately. A scale
+fixture must export and strictly decode the complete plan, apply, reopen, and remain within the
+declared default admissions without turning output bytes into token or cost claims.
 
 Logical-plan scale evidence compares export disabled and enabled for the same request, crosses the
 10,000-record compact stdout envelope in the external plan file, strictly decodes the result, and

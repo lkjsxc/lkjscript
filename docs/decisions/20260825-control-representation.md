@@ -57,9 +57,10 @@ program authority.
   lexical order.
 - Completed: use fixed stable tags, big-endian lengths and integers, and typed fixed-width identity
   fields.
-- Completed: replace `DeleteOwner { cascade: bool }` with closed reject-only leaf deletion.
-  Owned-closure deletion remains absent until one exported typed impact plan binds every removed
-  owner and relation.
+- Completed: replace `DeleteOwner { cascade: bool }` with a closed deletion policy. `reject`
+  remains leaf-only; `owned-closure` uses one bounded semantic-ownership selector and the exported
+  logical plan binds every removed owner, retirement, parent update, and relation. Predecessor
+  cascade/recursive aliases remain unknown input.
 - Completed: remove physical semantic-root, encoded-owner, derived-summary, dependency-object, and
   retirement-digest preconditions. Retained preconditions state exact semantic owner, namespace,
   parent, and dependency bindings.
@@ -121,8 +122,9 @@ one explicit normalized request view and a new allocation-seed contract domain.
   malformed-record locations, cycles, unused/shared expression rejection, and JSON rejection.
 - Black-box copied-binary tests cover plan/apply allocation equality, reviewed-plan mismatch,
   connected module/record/function creation, 100-module bounded output, predecessor JSON rejection
-  without HEAD movement, complete old-body ownership retirement, and direct exact-owner rename
-  from plan through inspection without repository source or a Rust toolchain.
+  without HEAD movement, complete old-body ownership retirement, reviewed ownership-closure
+  deletion with explicit referrer handling and idempotent reconciliation, and direct exact-owner
+  rename from plan through inspection without repository source or a Rust toolchain.
 - Direct/record differential tests cover identical canonical authored bytes and byte-identical plan
   tokens/files with omitted or equal idempotency and intent. Direct malformed, absent-owner, stale,
   and wrong-plan cases retain HEAD; wrong-plan rejection precedes project discovery.

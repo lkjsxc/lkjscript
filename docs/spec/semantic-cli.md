@@ -157,8 +157,8 @@ spelling.
 ## Public change protocol
 
 `change plan (--input RECORDS | --input-file PATH) [--output PATH]` and
-`change apply ... --plan TOKEN` accept flat UTF-8 records under contract
-`lkjscript-change-records-3`. A request begins with exactly one
+`change apply ... --plan TOKEN` accept flat UTF-8 records under the current Change contract named
+by the generated contract table. A request begins with exactly one
 `request base=REVISION` record and may add bounded `idempotency` and nonsemantic `intent` fields.
 Every later record is a closed semantic precondition, operation, type fragment, expression
 fragment, or indexed edge. There is no indentation meaning, implicit scalar typing, duplicate
@@ -191,6 +191,12 @@ then either advances HEAD once or reports stale authority. Request and prepared-
 distinct diagnostics and never publish. Both adapters converge before either commitment,
 repository access, preparation, response rendering, or publication.
 
+For apply with an idempotency key already bound to the same exact base, the repository may reopen
+that immutable historical base for retry preparation. The CLI still reparses the complete request,
+recomputes and compares both reviewed token components, and enters the publication lock; only the
+exact existing binding returns `already-accepted`. A different request, token, base, or key cannot
+use this recovery path, and replay never creates a second revision.
+
 With `--output`, plan streams contract `lkjscript-logical-change-plan-1` to an external canonical
 file while hashing the same pre-trailer records. Its closed records bind interpreting contracts,
 repository/package/base/result/state identities, request controls, transaction and semantic-diff
@@ -219,12 +225,11 @@ content and HEAD unchanged, and the plan file is never an apply input or accepte
 The executable sections `capabilities --section change`, `type`, and `expression` are the only
 public vocabulary owner. The current compact subset includes module, record, variant, pure
 function, constant, and test creation; field, case, and function-parameter addition; owner rename;
-declaration move; complete function-body replacement; and exact leaf-owner deletion with
-`policy=reject`. Reject deletion never infers an ownership closure, and predecessor `cascade` input
-is invalid. Types include the advertised primitive, named, parameter, collection, result, stream,
-and function forms. Expressions include unit, boolean, integer, text, local/constant references,
-conditional, sequence, and direct call. Broader typed engine operations remain private until their
-compact workflows are complete.
+declaration move; complete function-body replacement; and exact owner deletion with either
+`policy=reject` or `policy=owned-closure`. Types include the advertised primitive, named,
+parameter, collection, result, stream, and function forms. Expressions include unit, boolean,
+integer, text, local/constant references, conditional, sequence, and direct call. Broader typed
+engine operations remain private until their compact workflows are complete.
 
 `change.operation-field` discovery records expose every registered field's operation, name,
 required status, and typed form for all 13 public operations. `change.field-form` records resolve
@@ -254,13 +259,34 @@ graph authority.
 Allocation is deterministic from repository, exact base, and normalized authored intent;
 operational budgets, idempotency, and intent are bound by the request commitment without perturbing
 allocated identities. Plan and apply return equal complete symbol maps. Function-body replacement
-retires the exact old expression/binding ownership closure in the same semantic change, and the
-logical plan lists each removed owner and relation explicitly. Raw JSON,
-the former `--request`/`--request-file` grammar, and `--dry-run`/`--commit` are rejected before
-publication. Public owned-closure deletion remains unavailable; this plan contract supplies its
-review-evidence prerequisite but does not define cascade policy or reference repair. Large
-external value files, direct forms for the other 12 operations, and broad result export are not yet
-exposed by this subset.
+and public owned-closure deletion use one bounded semantic-ownership selector. Raw JSON, the former
+`--request`/`--request-file` grammar, and `--dry-run`/`--commit` are rejected before publication.
+Large external value files, direct forms for the other 12 operations, and broad result export are
+not yet exposed by this subset.
+
+`delete.owner` accepts one exact live local non-expression owner and requires an explicit policy.
+`policy=reject` is exact leaf deletion: any candidate-owned child rejects with
+`change_delete_owned_children`. `policy=owned-closure` selects the root plus every transitive
+semantic child from the post-mutation, pre-deletion candidate. Canonical aggregate membership and
+canonical external parent relationships are the only ownership edges. Arbitrary references,
+package dependencies, persistent-map reachability, objects, artifacts, and caches are not followed.
+Bindings and expressions can enter a selected closure but remain invalid public roots.
+
+Multiple roots form one deterministic typed-owner union; ancestor/descendant overlap is valid while
+an exact duplicate root is not. Every root independently satisfies its policy. A request-local
+owner, including a newly created descendant under a selected root, cannot be created and deleted in
+one request. Only selected roots whose direct parent survives detach from that parent; every
+deleted accepted owner receives one retirement bound to the exact base facts.
+
+Any surviving local or foreign source whose final candidate relations still target the deletion
+set rejects with `change_delete_live_reference`. The engine never rewrites, nulls, rebinds, repairs,
+or deletes a referrer implicitly. An earlier explicit mutation may remove the relation, and an
+additional explicit deletion root may remove the referrer, in the same reviewed request. The
+logical plan lists every removed owner, retirement, surviving-parent edit, relation change,
+validation owner, selected test, and impact reason selected by the existing contract; apply
+reparses, reprepares, compares both token components, and publishes once or not at all. There is no
+direct flag adapter for deletion. Missing policy, `cascade=true`, and policies named `cascade`,
+`recursive`, `deep`, or any other alias are predecessor or unknown input and reject.
 
 ## Drafts, history, and packages
 

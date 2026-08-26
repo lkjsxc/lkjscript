@@ -40,7 +40,7 @@ not yet the released path, so this file does not claim runtime cutover complete.
 Unknown contracts and fields, malformed tagged identities, duplicate/noncanonical order, trailing
 bytes, checksum mismatch, foreign IDs, and configured exhaustion reject at their owning boundary.
 Graph-1/2/3 roots, root-storage-1 manifests, artifact-2/3 and package-object-1/2 bytes,
-backup-1/2/3 bytes, transaction-2/3 requests, CLI-v2/3 routing, change-v1/2 requests, draft-v3
+backup-1/2/3 bytes, transaction-2/3 requests, CLI-v2/3 routing, change-v1/2/3 requests, draft-v3
 objects, and query-v1/2 requests and continuations are not current readers.
 
 ## Direct CLI and binary-only bootstrap
@@ -59,7 +59,9 @@ read status, create meaning through compact records, plan/apply direct `rename.o
 the renamed exact owner without a repository checkout, Rust toolchain, network, or external
 bootstrap artifact. The copied executable can also discard the allocation response, recover live
 owner identities by canonical namespace or bounded enumeration, and inspect incoming and outgoing
-committed relations.
+committed relations. A copied release executable can plan, export, strictly inspect, apply, reopen,
+query, and idempotently reconcile one reviewed ownership-closure deletion.
+
 Check, build, run, service, worker, package, history, draft, review, backup, restore, and doctor
 still use predecessor authority and cannot consume that new project yet.
 
@@ -70,7 +72,7 @@ unknown-entry counts, and an integrity-bound plan digest. It deliberately report
 `destructive_ready: false` and names missing revision-pin, active-reader-lease, and
 registered-backup-root authority; it never deletes data.
 
-Compact change contract `lkjscript-change-records-3` is the released authored-request boundary.
+The current executable-generated Change contract is the released authored-request boundary.
 `change plan [--output PATH]` and `change apply --plan TOKEN` share the normalized typed lowering
 and publication path, require an explicit revision, and return deterministic bounded records. The
 current `plan_` token contains one 32-byte pre-repository request commitment and one 32-byte
@@ -107,11 +109,18 @@ atomic rename, and is strictly decodable. It never enters repository state. Witn
 refresh, compiler units, physical layout, receipt work, paths, and timing remain operational
 evidence outside review identity.
 
-Exact leaf-owner deletion requires `policy=reject`; it never infers an ownership closure. Public
-owned-closure deletion remains unsupported even though the logical plan now supplies its exact
-removed-owner/relation review prerequisite. The executable registry publishes its exact required
-field forms. A leaf with live references remains rejected unless the same reviewed request removes
-those exact relations.
+Owner deletion requires an exact admissible local root and one of the two registry-owned policies.
+`policy=reject` remains exact leaf-only deletion. `policy=owned-closure` selects the root and every
+transitive candidate-owned descendant after earlier non-deletion operations, including owned
+bindings, expressions, documentation, and annotations. It follows canonical semantic ownership,
+not arbitrary references, dependencies, or physical reachability. Multiple roots form a
+deterministic union; expression and binding roots, duplicates, and request-local created
+descendants reject. Every removed accepted owner receives one retirement, and only selected roots
+with surviving parents detach. Any surviving source that still refers into the closure rejects;
+repair is possible only through an explicit mutation or additional deletion root in the same
+reviewed request. `cascade`, `recursive`, `deep`, omitted policies, predecessor fields, and all
+aliases reject. Deletion remains compact-record-only and publishes through the same reviewed
+`GraphRepository` boundary.
 Seven semantic preconditions are public: exact owner existence, absence, name, and parent;
 namespace absence and exact binding; and exact dependency binding by package, semantic revision,
 and logical package revision. Physical roots and encoded or derived object digests are not accepted
