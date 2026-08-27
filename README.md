@@ -11,15 +11,48 @@ binary. It creates Graph 5 projects, inspects and changes accepted meaning, runs
 builds deterministic artifact-10 bundles, and executes pure command targets through both the
 production VM and an implementation-disjoint semantic reference interpreter.
 
-The verified bootstrap is stable Rust 2024 on Linux x86-64.
+The public binary target is exactly `x86_64-unknown-linux-gnu`. The current candidate requires
+the ELF interpreter `/lib64/ld-linux-x86-64.so.2`, `libgcc_s.so.1`, `libm.so.6`, `libc.so.6`, and
+GLIBC 2.38 or newer. No broader Linux portability is claimed.
+
+## Download
+
+Download the latest supported archive and its checksum without running a remote installer:
+
+```sh
+mkdir -p /tmp/lkjscript-download
+cd /tmp/lkjscript-download
+curl --fail --location --remote-name \
+  https://github.com/lkjsxc/lkjscript/releases/latest/download/lkjscript-x86_64-unknown-linux-gnu.tar.gz
+curl --fail --location --remote-name \
+  https://github.com/lkjsxc/lkjscript/releases/latest/download/SHA256SUMS
+sha256sum --check SHA256SUMS
+tar -xzf lkjscript-x86_64-unknown-linux-gnu.tar.gz
+./lkjscript/lkjscript capabilities
+```
+
+The archive also contains the Apache-2.0 project license, exact third-party notices, and canonical
+release metadata. Its stable filename makes the latest URL durable; the
+[`v0.1.0` release page](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.0) owns the immutable
+version-specific bytes. See the [maintainer release procedure](docs/release.md) for identity,
+packaging, verification, and recovery details.
+
+Installation is optional. Select a directory you own rather than piping a download into a shell:
+
+```sh
+install_dir="$PWD/bin"
+mkdir -p "$install_dir"
+install -Dm755 ./lkjscript/lkjscript "$install_dir/lkjscript"
+"$install_dir/lkjscript" capabilities
+```
 
 ## Start from one binary
 
-Copy a release executable outside the checkout and create a useful command project:
+Use the extracted or installed executable outside the checkout to create a useful command project:
 
 ```sh
 mkdir -p /tmp/lkjscript-demo
-cp /path/to/released/lkjscript /tmp/lkjscript-demo/lkjscript
+cp /tmp/lkjscript-download/lkjscript/lkjscript /tmp/lkjscript-demo/lkjscript
 cd /tmp/lkjscript-demo
 ./lkjscript capabilities
 ./lkjscript new ./hello --template command --name hello

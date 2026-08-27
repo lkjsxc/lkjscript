@@ -1652,6 +1652,13 @@ fn duration_nanoseconds(duration: Duration) -> u64 {
 mod tests {
     use super::*;
 
+    fn release_workflow() -> String {
+        let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(".github/workflows/release.yml");
+        fs::read_to_string(repository).expect("read release workflow")
+    }
+
     #[test]
     fn release_strict_tag_accepts_only_matching_plain_semver() {
         assert!(validate_strict_tag("v0.1.0", "0.1.0").is_ok());
@@ -1685,5 +1692,56 @@ mod tests {
         assert!(validate_registry_digest(&"0".repeat(64)).is_ok());
         assert!(validate_registry_digest(&"A".repeat(64)).is_err());
         assert!(validate_registry_digest("short").is_err());
+    }
+
+    #[test]
+    fn release_workflow_pins_actions_and_separates_publication_authority() {
+        let workflow = release_workflow();
+        for line in workflow.lines().map(str::trim) {
+            let Some(action) = line.strip_prefix("uses: ") else {
+                continue;
+            };
+            let (_, revision) = action
+                .split_once('@')
+                .expect("workflow action has an explicit revision");
+            let revision = revision
+                .split_whitespace()
+                .next()
+                .expect("workflow action revision");
+            assert_eq!(revision.len(), 40, "action is not pinned: {action}");
+            assert!(
+                revision
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)),
+                "action is not pinned to a full SHA: {action}"
+            );
+        }
+        let jobs = workflow.split_once("\njobs:\n").expect("workflow jobs").1;
+        let publish = jobs
+            .split_once("\n  publish:\n")
+            .expect("publish job")
+            .1
+            .split_once("\n  post-release:\n")
+            .expect("post-release job")
+            .0;
+        assert!(publish.contains("contents: write"));
+        assert!(!publish.contains("actions/checkout"));
+        assert!(!publish.contains("cargo "));
+        assert!(!publish.contains("target/"));
+        for forbidden in [
+            "--clobber",
+            "ubuntu-latest",
+            "push --force",
+            "pull_request_target",
+            "cancel-in-progress: true",
+        ] {
+            assert!(
+                !workflow.contains(forbidden),
+                "workflow contains {forbidden}"
+            );
+        }
+        assert!(workflow.contains("persist-credentials: false"));
+        assert!(workflow.contains("cancel-in-progress: false"));
+        assert!(workflow.matches("timeout-minutes:").count() >= 3);
     }
 }

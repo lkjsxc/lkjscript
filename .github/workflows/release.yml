@@ -1,0 +1,477 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish an existing exact annotated tag
+        required: true
+        default: false
+        type: boolean
+      tag:
+        description: Exact vMAJOR.MINOR.PATCH tag; blank derives it from Cargo.toml for a dry run
+        required: false
+        type: string
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: never
+  RUST_BACKTRACE: "0"
+  RELEASE_ARCHIVE: lkjscript-x86_64-unknown-linux-gnu.tar.gz
+  RELEASE_CHECKSUMS: SHA256SUMS
+  RELEASE_RECEIPT: release-receipt.json
+  RELEASE_HANDOFF: release-handoff-${{ github.run_id }}-${{ github.run_attempt }}
+  CARGO_ABOUT_VERSION: 0.9.2
+  CARGO_ABOUT_ARCHIVE_SHA256: 9099a59e820c38a68b9d65f300662a567d56562f9a10f6aa4c7e86c17c2566af
+
+jobs:
+  build-verify-package:
+    name: Build, verify, and package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    outputs:
+      publish: ${{ steps.identity.outputs.publish }}
+      publication_mode: ${{ steps.identity.outputs.publication_mode }}
+      tag: ${{ steps.identity.outputs.tag }}
+      commit_sha: ${{ steps.identity.outputs.commit_sha }}
+    steps:
+      - name: Check out the exact source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate workflow and release identity
+        id: identity
+        shell: bash
+        env:
+          REQUESTED_PUBLISH: ${{ github.event.inputs.publish || 'false' }}
+          REQUESTED_TAG: ${{ github.event.inputs.tag || '' }}
+        run: |
+          set -euo pipefail
+          package_version=$(sed -n '/^\[package\]$/,/^\[/s/^version = "\([^"]*\)"$/\1/p' Cargo.toml)
+          test -n "$package_version"
+          expected_tag="v${package_version}"
+          publish=false
+          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            publish=true
+            tag="${GITHUB_REF_NAME}"
+            test "${GITHUB_REF_TYPE}" = tag
+          elif [[ "$REQUESTED_PUBLISH" == "true" ]]; then
+            publish=true
+            tag="$REQUESTED_TAG"
+            test -n "$tag"
+            test "${GITHUB_REF}" = "refs/tags/${tag}"
+          else
+            tag="${REQUESTED_TAG:-$expected_tag}"
+          fi
+          [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          test "$tag" = "$expected_tag"
+          commit_sha=$(git rev-parse HEAD)
+          test "${#commit_sha}" -eq 40
+          git merge-base --is-ancestor origin/main HEAD
+          if [[ "$publish" == "true" ]]; then
+            test "$(git cat-file -t "refs/tags/${tag}")" = tag
+            test "$(git rev-parse "refs/tags/${tag}^{commit}")" = "$commit_sha"
+            git merge-base --is-ancestor HEAD origin/main
+            publication_mode=release
+          else
+            publication_mode=dry-run
+          fi
+          {
+            echo "publish=$publish"
+            echo "publication_mode=$publication_mode"
+            echo "tag=$tag"
+            echo "commit_sha=$commit_sha"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Install the exact repository toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.98.0 --profile minimal --component clippy --component rustfmt --target x86_64-unknown-linux-gnu
+          rustup override set 1.98.0
+          rustc -Vv
+          cargo -V
+
+      - name: Download and verify cargo-about
+        id: cargo-about
+        shell: bash
+        run: |
+          set -euo pipefail
+          tool_root="$RUNNER_TEMP/cargo-about"
+          archive="$RUNNER_TEMP/cargo-about.tar.gz"
+          mkdir -p "$tool_root"
+          curl --fail --location --silent --show-error \
+            --output "$archive" \
+            "https://github.com/EmbarkStudios/cargo-about/releases/download/${CARGO_ABOUT_VERSION}/cargo-about-${CARGO_ABOUT_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+          printf '%s  %s\n' "$CARGO_ABOUT_ARCHIVE_SHA256" "$archive" | sha256sum --check --strict
+          expected=$(printf '%s\n' \
+            "cargo-about-${CARGO_ABOUT_VERSION}-x86_64-unknown-linux-musl/" \
+            "cargo-about-${CARGO_ABOUT_VERSION}-x86_64-unknown-linux-musl/LICENSE-APACHE" \
+            "cargo-about-${CARGO_ABOUT_VERSION}-x86_64-unknown-linux-musl/LICENSE-MIT" \
+            "cargo-about-${CARGO_ABOUT_VERSION}-x86_64-unknown-linux-musl/README.md" \
+            "cargo-about-${CARGO_ABOUT_VERSION}-x86_64-unknown-linux-musl/cargo-about")
+          observed=$(tar -tzf "$archive")
+          test "$observed" = "$expected"
+          tar -xzf "$archive" \
+            --strip-components=1 \
+            --directory "$tool_root" \
+            "cargo-about-${CARGO_ABOUT_VERSION}-x86_64-unknown-linux-musl/cargo-about"
+          chmod 0755 "$tool_root/cargo-about"
+          test "$("$tool_root/cargo-about" --version)" = "cargo-about ${CARGO_ABOUT_VERSION}"
+          {
+            echo "archive=$archive"
+            echo "executable=$tool_root/cargo-about"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build the release candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --workspace --release --locked
+          test -f target/release/lkjscript
+          test -x target/release/lkjscript
+
+      - name: Run fresh full verification
+        id: full
+        shell: bash
+        run: |
+          set -euo pipefail
+          summary="$RUNNER_TEMP/full-verification-summary.json"
+          cargo run --locked -p lkjscript-dev -- check full --machine | tee "$summary"
+          test "$(wc -l < "$summary")" -eq 1
+          receipt=$(jq -er '.receipt' "$summary")
+          test -f "$GITHUB_WORKSPACE/$receipt"
+          jq -e \
+            --arg commit "${{ steps.identity.outputs.commit_sha }}" \
+            '.status == "passed" and .profile == "full" and .git_head == $commit and .input_stable == true and .fresh_required == true and .reused_passed_gates == 0' \
+            "$GITHUB_WORKSPACE/$receipt"
+          echo "receipt=$GITHUB_WORKSPACE/$receipt" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare and strictly verify the release handoff
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/release-output"
+          cargo run --locked -p lkjscript-dev -- release prepare \
+            --candidate "$GITHUB_WORKSPACE/target/release/lkjscript" \
+            --cargo-about "${{ steps.cargo-about.outputs.executable }}" \
+            --cargo-about-archive "${{ steps.cargo-about.outputs.archive }}" \
+            --output "$output" \
+            --tag "${{ steps.identity.outputs.tag }}" \
+            --publication "${{ steps.identity.outputs.publication_mode }}" \
+            --full-verification-receipt "${{ steps.full.outputs.receipt }}" \
+            --require-full-verification | tee "$RUNNER_TEMP/release-prepare-summary.json"
+          cargo run --locked -p lkjscript-dev -- release verify \
+            --archive "$output/$RELEASE_ARCHIVE" \
+            --checksums "$output/$RELEASE_CHECKSUMS" \
+            --receipt "$output/$RELEASE_RECEIPT" \
+            --expected-tag "${{ steps.identity.outputs.tag }}" \
+            --expected-publication "${{ steps.identity.outputs.publication_mode }}"
+          (cd "$output" && sha256sum --check --strict "$RELEASE_CHECKSUMS")
+          test "$(find "$output" -mindepth 1 -maxdepth 1 -type f | wc -l)" -eq 3
+          test "$(find "$output" -mindepth 1 -maxdepth 1 ! -type f | wc -l)" -eq 0
+          echo "output=$output" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the transient verified handoff
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ env.RELEASE_HANDOFF }}
+          path: ${{ steps.prepare.outputs.output }}/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  publish:
+    name: Publish immutable release
+    if: needs.build-verify-package.outputs.publish == 'true'
+    needs: build-verify-package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    outputs:
+      release_url: ${{ steps.publish.outputs.release_url }}
+      immutable: ${{ steps.publish.outputs.immutable }}
+    steps:
+      - name: Download the verified handoff
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ env.RELEASE_HANDOFF }}
+          path: ${{ runner.temp }}/release-handoff
+
+      - name: Validate handoff without executing repository code
+        id: handoff
+        shell: bash
+        env:
+          TAG: ${{ needs.build-verify-package.outputs.tag }}
+          COMMIT_SHA: ${{ needs.build-verify-package.outputs.commit_sha }}
+        run: |
+          set -euo pipefail
+          handoff="$RUNNER_TEMP/release-handoff"
+          expected=$(printf '%s\n' "$RELEASE_ARCHIVE" "$RELEASE_CHECKSUMS" "$RELEASE_RECEIPT" | sort)
+          observed=$(find "$handoff" -mindepth 1 -maxdepth 1 -type f -printf '%f\n' | sort)
+          test "$observed" = "$expected"
+          test "$(find "$handoff" -mindepth 1 -maxdepth 1 ! -type f | wc -l)" -eq 0
+          (cd "$handoff" && sha256sum --check --strict "$RELEASE_CHECKSUMS")
+          archive_sha=$(sha256sum "$handoff/$RELEASE_ARCHIVE" | cut -d' ' -f1)
+          archive_bytes=$(stat -c '%s' "$handoff/$RELEASE_ARCHIVE")
+          jq -e \
+            --arg tag "$TAG" \
+            --arg commit "$COMMIT_SHA" \
+            --arg archive "$RELEASE_ARCHIVE" \
+            --arg sha "$archive_sha" \
+            --argjson bytes "$archive_bytes" \
+            '.publication_mode == "release" and .release_tag == $tag and .commit_sha == $commit and .archive.name == $archive and .archive.sha256 == $sha and .archive.byte_length == $bytes and (.classifications | all(.classification == "fresh_passed"))' \
+            "$handoff/$RELEASE_RECEIPT"
+          tar -xOzf "$handoff/$RELEASE_ARCHIVE" lkjscript/RELEASE-MANIFEST.json > "$RUNNER_TEMP/RELEASE-MANIFEST.json"
+          manifest_sha=$(sha256sum "$RUNNER_TEMP/RELEASE-MANIFEST.json" | cut -d' ' -f1)
+          test "$manifest_sha" = "$(jq -er '.manifest_sha256' "$handoff/$RELEASE_RECEIPT")"
+          jq -e \
+            --arg tag "$TAG" \
+            --arg commit "$COMMIT_SHA" \
+            '.publication_mode == "release" and .source.expected_release_tag == $tag and .source.tagged_commit_sha == $commit' \
+            "$RUNNER_TEMP/RELEASE-MANIFEST.json"
+          {
+            echo "directory=$handoff"
+            echo "archive_sha=$archive_sha"
+            echo "archive_bytes=$archive_bytes"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create, verify, and publish the draft
+        id: publish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build-verify-package.outputs.tag }}
+          COMMIT_SHA: ${{ needs.build-verify-package.outputs.commit_sha }}
+          HANDOFF: ${{ steps.handoff.outputs.directory }}
+          ARCHIVE_SHA: ${{ steps.handoff.outputs.archive_sha }}
+          ARCHIVE_BYTES: ${{ steps.handoff.outputs.archive_bytes }}
+        run: |
+          set -euo pipefail
+          immutable=$(gh api "repos/$GITHUB_REPOSITORY/immutable-releases" --jq '.enabled')
+          test "$immutable" = true
+          ref=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG")
+          test "$(jq -r '.object.type' <<< "$ref")" = tag
+          tag_object_sha=$(jq -r '.object.sha' <<< "$ref")
+          tag_object=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$tag_object_sha")
+          test "$(jq -r '.object.type' <<< "$tag_object")" = commit
+          test "$(jq -r '.object.sha' <<< "$tag_object")" = "$COMMIT_SHA"
+          test "$(jq -r '.source.annotated_tag_object_sha' "$RUNNER_TEMP/RELEASE-MANIFEST.json")" = "$tag_object_sha"
+
+          release_file="$RUNNER_TEMP/release.json"
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > "$release_file" 2> "$RUNNER_TEMP/release-get.stderr"; then
+            existing=true
+          elif grep -q 'HTTP 404' "$RUNNER_TEMP/release-get.stderr"; then
+            existing=false
+          else
+            cat "$RUNNER_TEMP/release-get.stderr" >&2
+            exit 1
+          fi
+          if [[ "$existing" == "false" ]]; then
+            gh release create "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --draft \
+              --title "$TAG" \
+              --notes-from-tag
+            gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > "$release_file"
+          fi
+
+          jq -e --arg tag "$TAG" \
+            '.tag_name == $tag and .prerelease == false' \
+            "$release_file"
+          draft=$(jq -r '.draft' "$release_file")
+          if [[ "$draft" == "false" ]]; then
+            test "$(jq -r '.immutable' "$release_file")" = true
+          fi
+
+          checksum_sha=$(sha256sum "$HANDOFF/$RELEASE_CHECKSUMS" | cut -d' ' -f1)
+          checksum_bytes=$(stat -c '%s' "$HANDOFF/$RELEASE_CHECKSUMS")
+          asset_names=$(jq -r '.assets[].name' "$release_file" | sort)
+          if [[ -n "$asset_names" ]]; then
+            while IFS= read -r name; do
+              [[ "$name" == "$RELEASE_ARCHIVE" || "$name" == "$RELEASE_CHECKSUMS" ]]
+            done <<< "$asset_names"
+          fi
+
+          upload_missing() {
+            local name=$1
+            if ! jq -e --arg name "$name" '.assets[] | select(.name == $name)' "$release_file" > /dev/null; then
+              test "$draft" = true
+              gh release upload "$TAG" "$HANDOFF/$name" --repo "$GITHUB_REPOSITORY"
+              gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > "$release_file"
+            fi
+          }
+          upload_missing "$RELEASE_ARCHIVE"
+          upload_missing "$RELEASE_CHECKSUMS"
+
+          verify_assets() {
+            jq -e \
+              --arg archive "$RELEASE_ARCHIVE" \
+              --arg archive_digest "sha256:$ARCHIVE_SHA" \
+              --argjson archive_bytes "$ARCHIVE_BYTES" \
+              --arg checksums "$RELEASE_CHECKSUMS" \
+              --arg checksum_digest "sha256:$checksum_sha" \
+              --argjson checksum_bytes "$checksum_bytes" \
+              '(.assets | length) == 2 and
+               any(.assets[]; .name == $archive and .digest == $archive_digest and .size == $archive_bytes) and
+               any(.assets[]; .name == $checksums and .digest == $checksum_digest and .size == $checksum_bytes)' \
+              "$release_file" > /dev/null
+          }
+          verified=false
+          for attempt in $(seq 1 12); do
+            gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > "$release_file"
+            if verify_assets; then
+              verified=true
+              break
+            fi
+            sleep 5
+          done
+          test "$verified" = true
+
+          if [[ "$draft" == "true" ]]; then
+            release_id=$(jq -r '.id' "$release_file")
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+              -F draft=false \
+              -F prerelease=false \
+              -f make_latest=true > "$release_file"
+          fi
+
+          immutable=false
+          for attempt in $(seq 1 12); do
+            gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > "$release_file"
+            if [[ "$(jq -r '.draft' "$release_file")" == "false" ]] && \
+               [[ "$(jq -r '.immutable' "$release_file")" == "true" ]]; then
+              immutable=true
+              break
+            fi
+            sleep 5
+          done
+          test "$immutable" = true
+          verify_assets
+          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name')" = "$TAG"
+          {
+            echo "release_url=$(jq -r '.html_url' "$release_file")"
+            echo "immutable=true"
+          } >> "$GITHUB_OUTPUT"
+
+  post-release:
+    name: Verify anonymous public release
+    if: needs.build-verify-package.outputs.publish == 'true'
+    needs:
+      - build-verify-package
+      - publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Download exact and latest assets anonymously
+        id: download
+        shell: bash
+        env:
+          TAG: ${{ needs.build-verify-package.outputs.tag }}
+        run: |
+          set -euo pipefail
+          exact="$RUNNER_TEMP/exact"
+          latest="$RUNNER_TEMP/latest"
+          mkdir -p "$exact" "$latest"
+          base="https://github.com/$GITHUB_REPOSITORY/releases"
+          env -u GH_TOKEN -u GITHUB_TOKEN curl --fail --location --silent --show-error \
+            --output "$exact/$RELEASE_ARCHIVE" \
+            "$base/download/$TAG/$RELEASE_ARCHIVE"
+          env -u GH_TOKEN -u GITHUB_TOKEN curl --fail --location --silent --show-error \
+            --output "$exact/$RELEASE_CHECKSUMS" \
+            "$base/download/$TAG/$RELEASE_CHECKSUMS"
+          env -u GH_TOKEN -u GITHUB_TOKEN curl --fail --location --silent --show-error \
+            --output "$latest/$RELEASE_ARCHIVE" \
+            "$base/latest/download/$RELEASE_ARCHIVE"
+          env -u GH_TOKEN -u GITHUB_TOKEN curl --fail --location --silent --show-error \
+            --output "$latest/$RELEASE_CHECKSUMS" \
+            "$base/latest/download/$RELEASE_CHECKSUMS"
+          (cd "$exact" && sha256sum --check --strict "$RELEASE_CHECKSUMS")
+          (cd "$latest" && sha256sum --check --strict "$RELEASE_CHECKSUMS")
+          cmp "$exact/$RELEASE_ARCHIVE" "$latest/$RELEASE_ARCHIVE"
+          cmp "$exact/$RELEASE_CHECKSUMS" "$latest/$RELEASE_CHECKSUMS"
+          sha=$(sha256sum "$exact/$RELEASE_ARCHIVE" | cut -d' ' -f1)
+          echo "sha256=$sha" >> "$GITHUB_OUTPUT"
+          echo "exact=$exact" >> "$GITHUB_OUTPUT"
+
+      - name: Verify GitHub asset digests and release attestations
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build-verify-package.outputs.tag }}
+          EXACT: ${{ steps.download.outputs.exact }}
+          ARCHIVE_SHA: ${{ steps.download.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          release=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG")
+          test "$(jq -r '.immutable' <<< "$release")" = true
+          test "$(jq -r '.draft' <<< "$release")" = false
+          test "$(jq -r '.prerelease' <<< "$release")" = false
+          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name')" = "$TAG"
+          test "$(jq -r --arg name "$RELEASE_ARCHIVE" '.assets[] | select(.name == $name) | .digest' <<< "$release")" = "sha256:$ARCHIVE_SHA"
+
+          attestation=false
+          for attempt in $(seq 1 12); do
+            if gh release verify "$TAG" --repo "$GITHUB_REPOSITORY" --format json > "$RUNNER_TEMP/release-attestation.json" 2> "$RUNNER_TEMP/release-attestation.stderr"; then
+              attestation=true
+              break
+            fi
+            sleep 5
+          done
+          if [[ "$attestation" != "true" ]]; then
+            cat "$RUNNER_TEMP/release-attestation.stderr" >&2
+            exit 1
+          fi
+          gh release verify-asset "$TAG" "$EXACT/$RELEASE_ARCHIVE" \
+            --repo "$GITHUB_REPOSITORY" --format json > "$RUNNER_TEMP/archive-attestation.json"
+          gh release verify-asset "$TAG" "$EXACT/$RELEASE_CHECKSUMS" \
+            --repo "$GITHUB_REPOSITORY" --format json > "$RUNNER_TEMP/checksum-attestation.json"
+
+      - name: Safely extract and smoke-test the public binary
+        shell: bash
+        env:
+          EXACT: ${{ steps.download.outputs.exact }}
+        run: |
+          set -euo pipefail
+          expected=$(printf '%s\n' \
+            'lkjscript/' \
+            'lkjscript/lkjscript' \
+            'lkjscript/LICENSE' \
+            'lkjscript/THIRD-PARTY-LICENSES.html' \
+            'lkjscript/RELEASE-MANIFEST.json')
+          observed=$(tar -tzf "$EXACT/$RELEASE_ARCHIVE")
+          test "$observed" = "$expected"
+          test "$(tar -tvzf "$EXACT/$RELEASE_ARCHIVE" | awk '$1 ~ /^d/ {d++} $1 ~ /^-/ {f++} $1 !~ /^[d-]/ {bad++} END {print (d == 1 && f == 4 && bad == 0) ? "yes" : "no"}')" = yes
+          root="$RUNNER_TEMP/public-smoke"
+          test ! -e "$root"
+          mkdir "$root"
+          tar -xzf "$EXACT/$RELEASE_ARCHIVE" --directory "$root" --no-same-owner
+          binary="$root/lkjscript/lkjscript"
+          test -x "$binary"
+          env -i LANG=C "$binary" capabilities > "$root/capabilities.out"
+          grep -F 'cli=10' "$root/capabilities.out"
+          grep -F 'digest=c63d0c4653d6de50e6f375d6da14bfb9101bba5a438aba5c0ae10a9dd27dbc43' "$root/capabilities.out"
+          project="$root/hello"
+          env -i LANG=C "$binary" new "$project" --template command --name hello
+          env -i LANG=C "$binary" --project "$project" check
+          env -i LANG=C "$binary" --project "$project" build --output "$root/hello.lkja"
+          env -i LANG=C "$binary" --project "$project" run main > "$root/run.out"
+          grep -F 'value="\"hello\""' "$root/run.out"
