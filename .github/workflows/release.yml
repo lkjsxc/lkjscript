@@ -377,6 +377,20 @@ jobs:
               printf '{}\n' > "$release_file"
             fi
           }
+          wait_for_release() {
+            for attempt in $(seq 1 12); do
+              load_release
+              if [[ "$release_found" == "true" ]]; then
+                echo "release discovery attempts=$attempt"
+                return 0
+              fi
+              if [[ "$attempt" -lt 12 ]]; then
+                echo "release discovery pending attempt=$attempt; retrying in 5 seconds" >&2
+                sleep 5
+              fi
+            done
+            return 1
+          }
           load_release
           existing=$release_found
           if [[ "$existing" == "false" ]]; then
@@ -386,8 +400,7 @@ jobs:
               --draft \
               --title "$TAG" \
               --notes-file "$release_notes"
-            load_release
-            test "$release_found" = true
+            wait_for_release
           fi
 
           jq -e --arg tag "$TAG" \
@@ -431,8 +444,7 @@ jobs:
               jq -e --arg name "$name" --argjson bytes "$upload_bytes" \
                 '.name == $name and .state == "uploaded" and .size == $bytes' \
                 "$upload_response" > /dev/null
-              load_release
-              test "$release_found" = true
+              wait_for_release
             fi
           }
           upload_missing "$RELEASE_ARCHIVE"
@@ -454,12 +466,14 @@ jobs:
           verified=false
           for attempt in $(seq 1 12); do
             load_release
-            test "$release_found" = true
-            if verify_assets; then
+            if [[ "$release_found" == "true" ]] && verify_assets; then
               verified=true
+              echo "asset digest propagation attempts=$attempt"
               break
             fi
-            sleep 5
+            if [[ "$attempt" -lt 12 ]]; then
+              sleep 5
+            fi
           done
           test "$verified" = true
 
@@ -474,13 +488,16 @@ jobs:
           immutable=false
           for attempt in $(seq 1 12); do
             load_release
-            test "$release_found" = true
-            if [[ "$(jq -r '.draft' "$release_file")" == "false" ]] && \
+            if [[ "$release_found" == "true" ]] && \
+               [[ "$(jq -r '.draft' "$release_file")" == "false" ]] && \
                [[ "$(jq -r '.immutable' "$release_file")" == "true" ]]; then
               immutable=true
+              echo "immutable propagation attempts=$attempt"
               break
             fi
-            sleep 5
+            if [[ "$attempt" -lt 12 ]]; then
+              sleep 5
+            fi
           done
           test "$immutable" = true
           verify_assets
@@ -499,6 +516,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
+      attestations: read
       contents: read
     steps:
       - name: Download exact and latest assets anonymously
@@ -512,18 +530,31 @@ jobs:
           latest="$RUNNER_TEMP/latest"
           mkdir -p "$exact" "$latest"
           base="https://github.com/$GITHUB_REPOSITORY/releases"
-          env -u GH_TOKEN -u GITHUB_TOKEN curl --fail --location --silent --show-error \
-            --output "$exact/$RELEASE_ARCHIVE" \
-            "$base/download/$TAG/$RELEASE_ARCHIVE"
-          env -u GH_TOKEN -u GITHUB_TOKEN curl --fail --location --silent --show-error \
-            --output "$exact/$RELEASE_CHECKSUMS" \
-            "$base/download/$TAG/$RELEASE_CHECKSUMS"
-          env -u GH_TOKEN -u GITHUB_TOKEN curl --fail --location --silent --show-error \
-            --output "$latest/$RELEASE_ARCHIVE" \
-            "$base/latest/download/$RELEASE_ARCHIVE"
-          env -u GH_TOKEN -u GITHUB_TOKEN curl --fail --location --silent --show-error \
-            --output "$latest/$RELEASE_CHECKSUMS" \
-            "$base/latest/download/$RELEASE_CHECKSUMS"
+          download_public_asset() {
+            local url=$1
+            local destination=$2
+            for attempt in $(seq 1 12); do
+              if env -u GH_TOKEN -u GITHUB_TOKEN curl \
+                --fail --location --silent --show-error \
+                --output "$destination.part" "$url"; then
+                mv "$destination.part" "$destination"
+                echo "anonymous download propagation attempts=$attempt url=$url"
+                return 0
+              fi
+              if [[ "$attempt" -lt 12 ]]; then
+                sleep 5
+              fi
+            done
+            return 1
+          }
+          download_public_asset \
+            "$base/download/$TAG/$RELEASE_ARCHIVE" "$exact/$RELEASE_ARCHIVE"
+          download_public_asset \
+            "$base/download/$TAG/$RELEASE_CHECKSUMS" "$exact/$RELEASE_CHECKSUMS"
+          download_public_asset \
+            "$base/latest/download/$RELEASE_ARCHIVE" "$latest/$RELEASE_ARCHIVE"
+          download_public_asset \
+            "$base/latest/download/$RELEASE_CHECKSUMS" "$latest/$RELEASE_CHECKSUMS"
           (cd "$exact" && sha256sum --check --strict "$RELEASE_CHECKSUMS")
           (cd "$latest" && sha256sum --check --strict "$RELEASE_CHECKSUMS")
           cmp "$exact/$RELEASE_ARCHIVE" "$latest/$RELEASE_ARCHIVE"
@@ -545,6 +576,7 @@ jobs:
           test "$(jq -r '.immutable' <<< "$release")" = true
           test "$(jq -r '.draft' <<< "$release")" = false
           test "$(jq -r '.prerelease' <<< "$release")" = false
+          test "$(jq -r '.name' <<< "$release")" = "$TAG"
           test "$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name')" = "$TAG"
           test "$(jq -r --arg name "$RELEASE_ARCHIVE" '.assets[] | select(.name == $name) | .digest' <<< "$release")" = "sha256:$ARCHIVE_SHA"
 
@@ -552,18 +584,37 @@ jobs:
           for attempt in $(seq 1 12); do
             if gh release verify "$TAG" --repo "$GITHUB_REPOSITORY" --format json > "$RUNNER_TEMP/release-attestation.json" 2> "$RUNNER_TEMP/release-attestation.stderr"; then
               attestation=true
+              echo "release attestation propagation attempts=$attempt"
               break
             fi
-            sleep 5
+            if [[ "$attempt" -lt 12 ]]; then
+              sleep 5
+            fi
           done
           if [[ "$attestation" != "true" ]]; then
             cat "$RUNNER_TEMP/release-attestation.stderr" >&2
             exit 1
           fi
-          gh release verify-asset "$TAG" "$EXACT/$RELEASE_ARCHIVE" \
-            --repo "$GITHUB_REPOSITORY" --format json > "$RUNNER_TEMP/archive-attestation.json"
-          gh release verify-asset "$TAG" "$EXACT/$RELEASE_CHECKSUMS" \
-            --repo "$GITHUB_REPOSITORY" --format json > "$RUNNER_TEMP/checksum-attestation.json"
+          verify_asset_attestation() {
+            local asset=$1
+            local output=$2
+            for attempt in $(seq 1 12); do
+              if gh release verify-asset "$TAG" "$asset" \
+                --repo "$GITHUB_REPOSITORY" --format json > "$output" 2> "$output.stderr"; then
+                echo "asset attestation propagation attempts=$attempt asset=$(basename "$asset")"
+                return 0
+              fi
+              if [[ "$attempt" -lt 12 ]]; then
+                sleep 5
+              fi
+            done
+            cat "$output.stderr" >&2
+            return 1
+          }
+          verify_asset_attestation \
+            "$EXACT/$RELEASE_ARCHIVE" "$RUNNER_TEMP/archive-attestation.json"
+          verify_asset_attestation \
+            "$EXACT/$RELEASE_CHECKSUMS" "$RUNNER_TEMP/checksum-attestation.json"
 
       - name: Safely extract and smoke-test the public binary
         shell: bash

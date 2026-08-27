@@ -1730,6 +1730,10 @@ mod tests {
             .split_once("\n  post-release:\n")
             .expect("post-release job")
             .0;
+        let post_release = jobs
+            .split_once("\n  post-release:\n")
+            .expect("post-release job")
+            .1;
         assert!(publish.contains("contents: write"));
         assert!(!publish.contains("actions/checkout"));
         assert!(!publish.contains("cargo "));
@@ -1738,10 +1742,18 @@ mod tests {
         assert!(!publish.contains("--notes-from-tag"));
         assert!(publish.contains("releases?per_page=100&page=1"));
         assert!(publish.contains("releases?per_page=100&page=2"));
+        assert!(publish.contains("release discovery pending attempt="));
+        assert!(publish.contains("for attempt in $(seq 1 12)"));
         assert!(!publish.contains("releases/tags/$TAG"));
         assert!(publish.contains("https://uploads.github.com/"));
         assert!(!publish.contains("gh release upload"));
         assert!(publish.contains(".name == $tag"));
+        assert!(workflow.contains("anonymous download propagation attempts="));
+        assert!(workflow.contains("asset attestation propagation attempts="));
+        assert!(post_release.contains("attestations: read"));
+        assert!(post_release.contains("contents: read"));
+        assert!(!post_release.contains("contents: write"));
+        assert!(!post_release.contains("attestations: write"));
         for forbidden in [
             "--clobber",
             "ubuntu-latest",

@@ -59,13 +59,13 @@ cargo run --locked -p lkjscript-dev -- release prepare \
   --cargo-about /absolute/path/to/cargo-about \
   --cargo-about-archive /absolute/path/to/cargo-about.tar.gz \
   --output /absolute/absent/path/release-output \
-  --tag v0.1.3 \
+  --tag v0.1.4 \
   --publication dry-run
 cargo run --locked -p lkjscript-dev -- release verify \
   --archive /absolute/path/release-output/lkjscript-x86_64-unknown-linux-gnu.tar.gz \
   --checksums /absolute/path/release-output/SHA256SUMS \
   --receipt /absolute/path/release-output/release-receipt.json \
-  --expected-tag v0.1.3 \
+  --expected-tag v0.1.4 \
   --expected-publication dry-run
 ```
 
@@ -91,7 +91,7 @@ existing annotated tag:
 
 ```sh
 gh workflow run Release --repo lkjsxc/lkjscript --ref main \
-  -f publish=false -f tag=v0.1.3
+  -f publish=false -f tag=v0.1.4
 gh run watch --repo lkjsxc/lkjscript RUN_ID --exit-status
 gh run download --repo lkjsxc/lkjscript RUN_ID \
   --name release-handoff-RUN_ID-RUN_ATTEMPT \
@@ -107,7 +107,7 @@ After the exact implementation commit is clean, verified, normally pushed, and e
 ```sh
 git fetch --prune origin
 test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
-release_tag=v0.1.3
+release_tag=v0.1.4
 git tag -a "$release_tag" -m "lkjscript $release_tag"
 test "$(git cat-file -t "refs/tags/$release_tag")" = tag
 tag_object_sha=$(git rev-parse "refs/tags/$release_tag")
@@ -138,7 +138,7 @@ come from the requested annotated tag:
 
 ```sh
 gh workflow run Release --repo lkjsxc/lkjscript --ref main \
-  -f publish=true -f tag=v0.1.3
+  -f publish=true -f tag=v0.1.4
 ```
 
 ## Public verification
@@ -148,22 +148,22 @@ Verify anonymous exact and latest transport separately:
 ```sh
 mkdir -p /tmp/lkjscript-release-check/exact /tmp/lkjscript-release-check/latest
 curl --fail --location --output /tmp/lkjscript-release-check/exact/archive.tar.gz \
-  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.3/lkjscript-x86_64-unknown-linux-gnu.tar.gz
+  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.4/lkjscript-x86_64-unknown-linux-gnu.tar.gz
 curl --fail --location --output /tmp/lkjscript-release-check/exact/SHA256SUMS \
-  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.3/SHA256SUMS
+  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.4/SHA256SUMS
 curl --fail --location --output /tmp/lkjscript-release-check/latest/archive.tar.gz \
   https://github.com/lkjsxc/lkjscript/releases/latest/download/lkjscript-x86_64-unknown-linux-gnu.tar.gz
 sha256sum /tmp/lkjscript-release-check/exact/archive.tar.gz \
   /tmp/lkjscript-release-check/latest/archive.tar.gz
-gh release verify v0.1.3 --repo lkjsxc/lkjscript
-gh release verify-asset v0.1.3 /tmp/lkjscript-release-check/exact/archive.tar.gz \
+gh release verify v0.1.4 --repo lkjsxc/lkjscript
+gh release verify-asset v0.1.4 /tmp/lkjscript-release-check/exact/archive.tar.gz \
   --repo lkjsxc/lkjscript
 ```
 
 The post-release job additionally compares exact/latest archive and checksum bytes, checks GitHub's
-asset digest and release attestation, validates the archive inventory before extraction, and runs
-`capabilities`, `new`, `check`, `build`, and `run main` from the anonymous public bytes without a
-checkout or Cargo.
+asset digest, and uses only `contents: read` plus `attestations: read` to verify release and asset
+attestations. It validates the archive inventory before extraction and runs `capabilities`, `new`,
+`check`, `build`, and `run main` from the anonymous public bytes without a checkout or Cargo.
 
 ## Recovery and maintenance
 
