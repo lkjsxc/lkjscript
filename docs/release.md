@@ -29,7 +29,12 @@ once with:
 gh api --method PUT repos/lkjsxc/lkjscript/immutable-releases
 ```
 
-Do not put administrator credentials in the workflow. Normal publication uses only the ephemeral
+Do not put administrator credentials in the workflow. GitHub's immutable-release settings endpoint
+requires repository `Administration: read`, which is not an assignable `GITHUB_TOKEN` permission.
+Immediately before pushing each release tag, the administrator therefore binds the successful
+setting check to that exact annotated tag-object SHA in the non-secret repository variable
+`LKJSCRIPT_IMMUTABLE_RELEASE_TAG_OBJECT_SHA`. The write-isolated publish job requires that exact
+binding and otherwise stops before creating a draft. Normal publication uses only the ephemeral
 workflow token and the publish job's `contents: write` permission.
 
 ## Pinned inputs and local preparation
@@ -54,13 +59,13 @@ cargo run --locked -p lkjscript-dev -- release prepare \
   --cargo-about /absolute/path/to/cargo-about \
   --cargo-about-archive /absolute/path/to/cargo-about.tar.gz \
   --output /absolute/absent/path/release-output \
-  --tag v0.1.0 \
+  --tag v0.1.1 \
   --publication dry-run
 cargo run --locked -p lkjscript-dev -- release verify \
   --archive /absolute/path/release-output/lkjscript-x86_64-unknown-linux-gnu.tar.gz \
   --checksums /absolute/path/release-output/SHA256SUMS \
   --receipt /absolute/path/release-output/release-receipt.json \
-  --expected-tag v0.1.0 \
+  --expected-tag v0.1.1 \
   --expected-publication dry-run
 ```
 
@@ -86,7 +91,7 @@ existing annotated tag:
 
 ```sh
 gh workflow run Release --repo lkjsxc/lkjscript --ref main \
-  -f publish=false -f tag=v0.1.0
+  -f publish=false -f tag=v0.1.1
 gh run watch --repo lkjsxc/lkjscript RUN_ID --exit-status
 gh run download --repo lkjsxc/lkjscript RUN_ID \
   --name release-handoff-RUN_ID-RUN_ATTEMPT \
@@ -102,17 +107,35 @@ After the exact implementation commit is clean, verified, normally pushed, and e
 ```sh
 git fetch --prune origin
 test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
-git tag -a v0.1.0 -m "lkjscript v0.1.0"
-test "$(git cat-file -t refs/tags/v0.1.0)" = tag
-git push origin refs/tags/v0.1.0
+release_tag=v0.1.1
+git tag -a "$release_tag" -m "lkjscript $release_tag"
+test "$(git cat-file -t "refs/tags/$release_tag")" = tag
+tag_object_sha=$(git rev-parse "refs/tags/$release_tag")
+test "$(gh api repos/lkjsxc/lkjscript/immutable-releases --jq '.enabled')" = true
+gh variable set LKJSCRIPT_IMMUTABLE_RELEASE_TAG_OBJECT_SHA \
+  --repo lkjsxc/lkjscript --body "$tag_object_sha"
+test "$(gh variable get LKJSCRIPT_IMMUTABLE_RELEASE_TAG_OBJECT_SHA \
+  --repo lkjsxc/lkjscript)" = "$tag_object_sha"
+git push origin "refs/tags/$release_tag"
 ```
 
 The tag push owns publication. Do not create a release manually in parallel. The publish job does
 not checkout or execute repository code. It downloads only the verified handoff, checks fixed
-names and digests with runner tools, checks the remote annotated tag and immutable-release setting,
-creates or resumes an exact draft, uploads only missing assets without `--clobber`, verifies both
-remote asset digests, and then publishes it as latest. Published exact immutable state is
-idempotent success; extra or mismatched state fails.
+names and digests with runner tools, checks the remote annotated tag and its administrator-recorded
+immutable-setting confirmation, creates or resumes an exact draft, uploads only missing assets
+without `--clobber`, verifies both remote asset digests, and then publishes it as latest. Published
+exact immutable state is idempotent success; extra or mismatched state fails.
+
+If a tag-triggered run fails before publication because the workflow itself needs a later repair,
+leave the tag untouched. After the repair is on `main`, recover with the next unused patch release.
+For an unchanged exact tag whose source and workflow need no repair, an idempotent manual retry may
+use `publish=true`; the workflow definition comes from `main` but checkout and all executable work
+come from the requested annotated tag:
+
+```sh
+gh workflow run Release --repo lkjsxc/lkjscript --ref main \
+  -f publish=true -f tag=v0.1.1
+```
 
 ## Public verification
 
@@ -121,15 +144,15 @@ Verify anonymous exact and latest transport separately:
 ```sh
 mkdir -p /tmp/lkjscript-release-check/exact /tmp/lkjscript-release-check/latest
 curl --fail --location --output /tmp/lkjscript-release-check/exact/archive.tar.gz \
-  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.0/lkjscript-x86_64-unknown-linux-gnu.tar.gz
+  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.1/lkjscript-x86_64-unknown-linux-gnu.tar.gz
 curl --fail --location --output /tmp/lkjscript-release-check/exact/SHA256SUMS \
-  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.0/SHA256SUMS
+  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.1/SHA256SUMS
 curl --fail --location --output /tmp/lkjscript-release-check/latest/archive.tar.gz \
   https://github.com/lkjsxc/lkjscript/releases/latest/download/lkjscript-x86_64-unknown-linux-gnu.tar.gz
 sha256sum /tmp/lkjscript-release-check/exact/archive.tar.gz \
   /tmp/lkjscript-release-check/latest/archive.tar.gz
-gh release verify v0.1.0 --repo lkjsxc/lkjscript
-gh release verify-asset v0.1.0 /tmp/lkjscript-release-check/exact/archive.tar.gz \
+gh release verify v0.1.1 --repo lkjsxc/lkjscript
+gh release verify-asset v0.1.1 /tmp/lkjscript-release-check/exact/archive.tar.gz \
   --repo lkjsxc/lkjscript
 ```
 
