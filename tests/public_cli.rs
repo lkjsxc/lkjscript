@@ -7,15 +7,38 @@
 use lkjscript::platform::control::{CompactRecord, decode_logical_change_plan, parse_records};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
+use std::env;
 use std::fs::{File, OpenOptions};
 use std::io::{self, BufReader, Read};
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
 const APPLICATION: &str = "applications/lkjournal";
+const RELEASE_CANDIDATE_ENVIRONMENT: &str = "LKJSCRIPT_RELEASE_CANDIDATE";
 
 fn binary() -> PathBuf {
-    PathBuf::from(env!("CARGO_BIN_EXE_lkjscript"))
+    let Some(candidate) = env::var_os(RELEASE_CANDIDATE_ENVIRONMENT) else {
+        return PathBuf::from(env!("CARGO_BIN_EXE_lkjscript"));
+    };
+    let candidate = PathBuf::from(candidate);
+    assert!(
+        candidate.is_absolute(),
+        "{RELEASE_CANDIDATE_ENVIRONMENT} must be an absolute path"
+    );
+    let metadata =
+        std::fs::symlink_metadata(&candidate).expect("inspect explicit release candidate metadata");
+    assert!(
+        !metadata.file_type().is_symlink() && metadata.is_file(),
+        "{RELEASE_CANDIDATE_ENVIRONMENT} must name a regular non-symlink file"
+    );
+    #[cfg(unix)]
+    assert!(
+        metadata.permissions().mode() & 0o111 != 0,
+        "{RELEASE_CANDIDATE_ENVIRONMENT} must be executable"
+    );
+    candidate
 }
 
 fn copy_executable(source: &Path, destination: &Path) {
