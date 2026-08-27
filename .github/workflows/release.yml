@@ -150,15 +150,54 @@ jobs:
         run: |
           set -euo pipefail
           summary="$RUNNER_TEMP/full-verification-summary.json"
+          set +e
           cargo run --locked -p lkjscript-dev -- check full --machine | tee "$summary"
+          check_status=${PIPESTATUS[0]}
+          set -e
           test "$(wc -l < "$summary")" -eq 1
-          receipt=$(jq -er '.receipt' "$summary")
-          test -f "$GITHUB_WORKSPACE/$receipt"
+          receipt_relative=$(jq -er '.receipt' "$summary")
+          [[ "$receipt_relative" == .artifacts/lkjscript-dev/check/*/receipt.json ]]
+          [[ ! "$receipt_relative" =~ (^|/)\.\.(/|$) ]]
+          receipt="$GITHUB_WORKSPACE/$receipt_relative"
+          test -f "$receipt"
+          evidence_relative=$(dirname "$receipt_relative")
+          evidence_directory=$(dirname "$receipt")
+          {
+            echo "receipt=$receipt"
+            echo "evidence_directory=$evidence_directory"
+          } >> "$GITHUB_OUTPUT"
+          if [[ "$check_status" -ne 0 ]]; then
+            jq '{status, profile, passed_gates, fresh_passed_gates, reused_passed_gates, selected_gates, failure, failed: [.gates[] | select(.status == "failed") | {name, status, reason: .process.reason, exit_code: .process.exit_code, signal: .process.signal, elapsed_nanoseconds, stdout: .process.stdout, stderr: .process.stderr}]}' "$receipt"
+            while IFS= read -r log_relative; do
+              [[ "$log_relative" == "$evidence_relative/"* ]] || {
+                echo "refusing unexpected verification log path: $log_relative" >&2
+                exit 1
+              }
+              log="$GITHUB_WORKSPACE/$log_relative"
+              test -f "$log"
+              echo "::group::bounded tail of $log_relative"
+              tail -c 65536 "$log"
+              echo "::endgroup::"
+            done < <(jq -r '.gates[] | select(.status == "failed") | (.process.stdout.path // empty), (.process.stderr.path // empty)' "$receipt")
+            exit "$check_status"
+          fi
           jq -e \
             --arg commit "${{ steps.identity.outputs.commit_sha }}" \
             '.status == "passed" and .profile == "full" and .git_head == $commit and .input_stable == true and .fresh_required == true and .reused_passed_gates == 0' \
-            "$GITHUB_WORKSPACE/$receipt"
-          echo "receipt=$GITHUB_WORKSPACE/$receipt" >> "$GITHUB_OUTPUT"
+            "$receipt"
+
+      - name: Retain bounded full-verification evidence
+        if: always() && steps.full.outputs.evidence_directory != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: full-verification-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ steps.full.outputs.evidence_directory }}/receipt.json
+            ${{ steps.full.outputs.evidence_directory }}/*.log
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 7
+          compression-level: 6
 
       - name: Prepare and strictly verify the release handoff
         id: prepare
