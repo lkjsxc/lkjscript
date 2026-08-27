@@ -409,6 +409,13 @@ fn parse_tar(path: &Path, extraction: &Path) -> Result<ParsedTar, DevError> {
                     DevError::infrastructure(format!("create extracted member '{name}': {error}"))
                 })?;
                 let digest = copy_exact(&mut input, &mut output, size, &name)?;
+                output
+                    .set_permissions(fs::Permissions::from_mode(expected.mode))
+                    .map_err(|error| {
+                        DevError::infrastructure(format!(
+                            "set extracted member mode '{name}': {error}"
+                        ))
+                    })?;
                 output.sync_all().map_err(|error| {
                     DevError::infrastructure(format!(
                         "synchronize extracted member '{name}': {error}"
@@ -519,6 +526,14 @@ fn copy_regular(source: &Path, destination: &Path, mode: u32) -> Result<(), DevE
     std::io::copy(&mut input, &mut output).map_err(|error| {
         DevError::infrastructure(format!("copy payload '{}': {error}", destination.display()))
     })?;
+    output
+        .set_permissions(fs::Permissions::from_mode(mode))
+        .map_err(|error| {
+            DevError::infrastructure(format!(
+                "set payload mode '{}': {error}",
+                destination.display()
+            ))
+        })?;
     output.sync_all().map_err(|error| {
         DevError::infrastructure(format!(
             "synchronize payload '{}': {error}",
@@ -536,6 +551,11 @@ pub(super) fn write_new(path: &Path, bytes: &[u8], mode: u32) -> Result<(), DevE
     output.write_all(bytes).map_err(|error| {
         DevError::infrastructure(format!("write '{}': {error}", path.display()))
     })?;
+    output
+        .set_permissions(fs::Permissions::from_mode(mode))
+        .map_err(|error| {
+            DevError::infrastructure(format!("set mode '{}': {error}", path.display()))
+        })?;
     output.sync_all().map_err(|error| {
         DevError::infrastructure(format!("synchronize '{}': {error}", path.display()))
     })
