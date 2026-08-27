@@ -41,6 +41,16 @@ use tokio::runtime::Handle;
 
 const MAXIMUM_NORMALIZED_DEPLOYMENT_GRANTS: usize = 1_024;
 
+#[derive(Clone, Copy)]
+struct AdapterPreparation<'a> {
+    program: &'a NormalizedProgram,
+    secrets: &'a SecretCatalog,
+    deployment_directory: &'a Path,
+    runtime: &'a Handle,
+    enforce_standard_interface: bool,
+    stream_requirements: &'a [RequirementReference],
+}
+
 #[derive(Clone, Debug)]
 pub(crate) enum NormalizedAdapterDescriptor {
     Configuration {
@@ -355,6 +365,14 @@ impl NormalizedPreparedDeployment {
                 .filter(|grant| grant.adapter.kind() == NormalizedAdapterKind::ByteStream)
                 .map(|grant| grant.requirement)
                 .collect::<Vec<_>>();
+            let adapter_preparation = AdapterPreparation {
+                program,
+                secrets,
+                deployment_directory,
+                runtime: &runtime,
+                enforce_standard_interface: enforce_standard_interfaces,
+                stream_requirements: &stream_requirements,
+            };
 
             let mut bindings = Vec::with_capacity(component.requirements.len());
             let mut observed = BTreeMap::new();
@@ -380,16 +398,7 @@ impl NormalizedPreparedDeployment {
                     )
                 })?;
                 let adapter_kind = grant.adapter.kind();
-                let adapter = prepare_adapter(
-                    program,
-                    requirement,
-                    &grant.adapter,
-                    secrets,
-                    deployment_directory,
-                    &runtime,
-                    enforce_standard_interfaces,
-                    &stream_requirements,
-                )?;
+                let adapter = prepare_adapter(adapter_preparation, requirement, &grant.adapter)?;
                 prepared_adapters.push(Arc::clone(&adapter));
                 let required_operations = exact_operations(program, requirement)?;
                 if adapter.operations() != &required_operations {
@@ -546,15 +555,18 @@ fn finish_preparation(
 }
 
 fn prepare_adapter(
-    program: &NormalizedProgram,
+    preparation: AdapterPreparation<'_>,
     requirement: &NormalizedRequirement,
     descriptor: &NormalizedAdapterDescriptor,
-    secrets: &SecretCatalog,
-    deployment_directory: &Path,
-    runtime: &Handle,
-    enforce_standard_interface: bool,
-    stream_requirements: &[RequirementReference],
 ) -> Result<Arc<dyn NormalizedCapabilityAdapter>, Diagnostic> {
+    let AdapterPreparation {
+        program,
+        secrets,
+        deployment_directory,
+        runtime,
+        enforce_standard_interface,
+        stream_requirements,
+    } = preparation;
     let interface = requirement.interface;
     if enforce_standard_interface {
         require_standard_interface(interface, descriptor.kind())?;
