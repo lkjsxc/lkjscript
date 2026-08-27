@@ -15,12 +15,12 @@ use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const SERVICE_CONTRACT_VERSION: u32 = 1;
+const SERVICE_CONTRACT_VERSION: u32 = 2;
 pub(crate) const POSTGRES_IMAGE: &str =
     "postgres@sha256:075f7ba66bc9b3ce7d6b8b635208ff61cd7cf1a67d71ec530eec5d7ae0cbe571";
-const FROZEN_SERVICE_ARTIFACT_RELATIVE: &str = "frozen-service/lkjournal-artifact-v4.lkja";
-const FROZEN_SERVICE_ARTIFACT_SHA256: &str =
-    "d0a57a74161903a302472cbd8997762434b64cc58bd8ae36577b9ba31d2f96a3";
+const SERVICE_ARTIFACT_RELATIVE: &str = "generated/lkjournal.lkja";
+const SERVICE_ARTIFACT_SHA256: &str =
+    "80c69d69aec80e49cc0c023ec65eef3106f4a876eff1dc347defb461f3037ccb";
 const MAXIMUM_COMMAND_STDOUT_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_COMMAND_STDERR_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_RUNNER_STDOUT_BYTES: u64 = 16 * 1024 * 1024;
@@ -28,6 +28,8 @@ const MAXIMUM_RUNNER_STDERR_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_BACKUP_BYTES: u64 = 64 * 1024 * 1024;
 const MAXIMUM_DESCRIPTOR_BYTES: u64 = 1024 * 1024;
 const MAXIMUM_ARTIFACT_BYTES: u64 = 64 * 1024 * 1024;
+const MAXIMUM_AUTHORITY_FILES: usize = 1_100_000;
+const MAXIMUM_AUTHORITY_BYTES: u64 = 16 * 1024 * 1024 * 1024;
 const MAXIMUM_HTTP_HEADER_BYTES: usize = 64 * 1024;
 const MAXIMUM_HTTP_BODY_BYTES: usize = 8 * 1024 * 1024;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(60);
@@ -126,6 +128,7 @@ struct RunnerReady {
     #[serde(skip_serializing_if = "Option::is_none")]
     listen: Option<String>,
     secret_names: Vec<String>,
+    readiness_elapsed_nanoseconds: u64,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -169,6 +172,10 @@ struct ContainerCleanup {
 #[serde(deny_unknown_fields)]
 struct ServiceResult {
     artifact_digest: String,
+    artifact_identity: ArtifactIdentity,
+    authority_before: AuthorityObservation,
+    authority_after: AuthorityObservation,
+    authority_unchanged: bool,
     routes_checked: u64,
     resource_revision: u64,
     history_entries: u64,
@@ -180,6 +187,38 @@ struct ServiceResult {
     initialization_transport: InitializationTransport,
     initialization_observation: InitializationObservation,
     request_elapsed_nanoseconds: BTreeMap<String, u64>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct ArtifactIdentity {
+    repository: String,
+    package: String,
+    revision: String,
+    semantic_state: String,
+    compilation_manifest: String,
+    artifact_manifest: String,
+    artifact_bundle: String,
+    bytes: u64,
+    packages: u64,
+    closure_objects: u64,
+    compiler_units: u64,
+    manifest_objects: u64,
+    manifest_object_bytes: u64,
+    segments: u64,
+    load_objects: u64,
+    load_object_bytes: u64,
+    checked_in_sha256: String,
+    fresh_build_equal: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct AuthorityObservation {
+    files: u64,
+    bytes: u64,
+    head_sha256: String,
+    inventory_sha256: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -337,6 +376,7 @@ struct ActiveRunner {
     stderr_path: PathBuf,
     ready: Option<RunnerReady>,
     terminal: Option<ProcessObservation>,
+    started: Instant,
 }
 
 pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, DevError> {
@@ -369,13 +409,13 @@ fn execute(
         binary_proof = Some(proof_input(repository, &binary)?);
         let artifact = repository
             .join("applications/lkjournal")
-            .join(FROZEN_SERVICE_ARTIFACT_RELATIVE);
+            .join(SERVICE_ARTIFACT_RELATIVE);
         artifact_proof = Some(proof_required_file_with_sha256(
             repository,
             &artifact,
             MAXIMUM_ARTIFACT_BYTES,
-            "frozen service artifact",
-            FROZEN_SERVICE_ARTIFACT_SHA256,
+            "maintained artifact-10 service bundle",
+            SERVICE_ARTIFACT_SHA256,
         )?);
         run_acceptance(&mut context, &binary)
     })();
@@ -563,6 +603,7 @@ impl ServiceContext {
             stderr_path,
             ready: None,
             terminal: None,
+            started: Instant::now(),
         }));
         Ok(index)
     }
@@ -574,7 +615,8 @@ impl ServiceContext {
             .and_then(Option::as_mut)
             .ok_or_else(|| ServiceFailure::failed("runner_missing", "runner is not active"))?;
         let line = runner.wait_for_ready_line(RUNNER_READY_TIMEOUT)?;
-        let ready = parse_ready_event(&line)?;
+        let mut ready = parse_ready_event(&line)?;
+        ready.readiness_elapsed_nanoseconds = duration_nanoseconds(runner.started.elapsed());
         runner.ready = Some(ready.clone());
         Ok(ready)
     }
@@ -793,18 +835,50 @@ fn run_acceptance(
     binary: &Path,
 ) -> Result<ServiceResult, ServiceFailure> {
     let application = context.repository.join("applications/lkjournal");
-    let artifact_source = application.join(FROZEN_SERVICE_ARTIFACT_RELATIVE);
+    let authority_before = observe_graph_authority(&application)?;
+    let artifact_source = application.join(SERVICE_ARTIFACT_RELATIVE);
     let service_source = application.join("service.deployment.json");
     let worker_source = application.join("worker.deployment.json");
     let artifact_bytes = process::read_bounded(&artifact_source, MAXIMUM_ARTIFACT_BYTES)
         .map_err(|error| ServiceFailure::infrastructure("artifact_read", error))?;
-    let artifact_directory = context.run_directory.join("frozen-service");
+    let fresh_artifact = context.run_directory.join("fresh-lkjournal.lkja");
+    let build_output = context.invoke(
+        CommandRequest::standard(
+            "artifact-fresh-build",
+            vec![
+                binary.to_string_lossy().into_owned(),
+                "--project".to_owned(),
+                application.to_string_lossy().into_owned(),
+                "build".to_owned(),
+                "--output".to_owned(),
+                fresh_artifact.to_string_lossy().into_owned(),
+            ],
+        )
+        .timeout(Duration::from_secs(120)),
+    )?;
+    let fresh_bytes = process::read_bounded(&fresh_artifact, MAXIMUM_ARTIFACT_BYTES)
+        .map_err(|error| ServiceFailure::infrastructure("fresh_artifact_read", error))?;
+    require(
+        fresh_bytes == artifact_bytes,
+        "artifact_fresh_build_mismatch",
+        "fresh public build is not byte-equal to the checked-in maintained artifact",
+    )?;
+    let artifact_identity = parse_build_identity(
+        &build_output,
+        artifact_bytes.len() as u64,
+        &sha256_hex(&artifact_bytes),
+    )?;
+    fs::remove_file(&fresh_artifact)
+        .map_err(|error| ServiceFailure::infrastructure("fresh_artifact_remove", error))?;
+    let artifact_directory = context.run_directory.join("generated");
     fs::create_dir(&artifact_directory)
         .map_err(|error| ServiceFailure::infrastructure("artifact_directory", error))?;
-    let artifact_path = context.run_directory.join(FROZEN_SERVICE_ARTIFACT_RELATIVE);
+    let artifact_path = context.run_directory.join(SERVICE_ARTIFACT_RELATIVE);
     evidence::publish(&artifact_path, &artifact_bytes)
         .map_err(|error| ServiceFailure::infrastructure("artifact_stage", error))?;
     context.retain(&artifact_path)?;
+    fs::create_dir_all(context.run_directory.join("state/objects"))
+        .map_err(|error| ServiceFailure::infrastructure("object_host_directory", error))?;
 
     context.invoke(
         CommandRequest::standard(
@@ -901,6 +975,13 @@ fn run_acceptance(
         runner_environment.clone(),
     )?;
     let ready = context.runner_ready(service_index)?;
+    require(
+        ready.artifact_digest == artifact_identity.artifact_bundle
+            && ready.target == "serve"
+            && ready.runner == "http",
+        "service_artifact_identity",
+        "service readiness disagrees with the exact fresh artifact-10 build",
+    )?;
     require(
         ready.secret_names == ["bootstrap-token", "database-url"],
         "service_secret_names",
@@ -1186,7 +1267,14 @@ fn run_acceptance(
         &context.run_directory.clone(),
         runner_environment.clone(),
     )?;
-    context.runner_ready(worker_index)?;
+    let worker_ready = context.runner_ready(worker_index)?;
+    require(
+        worker_ready.artifact_digest == artifact_identity.artifact_bundle
+            && worker_ready.target == "work"
+            && worker_ready.runner == "worker",
+        "worker_artifact_identity",
+        "worker readiness disagrees with the exact fresh artifact-10 build",
+    )?;
     let worker_started = Instant::now();
     let mut job_state = String::new();
     while worker_started.elapsed() < WORKER_READY_TIMEOUT {
@@ -1295,7 +1383,12 @@ fn run_acceptance(
         &context.run_directory.clone(),
         restored_environment,
     )?;
-    context.runner_ready(restored_index)?;
+    let restored_ready = context.runner_ready(restored_index)?;
+    require(
+        restored_ready.artifact_digest == artifact_identity.artifact_bundle,
+        "restored_artifact_identity",
+        "restored service readiness changed the exact artifact-10 bundle identity",
+    )?;
     let restored = context.request(
         "restored-read",
         restored_port,
@@ -1312,8 +1405,19 @@ fn run_acceptance(
     )?;
     context.stop_runner(restored_index)?;
 
+    let authority_after = observe_graph_authority(&application)?;
+    require(
+        authority_after == authority_before,
+        "graph_authority_changed",
+        "service acceptance changed the maintained Graph 5 authority inventory",
+    )?;
+
     Ok(ServiceResult {
         artifact_digest: ready.artifact_digest,
+        artifact_identity,
+        authority_before,
+        authority_after,
+        authority_unchanged: true,
         routes_checked: 13,
         resource_revision: 1,
         history_entries: 2,
@@ -1650,12 +1754,19 @@ fn parse_ready_event(line: &[u8]) -> Result<RunnerReady, ServiceFailure> {
             "runner readiness omitted deployment",
         )
     })?;
+    let artifact_digest = string_at(deployment, "artifact_digest")?;
+    require(
+        domain_identity(&artifact_digest, "artifact_bundle_", 64),
+        "runner_ready_artifact_identity",
+        "runner readiness artifact digest is not an exact artifact-10 bundle identity",
+    )?;
     Ok(RunnerReady {
-        artifact_digest: string_at(deployment, "artifact_digest")?,
+        artifact_digest,
         target: string_at(deployment, "target")?,
         runner: string_at(deployment, "runner")?,
         listen: optional_string_at(deployment, "listen")?,
         secret_names: string_array_at(deployment, "secret_names")?,
+        readiness_elapsed_nanoseconds: 0,
     })
 }
 
@@ -1824,10 +1935,10 @@ fn write_descriptor(
     let object = descriptor.as_object_mut().ok_or_else(|| {
         ServiceFailure::failed("descriptor_shape", "deployment descriptor is not an object")
     })?;
-    if object.get("artifact").and_then(Value::as_str) != Some(FROZEN_SERVICE_ARTIFACT_RELATIVE) {
+    if object.get("artifact").and_then(Value::as_str) != Some(SERVICE_ARTIFACT_RELATIVE) {
         return Err(ServiceFailure::failed(
             "descriptor_artifact_boundary",
-            "maintained deployment descriptor does not bind the frozen service artifact",
+            "maintained deployment descriptor does not bind the current artifact-10 bundle",
         ));
     }
     if let Some(port) = port {
@@ -1841,6 +1952,115 @@ fn write_descriptor(
     evidence::publish(destination, &encoded)
         .map_err(|error| ServiceFailure::infrastructure("descriptor_publish", error))?;
     Ok(())
+}
+
+fn parse_build_identity(
+    bytes: &[u8],
+    expected_bytes: u64,
+    checked_in_sha256: &str,
+) -> Result<ArtifactIdentity, ServiceFailure> {
+    let text = std::str::from_utf8(bytes).map_err(|_| {
+        ServiceFailure::failed(
+            "artifact_build_output_utf8",
+            "fresh public build output is not UTF-8",
+        )
+    })?;
+    let records = text
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            let name = fields.next()?;
+            let values = fields
+                .filter_map(|field| field.split_once('='))
+                .map(|(name, value)| (name.to_owned(), value.to_owned()))
+                .collect::<BTreeMap<_, _>>();
+            Some((name.to_owned(), values))
+        })
+        .collect::<BTreeMap<_, _>>();
+    let authority = build_record(&records, "authority")?;
+    let compilation = build_record(&records, "compilation")?;
+    let artifact = build_record(&records, "artifact")?;
+    let identity = ArtifactIdentity {
+        repository: build_field(authority, "repository")?,
+        package: build_field(authority, "package")?,
+        revision: build_field(authority, "revision")?,
+        semantic_state: build_field(authority, "state")?,
+        compilation_manifest: build_field(compilation, "manifest")?,
+        artifact_manifest: build_field(artifact, "manifest")?,
+        artifact_bundle: build_field(artifact, "bundle")?,
+        bytes: build_u64_field(artifact, "bytes")?,
+        packages: build_u64_field(artifact, "packages")?,
+        closure_objects: build_u64_field(artifact, "closure-objects")?,
+        compiler_units: build_u64_field(artifact, "compiler-units")?,
+        manifest_objects: build_u64_field(artifact, "manifest-objects")?,
+        manifest_object_bytes: build_u64_field(artifact, "manifest-object-bytes")?,
+        segments: build_u64_field(artifact, "segments")?,
+        load_objects: build_u64_field(artifact, "load-objects")?,
+        load_object_bytes: build_u64_field(artifact, "load-object-bytes")?,
+        checked_in_sha256: checked_in_sha256.to_owned(),
+        fresh_build_equal: true,
+    };
+    require(
+        identity.bytes == expected_bytes
+            && identity.packages > 0
+            && identity.compiler_units > 0
+            && identity.segments > 0
+            && identity.closure_objects == identity.manifest_objects
+            && identity.load_objects == identity.manifest_objects
+            && identity.load_object_bytes == identity.manifest_object_bytes
+            && domain_identity(&identity.repository, "repo_", 32)
+            && domain_identity(&identity.package, "pkg_", 32)
+            && domain_identity(&identity.revision, "rev_", 64)
+            && domain_identity(&identity.semantic_state, "semantic_state_", 64)
+            && domain_identity(&identity.compilation_manifest, "compilation_manifest_", 64)
+            && domain_identity(&identity.artifact_manifest, "artifact_manifest_", 64)
+            && domain_identity(&identity.artifact_bundle, "artifact_bundle_", 64)
+            && checked_in_sha256.len() == 64
+            && checked_in_sha256
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit()),
+        "artifact_build_identity",
+        "fresh public build reported a malformed or inconsistent exact artifact identity",
+    )?;
+    Ok(identity)
+}
+
+fn build_record<'a>(
+    records: &'a BTreeMap<String, BTreeMap<String, String>>,
+    name: &str,
+) -> Result<&'a BTreeMap<String, String>, ServiceFailure> {
+    records.get(name).ok_or_else(|| {
+        ServiceFailure::failed(
+            "artifact_build_record",
+            format!("fresh public build omitted its {name} record"),
+        )
+    })
+}
+
+fn build_field(record: &BTreeMap<String, String>, name: &str) -> Result<String, ServiceFailure> {
+    record.get(name).cloned().ok_or_else(|| {
+        ServiceFailure::failed(
+            "artifact_build_field",
+            format!("fresh public build omitted its {name} field"),
+        )
+    })
+}
+
+fn build_u64_field(record: &BTreeMap<String, String>, name: &str) -> Result<u64, ServiceFailure> {
+    build_field(record, name)?.parse().map_err(|_| {
+        ServiceFailure::failed(
+            "artifact_build_count",
+            format!("fresh public build reported invalid artifact field '{name}'"),
+        )
+    })
+}
+
+fn domain_identity(value: &str, prefix: &str, hexadecimal_bytes: usize) -> bool {
+    value.len() == prefix.len().saturating_add(hexadecimal_bytes)
+        && value.starts_with(prefix)
+        && value[prefix.len()..]
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
 }
 
 fn parse_json_body(bytes: &[u8]) -> Result<Value, ServiceFailure> {
@@ -1956,12 +2176,144 @@ fn hex_digit(value: u8) -> char {
 
 fn sha256_hex(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
-    let mut encoded = String::with_capacity(digest.len().saturating_mul(2));
-    for byte in digest {
+    lower_hex(&digest)
+}
+
+fn lower_hex(bytes: &[u8]) -> String {
+    let mut encoded = String::with_capacity(bytes.len().saturating_mul(2));
+    for &byte in bytes {
         encoded.push(hex_digit(byte >> 4).to_ascii_lowercase());
         encoded.push(hex_digit(byte & 0x0f).to_ascii_lowercase());
     }
     encoded
+}
+
+fn observe_graph_authority(application: &Path) -> Result<AuthorityObservation, ServiceFailure> {
+    let head = process::read_bounded(&application.join("HEAD"), MAXIMUM_DESCRIPTOR_BYTES)
+        .map_err(|error| ServiceFailure::infrastructure("authority_head_read", error))?;
+    let mut paths = vec![
+        ("HEAD".to_owned(), application.join("HEAD")),
+        (
+            "catalog/current.lkjc".to_owned(),
+            application.join("catalog/current.lkjc"),
+        ),
+    ];
+    collect_authority_directory(application, "packs", &mut paths)?;
+    collect_authority_directory(application, "PACKAGE-TRANSPORTS", &mut paths)?;
+    paths.sort_by(|left, right| left.0.cmp(&right.0));
+    if paths.len() > MAXIMUM_AUTHORITY_FILES {
+        return Err(ServiceFailure::failed(
+            "authority_file_limit",
+            "Graph authority inventory exceeded the maintained file-count bound",
+        ));
+    }
+
+    let mut hasher = Sha256::new();
+    hasher.update(b"lkjscript.graph-authority-inventory.v1");
+    let mut total_bytes = 0_u64;
+    for (relative, path) in &paths {
+        let metadata = fs::symlink_metadata(path)
+            .map_err(|error| ServiceFailure::infrastructure("authority_metadata", error))?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err(ServiceFailure::failed(
+                "authority_file_kind",
+                format!("Graph authority input '{relative}' is not a regular file"),
+            ));
+        }
+        total_bytes = total_bytes.checked_add(metadata.len()).ok_or_else(|| {
+            ServiceFailure::failed(
+                "authority_byte_overflow",
+                "Graph authority inventory byte count overflowed",
+            )
+        })?;
+        if total_bytes > MAXIMUM_AUTHORITY_BYTES {
+            return Err(ServiceFailure::failed(
+                "authority_byte_limit",
+                "Graph authority inventory exceeded the maintained byte bound",
+            ));
+        }
+        let bytes = process::read_bounded(path, metadata.len())
+            .map_err(|error| ServiceFailure::infrastructure("authority_file_read", error))?;
+        if u64::try_from(bytes.len()).ok() != Some(metadata.len()) {
+            return Err(ServiceFailure::failed(
+                "authority_file_changed",
+                "Graph authority input changed while its inventory was captured",
+            ));
+        }
+        let relative_bytes = relative.as_bytes();
+        hasher.update((relative_bytes.len() as u64).to_be_bytes());
+        hasher.update(relative_bytes);
+        hasher.update(metadata.len().to_be_bytes());
+        hasher.update(&bytes);
+    }
+    let digest = hasher.finalize();
+    Ok(AuthorityObservation {
+        files: paths.len() as u64,
+        bytes: total_bytes,
+        head_sha256: sha256_hex(&head),
+        inventory_sha256: lower_hex(&digest),
+    })
+}
+
+fn collect_authority_directory(
+    application: &Path,
+    relative: &str,
+    output: &mut Vec<(String, PathBuf)>,
+) -> Result<(), ServiceFailure> {
+    let directory = application.join(relative);
+    let metadata = fs::symlink_metadata(&directory)
+        .map_err(|error| ServiceFailure::infrastructure("authority_directory_metadata", error))?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(ServiceFailure::failed(
+            "authority_directory_kind",
+            format!("Graph authority directory '{relative}' is not a real directory"),
+        ));
+    }
+    let mut entries = fs::read_dir(&directory)
+        .map_err(|error| ServiceFailure::infrastructure("authority_directory_read", error))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| ServiceFailure::infrastructure("authority_directory_entry", error))?;
+    entries.sort_by_key(std::fs::DirEntry::file_name);
+    for entry in entries {
+        let name = entry.file_name().into_string().map_err(|_| {
+            ServiceFailure::failed(
+                "authority_path_encoding",
+                "Graph authority inventory contains a non-UTF-8 path",
+            )
+        })?;
+        if name.is_empty() || name.contains('/') || name.contains('\\') || name.contains('\0') {
+            return Err(ServiceFailure::failed(
+                "authority_path_encoding",
+                "Graph authority inventory contains a noncanonical path",
+            ));
+        }
+        let child = format!("{relative}/{name}");
+        let metadata = fs::symlink_metadata(entry.path())
+            .map_err(|error| ServiceFailure::infrastructure("authority_entry_metadata", error))?;
+        if metadata.file_type().is_symlink() {
+            return Err(ServiceFailure::failed(
+                "authority_entry_kind",
+                format!("Graph authority entry '{child}' is a symbolic link"),
+            ));
+        }
+        if metadata.is_dir() {
+            collect_authority_directory(application, &child, output)?;
+        } else if metadata.is_file() {
+            output.push((child, entry.path()));
+            if output.len() > MAXIMUM_AUTHORITY_FILES {
+                return Err(ServiceFailure::failed(
+                    "authority_file_limit",
+                    "Graph authority inventory exceeded the maintained file-count bound",
+                ));
+            }
+        } else {
+            return Err(ServiceFailure::failed(
+                "authority_entry_kind",
+                format!("Graph authority entry '{child}' is not a regular file or directory"),
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn free_port() -> Result<u16, ServiceFailure> {
@@ -2106,7 +2458,7 @@ fn proof_required_file_with_sha256(
     let observed = sha256_hex(&bytes);
     if observed != expected_sha256 {
         return Err(ServiceFailure::failed(
-            "frozen_service_artifact_digest",
+            "service_artifact_sha256",
             format!("{label} SHA-256 {observed} does not match {expected_sha256}"),
         ));
     }
@@ -2255,7 +2607,7 @@ mod tests {
     #[test]
     fn runner_events_are_typed_and_require_clean_shutdown() {
         let ready = parse_ready_event(
-            br#"{"contract_version":1,"ok":true,"event":"ready","deployment":{"artifact_digest":"artifact","target":"serve","runner":"http","listen":"127.0.0.1:1","secret_names":["bootstrap-token","database-url"]}}"#,
+            br#"{"contract_version":1,"ok":true,"event":"ready","deployment":{"artifact_digest":"artifact_bundle_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","target":"serve","runner":"http","listen":"127.0.0.1:1","secret_names":["bootstrap-token","database-url"]}}"#,
         )
         .expect("parse ready event");
         assert_eq!(ready.runner, "http");
@@ -2322,6 +2674,42 @@ mod tests {
         assert_eq!(
             query(&[("actor", "a b"), ("id", "x/y")]),
             "actor=a%20b&id=x%2Fy"
+        );
+    }
+
+    #[test]
+    fn graph_authority_inventory_is_bounded_and_excludes_derived_state() {
+        let temporary = tempfile::tempdir().expect("Graph authority fixture");
+        let application = temporary.path();
+        std::fs::create_dir(application.join("catalog")).expect("catalog directory");
+        std::fs::create_dir(application.join("packs")).expect("pack directory");
+        std::fs::create_dir_all(application.join("PACKAGE-TRANSPORTS/dependency"))
+            .expect("transport directory");
+        std::fs::write(application.join("HEAD"), b"head-one").expect("HEAD fixture");
+        std::fs::write(application.join("catalog/current.lkjc"), b"catalog")
+            .expect("catalog fixture");
+        std::fs::write(application.join("packs/pack_one.lkjp"), b"pack").expect("pack fixture");
+        std::fs::write(
+            application.join("PACKAGE-TRANSPORTS/dependency/CURRENT"),
+            b"transport",
+        )
+        .expect("transport fixture");
+        let before = observe_graph_authority(application).expect("authority observation");
+        assert_eq!(before.files, 4);
+        assert_eq!(before.bytes, 8 + 7 + 4 + 9);
+
+        std::fs::create_dir(application.join("derived")).expect("derived directory");
+        std::fs::write(application.join("derived/cache"), b"disposable").expect("derived fixture");
+        assert_eq!(
+            observe_graph_authority(application).expect("authority excludes derived"),
+            before
+        );
+
+        std::fs::write(application.join("packs/pack_one.lkjp"), b"changed")
+            .expect("change authority fixture");
+        assert_ne!(
+            observe_graph_authority(application).expect("changed authority"),
+            before
         );
     }
 }

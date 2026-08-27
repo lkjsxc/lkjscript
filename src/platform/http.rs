@@ -2,22 +2,14 @@
 
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::execution::{ExecutionError, ExecutionFailureClass};
-use super::package::RunnerKind;
-use super::runtime::{ResidentDeployment, ShutdownReceipt};
-use super::semantic::{ResolvedField, ResolvedType};
-use super::stream::{ByteStreamProducer, StreamLease, StreamRegistry};
-use super::value::{MapKey, Value};
-use axum::Router;
+use super::runtime::ShutdownReceipt;
+use super::stream::ByteStreamProducer;
 use axum::body::Body;
-use axum::extract::State;
 use axum::http::header::{CONTENT_TYPE, HeaderName, HeaderValue};
 use axum::http::{Request, Response, StatusCode};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
-use std::future::Future;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-use tokio::net::TcpListener;
+use std::time::Instant;
 
 pub const HTTP_ADAPTER_CONTRACT_VERSION: u16 = 1;
 pub const MAXIMUM_HTTP_BODY_BYTES: usize = 64 * 1024 * 1024;
@@ -125,180 +117,6 @@ pub struct HttpServerReceipt {
     pub local_address: String,
     pub accepted_at_transport: bool,
     pub shutdown: ShutdownReceipt,
-}
-
-#[derive(Clone)]
-pub struct HttpApplication {
-    deployment: ResidentDeployment,
-    limits: HttpLimits,
-    streams: StreamRegistry,
-}
-
-impl HttpApplication {
-    pub fn new(
-        deployment: ResidentDeployment,
-        limits: HttpLimits,
-        streams: StreamRegistry,
-    ) -> Result<Self, Diagnostic> {
-        limits.validate()?;
-        if deployment.target().runner != RunnerKind::Http {
-            return Err(http_diagnostic(
-                "http_runner_kind",
-                "HTTP adapter requires an http runner target",
-            ));
-        }
-        let signature = &deployment.target().port.signature;
-        if signature.parameters != [request_type()] || signature.result != response_type() {
-            return Err(http_diagnostic(
-                "http_handler_signature",
-                "HTTP handler must have the exact current structural request and response types",
-            ));
-        }
-        if streams.limits().maximum_total_bytes
-            < u64::try_from(limits.maximum_request_body_bytes).unwrap_or(u64::MAX)
-        {
-            return Err(http_diagnostic(
-                "http_stream_limit",
-                "stream total-byte limit is smaller than the accepted HTTP request body limit",
-            ));
-        }
-        Ok(Self {
-            deployment,
-            limits,
-            streams,
-        })
-    }
-
-    pub fn router(self) -> Router {
-        Router::new()
-            .fallback(live_handler)
-            .with_state(Arc::new(self))
-    }
-
-    pub async fn dispatch(
-        &self,
-        mut request: HttpRequest,
-    ) -> Result<(HttpResponse, HttpDispatchObservation), ExecutionError> {
-        validate_request(&request, &self.limits)?;
-        let lease = self
-            .streams
-            .register_memory(std::mem::take(&mut request.body))?;
-        self.dispatch_stream(request, &lease).await
-    }
-
-    async fn dispatch_stream(
-        &self,
-        request: HttpRequest,
-        body: &StreamLease,
-    ) -> Result<(HttpResponse, HttpDispatchObservation), ExecutionError> {
-        let request = request_value(request, body.value())?;
-        let receipt = self.deployment.invoke(vec![request]).await?;
-        let response = response_value(receipt.value, &self.limits)?;
-        Ok((
-            response,
-            HttpDispatchObservation {
-                task_id: receipt.task_id,
-                queue_nanoseconds: receipt.queue_nanoseconds,
-                execution_nanoseconds: receipt.execution_nanoseconds,
-                instructions: receipt.execution.instructions,
-            },
-        ))
-    }
-
-    pub async fn serve(
-        self,
-        listener: TcpListener,
-        shutdown: impl Future<Output = ()> + Send + 'static,
-    ) -> Result<HttpServerReceipt, Diagnostic> {
-        let local_address = listener
-            .local_addr()
-            .map_err(|error| http_io("http_listener_address", error))?;
-        let deployment = self.deployment.clone();
-        axum::serve(listener, self.router())
-            .with_graceful_shutdown(shutdown)
-            .await
-            .map_err(|error| http_io("http_serve", error))?;
-        let runtime_shutdown = deployment.shutdown().await;
-        if runtime_shutdown.remaining_tasks != 0 || !runtime_shutdown.cleanup_failures.is_empty() {
-            return Err(Diagnostic::new(
-                DiagnosticClass::Infrastructure,
-                "http_shutdown_incomplete",
-                format!(
-                    "{} resident tasks and {} cleanup failures remained after HTTP shutdown",
-                    runtime_shutdown.remaining_tasks,
-                    runtime_shutdown.cleanup_failures.len()
-                ),
-            ));
-        }
-        Ok(HttpServerReceipt {
-            contract_version: HTTP_ADAPTER_CONTRACT_VERSION,
-            local_address: local_address.to_string(),
-            accepted_at_transport: true,
-            shutdown: runtime_shutdown,
-        })
-    }
-
-    pub fn deployment(&self) -> &ResidentDeployment {
-        &self.deployment
-    }
-}
-
-async fn live_handler(
-    State(application): State<Arc<HttpApplication>>,
-    request: Request<Body>,
-) -> Response<Body> {
-    let method_is_head = request.method() == axum::http::Method::HEAD;
-    let (request, body) = match decode_live_request(request, &application.limits) {
-        Ok(request) => request,
-        Err(response) => return response,
-    };
-    let maximum_body_bytes = match u64::try_from(application.limits.maximum_request_body_bytes) {
-        Ok(value) => value,
-        Err(_) => {
-            return static_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "HTTP request body limit is not representable",
-            );
-        }
-    };
-    let (lease, producer) = match application
-        .streams
-        .register_pipe_with_limit(maximum_body_bytes)
-    {
-        Ok(stream) => stream,
-        Err(error) => return safe_error_response(&error, StatusCode::SERVICE_UNAVAILABLE),
-    };
-    let chunk_bytes = application.streams.limits().maximum_chunk_bytes;
-    let deadline = Instant::now()
-        .checked_add(Duration::from_millis(
-            application
-                .deployment
-                .limits()
-                .request_deadline_milliseconds,
-        ))
-        .unwrap_or_else(Instant::now);
-    let pump = tokio::spawn(pump_request_body(
-        body,
-        producer,
-        maximum_body_bytes,
-        chunk_bytes,
-    ));
-    let outcome = application.dispatch_stream(request, &lease).await;
-    drop(lease);
-    if let Err(response) = finish_request_body_pump(pump, deadline).await {
-        return response;
-    }
-    match outcome {
-        Ok((mut response, _)) => {
-            if method_is_head {
-                response.body.clear();
-            }
-            encode_live_response(response).unwrap_or_else(|error| {
-                safe_error_response(&error, StatusCode::INTERNAL_SERVER_ERROR)
-            })
-        }
-        Err(error) => safe_error_response(&error, execution_error_status(&error)),
-    }
 }
 
 pub(crate) async fn pump_request_body(
@@ -507,34 +325,6 @@ pub(crate) fn encode_live_response(
     })
 }
 
-fn request_value(request: HttpRequest, body: Value) -> Result<Value, ExecutionError> {
-    let query_parameters = decode_query(&request.query)?;
-    Ok(Value::record(
-        None,
-        [
-            ("method".to_owned(), Value::text(request.method)),
-            ("path".to_owned(), Value::text(request.path)),
-            ("query".to_owned(), Value::text(request.query)),
-            ("query_parameters".to_owned(), query_parameters),
-            ("headers".to_owned(), headers_value(request.headers)),
-            ("body".to_owned(), body),
-        ],
-    ))
-}
-
-fn decode_query(query: &str) -> Result<Value, ExecutionError> {
-    let decoded = decode_query_parameters(query)?;
-    let mut parameters: std::collections::BTreeMap<MapKey, Value> =
-        std::collections::BTreeMap::new();
-    for (name, values) in decoded {
-        parameters.insert(
-            MapKey::Text(name),
-            Value::List(Arc::new(values.into_iter().map(Value::text).collect())),
-        );
-    }
-    Ok(Value::Map(Arc::new(parameters)))
-}
-
 pub(crate) fn decode_query_parameters(
     query: &str,
 ) -> Result<std::collections::BTreeMap<String, Vec<String>>, ExecutionError> {
@@ -618,147 +408,6 @@ fn hex(value: u8) -> Option<u8> {
     }
 }
 
-fn headers_value(headers: Vec<HttpHeader>) -> Value {
-    Value::List(Arc::new(
-        headers
-            .into_iter()
-            .map(|header| {
-                Value::record(
-                    None,
-                    [
-                        ("name".to_owned(), Value::text(header.name)),
-                        ("value".to_owned(), Value::bytes(header.value)),
-                    ],
-                )
-            })
-            .collect(),
-    ))
-}
-
-fn response_value(value: Value, limits: &HttpLimits) -> Result<HttpResponse, ExecutionError> {
-    let Value::Record {
-        owner: None,
-        fields,
-    } = value
-    else {
-        return Err(protocol_error(
-            "http_response_value",
-            "HTTP handler returned a foreign value",
-        ));
-    };
-    let status = match fields.get("status") {
-        Some(Value::I64(value)) => u16::try_from(*value).map_err(|_| {
-            protocol_error(
-                "http_response_status",
-                "HTTP response status is outside unsigned 16-bit range",
-            )
-        })?,
-        _ => {
-            return Err(protocol_error(
-                "http_response_status",
-                "HTTP response status is absent or not I64",
-            ));
-        }
-    };
-    if !(200..=599).contains(&status) {
-        return Err(protocol_error(
-            "http_response_status",
-            "HTTP application response status must be 200 through 599",
-        ));
-    }
-    let headers = decode_headers(fields.get("headers"), limits)?;
-    let body = match fields.get("body") {
-        Some(Value::Bytes(body)) if body.len() <= limits.maximum_response_body_bytes => {
-            body.to_vec()
-        }
-        Some(Value::Bytes(_)) => {
-            return Err(ExecutionError::resource(
-                "http_response_body_limit",
-                "HTTP response body exceeds the configured bytes",
-            ));
-        }
-        _ => {
-            return Err(protocol_error(
-                "http_response_body",
-                "HTTP response body is absent or not Bytes",
-            ));
-        }
-    };
-    Ok(HttpResponse {
-        status,
-        headers,
-        body,
-    })
-}
-
-fn decode_headers(
-    value: Option<&Value>,
-    limits: &HttpLimits,
-) -> Result<Vec<HttpHeader>, ExecutionError> {
-    let Some(Value::List(values)) = value else {
-        return Err(protocol_error(
-            "http_response_headers",
-            "HTTP response headers are absent or not a list",
-        ));
-    };
-    if values.len() > limits.maximum_headers {
-        return Err(ExecutionError::resource(
-            "http_response_header_count",
-            "HTTP response header count exceeds the configured limit",
-        ));
-    }
-    let mut bytes = 0usize;
-    values
-        .iter()
-        .map(|value| {
-            let Value::Record {
-                owner: None,
-                fields,
-            } = value
-            else {
-                return Err(protocol_error(
-                    "http_response_header",
-                    "HTTP response header is not a structural record",
-                ));
-            };
-            let name = match fields.get("name") {
-                Some(Value::Text(name)) => name.to_string(),
-                _ => {
-                    return Err(protocol_error(
-                        "http_response_header_name",
-                        "HTTP response header name is absent or not Text",
-                    ));
-                }
-            };
-            let value = match fields.get("value") {
-                Some(Value::Bytes(value)) => value.to_vec(),
-                _ => {
-                    return Err(protocol_error(
-                        "http_response_header_value",
-                        "HTTP response header value is absent or not Bytes",
-                    ));
-                }
-            };
-            bytes = bytes
-                .checked_add(name.len())
-                .and_then(|length| length.checked_add(value.len()))
-                .ok_or_else(|| {
-                    ExecutionError::resource(
-                        "http_response_header_bytes",
-                        "HTTP response header byte accounting overflowed",
-                    )
-                })?;
-            if bytes > limits.maximum_header_bytes {
-                return Err(ExecutionError::resource(
-                    "http_response_header_bytes",
-                    "HTTP response headers exceed the configured bytes",
-                ));
-            }
-            Ok(HttpHeader { name, value })
-        })
-        .collect()
-}
-
 pub(crate) fn validate_request(
     request: &HttpRequest,
     limits: &HttpLimits,
@@ -806,45 +455,6 @@ pub(crate) fn validate_request(
         ));
     }
     Ok(())
-}
-
-pub fn request_type() -> ResolvedType {
-    ResolvedType::Record(vec![
-        field("method", ResolvedType::Text),
-        field("path", ResolvedType::Text),
-        field("query", ResolvedType::Text),
-        field(
-            "query_parameters",
-            ResolvedType::Map(
-                Box::new(ResolvedType::Text),
-                Box::new(ResolvedType::List(Box::new(ResolvedType::Text))),
-            ),
-        ),
-        field("headers", ResolvedType::List(Box::new(header_type()))),
-        field("body", ResolvedType::Stream(Box::new(ResolvedType::Bytes))),
-    ])
-}
-
-pub fn response_type() -> ResolvedType {
-    ResolvedType::Record(vec![
-        field("status", ResolvedType::I64),
-        field("headers", ResolvedType::List(Box::new(header_type()))),
-        field("body", ResolvedType::Bytes),
-    ])
-}
-
-fn header_type() -> ResolvedType {
-    ResolvedType::Record(vec![
-        field("name", ResolvedType::Text),
-        field("value", ResolvedType::Bytes),
-    ])
-}
-
-fn field(name: &str, ty: ResolvedType) -> ResolvedField {
-    ResolvedField {
-        name: name.to_owned(),
-        ty,
-    }
 }
 
 fn is_transport_owned_header(name: &HeaderName) -> bool {
@@ -919,160 +529,32 @@ fn http_diagnostic(code: &str, message: impl Into<String>) -> Diagnostic {
     Diagnostic::new(DiagnosticClass::Source, code, message)
 }
 
-fn http_io(code: &str, error: impl std::fmt::Display) -> Diagnostic {
-    Diagnostic::new(DiagnosticClass::Infrastructure, code, error.to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::platform::{
-        PreparedProgram, ResidentLimits, RunPolicy, SourceLimits, build_artifact, decode_package,
-        load_artifact, parse_source, validate_package_documents,
-    };
-    use axum::body::to_bytes;
-    use axum::http::Method;
-    use bytes::Bytes;
-    use futures_util::stream;
-    use tower::ServiceExt;
 
-    fn application() -> HttpApplication {
-        let descriptor = decode_package(
-            br#"{"contract_version":1,"package_id":"1234567890abcdef1234567890abcdef","name":"http-test","modules":[{"name":"main","path":"src/main.lkj"}],"dependencies":[],"targets":[{"name":"serve","component":"main.App","port":"request","runner":"http"}]}"#,
-        )
-        .expect("descriptor");
-        let source = br#"(module main
-  (export App)
-  (extern from-text ((value Text)) Bytes core.bytes.from-text)
-  (extern text-equal ((left Text) (right Text)) Bool core.text.equal)
-  (fn request ((request (Record
-      (method Text)
-      (path Text)
-      (query Text)
-      (query_parameters (Map Text (List Text)))
-      (headers (List (Record (name Text) (value Bytes))))
-      (body (Stream Bytes)))))
-    (Record
-      (status I64)
-      (headers (List (Record (name Text) (value Bytes))))
-      (body Bytes))
-    (if (call text-equal (field request path) "/health")
-        (record _
-          (status 200)
-          (headers (list (Record (name Text) (value Bytes))
-            (record _ (name "content-type") (value (call from-text "text/plain")))))
-          (body (call from-text "ready")))
-        (record _
-          (status 404)
-          (headers (list (Record (name Text) (value Bytes))))
-          (body (call from-text "not found")))))
-  (component App
-    (port request
-      (Function ((Record
-        (method Text)
-        (path Text)
-        (query Text)
-        (query_parameters (Map Text (List Text)))
-        (headers (List (Record (name Text) (value Bytes))))
-        (body (Stream Bytes))))
-        (Record
-          (status I64)
-          (headers (List (Record (name Text) (value Bytes))))
-          (body Bytes)))
-      (function request))))
-"#;
-        let document =
-            parse_source("src/main.lkj", source, SourceLimits::default()).expect("source");
-        let package = validate_package_documents(descriptor, vec![document], &[]).expect("package");
-        let (artifact, _) = build_artifact(&package, &[&package]).expect("artifact");
-        let program = Arc::new(
-            PreparedProgram::prepare(load_artifact(&artifact).expect("load")).expect("prepare"),
-        );
-        let deployment = ResidentDeployment::prepare(
-            program,
-            "serve",
-            Vec::new(),
-            ResidentLimits::default(),
-            RunPolicy::default(),
-        )
-        .expect("deployment");
-        HttpApplication::new(
-            deployment,
-            HttpLimits::default(),
-            crate::platform::StreamRegistry::new(crate::platform::StreamLimits::default())
-                .expect("stream registry"),
-        )
-        .expect("http application")
-    }
+    #[test]
+    fn transport_limits_and_query_decoding_are_strict() {
+        let error = HttpLimits {
+            contract_version: 0,
+            ..HttpLimits::default()
+        }
+        .validate()
+        .expect_err("predecessor HTTP contract must reject");
+        assert_eq!(error.code, "http_contract");
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn in_memory_transport_uses_the_prepared_component_handler() {
-        let application = application();
-        let router = application.clone().router();
-        let response = router
-            .oneshot(
-                Request::builder()
-                    .method(Method::GET)
-                    .uri("/health")
-                    .body(Body::empty())
-                    .expect("request"),
-            )
-            .await
-            .expect("response");
-        assert_eq!(response.status(), StatusCode::OK);
+        let query =
+            decode_query_parameters("name=one+two&name=three%2Ffour").expect("canonical query");
         assert_eq!(
-            to_bytes(response.into_body(), 64)
-                .await
-                .expect("body")
-                .as_ref(),
-            b"ready"
+            query.get("name"),
+            Some(&vec!["one two".to_owned(), "three/four".to_owned()])
         );
-        assert_eq!(application.deployment().observe().completed, 1);
-        assert_eq!(application.deployment().shutdown().await.remaining_tasks, 0);
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn malformed_application_response_and_body_limits_are_closed() {
-        let application = application();
-        let oversized = HttpRequest {
-            method: "POST".to_owned(),
-            path: "/".to_owned(),
-            query: String::new(),
-            headers: Vec::new(),
-            body: vec![0; application.limits.maximum_request_body_bytes + 1],
-        };
-        let error = application
-            .dispatch(oversized)
-            .await
-            .expect_err("oversized body");
-        assert_eq!(error.class, ExecutionFailureClass::Resource);
-        assert_eq!(application.deployment().observe().admitted, 0);
-        assert_eq!(application.deployment().shutdown().await.remaining_tasks, 0);
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn chunked_body_limit_is_enforced_when_the_handler_ignores_the_body() {
-        let application = application();
-        let limit = application.limits.maximum_request_body_bytes;
-        let body = Body::from_stream(stream::iter([
-            Ok::<_, std::io::Error>(Bytes::from(vec![0; limit / 2 + 1])),
-            Ok::<_, std::io::Error>(Bytes::from(vec![0; limit / 2 + 1])),
-        ]));
-        let response = application
-            .clone()
-            .router()
-            .oneshot(
-                Request::builder()
-                    .method(Method::POST)
-                    .uri("/health")
-                    .body(body)
-                    .expect("request"),
-            )
-            .await
-            .expect("response");
-        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
-        assert_eq!(application.deployment().observe().completed, 1);
-        assert_eq!(application.deployment().shutdown().await.remaining_tasks, 0);
+        assert_eq!(
+            decode_query_parameters("name=%zz")
+                .expect_err("malformed escape must reject")
+                .code,
+            "http_query_decode"
+        );
     }
 
     #[test]
@@ -1094,16 +576,23 @@ mod tests {
     }
 
     #[test]
-    fn exact_signature_and_predecessor_limits_reject() {
-        assert!(
-            HttpLimits {
-                contract_version: 0,
-                ..HttpLimits::default()
-            }
-            .validate()
-            .is_err()
+    fn request_validation_owns_transport_bounds() {
+        let limits = HttpLimits {
+            maximum_request_body_bytes: 4,
+            ..HttpLimits::default()
+        };
+        let request = HttpRequest {
+            method: "POST".to_owned(),
+            path: "/".to_owned(),
+            query: String::new(),
+            headers: Vec::new(),
+            body: vec![0; 5],
+        };
+        assert_eq!(
+            validate_request(&request, &limits)
+                .expect_err("oversized request body must reject")
+                .code,
+            "http_request_body_limit"
         );
-        assert_eq!(request_type(), request_type());
-        assert_eq!(response_type(), response_type());
     }
 }

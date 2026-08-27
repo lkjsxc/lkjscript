@@ -133,7 +133,8 @@ impl NormalizedResidentDeployment {
     }
 
     pub(crate) async fn shutdown(&self) -> ShutdownReceipt {
-        self.kernel.shutdown(Vec::new).await
+        let capabilities = self.deployment.capabilities().clone();
+        self.kernel.shutdown(move || capabilities.shutdown()).await
     }
 }
 

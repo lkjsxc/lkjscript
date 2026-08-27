@@ -10,9 +10,9 @@ use lkjscript::platform::contract::{
 };
 use lkjscript::platform::control::{CompactResponseLimits, CompactResponseWriter};
 use lkjscript::platform::{
-    Diagnostic, PreparedDeployment, PublicOperation, execute_build, execute_capabilities,
-    execute_change, execute_check, execute_inspect, execute_new, execute_package_builtin,
-    execute_query, execute_run, execute_status,
+    Diagnostic, PreparedDeployment, PublicOperation, ShutdownReceipt, execute_build,
+    execute_capabilities, execute_change, execute_check, execute_inspect, execute_new,
+    execute_package_builtin, execute_query, execute_run, execute_status,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -397,13 +397,16 @@ async fn worker(arguments: &[String]) -> Result<(), Diagnostic> {
     }
     let prepared =
         PreparedDeployment::load(Path::new(&arguments[1]), tokio::runtime::Handle::current())?;
-    write_json(&json!({
+    let application = prepared.worker_application()?;
+    if let Err(mut error) = write_json(&json!({
         "contract_version": 1,
         "ok": true,
         "event": "ready",
         "deployment": prepared.observe_redacted(),
-    }))?;
-    let application = prepared.worker_application()?;
+    })) {
+        append_shutdown_evidence(&mut error, &application.shutdown().await);
+        return Err(error);
+    }
     let receipt = application
         .run(async {
             let _ = tokio::signal::ctrl_c().await;
@@ -428,28 +431,41 @@ async fn serve(arguments: &[String]) -> Result<(), Diagnostic> {
     let address = prepared
         .listen()
         .ok_or_else(|| cli_error("service deployment requires a concrete listen address"))?;
-    let listener = TcpListener::bind(address).await.map_err(|error| {
-        Diagnostic::new(
-            lkjscript::platform::DiagnosticClass::Infrastructure,
-            "serve_bind",
-            format!("listener could not bind: {error}"),
-        )
-    })?;
-    let local_address = listener.local_addr().map_err(|error| {
-        Diagnostic::new(
-            lkjscript::platform::DiagnosticClass::Infrastructure,
-            "serve_address",
-            format!("listener address is unavailable: {error}"),
-        )
-    })?;
-    write_json(&json!({
+    let application = prepared.http_application()?;
+    let listener = match TcpListener::bind(address).await {
+        Ok(listener) => listener,
+        Err(source) => {
+            let mut error = Diagnostic::new(
+                lkjscript::platform::DiagnosticClass::Infrastructure,
+                "serve_bind",
+                format!("listener could not bind: {source}"),
+            );
+            append_shutdown_evidence(&mut error, &application.shutdown().await);
+            return Err(error);
+        }
+    };
+    let local_address = match listener.local_addr() {
+        Ok(address) => address,
+        Err(source) => {
+            let mut error = Diagnostic::new(
+                lkjscript::platform::DiagnosticClass::Infrastructure,
+                "serve_address",
+                format!("listener address is unavailable: {source}"),
+            );
+            append_shutdown_evidence(&mut error, &application.shutdown().await);
+            return Err(error);
+        }
+    };
+    if let Err(mut error) = write_json(&json!({
         "contract_version": 1,
         "ok": true,
         "event": "ready",
         "local_address": local_address.to_string(),
         "deployment": prepared.observe_redacted(),
-    }))?;
-    let application = prepared.http_application()?;
+    })) {
+        append_shutdown_evidence(&mut error, &application.shutdown().await);
+        return Err(error);
+    }
     let receipt = application
         .serve(listener, async {
             let _ = tokio::signal::ctrl_c().await;
@@ -461,6 +477,21 @@ async fn serve(arguments: &[String]) -> Result<(), Diagnostic> {
         "event": "stopped",
         "receipt": receipt,
     }))
+}
+
+fn append_shutdown_evidence(error: &mut Diagnostic, shutdown: &ShutdownReceipt) {
+    if shutdown.remaining_tasks != 0 {
+        error.notes.push(format!(
+            "{} resident tasks remained after failed command cleanup",
+            shutdown.remaining_tasks
+        ));
+    }
+    error.notes.extend(
+        shutdown
+            .cleanup_failures
+            .iter()
+            .map(|failure| format!("adapter cleanup failed with safe code '{}'", failure.code)),
+    );
 }
 
 fn write_json(value: &impl Serialize) -> Result<(), Diagnostic> {

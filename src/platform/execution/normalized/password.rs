@@ -7,8 +7,9 @@ use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::kernel::{DeclarationReference, OperationReference};
 use crate::platform::security::{PasswordHashEngine, PasswordHashPolicy};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
+#[cfg(test)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct NormalizedPasswordHashOperations {
     pub hash: OperationReference,
@@ -16,6 +17,7 @@ pub(crate) struct NormalizedPasswordHashOperations {
     pub needs_upgrade: OperationReference,
 }
 
+#[cfg(test)]
 impl NormalizedPasswordHashOperations {
     fn exact_set(&self) -> BTreeSet<OperationReference> {
         [self.hash, self.verify, self.needs_upgrade]
@@ -24,30 +26,62 @@ impl NormalizedPasswordHashOperations {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum NormalizedPasswordHashOperation {
+    Hash,
+    Verify,
+    NeedsUpgrade,
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct NormalizedPasswordHashAdapter {
     interface: DeclarationReference,
-    operations: NormalizedPasswordHashOperations,
+    operations: BTreeMap<OperationReference, NormalizedPasswordHashOperation>,
     exact_operations: BTreeSet<OperationReference>,
     engine: PasswordHashEngine,
 }
 
 impl NormalizedPasswordHashAdapter {
+    #[cfg(test)]
     pub(crate) fn new(
         interface: DeclarationReference,
         operations: NormalizedPasswordHashOperations,
         policy: PasswordHashPolicy,
     ) -> Result<Self, Diagnostic> {
-        let exact_operations = operations.exact_set();
-        if exact_operations.len() != 3 {
+        if operations.exact_set().len() != 3 {
             return Err(password_diagnostic(
                 "normalized_password_operation_duplicate",
                 "password adapter operation identities must be distinct",
             ));
         }
-        if exact_operations
+        Self::new_selected(
+            interface,
+            BTreeMap::from([
+                (operations.hash, NormalizedPasswordHashOperation::Hash),
+                (operations.verify, NormalizedPasswordHashOperation::Verify),
+                (
+                    operations.needs_upgrade,
+                    NormalizedPasswordHashOperation::NeedsUpgrade,
+                ),
+            ]),
+            policy,
+        )
+    }
+
+    pub(crate) fn new_selected(
+        interface: DeclarationReference,
+        operations: BTreeMap<OperationReference, NormalizedPasswordHashOperation>,
+        policy: PasswordHashPolicy,
+    ) -> Result<Self, Diagnostic> {
+        if operations.is_empty() {
+            return Err(password_diagnostic(
+                "normalized_password_operation_empty",
+                "password adapter must bind at least one exact operation",
+            ));
+        }
+        if operations
             .iter()
-            .any(|operation| operation.package != interface.package)
+            .any(|(operation, _)| operation.package != interface.package)
         {
             return Err(password_diagnostic(
                 "normalized_password_operation_package",
@@ -60,6 +94,7 @@ impl NormalizedPasswordHashAdapter {
                 format!("password adapter policy is invalid: {}", error.message),
             )
         })?;
+        let exact_operations = operations.keys().copied().collect();
         Ok(Self {
             interface,
             operations,
@@ -103,13 +138,23 @@ impl NormalizedCapabilityAdapter for NormalizedPasswordHashAdapter {
     ) -> Result<NormalizedValue, ExecutionError> {
         control.check()?;
         self.validate_policy(policy)?;
-        if policy.operation == self.operations.hash {
+        let operation = self
+            .operations
+            .get(&policy.operation)
+            .copied()
+            .ok_or_else(|| {
+                password_runtime(
+                    "normalized_password_binding",
+                    "password operation escaped its exact adapter set",
+                )
+            })?;
+        if operation == NormalizedPasswordHashOperation::Hash {
             let [NormalizedValue::Bytes(password)] = arguments.as_slice() else {
                 return Err(password_argument("password hash expects password Bytes"));
             };
             return Ok(NormalizedValue::text(self.engine.hash(password)?));
         }
-        if policy.operation == self.operations.verify {
+        if operation == NormalizedPasswordHashOperation::Verify {
             let [
                 NormalizedValue::Bytes(password),
                 NormalizedValue::Text(encoded),
@@ -123,7 +168,7 @@ impl NormalizedCapabilityAdapter for NormalizedPasswordHashAdapter {
                 self.engine.verify(password, encoded)?,
             ));
         }
-        if policy.operation == self.operations.needs_upgrade {
+        if operation == NormalizedPasswordHashOperation::NeedsUpgrade {
             let [NormalizedValue::Text(encoded)] = arguments.as_slice() else {
                 return Err(password_argument(
                     "password needs-upgrade expects encoded Text",

@@ -12,9 +12,6 @@ use serde_json::{Map, Value as JsonValue};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-pub const NORMALIZED_JSON_CONTRACT_IDENTITY: &str = "lkjscript-graph5-json-boundary-1";
-pub const NORMALIZED_JSON_CONTRACT_VERSION: u16 = 1;
-
 pub fn decode_typed(
     program: &NormalizedProgram,
     bytes: &[u8],

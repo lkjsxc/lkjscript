@@ -1,4 +1,3 @@
-use super::super::artifact::ARTIFACT_CONTRACT_VERSION as FROZEN_SERVICE_ARTIFACT_VERSION;
 use super::super::compiler::{
     ARTIFACT_BUNDLE_CHECKSUM_DOMAIN, ARTIFACT_BUNDLE_CONTRACT_IDENTITY,
     ARTIFACT_BUNDLE_DIGEST_DOMAIN, ARTIFACT_CLOSURE_DIGEST_DOMAIN, ARTIFACT_CONTRACT_VERSION,
@@ -24,7 +23,7 @@ use super::super::control::{
 use super::super::database::POSTGRES_ADAPTER_CONTRACT_VERSION;
 use super::super::deployment::DEPLOYMENT_CONTRACT_VERSION;
 use super::super::diagnostic::DiagnosticClass;
-use super::super::execution::CAPABILITY_GRANT_CONTRACT_VERSION;
+use super::super::execution::normalized::CAPABILITY_GRANT_CONTRACT_VERSION;
 use super::super::http::HTTP_ADAPTER_CONTRACT_VERSION;
 use super::super::json::JSON_CONTRACT_VERSION;
 use super::super::kernel::contract::{GRAPH_CONTRACT_IDENTITY, GRAPH_CONTRACT_VERSION};
@@ -104,12 +103,6 @@ const fn magic_bytes(value: &str) -> [u8; 8] {
     ]
 }
 
-const ARTIFACT_MAGIC_TEXT: &str = "LKJART04";
-pub(crate) const ARTIFACT_MAGIC: [u8; 8] = magic_bytes(ARTIFACT_MAGIC_TEXT);
-pub(crate) const ARTIFACT_DOMAIN: &str = "lkjscript.graph-artifact-bundle.v4";
-const PACKAGE_ARTIFACT_MAGIC_TEXT: &str = "LKJPKG03";
-pub(crate) const PACKAGE_ARTIFACT_MAGIC: [u8; 8] = magic_bytes(PACKAGE_ARTIFACT_MAGIC_TEXT);
-pub(crate) const PACKAGE_ARTIFACT_DOMAIN: &str = "lkjscript.graph-package-artifact.v3";
 const LOGICAL_ROOT_MAGIC_TEXT: &str = "LKJGRF04";
 pub(crate) const LOGICAL_ROOT_MAGIC: [u8; 8] = magic_bytes(LOGICAL_ROOT_MAGIC_TEXT);
 pub(crate) const LOGICAL_ROOT_DIGEST_DOMAIN: &str = "lkjscript.logical-graph-root.v4";
@@ -176,7 +169,6 @@ pub enum ContractKey {
     Diff,
     ArtifactManifest,
     ArtifactBundle,
-    FrozenServiceArtifact,
     ProjectCreation,
     PackageRevision,
     PackageInterface,
@@ -223,7 +215,6 @@ impl ContractKey {
             Self::Diff => "diff",
             Self::ArtifactManifest => "artifact_manifest",
             Self::ArtifactBundle => "artifact_bundle",
-            Self::FrozenServiceArtifact => "frozen_service_artifact",
             Self::ProjectCreation => "project_creation",
             Self::PackageRevision => "package_revision",
             Self::PackageInterface => "package_interface",
@@ -703,20 +694,9 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
                 ARTIFACT_CLOSURE_DIGEST_DOMAIN,
             ],
         },
-        ContractDescriptor {
-            key: ContractKey::FrozenServiceArtifact,
-            name: "frozen predecessor service artifact bundle",
-            identity: "lkjscript-artifact-4",
-            version: FROZEN_SERVICE_ARTIFACT_VERSION,
-            stability: ContractStability::Frozen,
-            authority: ContractAuthority::Runtime,
-            predecessor_policy: PredecessorPolicy::NotApplicable,
-            magic_values: &[ARTIFACT_MAGIC_TEXT],
-            digest_domains: &[ARTIFACT_DOMAIN, ARTIFACT_OBJECT_DIGEST_DOMAIN],
-        },
         simple_contract(
             ContractKey::Deployment,
-            "frozen-artifact deployment descriptor",
+            "standalone artifact deployment descriptor",
             "lkjscript-deployment-1",
             DEPLOYMENT_CONTRACT_VERSION,
             ContractAuthority::Deployment,
@@ -772,7 +752,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
         ),
         simple_contract(
             ContractKey::ResidentRuntime,
-            "frozen-artifact resident runtime",
+            "normalized artifact resident runtime",
             "lkjscript-resident-runtime-1",
             RESIDENT_RUNTIME_CONTRACT_VERSION,
             ContractAuthority::Runtime,
@@ -1101,13 +1081,13 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
         ),
         runtime_operation(
             PublicOperation::Serve,
-            "Run one plaintext HTTP deployment from the separately frozen artifact-4 boundary.",
+            "Run one plaintext HTTP deployment from a standalone normalized artifact bundle.",
             "serve --deployment DESCRIPTOR",
             ControlModel::ServeRequest,
         ),
         runtime_operation(
             PublicOperation::Worker,
-            "Run one bounded worker deployment from the separately frozen artifact-4 boundary.",
+            "Run one bounded worker deployment from a standalone normalized artifact bundle.",
             "worker --deployment DESCRIPTOR",
             ControlModel::WorkerRequest,
         ),

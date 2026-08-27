@@ -1,208 +1,18 @@
-//! Explicit time, secure-randomness, identifier, and password-hashing capability adapters.
+//! Representation-neutral time, randomness, identifier, and password-hashing host mechanisms.
 
-use super::execution::{CallPolicy, CapabilityAdapter, ExecutionError, ExecutionFailureClass};
-use super::semantic::OwnerId;
-use super::value::Value;
+use super::execution::{ExecutionError, ExecutionFailureClass};
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use argon2::{Algorithm, Argon2, Params, Version};
 use serde::{Deserialize, Serialize};
+#[cfg(test)]
 use std::collections::VecDeque;
-use std::fmt;
+#[cfg(test)]
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub const SECURITY_ADAPTER_CONTRACT_VERSION: u16 = 1;
 pub const MAXIMUM_RANDOM_BYTES: usize = 1024 * 1024;
 pub const MAXIMUM_PASSWORD_BYTES: usize = 1024;
-
-#[derive(Clone, Debug)]
-pub struct WallClockAdapter {
-    interface: OwnerId,
-}
-
-impl WallClockAdapter {
-    pub fn new(interface: OwnerId) -> Self {
-        Self { interface }
-    }
-}
-
-impl CapabilityAdapter for WallClockAdapter {
-    fn interface(&self) -> &OwnerId {
-        &self.interface
-    }
-
-    fn call(&self, policy: &CallPolicy, arguments: Vec<Value>) -> Result<Value, ExecutionError> {
-        policy.control.check()?;
-        if policy.operation != "utc-milliseconds" || !arguments.is_empty() {
-            return Err(adapter_argument(
-                "wall clock implements utc-milliseconds with no arguments",
-            ));
-        }
-        Ok(Value::I64(wall_clock_milliseconds()?))
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct DeterministicClockAdapter {
-    interface: OwnerId,
-    source: DeterministicClockSource,
-}
-
-impl DeterministicClockAdapter {
-    pub fn new(interface: OwnerId, observations: Vec<i64>) -> Self {
-        Self {
-            interface,
-            source: DeterministicClockSource::new(observations),
-        }
-    }
-}
-
-impl CapabilityAdapter for DeterministicClockAdapter {
-    fn interface(&self) -> &OwnerId {
-        &self.interface
-    }
-
-    fn call(&self, policy: &CallPolicy, arguments: Vec<Value>) -> Result<Value, ExecutionError> {
-        if policy.operation != "utc-milliseconds" || !arguments.is_empty() {
-            return Err(adapter_argument(
-                "deterministic clock implements utc-milliseconds with no arguments",
-            ));
-        }
-        Ok(Value::I64(self.source.next()?))
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct SecureRandomAdapter {
-    interface: OwnerId,
-}
-
-impl SecureRandomAdapter {
-    pub fn new(interface: OwnerId) -> Self {
-        Self { interface }
-    }
-}
-
-impl CapabilityAdapter for SecureRandomAdapter {
-    fn interface(&self) -> &OwnerId {
-        &self.interface
-    }
-
-    fn call(&self, policy: &CallPolicy, arguments: Vec<Value>) -> Result<Value, ExecutionError> {
-        policy.control.check()?;
-        if policy.operation != "bytes" {
-            return Err(adapter_argument("secure randomness implements only bytes"));
-        }
-        let [Value::I64(length)] = arguments.as_slice() else {
-            return Err(adapter_argument(
-                "secure-random bytes requires one I64 length",
-            ));
-        };
-        let granted = policy
-            .limits
-            .get("maximum_random_bytes")
-            .copied()
-            .unwrap_or(MAXIMUM_RANDOM_BYTES as u64);
-        Ok(Value::bytes(secure_random_bytes(*length, granted)?))
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct DeterministicRandomAdapter {
-    interface: OwnerId,
-    source: DeterministicRandomSource,
-}
-
-impl DeterministicRandomAdapter {
-    pub fn new(interface: OwnerId, values: Vec<Vec<u8>>) -> Self {
-        Self {
-            interface,
-            source: DeterministicRandomSource::new(values),
-        }
-    }
-}
-
-impl CapabilityAdapter for DeterministicRandomAdapter {
-    fn interface(&self) -> &OwnerId {
-        &self.interface
-    }
-
-    fn call(&self, policy: &CallPolicy, arguments: Vec<Value>) -> Result<Value, ExecutionError> {
-        if policy.operation != "bytes" {
-            return Err(adapter_argument(
-                "deterministic randomness implements only bytes",
-            ));
-        }
-        let [Value::I64(length)] = arguments.as_slice() else {
-            return Err(adapter_argument(
-                "deterministic-random bytes requires one I64 length",
-            ));
-        };
-        let granted = policy
-            .limits
-            .get("maximum_random_bytes")
-            .copied()
-            .unwrap_or(MAXIMUM_RANDOM_BYTES as u64);
-        Ok(Value::bytes(self.source.next(*length, granted)?))
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct IdentifierAdapter {
-    interface: OwnerId,
-}
-
-impl IdentifierAdapter {
-    pub fn new(interface: OwnerId) -> Self {
-        Self { interface }
-    }
-}
-
-impl CapabilityAdapter for IdentifierAdapter {
-    fn interface(&self) -> &OwnerId {
-        &self.interface
-    }
-
-    fn call(&self, policy: &CallPolicy, arguments: Vec<Value>) -> Result<Value, ExecutionError> {
-        policy.control.check()?;
-        if policy.operation != "uuid-v4" || !arguments.is_empty() {
-            return Err(adapter_argument(
-                "identifier adapter implements uuid-v4 with no arguments",
-            ));
-        }
-        Ok(Value::text(secure_identifier()?))
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct DeterministicIdentifierAdapter {
-    interface: OwnerId,
-    source: DeterministicIdentifierSource,
-}
-
-impl DeterministicIdentifierAdapter {
-    pub fn new(interface: OwnerId, values: Vec<[u8; 16]>) -> Self {
-        Self {
-            interface,
-            source: DeterministicIdentifierSource::new(values),
-        }
-    }
-}
-
-impl CapabilityAdapter for DeterministicIdentifierAdapter {
-    fn interface(&self) -> &OwnerId {
-        &self.interface
-    }
-
-    fn call(&self, policy: &CallPolicy, arguments: Vec<Value>) -> Result<Value, ExecutionError> {
-        if policy.operation != "uuid-v4" || !arguments.is_empty() {
-            return Err(adapter_argument(
-                "deterministic identifier implements uuid-v4 with no arguments",
-            ));
-        }
-        Ok(Value::text(self.source.next()?))
-    }
-}
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -336,75 +146,13 @@ fn parse_password_hash(encoded: &str) -> Result<PasswordHash<'_>, ExecutionError
     })
 }
 
-#[derive(Clone)]
-pub struct PasswordHashAdapter {
-    interface: OwnerId,
-    engine: PasswordHashEngine,
-}
-
-impl fmt::Debug for PasswordHashAdapter {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("PasswordHashAdapter")
-            .field("interface", &self.interface)
-            .field("policy", &self.engine.policy)
-            .finish()
-    }
-}
-
-impl PasswordHashAdapter {
-    pub fn new(interface: OwnerId, policy: PasswordHashPolicy) -> Result<Self, ExecutionError> {
-        Ok(Self {
-            interface,
-            engine: PasswordHashEngine::new(policy)?,
-        })
-    }
-}
-
-impl CapabilityAdapter for PasswordHashAdapter {
-    fn interface(&self) -> &OwnerId {
-        &self.interface
-    }
-
-    fn call(&self, policy: &CallPolicy, arguments: Vec<Value>) -> Result<Value, ExecutionError> {
-        policy.control.check()?;
-        match policy.operation.as_str() {
-            "hash" => {
-                let [Value::Bytes(password)] = arguments.as_slice() else {
-                    return Err(adapter_argument("password hash expects password Bytes"));
-                };
-                Ok(Value::text(self.engine.hash(password)?))
-            }
-            "verify" => {
-                let [Value::Bytes(password), Value::Text(encoded)] = arguments.as_slice() else {
-                    return Err(adapter_argument(
-                        "password verify expects password Bytes and encoded Text",
-                    ));
-                };
-                Ok(Value::Bool(self.engine.verify(password, encoded)?))
-            }
-            "needs-upgrade" => {
-                let [Value::Text(encoded)] = arguments.as_slice() else {
-                    return Err(adapter_argument(
-                        "password needs-upgrade expects encoded Text",
-                    ));
-                };
-                Ok(Value::Bool(self.engine.needs_upgrade(encoded)?))
-            }
-            operation => Err(ExecutionError::new(
-                ExecutionFailureClass::Infrastructure,
-                "password_operation_unknown",
-                format!("password adapter does not implement '{operation}'"),
-            )),
-        }
-    }
-}
-
+#[cfg(test)]
 #[derive(Clone, Debug)]
 pub(crate) struct DeterministicClockSource {
     observations: Arc<Mutex<VecDeque<i64>>>,
 }
 
+#[cfg(test)]
 impl DeterministicClockSource {
     pub(crate) fn new(observations: Vec<i64>) -> Self {
         Self {
@@ -425,11 +173,13 @@ impl DeterministicClockSource {
     }
 }
 
+#[cfg(test)]
 #[derive(Clone, Debug)]
 pub(crate) struct DeterministicRandomSource {
     values: Arc<Mutex<VecDeque<Vec<u8>>>>,
 }
 
+#[cfg(test)]
 impl DeterministicRandomSource {
     pub(crate) fn new(values: Vec<Vec<u8>>) -> Self {
         Self {
@@ -457,11 +207,13 @@ impl DeterministicRandomSource {
     }
 }
 
+#[cfg(test)]
 #[derive(Clone, Debug)]
 pub(crate) struct DeterministicIdentifierSource {
     values: Arc<Mutex<VecDeque<[u8; 16]>>>,
 }
 
+#[cfg(test)]
 impl DeterministicIdentifierSource {
     pub(crate) fn new(values: Vec<[u8; 16]>) -> Self {
         Self {
@@ -620,6 +372,7 @@ fn adapter_argument(message: impl Into<String>) -> ExecutionError {
     )
 }
 
+#[cfg(test)]
 fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     match mutex.lock() {
         Ok(guard) => guard,
@@ -630,109 +383,58 @@ fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::platform::PackageId;
-    use crate::platform::language::{Idempotency, Visibility};
-    use std::collections::BTreeMap;
-
-    fn owner(declaration: &str) -> OwnerId {
-        OwnerId::deterministic_for_test(
-            PackageId::parse("1234567890abcdef1234567890abcdef").expect("package id"),
-            "security",
-            declaration,
-        )
-    }
-
-    fn policy(interface: OwnerId, operation: &str) -> CallPolicy {
-        CallPolicy {
-            requirement: "test".to_owned(),
-            interface,
-            operation: operation.to_owned(),
-            idempotency: Idempotency::Idempotent,
-            visibility: Visibility::None,
-            limits: BTreeMap::from([("maximum_random_bytes".to_owned(), 64)]),
-            control: Default::default(),
-        }
-    }
 
     #[test]
-    fn deterministic_time_random_and_identifier_are_disjoint_fakes() {
-        let clock_owner = owner("Clock");
-        let clock = DeterministicClockAdapter::new(clock_owner.clone(), vec![42]);
-        assert!(matches!(
-            clock
-                .call(&policy(clock_owner, "utc-milliseconds"), Vec::new())
-                .expect("clock"),
-            Value::I64(42)
-        ));
+    fn deterministic_time_random_and_identifier_sources_are_disjoint() {
+        let clock = DeterministicClockSource::new(vec![42]);
+        assert_eq!(clock.next().expect("clock"), 42);
+        assert_eq!(
+            clock.next().expect_err("clock script exhaustion").code,
+            "clock_fake_exhausted"
+        );
 
-        let random_owner = owner("Random");
-        let random = DeterministicRandomAdapter::new(random_owner.clone(), vec![vec![7; 4]]);
-        assert!(matches!(
+        let random = DeterministicRandomSource::new(vec![vec![7; 4]]);
+        assert_eq!(random.next(4, 64).expect("random"), vec![7; 4]);
+        assert_eq!(
             random
-                .call(&policy(random_owner, "bytes"), vec![Value::I64(4)])
-                .expect("random"),
-            Value::Bytes(value) if value.as_ref() == [7, 7, 7, 7]
-        ));
+                .next(4, 64)
+                .expect_err("random script exhaustion")
+                .code,
+            "random_fake_exhausted"
+        );
 
-        let id_owner = owner("Identifier");
-        let ids = DeterministicIdentifierAdapter::new(id_owner.clone(), vec![[0; 16]]);
-        let Value::Text(value) = ids
-            .call(&policy(id_owner, "uuid-v4"), Vec::new())
-            .expect("identifier")
-        else {
-            panic!("identifier type");
-        };
-        assert_eq!(value.as_ref(), "00000000-0000-4000-8000-000000000000");
-        assert_eq!(parse_uuid(&value).expect("parse")[6] >> 4, 4);
+        let identifiers = DeterministicIdentifierSource::new(vec![[0; 16]]);
+        let identifier = identifiers.next().expect("identifier");
+        assert_eq!(identifier, "00000000-0000-4000-8000-000000000000");
+        assert_eq!(parse_uuid(&identifier).expect("parse")[6] >> 4, 4);
     }
 
     #[test]
-    fn password_hashing_distinguishes_mismatch_and_malformed() {
-        let interface = owner("Password");
-        let adapter = PasswordHashAdapter::new(interface.clone(), PasswordHashPolicy::default())
-            .expect("adapter");
-        let Value::Text(encoded) = adapter
-            .call(
-                &policy(interface.clone(), "hash"),
-                vec![Value::bytes(b"correct horse".to_vec())],
-            )
-            .expect("hash")
-        else {
-            panic!("hash type");
-        };
-        assert!(matches!(
-            adapter
-                .call(
-                    &policy(interface.clone(), "verify"),
-                    vec![
-                        Value::bytes(b"correct horse".to_vec()),
-                        Value::Text(encoded.clone())
-                    ],
-                )
-                .expect("verify"),
-            Value::Bool(true)
-        ));
-        assert!(matches!(
-            adapter
-                .call(
-                    &policy(interface.clone(), "verify"),
-                    vec![Value::bytes(b"wrong".to_vec()), Value::Text(encoded)],
-                )
-                .expect("mismatch"),
-            Value::Bool(false)
-        ));
-        let error = adapter
-            .call(
-                &policy(interface, "verify"),
-                vec![Value::bytes(b"wrong".to_vec()), Value::text("malformed")],
-            )
-            .expect_err("malformed");
-        assert_eq!(error.code, "password_hash_malformed");
+    fn password_engine_distinguishes_mismatch_and_malformed() {
+        let engine = PasswordHashEngine::new(PasswordHashPolicy::default()).expect("engine");
+        let encoded = engine.hash(b"correct horse").expect("hash");
+        assert!(engine.verify(b"correct horse", &encoded).expect("verify"));
+        assert!(!engine.verify(b"wrong", &encoded).expect("mismatch"));
+        assert_eq!(
+            engine
+                .verify(b"wrong", "malformed")
+                .expect_err("malformed hash")
+                .code,
+            "password_hash_malformed"
+        );
     }
 
     #[test]
-    fn blake3_intrinsic_has_a_stable_independent_oracle() {
-        let bytes = b"lkjscript";
-        assert_eq!(blake3::hash(bytes).as_bytes().len(), 32);
+    fn random_and_password_limits_are_bounded() {
+        assert_eq!(
+            bounded_random_length(-1, 64)
+                .expect_err("negative random length")
+                .code,
+            "secure_random_length"
+        );
+        assert_eq!(
+            validate_password(&[]).expect_err("empty password").code,
+            "password_length"
+        );
     }
 }

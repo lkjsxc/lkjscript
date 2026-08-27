@@ -8,9 +8,10 @@ use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFail
 use crate::platform::kernel::{
     DeclarationReference, Name, OperationReference, RequirementReference,
 };
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
+#[cfg(test)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct NormalizedByteStreamOperations {
     pub read: OperationReference,
@@ -18,26 +19,15 @@ pub(crate) struct NormalizedByteStreamOperations {
     pub read_all: OperationReference,
 }
 
+#[cfg(test)]
 impl NormalizedByteStreamOperations {
     fn exact_set(&self) -> BTreeSet<OperationReference> {
         [self.read, self.close, self.read_all].into_iter().collect()
     }
-
-    fn resolve(&self, operation: OperationReference) -> Option<ByteStreamOperation> {
-        if operation == self.read {
-            Some(ByteStreamOperation::Read)
-        } else if operation == self.close {
-            Some(ByteStreamOperation::Close)
-        } else if operation == self.read_all {
-            Some(ByteStreamOperation::ReadAll)
-        } else {
-            None
-        }
-    }
 }
 
-#[derive(Clone, Copy)]
-enum ByteStreamOperation {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum NormalizedByteStreamOperation {
     Read,
     Close,
     ReadAll,
@@ -47,34 +37,57 @@ enum ByteStreamOperation {
 pub(crate) struct NormalizedByteStreamAdapter {
     requirement: RequirementReference,
     interface: DeclarationReference,
-    operations: NormalizedByteStreamOperations,
+    operations: BTreeMap<OperationReference, NormalizedByteStreamOperation>,
     exact_operations: BTreeSet<OperationReference>,
     chunk_name: Name,
     done_name: Name,
 }
 
 impl NormalizedByteStreamAdapter {
+    #[cfg(test)]
     pub(crate) fn new(
         requirement: RequirementReference,
         interface: DeclarationReference,
         operations: NormalizedByteStreamOperations,
     ) -> Result<Self, Diagnostic> {
-        let exact_operations = operations.exact_set();
-        if exact_operations.len() != 3 {
+        if operations.exact_set().len() != 3 {
             return Err(stream_diagnostic(
                 "normalized_stream_operation_duplicate",
                 "byte-stream adapter operation identities must be distinct",
             ));
         }
-        if exact_operations
+        Self::new_selected(
+            requirement,
+            interface,
+            BTreeMap::from([
+                (operations.read, NormalizedByteStreamOperation::Read),
+                (operations.close, NormalizedByteStreamOperation::Close),
+                (operations.read_all, NormalizedByteStreamOperation::ReadAll),
+            ]),
+        )
+    }
+
+    pub(crate) fn new_selected(
+        requirement: RequirementReference,
+        interface: DeclarationReference,
+        operations: BTreeMap<OperationReference, NormalizedByteStreamOperation>,
+    ) -> Result<Self, Diagnostic> {
+        if operations.is_empty() {
+            return Err(stream_diagnostic(
+                "normalized_stream_operation_empty",
+                "byte-stream adapter must bind at least one exact operation",
+            ));
+        }
+        if operations
             .iter()
-            .any(|operation| operation.package != interface.package)
+            .any(|(operation, _)| operation.package != interface.package)
         {
             return Err(stream_diagnostic(
                 "normalized_stream_operation_package",
                 "byte-stream operations must share the exact interface package",
             ));
         }
+        let exact_operations = operations.keys().copied().collect();
         Ok(Self {
             requirement,
             interface,
@@ -131,13 +144,17 @@ impl NormalizedCapabilityAdapter for NormalizedByteStreamAdapter {
     ) -> Result<NormalizedValue, ExecutionError> {
         control.check()?;
         self.validate_policy(policy)?;
-        match self.operations.resolve(policy.operation).ok_or_else(|| {
-            stream_runtime(
-                "normalized_stream_operation",
-                "byte-stream call policy has a foreign exact operation",
-            )
-        })? {
-            ByteStreamOperation::Read => {
+        match self
+            .operations
+            .get(&policy.operation)
+            .copied()
+            .ok_or_else(|| {
+                stream_runtime(
+                    "normalized_stream_operation",
+                    "byte-stream call policy has a foreign exact operation",
+                )
+            })? {
+            NormalizedByteStreamOperation::Read => {
                 let [NormalizedValue::Resource(stream)] = arguments.as_slice() else {
                     return Err(stream_argument(
                         "stream read expects one byte-stream handle",
@@ -147,7 +164,7 @@ impl NormalizedCapabilityAdapter for NormalizedByteStreamAdapter {
                     .read_byte_stream(policy.requirement, *stream, control)
                     .map(|chunk| self.read_result(chunk))
             }
-            ByteStreamOperation::Close => {
+            NormalizedByteStreamOperation::Close => {
                 let [NormalizedValue::Resource(stream)] = arguments.as_slice() else {
                     return Err(stream_argument(
                         "stream close expects one byte-stream handle",
@@ -156,7 +173,7 @@ impl NormalizedCapabilityAdapter for NormalizedByteStreamAdapter {
                 resources.close(policy.requirement, *stream)?;
                 Ok(NormalizedValue::Unit)
             }
-            ByteStreamOperation::ReadAll => {
+            NormalizedByteStreamOperation::ReadAll => {
                 let [
                     NormalizedValue::Resource(stream),
                     NormalizedValue::I64(maximum_bytes),

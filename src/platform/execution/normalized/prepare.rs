@@ -207,6 +207,7 @@ pub struct NormalizedOperation {
 pub enum NormalizedEntryPoint {
     Function(FunctionIndex),
     Code(NormalizedCode),
+    PortExpression(NormalizedCode),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -954,9 +955,11 @@ fn prepare_components(
                         "function",
                     )?)
                 }
-                CompiledPortImplementation::Expression(code) => NormalizedEntryPoint::Code(
-                    translate_code(artifact, unit, code, indexes, text_cache, work)?,
-                ),
+                CompiledPortImplementation::Expression(code) => {
+                    NormalizedEntryPoint::PortExpression(translate_code(
+                        artifact, unit, code, indexes, text_cache, work,
+                    )?)
+                }
             };
             if ports[port_index.0 as usize]
                 .replace(NormalizedPort {

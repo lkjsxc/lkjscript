@@ -68,26 +68,6 @@ impl OwnerId {
             self.declaration
         )
     }
-
-    #[cfg(test)]
-    pub(crate) fn deterministic_for_test(
-        package: PackageId,
-        module: &str,
-        declaration: &str,
-    ) -> Self {
-        let mut seed = package.bytes().to_vec();
-        seed.extend_from_slice(&(module.len() as u64).to_be_bytes());
-        seed.extend_from_slice(module.as_bytes());
-        seed.extend_from_slice(&(declaration.len() as u64).to_be_bytes());
-        seed.extend_from_slice(declaration.as_bytes());
-        Self {
-            package,
-            module_id: ModuleId::migrate(&seed, 0),
-            declaration_id: DeclarationId::migrate(&seed, 0),
-            module: module.to_owned(),
-            declaration: declaration.to_owned(),
-        }
-    }
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize)]

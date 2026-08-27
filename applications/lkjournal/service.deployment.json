@@ -1,6 +1,6 @@
 {
   "contract_version": 1,
-  "artifact": "frozen-service/lkjournal-artifact-v4.lkja",
+  "artifact": "generated/lkjournal.lkja",
   "target": "serve",
   "listen": "127.0.0.1:8080",
   "runtime": {

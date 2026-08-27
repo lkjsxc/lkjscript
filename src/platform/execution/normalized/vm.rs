@@ -102,18 +102,7 @@ impl<'a> NormalizedVm<'a> {
         }
     }
 
-    pub fn with_host(
-        program: &'a NormalizedProgram,
-        policy: NormalizedRunPolicy,
-        host: &'a dyn NormalizedHost,
-    ) -> Self {
-        Self {
-            program,
-            policy,
-            host,
-        }
-    }
-
+    #[cfg(test)]
     pub fn invoke(
         &self,
         declaration: DeclarationReference,
@@ -270,25 +259,34 @@ impl<'a> NormalizedVm<'a> {
                 production_tier: "graph5_dense_bytecode_1",
             },
         };
-        let admission = match entry {
-            NormalizedEntryPoint::Function(function) => machine.call(function, arguments),
-            NormalizedEntryPoint::Code(code) => machine.call_code(code, arguments),
-        };
-        if let Err(error) = admission {
-            machine.rollback_all();
-            return Err(error);
-        }
-        if machine.frames.is_empty() {
-            let value = machine.pop()?;
-            if !machine.stack.is_empty() {
-                return Err(runtime_error(
-                    "normalized_stack_residue",
-                    "normalized external entry left more than one result value",
+        let result = (|| {
+            let port_arguments = match entry {
+                NormalizedEntryPoint::Function(function) => {
+                    machine.call(function, arguments)?;
+                    None
+                }
+                NormalizedEntryPoint::Code(code) => {
+                    machine.call_code(code, arguments)?;
+                    None
+                }
+                NormalizedEntryPoint::PortExpression(code) => {
+                    machine.call_code(code, Vec::new())?;
+                    Some(arguments)
+                }
+            };
+            let value = finish_admitted(&mut machine)?;
+            let Some(arguments) = port_arguments else {
+                return Ok(value);
+            };
+            let NormalizedValue::Function(function) = value else {
+                return Err(type_error(
+                    "expression-backed target port did not evaluate to a function",
                 ));
-            }
-            return Ok((value, machine.observation));
-        }
-        match machine.run() {
+            };
+            machine.call(function, arguments)?;
+            finish_admitted(&mut machine)
+        })();
+        match result {
             Ok(value) => Ok((value, machine.observation)),
             Err(error) => {
                 machine.rollback_all();
@@ -296,6 +294,20 @@ impl<'a> NormalizedVm<'a> {
             }
         }
     }
+}
+
+fn finish_admitted(machine: &mut Machine<'_>) -> Result<NormalizedValue, ExecutionError> {
+    if !machine.frames.is_empty() {
+        return machine.run();
+    }
+    let value = machine.pop()?;
+    if !machine.stack.is_empty() {
+        return Err(runtime_error(
+            "normalized_stack_residue",
+            "normalized external entry left more than one result value",
+        ));
+    }
+    Ok(value)
 }
 
 struct Frame {
@@ -518,7 +530,9 @@ impl Machine<'_> {
                 } => {
                     let arguments = self.pop_many(arguments as usize)?;
                     self.charge_capability_call(requirement)?;
-                    let value = if let Some(transaction) = self.transactions.get_mut(&requirement) {
+                    let capabilities = self.capabilities.ok_or_else(capabilities_unbound)?;
+                    let canonical = capabilities.canonical_requirement(requirement)?;
+                    let value = if let Some(transaction) = self.transactions.get_mut(&canonical) {
                         let policy = self
                             .capabilities
                             .ok_or_else(capabilities_unbound)?
@@ -531,7 +545,7 @@ impl Machine<'_> {
                         );
                         validate_outcome(&policy, result)?
                     } else {
-                        self.capabilities.ok_or_else(capabilities_unbound)?.call(
+                        capabilities.call(
                             self.program,
                             requirement,
                             operation,
@@ -547,7 +561,9 @@ impl Machine<'_> {
                     requirement,
                     binding,
                 } => {
-                    if self.transactions.contains_key(&requirement) {
+                    let capabilities = self.capabilities.ok_or_else(capabilities_unbound)?;
+                    let canonical = capabilities.canonical_requirement(requirement)?;
+                    if self.transactions.contains_key(&canonical) {
                         return Err(runtime_error(
                             "normalized_transaction_nested",
                             "one exact requirement cannot begin a nested transaction",
@@ -574,19 +590,16 @@ impl Machine<'_> {
                             )
                         })?;
                     self.charge_capability_call(requirement)?;
-                    let transaction = self
-                        .capabilities
-                        .ok_or_else(capabilities_unbound)?
-                        .begin_transaction(
-                            self.program,
-                            requirement,
-                            self.resources,
-                            self.control,
-                        )?;
+                    let transaction = capabilities.begin_transaction(
+                        self.program,
+                        requirement,
+                        self.resources,
+                        self.control,
+                    )?;
                     self.next_transaction = next_generation;
                     self.set_local(binding, Some(NormalizedValue::Unit))?;
                     self.transactions.insert(
-                        requirement,
+                        canonical,
                         ActiveTransaction {
                             owner_frame,
                             binding,
@@ -599,8 +612,12 @@ impl Machine<'_> {
                     requirement,
                     binding,
                 } => {
+                    let canonical = self
+                        .capabilities
+                        .ok_or_else(capabilities_unbound)?
+                        .canonical_requirement(requirement)?;
                     let mut transaction =
-                        self.transactions.remove(&requirement).ok_or_else(|| {
+                        self.transactions.remove(&canonical).ok_or_else(|| {
                             runtime_error(
                                 "normalized_transaction_missing",
                                 "transaction commit has no active exact requirement scope",
@@ -862,7 +879,8 @@ impl Machine<'_> {
         }
         let capabilities = self.capabilities.ok_or_else(capabilities_unbound)?;
         let maximum = capabilities.maximum_calls(requirement)?;
-        let calls = self.calls_by_requirement.entry(requirement).or_default();
+        let canonical = capabilities.canonical_requirement(requirement)?;
+        let calls = self.calls_by_requirement.entry(canonical).or_default();
         if *calls >= maximum {
             return Err(resource_error(
                 "normalized_grant_calls",

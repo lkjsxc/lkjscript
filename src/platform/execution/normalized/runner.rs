@@ -28,6 +28,7 @@ pub struct NormalizedCommandReceipt {
     pub differential: &'static str,
 }
 
+#[cfg(test)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NormalizedEffectfulCommandReceipt {
     pub target: Name,
@@ -150,6 +151,7 @@ pub fn run_pure_command(
 ///
 /// The authority/artifact binding and complete deployment grant set are checked before execution.
 /// The reference tier is intentionally not invoked against live effects.
+#[cfg(test)]
 pub fn run_effectful_command(
     authority: &dyn NormalizedReferenceRead,
     program: &NormalizedProgram,

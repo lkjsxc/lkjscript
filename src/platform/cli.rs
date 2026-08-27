@@ -1,8 +1,7 @@
 //! Strict, bounded public graph-native command projection.
 
-use super::artifact::MAXIMUM_ARTIFACT_BYTES;
 use super::change::{AuthoredChange, AuthoredChangeSet, OwnerSelector};
-use super::compiler::{build_incremental, load_current_compilation};
+use super::compiler::{MAXIMUM_ARTIFACT_BUNDLE_BYTES, build_incremental, load_current_compilation};
 use super::contract::{
     MAXIMUM_CLI_RESPONSE_BYTES, MAXIMUM_CLI_RESPONSE_RECORDS, PublicOperation, RegistrySection,
     RegistrySnapshot, diagnostic_class_name, generated_documents, operation_descriptors,
@@ -185,7 +184,7 @@ pub fn execute_build(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
     let publication = publish_create_new(
         Path::new(&output_path),
         &prepared.artifact_bytes,
-        MAXIMUM_ARTIFACT_BYTES + 50,
+        maximum_artifact_output_bytes()?,
         "normalized graph artifact",
     )?;
     let mut output = compact_response_writer()?;
@@ -210,6 +209,19 @@ pub fn execute_build(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
         ],
     )?;
     Ok(output.finish())
+}
+
+fn maximum_artifact_output_bytes() -> Result<usize, Diagnostic> {
+    usize::try_from(MAXIMUM_ARTIFACT_BUNDLE_BYTES)
+        .ok()
+        .and_then(|maximum| maximum.checked_add(50))
+        .ok_or_else(|| {
+            Diagnostic::new(
+                DiagnosticClass::Resource,
+                "artifact_output_limit",
+                "artifact output limit is not representable on this platform",
+            )
+        })
 }
 
 pub fn execute_run(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
@@ -335,12 +347,12 @@ pub fn execute_package_builtin(arguments: Vec<String>) -> Result<Vec<u8>, Diagno
             let (bytes, maximum, digest) = match kind.as_str() {
                 "transport" => (
                     standard.transport_bytes(),
-                    MAXIMUM_ARTIFACT_BYTES + 50,
+                    maximum_artifact_output_bytes()?,
                     standard.package_transport.to_string(),
                 ),
                 "artifact" => (
                     standard.artifact_bytes(),
-                    MAXIMUM_ARTIFACT_BYTES + 50,
+                    maximum_artifact_output_bytes()?,
                     standard.artifact.bundle_digest.to_string(),
                 ),
                 _ => {
@@ -1924,6 +1936,36 @@ fn append_lifecycle_records(
             (
                 "compiler-units",
                 prepared.program.work.compiler_units.to_string(),
+            ),
+            (
+                "manifest-objects",
+                prepared
+                    .program
+                    .artifact()
+                    .manifest
+                    .object_count
+                    .to_string(),
+            ),
+            (
+                "manifest-object-bytes",
+                prepared
+                    .program
+                    .artifact()
+                    .manifest
+                    .object_bytes
+                    .to_string(),
+            ),
+            (
+                "segments",
+                prepared.program.artifact().segment_count.to_string(),
+            ),
+            (
+                "load-objects",
+                prepared.program.artifact().work.objects.to_string(),
+            ),
+            (
+                "load-object-bytes",
+                prepared.program.artifact().work.object_bytes.to_string(),
             ),
         ],
     )

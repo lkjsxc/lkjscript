@@ -1,9 +1,7 @@
 //! Typed deployment configuration without ambient environment reads in application code.
 
 use super::diagnostic::{Diagnostic, DiagnosticClass};
-use super::execution::{CallPolicy, CapabilityAdapter, ExecutionError, ExecutionFailureClass};
-use super::semantic::OwnerId;
-use super::value::Value;
+use super::execution::{ExecutionError, ExecutionFailureClass};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -53,18 +51,6 @@ pub(crate) enum ConfigurationOperation {
     Bool,
 }
 
-impl ConfigurationOperation {
-    fn parse(value: &str) -> Option<Self> {
-        match value {
-            "exists" => Some(Self::Exists),
-            "text" => Some(Self::Text),
-            "i64" => Some(Self::I64),
-            "bool" => Some(Self::Bool),
-            _ => None,
-        }
-    }
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum ConfigurationOutput {
     Text(String),
@@ -90,10 +76,6 @@ impl ConfigurationStore {
     ) -> Result<ConfigurationObservation, Diagnostic> {
         validate_values(values)?;
         Ok(observation(values))
-    }
-
-    pub(crate) fn observe_redacted(&self) -> ConfigurationObservation {
-        observation(&self.values)
     }
 
     pub(crate) fn execute(
@@ -137,64 +119,6 @@ impl ConfigurationStore {
                 "configuration_operation_state",
                 "configuration exists operation reached a value-only branch",
             )),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct ConfigurationAdapter {
-    interface: OwnerId,
-    store: ConfigurationStore,
-}
-
-impl ConfigurationAdapter {
-    pub fn new(
-        interface: OwnerId,
-        values: BTreeMap<String, ConfigurationValue>,
-    ) -> Result<Self, Diagnostic> {
-        Ok(Self {
-            interface,
-            store: ConfigurationStore::new(values)?,
-        })
-    }
-
-    pub fn observe_values(
-        values: &BTreeMap<String, ConfigurationValue>,
-    ) -> Result<ConfigurationObservation, Diagnostic> {
-        ConfigurationStore::observe_values(values)
-    }
-
-    pub fn observe_redacted(&self) -> ConfigurationObservation {
-        self.store.observe_redacted()
-    }
-}
-
-impl CapabilityAdapter for ConfigurationAdapter {
-    fn interface(&self) -> &OwnerId {
-        &self.interface
-    }
-
-    fn call(&self, policy: &CallPolicy, arguments: Vec<Value>) -> Result<Value, ExecutionError> {
-        policy.control.check()?;
-        let [Value::StaticText(name)] = arguments.as_slice() else {
-            return Err(configuration_argument(
-                "configuration operation expects one source-origin StaticText field name",
-            ));
-        };
-        let operation = ConfigurationOperation::parse(&policy.operation).ok_or_else(|| {
-            ExecutionError::new(
-                ExecutionFailureClass::Infrastructure,
-                "configuration_operation_unknown",
-                format!(
-                    "configuration adapter does not implement '{}'",
-                    policy.operation
-                ),
-            )
-        })?;
-        match self.store.execute(operation, name)? {
-            ConfigurationOutput::Text(value) => Ok(Value::text(value)),
-            ConfigurationOutput::I64(value) => Ok(Value::I64(value)),
-            ConfigurationOutput::Bool(value) => Ok(Value::Bool(value)),
         }
     }
 }
@@ -258,51 +182,36 @@ fn configuration_diagnostic(code: &str, message: impl Into<String>) -> Diagnosti
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::platform::PackageId;
-    use crate::platform::execution::ExecutionControl;
-    use crate::platform::language::{Idempotency, Visibility};
-
-    fn owner() -> OwnerId {
-        OwnerId::deterministic_for_test(
-            PackageId::parse("1234567890abcdef1234567890abcdef").expect("package id"),
-            "configuration",
-            "Configuration",
-        )
-    }
-
-    fn policy(operation: &str) -> CallPolicy {
-        CallPolicy {
-            requirement: "config".to_owned(),
-            interface: owner(),
-            operation: operation.to_owned(),
-            idempotency: Idempotency::Idempotent,
-            visibility: Visibility::None,
-            limits: BTreeMap::new(),
-            control: ExecutionControl::uncancelled(),
-        }
-    }
 
     #[test]
     fn exact_types_and_source_origin_names_are_enforced() {
-        let adapter = ConfigurationAdapter::new(
-            owner(),
-            BTreeMap::from([
-                (
-                    "service-title".to_owned(),
-                    ConfigurationValue::Text("Journal".to_owned()),
-                ),
-                ("workers".to_owned(), ConfigurationValue::I64(4)),
-            ]),
-        )
-        .expect("adapter");
-        let value = adapter
-            .call(&policy("text"), vec![Value::static_text("service-title")])
+        let store = ConfigurationStore::new(BTreeMap::from([
+            (
+                "service-title".to_owned(),
+                ConfigurationValue::Text("Journal".to_owned()),
+            ),
+            ("workers".to_owned(), ConfigurationValue::I64(4)),
+        ]))
+        .expect("store");
+        let value = store
+            .execute(ConfigurationOperation::Text, "service-title")
             .expect("text value");
-        assert!(matches!(value, Value::Text(value) if value.as_ref() == "Journal"));
-        let dynamic = adapter
-            .call(&policy("text"), vec![Value::text("service-title")])
-            .expect_err("dynamic key rejects");
-        assert_eq!(dynamic.code, "configuration_argument");
-        assert_eq!(adapter.observe_redacted().fields["service-title"], "text");
+        assert_eq!(value, ConfigurationOutput::Text("Journal".to_owned()));
+        assert_eq!(
+            store
+                .execute(ConfigurationOperation::Bool, "service-title")
+                .expect_err("wrong typed read must reject")
+                .code,
+            "configuration_type"
+        );
+        assert_eq!(
+            ConfigurationStore::observe_values(&BTreeMap::from([(
+                "service-title".to_owned(),
+                ConfigurationValue::Text("Journal".to_owned()),
+            )]))
+            .expect("observation")
+            .fields["service-title"],
+            "text"
+        );
     }
 }

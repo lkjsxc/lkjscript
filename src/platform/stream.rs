@@ -1,11 +1,7 @@
 //! Task-scoped byte streams with bounded buffering, backpressure, cancellation, and exact close.
 
 use super::diagnostic::{Diagnostic, DiagnosticClass};
-use super::execution::{
-    CallPolicy, CapabilityAdapter, ExecutionControl, ExecutionError, ExecutionFailureClass,
-};
-use super::semantic::OwnerId;
-use super::value::{ResourceId, ResourceKind, Value};
+use super::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -84,7 +80,10 @@ struct RegistryInner {
 }
 
 type SharedSource = Arc<Mutex<Box<dyn ByteSource>>>;
-type SourceMap = BTreeMap<ResourceId, SharedSource>;
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct StreamId(u64);
+
+type SourceMap = BTreeMap<StreamId, SharedSource>;
 
 trait ByteSource: Send {
     fn read(&mut self, control: &ExecutionControl) -> Result<Option<Vec<u8>>, ExecutionError>;
@@ -153,17 +152,9 @@ impl StreamRegistry {
         Ok((lease, ByteStreamProducer { pipe }))
     }
 
-    pub fn read(
-        &self,
-        value: &Value,
-        control: &ExecutionControl,
-    ) -> Result<Option<Vec<u8>>, ExecutionError> {
-        self.read_id(stream_id(value)?, control)
-    }
-
     fn read_id(
         &self,
-        id: ResourceId,
+        id: StreamId,
         control: &ExecutionControl,
     ) -> Result<Option<Vec<u8>>, ExecutionError> {
         let source = lock_unpoisoned(&self.inner.sources)
@@ -179,23 +170,9 @@ impl StreamRegistry {
         lock_unpoisoned(&source).read(control)
     }
 
-    pub fn close(&self, value: &Value) -> Result<(), ExecutionError> {
-        self.close_id(stream_id(value)?);
-        Ok(())
-    }
-
-    pub fn read_all(
-        &self,
-        value: &Value,
-        maximum_bytes: usize,
-        control: &ExecutionControl,
-    ) -> Result<Vec<u8>, ExecutionError> {
-        self.read_all_id(stream_id(value)?, maximum_bytes, control)
-    }
-
     fn read_all_id(
         &self,
-        id: ResourceId,
+        id: StreamId,
         maximum_bytes: usize,
         control: &ExecutionControl,
     ) -> Result<Vec<u8>, ExecutionError> {
@@ -249,7 +226,7 @@ impl StreamRegistry {
                 "stream identity domain is exhausted",
             ));
         }
-        let id = ResourceId(raw);
+        let id = StreamId(raw);
         if sources.insert(id, Arc::new(Mutex::new(source))).is_some() {
             return Err(ExecutionError::new(
                 ExecutionFailureClass::Infrastructure,
@@ -263,7 +240,7 @@ impl StreamRegistry {
         })
     }
 
-    fn close_id(&self, id: ResourceId) {
+    fn close_id(&self, id: StreamId) {
         if let Some(source) = lock_unpoisoned(&self.inner.sources).remove(&id) {
             lock_unpoisoned(&source).close();
         }
@@ -272,17 +249,10 @@ impl StreamRegistry {
 
 pub struct StreamLease {
     registry: StreamRegistry,
-    id: Option<ResourceId>,
+    id: Option<StreamId>,
 }
 
 impl StreamLease {
-    pub fn value(&self) -> Value {
-        Value::Resource {
-            id: self.id.unwrap_or(ResourceId(0)),
-            kind: ResourceKind::ByteStream,
-        }
-    }
-
     pub fn close(mut self) {
         if let Some(id) = self.id.take() {
             self.registry.close_id(id);
@@ -311,7 +281,7 @@ impl StreamLease {
         }
     }
 
-    fn live_id(&self) -> Result<ResourceId, ExecutionError> {
+    fn live_id(&self) -> Result<StreamId, ExecutionError> {
         self.id.ok_or_else(|| {
             ExecutionError::new(
                 ExecutionFailureClass::Infrastructure,
@@ -467,21 +437,6 @@ impl ByteSource for PipeSource {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct ByteStreamAdapter {
-    interface: OwnerId,
-    registry: StreamRegistry,
-}
-
-impl ByteStreamAdapter {
-    pub fn new(interface: OwnerId, registry: StreamRegistry) -> Self {
-        Self {
-            interface,
-            registry,
-        }
-    }
-}
-
 impl std::fmt::Debug for StreamRegistry {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
@@ -490,84 +445,6 @@ impl std::fmt::Debug for StreamRegistry {
             .field("live_streams", &self.live_streams())
             .finish()
     }
-}
-
-impl CapabilityAdapter for ByteStreamAdapter {
-    fn interface(&self) -> &OwnerId {
-        &self.interface
-    }
-
-    fn call(&self, policy: &CallPolicy, arguments: Vec<Value>) -> Result<Value, ExecutionError> {
-        match policy.operation.as_str() {
-            "read" => {
-                let [stream] = arguments.as_slice() else {
-                    return Err(stream_argument("stream read expects one stream"));
-                };
-                match self.registry.read(stream, &policy.control)? {
-                    Some(chunk) => Ok(Value::record(
-                        None,
-                        [
-                            ("done".to_owned(), Value::Bool(false)),
-                            ("chunk".to_owned(), Value::bytes(chunk)),
-                        ],
-                    )),
-                    None => Ok(Value::record(
-                        None,
-                        [
-                            ("done".to_owned(), Value::Bool(true)),
-                            ("chunk".to_owned(), Value::bytes(Vec::<u8>::new())),
-                        ],
-                    )),
-                }
-            }
-            "close" => {
-                let [stream] = arguments.as_slice() else {
-                    return Err(stream_argument("stream close expects one stream"));
-                };
-                self.registry.close(stream)?;
-                Ok(Value::Unit)
-            }
-            "read-all" => {
-                let [stream, Value::I64(maximum_bytes)] = arguments.as_slice() else {
-                    return Err(stream_argument(
-                        "stream read-all expects a stream and positive I64 byte limit",
-                    ));
-                };
-                let maximum_bytes = usize::try_from(*maximum_bytes).map_err(|_| {
-                    ExecutionError::resource(
-                        "stream_read_all_limit",
-                        "whole-stream byte limit must be a positive platform-sized integer",
-                    )
-                })?;
-                self.registry
-                    .read_all(stream, maximum_bytes, &policy.control)
-                    .map(Value::bytes)
-            }
-            operation => Err(ExecutionError::new(
-                ExecutionFailureClass::Infrastructure,
-                "stream_operation_unknown",
-                format!("byte-stream adapter does not implement '{operation}'"),
-            )),
-        }
-    }
-}
-
-fn stream_id(value: &Value) -> Result<ResourceId, ExecutionError> {
-    match value {
-        Value::Resource {
-            id,
-            kind: ResourceKind::ByteStream,
-        } => Ok(*id),
-        _ => Err(stream_argument("value is not a task-scoped byte stream")),
-    }
-}
-
-fn stream_argument(message: impl Into<String>) -> ExecutionError {
-    ExecutionError::new(
-        ExecutionFailureClass::Infrastructure,
-        "stream_adapter_argument",
-        message,
-    )
 }
 
 fn stream_diagnostic(code: &str, message: impl Into<String>) -> Diagnostic {
@@ -607,18 +484,13 @@ mod tests {
         .expect("registry");
         let (lease, producer) = registry.register_pipe().expect("pipe");
         producer.push(vec![1, 2, 3, 4]).await.expect("first");
-        let value = lease.value();
         assert_eq!(
-            registry
-                .read(&value, &ExecutionControl::uncancelled())
-                .expect("read"),
+            lease.read(&ExecutionControl::uncancelled()).expect("read"),
             Some(vec![1, 2, 3, 4])
         );
         producer.finish();
         assert_eq!(
-            registry
-                .read(&value, &ExecutionControl::uncancelled())
-                .expect("end"),
+            lease.read(&ExecutionControl::uncancelled()).expect("end"),
             None
         );
         drop(lease);
@@ -637,22 +509,11 @@ mod tests {
         let lease = registry
             .register_memory(vec![1, 2, 3, 4, 5])
             .expect("memory stream");
-        let value = lease.value();
-        assert!(!value.is_durable());
         let control = ExecutionControl::uncancelled();
-        assert_eq!(
-            registry.read(&value, &control).expect("one"),
-            Some(vec![1, 2])
-        );
-        assert_eq!(
-            registry.read(&value, &control).expect("two"),
-            Some(vec![3, 4])
-        );
-        assert_eq!(
-            registry.read(&value, &control).expect("three"),
-            Some(vec![5])
-        );
-        assert_eq!(registry.read(&value, &control).expect("end"), None);
+        assert_eq!(lease.read(&control).expect("one"), Some(vec![1, 2]));
+        assert_eq!(lease.read(&control).expect("two"), Some(vec![3, 4]));
+        assert_eq!(lease.read(&control).expect("three"), Some(vec![5]));
+        assert_eq!(lease.read(&control).expect("end"), None);
     }
 
     #[test]
@@ -668,8 +529,8 @@ mod tests {
             .register_memory(vec![1, 2, 3, 4, 5])
             .expect("memory stream");
         assert_eq!(
-            registry
-                .read_all(&lease.value(), 5, &ExecutionControl::uncancelled())
+            lease
+                .read_all(5, &ExecutionControl::uncancelled())
                 .expect("whole value"),
             vec![1, 2, 3, 4, 5]
         );
@@ -678,8 +539,8 @@ mod tests {
         let lease = registry
             .register_memory(vec![1, 2, 3, 4, 5])
             .expect("memory stream");
-        let error = registry
-            .read_all(&lease.value(), 4, &ExecutionControl::uncancelled())
+        let error = lease
+            .read_all(4, &ExecutionControl::uncancelled())
             .expect_err("limit must reject");
         assert_eq!(error.code, "stream_read_all_limit");
         assert_eq!(registry.live_streams(), 0);

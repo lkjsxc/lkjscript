@@ -1,11 +1,7 @@
 //! Bounded resident execution shared by service, worker, foreground, and test runners.
 
 use super::diagnostic::{Diagnostic, DiagnosticClass};
-use super::execution::{
-    BoundCapabilities, CapabilityGrant, ExecutionControl, ExecutionError, ExecutionFailureClass,
-    PreparedProgram, PreparedTarget, RunObservation, RunPolicy, Vm,
-};
-use super::value::Value;
+use super::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -97,15 +93,6 @@ impl ResidentLimits {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct InvocationReceipt {
-    pub value: Value,
-    pub execution: RunObservation,
-    pub queue_nanoseconds: u64,
-    pub execution_nanoseconds: u64,
-    pub task_id: u64,
-}
-
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ResidentObservation {
@@ -135,19 +122,6 @@ pub struct ShutdownReceipt {
 }
 
 #[derive(Clone)]
-pub struct ResidentDeployment {
-    inner: Arc<RuntimeInner>,
-}
-
-struct RuntimeInner {
-    program: Arc<PreparedProgram>,
-    target: PreparedTarget,
-    capabilities: BoundCapabilities,
-    run_policy: RunPolicy,
-    kernel: ResidentKernel,
-}
-
-#[derive(Clone)]
 pub(crate) struct ResidentKernel {
     inner: Arc<ResidentKernelInner>,
 }
@@ -163,6 +137,7 @@ struct ResidentKernelInner {
     active: AtomicUsize,
     next_task: AtomicU64,
     controls: Mutex<BTreeMap<u64, ExecutionControl>>,
+    cleanup_failures: Mutex<Option<Vec<ExecutionError>>>,
     counters: RuntimeCounters,
 }
 
@@ -183,82 +158,6 @@ struct RuntimeCounters {
     rejected_after_shutdown: AtomicU64,
     maximum_queued: AtomicUsize,
     maximum_active: AtomicUsize,
-}
-
-impl ResidentDeployment {
-    pub fn prepare(
-        program: Arc<PreparedProgram>,
-        target_name: &str,
-        grants: Vec<CapabilityGrant>,
-        limits: ResidentLimits,
-        run_policy: RunPolicy,
-    ) -> Result<Self, Diagnostic> {
-        let target = program.target(target_name)?.clone();
-        let component = program.components().get(&target.component).ok_or_else(|| {
-            runtime_diagnostic(
-                "resident_component_missing",
-                "prepared target lost its component",
-            )
-        })?;
-        let capabilities = BoundCapabilities::bind(component, grants)?;
-        let kernel = ResidentKernel::new(limits)?;
-        Ok(Self {
-            inner: Arc::new(RuntimeInner {
-                program,
-                target,
-                capabilities,
-                run_policy,
-                kernel,
-            }),
-        })
-    }
-
-    pub fn target(&self) -> &PreparedTarget {
-        &self.inner.target
-    }
-
-    pub fn limits(&self) -> &ResidentLimits {
-        self.inner.kernel.limits()
-    }
-
-    pub fn observe(&self) -> ResidentObservation {
-        self.inner.kernel.observe()
-    }
-
-    pub async fn invoke(&self, arguments: Vec<Value>) -> Result<InvocationReceipt, ExecutionError> {
-        let program = self.inner.program.clone();
-        let function = self.inner.target.port.function.clone();
-        let capabilities = self.inner.capabilities.task_scope();
-        let policy = self.inner.run_policy;
-        let receipt = self
-            .inner
-            .kernel
-            .invoke(move |control| {
-                Vm::new(&program, policy).invoke_controlled(
-                    &function,
-                    arguments,
-                    Some(&capabilities),
-                    &control,
-                )
-            })
-            .await?;
-        let (value, execution) = receipt.value;
-        Ok(InvocationReceipt {
-            value,
-            execution,
-            queue_nanoseconds: receipt.queue_nanoseconds,
-            execution_nanoseconds: receipt.execution_nanoseconds,
-            task_id: receipt.task_id,
-        })
-    }
-
-    pub async fn shutdown(&self) -> ShutdownReceipt {
-        let capabilities = self.inner.capabilities.clone();
-        self.inner
-            .kernel
-            .shutdown(move || capabilities.shutdown())
-            .await
-    }
 }
 
 impl ResidentKernel {
@@ -287,6 +186,7 @@ impl ResidentKernel {
                 active: AtomicUsize::new(0),
                 next_task: AtomicU64::new(1),
                 controls: Mutex::new(BTreeMap::new()),
+                cleanup_failures: Mutex::new(None),
                 counters: RuntimeCounters::default(),
             }),
         })
@@ -488,7 +388,17 @@ impl ResidentKernel {
             .queued
             .load(Ordering::Acquire)
             .saturating_add(self.inner.active.load(Ordering::Acquire));
-        let cleanup_failures = cleanup();
+        let cleanup_failures = {
+            let mut completed = lock_unpoisoned(&self.inner.cleanup_failures);
+            match completed.as_ref() {
+                Some(failures) => failures.clone(),
+                None => {
+                    let failures = cleanup();
+                    *completed = Some(failures.clone());
+                    failures
+                }
+            }
+        };
         ShutdownReceipt {
             contract_version: RESIDENT_RUNTIME_CONTRACT_VERSION,
             admission_stopped: true,
@@ -609,66 +519,6 @@ fn runtime_diagnostic(code: &str, message: impl Into<String>) -> Diagnostic {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::platform::{
-        SourceLimits, build_artifact, decode_package, load_artifact, parse_source,
-        validate_package_documents,
-    };
-
-    fn program(source: &[u8]) -> Arc<PreparedProgram> {
-        let descriptor = decode_package(
-            br#"{"contract_version":1,"package_id":"1234567890abcdef1234567890abcdef","name":"resident","modules":[{"name":"main","path":"src/main.lkj"}],"dependencies":[],"targets":[{"name":"run","component":"main.App","port":"main","runner":"http"}]}"#,
-        )
-        .expect("descriptor");
-        let document =
-            parse_source("src/main.lkj", source, SourceLimits::default()).expect("source");
-        let package = validate_package_documents(descriptor, vec![document], &[]).expect("package");
-        let (bytes, _) = build_artifact(&package, &[&package]).expect("artifact");
-        Arc::new(PreparedProgram::prepare(load_artifact(&bytes).expect("load")).expect("prepare"))
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn resident_reuses_one_program_and_drains_cleanly() {
-        let program = program(
-            br#"(module main
-  (export App)
-  (extern add ((left I64) (right I64)) I64 core.i64.add)
-  (fn main ((left I64) (right I64)) I64 (call add left right))
-  (component App (port main (Function (I64 I64) I64) (function main))))
-"#,
-        );
-        let deployment = ResidentDeployment::prepare(
-            program,
-            "run",
-            Vec::new(),
-            ResidentLimits {
-                maximum_concurrent_tasks: 2,
-                ..ResidentLimits::default()
-            },
-            RunPolicy::default(),
-        )
-        .expect("deployment");
-        let (left, right) = tokio::join!(
-            deployment.invoke(vec![Value::I64(20), Value::I64(22)]),
-            deployment.invoke(vec![Value::I64(7), Value::I64(8)])
-        );
-        assert_eq!(
-            left.expect("left").value.canonical_json(),
-            serde_json::json!(42)
-        );
-        assert_eq!(
-            right.expect("right").value.canonical_json(),
-            serde_json::json!(15)
-        );
-        let shutdown = deployment.shutdown().await;
-        assert!(shutdown.drained_before_cancellation);
-        assert_eq!(shutdown.remaining_tasks, 0);
-        assert_eq!(deployment.observe().completed, 2);
-        let error = deployment
-            .invoke(vec![Value::I64(1), Value::I64(2)])
-            .await
-            .expect_err("admission stopped");
-        assert_eq!(error.code, "resident_shutting_down");
-    }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn resident_kernel_is_value_agnostic() {
@@ -685,39 +535,6 @@ mod tests {
         assert_eq!(receipt.task_id, 1);
         assert_eq!(kernel.observe().completed, 1);
         assert_eq!(kernel.shutdown(Vec::new).await.remaining_tasks, 0);
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn deadline_cancels_computation_cooperatively() {
-        let program = program(
-            br#"(module main
-  (export App)
-  (fn forever ((value I64)) I64 (call forever value))
-  (component App (port main (Function (I64) I64) (function forever))))
-"#,
-        );
-        let deployment = ResidentDeployment::prepare(
-            program,
-            "run",
-            Vec::new(),
-            ResidentLimits {
-                request_deadline_milliseconds: 5,
-                cancellation_grace_milliseconds: 500,
-                ..ResidentLimits::default()
-            },
-            RunPolicy {
-                instruction_fuel: u64::MAX,
-                maximum_call_depth: 1_000_000,
-                maximum_value_stack: 2_000_000,
-            },
-        )
-        .expect("deployment");
-        let error = deployment
-            .invoke(vec![Value::I64(1)])
-            .await
-            .expect_err("deadline");
-        assert_eq!(error.class, ExecutionFailureClass::Cancelled);
-        assert_eq!(deployment.shutdown().await.remaining_tasks, 0);
     }
 
     #[test]

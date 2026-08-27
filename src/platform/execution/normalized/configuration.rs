@@ -11,6 +11,7 @@ use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFail
 use crate::platform::kernel::{DeclarationReference, OperationReference};
 use std::collections::{BTreeMap, BTreeSet};
 
+#[cfg(test)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct NormalizedConfigurationOperations {
     pub exists: OperationReference,
@@ -19,58 +20,69 @@ pub(crate) struct NormalizedConfigurationOperations {
     pub bool: OperationReference,
 }
 
+#[cfg(test)]
 impl NormalizedConfigurationOperations {
     fn exact_set(&self) -> BTreeSet<OperationReference> {
         [self.exists, self.text, self.i64, self.bool]
             .into_iter()
             .collect()
     }
-
-    fn resolve(&self, operation: OperationReference) -> Option<ConfigurationOperation> {
-        if operation == self.exists {
-            Some(ConfigurationOperation::Exists)
-        } else if operation == self.text {
-            Some(ConfigurationOperation::Text)
-        } else if operation == self.i64 {
-            Some(ConfigurationOperation::I64)
-        } else if operation == self.bool {
-            Some(ConfigurationOperation::Bool)
-        } else {
-            None
-        }
-    }
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct NormalizedConfigurationAdapter {
     interface: DeclarationReference,
-    operations: NormalizedConfigurationOperations,
+    operations: BTreeMap<OperationReference, ConfigurationOperation>,
     exact_operations: BTreeSet<OperationReference>,
     store: ConfigurationStore,
 }
 
 impl NormalizedConfigurationAdapter {
+    #[cfg(test)]
     pub(crate) fn new(
         interface: DeclarationReference,
         operations: NormalizedConfigurationOperations,
         values: BTreeMap<String, ConfigurationValue>,
     ) -> Result<Self, Diagnostic> {
-        let exact_operations = operations.exact_set();
-        if exact_operations.len() != 4 {
+        if operations.exact_set().len() != 4 {
             return Err(configuration_diagnostic(
                 "normalized_configuration_operation_duplicate",
                 "configuration adapter operation identities must be distinct",
             ));
         }
-        if exact_operations
+        Self::new_selected(
+            interface,
+            BTreeMap::from([
+                (operations.exists, ConfigurationOperation::Exists),
+                (operations.text, ConfigurationOperation::Text),
+                (operations.i64, ConfigurationOperation::I64),
+                (operations.bool, ConfigurationOperation::Bool),
+            ]),
+            values,
+        )
+    }
+
+    pub(crate) fn new_selected(
+        interface: DeclarationReference,
+        operations: BTreeMap<OperationReference, ConfigurationOperation>,
+        values: BTreeMap<String, ConfigurationValue>,
+    ) -> Result<Self, Diagnostic> {
+        if operations.is_empty() {
+            return Err(configuration_diagnostic(
+                "normalized_configuration_operation_empty",
+                "configuration adapter must bind at least one exact operation",
+            ));
+        }
+        if operations
             .iter()
-            .any(|operation| operation.package != interface.package)
+            .any(|(operation, _)| operation.package != interface.package)
         {
             return Err(configuration_diagnostic(
                 "normalized_configuration_operation_package",
                 "configuration adapter operations must share the exact interface package",
             ));
         }
+        let exact_operations = operations.keys().copied().collect();
         Ok(Self {
             interface,
             operations,
@@ -107,12 +119,16 @@ impl NormalizedCapabilityAdapter for NormalizedConfigurationAdapter {
                 "configuration call policy has a foreign exact interface",
             ));
         }
-        let operation = self.operations.resolve(policy.operation).ok_or_else(|| {
-            configuration_runtime(
-                "normalized_configuration_operation",
-                "configuration call policy has a foreign exact operation",
-            )
-        })?;
+        let operation = self
+            .operations
+            .get(&policy.operation)
+            .copied()
+            .ok_or_else(|| {
+                configuration_runtime(
+                    "normalized_configuration_operation",
+                    "configuration call policy has a foreign exact operation",
+                )
+            })?;
         let [NormalizedValue::StaticText(name)] = arguments.as_slice() else {
             return Err(ExecutionError::new(
                 ExecutionFailureClass::Capability,

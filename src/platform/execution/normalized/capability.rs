@@ -13,6 +13,7 @@ use std::sync::Arc;
 
 const GRANT_AUTHORITY_REVISION_DOMAIN: &str = "lkjscript.normalized-grant-authority-revision.v1";
 const GRANT_DESCRIPTOR_DIGEST_DOMAIN: &str = "lkjscript.normalized-grant-descriptor.v1";
+pub(crate) const CAPABILITY_GRANT_CONTRACT_VERSION: u16 = 1;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum NormalizedAdapterKind {
@@ -85,6 +86,7 @@ impl NormalizedGrantDescriptorDigest {
         Self(grant_digest(GRANT_DESCRIPTOR_DIGEST_DOMAIN, bytes))
     }
 
+    #[cfg(test)]
     pub const fn bytes(self) -> [u8; 32] {
         self.0
     }
@@ -149,6 +151,12 @@ pub trait NormalizedCapabilityAdapter: Send + Sync {
             "normalized_transaction_unsupported",
             "the exact capability adapter does not support transactions",
         ))
+    }
+
+    /// Releases deployment-owned resources after admission has stopped and task scopes drained.
+    /// Implementations must make repeated calls idempotent.
+    fn shutdown(&self) -> Result<(), ExecutionError> {
+        Ok(())
     }
 }
 
@@ -234,6 +242,7 @@ impl std::fmt::Debug for NormalizedCapabilities {
 
 #[derive(Clone)]
 struct BoundNormalizedCapability {
+    canonical_requirement: RequirementIndex,
     operations: BTreeSet<OperationIndex>,
     descriptor: Arc<NormalizedCapabilityGrantDescriptor>,
     adapter: Arc<dyn NormalizedCapabilityAdapter>,
@@ -325,6 +334,7 @@ impl NormalizedCapabilities {
             validate_limits(declaration, &grant.descriptor.limits)?;
             let exact_requirement = declaration.reference;
             let binding = BoundNormalizedCapability {
+                canonical_requirement: requirement,
                 operations,
                 descriptor: Arc::new(grant.descriptor),
                 adapter: grant.adapter,
@@ -343,6 +353,42 @@ impl NormalizedCapabilities {
                 "normalized_grant_missing",
                 "deployment does not bind every exact selected component requirement",
             ));
+        }
+        let component_bindings = bindings.clone();
+        for (index, candidate) in program.requirements.iter().enumerate() {
+            let candidate_index = RequirementIndex(index as u32);
+            if bindings.contains_key(&candidate_index) {
+                continue;
+            }
+            let matches = component_bindings
+                .iter()
+                .filter(|(component_index, _)| {
+                    equivalent_requirement(
+                        candidate,
+                        &program.requirements[component_index.0 as usize],
+                    )
+                })
+                .collect::<Vec<_>>();
+            let [(_, binding)] = matches.as_slice() else {
+                if matches.len() > 1 {
+                    return Err(capability_error(
+                        "normalized_grant_alias_ambiguous",
+                        "artifact requirement matches more than one selected component capability slot",
+                    ));
+                }
+                continue;
+            };
+            let binding = (*binding).clone();
+            if exact_bindings
+                .insert(candidate.reference, binding.clone())
+                .is_some()
+            {
+                return Err(capability_error(
+                    "normalized_grant_alias_duplicate",
+                    "artifact repeats one exact aliased capability requirement",
+                ));
+            }
+            bindings.insert(candidate_index, binding);
         }
         Ok(Self {
             component: component_index,
@@ -364,6 +410,13 @@ impl NormalizedCapabilities {
         requirement: RequirementIndex,
     ) -> Result<u64, ExecutionError> {
         maximum_calls(self.binding(requirement)?)
+    }
+
+    pub(crate) fn canonical_requirement(
+        &self,
+        requirement: RequirementIndex,
+    ) -> Result<RequirementIndex, ExecutionError> {
+        Ok(self.binding(requirement)?.canonical_requirement)
     }
 
     pub(crate) fn call(
@@ -407,6 +460,24 @@ impl NormalizedCapabilities {
         maximum_calls(self.exact_binding(requirement)?)
     }
 
+    pub(crate) fn canonical_requirement_exact(
+        &self,
+        program: &NormalizedProgram,
+        requirement: RequirementReference,
+    ) -> Result<RequirementReference, ExecutionError> {
+        let binding = self.exact_binding(requirement)?;
+        program
+            .requirements
+            .get(binding.canonical_requirement.0 as usize)
+            .map(|requirement| requirement.reference)
+            .ok_or_else(|| {
+                capability_error(
+                    "normalized_grant_alias_index",
+                    "bound capability slot escaped the exact artifact requirement table",
+                )
+            })
+    }
+
     pub(crate) fn call_exact(
         &self,
         program: &NormalizedProgram,
@@ -435,6 +506,15 @@ impl NormalizedCapabilities {
         self.exact_binding(requirement)?
             .adapter
             .begin_transaction(&policy, resources, control)
+    }
+
+    pub(crate) fn shutdown(&self) -> Vec<ExecutionError> {
+        self.bindings
+            .iter()
+            .filter(|(requirement, binding)| **requirement == binding.canonical_requirement)
+            .map(|(_, binding)| binding)
+            .filter_map(|binding| binding.adapter.shutdown().err())
+            .collect()
     }
 
     pub(crate) fn call_policy(
@@ -474,8 +554,17 @@ impl NormalizedCapabilities {
                     "prepared capability operation index is outside the artifact table",
                 )
             })?;
+        let canonical = program
+            .requirements
+            .get(binding.canonical_requirement.0 as usize)
+            .ok_or_else(|| {
+                capability_error(
+                    "normalized_grant_alias_index",
+                    "bound capability slot escaped the exact artifact requirement table",
+                )
+            })?;
         Ok(NormalizedCallPolicy {
-            requirement: requirement.reference,
+            requirement: canonical.reference,
             requirement_name: requirement.name.clone(),
             operation: operation.reference,
             operation_name: operation.name.clone(),
@@ -539,8 +628,17 @@ impl NormalizedCapabilities {
                     "prepared transaction requirement index is outside the artifact table",
                 )
             })?;
+        let canonical = program
+            .requirements
+            .get(binding.canonical_requirement.0 as usize)
+            .ok_or_else(|| {
+                capability_error(
+                    "normalized_grant_alias_index",
+                    "bound capability slot escaped the exact artifact requirement table",
+                )
+            })?;
         Ok(NormalizedTransactionPolicy {
-            requirement: requirement.reference,
+            requirement: canonical.reference,
             requirement_name: requirement.name.clone(),
             requirement_limits: Arc::clone(&requirement.limits),
             grant: Arc::clone(&binding.descriptor),
@@ -590,6 +688,33 @@ impl NormalizedCapabilities {
             )
         })
     }
+}
+
+fn equivalent_requirement(
+    candidate: &super::prepare::NormalizedRequirement,
+    component: &super::prepare::NormalizedRequirement,
+) -> bool {
+    let candidate_operations = candidate
+        .operations
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let component_operations = component
+        .operations
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    candidate.reference.package == component.reference.package
+        && candidate.name == component.name
+        && candidate.interface == component.interface
+        && candidate_operations.is_subset(&component_operations)
+        && candidate.limits.iter().all(|required| {
+            component.limits.iter().any(|available| {
+                available.name == required.name
+                    && available.unit == required.unit
+                    && available.maximum <= required.maximum
+            })
+        })
 }
 
 fn validate_limits(

@@ -148,21 +148,13 @@ pub struct NormalizedReferenceInterpreter<'a> {
 }
 
 impl<'a> NormalizedReferenceInterpreter<'a> {
+    #[cfg(test)]
     pub fn new(
         snapshot: &'a KernelSnapshot,
         program: &'a NormalizedProgram,
         policy: NormalizedRunPolicy,
     ) -> Self {
         Self::from_reader(snapshot, program, policy)
-    }
-
-    pub fn with_host(
-        snapshot: &'a KernelSnapshot,
-        program: &'a NormalizedProgram,
-        policy: NormalizedRunPolicy,
-        host: &'a dyn NormalizedReferenceHost,
-    ) -> Self {
-        Self::with_reader_and_host(snapshot, program, policy, host)
     }
 
     pub fn from_reader(
@@ -178,20 +170,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         }
     }
 
-    pub fn with_reader_and_host(
-        authority: &'a dyn NormalizedReferenceRead,
-        program: &'a NormalizedProgram,
-        policy: NormalizedRunPolicy,
-        host: &'a dyn NormalizedReferenceHost,
-    ) -> Self {
-        Self {
-            authority,
-            program,
-            policy,
-            host,
-        }
-    }
-
+    #[cfg(test)]
     pub fn invoke(
         &self,
         declaration: DeclarationReference,
@@ -282,12 +261,14 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                     state.call_declaration(function, arguments)
                 }
                 PortImplementation::Expression(expression) => {
-                    if !arguments.is_empty() {
+                    let callee = state.evaluate(expression, &mut BTreeMap::new())?;
+                    let NormalizedValue::Function(function) = callee else {
                         return Err(reference_type_error(
-                            "expression-backed target port received arguments",
+                            "expression-backed target port did not evaluate to a function",
                         ));
-                    }
-                    state.evaluate(expression, &mut BTreeMap::new())
+                    };
+                    let declaration = state.function_reference(function)?;
+                    state.call_declaration(declaration, arguments)
                 }
             }
         })
@@ -1132,7 +1113,11 @@ impl ReferenceState<'_> {
         arguments: Vec<NormalizedValue>,
     ) -> Result<NormalizedValue, ExecutionError> {
         self.charge_capability_call(requirement)?;
-        let value = if let Some(transaction) = self.transactions.get_mut(&requirement) {
+        let capabilities = self
+            .capabilities
+            .ok_or_else(reference_capabilities_unbound)?;
+        let canonical = capabilities.canonical_requirement_exact(self.program, requirement)?;
+        let value = if let Some(transaction) = self.transactions.get_mut(&canonical) {
             let policy = self
                 .capabilities
                 .ok_or_else(reference_capabilities_unbound)?
@@ -1143,16 +1128,14 @@ impl ReferenceState<'_> {
                     .call(&policy, arguments, self.resources, self.control);
             validate_outcome(&policy, result)?
         } else {
-            self.capabilities
-                .ok_or_else(reference_capabilities_unbound)?
-                .call_exact(
-                    self.program,
-                    requirement,
-                    operation,
-                    arguments,
-                    self.resources,
-                    self.control,
-                )?
+            capabilities.call_exact(
+                self.program,
+                requirement,
+                operation,
+                arguments,
+                self.resources,
+                self.control,
+            )?
         };
         self.charge_value(&value)?;
         Ok(value)
@@ -1166,7 +1149,11 @@ impl ReferenceState<'_> {
         locals: &mut BTreeMap<LocalValueReference, NormalizedValue>,
     ) -> Result<NormalizedValue, ExecutionError> {
         self.binding(binding, BindingKind::Transaction)?;
-        if self.transactions.contains_key(&requirement) {
+        let capabilities = self
+            .capabilities
+            .ok_or_else(reference_capabilities_unbound)?;
+        let canonical = capabilities.canonical_requirement_exact(self.program, requirement)?;
+        if self.transactions.contains_key(&canonical) {
             return Err(reference_error(
                 "normalized_reference_transaction_nested",
                 "one exact requirement cannot begin a nested transaction",
@@ -1187,14 +1174,16 @@ impl ReferenceState<'_> {
             )
         })?;
         self.charge_capability_call(requirement)?;
-        let transaction = self
-            .capabilities
-            .ok_or_else(reference_capabilities_unbound)?
-            .begin_transaction_exact(self.program, requirement, self.resources, self.control)?;
+        let transaction = capabilities.begin_transaction_exact(
+            self.program,
+            requirement,
+            self.resources,
+            self.control,
+        )?;
         self.next_transaction = next_generation;
         debug_assert!(locals.insert(local, NormalizedValue::Unit).is_none());
         self.transactions.insert(
-            requirement,
+            canonical,
             ReferenceTransaction {
                 binding,
                 generation,
@@ -1203,7 +1192,7 @@ impl ReferenceState<'_> {
         );
         let result = self.evaluate(body, locals);
         let token = locals.remove(&local);
-        let mut transaction = self.transactions.remove(&requirement).ok_or_else(|| {
+        let mut transaction = self.transactions.remove(&canonical).ok_or_else(|| {
             reference_error(
                 "normalized_reference_transaction_missing",
                 "reference transaction disappeared before scope completion",
@@ -1287,7 +1276,8 @@ impl ReferenceState<'_> {
             .capabilities
             .ok_or_else(reference_capabilities_unbound)?;
         let maximum = capabilities.maximum_calls_exact(requirement)?;
-        let calls = self.calls_by_requirement.entry(requirement).or_default();
+        let canonical = capabilities.canonical_requirement_exact(self.program, requirement)?;
+        let calls = self.calls_by_requirement.entry(canonical).or_default();
         if *calls >= maximum {
             return Err(reference_resource(
                 "normalized_reference_grant_calls",

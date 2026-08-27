@@ -2,10 +2,7 @@
 
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::execution::{ExecutionError, ExecutionFailureClass};
-use super::package::RunnerKind;
-use super::runtime::{ResidentDeployment, ShutdownReceipt};
-use super::semantic::ResolvedType;
-use super::value::Value;
+use super::runtime::ShutdownReceipt;
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 use std::sync::Arc;
@@ -82,59 +79,10 @@ pub struct WorkerReceipt {
     pub shutdown: ShutdownReceipt,
 }
 
-#[derive(Clone)]
-pub struct WorkerApplication {
-    deployment: ResidentDeployment,
-    limits: WorkerLimits,
-}
-
-impl WorkerApplication {
-    pub fn new(deployment: ResidentDeployment, limits: WorkerLimits) -> Result<Self, Diagnostic> {
-        limits.validate(deployment.limits().maximum_concurrent_tasks)?;
-        if deployment.target().runner != RunnerKind::Worker {
-            return Err(worker_diagnostic(
-                DiagnosticClass::Source,
-                "worker_runner_kind",
-                "worker topology requires a worker runner target",
-            ));
-        }
-        let signature = &deployment.target().port.signature;
-        if !signature.parameters.is_empty() || signature.result != ResolvedType::Bool {
-            return Err(worker_diagnostic(
-                DiagnosticClass::Semantic,
-                "worker_port_signature",
-                "worker port must have the exact signature () -> Bool",
-            ));
-        }
-        Ok(Self { deployment, limits })
-    }
-
-    pub async fn run(
-        self,
-        shutdown: impl Future<Output = ()> + Send,
-    ) -> Result<WorkerReceipt, Diagnostic> {
-        run_worker_topology(self.deployment, self.limits, shutdown).await
-    }
-}
-
 pub(crate) trait ResidentWorker: Clone + Send + Sync + 'static {
     fn invoke_worker(&self) -> impl Future<Output = Result<bool, ExecutionError>> + Send;
 
     fn shutdown_worker(&self) -> impl Future<Output = ShutdownReceipt> + Send;
-}
-
-impl ResidentWorker for ResidentDeployment {
-    async fn invoke_worker(&self) -> Result<bool, ExecutionError> {
-        let receipt = self.invoke(Vec::new()).await?;
-        match receipt.value {
-            Value::Bool(value) => Ok(value),
-            _ => Err(worker_result_type()),
-        }
-    }
-
-    async fn shutdown_worker(&self) -> ShutdownReceipt {
-        self.shutdown().await
-    }
 }
 
 pub(crate) async fn run_worker_topology<D>(

@@ -1,13 +1,7 @@
 //! Generic parameterized PostgreSQL capability with bounded pools and task-scoped transactions.
 
 use super::diagnostic::{Diagnostic, DiagnosticClass};
-use super::execution::{
-    CallPolicy, CapabilityAdapter, CapabilityTransaction, ExecutionControl, ExecutionError,
-    ExecutionFailureClass,
-};
-use super::language::Visibility;
-use super::semantic::OwnerId;
-use super::value::Value;
+use super::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use fallible_iterator::FallibleIterator;
 use postgres::error::SqlState;
 use postgres::types::ToSql;
@@ -406,100 +400,91 @@ fn dispose_clients(clients: Vec<Client>) -> Result<(), ExecutionError> {
     })
 }
 
-#[derive(Clone)]
-pub struct PostgresAdapter {
-    interface: OwnerId,
-    value_owner: OwnerId,
-    type_owner: OwnerId,
+/// Representation-neutral PostgreSQL host engine. Artifact codecs own conversion to and from
+/// runtime values; this type owns only connection, SQL, transaction, and failure mechanics.
+#[derive(Clone, Debug)]
+pub(crate) struct PostgresEngine {
     pool: PostgresPool,
 }
 
-impl fmt::Debug for PostgresAdapter {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("PostgresAdapter")
-            .field("interface", &self.interface)
-            .field("value_owner", &self.value_owner)
-            .field("type_owner", &self.type_owner)
-            .field("pool", &self.pool)
-            .finish()
-    }
-}
-
-impl PostgresAdapter {
-    pub fn new(
-        interface: OwnerId,
-        value_owner: OwnerId,
-        type_owner: OwnerId,
-        pool: PostgresPool,
-    ) -> Self {
-        Self {
-            interface,
-            value_owner,
-            type_owner,
-            pool,
-        }
+impl PostgresEngine {
+    pub(crate) fn new(pool: PostgresPool) -> Self {
+        Self { pool }
     }
 
-    pub fn pool(&self) -> &PostgresPool {
-        &self.pool
+    pub(crate) fn preflight(&self) -> Result<(), ExecutionError> {
+        self.pool.preflight()
     }
 
-    fn execute(&self, policy: &CallPolicy, arguments: Vec<Value>) -> Result<Value, ExecutionError> {
-        let [statement, parameters] = arguments.as_slice() else {
-            return Err(argument_error(
-                "execute expects statement and parameter list",
-            ));
-        };
-        let statement = static_statement(statement)?;
-        let parameters = decode_parameters(parameters, &self.value_owner)?;
-        let mut connection = self.pool.acquire(&policy.control)?;
-        execute_on(connection.client()?, statement, &parameters, policy)
-            .map(Value::I64)
-            .inspect_err(|_| connection.discard())
+    pub(crate) fn shutdown(&self) -> Result<(), ExecutionError> {
+        self.pool.close()
     }
 
-    fn query(&self, policy: &CallPolicy, arguments: Vec<Value>) -> Result<Value, ExecutionError> {
-        let [statement, parameters, columns, maximum_rows] = arguments.as_slice() else {
-            return Err(argument_error(
-                "query expects statement, parameter list, column schema, and maximum rows",
-            ));
-        };
-        let statement = static_statement(statement)?;
-        let parameters = decode_parameters(parameters, &self.value_owner)?;
-        let columns = decode_column_types(columns, &self.type_owner)?;
-        let maximum_rows = decode_maximum_rows(maximum_rows, policy)?;
-        let mut connection = self.pool.acquire(&policy.control)?;
-        query_on(
+    pub(crate) fn execute(
+        &self,
+        statement: &str,
+        parameters: &[DatabaseValue],
+        control: &ExecutionControl,
+        possible_visibility: bool,
+    ) -> Result<i64, ExecutionError> {
+        validate_static_statement(statement)?;
+        control.check()?;
+        let mut connection = self.pool.acquire(control)?;
+        execute_on(
             connection.client()?,
             statement,
-            &parameters,
-            &columns,
-            maximum_rows,
-            &self.value_owner,
-            policy,
+            parameters,
+            &DatabaseVisibility(possible_visibility),
         )
         .inspect_err(|_| connection.discard())
     }
 
-    fn migration(
+    pub(crate) fn query(
         &self,
-        policy: &CallPolicy,
-        arguments: Vec<Value>,
-    ) -> Result<Value, ExecutionError> {
-        let [migration_id, checksum, statement] = arguments.as_slice() else {
-            return Err(argument_error(
-                "migration expects positive id, checksum, and static statement",
+        statement: &str,
+        parameters: &[DatabaseValue],
+        columns: &[DatabaseColumnType],
+        maximum_rows: usize,
+        control: &ExecutionControl,
+    ) -> Result<Vec<Vec<DatabaseValue>>, ExecutionError> {
+        validate_static_statement(statement)?;
+        if columns.len() > MAXIMUM_DATABASE_COLUMNS {
+            return Err(ExecutionError::resource(
+                "database_column_limit",
+                "database column schema exceeds its maximum",
             ));
-        };
-        let Value::I64(migration_id) = migration_id else {
-            return Err(argument_error("migration id must be I64"));
-        };
-        if *migration_id <= 0 {
+        }
+        if maximum_rows == 0 || maximum_rows > MAXIMUM_DATABASE_ROWS {
+            return Err(ExecutionError::resource(
+                "database_row_limit",
+                "database maximum rows is zero or exceeds its host maximum",
+            ));
+        }
+        control.check()?;
+        let mut connection = self.pool.acquire(control)?;
+        query_on(
+            connection.client()?,
+            statement,
+            parameters,
+            columns,
+            maximum_rows,
+            &DatabaseVisibility(false),
+        )
+        .inspect_err(|_| connection.discard())
+    }
+
+    pub(crate) fn migration(
+        &self,
+        migration_id: i64,
+        checksum: &str,
+        statement: &str,
+        control: &ExecutionControl,
+    ) -> Result<bool, ExecutionError> {
+        if migration_id <= 0 {
             return Err(argument_error("migration id must be positive"));
         }
-        let checksum = static_statement(checksum)?;
-        let statement = static_statement(statement)?;
+        validate_static_statement(checksum)?;
+        validate_static_statement(statement)?;
         let actual = blake3::hash(statement.as_bytes()).to_hex().to_string();
         if checksum != actual {
             return Err(argument_error(
@@ -511,80 +496,41 @@ impl PostgresAdapter {
                 "migration statement may not contain transaction control",
             ));
         }
-        let mut connection = self.pool.acquire(&policy.control)?;
-        let result = migrate_on(
+        control.check()?;
+        let mut connection = self.pool.acquire(control)?;
+        migrate_on(
             connection.client()?,
-            *migration_id,
+            migration_id,
             checksum,
             statement,
-            policy,
-        );
-        if result.is_err() {
-            connection.discard();
-        }
-        result.map(Value::Bool)
-    }
-}
-
-impl CapabilityAdapter for PostgresAdapter {
-    fn interface(&self) -> &OwnerId {
-        &self.interface
+            &DatabaseVisibility(true),
+        )
+        .inspect_err(|_| connection.discard())
     }
 
-    fn call(&self, policy: &CallPolicy, arguments: Vec<Value>) -> Result<Value, ExecutionError> {
-        policy.control.check()?;
-        match policy.operation.as_str() {
-            "execute" => self.execute(policy, arguments),
-            "query" => self.query(policy, arguments),
-            "migration" => self.migration(policy, arguments),
-            operation => Err(ExecutionError::new(
-                ExecutionFailureClass::Infrastructure,
-                "database_operation_unknown",
-                format!("PostgreSQL adapter does not implement operation '{operation}'"),
-            )),
-        }
-    }
-
-    fn begin_transaction(
+    pub(crate) fn begin_transaction(
         &self,
-        policy: &CallPolicy,
-    ) -> Result<Box<dyn CapabilityTransaction>, ExecutionError> {
-        policy.control.check()?;
-        if policy.operation != "transaction" {
-            return Err(ExecutionError::new(
-                ExecutionFailureClass::Infrastructure,
-                "database_transaction_operation",
-                "PostgreSQL transaction entry uses a foreign operation",
-            ));
-        }
-        let mut connection = self.pool.acquire(&policy.control)?;
+        control: &ExecutionControl,
+    ) -> Result<PostgresEngineTransaction, ExecutionError> {
+        control.check()?;
+        let mut connection = self.pool.acquire(control)?;
         if let Err(error) = connection.client()?.batch_execute("BEGIN") {
             connection.discard();
-            return Err(map_postgres_error(error, policy, false));
+            return Err(map_postgres_error(error, &DatabaseVisibility(false), false));
         }
-        Ok(Box::new(PostgresTransaction {
+        Ok(PostgresEngineTransaction {
             connection: Some(connection),
-            value_owner: self.value_owner.clone(),
-            type_owner: self.type_owner.clone(),
-            transaction_policy: policy.clone(),
             completed: false,
-        }))
-    }
-
-    fn shutdown(&self) -> Result<(), ExecutionError> {
-        self.pool.close()
+        })
     }
 }
 
-struct PostgresTransaction {
+pub(crate) struct PostgresEngineTransaction {
     connection: Option<PooledClient>,
-    value_owner: OwnerId,
-    type_owner: OwnerId,
-    transaction_policy: CallPolicy,
     completed: bool,
 }
 
-impl PostgresTransaction {
+impl PostgresEngineTransaction {
     fn connection(&mut self) -> Result<&mut PooledClient, ExecutionError> {
         self.connection.as_mut().ok_or_else(|| {
             ExecutionError::new(
@@ -594,71 +540,63 @@ impl PostgresTransaction {
             )
         })
     }
-}
 
-impl CapabilityTransaction for PostgresTransaction {
-    fn call(
+    pub(crate) fn execute(
         &mut self,
-        policy: &CallPolicy,
-        arguments: Vec<Value>,
-    ) -> Result<Value, ExecutionError> {
-        policy.control.check()?;
-        match policy.operation.as_str() {
-            "execute" => {
-                let [statement, parameters] = arguments.as_slice() else {
-                    return Err(argument_error("execute expects statement and parameters"));
-                };
-                let statement = static_statement(statement)?;
-                let parameters = decode_parameters(parameters, &self.value_owner)?;
-                let result =
-                    execute_on(self.connection()?.client()?, statement, &parameters, policy);
-                result.map(Value::I64)
-            }
-            "query" => {
-                let [statement, parameters, columns, maximum_rows] = arguments.as_slice() else {
-                    return Err(argument_error(
-                        "query expects statement, parameters, columns, and maximum rows",
-                    ));
-                };
-                let statement = static_statement(statement)?;
-                let parameters = decode_parameters(parameters, &self.value_owner)?;
-                let columns = decode_column_types(columns, &self.type_owner)?;
-                let maximum_rows = decode_maximum_rows(maximum_rows, policy)?;
-                let value_owner = self.value_owner.clone();
-                query_on(
-                    self.connection()?.client()?,
-                    statement,
-                    &parameters,
-                    &columns,
-                    maximum_rows,
-                    &value_owner,
-                    policy,
-                )
-            }
-            "migration" | "transaction" => Err(argument_error(
-                "migration and nested transaction operations are unavailable in a transaction scope",
-            )),
-            _ => Err(ExecutionError::new(
-                ExecutionFailureClass::Infrastructure,
-                "database_transaction_operation",
-                "transaction received an unknown database operation",
-            )),
-        }
+        statement: &str,
+        parameters: &[DatabaseValue],
+        control: &ExecutionControl,
+        possible_visibility: bool,
+    ) -> Result<i64, ExecutionError> {
+        validate_static_statement(statement)?;
+        control.check()?;
+        execute_on(
+            self.connection()?.client()?,
+            statement,
+            parameters,
+            &DatabaseVisibility(possible_visibility),
+        )
     }
 
-    fn commit(&mut self) -> Result<(), ExecutionError> {
-        let control = ExecutionControl::uncancelled();
-        let policy = internal_policy(
-            &self.transaction_policy,
-            "commit",
-            Visibility::Possible,
-            &control,
-        );
+    pub(crate) fn query(
+        &mut self,
+        statement: &str,
+        parameters: &[DatabaseValue],
+        columns: &[DatabaseColumnType],
+        maximum_rows: usize,
+        control: &ExecutionControl,
+    ) -> Result<Vec<Vec<DatabaseValue>>, ExecutionError> {
+        validate_static_statement(statement)?;
+        if columns.len() > MAXIMUM_DATABASE_COLUMNS {
+            return Err(ExecutionError::resource(
+                "database_column_limit",
+                "database column schema exceeds its maximum",
+            ));
+        }
+        if maximum_rows == 0 || maximum_rows > MAXIMUM_DATABASE_ROWS {
+            return Err(ExecutionError::resource(
+                "database_row_limit",
+                "database maximum rows is zero or exceeds its host maximum",
+            ));
+        }
+        control.check()?;
+        query_on(
+            self.connection()?.client()?,
+            statement,
+            parameters,
+            columns,
+            maximum_rows,
+            &DatabaseVisibility(false),
+        )
+    }
+
+    pub(crate) fn commit(&mut self, control: &ExecutionControl) -> Result<(), ExecutionError> {
+        control.check()?;
         let result = self
             .connection()?
             .client()?
             .batch_execute("COMMIT")
-            .map_err(|error| map_postgres_error(error, &policy, true));
+            .map_err(|error| map_postgres_error(error, &DatabaseVisibility(true), true));
         self.completed = true;
         if result.is_err()
             && let Some(connection) = self.connection.as_mut()
@@ -669,19 +607,15 @@ impl CapabilityTransaction for PostgresTransaction {
         result
     }
 
-    fn rollback(&mut self) -> Result<(), ExecutionError> {
-        let control = ExecutionControl::uncancelled();
-        let policy = internal_policy(
-            &self.transaction_policy,
-            "rollback",
-            Visibility::None,
-            &control,
-        );
+    pub(crate) fn rollback(&mut self) -> Result<(), ExecutionError> {
+        if self.completed {
+            return Ok(());
+        }
         let result = self
             .connection()?
             .client()?
             .batch_execute("ROLLBACK")
-            .map_err(|error| map_postgres_error(error, &policy, false));
+            .map_err(|error| map_postgres_error(error, &DatabaseVisibility(false), false));
         self.completed = true;
         if result.is_err()
             && let Some(connection) = self.connection.as_mut()
@@ -693,7 +627,7 @@ impl CapabilityTransaction for PostgresTransaction {
     }
 }
 
-impl Drop for PostgresTransaction {
+impl Drop for PostgresEngineTransaction {
     fn drop(&mut self) {
         if !self.completed {
             if let Some(connection) = self.connection.as_mut()
@@ -710,14 +644,15 @@ impl Drop for PostgresTransaction {
     }
 }
 
-enum Parameter {
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum DatabaseValue {
     Bool(Option<bool>),
     I64(Option<i64>),
     Text(Option<String>),
     Bytes(Option<Vec<u8>>),
 }
 
-impl Parameter {
+impl DatabaseValue {
     fn as_sql(&self) -> &(dyn ToSql + Sync) {
         match self {
             Self::Bool(value) => value,
@@ -728,8 +663,8 @@ impl Parameter {
     }
 }
 
-#[derive(Clone, Copy)]
-enum ColumnType {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum DatabaseColumnType {
     Bool,
     I64,
     Text,
@@ -739,8 +674,8 @@ enum ColumnType {
 fn execute_on(
     client: &mut Client,
     statement: &str,
-    parameters: &[Parameter],
-    policy: &CallPolicy,
+    parameters: &[DatabaseValue],
+    policy: &impl PostgresErrorPolicy,
 ) -> Result<i64, ExecutionError> {
     let parameters = sql_parameters(parameters);
     let count = client
@@ -757,12 +692,11 @@ fn execute_on(
 fn query_on(
     client: &mut Client,
     statement: &str,
-    parameters: &[Parameter],
-    columns: &[ColumnType],
+    parameters: &[DatabaseValue],
+    columns: &[DatabaseColumnType],
     maximum_rows: usize,
-    value_owner: &OwnerId,
-    policy: &CallPolicy,
-) -> Result<Value, ExecutionError> {
+    policy: &impl PostgresErrorPolicy,
+) -> Result<Vec<Vec<DatabaseValue>>, ExecutionError> {
     let parameters = sql_parameters(parameters);
     let mut rows = client
         .query_raw(statement, parameters)
@@ -778,17 +712,16 @@ fn query_on(
                 "database query returned more rows than its declared maximum",
             ));
         }
-        output.push(decode_row(&row, columns, value_owner, policy)?);
+        output.push(decode_row(&row, columns, policy)?);
     }
-    Ok(Value::List(Arc::new(output)))
+    Ok(output)
 }
 
 fn decode_row(
     row: &Row,
-    columns: &[ColumnType],
-    owner: &OwnerId,
-    policy: &CallPolicy,
-) -> Result<Value, ExecutionError> {
+    columns: &[DatabaseColumnType],
+    policy: &impl PostgresErrorPolicy,
+) -> Result<Vec<DatabaseValue>, ExecutionError> {
     if row.len() != columns.len() {
         return Err(ExecutionError::new(
             ExecutionFailureClass::Capability,
@@ -800,52 +733,49 @@ fn decode_row(
             ),
         ));
     }
-    let values = columns
+    columns
         .iter()
         .enumerate()
-        .map(|(index, ty)| decode_column(row, index, *ty, owner, policy))
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(Value::List(Arc::new(values)))
+        .map(|(index, ty)| decode_column(row, index, *ty, policy))
+        .collect()
 }
 
 fn decode_column(
     row: &Row,
     index: usize,
-    ty: ColumnType,
-    owner: &OwnerId,
-    policy: &CallPolicy,
-) -> Result<Value, ExecutionError> {
-    let (case, payload) = match ty {
-        ColumnType::Bool => match row
+    ty: DatabaseColumnType,
+    policy: &impl PostgresErrorPolicy,
+) -> Result<DatabaseValue, ExecutionError> {
+    match ty {
+        DatabaseColumnType::Bool => match row
             .try_get::<_, Option<bool>>(index)
             .map_err(|error| map_postgres_error(error, policy, false))?
         {
-            Some(value) => ("Bool", Some(Value::Bool(value))),
-            None => ("NullBool", None),
+            Some(value) => Ok(DatabaseValue::Bool(Some(value))),
+            None => Ok(DatabaseValue::Bool(None)),
         },
-        ColumnType::I64 => match row
+        DatabaseColumnType::I64 => match row
             .try_get::<_, Option<i64>>(index)
             .map_err(|error| map_postgres_error(error, policy, false))?
         {
-            Some(value) => ("I64", Some(Value::I64(value))),
-            None => ("NullI64", None),
+            Some(value) => Ok(DatabaseValue::I64(Some(value))),
+            None => Ok(DatabaseValue::I64(None)),
         },
-        ColumnType::Text => match row
+        DatabaseColumnType::Text => match row
             .try_get::<_, Option<String>>(index)
             .map_err(|error| map_postgres_error(error, policy, false))?
         {
-            Some(value) => ("Text", Some(Value::text(value))),
-            None => ("NullText", None),
+            Some(value) => Ok(DatabaseValue::Text(Some(value))),
+            None => Ok(DatabaseValue::Text(None)),
         },
-        ColumnType::Bytes => match row
+        DatabaseColumnType::Bytes => match row
             .try_get::<_, Option<Vec<u8>>>(index)
             .map_err(|error| map_postgres_error(error, policy, false))?
         {
-            Some(value) => ("Bytes", Some(Value::bytes(value))),
-            None => ("NullBytes", None),
+            Some(value) => Ok(DatabaseValue::Bytes(Some(value))),
+            None => Ok(DatabaseValue::Bytes(None)),
         },
-    };
-    Ok(Value::variant(owner.clone(), case, payload))
+    }
 }
 
 fn migrate_on(
@@ -853,7 +783,7 @@ fn migrate_on(
     migration_id: i64,
     checksum: &str,
     statement: &str,
-    policy: &CallPolicy,
+    policy: &impl PostgresErrorPolicy,
 ) -> Result<bool, ExecutionError> {
     let mut transaction = client
         .transaction()
@@ -903,124 +833,17 @@ fn migrate_on(
     Ok(true)
 }
 
-fn decode_parameters(value: &Value, owner: &OwnerId) -> Result<Vec<Parameter>, ExecutionError> {
-    let Value::List(values) = value else {
-        return Err(argument_error("database parameters must be a list"));
-    };
-    values
-        .iter()
-        .map(|value| decode_parameter(value, owner))
-        .collect()
+fn sql_parameters(parameters: &[DatabaseValue]) -> Vec<&(dyn ToSql + Sync)> {
+    parameters.iter().map(DatabaseValue::as_sql).collect()
 }
 
-fn decode_parameter(value: &Value, owner: &OwnerId) -> Result<Parameter, ExecutionError> {
-    let Value::Variant {
-        owner: actual,
-        case,
-        payload,
-    } = value
-    else {
-        return Err(argument_error(
-            "database parameter is not a SqlValue variant",
-        ));
-    };
-    if actual != owner {
-        return Err(argument_error(
-            "database parameter has a foreign nominal identity",
-        ));
-    }
-    match (case.as_str(), payload.as_deref()) {
-        ("Bool", Some(Value::Bool(value))) => Ok(Parameter::Bool(Some(*value))),
-        ("I64", Some(Value::I64(value))) => Ok(Parameter::I64(Some(*value))),
-        ("Text", Some(Value::Text(value))) => Ok(Parameter::Text(Some(value.to_string()))),
-        ("Bytes", Some(Value::Bytes(value))) => Ok(Parameter::Bytes(Some(value.to_vec()))),
-        ("NullBool", None) => Ok(Parameter::Bool(None)),
-        ("NullI64", None) => Ok(Parameter::I64(None)),
-        ("NullText", None) => Ok(Parameter::Text(None)),
-        ("NullBytes", None) => Ok(Parameter::Bytes(None)),
-        _ => Err(argument_error(
-            "database parameter case or payload does not match SqlValue",
-        )),
-    }
-}
-
-fn decode_column_types(value: &Value, owner: &OwnerId) -> Result<Vec<ColumnType>, ExecutionError> {
-    let Value::List(values) = value else {
-        return Err(argument_error("database column schema must be a list"));
-    };
-    if values.len() > MAXIMUM_DATABASE_COLUMNS {
-        return Err(ExecutionError::resource(
-            "database_column_limit",
-            "database column schema exceeds its maximum",
-        ));
-    }
-    values
-        .iter()
-        .map(|value| {
-            let Value::Variant {
-                owner: actual,
-                case,
-                payload: None,
-            } = value
-            else {
-                return Err(argument_error("database column type is not a unit variant"));
-            };
-            if actual != owner {
-                return Err(argument_error(
-                    "database column type has a foreign nominal identity",
-                ));
-            }
-            match case.as_str() {
-                "Bool" => Ok(ColumnType::Bool),
-                "I64" => Ok(ColumnType::I64),
-                "Text" => Ok(ColumnType::Text),
-                "Bytes" => Ok(ColumnType::Bytes),
-                _ => Err(argument_error("database column type case is unknown")),
-            }
-        })
-        .collect()
-}
-
-fn decode_maximum_rows(value: &Value, policy: &CallPolicy) -> Result<usize, ExecutionError> {
-    let Value::I64(value) = value else {
-        return Err(argument_error("database maximum rows must be I64"));
-    };
-    let maximum = usize::try_from(*value).map_err(|_| {
-        argument_error("database maximum rows must be a non-negative platform-sized integer")
-    })?;
-    let grant_maximum = policy
-        .limits
-        .get("maximum_rows")
-        .copied()
-        .unwrap_or(MAXIMUM_DATABASE_ROWS as u64);
-    if maximum == 0
-        || maximum > MAXIMUM_DATABASE_ROWS
-        || u64::try_from(maximum).map_or(true, |maximum| maximum > grant_maximum)
-    {
-        return Err(ExecutionError::resource(
-            "database_row_limit",
-            "database maximum rows is zero or exceeds its exact grant",
-        ));
-    }
-    Ok(maximum)
-}
-
-fn sql_parameters(parameters: &[Parameter]) -> Vec<&(dyn ToSql + Sync)> {
-    parameters.iter().map(Parameter::as_sql).collect()
-}
-
-fn static_statement(value: &Value) -> Result<&str, ExecutionError> {
-    let Value::StaticText(value) = value else {
-        return Err(argument_error(
-            "SQL and migration text must be source-origin StaticText",
-        ));
-    };
+fn validate_static_statement(value: &str) -> Result<(), ExecutionError> {
     if value.is_empty() || value.len() > 1024 * 1024 || value.as_bytes().contains(&0) {
         return Err(argument_error(
             "SQL and migration text is empty, excessive, or contains NUL",
         ));
     }
-    Ok(value)
+    Ok(())
 }
 
 fn contains_transaction_control(statement: &str) -> bool {
@@ -1036,7 +859,7 @@ fn contains_transaction_control(statement: &str) -> bool {
 
 pub(crate) fn map_postgres_error(
     error: postgres::Error,
-    policy: &CallPolicy,
+    policy: &impl PostgresErrorPolicy,
     commit: bool,
 ) -> ExecutionError {
     if let Some(database) = error.as_db_error() {
@@ -1070,7 +893,7 @@ pub(crate) fn map_postgres_error(
             format!("database rejected statement with SQLSTATE {}", code.code()),
         );
     }
-    if commit || policy.visibility == Visibility::Possible {
+    if commit || policy.possible_visibility() {
         return ExecutionError::new(
             ExecutionFailureClass::PossibleVisibility,
             "database_visibility_unknown",
@@ -1086,6 +909,19 @@ pub(crate) fn map_postgres_error(
     result
 }
 
+pub(crate) trait PostgresErrorPolicy {
+    fn possible_visibility(&self) -> bool;
+}
+
+#[derive(Clone, Copy)]
+struct DatabaseVisibility(bool);
+
+impl PostgresErrorPolicy for DatabaseVisibility {
+    fn possible_visibility(&self) -> bool {
+        self.0
+    }
+}
+
 fn connection_error(error: postgres::Error) -> ExecutionError {
     let mut result = ExecutionError::new(
         ExecutionFailureClass::Capability,
@@ -1098,23 +934,6 @@ fn connection_error(error: postgres::Error) -> ExecutionError {
     );
     result.retryable = true;
     result
-}
-
-fn internal_policy(
-    base: &CallPolicy,
-    operation: &str,
-    visibility: Visibility,
-    control: &ExecutionControl,
-) -> CallPolicy {
-    CallPolicy {
-        requirement: base.requirement.clone(),
-        interface: base.interface.clone(),
-        operation: operation.to_owned(),
-        idempotency: super::language::Idempotency::NonIdempotent,
-        visibility,
-        limits: base.limits.clone(),
-        control: control.clone(),
-    }
 }
 
 fn argument_error(message: impl Into<String>) -> ExecutionError {
@@ -1150,15 +969,6 @@ fn wait_unpoisoned<'a, T>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::platform::PackageId;
-
-    fn owner(declaration: &str) -> OwnerId {
-        OwnerId::deterministic_for_test(
-            PackageId::parse("1234567890abcdef1234567890abcdef").expect("package id"),
-            "database",
-            declaration,
-        )
-    }
 
     #[test]
     fn connection_secrets_are_redacted_and_pool_limits_are_closed() {
@@ -1171,24 +981,28 @@ mod tests {
             maximum_wait_milliseconds: 1,
             statement_timeout_milliseconds: 1,
         };
-        assert!(config.validate().is_err());
+        assert_eq!(
+            config
+                .validate()
+                .expect_err("zero pool size must reject")
+                .code,
+            "database_pool_connections"
+        );
     }
 
     #[test]
-    fn parameter_values_require_exact_nominal_identity() {
-        let expected = owner("SqlValue");
-        let value = Value::List(Arc::new(vec![
-            Value::variant(expected.clone(), "I64", Some(Value::I64(7))),
-            Value::variant(expected.clone(), "NullText", None),
-        ]));
-        let parameters = decode_parameters(&value, &expected).expect("parameters");
-        assert_eq!(parameters.len(), 2);
-        assert!(decode_parameters(&value, &owner("ForeignSqlValue")).is_err());
-        assert!(static_statement(&Value::text("SELECT 1")).is_err());
-        assert_eq!(
-            static_statement(&Value::static_text("SELECT $1")).expect("static statement"),
-            "SELECT $1"
-        );
+    fn neutral_values_cover_typed_parameters_and_nulls() {
+        let values = [
+            DatabaseValue::Bool(Some(true)),
+            DatabaseValue::I64(Some(7)),
+            DatabaseValue::Text(Some("text".to_owned())),
+            DatabaseValue::Bytes(Some(vec![1, 2])),
+            DatabaseValue::Bool(None),
+            DatabaseValue::I64(None),
+            DatabaseValue::Text(None),
+            DatabaseValue::Bytes(None),
+        ];
+        assert_eq!(sql_parameters(&values).len(), values.len());
     }
 
     #[test]
@@ -1205,5 +1019,12 @@ mod tests {
             "BEGIN; CREATE TABLE x (id BIGINT)"
         ));
         assert!(!contains_transaction_control(statement));
+        assert!(validate_static_statement(statement).is_ok());
+        assert_eq!(
+            validate_static_statement("")
+                .expect_err("empty static SQL")
+                .code,
+            "database_adapter_argument"
+        );
     }
 }

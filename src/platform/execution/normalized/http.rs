@@ -149,7 +149,7 @@ impl NormalizedHttpApplication {
             )
         })?;
         let resident = self.resident.clone();
-        axum::serve(listener, self.router())
+        let serving = axum::serve(listener, self.router())
             .with_graceful_shutdown(shutdown)
             .await
             .map_err(|error| {
@@ -157,8 +157,22 @@ impl NormalizedHttpApplication {
                     "normalized_http_serve",
                     format!("normalized HTTP server failed: {error}"),
                 )
-            })?;
+            });
         let shutdown = resident.shutdown().await;
+        if let Err(mut error) = serving {
+            if shutdown.remaining_tasks != 0 {
+                error.notes.push(format!(
+                    "{} resident tasks remained after server failure cleanup",
+                    shutdown.remaining_tasks
+                ));
+            }
+            error
+                .notes
+                .extend(shutdown.cleanup_failures.iter().map(|failure| {
+                    format!("adapter cleanup failed with safe code '{}'", failure.code)
+                }));
+            return Err(error);
+        }
         if shutdown.remaining_tasks != 0 || !shutdown.cleanup_failures.is_empty() {
             return Err(http_io(
                 "normalized_http_shutdown_incomplete",

@@ -1213,6 +1213,7 @@ struct TransactionStats {
     calls: AtomicU64,
     commits: AtomicU64,
     rollbacks: AtomicU64,
+    shutdowns: AtomicU64,
     call_policies: Mutex<Vec<NormalizedCallPolicy>>,
     transaction_policies: Mutex<Vec<NormalizedTransactionPolicy>>,
 }
@@ -1271,6 +1272,11 @@ impl NormalizedCapabilityAdapter for TrackingAdapter {
             stats: Arc::clone(&self.stats),
             fail_call: self.fail_transaction_call,
         }))
+    }
+
+    fn shutdown(&self) -> Result<(), ExecutionError> {
+        self.stats.shutdowns.fetch_add(1, Ordering::Relaxed);
+        Ok(())
     }
 }
 
@@ -1358,6 +1364,22 @@ fn bind_tracking_capability(
     maximum_calls: u64,
     fail_transaction_call: bool,
 ) -> (NormalizedCapabilities, Arc<TransactionStats>) {
+    let (grant, stats) = tracking_grant(program, maximum_calls, fail_transaction_call);
+    let target = program
+        .root_target(&Name::new("command").unwrap())
+        .expect("fixture target");
+    (
+        NormalizedCapabilities::bind(program, target.component, vec![grant])
+            .expect("exact tracked fixture grant"),
+        stats,
+    )
+}
+
+fn tracking_grant(
+    program: &NormalizedProgram,
+    maximum_calls: u64,
+    fail_transaction_call: bool,
+) -> (NormalizedCapabilityGrant, Arc<TransactionStats>) {
     let target = program
         .root_target(&Name::new("command").unwrap())
         .expect("fixture target");
@@ -1369,23 +1391,21 @@ fn bind_tracking_capability(
         .iter()
         .map(|operation| program.operations[operation.0 as usize].reference)
         .collect::<BTreeSet<_>>();
-    let grant = NormalizedCapabilityGrant {
-        requirement: requirement.reference,
-        descriptor: exact_grant_descriptor(
-            requirement,
-            operations.clone(),
-            exact_grant_limits(requirement, maximum_calls),
-        ),
-        adapter: Arc::new(TrackingAdapter {
-            interface: requirement.interface,
-            operations,
-            stats: Arc::clone(&stats),
-            fail_transaction_call,
-        }),
-    };
     (
-        NormalizedCapabilities::bind(program, target.component, vec![grant])
-            .expect("exact tracked fixture grant"),
+        NormalizedCapabilityGrant {
+            requirement: requirement.reference,
+            descriptor: exact_grant_descriptor(
+                requirement,
+                operations.clone(),
+                exact_grant_limits(requirement, maximum_calls),
+            ),
+            adapter: Arc::new(TrackingAdapter {
+                interface: requirement.interface,
+                operations,
+                stats: Arc::clone(&stats),
+                fail_transaction_call,
+            }),
+        },
         stats,
     )
 }
@@ -1891,6 +1911,48 @@ async fn normalized_resident_reuses_the_bounded_execution_kernel() {
             .code,
         "resident_shutting_down"
     );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn normalized_deployment_cleans_owned_adapters_exactly_once() {
+    let snapshot = crate::platform::compiler::tests::complete_expression_snapshot();
+    let (_temporary, _repository, program) = prepare_repository(&snapshot);
+    let program = Arc::new(program);
+    let target = Name::new("command").unwrap();
+    let (grant, stats) = tracking_grant(&program, 2, false);
+    let deployment = NormalizedPreparedDeployment::prepare_exact_for_test(
+        &program,
+        target.clone(),
+        vec![grant],
+        NormalizedDeploymentResourcePolicy::default(),
+    )
+    .expect("tracked normalized deployment");
+    let resident = NormalizedResidentDeployment::prepare(
+        Arc::clone(&program),
+        deployment,
+        ResidentLimits::default(),
+        NormalizedRunPolicy::default(),
+    )
+    .expect("tracked normalized resident");
+
+    let first = resident.shutdown().await;
+    let repeated = resident.shutdown().await;
+    assert!(first.cleanup_failures.is_empty());
+    assert!(repeated.cleanup_failures.is_empty());
+    assert_eq!(stats.shutdowns.load(Ordering::Relaxed), 1);
+
+    let (first_grant, first_stats) = tracking_grant(&program, 2, false);
+    let (second_grant, second_stats) = tracking_grant(&program, 2, false);
+    let error = NormalizedPreparedDeployment::prepare_exact_for_test(
+        &program,
+        target,
+        vec![first_grant, second_grant],
+        NormalizedDeploymentResourcePolicy::default(),
+    )
+    .expect_err("duplicate exact grants fail preparation");
+    assert_eq!(error.code, "normalized_deployment_grant_duplicate");
+    assert_eq!(first_stats.shutdowns.load(Ordering::Relaxed), 1);
+    assert_eq!(second_stats.shutdowns.load(Ordering::Relaxed), 1);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

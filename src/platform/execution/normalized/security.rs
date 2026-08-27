@@ -6,8 +6,11 @@ use super::value::NormalizedValue;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::kernel::{DeclarationReference, OperationReference, ResourceUnit};
+#[cfg(test)]
 use crate::platform::security::{
     DeterministicClockSource, DeterministicIdentifierSource, DeterministicRandomSource,
+};
+use crate::platform::security::{
     MAXIMUM_RANDOM_BYTES, secure_identifier, secure_random_bytes, wall_clock_milliseconds,
 };
 use std::collections::BTreeSet;
@@ -15,10 +18,13 @@ use std::collections::BTreeSet;
 #[derive(Clone, Debug)]
 enum NormalizedSecurityImplementation {
     WallClock,
+    #[cfg(test)]
     DeterministicClock(DeterministicClockSource),
     SecureRandom,
+    #[cfg(test)]
     DeterministicRandom(DeterministicRandomSource),
     Identifier,
+    #[cfg(test)]
     DeterministicIdentifier(DeterministicIdentifierSource),
 }
 
@@ -42,6 +48,7 @@ impl NormalizedSecurityAdapter {
         )
     }
 
+    #[cfg(test)]
     pub(crate) fn deterministic_clock(
         interface: DeclarationReference,
         operation: OperationReference,
@@ -67,6 +74,7 @@ impl NormalizedSecurityAdapter {
         )
     }
 
+    #[cfg(test)]
     pub(crate) fn deterministic_random(
         interface: DeclarationReference,
         operation: OperationReference,
@@ -92,6 +100,7 @@ impl NormalizedSecurityAdapter {
         )
     }
 
+    #[cfg(test)]
     pub(crate) fn deterministic_identifier(
         interface: DeclarationReference,
         operation: OperationReference,
@@ -139,16 +148,19 @@ impl NormalizedSecurityAdapter {
 impl NormalizedCapabilityAdapter for NormalizedSecurityAdapter {
     fn kind(&self) -> NormalizedAdapterKind {
         match &self.implementation {
-            NormalizedSecurityImplementation::WallClock
-            | NormalizedSecurityImplementation::DeterministicClock(_) => {
+            NormalizedSecurityImplementation::WallClock => NormalizedAdapterKind::WallClock,
+            #[cfg(test)]
+            NormalizedSecurityImplementation::DeterministicClock(_) => {
                 NormalizedAdapterKind::WallClock
             }
-            NormalizedSecurityImplementation::SecureRandom
-            | NormalizedSecurityImplementation::DeterministicRandom(_) => {
+            NormalizedSecurityImplementation::SecureRandom => NormalizedAdapterKind::SecureRandom,
+            #[cfg(test)]
+            NormalizedSecurityImplementation::DeterministicRandom(_) => {
                 NormalizedAdapterKind::SecureRandom
             }
-            NormalizedSecurityImplementation::Identifier
-            | NormalizedSecurityImplementation::DeterministicIdentifier(_) => {
+            NormalizedSecurityImplementation::Identifier => NormalizedAdapterKind::Identifier,
+            #[cfg(test)]
+            NormalizedSecurityImplementation::DeterministicIdentifier(_) => {
                 NormalizedAdapterKind::Identifier
             }
         }
@@ -176,6 +188,7 @@ impl NormalizedCapabilityAdapter for NormalizedSecurityAdapter {
                 require_no_arguments(&arguments, "wall clock")?;
                 Ok(NormalizedValue::I64(wall_clock_milliseconds()?))
             }
+            #[cfg(test)]
             NormalizedSecurityImplementation::DeterministicClock(source) => {
                 require_no_arguments(&arguments, "deterministic clock")?;
                 Ok(NormalizedValue::I64(source.next()?))
@@ -192,6 +205,7 @@ impl NormalizedCapabilityAdapter for NormalizedSecurityAdapter {
                     )?,
                 )?))
             }
+            #[cfg(test)]
             NormalizedSecurityImplementation::DeterministicRandom(source) => {
                 let length = random_length(&arguments, "deterministic randomness")?;
                 Ok(NormalizedValue::bytes(source.next(
@@ -208,6 +222,7 @@ impl NormalizedCapabilityAdapter for NormalizedSecurityAdapter {
                 require_no_arguments(&arguments, "identifier")?;
                 Ok(NormalizedValue::text(secure_identifier()?))
             }
+            #[cfg(test)]
             NormalizedSecurityImplementation::DeterministicIdentifier(source) => {
                 require_no_arguments(&arguments, "deterministic identifier")?;
                 Ok(NormalizedValue::text(source.next()?))

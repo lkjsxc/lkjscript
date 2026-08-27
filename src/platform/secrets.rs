@@ -1,9 +1,7 @@
 //! Deployment-only secret resolution with redacted diagnostics and no semantic serialization.
 
 use super::diagnostic::{Diagnostic, DiagnosticClass};
-use super::execution::{CallPolicy, CapabilityAdapter, ExecutionError, ExecutionFailureClass};
-use super::semantic::OwnerId;
-use super::value::Value;
+use super::execution::ExecutionError;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -110,65 +108,6 @@ impl SecretCatalog {
                 format!("adapter references undeclared secret '{name}'"),
             )
         })
-    }
-}
-
-/// A least-authority adapter that answers equality without exposing the deployment secret as a
-/// semantic value. Candidate bytes are request-owned and never retained or included in errors.
-#[derive(Clone)]
-pub struct SecretVerifierAdapter {
-    interface: OwnerId,
-    verifier: SecretVerifier,
-}
-
-impl fmt::Debug for SecretVerifierAdapter {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("SecretVerifierAdapter")
-            .field("interface", &self.interface)
-            .field(
-                "maximum_candidate_bytes",
-                &self.verifier.maximum_candidate_bytes,
-            )
-            .field("secret", &"<redacted>")
-            .finish()
-    }
-}
-
-impl SecretVerifierAdapter {
-    pub fn new(
-        interface: OwnerId,
-        secret: SecretValue,
-        maximum_candidate_bytes: usize,
-    ) -> Result<Self, Diagnostic> {
-        Ok(Self {
-            interface,
-            verifier: SecretVerifier::new(secret, maximum_candidate_bytes)?,
-        })
-    }
-}
-
-impl CapabilityAdapter for SecretVerifierAdapter {
-    fn interface(&self) -> &OwnerId {
-        &self.interface
-    }
-
-    fn call(&self, policy: &CallPolicy, arguments: Vec<Value>) -> Result<Value, ExecutionError> {
-        if policy.operation != "matches" {
-            return Err(ExecutionError::new(
-                ExecutionFailureClass::Capability,
-                "secret_operation",
-                "secret verifier operation is not supported",
-            ));
-        }
-        let [Value::Bytes(candidate)] = arguments.as_slice() else {
-            return Err(ExecutionError::new(
-                ExecutionFailureClass::Capability,
-                "secret_argument",
-                "secret verifier expects one Bytes candidate",
-            ));
-        };
-        Ok(Value::Bool(self.verifier.matches(candidate)?))
     }
 }
 

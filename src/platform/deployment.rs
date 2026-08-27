@@ -1,32 +1,34 @@
-//! Strict deployment descriptors bind graph-authored requirements to generic native adapters.
+//! Strict standalone artifact-10 deployment and normalized resident execution.
 
-use super::artifact::{MAXIMUM_ARTIFACT_BYTES, load_artifact};
-use super::configuration::{ConfigurationAdapter, ConfigurationObservation, ConfigurationValue};
-use super::database::{PostgresAdapter, PostgresPool, PostgresPoolConfig, PostgresSecret};
+use super::compiler::{MAXIMUM_ARTIFACT_BUNDLE_BYTES, load_artifact};
+use super::configuration::{ConfigurationObservation, ConfigurationStore, ConfigurationValue};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
-use super::execution::{
-    CAPABILITY_GRANT_CONTRACT_VERSION, CapabilityAdapter, CapabilityGrant,
-    CapabilityGrantDescriptor, PreparedProgram, PreparedRequirement, RunPolicy,
+use super::execution::RunPolicy;
+use super::execution::normalized::{
+    NormalizedAdapterDescriptor, NormalizedDeploymentGrant, NormalizedDeploymentResourcePolicy,
+    NormalizedGrantAuthorityRevision, NormalizedGrantLimit, NormalizedHttpApplication,
+    NormalizedPreparedDeployment, NormalizedProgram, NormalizedResidentDeployment,
+    NormalizedRunPolicy, NormalizedSharingDomain, NormalizedWorkerApplication,
 };
-use super::http::{HttpApplication, HttpLimits};
-use super::object::{
-    ObjectLimits, ObjectStorageAdapter, S3Config as ObjectS3Config, S3Credentials,
+use super::http::{
+    HttpDispatchObservation, HttpLimits, HttpRequest, HttpResponse, HttpServerReceipt,
 };
-use super::queue::{DurableQueueAdapter, QueueLimits};
-use super::runtime::{ResidentDeployment, ResidentLimits};
-use super::secrets::{EnvironmentSecretBinding, SecretCatalog, SecretVerifierAdapter};
-use super::security::{
-    IdentifierAdapter, PasswordHashAdapter, PasswordHashPolicy, SecureRandomAdapter,
-    WallClockAdapter,
-};
-use super::semantic::{OwnerId, ResolvedType};
-use super::stream::{ByteStreamAdapter, StreamLimits, StreamRegistry};
-use super::worker::{WorkerApplication, WorkerLimits};
+use super::kernel::Name;
+use super::object::ObjectLimits;
+use super::package::RunnerKind;
+use super::queue::QueueLimits;
+use super::runtime::{ResidentLimits, ResidentObservation, ShutdownReceipt};
+use super::secrets::{EnvironmentSecretBinding, SecretCatalog};
+use super::security::PasswordHashPolicy;
+use super::stream::StreamLimits;
+use super::worker::{WorkerLimits, WorkerReceipt};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::future::Future;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
+use tokio::net::TcpListener;
 use tokio::runtime::Handle;
 
 pub const DEPLOYMENT_CONTRACT_VERSION: u16 = 1;
@@ -149,9 +151,8 @@ pub struct DeploymentObservation {
 #[derive(Clone)]
 pub struct PreparedDeployment {
     descriptor: DeploymentDescriptor,
-    program: Arc<PreparedProgram>,
-    grants: Vec<CapabilityGrant>,
-    streams: StreamRegistry,
+    program: Arc<NormalizedProgram>,
+    deployment: NormalizedPreparedDeployment,
     observation: DeploymentObservation,
 }
 
@@ -166,237 +167,140 @@ impl std::fmt::Debug for PreparedDeployment {
 
 impl PreparedDeployment {
     pub fn load(path: &Path, runtime: Handle) -> Result<Self, Diagnostic> {
-        let descriptor_bytes = read_bounded(path, MAXIMUM_DEPLOYMENT_BYTES, "deployment")?;
+        let descriptor_bytes = read_bounded(
+            path,
+            MAXIMUM_DEPLOYMENT_BYTES as u64,
+            "deployment descriptor",
+        )?;
         let descriptor = decode_deployment(&descriptor_bytes)?;
         let directory = path.parent().unwrap_or_else(|| Path::new("."));
         let artifact_path = resolve_relative(directory, &descriptor.artifact, "artifact")?;
-        let artifact_bytes =
-            read_bounded(&artifact_path, MAXIMUM_ARTIFACT_BYTES, "component artifact")?;
-        let program = Arc::new(PreparedProgram::prepare(load_artifact(&artifact_bytes)?)?);
+        let artifact_bytes = read_bounded(
+            &artifact_path,
+            MAXIMUM_ARTIFACT_BUNDLE_BYTES,
+            "component artifact",
+        )?;
+        let artifact = load_artifact(&artifact_bytes)?;
+        let artifact_digest = artifact.bundle_digest.to_string();
+        let program = Arc::new(NormalizedProgram::prepare(artifact)?);
+
+        // Resolve target, runner, exact requirements, adapter kinds, and grant closure before
+        // reading any named secret from the process environment.
+        validate_program_descriptor(&descriptor, &program)?;
         let secrets = SecretCatalog::from_environment(&descriptor.secrets)?;
-        Self::prepare(descriptor, program, directory, runtime, secrets)
+        Self::prepare(
+            descriptor,
+            program,
+            artifact_digest,
+            directory,
+            runtime,
+            secrets,
+        )
     }
 
-    pub fn prepare(
+    fn prepare(
         descriptor: DeploymentDescriptor,
-        program: Arc<PreparedProgram>,
+        program: Arc<NormalizedProgram>,
+        artifact_digest: String,
         deployment_directory: &Path,
         runtime: Handle,
         secrets: SecretCatalog,
     ) -> Result<Self, Diagnostic> {
-        validate_descriptor(&descriptor)?;
-        let target = program.target(&descriptor.target)?.clone();
-        validate_runner_descriptor(&descriptor, target.runner)?;
-        let component = program.components().get(&target.component).ok_or_else(|| {
+        let target_name = Name::new(descriptor.target.clone())?;
+        let target = program.root_target(&target_name).cloned().ok_or_else(|| {
             deployment_error(
-                "deployment_component_missing",
-                "prepared target component disappeared",
+                "deployment_target_missing",
+                "deployment names no exact root-package artifact target",
             )
         })?;
-        let streams = StreamRegistry::new(descriptor.streams.clone())?;
-        let configuration_observation =
-            ConfigurationAdapter::observe_values(&descriptor.configuration)?;
-
-        let mut by_requirement = BTreeMap::new();
-        for grant in &descriptor.grants {
-            if by_requirement
-                .insert(grant.requirement.as_str(), grant)
-                .is_some()
-            {
-                return Err(deployment_error(
-                    "deployment_grant_duplicate",
-                    format!(
-                        "deployment requirement '{}' is granted twice",
-                        grant.requirement
-                    ),
-                ));
-            }
-        }
-        if by_requirement.len() > MAXIMUM_DEPLOYMENT_GRANTS {
-            return Err(deployment_error(
-                "deployment_grant_limit",
-                format!("deployment has more than {MAXIMUM_DEPLOYMENT_GRANTS} grants"),
-            ));
-        }
-        let mut grants = Vec::new();
+        let component = program
+            .components
+            .get(target.component.0 as usize)
+            .ok_or_else(|| {
+                deployment_error(
+                    "deployment_component_missing",
+                    "selected target component escaped the exact artifact table",
+                )
+            })?;
+        let configuration = ConfigurationStore::observe_values(&descriptor.configuration)?;
+        let mut supplied = descriptor
+            .grants
+            .iter()
+            .map(|grant| (grant.requirement.as_str(), grant))
+            .collect::<BTreeMap<_, _>>();
+        let mut grants = Vec::with_capacity(component.requirements.len());
         let mut observed_grants = BTreeMap::new();
-        for (alias, requirement) in &component.requirements {
-            let declared = by_requirement.remove(alias.as_str()).ok_or_else(|| {
+        for requirement_index in component.requirements.iter().copied() {
+            let requirement = program
+                .requirements
+                .get(requirement_index.0 as usize)
+                .ok_or_else(|| {
+                    deployment_error(
+                        "deployment_requirement_missing",
+                        "component requirement escaped the exact artifact table",
+                    )
+                })?;
+            let alias = requirement.name.as_str();
+            let declared = supplied.remove(alias).ok_or_else(|| {
                 deployment_error(
                     "deployment_grant_missing",
                     format!("component requirement '{alias}' has no deployment grant"),
                 )
             })?;
-            let adapter: Arc<dyn CapabilityAdapter> = match &declared.adapter {
-                AdapterDescriptor::Configuration => Arc::new(ConfigurationAdapter::new(
-                    requirement.interface.clone(),
-                    descriptor.configuration.clone(),
-                )?),
-                AdapterDescriptor::WallClock => {
-                    Arc::new(WallClockAdapter::new(requirement.interface.clone()))
-                }
-                AdapterDescriptor::SecureRandom => {
-                    Arc::new(SecureRandomAdapter::new(requirement.interface.clone()))
-                }
-                AdapterDescriptor::Identifier => {
-                    Arc::new(IdentifierAdapter::new(requirement.interface.clone()))
-                }
-                AdapterDescriptor::PasswordHash { policy } => Arc::new(
-                    PasswordHashAdapter::new(requirement.interface.clone(), policy.clone())
-                        .map_err(execution_diagnostic)?,
+            grants.push(NormalizedDeploymentGrant {
+                requirement: requirement.reference,
+                sharing_domain: NormalizedSharingDomain::new(declared.sharing_domain.clone())?,
+                authority_revision: NormalizedGrantAuthorityRevision::of(
+                    declared.authority_revision.as_bytes(),
                 ),
-                AdapterDescriptor::SecretVerifier {
-                    secret,
-                    maximum_candidate_bytes,
-                } => Arc::new(SecretVerifierAdapter::new(
-                    requirement.interface.clone(),
-                    secrets.require(secret)?.clone(),
-                    *maximum_candidate_bytes,
-                )?),
-                AdapterDescriptor::ByteStream => Arc::new(ByteStreamAdapter::new(
-                    requirement.interface.clone(),
-                    streams.clone(),
-                )),
-                AdapterDescriptor::Postgres {
-                    connection_secret,
-                    maximum_connections,
-                    maximum_wait_milliseconds,
-                    statement_timeout_milliseconds,
-                } => {
-                    let (value_owner, type_owner) = database_nominal_owners(requirement)?;
-                    let pool = postgres_pool(
-                        &secrets,
-                        connection_secret,
-                        *maximum_connections,
-                        *maximum_wait_milliseconds,
-                        *statement_timeout_milliseconds,
-                    )?;
-                    Arc::new(PostgresAdapter::new(
-                        requirement.interface.clone(),
-                        value_owner,
-                        type_owner,
-                        pool,
-                    ))
-                }
-                AdapterDescriptor::ObjectMemory { prefix, limits } => {
-                    Arc::new(ObjectStorageAdapter::in_memory(
-                        requirement.interface.clone(),
-                        runtime.clone(),
-                        streams.clone(),
-                        prefix.clone(),
-                        limits.clone(),
-                    )?)
-                }
-                AdapterDescriptor::ObjectLocal {
-                    root,
-                    prefix,
-                    limits,
-                } => {
-                    let root = resolve_relative(deployment_directory, root, "object root")?;
-                    fs::create_dir_all(&root)
-                        .map_err(|error| deployment_io("deployment_object_root", &root, error))?;
-                    Arc::new(ObjectStorageAdapter::local(
-                        requirement.interface.clone(),
-                        runtime.clone(),
-                        streams.clone(),
-                        &root,
-                        prefix.clone(),
-                        limits.clone(),
-                    )?)
-                }
-                AdapterDescriptor::ObjectS3 {
-                    endpoint,
-                    region,
-                    bucket,
-                    prefix,
-                    allow_http,
-                    path_style,
-                    access_key_secret,
-                    secret_key_secret,
-                    limits,
-                } => {
-                    let access_key = secrets.require(access_key_secret)?.text()?.to_owned();
-                    let secret_key = secrets.require(secret_key_secret)?.text()?.to_owned();
-                    Arc::new(ObjectStorageAdapter::s3(
-                        requirement.interface.clone(),
-                        runtime.clone(),
-                        streams.clone(),
-                        ObjectS3Config {
-                            endpoint: endpoint.clone(),
-                            region: region.clone(),
-                            bucket: bucket.clone(),
-                            prefix: prefix.clone(),
-                            allow_http: *allow_http,
-                            path_style: *path_style,
-                            credentials: S3Credentials::new(access_key, secret_key)?,
-                        },
-                        limits.clone(),
-                    )?)
-                }
-                AdapterDescriptor::DurableQueueMemory { limits } => Arc::new(
-                    DurableQueueAdapter::in_memory(requirement.interface.clone(), limits.clone())?,
-                ),
-                AdapterDescriptor::DurableQueuePostgres {
-                    connection_secret,
-                    namespace,
-                    maximum_connections,
-                    maximum_wait_milliseconds,
-                    statement_timeout_milliseconds,
-                    limits,
-                } => {
-                    let pool = postgres_pool(
-                        &secrets,
-                        connection_secret,
-                        *maximum_connections,
-                        *maximum_wait_milliseconds,
-                        *statement_timeout_milliseconds,
-                    )?;
-                    Arc::new(DurableQueueAdapter::postgres(
-                        requirement.interface.clone(),
-                        pool,
-                        namespace.clone(),
-                        limits.clone(),
-                    )?)
-                }
-            };
-            let descriptor_digest = adapter_descriptor_digest(declared)?;
-            grants.push(CapabilityGrant {
-                requirement: alias.clone(),
-                descriptor: CapabilityGrantDescriptor {
-                    contract_version: CAPABILITY_GRANT_CONTRACT_VERSION,
-                    interface: requirement.interface.clone(),
-                    adapter_kind: declared.adapter.kind().to_owned(),
-                    sharing_domain: declared.sharing_domain.clone(),
-                    authority_revision: declared.authority_revision.clone(),
-                    descriptor_digest,
-                    operations: requirement.operations.keys().cloned().collect(),
-                    limits: requirement.limits.clone(),
-                },
-                adapter,
+                limits: requirement
+                    .limits
+                    .iter()
+                    .map(|limit| {
+                        (
+                            limit.name.clone(),
+                            NormalizedGrantLimit {
+                                maximum: limit.maximum,
+                                unit: limit.unit,
+                            },
+                        )
+                    })
+                    .collect(),
+                adapter: normalized_adapter(&declared.adapter, &descriptor.configuration),
             });
-            observed_grants.insert(alias.clone(), declared.adapter.kind().to_owned());
+            observed_grants.insert(alias.to_owned(), declared.adapter.kind().to_owned());
         }
-        if let Some((alias, _)) = by_requirement.into_iter().next() {
+        if let Some((alias, _)) = supplied.into_iter().next() {
             return Err(deployment_error(
                 "deployment_grant_foreign",
                 format!("deployment grants undeclared component requirement '{alias}'"),
             ));
         }
+        let deployment = NormalizedPreparedDeployment::prepare_with_host(
+            &program,
+            target_name,
+            grants,
+            NormalizedDeploymentResourcePolicy {
+                streams: descriptor.streams.clone(),
+            },
+            &secrets,
+            deployment_directory,
+            runtime,
+        )?;
         let observation = DeploymentObservation {
             contract_version: DEPLOYMENT_CONTRACT_VERSION,
-            artifact_digest: program.artifact().artifact_digest.clone(),
+            artifact_digest,
             target: descriptor.target.clone(),
             runner: format!("{:?}", target.runner).to_ascii_lowercase(),
             listen: descriptor.listen.clone(),
-            configuration: configuration_observation,
+            configuration,
             secret_names: secrets.names(),
             grants: observed_grants,
         };
         Ok(Self {
             descriptor,
             program,
-            grants,
-            streams,
+            deployment,
             observation,
         })
     }
@@ -409,34 +313,81 @@ impl PreparedDeployment {
         self.descriptor.listen.as_deref()
     }
 
-    pub fn resident(&self) -> Result<ResidentDeployment, Diagnostic> {
-        ResidentDeployment::prepare(
-            self.program.clone(),
-            &self.descriptor.target,
-            self.grants.clone(),
+    fn resident(&self) -> Result<NormalizedResidentDeployment, Diagnostic> {
+        NormalizedResidentDeployment::prepare(
+            Arc::clone(&self.program),
+            self.deployment.clone(),
             self.descriptor.runtime.clone(),
-            self.descriptor.execution,
+            normalized_run_policy(self.descriptor.execution),
         )
     }
 
-    pub fn http_application(&self) -> Result<HttpApplication, Diagnostic> {
+    pub fn http_application(&self) -> Result<PreparedHttpApplication, Diagnostic> {
         let limits = self.descriptor.http.clone().ok_or_else(|| {
             deployment_error(
                 "deployment_http_missing",
                 "HTTP target requires an HTTP limits descriptor",
             )
         })?;
-        HttpApplication::new(self.resident()?, limits, self.streams.clone())
+        NormalizedHttpApplication::new(self.resident()?, limits).map(PreparedHttpApplication)
     }
 
-    pub fn worker_application(&self) -> Result<WorkerApplication, Diagnostic> {
+    pub fn worker_application(&self) -> Result<PreparedWorkerApplication, Diagnostic> {
         let limits = self.descriptor.worker.clone().ok_or_else(|| {
             deployment_error(
                 "deployment_worker_missing",
                 "worker target requires a worker limits descriptor",
             )
         })?;
-        WorkerApplication::new(self.resident()?, limits)
+        NormalizedWorkerApplication::new(self.resident()?, limits).map(PreparedWorkerApplication)
+    }
+}
+
+#[derive(Clone)]
+pub struct PreparedHttpApplication(NormalizedHttpApplication);
+
+impl PreparedHttpApplication {
+    pub async fn dispatch(
+        &self,
+        request: HttpRequest,
+    ) -> Result<(HttpResponse, HttpDispatchObservation), super::execution::ExecutionError> {
+        self.0.dispatch(request).await
+    }
+
+    pub async fn serve(
+        self,
+        listener: TcpListener,
+        shutdown: impl Future<Output = ()> + Send + 'static,
+    ) -> Result<HttpServerReceipt, Diagnostic> {
+        self.0.serve(listener, shutdown).await
+    }
+
+    pub fn observe_resident(&self) -> ResidentObservation {
+        self.0.resident().observe()
+    }
+
+    pub async fn shutdown(&self) -> ShutdownReceipt {
+        self.0.resident().shutdown().await
+    }
+}
+
+#[derive(Clone)]
+pub struct PreparedWorkerApplication(NormalizedWorkerApplication);
+
+impl PreparedWorkerApplication {
+    pub async fn run(
+        self,
+        shutdown: impl Future<Output = ()> + Send,
+    ) -> Result<WorkerReceipt, Diagnostic> {
+        self.0.run(shutdown).await
+    }
+
+    pub fn observe_resident(&self) -> ResidentObservation {
+        self.0.resident().observe()
+    }
+
+    pub async fn shutdown(&self) -> ShutdownReceipt {
+        self.0.resident().shutdown().await
     }
 }
 
@@ -501,19 +452,164 @@ fn validate_descriptor(descriptor: &DeploymentDescriptor) -> Result<(), Diagnost
     if let Some(worker) = &descriptor.worker {
         worker.validate(descriptor.runtime.maximum_concurrent_tasks)?;
     }
+    let mut requirements = BTreeSet::new();
     for grant in &descriptor.grants {
         validate_name(&grant.requirement, "requirement")?;
         validate_name(&grant.sharing_domain, "sharing domain")?;
         validate_digest(&grant.authority_revision, "authority revision")?;
+        if !requirements.insert(grant.requirement.as_str()) {
+            return Err(deployment_error(
+                "deployment_grant_duplicate",
+                format!(
+                    "deployment requirement '{}' is granted twice",
+                    grant.requirement
+                ),
+            ));
+        }
+        validate_adapter_descriptor(&grant.adapter)?;
+    }
+    Ok(())
+}
+
+fn validate_adapter_descriptor(adapter: &AdapterDescriptor) -> Result<(), Diagnostic> {
+    match adapter {
+        AdapterDescriptor::SecretVerifier { secret, .. }
+        | AdapterDescriptor::Postgres {
+            connection_secret: secret,
+            ..
+        }
+        | AdapterDescriptor::DurableQueuePostgres {
+            connection_secret: secret,
+            ..
+        } => validate_name(secret, "secret name")?,
+        AdapterDescriptor::ObjectLocal { root, .. } => {
+            validate_relative(root, "object root")?;
+        }
+        AdapterDescriptor::ObjectS3 {
+            access_key_secret,
+            secret_key_secret,
+            ..
+        } => {
+            validate_name(access_key_secret, "access-key secret name")?;
+            validate_name(secret_key_secret, "secret-key secret name")?;
+        }
+        AdapterDescriptor::Configuration
+        | AdapterDescriptor::WallClock
+        | AdapterDescriptor::SecureRandom
+        | AdapterDescriptor::Identifier
+        | AdapterDescriptor::PasswordHash { .. }
+        | AdapterDescriptor::ByteStream
+        | AdapterDescriptor::ObjectMemory { .. }
+        | AdapterDescriptor::DurableQueueMemory { .. } => {}
+    }
+    Ok(())
+}
+
+fn validate_program_descriptor(
+    descriptor: &DeploymentDescriptor,
+    program: &NormalizedProgram,
+) -> Result<(), Diagnostic> {
+    let target_name = Name::new(descriptor.target.clone())?;
+    let target = program.root_target(&target_name).ok_or_else(|| {
+        deployment_error(
+            "deployment_target_missing",
+            "deployment names no exact root-package artifact target",
+        )
+    })?;
+    validate_runner_descriptor(descriptor, target.runner)?;
+    let component = program
+        .components
+        .get(target.component.0 as usize)
+        .ok_or_else(|| {
+            deployment_error(
+                "deployment_component_missing",
+                "selected target component escaped the exact artifact table",
+            )
+        })?;
+    let supplied = descriptor
+        .grants
+        .iter()
+        .map(|grant| (grant.requirement.as_str(), grant))
+        .collect::<BTreeMap<_, _>>();
+    for requirement_index in component.requirements.iter().copied() {
+        let requirement = program
+            .requirements
+            .get(requirement_index.0 as usize)
+            .ok_or_else(|| {
+                deployment_error(
+                    "deployment_requirement_missing",
+                    "component requirement escaped the exact artifact table",
+                )
+            })?;
+        let grant = supplied.get(requirement.name.as_str()).ok_or_else(|| {
+            deployment_error(
+                "deployment_grant_missing",
+                format!(
+                    "component requirement '{}' has no deployment grant",
+                    requirement.name
+                ),
+            )
+        })?;
+        validate_exact_adapter_interface(requirement.interface, &grant.adapter)?;
+    }
+    if supplied.len() != component.requirements.len() {
+        let required = component
+            .requirements
+            .iter()
+            .filter_map(|index| program.requirements.get(index.0 as usize))
+            .map(|requirement| requirement.name.as_str())
+            .collect::<BTreeSet<_>>();
+        let foreign = supplied
+            .keys()
+            .find(|alias| !required.contains(**alias))
+            .copied()
+            .unwrap_or("<unknown>");
+        return Err(deployment_error(
+            "deployment_grant_foreign",
+            format!("deployment grants undeclared component requirement '{foreign}'"),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_exact_adapter_interface(
+    interface: super::kernel::DeclarationReference,
+    adapter: &AdapterDescriptor,
+) -> Result<(), Diagnostic> {
+    const STANDARD_PACKAGE: &str = "pkg_10000000000000000000000000000001";
+    let declaration = match adapter {
+        AdapterDescriptor::Configuration => "decl_def8eec5eed34e86eda0df7ee7bb4883",
+        AdapterDescriptor::WallClock => "decl_8d99ab2f1d59391e1e21c17cc8757731",
+        AdapterDescriptor::SecureRandom => "decl_2ad39598d2945149fff8b841fe8b253e",
+        AdapterDescriptor::Identifier => "decl_92bb73b52bc3654abcbde47513873f42",
+        AdapterDescriptor::PasswordHash { .. } => "decl_375bc0a9f5214e8a27ede17a14e79f67",
+        AdapterDescriptor::SecretVerifier { .. } => "decl_172ae7f44000b32243d75a92e6733e50",
+        AdapterDescriptor::ByteStream => "decl_e29e0ac407696662f355e9056172ac2b",
+        AdapterDescriptor::Postgres { .. } => "decl_4c1cf20949507973e07ece4ec002c2d7",
+        AdapterDescriptor::ObjectMemory { .. }
+        | AdapterDescriptor::ObjectLocal { .. }
+        | AdapterDescriptor::ObjectS3 { .. } => "decl_ac421d578f44958595e92fa9f5fb1d43",
+        AdapterDescriptor::DurableQueueMemory { .. }
+        | AdapterDescriptor::DurableQueuePostgres { .. } => "decl_20a0ef729beda0abf0e743cd7e1126de",
+    };
+    if interface.package.to_string() != STANDARD_PACKAGE
+        || interface.declaration.to_string() != declaration
+    {
+        return Err(deployment_error(
+            "deployment_adapter_interface",
+            format!(
+                "{} adapter requires its exact maintained standard interface",
+                adapter.kind()
+            ),
+        ));
     }
     Ok(())
 }
 
 fn validate_runner_descriptor(
     descriptor: &DeploymentDescriptor,
-    runner: super::package::RunnerKind,
+    runner: RunnerKind,
 ) -> Result<(), Diagnostic> {
-    use super::package::RunnerKind;
     match runner {
         RunnerKind::Http => {
             if descriptor.listen.is_none() || descriptor.http.is_none() {
@@ -558,83 +654,141 @@ fn validate_runner_descriptor(
     Ok(())
 }
 
-fn postgres_pool(
-    secrets: &SecretCatalog,
-    secret_name: &str,
-    maximum_connections: usize,
-    maximum_wait_milliseconds: u64,
-    statement_timeout_milliseconds: u64,
-) -> Result<PostgresPool, Diagnostic> {
-    let connection = secrets.require(secret_name)?.text()?.to_owned();
-    let pool = PostgresPool::new(PostgresPoolConfig {
-        connection: PostgresSecret::new(connection)?,
-        maximum_connections,
-        maximum_wait_milliseconds,
-        statement_timeout_milliseconds,
-    })?;
-    pool.preflight().map_err(execution_diagnostic)?;
-    Ok(pool)
-}
-
-fn database_nominal_owners(
-    requirement: &PreparedRequirement,
-) -> Result<(OwnerId, OwnerId), Diagnostic> {
-    let execute = requirement.operations.get("execute").ok_or_else(|| {
-        deployment_error(
-            "deployment_postgres_interface",
-            "PostgreSQL adapter requires the exact execute operation",
-        )
-    })?;
-    let query = requirement.operations.get("query").ok_or_else(|| {
-        deployment_error(
-            "deployment_postgres_interface",
-            "PostgreSQL adapter requires the exact query operation",
-        )
-    })?;
-    let value_owner = match execute.parameters.get(1) {
-        Some(ResolvedType::List(value)) => match value.as_ref() {
-            ResolvedType::Nominal(owner) => owner.clone(),
-            _ => return Err(postgres_shape()),
+fn normalized_adapter(
+    adapter: &AdapterDescriptor,
+    configuration: &BTreeMap<String, ConfigurationValue>,
+) -> NormalizedAdapterDescriptor {
+    match adapter {
+        AdapterDescriptor::Configuration => NormalizedAdapterDescriptor::Configuration {
+            values: configuration.clone(),
         },
-        _ => return Err(postgres_shape()),
-    };
-    let type_owner = match query.parameters.get(2) {
-        Some(ResolvedType::List(value)) => match value.as_ref() {
-            ResolvedType::Nominal(owner) => owner.clone(),
-            _ => return Err(postgres_shape()),
+        AdapterDescriptor::WallClock => NormalizedAdapterDescriptor::WallClock,
+        AdapterDescriptor::SecureRandom => NormalizedAdapterDescriptor::SecureRandom,
+        AdapterDescriptor::Identifier => NormalizedAdapterDescriptor::Identifier,
+        AdapterDescriptor::PasswordHash { policy } => NormalizedAdapterDescriptor::PasswordHash {
+            policy: policy.clone(),
         },
-        _ => return Err(postgres_shape()),
-    };
-    Ok((value_owner, type_owner))
+        AdapterDescriptor::SecretVerifier {
+            secret,
+            maximum_candidate_bytes,
+        } => NormalizedAdapterDescriptor::SecretVerifier {
+            secret: secret.clone(),
+            maximum_candidate_bytes: *maximum_candidate_bytes,
+        },
+        AdapterDescriptor::ByteStream => NormalizedAdapterDescriptor::ByteStream,
+        AdapterDescriptor::Postgres {
+            connection_secret,
+            maximum_connections,
+            maximum_wait_milliseconds,
+            statement_timeout_milliseconds,
+        } => NormalizedAdapterDescriptor::Postgres {
+            connection_secret: connection_secret.clone(),
+            maximum_connections: *maximum_connections,
+            maximum_wait_milliseconds: *maximum_wait_milliseconds,
+            statement_timeout_milliseconds: *statement_timeout_milliseconds,
+        },
+        AdapterDescriptor::ObjectMemory { prefix, limits } => {
+            NormalizedAdapterDescriptor::ObjectMemory {
+                prefix: prefix.clone(),
+                limits: limits.clone(),
+            }
+        }
+        AdapterDescriptor::ObjectLocal {
+            root,
+            prefix,
+            limits,
+        } => NormalizedAdapterDescriptor::ObjectLocal {
+            root: root.clone(),
+            prefix: prefix.clone(),
+            limits: limits.clone(),
+        },
+        AdapterDescriptor::ObjectS3 {
+            endpoint,
+            region,
+            bucket,
+            prefix,
+            allow_http,
+            path_style,
+            access_key_secret,
+            secret_key_secret,
+            limits,
+        } => NormalizedAdapterDescriptor::ObjectS3 {
+            endpoint: endpoint.clone(),
+            region: region.clone(),
+            bucket: bucket.clone(),
+            prefix: prefix.clone(),
+            allow_http: *allow_http,
+            path_style: *path_style,
+            access_key_secret: access_key_secret.clone(),
+            secret_key_secret: secret_key_secret.clone(),
+            limits: limits.clone(),
+        },
+        AdapterDescriptor::DurableQueueMemory { limits } => {
+            NormalizedAdapterDescriptor::DurableQueueMemory {
+                limits: limits.clone(),
+            }
+        }
+        AdapterDescriptor::DurableQueuePostgres {
+            connection_secret,
+            namespace,
+            maximum_connections,
+            maximum_wait_milliseconds,
+            statement_timeout_milliseconds,
+            limits,
+        } => NormalizedAdapterDescriptor::DurableQueuePostgres {
+            connection_secret: connection_secret.clone(),
+            namespace: namespace.clone(),
+            maximum_connections: *maximum_connections,
+            maximum_wait_milliseconds: *maximum_wait_milliseconds,
+            statement_timeout_milliseconds: *statement_timeout_milliseconds,
+            limits: limits.clone(),
+        },
+    }
 }
 
-fn postgres_shape() -> Diagnostic {
-    deployment_error(
-        "deployment_postgres_interface",
-        "PostgreSQL interface must use nominal SqlValue and SqlType lists in exact positions",
-    )
-}
-
-fn adapter_descriptor_digest(grant: &DeploymentGrant) -> Result<String, Diagnostic> {
-    let bytes = serde_json::to_vec(grant).map_err(|error| {
-        deployment_error(
-            "deployment_descriptor_digest",
-            format!("adapter descriptor could not be encoded: {error}"),
-        )
-    })?;
-    Ok(blake3::hash(&bytes).to_hex().to_string())
+fn normalized_run_policy(policy: RunPolicy) -> NormalizedRunPolicy {
+    NormalizedRunPolicy {
+        instruction_steps: policy.instruction_fuel,
+        maximum_call_depth: policy.maximum_call_depth,
+        maximum_value_stack: policy.maximum_value_stack,
+        ..NormalizedRunPolicy::default()
+    }
 }
 
 fn resolve_relative(root: &Path, value: &str, label: &str) -> Result<PathBuf, Diagnostic> {
     validate_relative(value, label)?;
-    Ok(root.join(value))
+    let mut resolved = root.to_path_buf();
+    let mut components = Path::new(value).components().peekable();
+    while let Some(Component::Normal(component)) = components.next() {
+        resolved.push(component);
+        match fs::symlink_metadata(&resolved) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(deployment_error(
+                    "deployment_input_kind",
+                    format!("{label} path contains a symbolic-link component"),
+                ));
+            }
+            Ok(metadata) if components.peek().is_some() && !metadata.is_dir() => {
+                return Err(deployment_error(
+                    "deployment_input_kind",
+                    format!("{label} path contains a non-directory parent component"),
+                ));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(root.join(value));
+            }
+            Err(error) => return Err(deployment_io("deployment_read", &resolved, error)),
+        }
+    }
+    Ok(resolved)
 }
 
 fn validate_relative(value: &str, label: &str) -> Result<(), Diagnostic> {
-    if value.is_empty() || value.len() > 4096 || value.contains('\0') {
+    if value.is_empty() || value.len() > 4096 || value.contains('\0') || value.contains('\\') {
         return Err(deployment_error(
             "deployment_path",
-            format!("{label} path is empty, excessive, or contains NUL"),
+            format!("{label} path is empty, excessive, or noncanonical"),
         ));
     }
     let path = Path::new(value);
@@ -680,27 +834,32 @@ fn validate_digest(value: &str, label: &str) -> Result<(), Diagnostic> {
     Ok(())
 }
 
-fn read_bounded(path: &Path, maximum: usize, label: &str) -> Result<Vec<u8>, Diagnostic> {
-    let metadata =
-        fs::metadata(path).map_err(|error| deployment_io("deployment_read", path, error))?;
-    if metadata.len() > maximum as u64 {
+fn read_bounded(path: &Path, maximum: u64, label: &str) -> Result<Vec<u8>, Diagnostic> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|error| deployment_io("deployment_read", path, error))?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(deployment_error(
+            "deployment_input_kind",
+            format!(
+                "{label} '{}' is not a regular non-symlink file",
+                path.display()
+            ),
+        ));
+    }
+    if metadata.len() > maximum {
         return Err(deployment_error(
             "deployment_input_limit",
             format!("{label} '{}' exceeds {maximum} bytes", path.display()),
         ));
     }
     let bytes = fs::read(path).map_err(|error| deployment_io("deployment_read", path, error))?;
-    if bytes.len() > maximum {
+    if u64::try_from(bytes.len()).map_or(true, |length| length > maximum) {
         return Err(deployment_error(
             "deployment_input_limit",
             format!("{label} '{}' exceeds {maximum} bytes", path.display()),
         ));
     }
     Ok(bytes)
-}
-
-fn execution_diagnostic(error: super::execution::ExecutionError) -> Diagnostic {
-    Diagnostic::new(DiagnosticClass::Capability, error.code, error.message)
 }
 
 fn deployment_io(code: &str, path: &Path, error: std::io::Error) -> Diagnostic {
@@ -752,5 +911,66 @@ mod tests {
         let error = decode_deployment(&serde_json::to_vec(&value).expect("path JSON"))
             .expect_err("traversal must reject");
         assert_eq!(error.code, "deployment_path");
+        value["artifact"] = serde_json::json!("foreign\\artifact.lkja");
+        assert_eq!(
+            decode_deployment(&serde_json::to_vec(&value).expect("backslash path JSON"))
+                .expect_err("backslash must reject")
+                .code,
+            "deployment_path"
+        );
+
+        for path in ["", "/foreign.lkja", ".", "nested/../foreign.lkja"] {
+            value["artifact"] = serde_json::json!(path);
+            assert_eq!(
+                decode_deployment(&serde_json::to_vec(&value).expect("path JSON"))
+                    .expect_err("noncanonical path must reject")
+                    .code,
+                "deployment_path",
+                "{path}"
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn deployment_inputs_reject_symbolic_links_and_nonregular_files() {
+        use std::os::unix::fs::symlink;
+
+        let temporary = tempfile::tempdir().expect("deployment input directory");
+        let artifact = temporary.path().join("application.lkja");
+        fs::write(&artifact, b"artifact").expect("artifact fixture");
+        let linked_artifact = temporary.path().join("linked.lkja");
+        symlink(&artifact, &linked_artifact).expect("artifact symlink");
+        assert_eq!(
+            read_bounded(&linked_artifact, 64, "component artifact")
+                .expect_err("artifact symlink must reject")
+                .code,
+            "deployment_input_kind"
+        );
+
+        let linked_directory = temporary.path().join("linked-directory");
+        symlink(temporary.path(), &linked_directory).expect("directory symlink");
+        assert_eq!(
+            resolve_relative(
+                temporary.path(),
+                "linked-directory/application.lkja",
+                "artifact"
+            )
+            .expect_err("parent symlink must reject")
+            .code,
+            "deployment_input_kind"
+        );
+        assert_eq!(
+            read_bounded(temporary.path(), 64, "component artifact")
+                .expect_err("directory input must reject")
+                .code,
+            "deployment_input_kind"
+        );
+        assert_eq!(
+            read_bounded(&artifact, 1, "component artifact")
+                .expect_err("oversized input must reject")
+                .code,
+            "deployment_input_limit"
+        );
     }
 }

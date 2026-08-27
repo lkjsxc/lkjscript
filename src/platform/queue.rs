@@ -1,10 +1,8 @@
 //! Durable at-least-once jobs with exact attempts, leases, and stale-completion rejection.
 
-use super::database::{PostgresPool, map_postgres_error};
+use super::database::{PostgresErrorPolicy, PostgresPool, map_postgres_error};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
-use super::execution::{CallPolicy, CapabilityAdapter, ExecutionError, ExecutionFailureClass};
-use super::semantic::OwnerId;
-use super::value::Value;
+use super::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use postgres::Row;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
@@ -81,7 +79,7 @@ pub enum JobState {
 }
 
 impl JobState {
-    fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Ready => "ready",
             Self::Leased => "leased",
@@ -126,24 +124,6 @@ pub struct JobSnapshot {
 }
 
 #[derive(Clone)]
-pub struct DurableQueueAdapter {
-    interface: OwnerId,
-    store: QueueStore,
-    limits: QueueLimits,
-}
-
-impl fmt::Debug for DurableQueueAdapter {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("DurableQueueAdapter")
-            .field("interface", &self.interface)
-            .field("adapter_kind", &self.store.kind())
-            .field("limits", &self.limits)
-            .finish()
-    }
-}
-
-#[derive(Clone)]
 enum QueueStore {
     Memory(MemoryQueue),
     Postgres(PostgresQueue),
@@ -158,18 +138,34 @@ impl QueueStore {
     }
 }
 
-impl DurableQueueAdapter {
-    pub fn in_memory(interface: OwnerId, limits: QueueLimits) -> Result<Self, Diagnostic> {
+/// Representation-neutral durable-queue host engine. Artifact codecs own value layouts while this
+/// type owns queue state transitions, PostgreSQL persistence, bounds, and cleanup.
+#[derive(Clone)]
+pub(crate) struct DurableQueueEngine {
+    store: QueueStore,
+    limits: QueueLimits,
+}
+
+impl fmt::Debug for DurableQueueEngine {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("DurableQueueEngine")
+            .field("adapter_kind", &self.store.kind())
+            .field("limits", &self.limits)
+            .finish()
+    }
+}
+
+impl DurableQueueEngine {
+    pub(crate) fn in_memory(limits: QueueLimits) -> Result<Self, Diagnostic> {
         limits.validate()?;
         Ok(Self {
-            interface,
             store: QueueStore::Memory(MemoryQueue::default()),
             limits,
         })
     }
 
-    pub fn postgres(
-        interface: OwnerId,
+    pub(crate) fn postgres(
         pool: PostgresPool,
         namespace: String,
         limits: QueueLimits,
@@ -178,233 +174,265 @@ impl DurableQueueAdapter {
         validate_token(&namespace, "queue namespace")
             .map_err(|error| queue_diagnostic("queue_namespace", error.message))?;
         Ok(Self {
-            interface,
             store: QueueStore::Postgres(PostgresQueue { pool, namespace }),
             limits,
         })
     }
 
-    fn initialize(
-        &self,
-        policy: &CallPolicy,
-        arguments: &[Value],
-    ) -> Result<Value, ExecutionError> {
-        if !arguments.is_empty() {
-            return Err(queue_argument("initialize expects no arguments"));
-        }
+    pub(crate) fn preflight(&self) -> Result<(), ExecutionError> {
         match &self.store {
-            QueueStore::Memory(_) => Ok(Value::Unit),
-            QueueStore::Postgres(store) => {
-                store.initialize(policy)?;
-                Ok(Value::Unit)
-            }
+            QueueStore::Memory(_) => Ok(()),
+            QueueStore::Postgres(store) => store.pool.preflight(),
         }
     }
 
-    fn enqueue(&self, policy: &CallPolicy, arguments: &[Value]) -> Result<Value, ExecutionError> {
-        let [job_id, idempotency_key, payload, available_at, created_at] = arguments else {
-            return Err(queue_argument(
-                "enqueue expects job id, idempotency key, payload, available time, and creation time",
-            ));
-        };
-        let job_id = token(job_id, "job id")?;
-        let idempotency_key = bounded_text(idempotency_key, "idempotency key", 512)?;
-        let payload = bytes(payload, "job payload", self.limits.maximum_payload_bytes)?;
-        let available_at = nonnegative_time(available_at, "available time")?;
-        let created_at = nonnegative_time(created_at, "creation time")?;
-        let inserted = match &self.store {
+    pub(crate) fn shutdown(&self) -> Result<(), ExecutionError> {
+        match &self.store {
+            QueueStore::Memory(_) => Ok(()),
+            QueueStore::Postgres(store) => store.pool.close(),
+        }
+    }
+
+    pub(crate) fn initialize(
+        &self,
+        control: &ExecutionControl,
+        possible_visibility: bool,
+    ) -> Result<(), ExecutionError> {
+        control.check()?;
+        match &self.store {
+            QueueStore::Memory(_) => Ok(()),
+            QueueStore::Postgres(store) => store.initialize(&QueueHostPolicy {
+                control,
+                possible_visibility,
+            }),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn enqueue(
+        &self,
+        job_id: &str,
+        idempotency_key: &str,
+        payload: &[u8],
+        available_at: i64,
+        created_at: i64,
+        control: &ExecutionControl,
+        possible_visibility: bool,
+    ) -> Result<bool, ExecutionError> {
+        control.check()?;
+        validate_token(job_id, "job id")?;
+        validate_bounded_text(idempotency_key, "idempotency key", 512)?;
+        validate_bytes(payload, "job payload", self.limits.maximum_payload_bytes)?;
+        validate_nonnegative_time(available_at, "available time")?;
+        validate_nonnegative_time(created_at, "creation time")?;
+        match &self.store {
             QueueStore::Memory(store) => {
-                store.enqueue(job_id, idempotency_key, payload, available_at, created_at)?
+                store.enqueue(job_id, idempotency_key, payload, available_at, created_at)
             }
             QueueStore::Postgres(store) => store.enqueue(
-                policy,
+                &QueueHostPolicy {
+                    control,
+                    possible_visibility,
+                },
                 job_id,
                 idempotency_key,
                 payload,
                 available_at,
                 created_at,
-            )?,
-        };
-        Ok(Value::Bool(inserted))
+            ),
+        }
     }
 
-    fn claim(&self, policy: &CallPolicy, arguments: &[Value]) -> Result<Value, ExecutionError> {
-        let [worker_id, now, lease] = arguments else {
-            return Err(queue_argument(
-                "claim expects worker id, current time, and lease duration",
-            ));
-        };
-        let worker_id = token(worker_id, "worker id")?;
-        let now = nonnegative_time(now, "claim time")?;
-        let lease = lease_duration(lease, &self.limits)?;
-        let lease = match &self.store {
+    pub(crate) fn claim(
+        &self,
+        worker_id: &str,
+        now: i64,
+        lease: i64,
+        control: &ExecutionControl,
+        possible_visibility: bool,
+    ) -> Result<Option<JobLease>, ExecutionError> {
+        control.check()?;
+        validate_token(worker_id, "worker id")?;
+        validate_nonnegative_time(now, "claim time")?;
+        validate_lease_duration(lease, &self.limits)?;
+        match &self.store {
             QueueStore::Memory(store) => {
-                store.claim(worker_id, now, lease, self.limits.maximum_attempts)?
+                store.claim(worker_id, now, lease, self.limits.maximum_attempts)
             }
-            QueueStore::Postgres(store) => {
-                store.claim(policy, worker_id, now, lease, self.limits.maximum_attempts)?
-            }
-        };
-        Ok(Value::List(Arc::new(
-            lease.into_iter().map(lease_value).collect(),
-        )))
+            QueueStore::Postgres(store) => store.claim(
+                &QueueHostPolicy {
+                    control,
+                    possible_visibility,
+                },
+                worker_id,
+                now,
+                lease,
+                self.limits.maximum_attempts,
+            ),
+        }
     }
 
-    fn heartbeat(&self, policy: &CallPolicy, arguments: &[Value]) -> Result<Value, ExecutionError> {
-        let [job_id, attempt_id, worker_id, now, lease] = arguments else {
-            return Err(queue_argument(
-                "heartbeat expects job id, attempt id, worker id, current time, and lease duration",
-            ));
-        };
-        let job_id = token(job_id, "job id")?;
-        let attempt_id = token(attempt_id, "attempt id")?;
-        let worker_id = token(worker_id, "worker id")?;
-        let now = nonnegative_time(now, "heartbeat time")?;
-        let lease = lease_duration(lease, &self.limits)?;
-        let accepted = match &self.store {
-            QueueStore::Memory(store) => {
-                store.heartbeat(job_id, attempt_id, worker_id, now, lease)?
-            }
-            QueueStore::Postgres(store) => {
-                store.heartbeat(policy, job_id, attempt_id, worker_id, now, lease)?
-            }
-        };
-        Ok(Value::Bool(accepted))
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn heartbeat(
+        &self,
+        job_id: &str,
+        attempt_id: &str,
+        worker_id: &str,
+        now: i64,
+        lease: i64,
+        control: &ExecutionControl,
+        possible_visibility: bool,
+    ) -> Result<bool, ExecutionError> {
+        self.validate_lease_call(job_id, attempt_id, worker_id, now, control)?;
+        validate_lease_duration(lease, &self.limits)?;
+        match &self.store {
+            QueueStore::Memory(store) => store.heartbeat(job_id, attempt_id, worker_id, now, lease),
+            QueueStore::Postgres(store) => store.heartbeat(
+                &QueueHostPolicy {
+                    control,
+                    possible_visibility,
+                },
+                job_id,
+                attempt_id,
+                worker_id,
+                now,
+                lease,
+            ),
+        }
     }
 
-    fn complete(&self, policy: &CallPolicy, arguments: &[Value]) -> Result<Value, ExecutionError> {
-        let [job_id, attempt_id, worker_id, now, result] = arguments else {
-            return Err(queue_argument(
-                "complete expects job id, attempt id, worker id, current time, and result",
-            ));
-        };
-        let job_id = token(job_id, "job id")?;
-        let attempt_id = token(attempt_id, "attempt id")?;
-        let worker_id = token(worker_id, "worker id")?;
-        let now = nonnegative_time(now, "completion time")?;
-        let result = bytes(result, "job result", self.limits.maximum_result_bytes)?;
-        let accepted = match &self.store {
-            QueueStore::Memory(store) => {
-                store.complete(job_id, attempt_id, worker_id, now, result)?
-            }
-            QueueStore::Postgres(store) => {
-                store.complete(policy, job_id, attempt_id, worker_id, now, result)?
-            }
-        };
-        Ok(Value::Bool(accepted))
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn complete(
+        &self,
+        job_id: &str,
+        attempt_id: &str,
+        worker_id: &str,
+        now: i64,
+        result: &[u8],
+        control: &ExecutionControl,
+        possible_visibility: bool,
+    ) -> Result<bool, ExecutionError> {
+        self.validate_lease_call(job_id, attempt_id, worker_id, now, control)?;
+        validate_bytes(result, "job result", self.limits.maximum_result_bytes)?;
+        match &self.store {
+            QueueStore::Memory(store) => store.complete(job_id, attempt_id, worker_id, now, result),
+            QueueStore::Postgres(store) => store.complete(
+                &QueueHostPolicy {
+                    control,
+                    possible_visibility,
+                },
+                job_id,
+                attempt_id,
+                worker_id,
+                now,
+                result,
+            ),
+        }
     }
 
-    fn fail(&self, policy: &CallPolicy, arguments: &[Value]) -> Result<Value, ExecutionError> {
-        let [
-            job_id,
-            attempt_id,
-            worker_id,
-            now,
-            retry,
-            retry_at,
-            error_class,
-        ] = arguments
-        else {
-            return Err(queue_argument(
-                "fail expects job id, attempt id, worker id, current time, retry decision, retry time, and error class",
-            ));
-        };
-        let job_id = token(job_id, "job id")?;
-        let attempt_id = token(attempt_id, "attempt id")?;
-        let worker_id = token(worker_id, "worker id")?;
-        let now = nonnegative_time(now, "failure time")?;
-        let Value::Bool(retry) = retry else {
-            return Err(queue_argument("retry decision must be Bool"));
-        };
-        let retry_at = nonnegative_time(retry_at, "retry time")?;
-        if *retry && retry_at < now {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn fail(
+        &self,
+        job_id: &str,
+        attempt_id: &str,
+        worker_id: &str,
+        now: i64,
+        retry: bool,
+        retry_at: i64,
+        error_class: &str,
+        control: &ExecutionControl,
+        possible_visibility: bool,
+    ) -> Result<bool, ExecutionError> {
+        self.validate_lease_call(job_id, attempt_id, worker_id, now, control)?;
+        validate_nonnegative_time(retry_at, "retry time")?;
+        if retry && retry_at < now {
             return Err(queue_argument("retry time precedes failure time"));
         }
-        let error_class = bounded_text(error_class, "error class", 128)?;
+        validate_bounded_text(error_class, "error class", 128)?;
         validate_token(error_class, "error class")?;
-        let accepted = match &self.store {
+        match &self.store {
             QueueStore::Memory(store) => store.fail(
                 job_id,
                 attempt_id,
                 worker_id,
                 now,
-                *retry,
+                retry,
                 retry_at,
                 error_class,
                 self.limits.maximum_attempts,
-            )?,
+            ),
             QueueStore::Postgres(store) => store.fail(
-                policy,
+                &QueueHostPolicy {
+                    control,
+                    possible_visibility,
+                },
                 job_id,
                 attempt_id,
                 worker_id,
                 now,
-                *retry,
+                retry,
                 retry_at,
                 error_class,
                 self.limits.maximum_attempts,
-            )?,
-        };
-        Ok(Value::Bool(accepted))
-    }
-
-    fn cancel(&self, policy: &CallPolicy, arguments: &[Value]) -> Result<Value, ExecutionError> {
-        let [job_id, now] = arguments else {
-            return Err(queue_argument("cancel expects job id and current time"));
-        };
-        let job_id = token(job_id, "job id")?;
-        let now = nonnegative_time(now, "cancellation time")?;
-        let accepted = match &self.store {
-            QueueStore::Memory(store) => store.cancel(job_id, now)?,
-            QueueStore::Postgres(store) => store.cancel(policy, job_id, now)?,
-        };
-        Ok(Value::Bool(accepted))
-    }
-
-    fn inspect(&self, policy: &CallPolicy, arguments: &[Value]) -> Result<Value, ExecutionError> {
-        let [job_id] = arguments else {
-            return Err(queue_argument("inspect expects one job id"));
-        };
-        let job_id = token(job_id, "job id")?;
-        let snapshot = match &self.store {
-            QueueStore::Memory(store) => store.inspect(job_id)?,
-            QueueStore::Postgres(store) => store.inspect(policy, job_id)?,
-        };
-        Ok(Value::List(Arc::new(
-            snapshot.into_iter().map(snapshot_value).collect(),
-        )))
-    }
-}
-
-impl CapabilityAdapter for DurableQueueAdapter {
-    fn interface(&self) -> &OwnerId {
-        &self.interface
-    }
-
-    fn call(&self, policy: &CallPolicy, arguments: Vec<Value>) -> Result<Value, ExecutionError> {
-        policy.control.check()?;
-        match policy.operation.as_str() {
-            "initialize" => self.initialize(policy, &arguments),
-            "enqueue" => self.enqueue(policy, &arguments),
-            "claim" => self.claim(policy, &arguments),
-            "heartbeat" => self.heartbeat(policy, &arguments),
-            "complete" => self.complete(policy, &arguments),
-            "fail" => self.fail(policy, &arguments),
-            "cancel" => self.cancel(policy, &arguments),
-            "inspect" => self.inspect(policy, &arguments),
-            operation => Err(ExecutionError::new(
-                ExecutionFailureClass::Infrastructure,
-                "queue_operation_unknown",
-                format!("durable queue adapter does not implement '{operation}'"),
-            )),
+            ),
         }
     }
 
-    fn shutdown(&self) -> Result<(), ExecutionError> {
+    pub(crate) fn cancel(
+        &self,
+        job_id: &str,
+        now: i64,
+        control: &ExecutionControl,
+        possible_visibility: bool,
+    ) -> Result<bool, ExecutionError> {
+        control.check()?;
+        validate_token(job_id, "job id")?;
+        validate_nonnegative_time(now, "cancellation time")?;
         match &self.store {
-            QueueStore::Memory(_) => Ok(()),
-            QueueStore::Postgres(store) => store.pool.close(),
+            QueueStore::Memory(store) => store.cancel(job_id, now),
+            QueueStore::Postgres(store) => store.cancel(
+                &QueueHostPolicy {
+                    control,
+                    possible_visibility,
+                },
+                job_id,
+                now,
+            ),
         }
+    }
+
+    pub(crate) fn inspect(
+        &self,
+        job_id: &str,
+        control: &ExecutionControl,
+    ) -> Result<Option<JobSnapshot>, ExecutionError> {
+        control.check()?;
+        validate_token(job_id, "job id")?;
+        match &self.store {
+            QueueStore::Memory(store) => store.inspect(job_id),
+            QueueStore::Postgres(store) => store.inspect(
+                &QueueHostPolicy {
+                    control,
+                    possible_visibility: false,
+                },
+                job_id,
+            ),
+        }
+    }
+
+    fn validate_lease_call(
+        &self,
+        job_id: &str,
+        attempt_id: &str,
+        worker_id: &str,
+        now: i64,
+        control: &ExecutionControl,
+    ) -> Result<(), ExecutionError> {
+        control.check()?;
+        validate_token(job_id, "job id")?;
+        validate_token(attempt_id, "attempt id")?;
+        validate_token(worker_id, "worker id")?;
+        validate_nonnegative_time(now, "queue operation time")
     }
 }
 
@@ -670,9 +698,30 @@ struct PostgresQueue {
     namespace: String,
 }
 
+trait QueueExecutionPolicy: PostgresErrorPolicy {
+    fn control(&self) -> &ExecutionControl;
+}
+
+struct QueueHostPolicy<'a> {
+    control: &'a ExecutionControl,
+    possible_visibility: bool,
+}
+
+impl PostgresErrorPolicy for QueueHostPolicy<'_> {
+    fn possible_visibility(&self) -> bool {
+        self.possible_visibility
+    }
+}
+
+impl QueueExecutionPolicy for QueueHostPolicy<'_> {
+    fn control(&self) -> &ExecutionControl {
+        self.control
+    }
+}
+
 impl PostgresQueue {
-    fn initialize(&self, policy: &CallPolicy) -> Result<(), ExecutionError> {
-        let mut connection = self.pool.acquire(&policy.control)?;
+    fn initialize(&self, policy: &impl QueueExecutionPolicy) -> Result<(), ExecutionError> {
+        let mut connection = self.pool.acquire(policy.control())?;
         let result = connection
             .client()?
             .batch_execute(
@@ -703,14 +752,14 @@ impl PostgresQueue {
     #[allow(clippy::too_many_arguments)]
     fn enqueue(
         &self,
-        policy: &CallPolicy,
+        policy: &impl QueueExecutionPolicy,
         job_id: &str,
         idempotency_key: &str,
         payload: &[u8],
         available_at: i64,
         created_at: i64,
     ) -> Result<bool, ExecutionError> {
-        let mut connection = self.pool.acquire(&policy.control)?;
+        let mut connection = self.pool.acquire(policy.control())?;
         let result = (|| {
             let mut transaction = connection
                 .client()?
@@ -769,7 +818,7 @@ impl PostgresQueue {
 
     fn claim(
         &self,
-        policy: &CallPolicy,
+        policy: &impl QueueExecutionPolicy,
         worker_id: &str,
         now: i64,
         lease_duration: i64,
@@ -779,7 +828,7 @@ impl PostgresQueue {
             .checked_add(lease_duration)
             .ok_or_else(|| queue_argument("queue lease time overflowed"))?;
         let maximum_attempts = i64::from(maximum_attempts);
-        let mut connection = self.pool.acquire(&policy.control)?;
+        let mut connection = self.pool.acquire(policy.control())?;
         let result = (|| {
             let mut transaction = connection
                 .client()?
@@ -827,7 +876,7 @@ impl PostgresQueue {
 
     fn heartbeat(
         &self,
-        policy: &CallPolicy,
+        policy: &impl QueueExecutionPolicy,
         job_id: &str,
         attempt_id: &str,
         worker_id: &str,
@@ -855,7 +904,7 @@ impl PostgresQueue {
 
     fn complete(
         &self,
-        policy: &CallPolicy,
+        policy: &impl QueueExecutionPolicy,
         job_id: &str,
         attempt_id: &str,
         worker_id: &str,
@@ -882,7 +931,7 @@ impl PostgresQueue {
     #[allow(clippy::too_many_arguments)]
     fn fail(
         &self,
-        policy: &CallPolicy,
+        policy: &impl QueueExecutionPolicy,
         job_id: &str,
         attempt_id: &str,
         worker_id: &str,
@@ -915,7 +964,12 @@ impl PostgresQueue {
         )
     }
 
-    fn cancel(&self, policy: &CallPolicy, job_id: &str, now: i64) -> Result<bool, ExecutionError> {
+    fn cancel(
+        &self,
+        policy: &impl QueueExecutionPolicy,
+        job_id: &str,
+        now: i64,
+    ) -> Result<bool, ExecutionError> {
         self.mutate(
             policy,
             "UPDATE lkjscript_durable_jobs SET state = 'cancelled', completed_at_ms = $3, \
@@ -927,10 +981,10 @@ impl PostgresQueue {
 
     fn inspect(
         &self,
-        policy: &CallPolicy,
+        policy: &impl QueueExecutionPolicy,
         job_id: &str,
     ) -> Result<Option<JobSnapshot>, ExecutionError> {
-        let mut connection = self.pool.acquire(&policy.control)?;
+        let mut connection = self.pool.acquire(policy.control())?;
         let result = connection
             .client()?
             .query_opt(
@@ -948,11 +1002,11 @@ impl PostgresQueue {
 
     fn mutate(
         &self,
-        policy: &CallPolicy,
+        policy: &impl QueueExecutionPolicy,
         statement: &str,
         parameters: &[&(dyn postgres::types::ToSql + Sync)],
     ) -> Result<bool, ExecutionError> {
-        let mut connection = self.pool.acquire(&policy.control)?;
+        let mut connection = self.pool.acquire(policy.control())?;
         let result = connection
             .client()?
             .execute(statement, parameters)
@@ -1016,61 +1070,6 @@ fn decode_snapshot(row: &Row) -> Result<JobSnapshot, ExecutionError> {
     })
 }
 
-fn lease_value(lease: JobLease) -> Value {
-    Value::record(
-        None,
-        [
-            ("job_id".to_owned(), Value::text(lease.job_id)),
-            ("attempt_id".to_owned(), Value::text(lease.attempt_id)),
-            ("payload".to_owned(), Value::bytes(lease.payload)),
-            (
-                "attempt_number".to_owned(),
-                Value::I64(i64::from(lease.attempt_number)),
-            ),
-            (
-                "lease_until_milliseconds".to_owned(),
-                Value::I64(lease.lease_until_milliseconds),
-            ),
-        ],
-    )
-}
-
-fn snapshot_value(snapshot: JobSnapshot) -> Value {
-    Value::record(
-        None,
-        [
-            ("job_id".to_owned(), Value::text(snapshot.job_id)),
-            ("state".to_owned(), Value::text(snapshot.state.as_str())),
-            (
-                "attempt_count".to_owned(),
-                Value::I64(i64::from(snapshot.attempt_count)),
-            ),
-            (
-                "available_at_milliseconds".to_owned(),
-                Value::I64(snapshot.available_at_milliseconds),
-            ),
-            (
-                "lease_until_milliseconds".to_owned(),
-                Value::I64(snapshot.lease_until_milliseconds.unwrap_or(-1)),
-            ),
-            (
-                "result".to_owned(),
-                Value::bytes(snapshot.result.unwrap_or_default()),
-            ),
-            (
-                "last_error_class".to_owned(),
-                Value::text(snapshot.last_error_class.unwrap_or_default()),
-            ),
-        ],
-    )
-}
-
-fn token<'a>(value: &'a Value, label: &str) -> Result<&'a str, ExecutionError> {
-    let value = bounded_text(value, label, 256)?;
-    validate_token(value, label)?;
-    Ok(value)
-}
-
 fn validate_token(value: &str, label: &str) -> Result<(), ExecutionError> {
     if value.is_empty()
         || !value
@@ -1082,54 +1081,40 @@ fn validate_token(value: &str, label: &str) -> Result<(), ExecutionError> {
     Ok(())
 }
 
-fn bounded_text<'a>(
-    value: &'a Value,
-    label: &str,
-    maximum: usize,
-) -> Result<&'a str, ExecutionError> {
-    let Value::Text(value) = value else {
-        return Err(queue_argument(format!("{label} must be Text")));
-    };
+fn validate_bounded_text(value: &str, label: &str, maximum: usize) -> Result<(), ExecutionError> {
     if value.is_empty() || value.len() > maximum || value.contains('\0') {
         return Err(queue_argument(format!(
-            "{label} is empty, excessive, or contains NUL"
+            "{label} is empty, excessive, or contains NUL",
         )));
     }
-    Ok(value)
+    Ok(())
 }
 
-fn bytes<'a>(value: &'a Value, label: &str, maximum: usize) -> Result<&'a [u8], ExecutionError> {
-    let Value::Bytes(value) = value else {
-        return Err(queue_argument(format!("{label} must be Bytes")));
-    };
+fn validate_bytes(value: &[u8], label: &str, maximum: usize) -> Result<(), ExecutionError> {
     if value.len() > maximum {
         return Err(ExecutionError::resource(
             "queue_byte_limit",
             format!("{label} exceeds its exact byte limit"),
         ));
     }
-    Ok(value)
+    Ok(())
 }
 
-fn nonnegative_time(value: &Value, label: &str) -> Result<i64, ExecutionError> {
-    let Value::I64(value) = value else {
-        return Err(queue_argument(format!("{label} must be I64")));
-    };
-    if *value < 0 {
+fn validate_nonnegative_time(value: i64, label: &str) -> Result<(), ExecutionError> {
+    if value < 0 {
         return Err(queue_argument(format!("{label} must be non-negative")));
     }
-    Ok(*value)
+    Ok(())
 }
 
-fn lease_duration(value: &Value, limits: &QueueLimits) -> Result<i64, ExecutionError> {
-    let lease = nonnegative_time(value, "lease duration")?;
-    if lease == 0 || lease > limits.maximum_lease_milliseconds {
+fn validate_lease_duration(value: i64, limits: &QueueLimits) -> Result<(), ExecutionError> {
+    if value <= 0 || value > limits.maximum_lease_milliseconds {
         return Err(ExecutionError::resource(
             "queue_lease_limit",
-            "lease duration is zero or exceeds its exact limit",
+            "queue lease duration is zero or exceeds its exact limit",
         ));
     }
-    Ok(lease)
+    Ok(())
 }
 
 fn queue_argument(message: impl Into<String>) -> ExecutionError {
@@ -1161,212 +1146,182 @@ fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::platform::PackageId;
-    use crate::platform::execution::ExecutionControl;
-    use crate::platform::language::{Idempotency, Visibility};
 
-    fn owner() -> OwnerId {
-        OwnerId::deterministic_for_test(
-            PackageId::parse("1234567890abcdef1234567890abcdef").expect("package id"),
-            "queue",
-            "DurableQueue",
+    fn engine(limits: QueueLimits) -> DurableQueueEngine {
+        DurableQueueEngine::in_memory(limits).expect("queue engine")
+    }
+
+    fn enqueue(
+        engine: &DurableQueueEngine,
+        job: &str,
+        key: &str,
+        payload: &[u8],
+    ) -> Result<bool, ExecutionError> {
+        engine.enqueue(
+            job,
+            key,
+            payload,
+            0,
+            0,
+            &ExecutionControl::uncancelled(),
+            false,
         )
     }
 
-    fn policy(operation: &str) -> CallPolicy {
-        CallPolicy {
-            requirement: "jobs".to_owned(),
-            interface: owner(),
-            operation: operation.to_owned(),
-            idempotency: Idempotency::IdempotentWithKey,
-            visibility: Visibility::Possible,
-            limits: BTreeMap::new(),
-            control: ExecutionControl::uncancelled(),
-        }
-    }
-
-    fn enqueue(adapter: &DurableQueueAdapter, job: &str, key: &str, payload: &[u8]) -> Value {
-        adapter
-            .call(
-                &policy("enqueue"),
-                vec![
-                    Value::text(job),
-                    Value::text(key),
-                    Value::bytes(payload.to_vec()),
-                    Value::I64(0),
-                    Value::I64(0),
-                ],
-            )
-            .expect("enqueue")
-    }
-
-    fn claim(adapter: &DurableQueueAdapter, worker: &str, now: i64) -> JobLease {
-        let result = adapter
-            .call(
-                &policy("claim"),
-                vec![Value::text(worker), Value::I64(now), Value::I64(10)],
-            )
-            .expect("claim");
-        let Value::List(items) = result else {
-            panic!("claim did not return a list")
-        };
-        let [Value::Record { fields, .. }] = items.as_slice() else {
-            panic!("claim did not return one lease")
-        };
-        JobLease {
-            job_id: value_text(&fields["job_id"]),
-            attempt_id: value_text(&fields["attempt_id"]),
-            payload: value_bytes(&fields["payload"]),
-            attempt_number: u32::try_from(value_i64(&fields["attempt_number"]))
-                .expect("attempt number"),
-            lease_until_milliseconds: value_i64(&fields["lease_until_milliseconds"]),
-        }
+    fn claim(engine: &DurableQueueEngine, worker: &str, now: i64) -> JobLease {
+        engine
+            .claim(worker, now, 10, &ExecutionControl::uncancelled(), false)
+            .expect("claim")
+            .expect("lease")
     }
 
     #[test]
     fn duplicate_enqueue_is_idempotent_and_conflicting_input_rejects() {
-        let adapter =
-            DurableQueueAdapter::in_memory(owner(), QueueLimits::default()).expect("adapter");
-        assert!(matches!(
-            enqueue(&adapter, "job-1", "key-1", b"a"),
-            Value::Bool(true)
-        ));
-        assert!(matches!(
-            enqueue(&adapter, "job-1", "key-1", b"a"),
-            Value::Bool(false)
-        ));
-        let error = adapter
-            .call(
-                &policy("enqueue"),
-                vec![
-                    Value::text("job-1"),
-                    Value::text("key-1"),
-                    Value::bytes(b"changed".to_vec()),
-                    Value::I64(0),
-                    Value::I64(0),
-                ],
-            )
-            .expect_err("conflicting replay must reject");
-        assert_eq!(error.code, "queue_idempotency_conflict");
+        let engine = engine(QueueLimits::default());
+        assert!(enqueue(&engine, "job-1", "key-1", b"a").expect("insert"));
+        assert!(!enqueue(&engine, "job-1", "key-1", b"a").expect("replay"));
+        assert_eq!(
+            enqueue(&engine, "job-1", "key-1", b"changed")
+                .expect_err("conflicting replay must reject")
+                .code,
+            "queue_idempotency_conflict"
+        );
     }
 
     #[test]
     fn lease_loss_and_stale_completion_cannot_publish_twice() {
-        let adapter =
-            DurableQueueAdapter::in_memory(owner(), QueueLimits::default()).expect("adapter");
-        enqueue(&adapter, "job-1", "key-1", b"payload");
-        let first = claim(&adapter, "worker-1", 100);
+        let engine = engine(QueueLimits::default());
+        enqueue(&engine, "job-1", "key-1", b"payload").expect("enqueue");
+        let first = claim(&engine, "worker-1", 100);
         assert_eq!(first.attempt_number, 1);
-        let second = claim(&adapter, "worker-2", 110);
+        let second = claim(&engine, "worker-2", 110);
         assert_eq!(second.attempt_number, 2);
-        let stale = adapter
-            .call(
-                &policy("complete"),
-                vec![
-                    Value::text(first.job_id.as_str()),
-                    Value::text(first.attempt_id.as_str()),
-                    Value::text("worker-1"),
-                    Value::I64(110),
-                    Value::bytes(b"stale".to_vec()),
-                ],
-            )
-            .expect("stale completion is a typed rejection");
-        assert!(matches!(stale, Value::Bool(false)));
-        let accepted = adapter
-            .call(
-                &policy("complete"),
-                vec![
-                    Value::text(second.job_id.as_str()),
-                    Value::text(second.attempt_id.as_str()),
-                    Value::text("worker-2"),
-                    Value::I64(111),
-                    Value::bytes(b"result".to_vec()),
-                ],
-            )
-            .expect("current completion");
-        assert!(matches!(accepted, Value::Bool(true)));
-        let repeated = adapter
-            .call(
-                &policy("complete"),
-                vec![
-                    Value::text(second.job_id.as_str()),
-                    Value::text(second.attempt_id.as_str()),
-                    Value::text("worker-2"),
-                    Value::I64(111),
-                    Value::bytes(b"result".to_vec()),
-                ],
-            )
-            .expect("repeated completion");
-        assert!(matches!(repeated, Value::Bool(false)));
+        assert!(
+            !engine
+                .complete(
+                    &first.job_id,
+                    &first.attempt_id,
+                    "worker-1",
+                    110,
+                    b"stale",
+                    &ExecutionControl::uncancelled(),
+                    false,
+                )
+                .expect("stale completion")
+        );
+        assert!(
+            engine
+                .complete(
+                    &second.job_id,
+                    &second.attempt_id,
+                    "worker-2",
+                    111,
+                    b"result",
+                    &ExecutionControl::uncancelled(),
+                    false,
+                )
+                .expect("current completion")
+        );
+        assert!(
+            !engine
+                .complete(
+                    &second.job_id,
+                    &second.attempt_id,
+                    "worker-2",
+                    111,
+                    b"result",
+                    &ExecutionControl::uncancelled(),
+                    false,
+                )
+                .expect("duplicate completion")
+        );
+        let snapshot = engine
+            .inspect("job-1", &ExecutionControl::uncancelled())
+            .expect("inspect")
+            .expect("snapshot");
+        assert_eq!(snapshot.state, JobState::Completed);
+        assert_eq!(snapshot.result.as_deref(), Some(b"result".as_slice()));
     }
 
     #[test]
     fn retry_policy_is_explicit_and_attempt_bound_is_terminal() {
-        let limits = QueueLimits {
+        let engine = engine(QueueLimits {
             maximum_attempts: 2,
             ..QueueLimits::default()
-        };
-        let adapter = DurableQueueAdapter::in_memory(owner(), limits).expect("adapter");
-        enqueue(&adapter, "job-1", "key-1", b"payload");
-        let first = claim(&adapter, "worker", 0);
-        let failed = adapter
-            .call(
-                &policy("fail"),
-                vec![
-                    Value::text(first.job_id.as_str()),
-                    Value::text(first.attempt_id.as_str()),
-                    Value::text("worker"),
-                    Value::I64(1),
-                    Value::Bool(true),
-                    Value::I64(5),
-                    Value::text("provider_unavailable"),
-                ],
-            )
-            .expect("retry decision");
-        assert!(matches!(failed, Value::Bool(true)));
-        let second = claim(&adapter, "worker", 5);
-        let failed = adapter
-            .call(
-                &policy("fail"),
-                vec![
-                    Value::text(second.job_id.as_str()),
-                    Value::text(second.attempt_id.as_str()),
-                    Value::text("worker"),
-                    Value::I64(6),
-                    Value::Bool(true),
-                    Value::I64(7),
-                    Value::text("provider_unavailable"),
-                ],
-            )
-            .expect("attempt bound");
-        assert!(matches!(failed, Value::Bool(true)));
-        let empty = adapter
-            .call(
-                &policy("claim"),
-                vec![Value::text("worker"), Value::I64(7), Value::I64(10)],
-            )
-            .expect("no third attempt");
-        assert!(matches!(empty, Value::List(items) if items.is_empty()));
+        });
+        enqueue(&engine, "job-1", "key-1", b"payload").expect("enqueue");
+        let first = claim(&engine, "worker", 0);
+        assert!(
+            engine
+                .fail(
+                    &first.job_id,
+                    &first.attempt_id,
+                    "worker",
+                    1,
+                    true,
+                    5,
+                    "provider_unavailable",
+                    &ExecutionControl::uncancelled(),
+                    false,
+                )
+                .expect("first failure")
+        );
+        let second = claim(&engine, "worker", 5);
+        assert!(
+            engine
+                .fail(
+                    &second.job_id,
+                    &second.attempt_id,
+                    "worker",
+                    6,
+                    true,
+                    7,
+                    "provider_unavailable",
+                    &ExecutionControl::uncancelled(),
+                    false,
+                )
+                .expect("second failure")
+        );
+        assert!(
+            engine
+                .claim("worker", 7, 10, &ExecutionControl::uncancelled(), false,)
+                .expect("terminal claim")
+                .is_none()
+        );
     }
 
-    fn value_text(value: &Value) -> String {
-        let Value::Text(value) = value else {
-            panic!("not text")
-        };
-        value.to_string()
-    }
-
-    fn value_bytes(value: &Value) -> Vec<u8> {
-        let Value::Bytes(value) = value else {
-            panic!("not bytes")
-        };
-        value.to_vec()
-    }
-
-    fn value_i64(value: &Value) -> i64 {
-        let Value::I64(value) = value else {
-            panic!("not i64")
-        };
-        *value
+    #[test]
+    fn heartbeat_cancel_and_limits_are_owned_by_the_engine() {
+        let engine = engine(QueueLimits::default());
+        engine
+            .initialize(&ExecutionControl::uncancelled(), false)
+            .expect("initialize");
+        enqueue(&engine, "job-1", "key-1", b"payload").expect("enqueue");
+        let lease = claim(&engine, "worker", 0);
+        assert!(
+            engine
+                .heartbeat(
+                    &lease.job_id,
+                    &lease.attempt_id,
+                    "worker",
+                    1,
+                    20,
+                    &ExecutionControl::uncancelled(),
+                    false,
+                )
+                .expect("heartbeat")
+        );
+        assert!(
+            engine
+                .cancel("job-1", 2, &ExecutionControl::uncancelled(), false,)
+                .expect("cancel")
+        );
+        assert_eq!(
+            engine
+                .claim("worker", 0, 0, &ExecutionControl::uncancelled(), false,)
+                .expect_err("zero lease")
+                .code,
+            "queue_lease_limit"
+        );
     }
 }

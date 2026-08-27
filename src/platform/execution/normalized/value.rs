@@ -56,6 +56,7 @@ impl NormalizedValue {
         Self::Text(value.into())
     }
 
+    #[cfg(test)]
     pub fn static_text(value: impl Into<Arc<str>>) -> Self {
         Self::StaticText(value.into())
     }
@@ -64,6 +65,7 @@ impl NormalizedValue {
         Self::Bytes(value.into())
     }
 
+    #[cfg(test)]
     pub fn is_durable(&self) -> bool {
         match self {
             Self::Function(_) | Self::Resource(_) => false,
