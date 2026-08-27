@@ -1734,6 +1734,8 @@ mod tests {
         assert!(!publish.contains("actions/checkout"));
         assert!(!publish.contains("cargo "));
         assert!(!publish.contains("target/"));
+        assert!(publish.contains("--notes-file"));
+        assert!(!publish.contains("--notes-from-tag"));
         for forbidden in [
             "--clobber",
             "ubuntu-latest",

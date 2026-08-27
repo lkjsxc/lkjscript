@@ -349,6 +349,9 @@ jobs:
           test "$(jq -r '.source.annotated_tag_object_sha' "$RUNNER_TEMP/RELEASE-MANIFEST.json")" = "$tag_object_sha"
           test -n "$IMMUTABLE_RELEASE_TAG_OBJECT_SHA"
           test "$IMMUTABLE_RELEASE_TAG_OBJECT_SHA" = "$tag_object_sha"
+          release_notes="$RUNNER_TEMP/release-notes.txt"
+          jq -er '.message' <<< "$tag_object" > "$release_notes"
+          test -s "$release_notes"
 
           release_file="$RUNNER_TEMP/release.json"
           if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > "$release_file" 2> "$RUNNER_TEMP/release-get.stderr"; then
@@ -365,7 +368,7 @@ jobs:
               --verify-tag \
               --draft \
               --title "$TAG" \
-              --notes-from-tag
+              --notes-file "$release_notes"
             gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > "$release_file"
           fi
 
