@@ -1736,6 +1736,12 @@ mod tests {
         assert!(!publish.contains("target/"));
         assert!(publish.contains("--notes-file"));
         assert!(!publish.contains("--notes-from-tag"));
+        assert!(publish.contains("releases?per_page=100&page=1"));
+        assert!(publish.contains("releases?per_page=100&page=2"));
+        assert!(!publish.contains("releases/tags/$TAG"));
+        assert!(publish.contains("https://uploads.github.com/"));
+        assert!(!publish.contains("gh release upload"));
+        assert!(publish.contains(".name == $tag"));
         for forbidden in [
             "--clobber",
             "ubuntu-latest",

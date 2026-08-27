@@ -354,14 +354,31 @@ jobs:
           test -s "$release_notes"
 
           release_file="$RUNNER_TEMP/release.json"
-          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > "$release_file" 2> "$RUNNER_TEMP/release-get.stderr"; then
-            existing=true
-          elif grep -q 'HTTP 404' "$RUNNER_TEMP/release-get.stderr"; then
-            existing=false
-          else
-            cat "$RUNNER_TEMP/release-get.stderr" >&2
-            exit 1
-          fi
+          load_release() {
+            local releases_file="$RUNNER_TEMP/releases.json"
+            local overflow_file="$RUNNER_TEMP/releases-overflow.json"
+            local release_count
+            local matches
+            gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100&page=1" > "$releases_file"
+            release_count=$(jq -er 'length' "$releases_file")
+            [[ "$release_count" =~ ^[0-9]+$ ]]
+            if [[ "$release_count" -eq 100 ]]; then
+              gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100&page=2" > "$overflow_file"
+              test "$(jq -er 'length' "$overflow_file")" -eq 0
+            fi
+            matches=$(jq -er --arg tag "$TAG" '[.[] | select(.tag_name == $tag)] | length' "$releases_file")
+            test "$matches" -le 1
+            release_found=false
+            if [[ "$matches" -eq 1 ]]; then
+              jq -e --arg tag "$TAG" '[.[] | select(.tag_name == $tag)] | .[0]' \
+                "$releases_file" > "$release_file"
+              release_found=true
+            else
+              printf '{}\n' > "$release_file"
+            fi
+          }
+          load_release
+          existing=$release_found
           if [[ "$existing" == "false" ]]; then
             gh release create "$TAG" \
               --repo "$GITHUB_REPOSITORY" \
@@ -369,11 +386,12 @@ jobs:
               --draft \
               --title "$TAG" \
               --notes-file "$release_notes"
-            gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > "$release_file"
+            load_release
+            test "$release_found" = true
           fi
 
           jq -e --arg tag "$TAG" \
-            '.tag_name == $tag and .prerelease == false' \
+            '.tag_name == $tag and .name == $tag and .prerelease == false' \
             "$release_file"
           draft=$(jq -r '.draft' "$release_file")
           if [[ "$draft" == "false" ]]; then
@@ -392,9 +410,29 @@ jobs:
           upload_missing() {
             local name=$1
             if ! jq -e --arg name "$name" '.assets[] | select(.name == $name)' "$release_file" > /dev/null; then
+              local release_id
+              local upload_bytes
+              local upload_response
               test "$draft" = true
-              gh release upload "$TAG" "$HANDOFF/$name" --repo "$GITHUB_REPOSITORY"
-              gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > "$release_file"
+              release_id=$(jq -er '.id' "$release_file")
+              [[ "$release_id" =~ ^[1-9][0-9]*$ ]]
+              upload_bytes=$(stat -c '%s' "$HANDOFF/$name")
+              [[ "$upload_bytes" =~ ^[1-9][0-9]*$ ]]
+              upload_response="$RUNNER_TEMP/upload-$name.json"
+              curl --fail --silent --show-error \
+                --request POST \
+                --header 'Accept: application/vnd.github+json' \
+                --header "Authorization: Bearer $GH_TOKEN" \
+                --header 'X-GitHub-Api-Version: 2022-11-28' \
+                --header 'Content-Type: application/octet-stream' \
+                --data-binary "@$HANDOFF/$name" \
+                --output "$upload_response" \
+                "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name=$name"
+              jq -e --arg name "$name" --argjson bytes "$upload_bytes" \
+                '.name == $name and .state == "uploaded" and .size == $bytes' \
+                "$upload_response" > /dev/null
+              load_release
+              test "$release_found" = true
             fi
           }
           upload_missing "$RELEASE_ARCHIVE"
@@ -415,7 +453,8 @@ jobs:
           }
           verified=false
           for attempt in $(seq 1 12); do
-            gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > "$release_file"
+            load_release
+            test "$release_found" = true
             if verify_assets; then
               verified=true
               break
@@ -434,7 +473,8 @@ jobs:
 
           immutable=false
           for attempt in $(seq 1 12); do
-            gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > "$release_file"
+            load_release
+            test "$release_found" = true
             if [[ "$(jq -r '.draft' "$release_file")" == "false" ]] && \
                [[ "$(jq -r '.immutable' "$release_file")" == "true" ]]; then
               immutable=true
