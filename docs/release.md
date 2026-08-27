@@ -47,6 +47,7 @@ before invoking the otherwise network-independent service harness.
 From a clean fast-forward checkout, build and prepare a dry-run package with absolute paths:
 
 ```sh
+cargo fetch --locked
 cargo build --workspace --release --locked
 cargo run --locked -p lkjscript-dev -- release prepare \
   --candidate "$PWD/target/release/lkjscript" \
@@ -63,7 +64,10 @@ cargo run --locked -p lkjscript-dev -- release verify \
   --expected-publication dry-run
 ```
 
-Preparation generates notices twice from the locked, offline, target-filtered production closure;
+The untargeted fetch makes every package selected by locked Cargo metadata available before the
+notice generator switches Cargo to offline mode; target filtering and the production-only policy
+still determine the notice contents. Preparation generates notices twice from that locked,
+offline, target-filtered production closure;
 runs the exact private copy of the candidate through the existing copied-binary lifecycle; creates
 two archives; and compares and strictly extracts them. It refuses a dirty checkout, symlink or
 nonregular input, output conflict, wrong target, malformed manifest, unknown license, nondeterministic

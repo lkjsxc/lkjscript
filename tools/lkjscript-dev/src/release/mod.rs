@@ -1015,17 +1015,23 @@ fn generate_notices(
             timeout: Duration::from_secs(300),
             maximum_stdout_bytes: 1024 * 1024,
             maximum_stderr_bytes: 4 * 1024 * 1024,
-            stdout_path: stdout,
-            stderr_path: stderr,
+            stdout_path: stdout.clone(),
+            stderr_path: stderr.clone(),
             unavailable_exit_code: None,
         },
         repository,
     );
     if observation.status != ProcessStatus::Passed {
+        let stdout_excerpt = process::excerpt(&stdout, 8 * 1024)
+            .unwrap_or_else(|error| format!("<stdout excerpt unavailable: {error}>"));
+        let stderr_excerpt = process::excerpt(&stderr, 8 * 1024)
+            .unwrap_or_else(|error| format!("<stderr excerpt unavailable: {error}>"));
         return Err(DevError::infrastructure(format!(
-            "cargo-about notice generation failed with {:?}: {}",
+            "cargo-about notice generation failed with {:?}: {}\nstdout:\n{}\nstderr:\n{}",
             observation.status,
-            observation.reason.as_deref().unwrap_or("no reason")
+            observation.reason.as_deref().unwrap_or("no reason"),
+            stdout_excerpt,
+            stderr_excerpt,
         )));
     }
     archive::ensure_regular(output, "third-party notice output")?;
@@ -1742,6 +1748,7 @@ mod tests {
         }
         assert!(workflow.contains("persist-credentials: false"));
         assert!(workflow.contains("cancel-in-progress: false"));
+        assert!(workflow.contains("cargo fetch --locked"));
         assert!(workflow.contains(crate::service::POSTGRES_IMAGE));
         assert!(!workflow.contains("postgres:16-alpine"));
         assert!(workflow.matches("timeout-minutes:").count() >= 3);

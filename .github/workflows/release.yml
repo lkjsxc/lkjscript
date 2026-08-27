@@ -41,6 +41,8 @@ jobs:
     timeout-minutes: 180
     permissions:
       contents: read
+    env:
+      CARGO_HOME: ${{ runner.temp }}/cargo-home
     outputs:
       publish: ${{ steps.identity.outputs.publish }}
       publication_mode: ${{ steps.identity.outputs.publication_mode }}
@@ -136,6 +138,19 @@ jobs:
             echo "archive=$archive"
             echo "executable=$tool_root/cargo-about"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Fetch the exact locked dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$CARGO_HOME"
+          started=$(date +%s%N)
+          cargo fetch --locked
+          completed=$(date +%s%N)
+          registry_bytes=$(du -sb "$CARGO_HOME/registry" | cut -f1)
+          [[ "$registry_bytes" =~ ^[1-9][0-9]*$ ]]
+          echo "cargo_registry_bytes=$registry_bytes"
+          echo "cargo_fetch_elapsed_nanoseconds=$((completed - started))"
 
       - name: Build the release candidate
         shell: bash
