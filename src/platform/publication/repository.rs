@@ -322,8 +322,19 @@ impl GraphRepository {
         let root = root
             .canonicalize()
             .map_err(|error| io_diagnostic("publication_repository_open_canonical", root, error))?;
+        let root_directory = open_directory(&root)?;
+        let lock = open_or_reconstruct_lock(&root_directory, &root)?;
+        FileExt::lock_shared(&lock)
+            .map_err(|error| io_diagnostic("publication_repository_read_lock", &root, error))?;
+        let store = PackDirectoryStore::initialize(&root).map_err(store_diagnostic)?;
+        let _ = read_current_optional(&root_directory, &store)?.ok_or_else(|| {
+            repository_error(
+                DiagnosticClass::Source,
+                "publication_repository_unpublished",
+                "Graph 5 repository has no accepted HEAD",
+            )
+        })?;
         let repository = Self { root };
-        let _ = repository.current()?;
         Ok(repository)
     }
 
@@ -2317,15 +2328,30 @@ fn open_directory(path: &Path) -> Result<File, Diagnostic> {
     Ok(File::from(fd))
 }
 
-fn open_lock(root_directory: &File) -> Result<File, Diagnostic> {
-    let fd = rustix::fs::openat(
+fn open_lock_optional(root_directory: &File) -> Result<Option<File>, Diagnostic> {
+    let fd = match rustix::fs::openat(
         root_directory,
         LOCK_FILE,
         OFlags::RDWR | OFlags::NOFOLLOW | OFlags::CLOEXEC,
         Mode::empty(),
-    )
-    .map_err(|error| rustix_diagnostic("publication_repository_lock_open", error))?;
+    ) {
+        Ok(fd) => fd,
+        Err(error) if error == rustix::io::Errno::NOENT => return Ok(None),
+        Err(error) => {
+            return Err(rustix_diagnostic("publication_repository_lock_open", error));
+        }
+    };
     let file = File::from(fd);
+    validate_lock(file).map(Some)
+}
+
+fn open_lock(root_directory: &File) -> Result<File, Diagnostic> {
+    open_lock_optional(root_directory)?.ok_or_else(|| {
+        rustix_diagnostic("publication_repository_lock_open", rustix::io::Errno::NOENT)
+    })
+}
+
+fn validate_lock(file: File) -> Result<File, Diagnostic> {
     let metadata = file.metadata().map_err(|error| {
         io_diagnostic(
             "publication_repository_lock_metadata",
@@ -2341,6 +2367,44 @@ fn open_lock(root_directory: &File) -> Result<File, Diagnostic> {
         ));
     }
     Ok(file)
+}
+
+fn open_or_reconstruct_lock(root_directory: &File, root: &Path) -> Result<File, Diagnostic> {
+    if let Some(lock) = open_lock_optional(root_directory)? {
+        return Ok(lock);
+    }
+
+    let store = PackDirectoryStore::initialize(root).map_err(store_diagnostic)?;
+    let _ = read_current_optional(root_directory, &store)?.ok_or_else(|| {
+        repository_error(
+            DiagnosticClass::Source,
+            "publication_repository_unpublished",
+            "Graph 5 repository has no accepted HEAD",
+        )
+    })?;
+    drop(store);
+
+    match rustix::fs::openat(
+        root_directory,
+        LOCK_FILE,
+        OFlags::RDWR | OFlags::CREATE | OFlags::EXCL | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::from_raw_mode(0o600),
+    ) {
+        Ok(fd) => {
+            let lock = validate_lock(File::from(fd))?;
+            lock.sync_all()
+                .map_err(|error| io_diagnostic("publication_repository_lock_sync", root, error))?;
+            root_directory.sync_all().map_err(|error| {
+                io_diagnostic("publication_repository_layout_sync", root, error)
+            })?;
+            Ok(lock)
+        }
+        Err(error) if error == rustix::io::Errno::EXIST => open_lock(root_directory),
+        Err(error) => Err(rustix_diagnostic(
+            "publication_repository_lock_create",
+            error,
+        )),
+    }
 }
 
 fn read_optional_regular_at(

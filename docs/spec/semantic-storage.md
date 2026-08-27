@@ -19,8 +19,10 @@ derived/compiler/          disposable compiler manifests, units, and CURRENT
 
 The physical layout is replaceable and is not language meaning. The logical authority is the exact
 validated semantic revision and immutable closure selected by `HEAD`. Missing disposable
-`staging/` or compiler state may be recreated. Missing or inconsistent accepted `HEAD`, pack,
-object, revision, receipt, root, or witness bindings are corruption.
+`catalog/`, `staging/`, or compiler state may be recreated. A missing `LOCK` may be atomically
+recreated only after the accepted `HEAD` and its immutable closure validate; a non-regular,
+nonempty, or symlinked lock rejects. Missing or inconsistent accepted `HEAD`, pack, object,
+revision, receipt, root, or witness bindings are corruption.
 
 A predecessor `.lkjscript` marker is not a storage edition. Project discovery rejects it before
 opening derived state or mutating the destination. A root containing both current and predecessor

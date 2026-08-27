@@ -6970,6 +6970,57 @@ fn repository_rejects_predecessor_head_and_missing_accepted_pack() {
     );
 }
 
+#[test]
+fn repository_open_reconstructs_one_missing_operational_lock_concurrently() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let expected = created.current.head;
+    std::fs::remove_file(destination.join("LOCK")).expect("remove disposable lock");
+    std::fs::remove_dir_all(destination.join("catalog")).expect("remove disposable catalog");
+    std::fs::remove_dir_all(destination.join("staging")).expect("remove disposable staging");
+
+    let mut workers = Vec::new();
+    for _ in 0..8 {
+        let destination = destination.clone();
+        workers.push(std::thread::spawn(move || {
+            GraphRepository::open(&destination)
+                .expect("reopen without lock")
+                .current()
+                .expect("read reconstructed repository")
+                .head
+        }));
+    }
+    for worker in workers {
+        assert_eq!(worker.join().expect("join repository opener"), expected);
+    }
+    let metadata =
+        std::fs::symlink_metadata(destination.join("LOCK")).expect("reconstructed lock metadata");
+    assert!(metadata.is_file());
+    assert_eq!(metadata.len(), 0);
+}
+
+#[test]
+fn repository_open_does_not_reconstruct_lock_before_canonical_validation() {
+    let temporary = tempfile::tempdir().expect("temporary repository parent");
+    let destination = temporary.path().join("meaning");
+    let logical = crate::platform::kernel::tests::witness_snapshot();
+    let _ = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    std::fs::remove_file(destination.join("LOCK")).expect("remove disposable lock");
+    for entry in std::fs::read_dir(destination.join("packs")).expect("pack directory") {
+        std::fs::remove_file(entry.expect("pack entry").path()).expect("remove accepted pack");
+    }
+
+    assert_eq!(
+        GraphRepository::open(&destination)
+            .expect_err("corrupt authority without a lock must reject")
+            .code,
+        "publication_repository_object_missing"
+    );
+    assert!(!destination.join("LOCK").exists());
+}
+
 #[cfg(unix)]
 #[test]
 fn repository_rejects_symlinked_lock_and_head_stage() {
