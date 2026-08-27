@@ -1,6 +1,6 @@
 # Current status
 
-Status date: 2026-08-26 UTC. This file describes implemented checkout reality. Executable-derived
+Status date: 2026-08-27 UTC. This file describes implemented checkout reality. Executable-derived
 contract and operation catalogs live in [generated/contracts.md](generated/contracts.md) and
 [generated/operations.md](generated/operations.md); this file does not duplicate them.
 
@@ -36,6 +36,29 @@ The built-in transport and artifact are compiled into the executable and strictl
 Product verification regenerates the maintained owners and compares exact bytes. The frozen
 service artifact is separately digest-pinned by the service harness and is never compared with or
 overwritten by current `build`.
+
+## Public binary release
+
+[`v0.1.4`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.4) is the current public and
+latest release. Its annotated tag object
+`5e3052e3a29c146e9a6e83258ef54723c9b4a8df` selects commit
+`6bd8d46475add972ca468d458caae88df6f26f42`; the repository reports the published release as
+immutable. The supported target is exactly `x86_64-unknown-linux-gnu`. The candidate is ELF64
+x86-64, uses `/lib64/ld-linux-x86-64.so.2`, requires `libc.so.6`, `libgcc_s.so.1`, and
+`libm.so.6`, and has a measured maximum required symbol version of `GLIBC_2.38`.
+
+| Public asset | Bytes | SHA-256 / GitHub asset digest |
+|---|---:|---|
+| `lkjscript-x86_64-unknown-linux-gnu.tar.gz` | 7,407,455 | `6f332da3068c828be9ac445034f47ad664ca5ef450f2df9987390f9cb25c9053` |
+| `SHA256SUMS` | 108 | `675c80f985883cba707ad3e0a7b5bb5758f7c9559939a49209a59dfa2e5c1cb2` |
+
+Anonymous downloads from both the exact-tag and stable `releases/latest` paths matched the
+archive digest and passed extraction plus the command-project smoke lifecycle. The archive holds
+only the executable, root license, generated third-party notices, and canonical release manifest
+under one `lkjscript/` directory. The release path is derived distribution evidence: its tag,
+archive, manifest, checksum, GitHub asset digest, and release attestation do not own program
+meaning or establish build provenance. Exact evidence is retained in
+[the public binary release record](evidence/202608271521-public-binary-release.json).
 
 ## Released command lifecycle
 
@@ -116,14 +139,24 @@ sandbox or multi-tenant isolation boundary.
 - No million-owner complete application lifecycle, long-history retention policy, garbage
   collection, live-store packing, artifact signing, encrypted graph storage, or distributed
   publication protocol has been proved.
-- Linux x86-64 with stable Rust is the verified environment. Provider tokens, cached-token counts,
-  requests, retries, and monetary cost are unavailable because no direct telemetry exists.
+- The public binary is admitted only for `x86_64-unknown-linux-gnu` with the measured dynamic
+  runtime above. Musl/static Linux, older GLIBC, macOS, Windows, arm64, generic Unix, and other
+  targets are unproved.
+- The immutable GitHub release attestation and asset digests prove release identity and integrity;
+  they are not code signing, compiler reproducibility, build provenance across runner images, or
+  a general supply-chain policy.
+- Provider tokens, cached-token counts, requests, and monetary cost are unavailable because no
+  direct telemetry exists.
 
 ## Verification
 
 The contributor-only `lkjscript-dev check` harness owns gate dependencies, exact input
 fingerprints, fresh/reused classification, bounded child logs, required outputs, and receipts.
-The final campaign record [202608270014](campaigns/202608270014.md) names the exact focused,
-product, full, and service results for this content. Structured lifecycle measurements live in
-[evidence/202608270014-normalized-command-lifecycle.json](evidence/202608270014-normalized-command-lifecycle.json)
-and are summarized in [performance.md](performance.md).
+The semantic lifecycle campaign record [202608270014](campaigns/202608270014.md) names its exact
+focused, product, full, and service results. The public binary campaign record
+[202608271521](campaigns/202608271521.md) and its
+[structured release evidence](evidence/202608271521-public-binary-release.json) bind the live
+tag, workflow, assets, anonymous downloads, and hosted full verification. Lifecycle measurements
+remain in
+[evidence/202608270014-normalized-command-lifecycle.json](evidence/202608270014-normalized-command-lifecycle.json);
+both campaigns are summarized in [performance.md](performance.md).

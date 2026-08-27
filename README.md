@@ -34,8 +34,11 @@ tar -xzf lkjscript-x86_64-unknown-linux-gnu.tar.gz
 The archive also contains the Apache-2.0 project license, exact third-party notices, and canonical
 release metadata. Its stable filename makes the latest URL durable; the
 [`v0.1.4` release page](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.4) owns the immutable
-version-specific bytes. See the [maintainer release procedure](docs/release.md) for identity,
-packaging, verification, and recovery details.
+version-specific
+[archive](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.4/lkjscript-x86_64-unknown-linux-gnu.tar.gz)
+and [checksum](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.4/SHA256SUMS). See the
+[maintainer release procedure](docs/release.md) for identity, packaging, verification, and
+recovery details.
 
 Installation is optional. Select a directory you own rather than piping a download into a shell:
 

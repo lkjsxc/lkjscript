@@ -59,6 +59,37 @@ dependency closure, cache selection/recovery, compilation, linking, artifact val
 preparation, and typed observations. `check`, `build`, and `run` do not duplicate compiler or
 linker decisions.
 
+## Derived release distribution path
+
+The repository has one tag-driven public binary path for the admitted Linux target:
+
+```text
+annotated SemVer tag on origin/main
+                  │
+                  ▼
+read-only build / full verification / exact-candidate acceptance
+                  │
+                  ▼
+deterministic archive + checksum + transient handoff
+                  │
+                  ▼
+no-checkout publication job with contents:write
+                  │
+                  ▼
+immutable GitHub Release and release attestation
+                  │
+                  ▼
+anonymous exact/latest download and copied-binary smoke
+```
+
+`tools/lkjscript-dev` owns typed release preparation and strict archive verification. The hosted
+workflow supplies exact runner context, separates verified checkout execution from publication
+authority, and uses its artifact only for bounded job handoff. The public release, archive,
+manifest, checksum, asset digest, and attestation are all derived distribution evidence. None can
+select or edit Graph 5 meaning, executable contracts, compilation semantics, or deployment data.
+The root package version and annotated tag bind release identity; recovery from a published
+content defect uses a new patch identity rather than mutation.
+
 ## Layer ownership
 
 | Layer | Primary code | Owns | Does not own |
@@ -73,6 +104,7 @@ linker decisions.
 | Derived output | `platform/owned_output` | bounded synchronized create-new file publication | overwrite or semantic visibility |
 | Frozen service runtime | `platform/artifact.rs`, legacy `platform/execution`, deployment/adapters | strict read-only artifact-4 loading and current service/worker host mechanics | editable Graph 4 authority or current builds |
 | Contributor verification | `tools/lkjscript-dev` | gate DAG, fingerprints, classifications, logs, receipts, product/service evidence | product authority |
+| Release distribution | `tools/lkjscript-dev` release tooling, `.github/workflows/release.yml` | deterministic package validation, transient handoff, immutable publication, anonymous transport verification | program meaning, compiler/runtime authority, or build provenance |
 
 The old `SemanticWorkspace`, predecessor repository writer, drafts, history/diff/merge workflows,
 backup/restore, review projection, and query indexes have no current consumer and are deleted. Old

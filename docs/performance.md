@@ -2,6 +2,49 @@
 
 Measurements are observations, not promises.
 
+## Current public binary release
+
+Release `v0.1.4` was built and published by GitHub Actions run
+[`33069640764`](https://github.com/lkjsxc/lkjscript/actions/runs/33069640764) on explicit
+`ubuntu-24.04` with Rust/Cargo 1.98.0. The run had three jobs: the read-only build job completed in
+10 minutes 59 seconds, the no-checkout publication job in 25 seconds, and anonymous post-release
+verification in 13 seconds. All required jobs passed on attempt 1.
+
+| Observation | Value |
+|---|---:|
+| pinned `cargo-about` archive download | 6,732,751 bytes; about 1 s |
+| locked dependency prefetch | about 3 s |
+| release compilation workflow step | about 263 s |
+| fresh full verification receipt | 287.874 s; 20/20 gates fresh passed |
+| service acceptance within full verification | 3.937 s; 8,092 KiB peak RSS |
+| exact-candidate copied-binary acceptance | 0.579 s; 0.160 s CPU; 74,876 KiB peak RSS |
+| complete release preparation (notice, candidate, two packages, strict verification) | 63.843 s |
+| transient handoff upload | about 2 s; 7,411,909 compressed bytes |
+| draft upload, exact inspection, and publication workflow step | about 18 s |
+| anonymous download step | about 1 s |
+| release and asset attestation checks | about 9 s |
+
+The exact release executable is 16,504,936 bytes. `LICENSE` is 11,336 bytes, the generated
+third-party notice is 315,160 bytes, and `RELEASE-MANIFEST.json` is 3,957 bytes. Their 16,835,389
+payload bytes compress to a 7,407,455-byte archive, a ratio of 0.439993 (56.00% smaller). The
+108-byte checksum file and 3,906-byte external receipt complete the fixed handoff. The largest
+observed gate peak RSS was 79,404 KiB for workspace tests. Exact notice-generation wall time and
+peak RSS were not isolated from the packaging step.
+
+Anonymous local observations downloaded the exact-tag archive in 0.698 seconds and its checksum
+in 0.492 seconds; the latest archive took 0.430 seconds and its checksum 0.320 seconds. Each of
+the four transport requests succeeded on its first attempt and transferred 7,407,455 or 108 bytes
+as appropriate. GitHub draft discovery required two bounded attempts and one five-second wait;
+asset-digest propagation, immutable-state observation, release verification, and both asset
+verifications succeeded on their first attempts. The release run executed no destructive retry.
+
+These are single hosted and client observations, not latency distributions. Runner caches and
+network conditions were uncontrolled. The same-input package was byte-stable within one runner;
+this does not establish bit-for-bit compiler reproducibility across runner images. Provider token
+use, monetary cost, and exact filesystem syscall counts are unavailable. Structured identities,
+digests, classifications, failed predecessor attempts, and raw-evidence pointers are in
+[`202608271521-public-binary-release.json`](evidence/202608271521-public-binary-release.json).
+
 ## Current normalized command lifecycle
 
 Campaign `202608270014` measured release binaries after a warm build on Linux
