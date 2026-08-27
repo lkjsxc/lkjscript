@@ -23,10 +23,11 @@ operational evidence, not application state.
 
 Shutdown atomically stops admission, closes admission/worker semaphores, wakes queued tasks, and
 waits the declared drain grace. If work remains, it requests cooperative cancellation and waits the
-cancellation grace. It then calls every adapter's idempotent shutdown and reports admission stop,
-whether drain preceded cancellation, cancellation count, remaining tasks, cleanup failures, and
-elapsed time. A stalled blocking task is infrastructure failure; possibly visible work is not
-replayed. Process restart reloads artifact and durable adapters and discards tasks/queues/caches.
+cancellation grace. It then calls every owned adapter's idempotent shutdown exactly once, retains
+that cleanup outcome for repeated shutdown calls, and reports admission stop, whether drain
+preceded cancellation, cancellation count, remaining tasks, cleanup failures, and elapsed time. A
+stalled blocking task is infrastructure failure; possibly visible work is not replayed. Process
+restart reloads artifact and durable adapters and discards tasks/queues/caches.
 
 ## Byte streams
 

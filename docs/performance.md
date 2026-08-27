@@ -370,6 +370,30 @@ operation. A 100,000-module attempt reached backup, but its final JSON was lost 
 execution session exceeded the orchestration capture context and could not be reopened; it is
 classified unavailable rather than pass. The one-million-owner public workflow was not run.
 
+## Current artifact-10 resident deployment
+
+The maintained `lkjournal` bundle remains 685,766 bytes and contains two packages, 2,280 closure
+objects (465,145 object bytes), 120 compiler units, and one artifact segment. Strict reload observed
+the same 2,280 objects and object bytes. Its manifest is
+`artifact_manifest_97447a36407a29bb2b979ac42191d774334e661d799f65399b6eba904d593834`
+and bundle identity is
+`artifact_bundle_f29713ff437662d63d9b93514c97b007815c43f185a9eba4498ecb700a276501`.
+
+The local campaign host freshly rebuilt and byte-compared that bundle, then classified live service
+acceptance unavailable because Docker was absent; the preliminary run took 1.192 seconds and is not
+a service latency result. The supported copied-binary HTTP/worker/PostgreSQL observations, including
+readiness, per-request, worker, shutdown, CPU/RSS, backup, object, authority-inventory, and evidence
+sizes, are owned by
+[`202608272159-artifact10-service-cutover.json`](evidence/202608272159-artifact10-service-cutover.json).
+Filesystem cache state, scheduler noise, container startup, PostgreSQL behavior, and hosted-runner
+sampling remain uncontrolled point-observation limitations. No SLO or provider-cost inference is
+made.
+
+The assembled release-mode product candidate was 15,386,696 bytes, 1,118,240 bytes smaller than
+the published `v0.1.4` executable observation. Its preliminary product profile passed 16/16 fresh
+gates in 240.796 seconds with no reuse. This size difference is contraction evidence, not a general
+binary-size trend; the exact final full profile remains the completion authority.
+
 ## Historical compiler, service, and verification receipts
 
 Before the current cutover, graph packages passed 6 standard and 11 `lkjournal` tests with

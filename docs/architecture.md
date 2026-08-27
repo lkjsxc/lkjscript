@@ -100,16 +100,16 @@ content defect uses a new patch identity rather than mutation.
 | Query | `platform/normalized_query`, publication read views | revision-pinned owner, namespace, and relation reads with logical continuations | mutable cursors or repair |
 | Package boundary | `platform/package_interface`, `platform/package_transport`, `platform/builtin_standard` | exact public interfaces, closure transport, one validated embedded standard dependency | a general registry or ambient resolver |
 | Compiler/cache | `platform/compiler` | deterministic compiler units, exact manifest, clean/incremental derived cache, linker, artifact 10 | accepted semantic identity |
-| Normalized execution | `platform/execution/normalized` | dense runtime indexes, VM, canonical reference interpreter, tests and pure commands | semantic publication or live deployment grants |
+| Normalized execution | `platform/execution/normalized` | dense runtime indexes, VM, canonical reference interpreter, tests, commands, resident HTTP/worker execution, exact capability bindings | semantic publication or deployment authority |
 | Derived output | `platform/owned_output` | bounded synchronized create-new file publication | overwrite or semantic visibility |
-| Frozen service runtime | `platform/artifact.rs`, legacy `platform/execution`, deployment/adapters | strict read-only artifact-4 loading and current service/worker host mechanics | editable Graph 4 authority or current builds |
+| Standalone deployment | `platform/deployment.rs`, normalized deployment/adapters, representation-neutral database/object/queue engines | strict artifact-10 loading, target/grant/preflight binding, adapter ownership, HTTP/worker lifecycle | project discovery, accepted publication, or application policy |
 | Contributor verification | `tools/lkjscript-dev` | gate DAG, fingerprints, classifications, logs, receipts, product/service evidence | product authority |
 | Release distribution | `tools/lkjscript-dev` release tooling, `.github/workflows/release.yml` | deterministic package validation, transient handoff, immutable publication, anonymous transport verification | program meaning, compiler/runtime authority, or build provenance |
 
 The old `SemanticWorkspace`, predecessor repository writer, drafts, history/diff/merge workflows,
-backup/restore, review projection, and query indexes have no current consumer and are deleted. Old
-meaning/artifact/runtime types remain only where the frozen artifact-4 service boundary or an
-implementation-disjoint test oracle requires them.
+backup/restore, review projection, query indexes, artifact-4 reader/runtime, and predecessor value
+representation have no current consumer and are deleted. The source-era parser remains only as an
+implementation-disjoint language test oracle; it has no public project or deployment path.
 
 ## Authority, identity, and storage
 
@@ -185,26 +185,43 @@ Build output uses a sibling stage, file synchronization, create-new hard-link vi
 directory synchronization, and cleanup of only its owned stage. Existing files, directories,
 symlinks, invalid parents, and byte-limit exhaustion reject without a partial visible artifact.
 
-## Frozen service separation
+## Standalone artifact-10 deployment
 
-The retained service path is intentionally outside the current compiler/artifact pipeline:
+Resident deployment consumes immutable derived execution and external operational authority
+without entering the editable project lifecycle:
 
 ```text
-deployment descriptor
-      + frozen-service/lkjournal-artifact-v4.lkja (exact digest)
-      + environment and generic host adapters
+strict deployment descriptor + relative artifact-10 bundle
                          │
                          ▼
-             legacy prepared artifact runtime
+             strict loader + NormalizedProgram
                          │
-                  serve / worker
+              exact target / component / requirements
+                         │
+       grants + secrets + adapter construction/preflight
+                         │
+              normalized resident VM exactly once
+                  ┌──────┴──────┐
+                  ▼             ▼
+                serve         worker
+                  │             │
+                  └──────┬──────┘
+                         ▼
+       normalized capability codecs at artifact edge
+                         │
+     representation-neutral PostgreSQL/object/queue engines
 ```
 
-`PreparedDeployment::load` consumes descriptor, artifact, environment, and adapters only. The
-service harness copies those inputs to an isolated directory and verifies the frozen artifact
-digest before launch. It never opens `applications/lkjournal` as editable authority. A later
-campaign must move effectful deployment to artifact 10 before normalized service completion can be
-claimed.
+`PreparedDeployment::load` consumes descriptor, artifact, environment, and named host resources
+only. It retains the exact bundle/manifest/root/revision/state identities internally, constructs
+adapters in deterministic order, and emits readiness only after validation and required preflight.
+Preparation failure shuts down every already-created adapter in reverse order; resident shutdown
+stops admission, drains/cancels bounded work, and records adapter cleanup exactly once.
+
+The service harness freshly builds `lkjournal`, requires byte equality with the checked-in bundle,
+then stages only a copied binary, the bundle, descriptors, configuration/secrets, a local object
+directory, and PostgreSQL coordinates. It snapshots canonical Graph authority before and after the
+live HTTP/worker/restart workflow. No deployment path opens or advances accepted `HEAD`.
 
 ## Security and replaceability
 

@@ -164,13 +164,12 @@ are not duplicated. Run never advances authority.
 ## Serve and worker
 
 `serve --deployment DESCRIPTOR` and `worker --deployment DESCRIPTOR` are resident artifact-runtime
-operations, not current graph build commands. Their descriptors reference the explicitly isolated,
-digest-pinned frozen artifact-4 input. Loading reads descriptor, artifact, environment, and host
-adapters only; it does not discover a repository. Resident events are bounded and resources are
-released on failure, cancellation, exhaustion, and shutdown.
-
-This retained boundary does not claim normalized service/worker compilation. The plaintext HTTP
-and `NoTls` PostgreSQL adapters require an external trusted encryption boundary.
+operations, not current graph build commands. Their descriptors reference an explicitly isolated
+artifact-10 bundle. Loading reads descriptor, artifact, environment, and named host resources only;
+it does not discover a repository. Preparation resolves the exact target and grants before
+readiness, and `artifact_digest` is the domain-tagged artifact bundle identity. Resident events are
+bounded and resources are released on failure, cancellation, exhaustion, and shutdown. The
+plaintext HTTP and `NoTls` PostgreSQL adapters require an external trusted encryption boundary.
 
 ## Removed behavior and non-goals
 

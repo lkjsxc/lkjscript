@@ -107,9 +107,10 @@ implementation-disjoint canonical reference interpreter. Both read the same exac
 revision and artifact closure. A disagreement is failure. Live external effects are never
 duplicated to obtain a differential result.
 
-`serve` and `worker` currently consume an explicitly digest-pinned frozen artifact-4 file and
-external deployment descriptors. That read-only artifact runtime does not open editable Graph 4
-authority, produce a current artifact, or establish normalized service completion.
+`serve` and `worker` consume an explicitly selected immutable artifact-10 bundle and external
+deployment descriptors. Standalone preparation does not open editable Graph authority or advance
+`HEAD`. The bundle remains derived execution input; descriptors, secrets, grants, and host
+resources remain external operational authority.
 
 ## Compatibility and security
 

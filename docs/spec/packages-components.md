@@ -97,9 +97,11 @@ binds requirement aliases to generic adapters and secret/configuration sources, 
 limits/topology. Application routes, SQL, authorization, representations, object keys, and queue
 transitions belong in graph meaning; Rust owns generic host mechanisms.
 
-Current `serve` and `worker` descriptors select the separately named frozen artifact-4 file. That
-runtime is read-only and does not open an editable predecessor repository. Artifact 10 deployment
-and effectful reference/replay closure remain a future cutover.
+Current `serve` and `worker` descriptors select the maintained artifact-10 bundle. Standalone
+preparation strictly loads the bundle without project discovery, resolves the exact root-package
+target, component, runner, and complete requirement closure, then binds external grants. Live
+effects execute once through the normalized production VM; reference execution remains limited to
+pure or deterministic oracle work and never repeats external effects.
 
 The HTTP listener is plaintext and PostgreSQL uses `NoTls`. Encrypted transport requires an
 external trusted boundary or a future explicitly selected adapter; no TLS or certificate machinery

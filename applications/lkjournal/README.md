@@ -21,6 +21,7 @@ Current normalized identity:
 - semantic revision: `rev_0f660831701b710fc7cd6e5f2c87cd754a944adc4ce77e1aca4649711946b4db`;
 - semantic state: `semantic_state_067e2ba593a62c71757d24aaf717ddf28027454bf11b623e292d939120520cd4`;
 - artifact manifest: `artifact_manifest_97447a36407a29bb2b979ac42191d774334e661d799f65399b6eba904d593834`;
+- artifact bundle: `artifact_bundle_f29713ff437662d63d9b93514c97b007815c43f185a9eba4498ecb700a276501`;
 - 1,313 root semantic owners and one exact built-in standard dependency.
 
 ## Inspect and verify current authority
@@ -50,19 +51,22 @@ It contains no grants, credentials, listener address, host paths, or deployment 
 
 ## Current service and worker boundary
 
-Released `serve` and `worker` have not yet cut over to artifact 10. They deliberately use the
-separate read-only file `frozen-service/lkjournal-artifact-v4.lkja`, SHA-256
-`d0a57a74161903a302472cbd8997762434b64cc58bd8ae36577b9ba31d2f96a3`. The deployment
-descriptors refer to that exact path. The service harness verifies its digest and copies only the
-descriptor/artifact runtime inputs to an isolated run; it never opens this Graph 5 repository.
+Both maintained deployment descriptors name `generated/lkjournal.lkja`, the 685,766-byte
+artifact-10 bundle above (SHA-256
+`80c69d69aec80e49cc0c023ec65eef3106f4a876eff1dc347defb461f3037ccb`). `serve` resolves target
+`serve`; `worker` resolves target `work`. Preparation strictly loads the standalone bundle,
+validates the runner, exact component requirement closure, grants, secrets, and adapters, and emits
+readiness only after required PostgreSQL and queue preflight. It does not discover this Graph 5
+repository or read accepted `HEAD`.
 
-To exercise that retained service behavior, create an empty PostgreSQL database and bind the two
-named secrets without committing their values:
+To exercise the service, create an empty PostgreSQL database and the configured local object host
+directory, then bind the two named secrets without committing their values:
 
 ```sh
 export LKJOURNAL_DATABASE_URL='postgresql://operator:password@127.0.0.1/lkjournal'
 export LKJOURNAL_BOOTSTRAP_TOKEN='replace-with-a-random-bootstrap-token'
 cd applications/lkjournal
+mkdir -p state/objects
 ../../target/release/lkjscript serve --deployment service.deployment.json
 ../../target/release/lkjscript worker --deployment worker.deployment.json
 ```
@@ -72,9 +76,10 @@ requests, bounds request bodies to 8 MiB and response bodies to 4 MiB, and assig
 operational deadline. The worker runs at most two tasks. Deployment JSON is operational authority,
 not program meaning.
 
-This frozen artifact proves only retained service behavior. It is not the current `lkjournal`
-build, cannot regenerate the Graph 5 repository, and is not evidence of normalized service/worker
-completion.
+PostgreSQL, local/S3 object, and memory/PostgreSQL queue mechanisms are representation-neutral host
+engines with exact normalized codecs at the artifact edge. A common sharing-domain expresses common
+operational authority; the current descriptors still construct separate concrete pools per grant.
+Live effects run once through the production VM and never through differential replay.
 
 ## Routes
 
@@ -110,7 +115,10 @@ hostile-code or multi-tenant sandbox.
 cargo run --locked -p lkjscript-dev -- service --binary target/release/lkjscript
 ```
 
-The acceptance tool requires the cached Linux amd64 image
+The acceptance tool first builds through the public command and requires byte equality with the
+checked-in bundle. It stages only the copied binary, artifact, descriptors, configuration/secrets,
+local object directory, and PostgreSQL coordinates; it snapshots canonical Graph authority before
+and after. It requires the cached Linux amd64 image
 `postgres@sha256:075f7ba66bc9b3ce7d6b8b635208ff61cd7cf1a67d71ec530eec5d7ae0cbe571`.
 It never resolves or pulls a mutable image name itself. It starts an isolated database, exercises
 live HTTP and worker paths, performs `pg_dump`/`pg_restore`, restarts, and retains bounded evidence

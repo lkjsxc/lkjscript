@@ -9,15 +9,18 @@ not own application authentication/authorization policy, semantic identity, or o
 A deployment descriptor is strict JSON contract 1, at most 1 MiB and 1,024 grants. It names a
 relative component artifact, exact target, optional listener, resident/execution/HTTP/worker/stream
 limits, typed configuration map, secret environment bindings, and grants. Relative paths reject
-absolute, backslash, empty, `.` and `..` components. The deployment directory is a trusted operator
-boundary.
+absolute, backslash, empty, `.` and `..` components. Artifact paths and local object roots reject
+symbolic-link components; artifacts must be regular files and local roots must be existing real
+directories. The deployment directory is a trusted operator boundary.
 
-Preparation bounds and decodes the descriptor/artifact, prepares the exact target, loads named
-secrets, constructs adapters, computes redacted descriptor digests, verifies requirement/grant
-equality and runner-specific descriptors, and only then permits readiness/listener admission.
-Artifacts contain none of these deployment facts.
+Preparation bounds and decodes the descriptor and artifact-10 bundle, validates the bundle digest
+and exact root target/component/runner/requirement closure, then loads named secrets, constructs
+and preflights adapters, computes redacted descriptor digests, and only then permits readiness or
+listener/worker admission. A failure closes already-created adapters and emits no ready event or
+application work. Artifacts contain none of these deployment facts.
 
-`deployment inspect` returns public descriptor structure; runtime readiness returns artifact digest,
+`deployment inspect` returns public descriptor structure; runtime readiness returns the
+domain-tagged artifact-bundle digest,
 target, runner, listener, typed configuration observation, secret names, and adapter kinds. Secret
 bytes, database/object credentials, password inputs, and live handles are omitted. Startup failure
 publishes no application work.
@@ -57,12 +60,12 @@ or application policy, not this adapter.
 
 Current descriptor adapters are configuration, wall clock, secure randomness, UUID identifier,
 password hash, secret verifier, byte stream, PostgreSQL, memory/local/S3 object, and memory/
-PostgreSQL durable queue. Sharing domain identifies intentional resource sharing; authority revision
-and descriptor digest identify the exact operational binding. Neither becomes program semantic
-identity.
+PostgreSQL durable queue. Sharing domain identifies common operational authority; it does not by
+itself require two grants to share one concrete pool. Authority revision and descriptor digest
+identify the exact operational binding. None becomes program semantic identity.
 
 Adapters acquire live resources during preparation or calls, retain them only within deployment or
-task scope, reject use after close, and receive an idempotent shutdown after admission stops. A
+task scope, reject use after close, and receive one recorded idempotent shutdown after admission stops. A
 restart re-reads descriptor/artifact/secrets and reconstructs database/object/queue authority; pools,
 streams, task IDs, random state, connections, and compiled code are disposable.
 

@@ -177,18 +177,25 @@ The standard package and `lkjournal` are Graph 5 repositories and use the same l
 Their checked-in files under `generated/` are deterministic current outputs. The standard artifact
 and transport also own the executable's built-in bytes.
 
-`serve` and `worker` are deliberately separate. They currently load the explicitly named frozen
-artifact-4 file under `applications/lkjournal/frozen-service/` plus deployment descriptors and
-host adapters. They do not open an editable project repository, and the frozen artifact is not a
-current build output or evidence of normalized service completion:
+`serve` and `worker` load the standalone artifact-10 bundle named by their strict deployment
+descriptors and prepare the selected target through the same normalized VM used by current graph
+execution. The maintained descriptors name `generated/lkjournal.lkja`; a fresh public build must
+be byte-equal to that file. Preparation reads the descriptor, its relative regular artifact,
+configuration, named secrets, and host resources only. It does not discover or open editable
+project authority:
 
 ```sh
 export LKJOURNAL_DATABASE_URL='postgresql://operator:password@127.0.0.1/lkjournal'
 export LKJOURNAL_BOOTSTRAP_TOKEN='replace-with-a-random-bootstrap-token'
 cd applications/lkjournal
+mkdir -p state/objects
 ../../target/release/lkjscript serve --deployment service.deployment.json
 ../../target/release/lkjscript worker --deployment worker.deployment.json
 ```
+
+Readiness binds the domain-tagged `artifact_bundle_...` identity after exact target, requirement,
+grant, secret, adapter, and external-authority preflight. HTTP and worker effects execute once
+through production; only pure deterministic behavior uses the reference interpreter.
 
 The HTTP listener is plaintext and PostgreSQL uses `NoTls`; encrypted transport requires an
 external trusted boundary.

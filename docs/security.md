@@ -46,13 +46,14 @@ filesystems and platforms not covered by retained evidence are not claimed.
 
 | Threat | Implemented control | Residual assumption |
 |---|---|---|
+| Deployment artifact substitution | strict relative regular path, symlink-component rejection, artifact-10 contract/checksum/digest validation, exact root target and requirement closure before secrets or readiness | deployment directory and descriptor author are trusted operational authority |
 | Capability confusion | exact interface/operation/alias/limit requirement and deployment grant equality | deployment author chooses appropriate authority |
 | Secret disclosure | environment acquisition into opaque redacted values; no durable graph or artifact secret | OS environment and administrator are trusted |
 | SQL injection | graph-owned statements require `StaticText`; values use typed parameters | authored static SQL is trusted and reviewed |
 | Cross-actor access | graph-owned session and owner checks with deterministic denial tests | one PostgreSQL authority is trusted |
 | Password theft | bounded Argon2 hashes, random salt, generic verification | deployment protects transport and database |
 | Request denial | bounded headers/body/admission/tasks/streams and operational deadlines | no per-IP limiter or TLS proxy is included |
-| Object overwrite or traversal | validated opaque keys/prefixes, no-replace publication, checksums | object root and credentials are operator-controlled |
+| Object overwrite or traversal | existing real local-root components, validated opaque keys/prefixes, no-replace publication, checksums | object root and credentials are operator-controlled |
 | Possibly visible external write | closed `possible_visibility` failure plus application reconciliation | provider truth remains external authority |
 | Duplicate background work | idempotency key, exact attempt/lease owner, stale completion rejection | handlers keep domain publication idempotent |
 | Diagnostic leakage | closed projections, bounded excerpts, secret redaction | graph-authored response text is trusted |
@@ -69,9 +70,10 @@ mechanics; Argon2 and OS randomness own cryptographic mechanics. Locked dependen
 unsafe code outside the first-party prohibition.
 
 The predecessor parser has no public CLI or application-development path. Its remaining callers are
-Rust-test fixtures that provide an independent semantic and execution oracle. Fixture text is not
-maintained program authority. Source-era project markers and predecessor artifact/store contracts
-reject at public boundaries; there is no fallback decoder.
+Rust-test fixtures that provide an independent structural language oracle. Fixture text is not
+maintained program authority. The predecessor value, VM, capability, artifact, and adapter stack is
+deleted. Source-era project markers and predecessor artifact/store contracts reject at public
+boundaries; there is no fallback decoder.
 
 Explicit rank-1 type substitution and named pure function values are validated before preparation.
 Type parameters have distinct stable IDs, calls require exact type-argument arity, generic task

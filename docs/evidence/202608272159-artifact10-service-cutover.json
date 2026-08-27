@@ -1,0 +1,266 @@
+{
+  "schema": {
+    "identity": "lkjscript-artifact10-service-cutover-evidence",
+    "version": 1
+  },
+  "campaign": "202608272159",
+  "repository": "lkjsxc/lkjscript",
+  "baseline": {
+    "branch": "main",
+    "head": "7ae1ec9fcfe62ec481f0bca979f7d086181d1250",
+    "origin_main": "7ae1ec9fcfe62ec481f0bca979f7d086181d1250",
+    "orientation_equal_to_head": true,
+    "pre_existing_work_preserved": [
+      "modified root AGENTS.md",
+      "untracked campaign mandate docs/campaigns/202608272159.md"
+    ],
+    "artifact4": {
+      "path": "applications/lkjournal/frozen-service/lkjournal-artifact-v4.lkja",
+      "contract": "lkjscript-artifact-4",
+      "sha256": "d0a57a74161903a302472cbd8997762434b64cc58bd8ae36577b9ba31d2f96a3"
+    },
+    "product_receipt": {
+      "path": ".artifacts/lkjscript-dev/check/1787840005178092626-2457500-0/receipt.json",
+      "digest": "verification_5dd5094cf5e65dc79542a29e48faec684398569a49ed243cc929b8682f671c49",
+      "classification": "fresh_passed",
+      "gates_passed": 16
+    },
+    "service_receipt": {
+      "path": ".artifacts/lkjscript-dev/check/1787840013110624708-2458104-0/receipt.json",
+      "digest": "verification_705ba1ae3e86ddff8ea74f4fca9a64d15655026cbb07ad3d219c73a1bd4c01b6",
+      "passed_gates": 5,
+      "live_service": "unavailable_local_docker"
+    },
+    "published_v0_1_4_observations": {
+      "full_elapsed_nanoseconds": 287874000000,
+      "service_elapsed_nanoseconds": 3937000000,
+      "service_peak_rss_kib": 8092,
+      "linux_executable_bytes": 16504936
+    }
+  },
+  "authority": {
+    "editable_contract": "lkjscript-meaning-graph-5",
+    "repository": "repo_95f988c5423fe3eb823c329ef0832d51",
+    "package": "pkg_20000000000000000000000000000001",
+    "revision": "rev_0f660831701b710fc7cd6e5f2c87cd754a944adc4ce77e1aca4649711946b4db",
+    "semantic_state": "semantic_state_067e2ba593a62c71757d24aaf717ddf28027454bf11b623e292d939120520cd4",
+    "package_revision": "package_revision_420eb96689c2d10215a26b0863dab7adb96a76d1fbfd07dae65c94a573581ed6",
+    "semantic_change": "none",
+    "deployment_repository_access": "forbidden_and_black_box_tested",
+    "live_before_after_inventory": "owned_by_final_service_receipt"
+  },
+  "artifact": {
+    "path": "applications/lkjournal/generated/lkjournal.lkja",
+    "contract": "lkjscript-artifact-bundle-10",
+    "manifest_contract": "lkjscript-artifact-manifest-10",
+    "bundle": "artifact_bundle_f29713ff437662d63d9b93514c97b007815c43f185a9eba4498ecb700a276501",
+    "manifest": "artifact_manifest_97447a36407a29bb2b979ac42191d774334e661d799f65399b6eba904d593834",
+    "compilation_manifest": "compilation_manifest_f44092df603712f7e0e6bdeced28b3565338c961bf004e94d009801aadd5bef8",
+    "sha256": "80c69d69aec80e49cc0c023ec65eef3106f4a876eff1dc347defb461f3037ccb",
+    "bytes": 685766,
+    "packages": 2,
+    "compiler_units": 120,
+    "closure_objects": 2280,
+    "manifest_object_bytes": 465145,
+    "segments": 1,
+    "load_objects": 2280,
+    "load_object_bytes": 465145,
+    "fresh_public_build_equal": true,
+    "targets": {
+      "serve": "target_e6f0a45c5f938ba39a19de585e8fc0d7",
+      "work": "target_3608e4377fe1adb3ef15e610a9b5e0e5"
+    }
+  },
+  "public_contracts": {
+    "registry": "lkjscript-contract-registry-3",
+    "registry_digest": "0bb0a7e50a31e94660d9dd1fd6466ba2cbf5d811a79044220d788d626f62d2d7",
+    "cli": "lkjscript-cli-10",
+    "deployment": "lkjscript-deployment-1",
+    "capability_grant": "lkjscript-capability-grant-1",
+    "resident_runtime": "lkjscript-resident-runtime-1",
+    "ready_stopped_event_contract": 1,
+    "grammar_change": "none",
+    "ready_artifact_digest": "domain_tagged_artifact_bundle_identity"
+  },
+  "implementation": {
+    "verified_implementation_sha": null,
+    "final_evidence_sha": null,
+    "public_behavior": [
+      "serve and worker strictly load one standalone artifact-10 bundle",
+      "exact root target, runner, component requirements, grants, secrets, and adapters validate before readiness",
+      "HTTP and worker invoke the normalized resident VM exactly once for live effects",
+      "preparation failure closes already-created adapters and emits no readiness",
+      "shutdown stops admission, drains or cancels bounded tasks, and records cleanup exactly once"
+    ],
+    "representation_neutral_host_engines": [
+      "PostgreSQL pool, static SQL, transactions, migrations, cancellation, and preflight",
+      "memory/local/S3 object mechanics, no-replace streaming, checksums, reconciliation, and cleanup",
+      "memory/PostgreSQL queue initialization, idempotency, lease, heartbeat, completion, retry, cancel, and inspection"
+    ],
+    "normalized_adapter_families": [
+      "configuration",
+      "secret_verifier",
+      "wall_clock",
+      "secure_random",
+      "identifier",
+      "password_hash",
+      "byte_stream",
+      "postgres",
+      "object_memory",
+      "object_local",
+      "object_s3",
+      "durable_queue_memory",
+      "durable_queue_postgres"
+    ],
+    "sharing_domain_result": "expresses common operational authority; current grants construct separate concrete pools",
+    "object_streaming_result": "task-scoped bounded streams apply backpressure without whole-object buffering",
+    "explicit_cleanup": "PostgreSQL pools and PostgreSQL queue pools close idempotently; task streams close by scope; object stores use provider drop plus per-operation abort/temp cleanup"
+  },
+  "deletions": {
+    "paths": [
+      "applications/lkjournal/frozen-service/lkjournal-artifact-v4.lkja",
+      "src/platform/artifact.rs",
+      "src/platform/execution/capability.rs",
+      "src/platform/execution/compiler.rs",
+      "src/platform/execution/intrinsic.rs",
+      "src/platform/execution/reference.rs",
+      "src/platform/execution/vm.rs",
+      "src/platform/value.rs"
+    ],
+    "symbol_families": [
+      "artifact-4 reader and encoder",
+      "legacy PreparedProgram, compiler, VM, reference interpreter, intrinsic dispatcher, values, grants, and capability binding",
+      "legacy ResidentDeployment, HttpApplication, WorkerApplication, stream adapter, configuration, secret, security, PostgreSQL, object, and queue wrappers",
+      "frozen_service_artifact generated registry entry and current documentation"
+    ],
+    "permitted_predecessor_references": [
+      "minimal LKJART04 public rejection fixture in tests/general_service.rs",
+      "completed campaigns, decisions, and historical evidence",
+      "current documentation statements that the predecessor closure was deleted"
+    ]
+  },
+  "design_corrections": [
+    {
+      "mandate_assumption": "deployment JSON carries an independently editable exact operation and limit set",
+      "checkout_evidence": "deployment contract 1 carries requirement alias, sharing domain, authority revision, and adapter configuration; exact operations and semantic limits are immutable artifact requirements",
+      "correction": "derive the complete exact normalized grant descriptor from the artifact requirement and hash it with external operational binding data instead of creating a second authority"
+    },
+    {
+      "mandate_assumption": "a common sharing domain might imply a shared concrete pool",
+      "checkout_evidence": "no maintained descriptor or host-core contract defines cross-grant pool identity",
+      "correction": "preserve separate pools and document sharing domain as common operational authority only"
+    },
+    {
+      "mandate_assumption": "all predecessor parser/value modules might be independent oracles",
+      "checkout_evidence": "the source-era parser remains used by structural language tests; the predecessor Value and typed JSON codec had only self-tests",
+      "correction": "retain the parser oracle and delete the unused predecessor value/typed-codec closure"
+    }
+  ],
+  "focused_verification": [
+    {
+      "command": "cargo test --locked --lib normalized",
+      "classification": "fresh_passed",
+      "passed": 56,
+      "failed": 0
+    },
+    {
+      "command": "cargo test --locked --lib database",
+      "classification": "fresh_passed",
+      "passed": 5,
+      "failed": 0
+    },
+    {
+      "command": "cargo test --locked --lib object",
+      "classification": "fresh_passed",
+      "passed": 17,
+      "failed": 0
+    },
+    {
+      "command": "cargo test --locked --lib queue",
+      "classification": "fresh_passed",
+      "passed": 6,
+      "failed": 0
+    },
+    {
+      "command": "cargo test --locked --test general_service",
+      "classification": "fresh_passed",
+      "passed": 8,
+      "failed": 0
+    },
+    {
+      "command": "cargo test --locked -p lkjscript-dev service",
+      "classification": "fresh_passed",
+      "passed": 8,
+      "failed": 0
+    },
+    {
+      "command": "cargo run --locked -p lkjscript-dev -- service --binary target/debug/lkjscript --machine",
+      "classification": "unavailable",
+      "elapsed_nanoseconds": 1192326169,
+      "reason": "docker command absent",
+      "receipt": ".artifacts/lkjscript-dev/service/1787846833794122612-2542974-0/receipt.json",
+      "receipt_digest": "verification_d11f0219bece04a238de2f996174bdb3525081d4ac7e4af2e99653a1f61b938a"
+    },
+    {
+      "command": "cargo run --locked -p lkjscript-dev -- check product --machine",
+      "classification": "fresh_passed_before_receipt_was_recorded_in_tracked_evidence",
+      "passed": 16,
+      "fresh": 16,
+      "reused": 0,
+      "elapsed_nanoseconds": 240796354400,
+      "receipt": ".artifacts/lkjscript-dev/check/1787847750340219679-2555494-0/receipt.json",
+      "receipt_digest": "verification_beb0b9c048bb2b63cfbda27f9a618927e059b8f3b44e6fd016a1981df7c6d4ea"
+    }
+  ],
+  "final_verification": {
+    "command": "cargo run --locked -p lkjscript-dev -- check full --machine",
+    "classification": "pending_immutable_implementation_commit",
+    "receipt": null,
+    "receipt_digest": null,
+    "input_stable": null,
+    "fresh_required": true,
+    "fresh_passed": 0,
+    "reused_passed": 0,
+    "skipped": 0,
+    "unavailable": 0,
+    "failed": 0,
+    "hosted_workflow": null,
+    "publish": false,
+    "release_or_tag_created": false
+  },
+  "measurements": {
+    "filesystem_cache": "uncontrolled",
+    "cpu_resolution_nanoseconds": 10000000,
+    "external_service_noise": "uncontrolled",
+    "provider_telemetry": "unavailable",
+    "preliminary_local_service": {
+      "classification": "unavailable",
+      "elapsed_nanoseconds": 1192326169,
+      "commands_completed_before_unavailability": 2,
+      "retries": 0
+    },
+    "preliminary_product": {
+      "elapsed_nanoseconds": 240796354400,
+      "release_binary_bytes": 15386696,
+      "baseline_release_binary_bytes": 16504936,
+      "release_binary_byte_delta": -1118240,
+      "fresh_gates": 16,
+      "reused_gates": 0
+    },
+    "final_copied_binary_service": null
+  },
+  "limitations": [
+    "HTTP listener remains plaintext",
+    "PostgreSQL transport remains NoTls",
+    "no hostile-code sandbox or multi-tenant isolation",
+    "no cross-system atomicity or exactly-once external effects",
+    "S3 mechanics retain focused coverage but no live S3 acceptance",
+    "the immutable v0.1.4 public release predates this cutover and is not mutated by this campaign"
+  ],
+  "completion": {
+    "status": "pending_fresh_hosted_full_verification",
+    "normal_push": null,
+    "origin_main_equals_final_head": null,
+    "working_tree": "pending final assembly; pre-existing AGENTS.md modification preserved"
+  }
+}

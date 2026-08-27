@@ -63,11 +63,11 @@ execution, build deterministic artifact 10, and match their checked-in generated
 package, target, test, dependency, and public-interface inventories must be retained in migration
 or lifecycle evidence.
 
-Service verification separately copies the frozen artifact-4 input and deployment descriptors to
-an isolated run, checks the artifact's exact digest, launches `serve`/`worker`, and exercises the
-maintained external workflow. It must audit that no project marker or repository path is opened.
-A passed frozen service gate proves retained service behavior only; it does not prove normalized
-artifact-10 deployment.
+Service verification freshly builds `lkjournal` through the public binary, requires byte equality
+with the checked-in artifact-10 bundle, and copies the bundle plus deployment descriptors to an
+isolated run. It validates exact bundle/manifest/root/revision/state identity, launches
+`serve`/`worker`, and exercises the maintained external workflow. It must audit that no project
+marker or repository path is opened and that canonical Graph authority is unchanged before/after.
 
 If PostgreSQL/container/environment prerequisites are absent, service is `unavailable` with an
 exact reason. Unavailable is never rewritten as pass or silently omitted.
@@ -82,8 +82,8 @@ cargo run --locked -p lkjscript-dev -- check PROFILE
 
 `focused` runs narrow format/library/public checks. `changed` selects by exact changed inputs and
 widening rules. `product` builds release and verifies copied-binary workflows, maintained Graph 5
-consumers, generated docs, and built-in/generated assets. `service` owns isolated frozen service
-acceptance. `full` owns formatting, lints, workspace targets, all tests, release/product/service
+consumers, generated docs, and built-in/generated assets. `service` owns isolated standalone
+artifact-10 service acceptance. `full` owns formatting, lints, workspace targets, all tests, release/product/service
 classification, and diff checks; final full evidence must be fresh.
 
 The harness owns gate dependencies, exact fingerprints, bounded child logs, required outputs,

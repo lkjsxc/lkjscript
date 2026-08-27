@@ -30,12 +30,11 @@ Maintained derived assets are:
 | `packages/standard/generated/standard.lkjp` | exact built-in package transport, 69,811 bytes | `3031ebba737e219964687b04adf7fb0d320289771635209e2053ff322a739623` |
 | `packages/standard/generated/standard.lkja` | current artifact-10 standard bundle, 182,596 bytes | `7cc4637334751d36f284cd26a394ba885e570aa2e51a366f8ab91c1aea315436` |
 | `applications/lkjournal/generated/lkjournal.lkja` | current artifact-10 application bundle, 685,766 bytes | `80c69d69aec80e49cc0c023ec65eef3106f4a876eff1dc347defb461f3037ccb` |
-| `applications/lkjournal/frozen-service/lkjournal-artifact-v4.lkja` | read-only artifact-4 service/worker input | `d0a57a74161903a302472cbd8997762434b64cc58bd8ae36577b9ba31d2f96a3` |
 
 The built-in transport and artifact are compiled into the executable and strictly cross-checked.
-Product verification regenerates the maintained owners and compares exact bytes. The frozen
-service artifact is separately digest-pinned by the service harness and is never compared with or
-overwritten by current `build`.
+Product verification regenerates maintained owners and compares exact bytes. Service verification
+also performs a fresh public `lkjournal` build, requires byte equality with the checked-in bundle,
+and stages that one artifact for isolated `serve` and `worker` acceptance.
 
 ## Public binary release
 
@@ -59,13 +58,15 @@ under one `lkjscript/` directory. The release path is derived distribution evide
 archive, manifest, checksum, GitHub asset digest, and release attestation do not own program
 meaning or establish build provenance. Exact evidence is retained in
 [the public binary release record](evidence/202608271521-public-binary-release.json).
+The artifact-10 service cutover changes the current checkout only; this campaign does not publish
+or mutate a release, so immutable `v0.1.4` predates that cutover.
 
-## Released command lifecycle
+## Current public command lifecycle
 
 CLI contract 10 exposes exactly `capabilities`, `new`, `status`, `inspect`, `query`, `change`,
 normalized built-in `package`, `check`, `build`, `run`, and artifact-runtime `serve` and `worker`.
 All finite operations use deterministic bounded compact records. The registry digest is
-`c63d0c4653d6de50e6f375d6da14bfb9101bba5a438aba5c0ae10a9dd27dbc43` for the current generated
+`0bb0a7e50a31e94660d9dd1fd6466ba2cbf5d811a79044220d788d626f62d2d7` for the current generated
 content.
 
 `new --template minimal` creates an empty package. `new --template command` creates an offline,
@@ -106,14 +107,18 @@ fallback reader, graph selector, converter, or dual write.
 
 ## Runtime boundary
 
-Normalized production and reference execution support pure commands and graph tests, plus private
-normalized adapter machinery covered by focused tests. The released `run` operation deliberately
-rejects non-command runners and effectful command entry points.
+Normalized production and reference execution support pure commands and graph tests. Public `run`
+deliberately rejects non-command runners and effectful command entry points. Public `serve` and
+`worker` strictly load a standalone artifact-10 bundle, prepare `NormalizedProgram`, resolve the
+selected target and exact component requirement closure, and invoke the normalized resident VM.
+Their descriptors supply configuration, named secrets, adapter selection, external coordinates,
+and topology; deployment preparation never discovers or opens a project repository. Live effects
+execute once through production rather than differential replay.
 
-`serve` and `worker` remain a separate artifact-runtime boundary. `PreparedDeployment` reads a
-strict descriptor, the explicitly referenced frozen artifact-4 bytes, environment/configuration,
-and host adapters. It does not discover or open a project repository. This is retained service
-behavior, not normalized service compilation or artifact-10 deployment support.
+Configuration, secrets, clock, secure randomness, identifiers, password hashing, byte streams,
+PostgreSQL, object storage, and durable queue all have exact normalized capability bindings.
+PostgreSQL, object, and queue codecs use one representation-neutral host engine per family.
+Adapter preparation is all-or-nothing, and repeated shutdown reuses one recorded cleanup outcome.
 
 The HTTP listener is plaintext and PostgreSQL uses `NoTls`. The runtime is not a hostile-code
 sandbox or multi-tenant isolation boundary.
@@ -123,8 +128,8 @@ sandbox or multi-tenant isolation boundary.
 - The only released dependency resolver accepts the exact built-in standard package. There is no
   general package manager, ambient filesystem lookup, mutable tag, network registry, or upgrade
   resolver.
-- Public `run` is pure-command-only. Normalized service, worker, PostgreSQL, queue, object storage,
-  and outbound effect deployment remain future dependency-closed cutovers.
+- Public `run` is pure-command-only. Outbound HTTP and additional effect families are absent until
+  a maintained consumer justifies a dependency-closed capability cutover.
 - Context traversal, generic impact query, fuzzy search, and historical query are absent.
 - Removed draft/history/review/backup/restore/doctor workflows have not yet been reintroduced on
   Graph 5 authority.
@@ -159,4 +164,6 @@ focused, product, full, and service results. The public binary campaign record
 tag, workflow, assets, anonymous downloads, and hosted full verification. Lifecycle measurements
 remain in
 [evidence/202608270014-normalized-command-lifecycle.json](evidence/202608270014-normalized-command-lifecycle.json);
-both campaigns are summarized in [performance.md](performance.md).
+the artifact-10 resident cutover is bound by
+[evidence/202608272159-artifact10-service-cutover.json](evidence/202608272159-artifact10-service-cutover.json).
+These campaigns are summarized in [performance.md](performance.md).
