@@ -114,8 +114,10 @@ tag_object_sha=$(git rev-parse "refs/tags/$release_tag")
 test "$(gh api repos/lkjsxc/lkjscript/immutable-releases --jq '.enabled')" = true
 gh variable set LKJSCRIPT_IMMUTABLE_RELEASE_TAG_OBJECT_SHA \
   --repo lkjsxc/lkjscript --body "$tag_object_sha"
-test "$(gh variable get LKJSCRIPT_IMMUTABLE_RELEASE_TAG_OBJECT_SHA \
-  --repo lkjsxc/lkjscript)" = "$tag_object_sha"
+test "$(gh variable list --repo lkjsxc/lkjscript \
+  --json name,value \
+  --jq '.[] | select(.name == "LKJSCRIPT_IMMUTABLE_RELEASE_TAG_OBJECT_SHA") | .value')" \
+  = "$tag_object_sha"
 git push origin "refs/tags/$release_tag"
 ```
 
