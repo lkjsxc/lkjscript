@@ -110,7 +110,9 @@ hostile-code or multi-tenant sandbox.
 cargo run --locked -p lkjscript-dev -- service --binary target/release/lkjscript
 ```
 
-The acceptance tool requires a cached `postgres:16-alpine` image. It starts an isolated database,
-exercises live HTTP and worker paths, performs `pg_dump`/`pg_restore`, restarts, and retains bounded
-evidence under `.artifacts/lkjscript-dev/service/`. Missing container/database prerequisites are
-reported as unavailable, never as pass.
+The acceptance tool requires the cached Linux amd64 image
+`postgres@sha256:075f7ba66bc9b3ce7d6b8b635208ff61cd7cf1a67d71ec530eec5d7ae0cbe571`.
+It never resolves or pulls a mutable image name itself. It starts an isolated database, exercises
+live HTTP and worker paths, performs `pg_dump`/`pg_restore`, restarts, and retains bounded evidence
+under `.artifacts/lkjscript-dev/service/`. Missing container/database prerequisites are reported as
+unavailable, never as pass.

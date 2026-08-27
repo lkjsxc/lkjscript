@@ -16,7 +16,8 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const SERVICE_CONTRACT_VERSION: u32 = 1;
-const POSTGRES_IMAGE: &str = "postgres:16-alpine";
+pub(crate) const POSTGRES_IMAGE: &str =
+    "postgres@sha256:075f7ba66bc9b3ce7d6b8b635208ff61cd7cf1a67d71ec530eec5d7ae0cbe571";
 const FROZEN_SERVICE_ARTIFACT_RELATIVE: &str = "frozen-service/lkjournal-artifact-v4.lkja";
 const FROZEN_SERVICE_ARTIFACT_SHA256: &str =
     "d0a57a74161903a302472cbd8997762434b64cc58bd8ae36577b9ba31d2f96a3";
@@ -2207,6 +2208,19 @@ fn print_summary(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn postgres_acceptance_image_is_immutable() {
+        let digest = POSTGRES_IMAGE
+            .strip_prefix("postgres@sha256:")
+            .expect("PostgreSQL image uses a digest reference");
+        assert_eq!(digest.len(), 64);
+        assert!(
+            digest
+                .bytes()
+                .all(|byte| { byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte) })
+        );
+    }
 
     #[test]
     fn unavailable_run_retains_an_atomic_typed_receipt() {

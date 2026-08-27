@@ -39,7 +39,10 @@ generator is `cargo-about` 0.9.2. Its selected release archive has SHA-256
 `9099a59e820c38a68b9d65f300662a567d56562f9a10f6aa4c7e86c17c2566af`; the executable extracted
 from that archive has SHA-256
 `b06bd6a8bfd726cffb90e3e0588e3e0b1cfbb582bf6a34f4c1c2692ba8f2e7b8`. Keep both checks. Update a
-pin only in a reviewed commit that regenerates notices and reruns the release tests.
+pin only in a reviewed commit that regenerates notices and reruns the release tests. Hosted full
+verification provisions the Linux amd64 service dependency by its platform-manifest reference
+`postgres@sha256:075f7ba66bc9b3ce7d6b8b635208ff61cd7cf1a67d71ec530eec5d7ae0cbe571`
+before invoking the otherwise network-independent service harness.
 
 From a clean fast-forward checkout, build and prepare a dry-run package with absolute paths:
 

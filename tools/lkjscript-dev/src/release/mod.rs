@@ -1742,6 +1742,8 @@ mod tests {
         }
         assert!(workflow.contains("persist-credentials: false"));
         assert!(workflow.contains("cancel-in-progress: false"));
+        assert!(workflow.contains(crate::service::POSTGRES_IMAGE));
+        assert!(!workflow.contains("postgres:16-alpine"));
         assert!(workflow.matches("timeout-minutes:").count() >= 3);
     }
 }
