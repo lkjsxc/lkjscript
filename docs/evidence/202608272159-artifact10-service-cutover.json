@@ -47,7 +47,13 @@
     "package_revision": "package_revision_420eb96689c2d10215a26b0863dab7adb96a76d1fbfd07dae65c94a573581ed6",
     "semantic_change": "none",
     "deployment_repository_access": "forbidden_and_black_box_tested",
-    "live_before_after_inventory": "owned_by_final_service_receipt"
+    "live_before_after_inventory": {
+      "files": 13,
+      "bytes": 2386112,
+      "head_sha256": "47513596d7db13b3312d94ac29d6d86b454e2c60464f62d71e89a4f4f4372aba",
+      "inventory_sha256": "46698247386def0c2d6b4b365169e53d3ff4e1c904811d631d69b3003f5e245c",
+      "unchanged": true
+    }
   },
   "artifact": {
     "path": "applications/lkjournal/generated/lkjournal.lkja",
@@ -61,6 +67,7 @@
     "packages": 2,
     "compiler_units": 120,
     "closure_objects": 2280,
+    "manifest_objects": 2280,
     "manifest_object_bytes": 465145,
     "segments": 1,
     "load_objects": 2280,
@@ -83,8 +90,8 @@
     "ready_artifact_digest": "domain_tagged_artifact_bundle_identity"
   },
   "implementation": {
-    "verified_implementation_sha": null,
-    "final_evidence_sha": null,
+    "verified_implementation_sha": "366c421beae95f3e650695cf5304adb4a8e888f5",
+    "evidence_only_completion_commit": "the commit that owns this file; its SHA is reported by the final handoff to avoid self-reference",
     "public_behavior": [
       "serve and worker strictly load one standalone artifact-10 bundle",
       "exact root target, runner, component requirements, grants, secrets, and adapters validate before readiness",
@@ -154,8 +161,24 @@
       "mandate_assumption": "all predecessor parser/value modules might be independent oracles",
       "checkout_evidence": "the source-era parser remains used by structural language tests; the predecessor Value and typed JSON codec had only self-tests",
       "correction": "retain the parser oracle and delete the unused predecessor value/typed-codec closure"
+    },
+    {
+      "mandate_assumption": "the local object adapter could create its configured root during preparation",
+      "checkout_evidence": "creating the root would mutate external host state before readiness and could traverse a symbolic-link component",
+      "correction": "require an existing canonical regular host directory, reject symbolic-link components, and have deployment tooling create the named host resource explicitly"
     }
   ],
+  "empirical_answers": {
+    "maintained_policy": "all nine deterministic lkjournal policy scenarios pass against the unchanged Graph 5 authority and checked-in artifact 10; no semantic graph change was required",
+    "neutral_host_seams": "PostgreSQL uses neutral scalar/row/transaction requests, objects use neutral key/range/metadata/stream requests, and queue uses neutral job/lease/snapshot/result requests; artifact codecs alone use NormalizedValue and exact prepared layouts",
+    "object_streaming": "the existing normalized task resource scope and byte-stream adapter were sufficient; no additional resource operation was required, and pipe tests prove bounded backpressure and scope cleanup",
+    "adapter_cleanup": "PostgreSQL and PostgreSQL-queue pools own explicit idempotent close; normalized stream scopes close leases; object engines retain per-operation abort and temporary-file cleanup with provider resources released by drop",
+    "sharing_domain": "two maintained grants with the same sharing domain express common operational authority but construct separate concrete pools",
+    "event_consumers": "no maintained consumer required artifact-4 digest semantics; event contract 1 carries ArtifactBundleDigest::to_string without a shape change",
+    "remaining_oracles": "the source-era parser remains an implementation-disjoint structural language oracle; the artifact-4 reader, Value model, typed codec, VM, reference, and service fixtures had no independent maintained consumer and were deleted",
+    "live_boundary": "local Docker was unavailable; hosted Release dry-run 33095788182 supplied the mandatory fresh PostgreSQL and copied-binary proof with publish=false",
+    "unresolved_questions": []
+  },
   "focused_verification": [
     {
       "command": "cargo test --locked --lib normalized",
@@ -210,21 +233,121 @@
       "elapsed_nanoseconds": 240796354400,
       "receipt": ".artifacts/lkjscript-dev/check/1787847750340219679-2555494-0/receipt.json",
       "receipt_digest": "verification_beb0b9c048bb2b63cfbda27f9a618927e059b8f3b44e6fd016a1981df7c6d4ea"
+    },
+    {
+      "command": "cargo clippy --workspace --all-targets --all-features --locked -- -D warnings",
+      "classification": "fresh_passed_after_hosted_lint_diagnosis",
+      "failed": 0
+    },
+    {
+      "command": "cargo test --workspace --all-targets --all-features --locked",
+      "classification": "fresh_passed_after_worker_synchronization_correction",
+      "passed": 449,
+      "ignored_release_scale": 2,
+      "failed": 0
+    },
+    {
+      "command": "cargo test --locked --lib artifact10_worker_consumes_one_exact_queue_attempt --quiet",
+      "classification": "fresh_passed_repeated",
+      "repetitions": 50,
+      "failed": 0
     }
   ],
   "final_verification": {
     "command": "cargo run --locked -p lkjscript-dev -- check full --machine",
-    "classification": "pending_immutable_implementation_commit",
-    "receipt": null,
-    "receipt_digest": null,
-    "input_stable": null,
+    "classification": "fresh_passed_hosted",
+    "verified_implementation_sha": "366c421beae95f3e650695cf5304adb4a8e888f5",
+    "receipt": ".artifacts/campaign/202608272159/hosted-33095788182/evidence/check/1787850058644193501-6114-0/receipt.json",
+    "owner_receipt": ".artifacts/lkjscript-dev/check/1787850058644193501-6114-0/receipt.json",
+    "receipt_bytes": 47710,
+    "receipt_sha256": "d0568914316121514aff435c46ef1d5249e397d468965389b6a999f03db990bd",
+    "receipt_digest": "verification_49a6f4f4de0d74bf1b921506935086342573e25c981156bd8364a6e9695468e1",
+    "worktree_input_digest": "verification_d72abf219f5f801bb528fb9c9c540aec626af20881598f85ea4580f14f6ce288",
+    "final_worktree_input_digest": "verification_d72abf219f5f801bb528fb9c9c540aec626af20881598f85ea4580f14f6ce288",
+    "profile_definition_digest": "verification_5ab93f887464a4a656400f0c4529ecc13fa28cb7a00a935eadc6a8edde2851c6",
+    "input_stable": true,
     "fresh_required": true,
-    "fresh_passed": 0,
+    "selected": 20,
+    "fresh_passed": 20,
     "reused_passed": 0,
     "skipped": 0,
     "unavailable": 0,
     "failed": 0,
-    "hosted_workflow": null,
+    "unrun": 0,
+    "elapsed_nanoseconds": 285885869568,
+    "selected_gates": [
+      "fmt",
+      "clippy",
+      "workspace_tests",
+      "release_build",
+      "release_command_lifecycle",
+      "checker_self_test",
+      "rust_only_tooling",
+      "contract_registry_conformance",
+      "standard_package_test",
+      "application_package_test",
+      "standard_artifact_build",
+      "standard_artifact_compare",
+      "builtin_package_export",
+      "builtin_package_compare",
+      "builtin_transport_export",
+      "builtin_transport_compare",
+      "application_artifact_build",
+      "application_artifact_compare",
+      "service_acceptance",
+      "diff_check"
+    ],
+    "hosted_workflow": {
+      "name": "Release",
+      "run_id": 33095788182,
+      "run_attempt": 1,
+      "event": "workflow_dispatch",
+      "url": "https://github.com/lkjsxc/lkjscript/actions/runs/33095788182",
+      "commit": "366c421beae95f3e650695cf5304adb4a8e888f5",
+      "conclusion": "success",
+      "build_verify_package": "success",
+      "publish_immutable_release": "skipped",
+      "verify_anonymous_public_release": "skipped",
+      "evidence_artifact_digest": "sha256:63d74f31862bd5bc179a281c6e4552de33ae8c3dccf04b655dc0923c8fefb702",
+      "handoff_artifact_digest": "sha256:d75efe9a8a81e2fbd6e3d1e30cee934a1a70917535ce6dafa88177522344e35a"
+    },
+    "diagnostic_attempts": [
+      {
+        "run_id": 33093615846,
+        "commit": "4ea2dcc5f9a1bbc090520eb9730c3881acc0ae2b",
+        "classification": "failed",
+        "owner": "clippy",
+        "fresh_passed": 18,
+        "reused_passed": 0,
+        "skipped": 1,
+        "elapsed_nanoseconds": 210375749672,
+        "receipt_digest": "verification_b7590bc3df27b2e4bcbf2bcac7c3851e766513203aa00b13f06edb129c99e9d8",
+        "receipt_sha256": "b44d4ba126dcd669c8850bc4c2189d8546ef252c6df8c1824577b47911e38da8",
+        "correction": "grouped exact adapter preparation dependencies in one typed context"
+      },
+      {
+        "run_id": 33094556459,
+        "commit": "be173bcd2bfeca20fb161d89422d4d6effa25215",
+        "classification": "failed",
+        "owner": "workspace_tests",
+        "fresh_passed": 19,
+        "reused_passed": 0,
+        "skipped": 0,
+        "elapsed_nanoseconds": 288868077333,
+        "receipt_digest": "verification_6229e489a4aeec8b3c41817e9dd542ba48ab5bd7b60f8e42e1a5eff6dc9a8698",
+        "receipt_sha256": "f9aa84ffd2772122fa8dea8edd54119f09238453e8b84dc5283566ca5af1a2f8",
+        "correction": "made the worker test observe a third empty poll so the preceding idle iteration is necessarily counted"
+      },
+      {
+        "run_id": 33095788182,
+        "commit": "366c421beae95f3e650695cf5304adb4a8e888f5",
+        "classification": "fresh_passed",
+        "fresh_passed": 20,
+        "reused_passed": 0,
+        "skipped": 0,
+        "elapsed_nanoseconds": 285885869568
+      }
+    ],
     "publish": false,
     "release_or_tag_created": false
   },
@@ -247,7 +370,125 @@
       "fresh_gates": 16,
       "reused_gates": 0
     },
-    "final_copied_binary_service": null
+    "final_copied_binary_service": {
+      "classification": "fresh_passed_hosted",
+      "receipt": ".artifacts/campaign/202608272159/hosted-33095788182/evidence/service/1787850340544869376-15545-0/receipt.json",
+      "owner_receipt": ".artifacts/lkjscript-dev/service/1787850340544869376-15545-0/receipt.json",
+      "receipt_bytes": 35871,
+      "receipt_sha256": "db1f61d0c17aae5d8ecc84557cc2c7c56610c16785844929ffd79197dffe9c3c",
+      "elapsed_nanoseconds": 3901476866,
+      "aggregate_child_cpu_nanoseconds": 880000000,
+      "aggregate_runner_cpu_nanoseconds": 100000000,
+      "peak_child_rss_kib": 31964,
+      "binary": {
+        "bytes": 15390408,
+        "sha256": "6f3731258e2f695c9ad6a0f8bbcbe02d65cd354cbfbc75738ea227d85804d008",
+        "evidence_digest": "verification_1930604ca1f726984bc11b357d29776fad9aae9620335617e982c9079cb92a83",
+        "baseline_byte_delta": -1114528
+      },
+      "artifact": {
+        "bytes": 685766,
+        "sha256": "80c69d69aec80e49cc0c023ec65eef3106f4a876eff1dc347defb461f3037ccb",
+        "evidence_digest": "verification_9c5795abbf06107b732fa359ca6ff6aeddf8276106b78376d4ae1776da1a89a9",
+        "fresh_build_equal": true
+      },
+      "service_readiness_nanoseconds": 50248489,
+      "restored_service_readiness_nanoseconds": 50187043,
+      "worker_readiness_nanoseconds": 50190039,
+      "preparation_observation": {
+        "service_wall_nanoseconds": 50248489,
+        "worker_wall_nanoseconds": 50190039,
+        "phase_cpu_nanoseconds": "not_separately_sampled",
+        "phase_peak_rss_kib": "not_separately_sampled",
+        "service_whole_process_cpu_nanoseconds": 60000000,
+        "service_whole_process_peak_rss_kib": 31964,
+        "worker_whole_process_cpu_nanoseconds": 20000000,
+        "worker_whole_process_peak_rss_kib": 11408
+      },
+      "runner_elapsed_nanoseconds": 500233508,
+      "worker": {
+        "iterations": 3,
+        "productive_iterations": 1,
+        "idle_iterations": 2,
+        "elapsed_nanoseconds": 132910968,
+        "cpu_nanoseconds": 20000000,
+        "peak_rss_kib": 11408
+      },
+      "service_first": {
+        "elapsed_nanoseconds": 295508299,
+        "cpu_nanoseconds": 60000000,
+        "peak_rss_kib": 31964
+      },
+      "service_restored": {
+        "elapsed_nanoseconds": 71814241,
+        "cpu_nanoseconds": 20000000,
+        "peak_rss_kib": 11572
+      },
+      "shutdown": {
+        "worker_elapsed_nanoseconds": 243517,
+        "service_first_elapsed_nanoseconds": 1358108,
+        "service_restored_elapsed_nanoseconds": 469324,
+        "cancellation_requested": 0,
+        "remaining_tasks": 0,
+        "cleanup_failures": 0
+      },
+      "requests": {
+        "count": 14,
+        "routes_checked": 13,
+        "elapsed_nanoseconds": 99743799,
+        "request_body_bytes": 200323,
+        "response_body_bytes": 959
+      },
+      "object_bytes": 200000,
+      "database_dump_bytes": 12516,
+      "database_dump_digest": "verification_28e010fbb0a2d0318c30a00176abc27d1b1b92418c8b1465ff434936cef0a323",
+      "retained_inputs": {
+        "service_descriptor_bytes": 4677,
+        "service_descriptor_digest": "verification_f28e5f12bb4613b5b104c3a164210a5a39c4bf4698c2bcad5804de21aa4fbeb6",
+        "worker_descriptor_bytes": 1788,
+        "worker_descriptor_digest": "verification_63895a2d31cf39a0db7392a2a6fa7881e8c7c6006ca20394e242ed98cc1ccd16",
+        "restored_service_descriptor_bytes": 4677,
+        "restored_service_descriptor_digest": "verification_8af185ad5004484ed50d8d0690272df593ddccdf9d403fcc49f077511fb82f14",
+        "local_object_bytes": 200000,
+        "local_object_digest": "verification_ed23c5f3c50c3259f275e5d7e186363f4e36e857bb9a808016938d2bd091025b"
+      },
+      "runner_logs": {
+        "worker_stdout": ".artifacts/lkjscript-dev/service/1787850340544869376-15545-0/worker.stdout.log",
+        "worker_stdout_digest": "verification_be485aa77ef9f01b2c6f1977221435c2f12cc01d169e2a7613c7caa41a8bb2ef",
+        "service_first_stdout": ".artifacts/lkjscript-dev/service/1787850340544869376-15545-0/service-first.stdout.log",
+        "service_first_stdout_digest": "verification_5f82217a5ca4b2802f82a1e82815af31e2650f9b13ff2591b1f577431d796017",
+        "service_restored_stdout": ".artifacts/lkjscript-dev/service/1787850340544869376-15545-0/service-restored.stdout.log",
+        "service_restored_stdout_digest": "verification_5853e0c815b43f331a16ef90997f6e4f8ce13f40a48fa04cf441f1e4e50ed170",
+        "empty_stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      },
+      "restored_read_equal": true,
+      "commands": 15,
+      "passed_commands": 10,
+      "expected_postgres_readiness_retries": 5,
+      "runner_log_bytes": 2777,
+      "command_output_bytes": 18370,
+      "retained_file_bytes": 909424,
+      "authority_files": 13,
+      "authority_bytes": 2386112,
+      "authority_unchanged": true,
+      "postgres_image": "postgres@sha256:075f7ba66bc9b3ce7d6b8b635208ff61cd7cf1a67d71ec530eec5d7ae0cbe571",
+      "raw_secret_values_retained": false
+    },
+    "dry_run_handoff": {
+      "release_receipt": ".artifacts/campaign/202608272159/hosted-33095788182/handoff/release-receipt.json",
+      "release_receipt_sha256": "3b0b092e9e2caba3edd95aad7aee83aa1a025479c7f566d9191042b5ef535cca",
+      "publication_mode": "dry-run",
+      "archive": ".artifacts/campaign/202608272159/hosted-33095788182/handoff/lkjscript-x86_64-unknown-linux-gnu.tar.gz",
+      "archive_bytes": 6954775,
+      "archive_sha256": "6c7055337fa2613c0987ab3a649403add6601d9c1c61453cb67fc9452e7de5c4",
+      "checksums_sha256": "b869210bb81295b516c8fd279cbed7d6e153deb48d823b0be24cd5d1b3d07d4c",
+      "fresh_classifications": 10,
+      "reused_classifications": 0,
+      "candidate_lifecycle_elapsed_nanoseconds": 570129356,
+      "candidate_lifecycle_cpu_nanoseconds": 160000000,
+      "candidate_lifecycle_peak_rss_kib": 75232
+    },
+    "comparison": "the legacy same-host service could not be rerun because local Docker was unavailable; the published v0.1.4 observations are historical and runner-noise-limited, so no performance regression or improvement claim is made"
   },
   "limitations": [
     "HTTP listener remains plaintext",
@@ -255,12 +496,22 @@
     "no hostile-code sandbox or multi-tenant isolation",
     "no cross-system atomicity or exactly-once external effects",
     "S3 mechanics retain focused coverage but no live S3 acceptance",
+    "local Docker was unavailable; the mandatory live proof ran on the hosted ubuntu-24.04 boundary",
+    "filesystem cache state and external PostgreSQL scheduling noise were uncontrolled, CPU sampling resolution was 10 ms, and syscall/provider-cost telemetry was unavailable",
+    "pool wait, concurrent stream high-water, and queue lease high-water metrics are not exposed by the current acceptance receipt",
+    "preparation CPU and peak RSS are sampled only at whole-process granularity; readiness wall time is phase-specific",
     "the immutable v0.1.4 public release predates this cutover and is not mutated by this campaign"
   ],
   "completion": {
-    "status": "pending_fresh_hosted_full_verification",
-    "normal_push": null,
-    "origin_main_equals_final_head": null,
-    "working_tree": "pending final assembly; pre-existing AGENTS.md modification preserved"
+    "status": "complete",
+    "verified_implementation_sha": "366c421beae95f3e650695cf5304adb4a8e888f5",
+    "normal_push": true,
+    "origin_main_equal_to_verified_implementation_at_final_run": true,
+    "evidence_commit": "self; exact SHA and final origin/main equality are reported in the final handoff",
+    "publication": "none; publish=false, publication jobs skipped, tags unchanged, v0.1.4 unchanged",
+    "irreversible_actions": [
+      "normal fast-forward pushes to origin/main"
+    ],
+    "working_tree": "pre-existing root AGENTS.md modification preserved and excluded from every campaign commit"
   }
 }
