@@ -14,9 +14,13 @@ use std::io::{self, BufReader, Read};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
+use std::thread;
+use std::time::Duration;
 
 const APPLICATION: &str = "applications/lkjournal";
 const RELEASE_CANDIDATE_ENVIRONMENT: &str = "LKJSCRIPT_RELEASE_CANDIDATE";
+const EXECUTABLE_BUSY_ATTEMPTS: usize = 12;
+const EXECUTABLE_BUSY_DELAY: Duration = Duration::from_millis(50);
 
 fn binary() -> PathBuf {
     let Some(candidate) = env::var_os(RELEASE_CANDIDATE_ENVIRONMENT) else {
@@ -75,13 +79,56 @@ fn command_at(executable: &Path, directory: &Path, arguments: &[&str]) -> Output
         "run public CLI '{}' with {arguments:?}",
         executable.display()
     );
-    Command::new(executable)
-        .args(arguments)
-        .current_dir(directory)
-        .env_clear()
-        .env("LANG", "C")
-        .output()
-        .expect(&context)
+    retry_executable_busy(|| {
+        Command::new(executable)
+            .args(arguments)
+            .current_dir(directory)
+            .env_clear()
+            .env("LANG", "C")
+            .output()
+    })
+    .expect(&context)
+}
+
+fn retry_executable_busy<T>(mut operation: impl FnMut() -> io::Result<T>) -> io::Result<T> {
+    let mut attempt = 1_usize;
+    loop {
+        match operation() {
+            Err(error)
+                if error.kind() == io::ErrorKind::ExecutableFileBusy
+                    && attempt < EXECUTABLE_BUSY_ATTEMPTS =>
+            {
+                thread::sleep(EXECUTABLE_BUSY_DELAY);
+                attempt += 1;
+            }
+            result => return result,
+        }
+    }
+}
+
+#[test]
+fn copied_binary_spawn_retries_transient_executable_busy() {
+    let mut attempts = 0_usize;
+    let observed = retry_executable_busy(|| {
+        attempts += 1;
+        if attempts < 3 {
+            Err(io::Error::from(io::ErrorKind::ExecutableFileBusy))
+        } else {
+            Ok("started")
+        }
+    })
+    .expect("transient executable busy result");
+    assert_eq!(observed, "started");
+    assert_eq!(attempts, 3);
+
+    let mut exhausted_attempts = 0_usize;
+    let error = retry_executable_busy(|| -> io::Result<()> {
+        exhausted_attempts += 1;
+        Err(io::Error::from(io::ErrorKind::ExecutableFileBusy))
+    })
+    .expect_err("persistent executable busy result");
+    assert_eq!(error.kind(), io::ErrorKind::ExecutableFileBusy);
+    assert_eq!(exhausted_attempts, EXECUTABLE_BUSY_ATTEMPTS);
 }
 
 fn compact_success(arguments: &[&str]) -> Vec<CompactRecord> {
