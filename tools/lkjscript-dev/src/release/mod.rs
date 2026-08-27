@@ -17,7 +17,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::ffi::OsString;
 use std::fs::{self, File};
-use std::os::unix::fs::{MetadataExt, PermissionsExt};
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -126,7 +126,6 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
             "release candidate does not have an executable mode",
         ));
     }
-    let candidate_inode = (candidate_metadata.dev(), candidate_metadata.ino());
     let (candidate_sha256, candidate_bytes) = archive::sha256_file(&options.candidate)?;
     let elf = inspect_elf(&options.candidate, &repository, readelf_version)?;
     let capabilities = inspect_capabilities(&options.candidate, &repository)?;
@@ -215,9 +214,9 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
         run_candidate_lifecycle(&repository, &options.candidate, work.path())?;
     let candidate_after = archive::ensure_regular(&options.candidate, "release candidate")?;
     let (candidate_sha256_after, candidate_bytes_after) = archive::sha256_file(&options.candidate)?;
-    if candidate_inode != (candidate_after.dev(), candidate_after.ino())
-        || candidate_sha256 != candidate_sha256_after
+    if candidate_sha256 != candidate_sha256_after
         || candidate_bytes != candidate_bytes_after
+        || candidate_after.permissions().mode() & 0o111 == 0
     {
         return Err(DevError::infrastructure(
             "release candidate changed during exact-candidate acceptance",
