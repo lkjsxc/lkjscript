@@ -120,15 +120,28 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
     let _sha256sum_version = command_version("sha256sum", &["--version"], &repository)?;
     let (cargo_lock_sha256, _) = archive::sha256_file(&repository.join("Cargo.lock"))?;
     let (license_sha256, license_bytes) = archive::sha256_file(&repository.join("LICENSE"))?;
-    let candidate_metadata = archive::ensure_regular(&options.candidate, "release candidate")?;
+    let parent = options
+        .output
+        .parent()
+        .ok_or_else(|| DevError::usage("release output must have an existing parent directory"))?;
+    archive::ensure_directory(parent, "release output parent")?;
+    let work = tempfile::Builder::new()
+        .prefix(".lkjscript-release-work-")
+        .tempdir_in(parent)
+        .map_err(|error| {
+            DevError::infrastructure(format!("create release work directory: {error}"))
+        })?;
+    let release_candidate = work.path().join("candidate-lkjscript");
+    archive::copy_new(&options.candidate, &release_candidate, 0o755)?;
+    let candidate_metadata = archive::ensure_regular(&release_candidate, "release candidate")?;
     if candidate_metadata.permissions().mode() & 0o111 == 0 {
         return Err(DevError::infrastructure(
             "release candidate does not have an executable mode",
         ));
     }
-    let (candidate_sha256, candidate_bytes) = archive::sha256_file(&options.candidate)?;
-    let elf = inspect_elf(&options.candidate, &repository, readelf_version)?;
-    let capabilities = inspect_capabilities(&options.candidate, &repository)?;
+    let (candidate_sha256, candidate_bytes) = archive::sha256_file(&release_candidate)?;
+    let elf = inspect_elf(&release_candidate, &repository, readelf_version)?;
+    let capabilities = inspect_capabilities(&release_candidate, &repository)?;
     if capabilities.cli_contract != CLI_CONTRACT {
         return Err(DevError::corrupt(format!(
             "release candidate CLI contract is {}, expected {CLI_CONTRACT}",
@@ -176,17 +189,6 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
         ));
     }
 
-    let parent = options
-        .output
-        .parent()
-        .ok_or_else(|| DevError::usage("release output must have an existing parent directory"))?;
-    archive::ensure_directory(parent, "release output parent")?;
-    let work = tempfile::Builder::new()
-        .prefix(".lkjscript-release-work-")
-        .tempdir_in(parent)
-        .map_err(|error| {
-            DevError::infrastructure(format!("create release work directory: {error}"))
-        })?;
     let notice_one = work.path().join("THIRD-PARTY-LICENSES-1.html");
     let notice_two = work.path().join("THIRD-PARTY-LICENSES-2.html");
     generate_notices(
@@ -211,15 +213,15 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
     audit_notice(&notice_one)?;
 
     let candidate_lifecycle =
-        run_candidate_lifecycle(&repository, &options.candidate, work.path())?;
-    let candidate_after = archive::ensure_regular(&options.candidate, "release candidate")?;
-    let (candidate_sha256_after, candidate_bytes_after) = archive::sha256_file(&options.candidate)?;
+        run_candidate_lifecycle(&repository, &release_candidate, work.path())?;
+    let candidate_after = archive::ensure_regular(&release_candidate, "release candidate")?;
+    let (candidate_sha256_after, candidate_bytes_after) = archive::sha256_file(&release_candidate)?;
     if candidate_sha256 != candidate_sha256_after
         || candidate_bytes != candidate_bytes_after
         || candidate_after.permissions().mode() & 0o111 == 0
     {
         return Err(DevError::infrastructure(
-            "release candidate changed during exact-candidate acceptance",
+            "private release candidate changed during exact-candidate acceptance",
         ));
     }
 
@@ -290,7 +292,7 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
         .map_err(|error| DevError::infrastructure(format!("create payload parent: {error}")))?;
     archive::stage_payload(
         &payload_parent.join("lkjscript"),
-        &options.candidate,
+        &release_candidate,
         &repository.join("LICENSE"),
         &notice_one,
         &manifest_bytes,
@@ -325,9 +327,9 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
             DevError::infrastructure(format!("create archive verification directories: {error}"))
         })?;
     let verified_one =
-        archive::verify_archive(&archive_one, &verify_one, Some(&options.candidate))?;
+        archive::verify_archive(&archive_one, &verify_one, Some(&release_candidate))?;
     let verified_two =
-        archive::verify_archive(&archive_two, &verify_two, Some(&options.candidate))?;
+        archive::verify_archive(&archive_two, &verify_two, Some(&release_candidate))?;
     if verified_one.archive_sha256 != verified_two.archive_sha256
         || verified_one.archive_byte_length != verified_two.archive_byte_length
         || verified_one.manifest_sha256 != verified_two.manifest_sha256
