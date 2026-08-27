@@ -1155,13 +1155,20 @@ async fn artifact10_worker_consumes_one_exact_queue_attempt() {
                 "claim",
                 NormalizedValue::List(Arc::new(Vec::new())),
             ),
+            scripted_call(
+                &program,
+                "work",
+                "jobs",
+                "claim",
+                NormalizedValue::List(Arc::new(Vec::new())),
+            ),
         ],
         Vec::new(),
     ));
     let adapters: BTreeMap<String, Arc<dyn NormalizedCapabilityAdapter>> = BTreeMap::from([
         (
             "clock".to_owned(),
-            deterministic_clock(&program, "work", vec![100, 101]),
+            deterministic_clock(&program, "work", vec![100, 101, 102]),
         ),
         (
             "jobs".to_owned(),
@@ -1194,7 +1201,7 @@ async fn artifact10_worker_consumes_one_exact_queue_attempt() {
     let observer = worker.resident().clone();
     let shutdown = async move {
         loop {
-            if observer.observe().completed >= 2 {
+            if observer.observe().completed >= 3 {
                 break;
             }
             tokio::task::yield_now().await;
@@ -1206,6 +1213,6 @@ async fn artifact10_worker_consumes_one_exact_queue_attempt() {
         .expect("artifact-10 worker topology");
     assert_eq!(receipt.productive_iterations, 1);
     assert!(receipt.idle_iterations >= 1);
-    assert_eq!(jobs.observed(), vec!["claim", "complete", "claim"]);
+    assert_eq!(jobs.observed(), vec!["claim", "complete", "claim", "claim"]);
     assert_eq!(receipt.shutdown.remaining_tasks, 0);
 }
