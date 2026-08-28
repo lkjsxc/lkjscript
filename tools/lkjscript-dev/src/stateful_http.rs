@@ -173,9 +173,18 @@ impl PostgresVerifier {
                 tools.environment(),
             ),
         };
-        context.success_external(name, &command, cwd, environment)?;
+        let recorded_command = redact_sql_command(&command);
+        context.success_external_recorded(name, &command, recorded_command, cwd, environment)?;
         Ok(())
     }
+}
+
+fn redact_sql_command(command: &[String]) -> Vec<String> {
+    let mut recorded = command.to_vec();
+    if let Some(statement) = recorded.last_mut() {
+        *statement = "<redacted-sql>".to_owned();
+    }
+    recorded
 }
 
 #[derive(Debug, Serialize)]
@@ -1626,7 +1635,7 @@ fn exercise_statement_failure(
         isolated,
         database,
         "postgres-add-failure-constraint",
-        "ALTER TABLE bbs_posts ADD CONSTRAINT bbs_statement_failure CHECK (body <> 'statement-failure')",
+        "ALTER TABLE bbs_posts ADD CONSTRAINT bbs_statement_failure CHECK (false) NOT VALID",
     )?;
     let failed = request(
         observations,
@@ -1932,6 +1941,29 @@ impl Context {
         Ok(output)
     }
 
+    fn success_external_recorded<S: AsRef<str>>(
+        &mut self,
+        name: &str,
+        command: &[S],
+        recorded_command: Vec<String>,
+        cwd: &Path,
+        environment: BTreeMap<String, String>,
+    ) -> Result<Output, DevError> {
+        let execution_command = command
+            .iter()
+            .map(|value| value.as_ref().to_owned())
+            .collect();
+        let (observation, output) = self.observe_command_with_record(
+            name,
+            execution_command,
+            recorded_command,
+            cwd,
+            environment,
+        )?;
+        self.require_status(name, observation, ProcessStatus::Passed)?;
+        Ok(output)
+    }
+
     fn required_external<S: AsRef<str>>(
         &mut self,
         name: &str,
@@ -1974,6 +2006,18 @@ impl Context {
         cwd: &Path,
         environment: BTreeMap<String, String>,
     ) -> Result<(ProcessObservation, Output), DevError> {
+        let recorded_command = command.clone();
+        self.observe_command_with_record(name, command, recorded_command, cwd, environment)
+    }
+
+    fn observe_command_with_record(
+        &mut self,
+        name: &str,
+        command: Vec<String>,
+        recorded_command: Vec<String>,
+        cwd: &Path,
+        environment: BTreeMap<String, String>,
+    ) -> Result<(ProcessObservation, Output), DevError> {
         let ordinal = self.ordinal;
         self.ordinal = self.ordinal.saturating_add(1);
         let safe = name
@@ -2009,7 +2053,7 @@ impl Context {
         };
         self.commands.push(CommandEvidence {
             name: name.to_owned(),
-            command,
+            command: recorded_command,
             process: observation.clone(),
         });
         Ok((observation, output))
@@ -2196,6 +2240,20 @@ mod tests {
         assert!(options.machine);
         assert_eq!(options.postgres_root, postgres::configured_root());
         assert!(parse_options([OsString::from("--unknown")].into_iter()).is_err());
+    }
+
+    #[test]
+    fn postgres_oracle_statements_are_redacted_from_evidence() {
+        let command = vec![
+            "psql".to_owned(),
+            "-Atc".to_owned(),
+            "SELECT sensitive_control_value".to_owned(),
+        ];
+        assert_eq!(
+            redact_sql_command(&command),
+            ["psql", "-Atc", "<redacted-sql>"]
+        );
+        assert_eq!(command[2], "SELECT sensitive_control_value");
     }
 
     #[cfg(unix)]
