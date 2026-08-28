@@ -5,10 +5,12 @@ source commit. Its tag, target, candidate, archive, manifest, checksum, asset di
 and verification receipts are distribution identities and evidence; none can select or edit
 accepted program meaning.
 
-The immutable `v0.1.7` release remains the current public release while the static `0.1.8` source
-candidate is prepared and verified. The current release procedure below is the direct-cutover path
-for that pending candidate and subsequent releases; it does not claim that `v0.1.8` is public before
-anonymous exact and latest acceptance completes.
+Immutable `v0.1.8` is externally committed but not closed: its exact and latest public bytes each
+passed strict static, distributed HTTP, and stateful HTTP verification, but release run
+`33196276783` then applied an invalid equality predicate to artifacts from two independently
+allocated fresh applications. The source version `0.1.9` is the smallest unused additive recovery
+candidate. `v0.1.7` remains the documented supported release until that recovery completes the
+anonymous exact and latest boundary.
 
 ## Identity and authority
 
@@ -219,8 +221,11 @@ The post-release job anonymously downloads separate exact-tag and `releases/late
 pairs. For each pair independently it verifies checksums, release and asset attestations, strict
 extraction, manifest/source/target/candidate identity, and static ELF linkage. It then runs transferred
 distributed HTTP and transferred stateful HTTP against fresh roots and a fresh isolated PostgreSQL
-authority. Exact/latest byte equality is checked after, and never substitutes for, both behavioral
-runs. The job retains bounded summaries, receipts, logs, cleanup facts, and attestation results.
+authority. Exact/latest archive, checksum, candidate, and manifest byte equality is checked after,
+and never substitutes for, both behavioral runs. Each stateful run requires its own clean and
+incremental artifacts to agree; artifacts from independently allocated fresh applications are not
+cross-compared. The job retains bounded summaries, receipts, logs, cleanup facts, and attestation
+results.
 
 An independent token-free transport check may repeat:
 

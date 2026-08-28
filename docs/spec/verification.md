@@ -130,8 +130,11 @@ checkout, and executes no repository binary or script.
 After immutable publication, exact-tag and `releases/latest` assets are downloaded anonymously and
 verified independently. Each path requires checksum, GitHub asset digest, release/asset attestation,
 strict extraction, source/manifest/candidate equality, static inspection, transferred distributed
-HTTP, transferred stateful HTTP against a fresh isolated database, and cleanup. Exact/latest byte
-equality is required but cannot replace either behavioral run. A required stale, reused, skipped,
+HTTP, transferred stateful HTTP against a fresh isolated database, and cleanup. Exact/latest
+release-asset, manifest, and candidate byte equality is required but cannot replace either
+behavioral run. Clean/incremental artifact equality is required within each independently created
+application; artifacts from the two fresh applications have independently allocated semantic
+identities and are not required to have the same digest. A required stale, reused, skipped,
 unavailable, failed, cancelled, or unrun observation is not public acceptance.
 
 ## Verification profiles and receipts

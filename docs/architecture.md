@@ -129,9 +129,12 @@ contracts, compilation semantics, or deployment data. The root package version a
 bind the human-facing product snapshot while contract identities remain independently owned.
 Published content recovers through a new patch rather than mutation.
 
-Immutable `v0.1.7` remains the current public release until the prepared `v0.1.8` path completes
-anonymous exact/latest acceptance. The predecessor release's successful public HTTP evidence remains
-historical and is not evidence for the pending static target or stateful public boundary.
+Immutable `v0.1.8` is externally committed but not closed: both exact and latest public binaries
+passed the static, distributed HTTP, and stateful HTTP boundaries, after which the workflow rejected
+their legitimately distinct fresh-project artifact identities. The prepared additive `v0.1.9`
+recovery removes that non-semantic cross-application predicate and must repeat every release
+boundary. `v0.1.7` remains the documented supported release until the recovery closes; predecessor
+evidence remains historical and is not evidence for the recovery candidate.
 
 ## Layer ownership
 

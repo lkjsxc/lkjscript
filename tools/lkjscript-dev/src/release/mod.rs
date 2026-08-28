@@ -1923,6 +1923,11 @@ mod tests {
         assert!(post_release.contains("distributed-http"));
         assert!(post_release.contains("stateful-http"));
         assert!(post_release.contains("request_records == 1010"));
+        assert_eq!(
+            post_release.matches(".result.incremental_sha256").count(),
+            1,
+            "fresh exact/latest applications must prove clean/incremental equality internally without requiring cross-application artifact identity"
+        );
         assert!(post_release.contains("--evidence-root"));
         assert!(post_release.contains("env -i LANG=C"));
         assert!(!post_release.contains("tar -"));

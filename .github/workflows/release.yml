@@ -1244,8 +1244,6 @@ jobs:
             "$(jq -er '.result.responses[0].body_sha256' "$root/latest-distributed-http/receipt.json")"
           test "$(jq -er '.candidate.sha256' "$root/exact-stateful-http/receipt.json")" = \
             "$(jq -er '.candidate.sha256' "$root/latest-stateful-http/receipt.json")"
-          test "$(jq -er '.result.incremental_sha256' "$root/exact-stateful-http/receipt.json")" = \
-            "$(jq -er '.result.incremental_sha256' "$root/latest-stateful-http/receipt.json")"
 
       - name: Retain bounded exact and latest public application evidence
         id: evidence-upload

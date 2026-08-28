@@ -97,11 +97,13 @@ the exact isolated PostgreSQL prerequisite required by the stateful oracle. It d
 checkout, Cargo, application helper, raw retained secret, or publication permission. The separate
 publication job receives no verifier and executes no repository code.
 
-These are source-candidate controls until immutable publication and anonymous exact/latest behavior
-are proved. They establish static runtime linkage and only the named Linux/amd64 userland boundary;
-they do not establish a minimum kernel, every CPU feature or filesystem, container independence,
-reproducible-build provenance, binary signing, or universal Linux compatibility. Immutable
-`v0.1.7` remains the current public release during this prepared state.
+These remain source-candidate controls until the additive `v0.1.9` recovery completes immutable
+publication and anonymous exact/latest behavior. They establish static runtime linkage and only the
+named Linux/amd64 userland boundary; they do not establish a minimum kernel, every CPU feature or
+filesystem, container independence, reproducible-build provenance, binary signing, or universal
+Linux compatibility. Immutable `v0.1.8` is externally committed but not closed after a final
+workflow-only cross-application equality defect; `v0.1.7` remains the documented supported release
+during recovery.
 
 ## Explicit non-claims
 

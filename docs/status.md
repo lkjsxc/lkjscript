@@ -39,7 +39,7 @@ and stages that one artifact for isolated `serve` and `worker` acceptance.
 ## Public binary release
 
 [`v0.1.7`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.7) is the current public and
-latest release. Its annotated tag object
+supported release. Its annotated tag object
 `92a6d0b68b8c524d058c51073e8dd28158a9247b` selects commit
 `be531d9c77d722559527bbfa3683da67d9055b89`; GitHub reports release `378319314` as immutable,
 non-draft, and non-prerelease. It includes the standalone artifact-10 `serve` and `worker`
@@ -74,9 +74,16 @@ evidence rather than program authority or independent build provenance. Exact ev
 in the historical [v0.1.6 record](evidence/20260828-v0.1.6-public-release.json) and the current
 [v0.1.7 public HTTP record](evidence/202608281451-public-http-release.json).
 
+Immutable `v0.1.8`, release `378668969`, is externally committed but not closed. Its exact and
+latest public musl binaries each passed strict extraction, static inspection, distributed HTTP, and
+stateful HTTP verification in release run `33196276783`. The run then failed only because its final
+predicate incorrectly required artifacts from two independently allocated fresh applications to
+have one digest. Current `main` is package version 0.1.9, the smallest unused additive recovery;
+the v0.1.8 tag, release, and assets will not be changed or removed.
+
 ## Current-main application lifecycle
 
-Current `main` is unreleased package version 0.1.8 with CLI contract 12. It exposes exactly
+Current `main` is unreleased package version 0.1.9 with CLI contract 12. It exposes exactly
 `capabilities`, `new`, `status`, `inspect`, `query`, `change`, normalized built-in `package`,
 `check`, `build`, `run`, and artifact-runtime `serve` and `worker`.
 All finite operations use deterministic bounded compact records. The registry digest is
@@ -98,12 +105,12 @@ resource limits, and listener `127.0.0.1:0`. Runtime readiness reports the actua
 address. The graph's editable response text is changed only through reviewed `change plan` and
 `change apply`; build and resident execution do not open or advance project authority.
 
-The closed HTTP recipe remains public `v0.1.7` behavior. Unreleased 0.1.8 adds compact change
-contract 5: task effects, `add.requirement`, `set.function-contract`, structural record types, and
-the lexical/record/field/list/variant/match/capability-call/transaction expression slice required
-to turn that starter into a request-dependent persistent application. It does not expose arbitrary
-component, interface, external, port, or target creation, higher-order invocation, or map
-expressions.
+The closed HTTP recipe remains public `v0.1.7` behavior. The 0.1.8/0.1.9 source line adds compact
+change contract 5: task effects, `add.requirement`, `set.function-contract`, structural record
+types, and the lexical/record/field/list/variant/match/capability-call/transaction expression slice
+required to turn that starter into a request-dependent persistent application. It does not expose
+arbitrary component, interface, external, port, or target creation, higher-order invocation, or
+map expressions.
 
 `package builtin query owners` and exact `package builtin inspect owner` expose the current public
 standard declarations and interface operations with canonical compact references, full signatures,
@@ -193,9 +200,10 @@ sandbox or multi-tenant isolation boundary.
 - No million-owner complete application lifecycle, long-history retention policy, garbage
   collection, live-store packing, artifact signing, encrypted graph storage, or distributed
   publication protocol has been proved.
-- The public binary is admitted only for `x86_64-unknown-linux-gnu` with the measured dynamic
-  runtime above. Musl/static Linux, older GLIBC, macOS, Windows, arm64, generic Unix, and other
-  targets are unproved.
+- The supported public binary remains `x86_64-unknown-linux-gnu` with the measured dynamic runtime
+  above during additive recovery. The immutable v0.1.8 musl bytes passed the named static and
+  userland/application boundaries but their release run did not close. macOS, Windows, arm64,
+  generic Unix, additional Linux targets, and universal portability remain unproved.
 - The immutable GitHub release attestation and asset digests prove release identity and integrity;
   they are not code signing, compiler reproducibility, build provenance across runner images, or
   a general supply-chain policy.

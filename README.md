@@ -6,20 +6,23 @@ mutable locators; stable typed identities preserve continuity. Source text, comp
 indexes, compiler caches, artifacts, deployment descriptors, and runtime handles are projections
 or consumers rather than alternate program truths.
 
-The released v0.1.7 executable supports offline command and editable HTTP application lifecycles
+The supported v0.1.7 executable supports offline command and editable HTTP application lifecycles
 through one copied binary. Both create Graph 5 projects, inspect and change accepted meaning, run
 graph-owned tests, and build deterministic artifact-10 bundles. The HTTP workflow also starts the
 artifact through the standalone deployment boundary and serves it on loopback without Cargo, a
 checkout, database, container, or helper executable.
 
-Current `main` is the unreleased 0.1.8 source candidate. It adds executable-owned built-in and
-deployment discovery plus reviewed compact task/capability authoring sufficient for a persistent,
-request-dependent PostgreSQL-backed BBS. Those additions are not present in immutable v0.1.7 and
-no 0.1.8 tag, release, package, or deployment exists yet.
+Immutable v0.1.8 is externally committed but not closed. Its exact and latest static binaries each
+passed strict package, distributed HTTP, and stateful HTTP verification, but the release run then
+rejected the legitimately different artifact identities of two independently created applications.
+Current `main` is the unreleased 0.1.9 additive recovery candidate. The 0.1.8/0.1.9 source line adds
+executable-owned built-in and deployment discovery plus reviewed compact task/capability authoring
+sufficient for a persistent, request-dependent PostgreSQL-backed BBS.
 
-The public binary target is exactly `x86_64-unknown-linux-gnu`. It requires the ELF interpreter
-`/lib64/ld-linux-x86-64.so.2`, `libgcc_s.so.1`, `libm.so.6`, `libc.so.6`, and GLIBC 2.38 or newer.
-No broader Linux portability is claimed.
+The supported v0.1.7 binary target remains exactly `x86_64-unknown-linux-gnu` during recovery. It
+requires the ELF interpreter `/lib64/ld-linux-x86-64.so.2`, `libgcc_s.so.1`, `libm.so.6`,
+`libc.so.6`, and GLIBC 2.38 or newer. Do not use the mutable latest-release alias until the additive
+recovery closes. No broader Linux portability is currently claimed.
 
 ## Download
 
@@ -29,9 +32,9 @@ Download the latest supported archive and its checksum without running a remote 
 mkdir -p /tmp/lkjscript-download
 cd /tmp/lkjscript-download
 curl --fail --location --remote-name \
-  https://github.com/lkjsxc/lkjscript/releases/latest/download/lkjscript-x86_64-unknown-linux-gnu.tar.gz
+  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.7/lkjscript-x86_64-unknown-linux-gnu.tar.gz
 curl --fail --location --remote-name \
-  https://github.com/lkjsxc/lkjscript/releases/latest/download/SHA256SUMS
+  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.7/SHA256SUMS
 sha256sum --check SHA256SUMS
 tar -xzf lkjscript-x86_64-unknown-linux-gnu.tar.gz
 ./lkjscript/lkjscript capabilities
@@ -116,7 +119,7 @@ deployment descriptor and empty `generated/` directory before the destination be
 does not create an artifact. The descriptor listens on `127.0.0.1:0`, and the ready event reports
 the operating-system-selected loopback address. `SIGINT` performs bounded graceful shutdown.
 
-### Stateful HTTP from unreleased source
+### Stateful HTTP from current source
 
 Build the current source candidate, then use that same copied executable for all application-facing
 discovery and authoring:

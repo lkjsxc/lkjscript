@@ -5,8 +5,9 @@ HTTP recipes, exact built-in interface/deployment discovery, compact task/capabi
 normalized check/build/pure-run, artifact 10, maintained standard/`lkjournal` artifacts, reviewed
 authored change, normalized query, standalone artifact-10 service/worker deployment, and both
 static and PostgreSQL-backed copied-binary HTTP acceptance are current architecture. The immutable
-`v0.1.7` GitHub Release remains the current public `x86_64-unknown-linux-gnu` distribution; source
-0.1.8 is unreleased.
+`v0.1.7` remains the supported public `x86_64-unknown-linux-gnu` distribution. Immutable v0.1.8 is
+externally committed but unclosed after an invalid final cross-application artifact comparison;
+source 0.1.9 is its additive static-musl recovery.
 
 Each future item requires a named maintained consumer, exact contract, independent oracle,
 measured reversal gate, and dependency-closed cutover/deletion plan.
@@ -29,10 +30,11 @@ measured reversal gate, and dependency-closed cutover/deletion plan.
 4. **Worker project recipe from a maintained binary-only consumer.** Add one only when a real
    standalone consumer fixes its semantic topology, grant closure, deployment defaults, and live
    acceptance. Do not infer a worker recipe from the existence of the resident runner.
-5. **Measured static/musl Linux portability.** Admit a musl asset only after its exact candidate
-   passes the copied-binary lifecycle, redistribution, deterministic packaging, anonymous
-   transport, and runtime inspection requirements. Do not infer static portability from the Rust
-   target name or replace the current GNU release without measured consumer evidence.
+5. **Close additive static/musl Linux recovery.** Admit the 0.1.9 recovery only after its exact
+   candidate freshly repeats the copied-binary lifecycle, redistribution, deterministic packaging,
+   anonymous transport, and runtime inspection requirements. Preserve immutable v0.1.8 and do not
+   infer closure from its independently passed application receipts while its workflow remained
+   failed.
 6. **Outbound HTTP from a maintained consumer.** Select exact URL, DNS, TLS, secret, redirect,
    response-limit, cancellation, retry, and SSRF policy before adding an interface or adapter. Do
    not infer outbound authority from the existing inbound HTTP server.
