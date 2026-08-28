@@ -636,10 +636,20 @@ jobs:
           mkdir "$root"
           tar -xzf "$EXACT/$RELEASE_ARCHIVE" --directory "$root" --no-same-owner
           binary="$root/lkjscript/lkjscript"
+          manifest="$root/lkjscript/RELEASE-MANIFEST.json"
           test -x "$binary"
+          expected_cli=$(jq -er '
+            .executable.cli_contract
+            | select(type == "number" and . >= 1 and . <= 65535 and . == floor)
+            | tostring
+          ' "$manifest")
+          expected_registry_digest=$(jq -er '
+            .executable.executable_registry_digest
+            | select(type == "string" and test("^[0-9a-f]{64}$"))
+          ' "$manifest")
           env -i LANG=C "$binary" capabilities > "$root/capabilities.out"
-          grep -F 'cli=10' "$root/capabilities.out"
-          grep -F 'digest=c63d0c4653d6de50e6f375d6da14bfb9101bba5a438aba5c0ae10a9dd27dbc43' "$root/capabilities.out"
+          grep -F "cli=$expected_cli" "$root/capabilities.out"
+          grep -F "digest=$expected_registry_digest" "$root/capabilities.out"
           project="$root/hello"
           env -i LANG=C "$binary" new "$project" --template command --name hello
           env -i LANG=C "$binary" --project "$project" check

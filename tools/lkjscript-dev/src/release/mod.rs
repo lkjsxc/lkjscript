@@ -1754,6 +1754,15 @@ mod tests {
         assert!(post_release.contains("contents: read"));
         assert!(!post_release.contains("contents: write"));
         assert!(!post_release.contains("attestations: write"));
+        assert!(post_release.contains(".executable.cli_contract"));
+        assert!(post_release.contains(".executable.executable_registry_digest"));
+        assert!(post_release.contains("grep -F \"cli=$expected_cli\""));
+        assert!(post_release.contains("grep -F \"digest=$expected_registry_digest\""));
+        assert!(
+            !post_release.contains(
+                "digest=c63d0c4653d6de50e6f375d6da14bfb9101bba5a438aba5c0ae10a9dd27dbc43"
+            )
+        );
         for forbidden in [
             "--clobber",
             "ubuntu-latest",
