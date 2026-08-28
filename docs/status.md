@@ -1,6 +1,6 @@
 # Current status
 
-Status date: 2026-08-27 UTC. This file describes implemented checkout reality. Executable-derived
+Status date: 2026-08-28 UTC. This file describes implemented checkout reality. Executable-derived
 contract and operation catalogs live in [generated/contracts.md](generated/contracts.md) and
 [generated/operations.md](generated/operations.md); this file does not duplicate them.
 
@@ -38,28 +38,36 @@ and stages that one artifact for isolated `serve` and `worker` acceptance.
 
 ## Public binary release
 
-[`v0.1.4`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.4) is the current public and
+[`v0.1.6`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.6) is the current public and
 latest release. Its annotated tag object
-`5e3052e3a29c146e9a6e83258ef54723c9b4a8df` selects commit
-`6bd8d46475add972ca468d458caae88df6f26f42`; the repository reports the published release as
-immutable. The supported target is exactly `x86_64-unknown-linux-gnu`. The candidate is ELF64
-x86-64, uses `/lib64/ld-linux-x86-64.so.2`, requires `libc.so.6`, `libgcc_s.so.1`, and
-`libm.so.6`, and has a measured maximum required symbol version of `GLIBC_2.38`.
+`ab2f02ad1c559b639d98a15214eb588f3ee54765` selects commit
+`59ac6c8d20a26f5b9c94960c506e3ec2bf315b61`; the repository reports the published release as
+immutable. It includes the standalone artifact-10 `serve` and `worker` cutover. The supported
+target remains exactly `x86_64-unknown-linux-gnu`. The candidate is ELF64 x86-64, uses
+`/lib64/ld-linux-x86-64.so.2`, requires `libc.so.6`, `libgcc_s.so.1`, and `libm.so.6`, and has a
+measured maximum required symbol version of `GLIBC_2.38`.
 
 | Public asset | Bytes | SHA-256 / GitHub asset digest |
 |---|---:|---|
-| `lkjscript-x86_64-unknown-linux-gnu.tar.gz` | 7,407,455 | `6f332da3068c828be9ac445034f47ad664ca5ef450f2df9987390f9cb25c9053` |
-| `SHA256SUMS` | 108 | `675c80f985883cba707ad3e0a7b5bb5758f7c9559939a49209a59dfa2e5c1cb2` |
+| `lkjscript-x86_64-unknown-linux-gnu.tar.gz` | 6,954,661 | `ad9f0806c79b95a381001a75c7907de12d61014417809d95f46c3a30819852c6` |
+| `SHA256SUMS` | 108 | `0d49e832de3dbd8ab57243666e000680feb7e4ad74d2f82f2626191f396f8620` |
 
-Anonymous downloads from both the exact-tag and stable `releases/latest` paths matched the
-archive digest and passed extraction plus the command-project smoke lifecycle. The archive holds
-only the executable, root license, generated third-party notices, and canonical release manifest
-under one `lkjscript/` directory. The release path is derived distribution evidence: its tag,
-archive, manifest, checksum, GitHub asset digest, and release attestation do not own program
-meaning or establish build provenance. Exact evidence is retained in
-[the public binary release record](evidence/202608271521-public-binary-release.json).
-The artifact-10 service cutover changes the current checkout only; this campaign does not publish
-or mutate a release, so immutable `v0.1.4` predates that cutover.
+Release workflow
+[`33130051176`](https://github.com/lkjsxc/lkjscript/actions/runs/33130051176) passed all three jobs.
+Its exact tagged content passed 20/20 fresh full gates, including copied-binary artifact-10 service
+acceptance. Anonymous downloads from both the exact-tag and stable `releases/latest` paths matched
+the archive digest and passed GitHub release/asset attestation, strict extraction, and the command
+project smoke lifecycle. The archive holds only the executable, root license, generated
+third-party notices, and canonical release manifest under one `lkjscript/` directory.
+
+Immutable `v0.1.5` was the first publication attempt for this source generation. Its public bytes
+passed independent checksum and command lifecycle verification, but its workflow's final smoke
+step compared the binary against a stale pre-cutover registry digest. The workflow now reads the
+CLI contract and registry digest from the verified release manifest, and recovery used additive
+`v0.1.6`; neither `v0.1.5` nor an older tag or asset was changed. Release files remain derived
+distribution evidence rather than program authority or independent build provenance. Exact
+evidence is retained in
+[the v0.1.6 public release record](evidence/20260828-v0.1.6-public-release.json).
 
 ## Current public command lifecycle
 

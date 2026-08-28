@@ -1,0 +1,306 @@
+{
+  "schema": {
+    "identity": "lkjscript-public-binary-release-evidence",
+    "version": 1
+  },
+  "recorded_utc_date": "2026-08-28",
+  "status": "complete",
+  "repository": {
+    "branch": "main",
+    "starting_head": "fbde924ba1bcabd225aa824094f1a9d0f03186af",
+    "starting_origin_main": "fbde924ba1bcabd225aa824094f1a9d0f03186af",
+    "tagged_release_commit": "59ac6c8d20a26f5b9c94960c506e3ec2bf315b61",
+    "tagged_release_commit_on_origin_main": true,
+    "preserved_preexisting_work": [
+      "AGENTS.md"
+    ]
+  },
+  "implementation_commits": [
+    {
+      "sha": "6dde5f5cc0aad70e05a443daec821162dac2cb05",
+      "subject": "Prepare v0.1.5 release",
+      "purpose": "bump the first release candidate after the artifact-10 service cutover"
+    },
+    {
+      "sha": "59ac6c8d20a26f5b9c94960c506e3ec2bf315b61",
+      "subject": "Bind public smoke checks to release manifest",
+      "purpose": "remove the stale registry-digest duplicate, add its regression test, and prepare additive recovery v0.1.6"
+    }
+  ],
+  "release_identity": {
+    "tag": "v0.1.6",
+    "package_version": "0.1.6",
+    "annotated_tag_object_sha": "ab2f02ad1c559b639d98a15214eb588f3ee54765",
+    "tagged_commit_sha": "59ac6c8d20a26f5b9c94960c506e3ec2bf315b61",
+    "release_id": 378199577,
+    "release_url": "https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.6",
+    "published_at": "2026-08-28T00:44:03Z",
+    "immutable": true,
+    "draft": false,
+    "prerelease": false,
+    "latest": true,
+    "target_triple": "x86_64-unknown-linux-gnu"
+  },
+  "repository_release_settings": {
+    "immutable_releases_enabled": true,
+    "confirmation_variable": "LKJSCRIPT_IMMUTABLE_RELEASE_TAG_OBJECT_SHA",
+    "confirmation_value": "ab2f02ad1c559b639d98a15214eb588f3ee54765",
+    "publication_authority": "ephemeral GitHub Actions token in the write-isolated publish job"
+  },
+  "public_assets": [
+    {
+      "name": "lkjscript-x86_64-unknown-linux-gnu.tar.gz",
+      "bytes": 6954661,
+      "sha256": "ad9f0806c79b95a381001a75c7907de12d61014417809d95f46c3a30819852c6",
+      "github_digest": "sha256:ad9f0806c79b95a381001a75c7907de12d61014417809d95f46c3a30819852c6",
+      "url": "https://github.com/lkjsxc/lkjscript/releases/download/v0.1.6/lkjscript-x86_64-unknown-linux-gnu.tar.gz"
+    },
+    {
+      "name": "SHA256SUMS",
+      "bytes": 108,
+      "sha256": "0d49e832de3dbd8ab57243666e000680feb7e4ad74d2f82f2626191f396f8620",
+      "github_digest": "sha256:0d49e832de3dbd8ab57243666e000680feb7e4ad74d2f82f2626191f396f8620",
+      "url": "https://github.com/lkjsxc/lkjscript/releases/download/v0.1.6/SHA256SUMS"
+    }
+  ],
+  "candidate": {
+    "release_manifest_contract": "lkjscript-release-manifest-1",
+    "release_manifest_bytes": 3957,
+    "release_manifest_sha256": "969408992ec37c4215337125f820d4322c65f8d8f304097d6c89838e315732d5",
+    "cargo_lock_sha256": "d6ae30993b432bbf62ddb2059817b8504ba01043c3fd760b729c83520bf7cece",
+    "executable_bytes": 15390408,
+    "executable_sha256": "c1b4df144f4c802e2592c4020c16045cba1e3667fa3f10acb0c7b37a0247fb4a",
+    "cli_contract": 10,
+    "registry_contract": "lkjscript-contract-registry-3",
+    "registry_digest": "0bb0a7e50a31e94660d9dd1fd6466ba2cbf5d811a79044220d788d626f62d2d7",
+    "elf": {
+      "class": "ELF64",
+      "machine": "Advanced Micro Devices X86-64",
+      "interpreter": "/lib64/ld-linux-x86-64.so.2",
+      "required_shared_libraries": [
+        "libc.so.6",
+        "libgcc_s.so.1",
+        "libm.so.6"
+      ],
+      "highest_required_glibc_symbol_version": "GLIBC_2.38"
+    },
+    "archive_inventory": {
+      "directories": 1,
+      "regular_files": 4,
+      "members": 5,
+      "format": "posix-ustar",
+      "gzip_level": 9,
+      "numeric_owner": 0,
+      "numeric_group": 0
+    },
+    "root_license_bytes": 11336,
+    "third_party_notice_bytes": 315160,
+    "third_party_notice_generator": "cargo-about 0.9.2"
+  },
+  "application_runtime": {
+    "artifact_contract": "lkjscript-artifact-bundle-10",
+    "artifact_bundle": "artifact_bundle_f29713ff437662d63d9b93514c97b007815c43f185a9eba4498ecb700a276501",
+    "artifact_manifest": "artifact_manifest_97447a36407a29bb2b979ac42191d774334e661d799f65399b6eba904d593834",
+    "root_repository": "repo_95f988c5423fe3eb823c329ef0832d51",
+    "root_package": "pkg_20000000000000000000000000000001",
+    "semantic_revision": "rev_0f660831701b710fc7cd6e5f2c87cd754a944adc4ce77e1aca4649711946b4db",
+    "semantic_state": "semantic_state_067e2ba593a62c71757d24aaf717ddf28027454bf11b623e292d939120520cd4",
+    "checked_in_artifact_sha256": "80c69d69aec80e49cc0c023ec65eef3106f4a876eff1dc347defb461f3037ccb",
+    "fresh_build_equal": true,
+    "serve_and_worker_use_normalized_artifact_10": true
+  },
+  "dry_runs": [
+    {
+      "run_id": 33127988263,
+      "commit_sha": "6dde5f5cc0aad70e05a443daec821162dac2cb05",
+      "tag_input": "v0.1.5",
+      "publish": false,
+      "conclusion": "success",
+      "publication_jobs": "skipped"
+    },
+    {
+      "run_id": 33129434484,
+      "commit_sha": "59ac6c8d20a26f5b9c94960c506e3ec2bf315b61",
+      "tag_input": "v0.1.6",
+      "publish": false,
+      "conclusion": "success",
+      "publication_jobs": "skipped",
+      "downloaded_handoff_archive_bytes": 6954633,
+      "downloaded_handoff_archive_sha256": "5786211244c0735b4f375f5dc32457b36e8dfd9611944e1c457b77e5d0385221",
+      "downloaded_handoff_receipt_sha256": "be3a1e9924e65825dda6dc19d2d6be2142c5b0169128f71a41ec165630254d65"
+    }
+  ],
+  "workflow": {
+    "name": "Release",
+    "run_id": 33130051176,
+    "run_attempt": 1,
+    "run_url": "https://github.com/lkjsxc/lkjscript/actions/runs/33130051176",
+    "event": "push",
+    "head_branch": "v0.1.6",
+    "head_sha": "59ac6c8d20a26f5b9c94960c506e3ec2bf315b61",
+    "conclusion": "success",
+    "jobs": [
+      {
+        "id": 98717202078,
+        "name": "Build, verify, and package",
+        "conclusion": "success",
+        "elapsed_seconds": 668
+      },
+      {
+        "id": 98719072659,
+        "name": "Publish immutable release",
+        "conclusion": "success",
+        "elapsed_seconds": 19
+      },
+      {
+        "id": 98719130004,
+        "name": "Verify anonymous public release",
+        "conclusion": "success",
+        "elapsed_seconds": 12
+      }
+    ],
+    "full_verification_artifact": {
+      "id": 9670074518,
+      "name": "full-verification-evidence-33130051176-1",
+      "bytes": 54412,
+      "github_artifact_digest": "sha256:025ecbec37d7bd7b772205e0abf8823a300830865e009030d4e8a3821c02de6c",
+      "expires_at": "2026-09-04T00:42:29Z"
+    },
+    "release_handoff_artifact": {
+      "id": 9670098935,
+      "name": "release-handoff-33130051176-1",
+      "bytes": 6959115,
+      "github_artifact_digest": "sha256:194a2186bd7b8552838b81b21d8ed3a1df05a451e7fac1fbbc0abced45aea1fb",
+      "expires_at": "2026-08-29T00:43:40Z"
+    }
+  },
+  "verification": {
+    "fresh_full_command": "cargo run --locked -p lkjscript-dev -- check full --machine",
+    "fresh_full_receipt": ".artifacts/release/v0.1.6/published-33130051176/full/check/1787877456451396088-6143-0/receipt.json",
+    "fresh_full_receipt_sha256": "5b03157b1f7a58331ae5dcd8bc60b6ebf380be6c0796d8df3d35499cf32345a4",
+    "fresh_full_elapsed_seconds": 292.860745656,
+    "fresh_full": {
+      "status": "passed",
+      "passed": 20,
+      "fresh_passed": 20,
+      "reused_passed": 0,
+      "skipped": 0,
+      "unavailable": 0,
+      "failed": 0,
+      "unrun": 0,
+      "input_stable": true,
+      "fresh_required": true
+    },
+    "post_publication_product": {
+      "command": "cargo run --locked -p lkjscript-dev -- check product --machine",
+      "status": "passed",
+      "passed": 16,
+      "fresh_passed": 16,
+      "reused_passed": 0,
+      "unrun": 0,
+      "input_stable": true,
+      "elapsed_seconds": 236.045086581,
+      "receipt": ".artifacts/lkjscript-dev/check/1787878259331028084-2753165-0/receipt.json",
+      "receipt_sha256": "1e005718c0f97157e46a318ef687c3a32bfb01494bf7a41e36117b907b8b4667"
+    },
+    "service_receipt": ".artifacts/release/v0.1.6/published-33130051176/full/service/1787877745396437333-15617-0/receipt.json",
+    "service_receipt_sha256": "2a70ce1b36bfaba6911e519681e1ab075e11473244004217e63d4e406c75c390",
+    "service_acceptance": {
+      "status": "fresh_passed",
+      "elapsed_seconds": 3.843962612,
+      "authority_unchanged": true,
+      "routes_checked": 13,
+      "object_bytes": 200000,
+      "worker_productive_iterations": 1,
+      "restored_read_equal": true,
+      "shutdown_cleanup_failures": 0
+    },
+    "release_receipt": ".artifacts/release/v0.1.6/published-33130051176/handoff/release-receipt.json",
+    "release_receipt_sha256": "4bbd1edef6848290b03e2bdd01d66f450ccb69d51c1a63273d327622f819c391",
+    "release_classifications": {
+      "fresh_passed": 10,
+      "reused": 0,
+      "skipped": 0,
+      "unavailable": 0,
+      "failed": 0
+    },
+    "candidate_lifecycle": {
+      "status": "passed",
+      "wall_seconds": 0.590124053,
+      "cpu_seconds": 0.16,
+      "peak_rss_kib": 75272
+    },
+    "release_attestation": "fresh passed in hosted post-release job on attempt 1",
+    "archive_asset_attestation": "fresh passed in hosted post-release job on attempt 1",
+    "checksum_asset_attestation": "fresh passed in hosted post-release job on attempt 1"
+  },
+  "anonymous_transport": {
+    "exact_archive_url": "https://github.com/lkjsxc/lkjscript/releases/download/v0.1.6/lkjscript-x86_64-unknown-linux-gnu.tar.gz",
+    "latest_archive_url": "https://github.com/lkjsxc/lkjscript/releases/latest/download/lkjscript-x86_64-unknown-linux-gnu.tar.gz",
+    "exact_and_latest_archive_equal": true,
+    "exact_and_latest_checksum_equal": true,
+    "public_and_release_handoff_equal": true,
+    "hosted_download_attempts_per_asset": 1,
+    "checksum_verification": "passed for exact and latest",
+    "archive_inventory_verification": "passed",
+    "public_binary_commands": [
+      "capabilities",
+      "new command project",
+      "check",
+      "build",
+      "run main"
+    ],
+    "public_binary_result": "execution target=main value=\"\\\"hello\\\"\" differential=equal production-instructions=3 reference-expressions=2",
+    "local_capabilities_output": ".artifacts/release/v0.1.6/published-33130051176/public-check/capabilities.out",
+    "local_capabilities_output_sha256": "f7e19dbc79d2bfa96dddc463552e1adf370ca2d4e3872c0da8977028fe7e7597",
+    "local_run_output": ".artifacts/release/v0.1.6/published-33130051176/public-check/run.out",
+    "local_run_output_sha256": "7aadadb03f55f47785567712897f6ff7e1064fcb13ffcec2b6f1ff727eb7e924"
+  },
+  "recovery": {
+    "predecessor_tag": "v0.1.5",
+    "predecessor_tag_object_sha": "cf0c30279b88ffcc69618767fe5971ab53df4f2c",
+    "predecessor_commit_sha": "6dde5f5cc0aad70e05a443daec821162dac2cb05",
+    "predecessor_release_id": 378191906,
+    "predecessor_release_immutable": true,
+    "predecessor_workflow_run": 33128702240,
+    "predecessor_workflow_conclusion": "failure",
+    "failed_job_id": 98714621758,
+    "failed_boundary": "anonymous public binary smoke test",
+    "failure": "the workflow expected registry digest c63d0c4653d6de50e6f375d6da14bfb9101bba5a438aba5c0ae10a9dd27dbc43 while the verified current manifest and binary reported 0bb0a7e50a31e94660d9dd1fd6466ba2cbf5d811a79044220d788d626f62d2d7",
+    "content_classification": "v0.1.5 exact/latest bytes, checksums, strict inventory, and command lifecycle passed independent verification",
+    "correction": "derive the expected CLI contract and executable registry digest from the verified release manifest and compare the public binary against those owned identities",
+    "recovery_version": "v0.1.6",
+    "destructive_actions": [],
+    "older_tag_release_or_asset_mutated": false
+  },
+  "performance_and_resources": {
+    "locked_dependency_prefetch_seconds": 2.703139358,
+    "cargo_registry_bytes": 474049511,
+    "postgres_image_preparation_seconds": 4.00278294,
+    "release_preparation_seconds": 68.173708884,
+    "maximum_full_gate_peak_rss_kib": 79944,
+    "maximum_service_process_peak_rss_kib": 32364,
+    "worker_readiness_seconds": 0.050199232,
+    "initial_service_readiness_seconds": 0.250655589,
+    "restored_service_readiness_seconds": 0.050238094,
+    "payload_bytes": 15720861,
+    "archive_bytes": 6954661,
+    "archive_to_payload_ratio": 0.442384,
+    "archive_size_reduction_percent": 55.76,
+    "publication_retries": 0,
+    "draft_discovery_attempts": 2,
+    "asset_digest_propagation_attempts": 1,
+    "immutable_propagation_attempts": 1,
+    "release_attestation_attempts": 1,
+    "asset_attestation_attempts_each": 1
+  },
+  "limitations": [
+    "only x86_64-unknown-linux-gnu with GLIBC_2.38 or newer is admitted",
+    "the public asset remains a tar.gz archive plus checksum; no uncompressed binary asset or installer was added",
+    "same-runner deterministic packaging does not prove compiler reproducibility across machines",
+    "GitHub release attestations prove release identity and integrity, not independent build provenance or code signing",
+    "the local environment lacked Docker, so release-required live PostgreSQL service acceptance was fresh-passed in the hosted environment",
+    "local gh 2.45.0 lacked release verification commands; hosted gh performed release and asset attestation verification",
+    "provider token use, monetary cost, exact filesystem syscall counts, and download latency distributions are unavailable"
+  ]
+}

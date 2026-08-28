@@ -4,7 +4,7 @@ Implemented work is intentionally absent. Graph 5 authority, CLI 10, offline min
 recipes, exact built-in standard dependency, normalized check/build/pure-run, artifact 10,
 maintained standard/`lkjournal` artifacts, reviewed authored change, normalized query, standalone
 artifact-10 service/worker deployment, and direct predecessor runtime deletion are current
-architecture. The immutable `v0.1.4`
+architecture. The immutable `v0.1.6`
 GitHub Release is the current public `x86_64-unknown-linux-gnu` distribution path; its measured
 runtime floor and exact evidence are current facts rather than multi-platform admission.
 
