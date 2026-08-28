@@ -193,9 +193,9 @@ checks its bytes before mode restoration, and uses first-party `release verify -
 each anonymous archive. With credentials removed from the executable environment, it then runs the
 transferred `distributed-http` acceptance owner independently against the exact-tag and latest
 binaries. Separate retained receipts prove creation, reviewed mutation, check, deterministic build,
-serve, restart, startup failures, shutdown cleanup, and unchanged Graph authority. The immutable
-v0.1.6 historical release predates this mechanism and is not credited with the current-main HTTP
-recipe.
+serve, restart, startup failures, shutdown cleanup, and unchanged Graph authority. Immutable
+`v0.1.7` is the first release admitted by this complete mechanism. The historical `v0.1.6` release
+predates it and is not credited with the public HTTP recipe.
 
 ## Recovery and maintenance
 

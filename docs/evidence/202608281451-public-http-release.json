@@ -1,0 +1,651 @@
+{
+  "schema": {
+    "identity": "lkjscript-public-http-release-evidence",
+    "version": 1
+  },
+  "campaign_id": "202608281451",
+  "recorded_utc": "2026-08-28T07:39:38Z",
+  "status": "complete",
+  "repository": {
+    "identity": "lkjsxc/lkjscript",
+    "branch": "main",
+    "orientation_baseline": "abd2a39ce7324954225637db5a8870f4b4486b05",
+    "starting_head": "abd2a39ce7324954225637db5a8870f4b4486b05",
+    "starting_origin_main": "abd2a39ce7324954225637db5a8870f4b4486b05",
+    "starting_worktree": [
+      "modified AGENTS.md",
+      "untracked docs/campaigns/202608281451.md"
+    ],
+    "release_source_commit": "be531d9c77d722559527bbfa3683da67d9055b89",
+    "release_source_on_origin_main": true,
+    "release_source_subject": "Gate HTTP release publication on transferred verifier",
+    "preserved_preexisting_work": {
+      "path": "AGENTS.md",
+      "diff_sha256": "3bd6ce2dc12b5a19b70ec1a29a2652ed8c7a353a8217ade3b2fdd9d3364362c2",
+      "stash_object_sha": "72094602db689a130b646a4f062e76353567690e",
+      "included_in_release_source": false
+    },
+    "later_commits_at_entry": [],
+    "open_issues_at_completion": [],
+    "open_pull_requests_at_completion": []
+  },
+  "entry_reconciliation": {
+    "package_version": "0.1.7",
+    "next_unused_patch_at_entry": "v0.1.7",
+    "v0_1_7_tag_at_entry": false,
+    "v0_1_7_release_at_entry": false,
+    "queued_or_in_progress_release_runs_at_entry": 0,
+    "immutable_releases_enabled": true,
+    "immutable_releases_enforced_by_owner": false,
+    "confirmation_variable": "LKJSCRIPT_IMMUTABLE_RELEASE_TAG_OBJECT_SHA",
+    "authenticated_identity": "lkjsxc",
+    "active_campaign": "202608281451",
+    "predecessor_campaign_202608281025_terminal_status": "complete",
+    "nested_instruction_files": [],
+    "audit_discrepancy": {
+      "assumption": "two old empty v0.1.2 and v0.1.3 draft releases existed",
+      "evidence": "REST and GraphQL each returned zero drafts and only published v0.1.4 through v0.1.6 at entry",
+      "correction": "treat the drafts as already absent external state and perform no cleanup",
+      "consequence": "no draft was selected, mutated, or deleted"
+    }
+  },
+  "implementation": {
+    "commit": "be531d9c77d722559527bbfa3683da67d9055b89",
+    "changes": [
+      "release validation now derives CLI contract 11 from the executable contract owner",
+      "distributed HTTP acceptance uses stable schema lkjscript-distributed-http-acceptance-2",
+      "explicit absolute create-new evidence roots select no-checkout transferred mode",
+      "verifier, candidate, and copied-candidate byte, mode, SHA-256, and verification identities are bound",
+      "release verify exposes first-party create-new verified extraction",
+      "a separate one-day verifier handoff is byte-bound and admitted before mode use",
+      "publication depends on a read-only no-checkout packaged-candidate HTTP pass",
+      "post-release verification runs the same oracle independently against exact and latest public binaries"
+    ],
+    "deleted_predecessors": [
+      "release-local CLI_CONTRACT literal 10",
+      "distributed HTTP CAMPAIGN constant 202608281025",
+      "campaign receipt and summary fields",
+      "compile-time checkout-root use in transferred mode",
+      "command-template-only post-release shell smoke"
+    ],
+    "retained_oracles": [
+      "distributed_http_application contributor gate",
+      "copied-binary normalized command lifecycle regression",
+      "production and canonical-reference execution equality"
+    ]
+  },
+  "contracts": {
+    "graph": 5,
+    "cli": 11,
+    "project_creation": 2,
+    "artifact": 10,
+    "registry_contract": "lkjscript-contract-registry-3",
+    "registry_digest": "dd11eb15c9642ba6c64a223b01236ecefcd9323d6ad3711e4b46a6689ebab77d",
+    "distributed_http_acceptance": "lkjscript-distributed-http-acceptance-2",
+    "distributed_http_workflow": "distributed-http-application",
+    "release_manifest": "lkjscript-release-manifest-1",
+    "release_receipt": "lkjscript-release-receipt-1",
+    "verifier_handoff": "lkjscript-http-verifier-handoff-1"
+  },
+  "local_verification": {
+    "format": "passed",
+    "lkjscript_dev_unit_tests": {
+      "status": "passed",
+      "passed": 53,
+      "failed": 0
+    },
+    "lkjscript_dev_clippy": "passed with -D warnings",
+    "workflow_yaml_and_bash_syntax": {
+      "status": "passed",
+      "bash_scripts": 17
+    },
+    "focused_profile": {
+      "status": "fresh_passed",
+      "selected": 6,
+      "fresh_passed": 6,
+      "reused_passed": 0,
+      "receipt": ".artifacts/lkjscript-dev/check/1787899860708806029-2998497-0/receipt.json",
+      "receipt_sha256": "e9834e440a4bddb31e9d3b8b89a03d64d1fc8082a305966df24cc45839615798",
+      "receipt_digest": "verification_50e1331723dcfdef5a7ff392c269089d8583154bbfe10097e0391180cd51c5a5"
+    },
+    "exact_release_source_product_profile": {
+      "status": "fresh_passed",
+      "git_head": "be531d9c77d722559527bbfa3683da67d9055b89",
+      "selected": 17,
+      "fresh_passed": 17,
+      "reused_passed": 0,
+      "elapsed_seconds": 34.292721355,
+      "receipt": ".artifacts/lkjscript-dev/check/1787899955141551447-3005520-0/receipt.json",
+      "receipt_sha256": "473937219b4d09005029268048b2666e48dd10cff4486433dc048db17925f0cd",
+      "receipt_digest": "verification_a303c1e05d1645dceab2ee66455b31091ad3ef553958c20c15b7dfcb99eb86b8"
+    },
+    "exact_release_source_local_full_profile": {
+      "status": "failed",
+      "classification": "unavailable",
+      "failed_boundary": "service_acceptance",
+      "reason": "Docker client was installed but no Docker daemon socket was available",
+      "selected": 21,
+      "fresh_passed": 20,
+      "reused_passed": 0,
+      "receipt": ".artifacts/lkjscript-dev/check/1787899996303160084-3006894-0/receipt.json",
+      "receipt_sha256": "01c5e9ad083e792bcbdd30b6e69415261fa07812c4a01c0b4335c8467b9224c8",
+      "receipt_digest": "verification_ed0970422e8141867e9a463f573e7ea3c6c61f5d2256d87d9c4c7f45d945f6d1",
+      "completion_use": "not credited as required release proof; hosted exact-source full passed freshly"
+    },
+    "copied_verifier_package_simulation": {
+      "status": "fresh_passed",
+      "root": "/tmp/lkjscript-release-R-be531d9c",
+      "publication_mode": "dry-run",
+      "archive_bytes": 6985817,
+      "archive_sha256": "4d0927adfbcc7fbacba019555160eb789e2c5a549635c3ae746f673b260451fd",
+      "candidate_bytes": 15463656,
+      "candidate_sha256": "033ad8a5cf52a06c67facd912d8abdca35b194ee9b9ee0804d6396cab29b352e",
+      "verifier_bytes": 2361792,
+      "verifier_sha256": "c8d6ecc20829e3c04a29d2764776ded65423272cf9c304ffd83e384bf2e9c30b",
+      "mode_simulation": "0755 to 0644 to 0755 only after byte verification",
+      "http_receipt": "/tmp/lkjscript-release-R-be531d9c/no-checkout/http-evidence/receipt.json",
+      "http_receipt_sha256": "cfca1499409aa9e29eec9c337ab7ad51341b721388a1e24b66b082128ec98df0",
+      "http_receipt_digest": "verification_235a2001abe6434ebe5b539ba82ec17491c0326fc46181aec6a6a618e712244e"
+    },
+    "evidence_only_changed_profile": {
+      "status": "fresh_passed",
+      "selected": 2,
+      "fresh_passed": 2,
+      "reused_passed": 0,
+      "elapsed_seconds": 0.444813304,
+      "receipt": ".artifacts/lkjscript-dev/check/1787902697490833121-3040156-0/receipt.json",
+      "receipt_bytes": 6736,
+      "receipt_sha256": "71e58371538f0bbed02d747f7ebee47192aebafd9ef379de7821688e84259923",
+      "receipt_digest": "verification_ea4f7e836397f5d0f1ec59e61fe37ad6ebfbf5c7f4ac7919351fc4afaed55da5"
+    }
+  },
+  "hosted_dry_run": {
+    "run_id": 33149642339,
+    "run_attempt": 1,
+    "url": "https://github.com/lkjsxc/lkjscript/actions/runs/33149642339",
+    "event": "workflow_dispatch",
+    "head_sha": "be531d9c77d722559527bbfa3683da67d9055b89",
+    "tag_input": "v0.1.7",
+    "publish": false,
+    "conclusion": "success",
+    "jobs": [
+      {
+        "id": 98778396826,
+        "name": "Build, verify, and package",
+        "conclusion": "success"
+      },
+      {
+        "id": 98780549360,
+        "name": "Verify transferred packaged HTTP candidate",
+        "conclusion": "success"
+      },
+      {
+        "id": 98780576147,
+        "name": "Publish immutable release",
+        "conclusion": "skipped"
+      },
+      {
+        "id": 98780576132,
+        "name": "Verify anonymous public release",
+        "conclusion": "skipped"
+      }
+    ],
+    "full_verification": {
+      "status": "fresh_passed",
+      "selected": 21,
+      "fresh_passed": 21,
+      "reused_passed": 0,
+      "receipt_digest": "verification_22a02f44b3e7e761917db46310a7aef7dd3638633a730bdd2e143d0290863b62"
+    },
+    "release_handoff_artifact": {
+      "id": 9677420304,
+      "name": "release-handoff-33149642339-1",
+      "bytes": 6990369,
+      "digest": "sha256:54f283bb6b0127112e85ebc8b2ff475d21cf12d4d576e8cf985ec05fbaa89502"
+    },
+    "verifier_handoff_artifact": {
+      "id": 9677420654,
+      "name": "verifier-handoff-33149642339-1",
+      "bytes": 2362601,
+      "digest": "sha256:1d676b7280d17d7dd2654beee0e3924f7d3dee22d1c559f873213074cd135063"
+    },
+    "prepublication_evidence_artifact": {
+      "id": 9677424008,
+      "name": "pre-publication-http-evidence-33149642339-1",
+      "bytes": 31756,
+      "digest": "sha256:a5e9db096eec638d778014d48cc625753892b7e341207b0eb8aeac7cb766d897"
+    },
+    "transferred_http_receipt": {
+      "classification": "fresh_passed",
+      "receipt_sha256": "609da5886ece7e2816a539ec308bcc3f8a355fa5f7daf21297998158e6d44e67",
+      "receipt_digest": "verification_e64602d3c04c4e7e470c748d4ba0065c9ecee8d4ce2d5186cbf480e6097d5ce8",
+      "commands": 23,
+      "runners": 2,
+      "cleanup_complete": true
+    }
+  },
+  "release_identity": {
+    "tag": "v0.1.7",
+    "package_version": "0.1.7",
+    "annotated_tag_object_sha": "92a6d0b68b8c524d058c51073e8dd28158a9247b",
+    "tagged_commit_sha": "be531d9c77d722559527bbfa3683da67d9055b89",
+    "release_id": 378319314,
+    "release_node_id": "RE_kwDOTeret84WjLHS",
+    "release_url": "https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.7",
+    "published_at": "2026-08-28T07:22:49Z",
+    "immutable": true,
+    "draft": false,
+    "prerelease": false,
+    "latest": true,
+    "target_triple": "x86_64-unknown-linux-gnu",
+    "tag_signature": "unsigned; no code-signing claim is made"
+  },
+  "repository_release_settings": {
+    "immutable_releases_enabled": true,
+    "confirmation_variable": "LKJSCRIPT_IMMUTABLE_RELEASE_TAG_OBJECT_SHA",
+    "confirmation_value": "92a6d0b68b8c524d058c51073e8dd28158a9247b",
+    "confirmation_readback": "matched through the repository variables API before tag push",
+    "publication_authority": "ephemeral GitHub Actions token in job 98783421091",
+    "publication_job_checked_out_source": false,
+    "publication_job_executed_repository_or_verifier_binary": false
+  },
+  "public_assets": [
+    {
+      "id": 533430431,
+      "name": "lkjscript-x86_64-unknown-linux-gnu.tar.gz",
+      "bytes": 6985922,
+      "sha256": "e62f080b39686603f0401dfd6faea57d00dbf5e37cd51c4f23e7b1b63904f455",
+      "github_digest": "sha256:e62f080b39686603f0401dfd6faea57d00dbf5e37cd51c4f23e7b1b63904f455",
+      "url": "https://github.com/lkjsxc/lkjscript/releases/download/v0.1.7/lkjscript-x86_64-unknown-linux-gnu.tar.gz"
+    },
+    {
+      "id": 533430469,
+      "name": "SHA256SUMS",
+      "bytes": 108,
+      "sha256": "f4db76f640618f97c3d981698f828f09f3730f3e5511eac7886977da5a9d5f1c",
+      "github_digest": "sha256:f4db76f640618f97c3d981698f828f09f3730f3e5511eac7886977da5a9d5f1c",
+      "url": "https://github.com/lkjsxc/lkjscript/releases/download/v0.1.7/SHA256SUMS"
+    }
+  ],
+  "candidate": {
+    "release_manifest_bytes": 3957,
+    "release_manifest_sha256": "2df5e5d2c222c8149f4249e00e71521613da33d6224202f679525f22cc0ba428",
+    "cargo_lock_sha256": "36643c47e3618737fcd8c7ae9593de489a94386fb345f797c34798842ff89fda",
+    "executable_bytes": 15471848,
+    "executable_sha256": "b3a86c7d3d00d5e299e037d9b31fba6daf2db961e1d15ff54c7769e980500c5f",
+    "cli_contract": 11,
+    "registry_digest": "dd11eb15c9642ba6c64a223b01236ecefcd9323d6ad3711e4b46a6689ebab77d",
+    "elf": {
+      "class": "ELF64",
+      "machine": "Advanced Micro Devices X86-64",
+      "interpreter": "/lib64/ld-linux-x86-64.so.2",
+      "required_shared_libraries": [
+        "libc.so.6",
+        "libgcc_s.so.1",
+        "libm.so.6"
+      ],
+      "highest_required_glibc_symbol_version": "GLIBC_2.38"
+    },
+    "archive_inventory": {
+      "directories": 1,
+      "regular_files": 4,
+      "members": 5,
+      "format": "posix-ustar",
+      "gzip_level": 9,
+      "numeric_owner": 0,
+      "numeric_group": 0
+    },
+    "root_license_bytes": 11336,
+    "third_party_notice_bytes": 315160,
+    "third_party_notice_generator": "cargo-about 0.9.2"
+  },
+  "release_workflow": {
+    "name": "Release",
+    "run_id": 33150527883,
+    "run_attempt": 1,
+    "run_url": "https://github.com/lkjsxc/lkjscript/actions/runs/33150527883",
+    "event": "push",
+    "head_branch": "v0.1.7",
+    "head_sha": "be531d9c77d722559527bbfa3683da67d9055b89",
+    "conclusion": "success",
+    "jobs": [
+      {
+        "id": 98781204412,
+        "name": "Build, verify, and package",
+        "conclusion": "success",
+        "elapsed_seconds": 673
+      },
+      {
+        "id": 98783378847,
+        "name": "Verify transferred packaged HTTP candidate",
+        "conclusion": "success",
+        "elapsed_seconds": 11
+      },
+      {
+        "id": 98783421091,
+        "name": "Publish immutable release",
+        "conclusion": "success",
+        "elapsed_seconds": 14
+      },
+      {
+        "id": 98783471411,
+        "name": "Verify anonymous public release",
+        "conclusion": "success",
+        "elapsed_seconds": 15
+      }
+    ],
+    "artifacts": [
+      {
+        "id": 9677731839,
+        "name": "full-verification-evidence-33150527883-1",
+        "bytes": 84010,
+        "digest": "sha256:d28a2f3074fb3edc6785787ebafadc573ce1a24187398d2b66b2e3104f5fc5ed",
+        "retention_days": 7,
+        "expires_at": "2026-09-04T07:21:08Z"
+      },
+      {
+        "id": 9677758224,
+        "name": "release-handoff-33150527883-1",
+        "bytes": 6990397,
+        "digest": "sha256:98485a33aa5eb96da713ef0e852a10eb35f5b48c5d9e8d0c38fa25bf815434bc",
+        "retention_days": 1,
+        "expires_at": "2026-08-29T07:22:19Z"
+      },
+      {
+        "id": 9677758514,
+        "name": "verifier-handoff-33150527883-1",
+        "bytes": 2362601,
+        "digest": "sha256:de5e16255142bf188d111278e361cbcfcf4025b6d98b8b5aba546f5a2075a081",
+        "retention_days": 1,
+        "expires_at": "2026-08-29T07:22:20Z"
+      },
+      {
+        "id": 9677763923,
+        "name": "pre-publication-http-evidence-33150527883-1",
+        "bytes": 31790,
+        "digest": "sha256:f9c7984a7130b96080289cfa9a28f89fc9eec99fb36c60fa25f2a430829ab69c",
+        "retention_days": 7,
+        "expires_at": "2026-09-04T07:22:33Z"
+      },
+      {
+        "id": 9677776658,
+        "name": "public-http-verification-evidence-33150527883-1",
+        "bytes": 72558,
+        "digest": "sha256:c8b9b15e8405c1128e0abb5c4226408a1ec351b4f1257ee10a8837d4c83137b9",
+        "retention_days": 14,
+        "expires_at": "2026-09-11T07:23:07Z"
+      }
+    ]
+  },
+  "verifier_handoff": {
+    "file": "lkjscript-dev",
+    "bytes": 2361984,
+    "sha256": "db241886dec830693520c31595c7dbbac986bdc424f7b8656fe44967de80ba67",
+    "declared_mode": 493,
+    "fixed_inventory": [
+      "lkjscript-dev",
+      "verifier-identity.json"
+    ],
+    "artifact_zip_mode": "100755",
+    "mode_policy": "verify artifact identity and file bytes before accepting 0755 or restoring 0755 from 0644/0600",
+    "public_release_asset": false
+  },
+  "verification": {
+    "fresh_full": {
+      "classification": "fresh_passed",
+      "command": "cargo run --locked -p lkjscript-dev -- check full --machine",
+      "receipt_artifact_path": "full-verification-evidence-33150527883-1/check/1787901423470676528-6105-0/receipt.json",
+      "receipt_bytes": 49888,
+      "receipt_sha256": "6d5e4ef382136e9138a6102815ce56899c0784c8d3d89fb6bbfbcb613c4c61da",
+      "receipt_digest": "verification_41cfd05c55870cbc14a4a975b05e8fa792f24190374647044e83250b5dd71f07",
+      "elapsed_seconds": 245.280797912,
+      "selected": 21,
+      "fresh_passed": 21,
+      "reused_passed": 0,
+      "skipped": 0,
+      "unavailable": 0,
+      "failed": 0,
+      "not_run": 0,
+      "input_stable": true,
+      "fresh_required": true,
+      "service_acceptance": "fresh_passed",
+      "distributed_http_application": "fresh_passed"
+    },
+    "service_receipt": {
+      "artifact_path": "full-verification-evidence-33150527883-1/service/1787901664724007351-15138-0/receipt.json",
+      "bytes": 35864,
+      "sha256": "f99e6b2de0f0c0e3e0bca3ee204ed5bff64d9ce99559bb55230a23538fc0b756",
+      "classification": "fresh_passed",
+      "elapsed_seconds": 3.960056144,
+      "commands": 15,
+      "cpu_seconds": 0.79,
+      "peak_rss_kib": 29740,
+      "authority_unchanged": true,
+      "cleanup_complete": true
+    },
+    "release_receipt": {
+      "artifact_path": "release-handoff-33150527883-1/release-receipt.json",
+      "bytes": 3927,
+      "sha256": "e29b61b36bdbbdacb2d09309b91584a13e0708d7f243c033ef2dd89ad7e170c8",
+      "classifications": {
+        "fresh_passed": 10,
+        "reused_passed": 0,
+        "skipped": 0,
+        "unavailable": 0,
+        "failed": 0,
+        "not_run": 0
+      },
+      "deterministic_packages_equal": true,
+      "strict_archive_verification": true
+    },
+    "prepublication_transferred_http": {
+      "classification": "fresh_passed",
+      "artifact_path": "pre-publication-http-evidence-33150527883-1/prepublication/http-evidence/receipt.json",
+      "receipt_bytes": 40157,
+      "receipt_sha256": "c7c0da37283c91a922a85db9e72c3fa4c2e0a3a60f5567ffa493289192758ba3",
+      "receipt_digest": "verification_08e961d8174e02ca58bf9a4b5176dae804870f8ba2c09c63f0c964d5c55fcbe6",
+      "execution_context": "transferred",
+      "checkout_root": null,
+      "commands": 23,
+      "runners": 2,
+      "elapsed_seconds": 1.965018657,
+      "cpu_seconds": 0.33,
+      "peak_rss_kib": 11136,
+      "authority_unchanged": true,
+      "deterministic_build": true,
+      "restart_equal": true,
+      "startup_failures_without_ready": 6,
+      "cleanup_complete": true
+    },
+    "attestations": {
+      "release": "fresh_passed in hosted job 98783471411",
+      "archive_asset": "fresh_passed in hosted job 98783471411 on attempt 1",
+      "checksum_asset": "fresh_passed in hosted job 98783471411 on attempt 1",
+      "retained_verification_result_sha256": "059d65d351a1b065b86d79d94b5392c54ce264f42d59a19ed887b46c7f8c3e60",
+      "statement_tag_object_sha": "92a6d0b68b8c524d058c51073e8dd28158a9247b",
+      "statement_archive_sha256": "e62f080b39686603f0401dfd6faea57d00dbf5e37cd51c4f23e7b1b63904f455",
+      "statement_checksum_sha256": "f4db76f640618f97c3d981698f828f09f3730f3e5511eac7886977da5a9d5f1c",
+      "verified_timestamp": "2026-08-28T07:22:50Z"
+    }
+  },
+  "anonymous_public_http": {
+    "exact_and_latest_archive_equal": true,
+    "exact_and_latest_checksum_equal": true,
+    "release_handoff_and_public_archive_equal": true,
+    "hosted_download_attempts_each": 1,
+    "checksum_verification": "fresh_passed for exact and latest",
+    "release_verification": "fresh_passed for exact and latest",
+    "manifest_bytes": 3957,
+    "manifest_sha256": "2df5e5d2c222c8149f4249e00e71521613da33d6224202f679525f22cc0ba428",
+    "candidate_bytes": 15471848,
+    "candidate_sha256": "b3a86c7d3d00d5e299e037d9b31fba6daf2db961e1d15ff54c7769e980500c5f",
+    "exact": {
+      "classification": "fresh_passed",
+      "artifact_path": "public-http-verification-evidence-33150527883-1/public-verification/exact-http-evidence/receipt.json",
+      "receipt_bytes": 40165,
+      "receipt_sha256": "e1d1e9b386df9db570451e7c8b12eeb44525ca9aef20fe262828d035a40a8fdd",
+      "receipt_digest": "verification_c1a4f09d1a5d4bcd2ef46a70d4a5acc998b13bad7ad1ac87675b370bafe0f809",
+      "commands": 23,
+      "runners": 2,
+      "elapsed_seconds": 1.09391599,
+      "cpu_seconds": 0.6,
+      "peak_rss_kib": 11044,
+      "application_artifact_bytes": 194077,
+      "within_run_artifact_sha256": "207c9addaa301e0fec45f1dc29e71b12753a0cbae4d700b6d27d34401ebfbffe",
+      "authority_unchanged": true,
+      "clean_incremental_equal": true,
+      "restart_equal": true,
+      "startup_failures_without_ready": 6,
+      "cleanup_complete": true
+    },
+    "latest": {
+      "classification": "fresh_passed",
+      "artifact_path": "public-http-verification-evidence-33150527883-1/public-verification/latest-http-evidence/receipt.json",
+      "receipt_bytes": 40164,
+      "receipt_sha256": "8fd7cabe26ec4f84dff49b38ea759b7f29a42b67932da8c639071ef9a2291906",
+      "receipt_digest": "verification_62ba436b44e188d1a24c29f62cbfd73e23f3fc508795683e5d9b38c9d28a0df2",
+      "commands": 23,
+      "runners": 2,
+      "elapsed_seconds": 1.093428272,
+      "cpu_seconds": 0.6,
+      "peak_rss_kib": 10992,
+      "application_artifact_bytes": 194077,
+      "within_run_artifact_sha256": "ce3aff1b40d7c5e5697e58cf1123707ee36a93445c55a08438a1cb0600ae1504",
+      "authority_unchanged": true,
+      "clean_incremental_equal": true,
+      "restart_equal": true,
+      "startup_failures_without_ready": 6,
+      "cleanup_complete": true
+    },
+    "expected_equalities": {
+      "candidate_bytes": true,
+      "release_manifest": true,
+      "package_version": true,
+      "cli_contract": true,
+      "registry_digest": true,
+      "response_body_sha256": "a2ab3c627cb792d859512e4f2e6a49de7bf79699f53f2488c5eff84026133664",
+      "fresh_project_and_application_artifact_identities": "intentionally distinct between independent runs; clean and incremental outputs are equal within each run"
+    },
+    "independent_token_free_client": {
+      "root": "/tmp/lkjscript-public-independent-v0.1.7",
+      "downloads": 4,
+      "attempts_each": 1,
+      "download_elapsed_seconds": 1.999574239,
+      "exact_and_latest_bytes_equal": true,
+      "exact_http_receipt_sha256": "a9feb9e595c30e692db454adc2512180a9b10438fa7856da224f2a9afa13bb1c",
+      "exact_http_receipt_digest": "verification_1e6d0a51e4db8a229560869702711bf604f658e844e0c49831f13194a4004125",
+      "latest_http_receipt_sha256": "4bc43a07bb4bc4d1c514bbdac35e19b78798acaad678f601e56e91ae5a41e808",
+      "latest_http_receipt_digest": "verification_82fa80c7514da09d04c3e1dfe7460be84010e870d5b68dfacfe4da3dce18617f",
+      "exact_http": "fresh_passed",
+      "latest_http": "fresh_passed"
+    }
+  },
+  "performance_and_resources": {
+    "cargo_registry_bytes": 474049511,
+    "locked_dependency_prefetch_seconds": 2.913613899,
+    "release_build_step_seconds": 248,
+    "postgres_image_bytes": 294275095,
+    "postgres_image_preparation_seconds": 3.185238766,
+    "fresh_full_seconds": 245.280797912,
+    "maximum_full_gate_peak_rss_kib": 76540,
+    "release_preparation_seconds": 67.914642497,
+    "payload_bytes": 15802301,
+    "archive_bytes": 6985922,
+    "archive_to_payload_ratio": 0.442083,
+    "archive_size_reduction_percent": 55.79,
+    "release_discovery_operations": 3,
+    "release_discovery_attempts_each": 1,
+    "asset_digest_propagation_attempts": 1,
+    "immutable_propagation_attempts": 1,
+    "hosted_download_attempts_each": 1,
+    "release_attestation_attempts": 1,
+    "asset_attestation_attempts_each": 1,
+    "mutation_capable_retries": 0,
+    "read_only_retries": 0
+  },
+  "external_actions_and_recovery": {
+    "normal_main_push": "abd2a39ce7324954225637db5a8870f4b4486b05 to be531d9c77d722559527bbfa3683da67d9055b89",
+    "dry_run_dispatch": 33149642339,
+    "annotated_tag_created": "v0.1.7",
+    "tag_push": "normal exact-ref push",
+    "immutable_release_published": true,
+    "irreversible_objects": [
+      "annotated tag object 92a6d0b68b8c524d058c51073e8dd28158a9247b",
+      "immutable release 378319314",
+      "public assets 533430431 and 533430469"
+    ],
+    "additive_recovery_used": false,
+    "destructive_actions": [],
+    "force_pushes": 0,
+    "tag_moves_or_deletions": 0,
+    "release_or_asset_deletions": 0,
+    "asset_clobbers": 0,
+    "old_tags_releases_or_assets_mutated": false,
+    "old_drafts_deleted": false,
+    "published_predecessors_preserved": [
+      "v0.1.4",
+      "v0.1.5",
+      "v0.1.6"
+    ],
+    "pre_push_tool_correction": {
+      "assumption": "installed gh supported gh variable get",
+      "evidence": "gh 2.45.0 reported that subcommand unavailable after the variable was set but before tag push",
+      "correction": "read the repository variable value through the GitHub variables API and compare without printing it",
+      "consequence": "the exact binding was proved before the tag push; no conflicting external tag or release existed"
+    }
+  },
+  "empirical_answers": [
+    {
+      "question": 1,
+      "answer": "main started at and tracked origin/main abd2a39ce7324954225637db5a8870f4b4486b05; only the user-owned AGENTS.md change and untracked selected campaign existed, with no later commits or nested instructions"
+    },
+    {
+      "question": 2,
+      "answer": "no v0.1.7 tag, release, draft, source conflict, or active Release run existed at entry or immediately before tag creation"
+    },
+    {
+      "question": 3,
+      "answer": "immutable releases were enabled; authenticated identity lkjsxc set the exact confirmation variable and API readback matched before tag push"
+    },
+    {
+      "question": 4,
+      "answer": "release preparation consumed the copied CLI literal; distributed HTTP summary/workflow checks consumed campaign fields. All migrated to the executable CLI owner and stable schema in one cutover, with focused and workflow tests passing"
+    },
+    {
+      "question": 5,
+      "answer": "the exact 2,361,984-byte release-built verifier executed successfully in dry-run, release pre-publication, and public post-release no-checkout jobs after artifact and byte verification"
+    },
+    {
+      "question": 6,
+      "answer": "release verify --extract-to replays strict first-party archive verification into a private stage and publishes one create-new verified directory"
+    },
+    {
+      "question": 7,
+      "answer": "fresh final identities and resource observations are bound in this record and artifacts 9677731839, 9677763923, and 9677776658"
+    }
+  ],
+  "limitations": [
+    "only x86_64-unknown-linux-gnu with GLIBC_2.38 or newer is admitted",
+    "the public asset remains a tar.gz archive plus checksum; no installer or additional platform was added",
+    "same-runner deterministic packaging does not prove compiler reproducibility across machines",
+    "GitHub release attestations prove release identity and integrity, not independent build provenance or code signing",
+    "the local environment lacked a Docker daemon; required service acceptance was fresh-passed twice in hosted exact-source runs",
+    "local gh 2.45.0 lacked repository-variable readback and release-attestation commands; API readback and the hosted pinned-boundary checks supplied those proofs",
+    "the verifier artifact ZIP recorded mode 100755, but consumers still verify bytes before accepting or restoring executable mode",
+    "fresh project identities and their application artifact digests differ across independent exact/latest runs by design",
+    "provider token use, monetary cost, exact filesystem syscall counts, cache state, and latency distributions are unavailable"
+  ],
+  "raw_evidence": {
+    "dry_run_download_root": "/tmp/lkjscript-dry-run-33149642339",
+    "release_run_download_root": "/tmp/lkjscript-release-run-33150527883",
+    "independent_public_client_root": "/tmp/lkjscript-public-independent-v0.1.7",
+    "workflow_artifact_ids": [
+      9677731839,
+      9677758224,
+      9677758514,
+      9677763923,
+      9677776658
+    ],
+    "large_logs_embedded": false
+  }
+}

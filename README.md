@@ -6,16 +6,15 @@ mutable locators; stable typed identities preserve continuity. Source text, comp
 indexes, compiler caches, artifacts, deployment descriptors, and runtime handles are projections
 or consumers rather than alternate program truths.
 
-The released v0.1.6 executable supports an offline command-application lifecycle through one copied
-binary. Current `main`, versioned as the unreleased 0.1.7 candidate, additionally closes an editable
-HTTP lifecycle through that same distribution form. Both create Graph 5 projects, inspect and
-change accepted meaning, run graph-owned tests, and build deterministic artifact-10 bundles. The
-HTTP candidate also starts the artifact through the standalone deployment boundary and serves it
-on loopback without Cargo, a checkout, database, container, or helper executable.
+The released v0.1.7 executable supports offline command and editable HTTP application lifecycles
+through one copied binary. Both create Graph 5 projects, inspect and change accepted meaning, run
+graph-owned tests, and build deterministic artifact-10 bundles. The HTTP workflow also starts the
+artifact through the standalone deployment boundary and serves it on loopback without Cargo, a
+checkout, database, container, or helper executable.
 
-The public binary target is exactly `x86_64-unknown-linux-gnu`. The current candidate requires
-the ELF interpreter `/lib64/ld-linux-x86-64.so.2`, `libgcc_s.so.1`, `libm.so.6`, `libc.so.6`, and
-GLIBC 2.38 or newer. No broader Linux portability is claimed.
+The public binary target is exactly `x86_64-unknown-linux-gnu`. It requires the ELF interpreter
+`/lib64/ld-linux-x86-64.so.2`, `libgcc_s.so.1`, `libm.so.6`, `libc.so.6`, and GLIBC 2.38 or newer.
+No broader Linux portability is claimed.
 
 ## Download
 
@@ -35,10 +34,10 @@ tar -xzf lkjscript-x86_64-unknown-linux-gnu.tar.gz
 
 The archive also contains the Apache-2.0 project license, exact third-party notices, and canonical
 release metadata. Its stable filename makes the latest URL durable; the
-[`v0.1.6` release page](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.6) owns the immutable
+[`v0.1.7` release page](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.7) owns the immutable
 version-specific
-[archive](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.6/lkjscript-x86_64-unknown-linux-gnu.tar.gz)
-and [checksum](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.6/SHA256SUMS). See the
+[archive](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.7/lkjscript-x86_64-unknown-linux-gnu.tar.gz)
+and [checksum](https://github.com/lkjsxc/lkjscript/releases/download/v0.1.7/SHA256SUMS). See the
 [maintainer release procedure](docs/release.md) for identity, packaging, verification, and
 recovery details.
 
@@ -73,15 +72,14 @@ and an exact dependency on the built-in standard package. It contains Graph 5 au
 does not read the checkout, Cargo, the network, or an external template. Use `--template minimal`
 for an empty dependency-free package.
 
-### Current 0.1.7 HTTP candidate (not yet released)
+### HTTP application from the public binary
 
-The immutable v0.1.6 download above does not contain the `http` recipe. A copied executable built
-from current `main` exposes the following candidate workflow:
+The immutable v0.1.7 download above exposes this complete workflow from the same copied executable:
 
 ```sh
-mkdir -p /tmp/lkjscript-http-candidate
-cp /path/to/verified/0.1.7-candidate/lkjscript /tmp/lkjscript-http-candidate/lkjscript
-cd /tmp/lkjscript-http-candidate
+mkdir -p /tmp/lkjscript-http-demo
+cp /tmp/lkjscript-download/lkjscript/lkjscript /tmp/lkjscript-http-demo/lkjscript
+cd /tmp/lkjscript-http-demo
 ./lkjscript capabilities new
 ./lkjscript new ./site --template http --name site
 ./lkjscript --project ./site status

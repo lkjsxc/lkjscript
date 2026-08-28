@@ -122,7 +122,9 @@ The public release, transient artifacts, archive, manifest, checksum, verifier r
 digest, and attestation are all derived distribution evidence. None can select or edit Graph 5
 meaning, executable contracts, compilation semantics, or deployment data. The root package version
 and annotated tag bind release identity; recovery from a published content defect uses a new patch
-identity rather than mutation.
+identity rather than mutation. Immutable `v0.1.7` is the first public release admitted through this
+complete path: its pre-publication package run and both independent anonymous exact/latest HTTP
+oracles passed in [workflow 33150527883](https://github.com/lkjsxc/lkjscript/actions/runs/33150527883).
 
 ## Layer ownership
 

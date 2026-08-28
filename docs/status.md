@@ -38,36 +38,41 @@ and stages that one artifact for isolated `serve` and `worker` acceptance.
 
 ## Public binary release
 
-[`v0.1.6`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.6) is the current public and
+[`v0.1.7`](https://github.com/lkjsxc/lkjscript/releases/tag/v0.1.7) is the current public and
 latest release. Its annotated tag object
-`ab2f02ad1c559b639d98a15214eb588f3ee54765` selects commit
-`59ac6c8d20a26f5b9c94960c506e3ec2bf315b61`; the repository reports the published release as
-immutable. It includes the standalone artifact-10 `serve` and `worker` cutover. The supported
-target remains exactly `x86_64-unknown-linux-gnu`. The candidate is ELF64 x86-64, uses
-`/lib64/ld-linux-x86-64.so.2`, requires `libc.so.6`, `libgcc_s.so.1`, and `libm.so.6`, and has a
-measured maximum required symbol version of `GLIBC_2.38`.
+`92a6d0b68b8c524d058c51073e8dd28158a9247b` selects commit
+`be531d9c77d722559527bbfa3683da67d9055b89`; GitHub reports release `378319314` as immutable,
+non-draft, and non-prerelease. It includes the standalone artifact-10 `serve` and `worker`
+boundary plus the complete copied-binary HTTP creation, reviewed mutation, build, serve, restart,
+and failure workflow. The supported target remains exactly `x86_64-unknown-linux-gnu`. The
+executable is ELF64 x86-64, uses `/lib64/ld-linux-x86-64.so.2`, requires `libc.so.6`,
+`libgcc_s.so.1`, and `libm.so.6`, and has a measured maximum required symbol version of
+`GLIBC_2.38`.
 
 | Public asset | Bytes | SHA-256 / GitHub asset digest |
 |---|---:|---|
-| `lkjscript-x86_64-unknown-linux-gnu.tar.gz` | 6,954,661 | `ad9f0806c79b95a381001a75c7907de12d61014417809d95f46c3a30819852c6` |
-| `SHA256SUMS` | 108 | `0d49e832de3dbd8ab57243666e000680feb7e4ad74d2f82f2626191f396f8620` |
+| `lkjscript-x86_64-unknown-linux-gnu.tar.gz` | 6,985,922 | `e62f080b39686603f0401dfd6faea57d00dbf5e37cd51c4f23e7b1b63904f455` |
+| `SHA256SUMS` | 108 | `f4db76f640618f97c3d981698f828f09f3730f3e5511eac7886977da5a9d5f1c` |
 
 Release workflow
-[`33130051176`](https://github.com/lkjsxc/lkjscript/actions/runs/33130051176) passed all three jobs.
-Its exact tagged content passed 20/20 fresh full gates, including copied-binary artifact-10 service
-acceptance. Anonymous downloads from both the exact-tag and stable `releases/latest` paths matched
-the archive digest and passed GitHub release/asset attestation, strict extraction, and the command
-project smoke lifecycle. The archive holds only the executable, root license, generated
+[`33150527883`](https://github.com/lkjsxc/lkjscript/actions/runs/33150527883) passed all four jobs on
+attempt 1. Its exact tagged content passed 21/21 fresh full gates with zero reuse, including
+PostgreSQL service and distributed HTTP acceptance. A separate read-only no-checkout job verified
+the release and verifier handoffs, safely extracted the package, and passed the transferred HTTP
+oracle before publication. Anonymous exact-tag and stable `releases/latest` downloads then matched
+the archive and checksum bytes, passed GitHub release and asset attestation, and independently
+completed the HTTP oracle twice. The archive holds only the executable, root license, generated
 third-party notices, and canonical release manifest under one `lkjscript/` directory.
 
 Immutable `v0.1.5` was the first publication attempt for this source generation. Its public bytes
 passed independent checksum and command lifecycle verification, but its workflow's final smoke
 step compared the binary against a stale pre-cutover registry digest. The workflow now reads the
 CLI contract and registry digest from the verified release manifest, and recovery used additive
-`v0.1.6`; neither `v0.1.5` nor an older tag or asset was changed. Release files remain derived
-distribution evidence rather than program authority or independent build provenance. Exact
-evidence is retained in
-[the v0.1.6 public release record](evidence/20260828-v0.1.6-public-release.json).
+`v0.1.6`; neither `v0.1.5` nor an older tag or asset was changed. The independent `v0.1.7`
+publication likewise moved or replaced no predecessor. Release files remain derived distribution
+evidence rather than program authority or independent build provenance. Exact evidence is retained
+in the historical [v0.1.6 record](evidence/20260828-v0.1.6-public-release.json) and the current
+[v0.1.7 public HTTP record](evidence/202608281451-public-http-release.json).
 
 ## Current-main application lifecycle
 
@@ -93,8 +98,8 @@ resource limits, and listener `127.0.0.1:0`. Runtime readiness reports the actua
 address. The graph's editable response text is changed only through reviewed `change plan` and
 `change apply`; build and resident execution do not open or advance project authority.
 
-This HTTP recipe is current-main candidate behavior, not public-release behavior. Immutable v0.1.6
-remains the latest public distribution and exposes only the minimal and command creation recipes.
+This closed HTTP recipe is public `v0.1.7` behavior. It does not expose generic component,
+requirement, port, or target authoring.
 
 `status`, exact owner `inspect`, and normalized owner/name/relation `query` read one accepted
 revision. `change plan` and `change apply` share typed lowering and a reviewed logical-plan

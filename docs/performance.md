@@ -4,45 +4,52 @@ Measurements are observations, not promises.
 
 ## Current public binary release
 
-Release `v0.1.6` was built and published by GitHub Actions run
-[`33130051176`](https://github.com/lkjsxc/lkjscript/actions/runs/33130051176) on explicit
-`ubuntu-24.04` with Rust/Cargo 1.98.0. The run had three jobs: the read-only build job completed in
-11 minutes 8 seconds, the no-checkout publication job in 19 seconds, and anonymous post-release
-verification in 12 seconds. All required jobs passed on attempt 1.
+Release `v0.1.7` was built and published by GitHub Actions run
+[`33150527883`](https://github.com/lkjsxc/lkjscript/actions/runs/33150527883) on explicit
+`ubuntu-24.04` with Rust/Cargo 1.98.0. Its four jobs completed in 11 minutes 13 seconds for the
+read-only build, 11 seconds for no-checkout packaged-candidate HTTP admission, 14 seconds for
+write-isolated publication, and 15 seconds for anonymous exact/latest verification. All passed on
+attempt 1.
 
 | Observation | Value |
 |---|---:|
-| locked dependency prefetch | 2.703 s; 474,049,511 registry bytes |
-| release compilation workflow step | about 266 s |
-| pinned PostgreSQL image preparation | 4.003 s |
-| fresh full verification receipt | 292.861 s; 20/20 gates fresh passed; zero reused |
-| service acceptance within full verification | 3.844 s end to end; 32,364 KiB maximum service-process peak RSS |
-| exact-candidate copied-binary acceptance | 0.590 s; 0.160 s CPU; 75,272 KiB peak RSS |
-| complete release preparation (notice, candidate, two packages, strict verification) | 68.174 s |
-| transient handoff artifact | 6,959,115 compressed bytes |
-| draft upload, exact inspection, and publication job | 19 s |
-| anonymous download, attestation, extraction, and smoke job | 12 s |
+| locked dependency prefetch | 2.914 s; 474,049,511 registry bytes |
+| release compilation workflow step | about 248 s |
+| pinned PostgreSQL image preparation | 3.185 s; 294,275,095 image bytes |
+| fresh full verification receipt | 245.281 s; 21/21 gates fresh passed; zero reused |
+| service acceptance within full verification | 3.960 s; 0.790 s sampled child CPU; 29,740 KiB maximum child peak RSS |
+| exact-candidate copied-binary acceptance | 0.763 s; 0.160 s CPU; 74,780 KiB peak RSS |
+| complete release preparation (notice, candidate, two packages, strict verification) | 67.915 s |
+| release handoff artifact | 6,990,397 bytes |
+| verifier handoff | 2,362,601-byte artifact; 2,361,984-byte executable |
+| transferred pre-publication HTTP oracle | 1.965 s; 0.330 s sampled CPU; 11,136 KiB peak RSS |
+| anonymous exact HTTP oracle | 1.094 s; 0.600 s sampled CPU; 11,044 KiB peak RSS |
+| anonymous latest HTTP oracle | 1.093 s; 0.600 s sampled CPU; 10,992 KiB peak RSS |
 
-The exact release executable is 15,390,408 bytes. `LICENSE` is 11,336 bytes, the generated
-third-party notice is 315,160 bytes, and `RELEASE-MANIFEST.json` is 3,957 bytes. Their 15,720,861
-payload bytes compress to a 6,954,661-byte archive, a ratio of 0.442384 (55.76% smaller). The
-108-byte checksum file and 3,906-byte external receipt complete the fixed handoff. The largest
-observed gate peak RSS was 79,944 KiB for workspace tests. Exact notice-generation wall time and
-peak RSS were not isolated from the packaging step.
+The exact release executable is 15,471,848 bytes with SHA-256
+`b3a86c7d3d00d5e299e037d9b31fba6daf2db961e1d15ff54c7769e980500c5f`. `LICENSE` is 11,336
+bytes, the generated third-party notice is 315,160 bytes, and `RELEASE-MANIFEST.json` is 3,957
+bytes. Their 15,802,301 payload bytes compress to a 6,985,922-byte archive, a ratio of 0.442083
+(55.79% smaller). The 108-byte checksum file and 3,927-byte external receipt complete the fixed
+release handoff. The largest observed full-gate peak RSS was 76,540 KiB for workspace tests. Exact
+notice-generation wall time and peak RSS were not isolated from the packaging step.
 
 Each of the four hosted anonymous transport requests succeeded on its first attempt and transferred
-6,954,661 or 108 bytes as appropriate. GitHub draft discovery required two bounded attempts and
-one five-second wait; asset-digest propagation, immutable-state observation, release verification,
-and both asset verifications succeeded on their first attempts. An independent local download also
-found exact-tag, latest, and release-handoff bytes equal and completed the same command lifecycle.
-The release run executed no destructive retry.
+6,985,922 or 108 bytes as appropriate. Every bounded release-discovery operation, asset-digest and
+immutable-state observation, release attestation, and both asset attestations succeeded on its
+first attempt. Exact and latest each ran the 23-command/two-runner HTTP workflow independently.
+An additional token-free client downloaded all four public files on its first attempt, found exact
+and latest bytes equal, and freshly repeated both HTTP workflows. The release run executed no
+destructive retry.
 
 These are single hosted and client observations, not latency distributions. Runner caches and
 network conditions were uncontrolled. The same-input package was byte-stable within one runner;
-this does not establish bit-for-bit compiler reproducibility across runner images. Provider token
-use, monetary cost, and exact filesystem syscall counts are unavailable. Structured identities,
-digests, classifications, failed predecessor attempts, and raw-evidence pointers are in
-[`20260828-v0.1.6-public-release.json`](evidence/20260828-v0.1.6-public-release.json).
+this does not establish bit-for-bit compiler reproducibility across runner images. The public HTTP
+checks do more work than the command-only `v0.1.6` smoke, so their wall time is not a like-for-like
+product regression. Provider token use, monetary cost, and exact filesystem syscall counts are
+unavailable. Current structured identities, digests, classifications, and raw-evidence pointers
+are in [`202608281451-public-http-release.json`](evidence/202608281451-public-http-release.json);
+the [v0.1.6 record](evidence/20260828-v0.1.6-public-release.json) remains historical.
 
 ## Current normalized command lifecycle
 
@@ -393,12 +400,12 @@ the published `v0.1.4` executable observation. Its preliminary product profile p
 gates in 240.796 seconds with no reuse. This size difference is contraction evidence, not a general
 binary-size trend; the exact final full profile remains the completion authority.
 
-## Current distributed HTTP application candidate
+## Distributed HTTP application
 
-The 0.1.7 release-mode executable measured 15,463,656 bytes with SHA-256
+The pre-publication local 0.1.7 release-mode executable measured 15,463,656 bytes with SHA-256
 `033ad8a5cf52a06c67facd912d8abdca35b194ee9b9ee0804d6396cab29b352e`. It is 73,248 bytes
-(0.48%) larger than the immutable v0.1.6 executable observation. The candidate was copied once to
-a fresh temporary root outside the checkout and completed 23 bounded child commands plus two
+(0.48%) larger than the immutable v0.1.6 executable observation. That candidate was copied once
+to a fresh temporary root outside the checkout and completed 23 bounded child commands plus two
 resident runners in 1.146 seconds. The environment contained only `LANG`; no database, container,
 Cargo invocation, checkout input, network registry, or product-side helper participated.
 
@@ -424,6 +431,15 @@ instruction counts, context switches, provider telemetry, and cost were unavaila
 an invasive measurement boundary. The complete identities and per-command observations are in
 [`202608281025-distributed-http-application.json`](evidence/202608281025-distributed-http-application.json);
 bounded raw logs remain under the receipt directory named there.
+
+The final immutable public v0.1.7 executable is 15,471,848 bytes, 81,440 bytes (0.53%) larger than
+the v0.1.6 executable observation. Hosted exact and latest public runs took 1.094 and 1.093 seconds;
+each independently executed 23 commands and two resident runners, returned the same 30-byte HTTP
+body before and after restart, exercised six startup failures, removed its product workspace, and
+left accepted Graph authority unchanged. Sampled CPU was 0.600 seconds for each run and maximum
+child peak RSS was 11,044 and 10,992 KiB. Fresh projects intentionally allocate different semantic
+and artifact identities; candidate bytes, release manifests, contracts, response bytes, and every
+within-run clean/incremental artifact comparison agreed where equality is required.
 
 ## Historical compiler, service, and verification receipts
 
