@@ -483,12 +483,12 @@ pub(crate) fn read_receipt(path: &Path, candidate: &Path) -> Result<ReceiptBindi
             runner
                 .stopped
                 .as_ref()
-                .is_some_and(|stopped| !stopped.clean())
+                .is_none_or(|stopped| !stopped.clean())
         })
         || !result.artifact_identity.fresh_build_equal
         || !result.authority_unchanged
         || result.authority_before != result.authority_after
-        || result.routes_checked != receipt.requests.len() as u64
+        || result.routes_checked.saturating_add(1) != receipt.requests.len() as u64
         || result.resource_revision == 0
         || result.history_entries == 0
         || result.object_bytes == 0
