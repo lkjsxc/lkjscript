@@ -24,7 +24,11 @@ const ACCEPTANCE_SCHEMA_VERSION: u32 = 2;
 const ACCEPTANCE_WORKFLOW: &str = "distributed-http-application";
 const MAXIMUM_COMMAND_OUTPUT_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_ARTIFACT_BYTES: u64 = 64 * 1024 * 1024;
-const MAXIMUM_EXECUTABLE_BYTES: u64 = 256 * 1024 * 1024;
+const MAXIMUM_CANDIDATE_EXECUTABLE_BYTES: u64 = 256 * 1024 * 1024;
+// Local contributor checks copy a debug verifier with symbols. Keep that operational input
+// separate from the tighter distributed product-candidate bound.
+const MAXIMUM_VERIFIER_EXECUTABLE_BYTES: u64 = 384 * 1024 * 1024;
+const MAXIMUM_RECEIPT_BYTES: u64 = 64 * 1024 * 1024;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(60);
 const RUNNER_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const READY_TIMEOUT: Duration = Duration::from_secs(30);
@@ -295,7 +299,11 @@ struct ActiveRunner {
 pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, DevError> {
     let options = parse_options(arguments)?;
     let verifier_path = current_verifier()?;
-    let verifier = executable_observation(&verifier_path, "distributed HTTP verifier")?;
+    let verifier = executable_observation(
+        &verifier_path,
+        "distributed HTTP verifier",
+        MAXIMUM_VERIFIER_EXECUTABLE_BYTES,
+    )?;
     let (execution_context, checkout_root, candidate_path, evidence_directory, observation_root) =
         if let Some(requested_evidence_root) = &options.evidence_root {
             let candidate = resolve_candidate(None, &options.binary)?;
@@ -322,7 +330,11 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
     let receipt_path = evidence_directory.join("receipt.json");
     let started_wall = unix_nanoseconds()?;
     let started = Instant::now();
-    let candidate = executable_observation(&candidate_path, "distributed HTTP candidate")?;
+    let candidate = executable_observation(
+        &candidate_path,
+        "distributed HTTP candidate",
+        MAXIMUM_CANDIDATE_EXECUTABLE_BYTES,
+    )?;
     let temporary = tempfile::Builder::new()
         .prefix("lkjscript-distributed-http-")
         .tempdir()
@@ -335,7 +347,11 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         .is_none_or(|repository| !isolated_root.starts_with(repository));
     let copied_binary = isolated_root.join("lkjscript");
     copy_binary(&candidate_path, &copied_binary)?;
-    let copied_candidate = executable_observation(&copied_binary, "copied HTTP candidate")?;
+    let copied_candidate = executable_observation(
+        &copied_binary,
+        "copied HTTP candidate",
+        MAXIMUM_CANDIDATE_EXECUTABLE_BYTES,
+    )?;
     if candidate.byte_length != copied_candidate.byte_length
         || candidate.sha256 != copied_candidate.sha256
         || candidate.verification_digest != copied_candidate.verification_digest
@@ -432,7 +448,7 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         failure,
     };
     let published = evidence::publish_json(&receipt_path, &receipt)?;
-    let receipt_sha256 = sha256_file(&receipt_path, MAXIMUM_EXECUTABLE_BYTES)?;
+    let receipt_sha256 = sha256_file(&receipt_path, MAXIMUM_RECEIPT_BYTES)?;
     print_summary(&options, &receipt, &published, &receipt_sha256)?;
     Ok(if status == AcceptanceStatus::Passed {
         0
@@ -1761,17 +1777,29 @@ fn resolve_candidate(checkout_root: Option<&Path>, binary: &Path) -> Result<Path
         })?;
         repository.join(binary)
     };
-    resolve_regular_executable(&path, "distributed HTTP candidate")
+    resolve_regular_executable(
+        &path,
+        "distributed HTTP candidate",
+        MAXIMUM_CANDIDATE_EXECUTABLE_BYTES,
+    )
 }
 
 fn current_verifier() -> Result<PathBuf, DevError> {
     let path = std::env::current_exe().map_err(|error| {
         DevError::infrastructure(format!("resolve distributed HTTP verifier: {error}"))
     })?;
-    resolve_regular_executable(&path, "distributed HTTP verifier")
+    resolve_regular_executable(
+        &path,
+        "distributed HTTP verifier",
+        MAXIMUM_VERIFIER_EXECUTABLE_BYTES,
+    )
 }
 
-fn resolve_regular_executable(path: &Path, label: &str) -> Result<PathBuf, DevError> {
+fn resolve_regular_executable(
+    path: &Path,
+    label: &str,
+    maximum_bytes: u64,
+) -> Result<PathBuf, DevError> {
     if !path.is_absolute() || has_noncanonical_component(path) {
         return Err(DevError::usage(format!(
             "{label} path '{}' must be absolute and lexically canonical",
@@ -1787,9 +1815,9 @@ fn resolve_regular_executable(path: &Path, label: &str) -> Result<PathBuf, DevEr
             path.display()
         )));
     }
-    if metadata.len() > MAXIMUM_EXECUTABLE_BYTES {
+    if metadata.len() > maximum_bytes {
         return Err(DevError::usage(format!(
-            "{label} '{}' exceeds {MAXIMUM_EXECUTABLE_BYTES} bytes",
+            "{label} '{}' exceeds {maximum_bytes} bytes",
             path.display()
         )));
     }
@@ -1812,8 +1840,12 @@ fn resolve_regular_executable(path: &Path, label: &str) -> Result<PathBuf, DevEr
     Ok(canonical)
 }
 
-fn executable_observation(path: &Path, label: &str) -> Result<ExecutableObservation, DevError> {
-    let path = resolve_regular_executable(path, label)?;
+fn executable_observation(
+    path: &Path,
+    label: &str,
+    maximum_bytes: u64,
+) -> Result<ExecutableObservation, DevError> {
+    let path = resolve_regular_executable(path, label, maximum_bytes)?;
     let file = evidence::proof(&path, path.display().to_string())?;
     let byte_length = file
         .bytes
@@ -1825,7 +1857,7 @@ fn executable_observation(path: &Path, label: &str) -> Result<ExecutableObservat
         .digest
         .clone()
         .ok_or_else(|| DevError::infrastructure(format!("{label} proof omitted digest")))?;
-    let sha256 = sha256_file(&path, MAXIMUM_EXECUTABLE_BYTES)?;
+    let sha256 = sha256_file(&path, maximum_bytes)?;
     Ok(ExecutableObservation {
         file,
         byte_length,
@@ -2179,7 +2211,9 @@ mod tests {
         fs::copy(source, &candidate).expect("copy candidate fixture");
         fs::set_permissions(&candidate, fs::Permissions::from_mode(0o755))
             .expect("set candidate mode");
-        let observed = executable_observation(&candidate, "fixture").expect("observe fixture");
+        let observed =
+            executable_observation(&candidate, "fixture", MAXIMUM_CANDIDATE_EXECUTABLE_BYTES)
+                .expect("observe fixture");
         assert!(observed.executable);
         assert_eq!(observed.mode & 0o7777, 0o755);
         assert_eq!(observed.sha256.len(), 64);
@@ -2190,19 +2224,27 @@ mod tests {
 
         fs::set_permissions(&candidate, fs::Permissions::from_mode(0o644))
             .expect("remove executable mode");
-        assert!(executable_observation(&candidate, "fixture").is_err());
+        assert!(
+            executable_observation(&candidate, "fixture", MAXIMUM_CANDIDATE_EXECUTABLE_BYTES,)
+                .is_err()
+        );
         let link = temporary.path().join("candidate-link");
         std::os::unix::fs::symlink(&candidate, &link).expect("create candidate link");
-        assert!(executable_observation(&link, "fixture").is_err());
+        assert!(
+            executable_observation(&link, "fixture", MAXIMUM_CANDIDATE_EXECUTABLE_BYTES).is_err()
+        );
 
         let oversized = temporary.path().join("oversized");
         let oversized_file = File::create(&oversized).expect("create oversized fixture");
         oversized_file
-            .set_len(MAXIMUM_EXECUTABLE_BYTES.saturating_add(1))
+            .set_len(MAXIMUM_CANDIDATE_EXECUTABLE_BYTES.saturating_add(1))
             .expect("size oversized fixture");
         fs::set_permissions(&oversized, fs::Permissions::from_mode(0o755))
             .expect("set oversized mode");
-        assert!(executable_observation(&oversized, "fixture").is_err());
+        assert!(
+            executable_observation(&oversized, "fixture", MAXIMUM_CANDIDATE_EXECUTABLE_BYTES,)
+                .is_err()
+        );
     }
 
     #[test]

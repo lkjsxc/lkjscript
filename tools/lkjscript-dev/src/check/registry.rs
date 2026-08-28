@@ -355,6 +355,27 @@ pub(crate) fn base_registry(
     ]);
     distributed_http.cacheable = false;
     gates.push(distributed_http);
+    let mut stateful_http = gate(
+        "stateful_http_application",
+        vec![
+            path_string(self_test_executable),
+            "stateful-http".to_owned(),
+            "--binary".to_owned(),
+            path_string(&binary),
+            "--machine".to_owned(),
+        ],
+        &["release_build"],
+    );
+    stateful_http.identity_command = Some(vec![
+        "$HARNESS".to_owned(),
+        "stateful-http".to_owned(),
+        "--binary".to_owned(),
+        path_string(&binary),
+        "--machine".to_owned(),
+    ]);
+    stateful_http.cacheable = false;
+    stateful_http.unavailable_exit_code = Some(2);
+    gates.push(stateful_http);
 
     let mut self_test = Gate::new(
         "checker_self_test",
@@ -595,6 +616,7 @@ pub(crate) fn profile(name: &str) -> Option<Vec<String>> {
             "release_build",
             "release_command_lifecycle",
             "distributed_http_application",
+            "stateful_http_application",
             "service_acceptance",
             "diff_check",
         ],
@@ -607,6 +629,7 @@ pub(crate) fn profile(name: &str) -> Option<Vec<String>> {
             "release_build",
             "release_command_lifecycle",
             "distributed_http_application",
+            "stateful_http_application",
             "contract_registry_conformance",
             "standard_package_test",
             "application_package_test",
@@ -745,7 +768,7 @@ mod tests {
             .expect("first maintained registry");
         let second = base_registry(temporary.path(), &second_run, Path::new("/bin/true"))
             .expect("second maintained registry");
-        assert_eq!(first.gates.len(), 24);
+        assert_eq!(first.gates.len(), 25);
         for profile_name in ["focused", "product", "service", "full"] {
             let requested = profile(profile_name).expect("maintained profile");
             assert!(requested.iter().any(|name| name == "rust_only_tooling"));
@@ -761,6 +784,12 @@ mod tests {
                         .any(|name| name == "distributed_http_application")
                 );
             }
+            assert_eq!(
+                requested
+                    .iter()
+                    .any(|name| name == "stateful_http_application"),
+                matches!(profile_name, "service" | "full")
+            );
             assert!(
                 !first
                     .closure(&requested)

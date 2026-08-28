@@ -37,6 +37,7 @@ const APPROVED_ENVIRONMENT: &[&str] = &[
     "DOCKER_HOST",
     "HOME",
     "LANG",
+    "LKJSCRIPT_POSTGRES_ROOT",
     "LC_ALL",
     "PATH",
     "PKG_CONFIG_PATH",

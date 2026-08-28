@@ -28,6 +28,13 @@ impl DevError {
         }
     }
 
+    pub(crate) fn unavailable(message: impl Into<String>) -> Self {
+        Self {
+            kind: "unavailable",
+            message: message.into(),
+        }
+    }
+
     pub(crate) fn kind(&self) -> &'static str {
         self.kind
     }

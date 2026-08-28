@@ -8,10 +8,13 @@ mod error;
 mod evidence;
 mod http_probe;
 mod measure;
+mod postgres;
 mod process;
 mod release;
 mod scale;
 mod service;
+mod stateful_http;
+mod stateful_http_program;
 
 use error::DevError;
 use std::ffi::OsString;
@@ -40,10 +43,11 @@ fn run(arguments: impl IntoIterator<Item = OsString>) -> Result<u8, DevError> {
         Some("measure") => measure::command(arguments),
         Some("release") => release::command(arguments),
         Some("service") => service::command(arguments),
+        Some("stateful-http") => stateful_http::command(arguments),
         Some("__fixture") => check::fixture(arguments),
         Some("help") | Some("--help") | Some("-h") | None => {
             println!(
-                "usage: lkjscript-dev check <focused|changed|product|service|full|self-test> ... | lkjscript-dev distributed-http [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--machine] | lkjscript-dev policy no-python [--machine] | lkjscript-dev measure --cwd PATH --output DIR -- COMMAND [ARG ...] | lkjscript-dev release <prepare|verify> ... | lkjscript-dev scale <independent-modules|small-functions|wide-module|deep-chain|wide-fanout> ... | lkjscript-dev service [--binary PATH] [--machine]"
+                "usage: lkjscript-dev check <focused|changed|product|service|full|self-test> ... | lkjscript-dev distributed-http [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--machine] | lkjscript-dev stateful-http [--binary PATH] [--postgres-root PATH] [--machine] | lkjscript-dev policy no-python [--machine] | lkjscript-dev measure --cwd PATH --output DIR -- COMMAND [ARG ...] | lkjscript-dev release <prepare|verify> ... | lkjscript-dev scale <independent-modules|small-functions|wide-module|deep-chain|wide-fanout> ... | lkjscript-dev service [--binary PATH] [--postgres-root PATH] [--machine]"
             );
             Ok(0)
         }

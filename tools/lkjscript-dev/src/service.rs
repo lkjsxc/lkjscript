@@ -2,6 +2,7 @@ use crate::authority::{self, AuthorityObservation};
 use crate::error::DevError;
 use crate::evidence::{self, FileProof, PublishedEvidence, VerificationDigest};
 use crate::http_probe::{self, HttpResponse};
+use crate::postgres::{self, LocalPostgresTools};
 use crate::process::{self, ProcessControl, ProcessObservation, ProcessSpec, ProcessStatus};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -19,12 +20,12 @@ use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const SERVICE_CONTRACT_VERSION: u32 = 2;
+const SERVICE_CONTRACT_VERSION: u32 = 3;
 pub(crate) const POSTGRES_IMAGE: &str =
     "postgres@sha256:075f7ba66bc9b3ce7d6b8b635208ff61cd7cf1a67d71ec530eec5d7ae0cbe571";
 const SERVICE_ARTIFACT_RELATIVE: &str = "generated/lkjournal.lkja";
 const SERVICE_ARTIFACT_SHA256: &str =
-    "80c69d69aec80e49cc0c023ec65eef3106f4a876eff1dc347defb461f3037ccb";
+    "95446895ad55a32335a57def21bbb210937d2d92bacfe12b9c1da8c33aa5f7af";
 const MAXIMUM_COMMAND_STDOUT_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_COMMAND_STDERR_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_RUNNER_STDOUT_BYTES: u64 = 16 * 1024 * 1024;
@@ -45,6 +46,7 @@ static RUN_ORDINAL: AtomicU64 = AtomicU64::new(0);
 #[derive(Clone, Debug)]
 struct Options {
     binary: PathBuf,
+    postgres_root: Option<PathBuf>,
     machine: bool,
 }
 
@@ -62,6 +64,7 @@ struct ServiceReceipt {
     contract_version: u32,
     status: ServiceStatus,
     postgres_image: String,
+    postgres_backend: String,
     platform: PlatformObservation,
     started_unix_nanoseconds: u128,
     completed_unix_nanoseconds: u128,
@@ -347,7 +350,18 @@ struct ServiceContext {
     secret_values: Vec<Vec<u8>>,
     container_name: String,
     container_started: bool,
+    postgres_root: Option<PathBuf>,
+    local_postgres: Option<LocalPostgresState>,
     cleanup: ContainerCleanup,
+}
+
+struct LocalPostgresState {
+    tools: LocalPostgresTools,
+    data: PathBuf,
+    socket: PathBuf,
+    log: PathBuf,
+    port: u16,
+    start_attempted: bool,
 }
 
 struct ActiveRunner {
@@ -384,7 +398,12 @@ fn execute(
     let started_wall = unix_nanoseconds()?;
     let started = Instant::now();
     let container_name = unique_container_name()?;
-    let mut context = ServiceContext::new(repository, &run_directory, container_name);
+    let mut context = ServiceContext::new(
+        repository,
+        &run_directory,
+        container_name,
+        options.postgres_root.clone(),
+    );
     let mut binary_proof = None;
     let mut artifact_proof = None;
 
@@ -420,6 +439,11 @@ fn execute(
         contract_version: SERVICE_CONTRACT_VERSION,
         status,
         postgres_image: POSTGRES_IMAGE.to_owned(),
+        postgres_backend: if options.postgres_root.is_some() {
+            "local-pinned-tools".to_owned()
+        } else {
+            "docker-pinned-image".to_owned()
+        },
         platform: PlatformObservation {
             operating_system: std::env::consts::OS.to_owned(),
             architecture: std::env::consts::ARCH.to_owned(),
@@ -449,7 +473,12 @@ fn execute(
 }
 
 impl ServiceContext {
-    fn new(repository: &Path, run_directory: &Path, container_name: String) -> Self {
+    fn new(
+        repository: &Path,
+        run_directory: &Path,
+        container_name: String,
+        postgres_root: Option<PathBuf>,
+    ) -> Self {
         Self {
             repository: repository.to_path_buf(),
             run_directory: run_directory.to_path_buf(),
@@ -467,6 +496,8 @@ impl ServiceContext {
             },
             container_name,
             container_started: false,
+            postgres_root,
+            local_postgres: None,
         }
     }
 
@@ -694,6 +725,57 @@ impl ServiceContext {
     }
 
     fn cleanup_container(&mut self) -> Result<(), ServiceFailure> {
+        if let Some(local) = self.local_postgres.take() {
+            self.cleanup.attempted = true;
+            let stop_result = if local.start_attempted {
+                self.observe_command(
+                    CommandRequest::standard(
+                        "postgres-local-stop",
+                        local.tools.stop_command(&local.data),
+                    )
+                    .environment(local.tools.environment())
+                    .timeout(Duration::from_secs(15)),
+                )
+                .and_then(|output| {
+                    if output.observation.status == ProcessStatus::Passed {
+                        Ok(output)
+                    } else {
+                        Err(ServiceFailure::failed(
+                            "postgres_cleanup_failed",
+                            "owned local PostgreSQL process did not stop cleanly",
+                        ))
+                    }
+                })
+                .map(|_| ())
+            } else {
+                Ok(())
+            };
+            let remove_file = |path: &Path| match fs::remove_file(path) {
+                Ok(()) => Ok(()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Err(error) => Err(ServiceFailure::infrastructure(
+                    "postgres_cleanup_file",
+                    error,
+                )),
+            };
+            let remove_directory = |path: &Path| match fs::remove_dir_all(path) {
+                Ok(()) => Ok(()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Err(error) => Err(ServiceFailure::infrastructure(
+                    "postgres_cleanup_directory",
+                    error,
+                )),
+            };
+            let log_result = remove_file(&local.log);
+            let data_result = remove_directory(&local.data);
+            let socket_result = remove_directory(&local.socket);
+            stop_result?;
+            log_result?;
+            data_result?;
+            socket_result?;
+            self.cleanup.completed = true;
+            return Ok(());
+        }
         if !self.container_started {
             self.cleanup.completed = true;
             return Ok(());
@@ -713,6 +795,50 @@ impl ServiceContext {
         self.cleanup.completed = true;
         self.container_started = false;
         Ok(())
+    }
+
+    fn postgres_command(
+        &self,
+        tool: &str,
+        arguments: &[String],
+    ) -> Result<Vec<String>, ServiceFailure> {
+        if let Some(local) = &self.local_postgres {
+            return Ok(local.tools.client_command(tool, local.port, arguments));
+        }
+        let mut command = vec![
+            "docker".to_owned(),
+            "exec".to_owned(),
+            self.container_name.clone(),
+            tool.to_owned(),
+        ];
+        command.extend(arguments.iter().cloned());
+        Ok(command)
+    }
+
+    fn postgres_environment(&self) -> BTreeMap<String, String> {
+        self.local_postgres
+            .as_ref()
+            .map(|local| local.tools.environment())
+            .unwrap_or_else(process::environment)
+    }
+
+    fn postgres_stdin_command(
+        &self,
+        tool: &str,
+        arguments: &[String],
+    ) -> Result<Vec<String>, ServiceFailure> {
+        if self.local_postgres.is_some() {
+            return self.postgres_command(tool, arguments);
+        }
+        let mut command = vec![
+            "docker".to_owned(),
+            "exec".to_owned(),
+            "-i".to_owned(),
+            self.container_name.clone(),
+            tool.to_owned(),
+        ];
+        command.extend(arguments.iter().cloned());
+        Ok(command)
     }
 
     fn request(
@@ -864,19 +990,6 @@ fn run_acceptance(
     fs::create_dir_all(context.run_directory.join("state/objects"))
         .map_err(|error| ServiceFailure::infrastructure("object_host_directory", error))?;
 
-    context.invoke(
-        CommandRequest::standard(
-            "docker-image-inspect",
-            vec![
-                "docker".to_owned(),
-                "image".to_owned(),
-                "inspect".to_owned(),
-                POSTGRES_IMAGE.to_owned(),
-            ],
-        )
-        .unavailable_on_failure(),
-    )?;
-
     let database_password = random_hex(16)?;
     let bootstrap_token = random_hex(16)?;
     let application_password = random_hex(16)?;
@@ -885,52 +998,7 @@ fn run_acceptance(
         bootstrap_token.as_bytes().to_vec(),
         application_password.as_bytes().to_vec(),
     ]);
-
-    let mut docker_environment = process::environment();
-    docker_environment.insert("POSTGRES_PASSWORD".to_owned(), database_password.clone());
-    context.cleanup.attempted = true;
-    // Once creation is attempted, cleanup must target the exact generated name even when
-    // the Docker client fails after the daemon has accepted the container.
-    context.container_started = true;
-    context.invoke(
-        CommandRequest::standard(
-            "postgres-start",
-            vec![
-                "docker".to_owned(),
-                "run".to_owned(),
-                "--rm".to_owned(),
-                "--name".to_owned(),
-                context.container_name.clone(),
-                "-e".to_owned(),
-                "POSTGRES_PASSWORD".to_owned(),
-                "-e".to_owned(),
-                "POSTGRES_DB=lkjournal".to_owned(),
-                "-p".to_owned(),
-                "127.0.0.1::5432".to_owned(),
-                "-d".to_owned(),
-                POSTGRES_IMAGE.to_owned(),
-            ],
-        )
-        .environment(docker_environment),
-    )?;
-
-    let container_name = context.container_name.clone();
-    let port_output = context.invoke(
-        CommandRequest::standard(
-            "postgres-port",
-            vec![
-                "docker".to_owned(),
-                "port".to_owned(),
-                container_name.clone(),
-                "5432/tcp".to_owned(),
-            ],
-        )
-        .output_limits(64 * 1024, MAXIMUM_COMMAND_STDERR_BYTES),
-    )?;
-    let postgres_port = parse_host_port(&port_output)?;
-    wait_for_postgres(context, postgres_port)?;
-    let database_url =
-        format!("postgresql://postgres:{database_password}@127.0.0.1:{postgres_port}/lkjournal");
+    let (postgres_port, database_url) = start_postgres(context, &database_password)?;
     context.secret_values.push(database_url.as_bytes().to_vec());
 
     let service_port = free_port()?;
@@ -1286,22 +1354,19 @@ fn run_acceptance(
     )?;
     context.stop_runner(service_index)?;
 
-    let backup_output = context.invoke(
-        CommandRequest::standard(
-            "postgres-backup",
-            vec![
-                "docker".to_owned(),
-                "exec".to_owned(),
-                container_name.clone(),
-                "pg_dump".to_owned(),
-                "-U".to_owned(),
-                "postgres".to_owned(),
-                "-d".to_owned(),
-                "lkjournal".to_owned(),
-                "--format=custom".to_owned(),
-            ],
-        )
-        .output_limits(MAXIMUM_BACKUP_BYTES, MAXIMUM_COMMAND_STDERR_BYTES),
+    let backup_output = invoke_postgres(
+        context,
+        "postgres-backup",
+        "pg_dump",
+        &[
+            "-U".to_owned(),
+            "postgres".to_owned(),
+            "-d".to_owned(),
+            "lkjournal".to_owned(),
+            "--format=custom".to_owned(),
+        ],
+        MAXIMUM_BACKUP_BYTES,
+        MAXIMUM_COMMAND_STDERR_BYTES,
     )?;
     require(
         !backup_output.is_empty() && backup_output.len() as u64 <= MAXIMUM_BACKUP_BYTES,
@@ -1313,44 +1378,46 @@ fn run_acceptance(
         .map_err(|error| ServiceFailure::infrastructure("database_backup_publish", error))?;
     let backup_proof = context.retain(&backup_path)?;
 
-    context.invoke(CommandRequest::standard(
+    invoke_postgres(
+        context,
         "postgres-create-restore-database",
-        vec![
-            "docker".to_owned(),
-            "exec".to_owned(),
-            container_name.clone(),
-            "createdb".to_owned(),
+        "createdb",
+        &[
             "-U".to_owned(),
             "postgres".to_owned(),
             "lkjournal_restore".to_owned(),
         ],
-    ))?;
+        64 * 1024,
+        MAXIMUM_COMMAND_STDERR_BYTES,
+    )?;
+    let restore_command = context.postgres_stdin_command(
+        "pg_restore",
+        &[
+            "-U".to_owned(),
+            "postgres".to_owned(),
+            "-d".to_owned(),
+            "lkjournal_restore".to_owned(),
+            "--exit-on-error".to_owned(),
+        ],
+    )?;
+    let restore_environment = context.postgres_environment();
     context.invoke(
-        CommandRequest::standard(
-            "postgres-restore",
-            vec![
-                "docker".to_owned(),
-                "exec".to_owned(),
-                "-i".to_owned(),
-                container_name,
-                "pg_restore".to_owned(),
-                "-U".to_owned(),
-                "postgres".to_owned(),
-                "-d".to_owned(),
-                "lkjournal_restore".to_owned(),
-                "--exit-on-error".to_owned(),
-            ],
-        )
-        .stdin(&backup_path, MAXIMUM_BACKUP_BYTES),
+        CommandRequest::standard("postgres-restore", restore_command)
+            .environment(restore_environment)
+            .stdin(&backup_path, MAXIMUM_BACKUP_BYTES),
     )?;
 
     let restored_port = free_port()?;
     let restored_descriptor = context.run_directory.join("service-restored.json");
     write_descriptor(&service_source, &restored_descriptor, Some(restored_port))?;
     context.retain(&restored_descriptor)?;
-    let restored_database_url = format!(
-        "postgresql://postgres:{database_password}@127.0.0.1:{postgres_port}/lkjournal_restore"
-    );
+    let restored_database_url = if context.local_postgres.is_some() {
+        format!("postgresql://postgres@127.0.0.1:{postgres_port}/lkjournal_restore")
+    } else {
+        format!(
+            "postgresql://postgres:{database_password}@127.0.0.1:{postgres_port}/lkjournal_restore"
+        )
+    };
     context
         .secret_values
         .push(restored_database_url.as_bytes().to_vec());
@@ -1416,27 +1483,175 @@ fn run_acceptance(
     })
 }
 
+fn start_postgres(
+    context: &mut ServiceContext,
+    database_password: &str,
+) -> Result<(u16, String), ServiceFailure> {
+    if let Some(requested_root) = context.postgres_root.clone() {
+        let tools = LocalPostgresTools::resolve(&requested_root).map_err(|error| {
+            ServiceFailure::unavailable("local_postgres_layout", error.to_string())
+        })?;
+        let version = context.invoke(
+            CommandRequest::standard("postgres-local-version", tools.version_command())
+                .environment(tools.environment())
+                .output_limits(64 * 1024, 64 * 1024)
+                .unavailable_on_failure(),
+        )?;
+        tools.validate_version(&version).map_err(|error| {
+            ServiceFailure::unavailable("local_postgres_version", error.to_string())
+        })?;
+        let data = context.run_directory.join("postgres-data");
+        let port = free_port()?;
+        let socket = std::env::temp_dir().join(format!(
+            "lkjscript-service-pg-{}-{port}",
+            std::process::id()
+        ));
+        let log = context.run_directory.join("postgres.log");
+        fs::create_dir(&socket)
+            .map_err(|error| ServiceFailure::infrastructure("postgres_socket", error))?;
+        context.invoke(
+            CommandRequest::standard("postgres-local-init", tools.initdb_command(&data))
+                .environment(tools.environment())
+                .timeout(Duration::from_secs(60)),
+        )?;
+        context.cleanup.exact_name = format!("local-postgres-{port}");
+        context.cleanup.attempted = true;
+        context.local_postgres = Some(LocalPostgresState {
+            tools: tools.clone(),
+            data: data.clone(),
+            socket: socket.clone(),
+            log: log.clone(),
+            port,
+            start_attempted: true,
+        });
+        context.invoke(
+            CommandRequest::standard(
+                "postgres-local-start",
+                tools.start_command(&data, &log, &socket, port, 32),
+            )
+            .environment(tools.environment())
+            .timeout(Duration::from_secs(60)),
+        )?;
+        wait_for_postgres(context, port)?;
+        invoke_postgres(
+            context,
+            "postgres-create-application-database",
+            "createdb",
+            &[
+                "-U".to_owned(),
+                "postgres".to_owned(),
+                "lkjournal".to_owned(),
+            ],
+            64 * 1024,
+            64 * 1024,
+        )?;
+        return Ok((
+            port,
+            format!("postgresql://postgres@127.0.0.1:{port}/lkjournal"),
+        ));
+    }
+
+    context.invoke(
+        CommandRequest::standard(
+            "docker-image-inspect",
+            vec![
+                "docker".to_owned(),
+                "image".to_owned(),
+                "inspect".to_owned(),
+                POSTGRES_IMAGE.to_owned(),
+            ],
+        )
+        .unavailable_on_failure(),
+    )?;
+    let mut docker_environment = process::environment();
+    docker_environment.insert("POSTGRES_PASSWORD".to_owned(), database_password.to_owned());
+    context.cleanup.attempted = true;
+    // Once creation is attempted, cleanup targets the exact generated name even if the client
+    // fails after the daemon accepts the container.
+    context.container_started = true;
+    context.invoke(
+        CommandRequest::standard(
+            "postgres-start",
+            vec![
+                "docker".to_owned(),
+                "run".to_owned(),
+                "--rm".to_owned(),
+                "--name".to_owned(),
+                context.container_name.clone(),
+                "-e".to_owned(),
+                "POSTGRES_PASSWORD".to_owned(),
+                "-e".to_owned(),
+                "POSTGRES_DB=lkjournal".to_owned(),
+                "-p".to_owned(),
+                "127.0.0.1::5432".to_owned(),
+                "-d".to_owned(),
+                POSTGRES_IMAGE.to_owned(),
+            ],
+        )
+        .environment(docker_environment),
+    )?;
+    let container_name = context.container_name.clone();
+    let port_output = context.invoke(
+        CommandRequest::standard(
+            "postgres-port",
+            vec![
+                "docker".to_owned(),
+                "port".to_owned(),
+                container_name,
+                "5432/tcp".to_owned(),
+            ],
+        )
+        .output_limits(64 * 1024, MAXIMUM_COMMAND_STDERR_BYTES),
+    )?;
+    let port = parse_host_port(&port_output)?;
+    wait_for_postgres(context, port)?;
+    Ok((
+        port,
+        format!("postgresql://postgres:{database_password}@127.0.0.1:{port}/lkjournal"),
+    ))
+}
+
+fn invoke_postgres(
+    context: &mut ServiceContext,
+    name: &str,
+    tool: &str,
+    arguments: &[String],
+    maximum_stdout_bytes: u64,
+    maximum_stderr_bytes: u64,
+) -> Result<Vec<u8>, ServiceFailure> {
+    let command = context.postgres_command(tool, arguments)?;
+    let environment = context.postgres_environment();
+    context.invoke(
+        CommandRequest::standard(name, command)
+            .environment(environment)
+            .output_limits(maximum_stdout_bytes, maximum_stderr_bytes),
+    )
+}
+
 fn wait_for_postgres(context: &mut ServiceContext, host_port: u16) -> Result<(), ServiceFailure> {
     let started = Instant::now();
     let mut attempt = 0_u64;
     while started.elapsed() < POSTGRES_READY_TIMEOUT {
         let name = format!("postgres-ready-{attempt:03}");
+        let command = context.postgres_command(
+            "pg_isready",
+            &[
+                "-U".to_owned(),
+                "postgres".to_owned(),
+                "-d".to_owned(),
+                if context.local_postgres.is_some() {
+                    "postgres".to_owned()
+                } else {
+                    "lkjournal".to_owned()
+                },
+            ],
+        )?;
+        let environment = context.postgres_environment();
         let output = context.observe_command(
-            CommandRequest::standard(
-                &name,
-                vec![
-                    "docker".to_owned(),
-                    "exec".to_owned(),
-                    context.container_name.clone(),
-                    "pg_isready".to_owned(),
-                    "-U".to_owned(),
-                    "postgres".to_owned(),
-                    "-d".to_owned(),
-                    "lkjournal".to_owned(),
-                ],
-            )
-            .timeout(Duration::from_secs(5))
-            .output_limits(64 * 1024, 64 * 1024),
+            CommandRequest::standard(&name, command)
+                .environment(environment)
+                .timeout(Duration::from_secs(5))
+                .output_limits(64 * 1024, 64 * 1024),
         )?;
         if output.observation.status == ProcessStatus::Passed
             && TcpStream::connect_timeout(
@@ -1463,23 +1678,20 @@ fn postgres_scalar(
     database: &str,
     statement: &str,
 ) -> Result<String, ServiceFailure> {
-    let output = context.invoke(
-        CommandRequest::standard(
-            "postgres-scalar",
-            vec![
-                "docker".to_owned(),
-                "exec".to_owned(),
-                context.container_name.clone(),
-                "psql".to_owned(),
-                "-U".to_owned(),
-                "postgres".to_owned(),
-                "-d".to_owned(),
-                database.to_owned(),
-                "-Atc".to_owned(),
-                statement.to_owned(),
-            ],
-        )
-        .output_limits(64 * 1024, 64 * 1024),
+    let output = invoke_postgres(
+        context,
+        "postgres-scalar",
+        "psql",
+        &[
+            "-U".to_owned(),
+            "postgres".to_owned(),
+            "-d".to_owned(),
+            database.to_owned(),
+            "-Atc".to_owned(),
+            statement.to_owned(),
+        ],
+        64 * 1024,
+        64 * 1024,
     )?;
     String::from_utf8(output)
         .map(|value| value.trim().to_owned())
@@ -2004,6 +2216,7 @@ fn safe_file_component(value: &str) -> Result<String, ServiceFailure> {
 
 fn parse(arguments: impl Iterator<Item = OsString>) -> Result<Options, DevError> {
     let mut binary = PathBuf::from("target/release/lkjscript");
+    let mut postgres_root = None;
     let mut machine = false;
     let mut arguments = arguments;
     while let Some(argument) = crate::next_utf8(&mut arguments, "service option")? {
@@ -2013,6 +2226,13 @@ fn parse(arguments: impl Iterator<Item = OsString>) -> Result<Options, DevError>
                     .ok_or_else(|| DevError::usage("--binary requires a path"))?;
                 binary = PathBuf::from(value);
             }
+            "--postgres-root" => {
+                let value = crate::next_utf8(&mut arguments, "--postgres-root")?
+                    .ok_or_else(|| DevError::usage("--postgres-root requires a path"))?;
+                if postgres_root.replace(PathBuf::from(value)).is_some() {
+                    return Err(DevError::usage("duplicate --postgres-root option"));
+                }
+            }
             "--machine" if !machine => machine = true,
             value => {
                 return Err(DevError::usage(format!(
@@ -2021,7 +2241,11 @@ fn parse(arguments: impl Iterator<Item = OsString>) -> Result<Options, DevError>
             }
         }
     }
-    Ok(Options { binary, machine })
+    Ok(Options {
+        binary,
+        postgres_root: postgres_root.or_else(postgres::configured_root),
+        machine,
+    })
 }
 
 fn resolve_input_file(
@@ -2217,6 +2441,7 @@ mod tests {
         let repository = tempfile::tempdir().expect("temporary service repository");
         let options = Options {
             binary: repository.path().join("absent-lkjscript"),
+            postgres_root: None,
             machine: true,
         };
         let (receipt, published) =
