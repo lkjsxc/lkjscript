@@ -1,9 +1,12 @@
 #![cfg_attr(test, allow(clippy::expect_used, clippy::panic, clippy::unwrap_used))]
 #![forbid(unsafe_code)]
 
+mod authority;
 mod check;
+mod distributed_http;
 mod error;
 mod evidence;
+mod http_probe;
 mod measure;
 mod process;
 mod release;
@@ -31,6 +34,7 @@ fn run(arguments: impl IntoIterator<Item = OsString>) -> Result<u8, DevError> {
     let command = next_utf8(&mut arguments, "command")?;
     match command.as_deref() {
         Some("check") => check::command(arguments),
+        Some("distributed-http") => distributed_http::command(arguments),
         Some("policy") => check::policy_command(arguments),
         Some("scale") => scale::command(arguments),
         Some("measure") => measure::command(arguments),
@@ -39,7 +43,7 @@ fn run(arguments: impl IntoIterator<Item = OsString>) -> Result<u8, DevError> {
         Some("__fixture") => check::fixture(arguments),
         Some("help") | Some("--help") | Some("-h") | None => {
             println!(
-                "usage: lkjscript-dev check <focused|changed|product|service|full|self-test> ... | lkjscript-dev policy no-python [--machine] | lkjscript-dev measure --cwd PATH --output DIR -- COMMAND [ARG ...] | lkjscript-dev release <prepare|verify> ... | lkjscript-dev scale <independent-modules|small-functions|wide-module|deep-chain|wide-fanout> ... | lkjscript-dev service [--binary PATH] [--machine]"
+                "usage: lkjscript-dev check <focused|changed|product|service|full|self-test> ... | lkjscript-dev distributed-http [--binary PATH] [--machine] | lkjscript-dev policy no-python [--machine] | lkjscript-dev measure --cwd PATH --output DIR -- COMMAND [ARG ...] | lkjscript-dev release <prepare|verify> ... | lkjscript-dev scale <independent-modules|small-functions|wide-module|deep-chain|wide-fanout> ... | lkjscript-dev service [--binary PATH] [--machine]"
             );
             Ok(0)
         }

@@ -170,13 +170,14 @@ fn discovery_error(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::platform::project_creation::create_minimal_project;
+    use crate::platform::project_creation::{ProjectTemplate, create_project};
 
     #[test]
     fn discovers_from_root_and_nested_directory() {
         let temporary = tempfile::TempDir::new().expect("temporary parent");
         let project = temporary.path().join("project");
-        let created = create_minimal_project(&project, "project").expect("normalized project");
+        let created = create_project(&project, "project", ProjectTemplate::Minimal)
+            .expect("normalized project");
         let nested = project.join("ordinary/nested");
         fs::create_dir_all(&nested).expect("nested directory");
 
@@ -206,7 +207,8 @@ mod tests {
         assert_eq!(error.code, "predecessor_contract");
 
         let ambiguous = temporary.path().join("ambiguous");
-        create_minimal_project(&ambiguous, "ambiguous").expect("normalized project");
+        create_project(&ambiguous, "ambiguous", ProjectTemplate::Minimal)
+            .expect("normalized project");
         fs::create_dir(ambiguous.join(".lkjscript")).expect("foreign predecessor marker");
         let error = discover_project(&ambiguous).expect_err("ambiguous authority rejected");
         assert_eq!(error.code, "predecessor_contract");
@@ -224,7 +226,7 @@ mod tests {
 
         let temporary = tempfile::TempDir::new().expect("temporary parent");
         let project = temporary.path().join("project");
-        create_minimal_project(&project, "project").expect("normalized project");
+        create_project(&project, "project", ProjectTemplate::Minimal).expect("normalized project");
         let link = temporary.path().join("project-link");
         symlink(&project, &link).expect("project symlink");
 

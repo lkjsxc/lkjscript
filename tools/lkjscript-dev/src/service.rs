@@ -1,5 +1,7 @@
+use crate::authority::{self, AuthorityObservation};
 use crate::error::DevError;
 use crate::evidence::{self, FileProof, PublishedEvidence, VerificationDigest};
+use crate::http_probe::{self, HttpResponse};
 use crate::process::{self, ProcessControl, ProcessObservation, ProcessSpec, ProcessStatus};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -7,7 +9,9 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::io::Read;
+#[cfg(test)]
+use std::io::Write;
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -28,10 +32,6 @@ const MAXIMUM_RUNNER_STDERR_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_BACKUP_BYTES: u64 = 64 * 1024 * 1024;
 const MAXIMUM_DESCRIPTOR_BYTES: u64 = 1024 * 1024;
 const MAXIMUM_ARTIFACT_BYTES: u64 = 64 * 1024 * 1024;
-const MAXIMUM_AUTHORITY_FILES: usize = 1_100_000;
-const MAXIMUM_AUTHORITY_BYTES: u64 = 16 * 1024 * 1024 * 1024;
-const MAXIMUM_HTTP_HEADER_BYTES: usize = 64 * 1024;
-const MAXIMUM_HTTP_BODY_BYTES: usize = 8 * 1024 * 1024;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(60);
 const RUNNER_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const RUNNER_READY_TIMEOUT: Duration = Duration::from_secs(30);
@@ -212,15 +212,6 @@ struct ArtifactIdentity {
     fresh_build_equal: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-struct AuthorityObservation {
-    files: u64,
-    bytes: u64,
-    head_sha256: String,
-    inventory_sha256: String,
-}
-
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct InitializationTransport {
@@ -342,13 +333,6 @@ impl<'a> CommandRequest<'a> {
         self.unavailable_on_failure = true;
         self
     }
-}
-
-struct HttpResponse {
-    status: u16,
-    body: Vec<u8>,
-    headers: BTreeMap<String, String>,
-    elapsed_nanoseconds: u64,
 }
 
 struct ServiceContext {
@@ -1511,233 +1495,10 @@ fn http_request(
     body: &[u8],
     headers: &[(&str, &str)],
 ) -> Result<HttpResponse, ServiceFailure> {
-    require(
-        method.bytes().all(|byte| byte.is_ascii_uppercase()),
-        "http_method",
-        "HTTP method is invalid",
-    )?;
-    require(
-        path.starts_with('/') && !path.contains(['\r', '\n']),
-        "http_path",
-        "HTTP path is invalid",
-    )?;
-    require(
-        body.len() <= MAXIMUM_HTTP_BODY_BYTES,
-        "http_request_body_limit",
-        "HTTP request body exceeds the acceptance bound",
-    )?;
-    for (name, value) in headers {
-        require(
-            !name.is_empty()
-                && name
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
-                && !value.contains(['\r', '\n']),
-            "http_header",
-            "HTTP header is invalid",
-        )?;
-    }
-    let started = Instant::now();
-    let mut stream = TcpStream::connect(("127.0.0.1", port))
-        .map_err(|error| ServiceFailure::infrastructure("http_connect", error))?;
-    stream
-        .set_read_timeout(Some(Duration::from_secs(35)))
-        .and_then(|()| stream.set_write_timeout(Some(Duration::from_secs(35))))
-        .map_err(|error| ServiceFailure::infrastructure("http_timeout", error))?;
-    let mut request = Vec::with_capacity(
-        method
-            .len()
-            .saturating_add(path.len())
-            .saturating_add(body.len())
-            .saturating_add(256),
-    );
-    write!(
-        request,
-        "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\nContent-Length: {}\r\n",
-        body.len()
-    )
-    .map_err(|error| ServiceFailure::infrastructure("http_request_encode", error))?;
-    for (name, value) in headers {
-        write!(request, "{name}: {value}\r\n")
-            .map_err(|error| ServiceFailure::infrastructure("http_header_encode", error))?;
-    }
-    request.extend_from_slice(b"\r\n");
-    request.extend_from_slice(body);
-    stream
-        .write_all(&request)
-        .map_err(|error| ServiceFailure::infrastructure("http_request_write", error))?;
-    stream
-        .flush()
-        .map_err(|error| ServiceFailure::infrastructure("http_request_flush", error))?;
-
-    let maximum_response = MAXIMUM_HTTP_HEADER_BYTES
-        .checked_add(MAXIMUM_HTTP_BODY_BYTES)
-        .and_then(|value| value.checked_add(1))
-        .ok_or_else(|| {
-            ServiceFailure::infrastructure("http_response_bound", "HTTP response bound overflow")
-        })?;
-    let mut response = Vec::with_capacity(16 * 1024);
-    let mut buffer = [0_u8; 16 * 1024];
-    let mut header_end = None;
-    let mut expected_total = None;
-    loop {
-        let read = stream
-            .read(&mut buffer)
-            .map_err(|error| ServiceFailure::infrastructure("http_response_read", error))?;
-        if read == 0 {
-            break;
-        }
-        if response.len().saturating_add(read) > maximum_response {
-            return Err(ServiceFailure::failed(
-                "http_response_limit",
-                "HTTP response exceeded the acceptance bound",
-            ));
-        }
-        response.extend_from_slice(&buffer[..read]);
-        if header_end.is_none() {
-            header_end = find_bytes(&response, b"\r\n\r\n").map(|index| index + 4);
-            if header_end.is_none() && response.len() > MAXIMUM_HTTP_HEADER_BYTES {
-                return Err(ServiceFailure::failed(
-                    "http_header_limit",
-                    "HTTP response headers exceeded the acceptance bound",
-                ));
-            }
-            if let Some(end) = header_end {
-                let (_, parsed_headers) = parse_response_head(&response[..end])?;
-                if let Some(length) = parsed_headers
-                    .get("content-length")
-                    .map(|value| value.parse::<usize>())
-                    .transpose()
-                    .map_err(|_| {
-                        ServiceFailure::failed(
-                            "http_content_length",
-                            "HTTP content length is invalid",
-                        )
-                    })?
-                {
-                    require(
-                        length <= MAXIMUM_HTTP_BODY_BYTES,
-                        "http_response_body_limit",
-                        "HTTP response body exceeded the acceptance bound",
-                    )?;
-                    expected_total = end.checked_add(length);
-                }
-            }
-        }
-        if expected_total.is_some_and(|expected| response.len() >= expected) {
-            break;
-        }
-    }
-    let end = header_end.ok_or_else(|| {
-        ServiceFailure::failed(
-            "http_response_head",
-            "HTTP response omitted complete headers",
-        )
-    })?;
-    let (status, response_headers) = parse_response_head(&response[..end])?;
-    let encoded_body = &response[end..];
-    let body = if response_headers
-        .get("transfer-encoding")
-        .is_some_and(|value| value.eq_ignore_ascii_case("chunked"))
-    {
-        decode_chunked(encoded_body)?
-    } else if let Some(length) = response_headers.get("content-length") {
-        let length = length.parse::<usize>().map_err(|_| {
-            ServiceFailure::failed("http_content_length", "HTTP content length is invalid")
-        })?;
-        require(
-            encoded_body.len() >= length,
-            "http_response_truncated",
-            "HTTP response body was truncated",
-        )?;
-        encoded_body[..length].to_vec()
-    } else {
-        encoded_body.to_vec()
-    };
-    require(
-        body.len() <= MAXIMUM_HTTP_BODY_BYTES,
-        "http_response_body_limit",
-        "HTTP response body exceeded the acceptance bound",
-    )?;
-    Ok(HttpResponse {
-        status,
-        body,
-        headers: response_headers,
-        elapsed_nanoseconds: duration_nanoseconds(started.elapsed()),
-    })
+    let address = std::net::SocketAddr::from((std::net::Ipv4Addr::LOCALHOST, port));
+    http_probe::request(address, method, path, body, headers)
+        .map_err(|error| ServiceFailure::infrastructure("http_probe", error))
 }
-
-fn parse_response_head(bytes: &[u8]) -> Result<(u16, BTreeMap<String, String>), ServiceFailure> {
-    let text = std::str::from_utf8(bytes).map_err(|_| {
-        ServiceFailure::failed("http_response_utf8", "HTTP response headers were not UTF-8")
-    })?;
-    let mut lines = text.split("\r\n");
-    let status_line = lines.next().ok_or_else(|| {
-        ServiceFailure::failed("http_status", "HTTP response omitted a status line")
-    })?;
-    let mut status_parts = status_line.split_whitespace();
-    let version = status_parts.next().unwrap_or_default();
-    let status = status_parts
-        .next()
-        .ok_or_else(|| ServiceFailure::failed("http_status", "HTTP status is absent"))?
-        .parse::<u16>()
-        .map_err(|_| ServiceFailure::failed("http_status", "HTTP status is invalid"))?;
-    require(
-        version == "HTTP/1.1" || version == "HTTP/1.0",
-        "http_version",
-        "HTTP response version is unsupported",
-    )?;
-    let mut headers = BTreeMap::new();
-    for line in lines.filter(|line| !line.is_empty()) {
-        let (name, value) = line.split_once(':').ok_or_else(|| {
-            ServiceFailure::failed("http_response_header", "HTTP response header is malformed")
-        })?;
-        let name = name.to_ascii_lowercase();
-        require(
-            !name.is_empty() && !headers.contains_key(&name),
-            "http_response_header",
-            "HTTP response contains an empty or duplicate header",
-        )?;
-        headers.insert(name, value.trim().to_owned());
-    }
-    Ok((status, headers))
-}
-
-fn decode_chunked(bytes: &[u8]) -> Result<Vec<u8>, ServiceFailure> {
-    let mut cursor = 0_usize;
-    let mut decoded = Vec::new();
-    loop {
-        let line_end = find_bytes(&bytes[cursor..], b"\r\n")
-            .map(|index| cursor + index)
-            .ok_or_else(|| {
-                ServiceFailure::failed("http_chunk", "HTTP chunk header is truncated")
-            })?;
-        let size_text = std::str::from_utf8(&bytes[cursor..line_end])
-            .map_err(|_| ServiceFailure::failed("http_chunk", "HTTP chunk size is not UTF-8"))?;
-        let size = usize::from_str_radix(size_text.split(';').next().unwrap_or_default(), 16)
-            .map_err(|_| ServiceFailure::failed("http_chunk", "HTTP chunk size is invalid"))?;
-        cursor = line_end.saturating_add(2);
-        if size == 0 {
-            return Ok(decoded);
-        }
-        require(
-            decoded.len().saturating_add(size) <= MAXIMUM_HTTP_BODY_BYTES,
-            "http_response_body_limit",
-            "HTTP response body exceeded the acceptance bound",
-        )?;
-        let end = cursor
-            .checked_add(size)
-            .ok_or_else(|| ServiceFailure::failed("http_chunk", "HTTP chunk length overflow"))?;
-        require(
-            end.saturating_add(2) <= bytes.len() && &bytes[end..end + 2] == b"\r\n",
-            "http_chunk",
-            "HTTP chunk payload is truncated",
-        )?;
-        decoded.extend_from_slice(&bytes[cursor..end]);
-        cursor = end + 2;
-    }
-}
-
 fn parse_ready_event(line: &[u8]) -> Result<RunnerReady, ServiceFailure> {
     let value: Value = serde_json::from_slice(line).map_err(|_| {
         ServiceFailure::failed("runner_ready_json", "runner readiness was not machine JSON")
@@ -2189,131 +1950,8 @@ fn lower_hex(bytes: &[u8]) -> String {
 }
 
 fn observe_graph_authority(application: &Path) -> Result<AuthorityObservation, ServiceFailure> {
-    let head = process::read_bounded(&application.join("HEAD"), MAXIMUM_DESCRIPTOR_BYTES)
-        .map_err(|error| ServiceFailure::infrastructure("authority_head_read", error))?;
-    let mut paths = vec![
-        ("HEAD".to_owned(), application.join("HEAD")),
-        (
-            "catalog/current.lkjc".to_owned(),
-            application.join("catalog/current.lkjc"),
-        ),
-    ];
-    collect_authority_directory(application, "packs", &mut paths)?;
-    collect_authority_directory(application, "PACKAGE-TRANSPORTS", &mut paths)?;
-    paths.sort_by(|left, right| left.0.cmp(&right.0));
-    if paths.len() > MAXIMUM_AUTHORITY_FILES {
-        return Err(ServiceFailure::failed(
-            "authority_file_limit",
-            "Graph authority inventory exceeded the maintained file-count bound",
-        ));
-    }
-
-    let mut hasher = Sha256::new();
-    hasher.update(b"lkjscript.graph-authority-inventory.v1");
-    let mut total_bytes = 0_u64;
-    for (relative, path) in &paths {
-        let metadata = fs::symlink_metadata(path)
-            .map_err(|error| ServiceFailure::infrastructure("authority_metadata", error))?;
-        if metadata.file_type().is_symlink() || !metadata.is_file() {
-            return Err(ServiceFailure::failed(
-                "authority_file_kind",
-                format!("Graph authority input '{relative}' is not a regular file"),
-            ));
-        }
-        total_bytes = total_bytes.checked_add(metadata.len()).ok_or_else(|| {
-            ServiceFailure::failed(
-                "authority_byte_overflow",
-                "Graph authority inventory byte count overflowed",
-            )
-        })?;
-        if total_bytes > MAXIMUM_AUTHORITY_BYTES {
-            return Err(ServiceFailure::failed(
-                "authority_byte_limit",
-                "Graph authority inventory exceeded the maintained byte bound",
-            ));
-        }
-        let bytes = process::read_bounded(path, metadata.len())
-            .map_err(|error| ServiceFailure::infrastructure("authority_file_read", error))?;
-        if u64::try_from(bytes.len()).ok() != Some(metadata.len()) {
-            return Err(ServiceFailure::failed(
-                "authority_file_changed",
-                "Graph authority input changed while its inventory was captured",
-            ));
-        }
-        let relative_bytes = relative.as_bytes();
-        hasher.update((relative_bytes.len() as u64).to_be_bytes());
-        hasher.update(relative_bytes);
-        hasher.update(metadata.len().to_be_bytes());
-        hasher.update(&bytes);
-    }
-    let digest = hasher.finalize();
-    Ok(AuthorityObservation {
-        files: paths.len() as u64,
-        bytes: total_bytes,
-        head_sha256: sha256_hex(&head),
-        inventory_sha256: lower_hex(&digest),
-    })
-}
-
-fn collect_authority_directory(
-    application: &Path,
-    relative: &str,
-    output: &mut Vec<(String, PathBuf)>,
-) -> Result<(), ServiceFailure> {
-    let directory = application.join(relative);
-    let metadata = fs::symlink_metadata(&directory)
-        .map_err(|error| ServiceFailure::infrastructure("authority_directory_metadata", error))?;
-    if metadata.file_type().is_symlink() || !metadata.is_dir() {
-        return Err(ServiceFailure::failed(
-            "authority_directory_kind",
-            format!("Graph authority directory '{relative}' is not a real directory"),
-        ));
-    }
-    let mut entries = fs::read_dir(&directory)
-        .map_err(|error| ServiceFailure::infrastructure("authority_directory_read", error))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| ServiceFailure::infrastructure("authority_directory_entry", error))?;
-    entries.sort_by_key(std::fs::DirEntry::file_name);
-    for entry in entries {
-        let name = entry.file_name().into_string().map_err(|_| {
-            ServiceFailure::failed(
-                "authority_path_encoding",
-                "Graph authority inventory contains a non-UTF-8 path",
-            )
-        })?;
-        if name.is_empty() || name.contains('/') || name.contains('\\') || name.contains('\0') {
-            return Err(ServiceFailure::failed(
-                "authority_path_encoding",
-                "Graph authority inventory contains a noncanonical path",
-            ));
-        }
-        let child = format!("{relative}/{name}");
-        let metadata = fs::symlink_metadata(entry.path())
-            .map_err(|error| ServiceFailure::infrastructure("authority_entry_metadata", error))?;
-        if metadata.file_type().is_symlink() {
-            return Err(ServiceFailure::failed(
-                "authority_entry_kind",
-                format!("Graph authority entry '{child}' is a symbolic link"),
-            ));
-        }
-        if metadata.is_dir() {
-            collect_authority_directory(application, &child, output)?;
-        } else if metadata.is_file() {
-            output.push((child, entry.path()));
-            if output.len() > MAXIMUM_AUTHORITY_FILES {
-                return Err(ServiceFailure::failed(
-                    "authority_file_limit",
-                    "Graph authority inventory exceeded the maintained file-count bound",
-                ));
-            }
-        } else {
-            return Err(ServiceFailure::failed(
-                "authority_entry_kind",
-                format!("Graph authority entry '{child}' is not a regular file or directory"),
-            ));
-        }
-    }
-    Ok(())
+    authority::observe_graph_authority(application)
+        .map_err(|error| ServiceFailure::infrastructure("authority_observation", error))
 }
 
 fn free_port() -> Result<u16, ServiceFailure> {

@@ -2,6 +2,7 @@ use super::registry::{
     RegistrySnapshot, contract_descriptors, diagnostic_class_name, diagnostic_descriptors,
     exit_status_descriptors, operation_descriptors, registry_snapshot,
 };
+use crate::platform::project_creation::ProjectTemplate;
 use std::fmt::Write as _;
 
 const GENERATOR_COMMAND: &str = "lkjscript capabilities --generate-docs docs/generated";
@@ -72,6 +73,22 @@ fn operations_markdown(snapshot: &RegistrySnapshot) -> String {
             operation.usage
         );
     }
+    output.push_str("\n## Project templates\n\n");
+    output.push_str(
+        "| Template | Purpose | Runner | Starter deployment | Recommended artifact output |\n",
+    );
+    output.push_str("|---|---|---|---|---|\n");
+    for template in ProjectTemplate::ALL {
+        let _ = writeln!(
+            output,
+            "| `{}` | {} | `{}` | `{}` | `{}` |",
+            template.name(),
+            template.purpose(),
+            template.runner(),
+            template.emits_deployment(),
+            template.recommended_artifact_output().unwrap_or("none")
+        );
+    }
     output
 }
 
@@ -111,6 +128,14 @@ mod tests {
             assert_eq!(left.relative_path, right.relative_path);
             assert_eq!(left.bytes, right.bytes);
             assert!(left.bytes.ends_with(b"\n"));
+        }
+        let operations = first
+            .iter()
+            .find(|document| document.relative_path == "operations.md")
+            .expect("generated operations document");
+        let operations = std::str::from_utf8(&operations.bytes).expect("UTF-8 operations document");
+        for template in ProjectTemplate::ALL {
+            assert!(operations.contains(&format!("| `{}` |", template.name())));
         }
     }
 

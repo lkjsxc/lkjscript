@@ -2,6 +2,7 @@
 
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::execution::{ExecutionError, ExecutionFailureClass};
+use super::kernel::{Name, StructuralTypeField, TypeForm, TypeObjectDigest, TypeObjectInterner};
 use super::runtime::ShutdownReceipt;
 use super::stream::ByteStreamProducer;
 use axum::body::Body;
@@ -15,6 +16,86 @@ pub const HTTP_ADAPTER_CONTRACT_VERSION: u16 = 1;
 pub const MAXIMUM_HTTP_BODY_BYTES: usize = 64 * 1024 * 1024;
 pub const MAXIMUM_HTTP_HEADER_BYTES: usize = 256 * 1024;
 pub const MAXIMUM_HTTP_HEADERS: usize = 1_024;
+
+/// One generation-neutral construction of the exact semantic HTTP boundary.
+///
+/// Runtime admission, project creation, and focused contract tests consume these same canonical
+/// type objects. Transport values and resident runtime indexes remain separate representations.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct HttpSemanticTypes {
+    pub(crate) i64_type: TypeObjectDigest,
+    pub(crate) bytes_type: TypeObjectDigest,
+    pub(crate) text_type: TypeObjectDigest,
+    pub(crate) stream_type: TypeObjectDigest,
+    pub(crate) header_type: TypeObjectDigest,
+    pub(crate) header_list_type: TypeObjectDigest,
+    pub(crate) request_type: TypeObjectDigest,
+    pub(crate) response_type: TypeObjectDigest,
+    pub(crate) function_type: TypeObjectDigest,
+}
+
+pub(crate) fn semantic_http_types(
+    types: &mut TypeObjectInterner,
+) -> Result<HttpSemanticTypes, Diagnostic> {
+    let i64_type = types.intern(TypeForm::I64)?;
+    let bytes_type = types.intern(TypeForm::Bytes)?;
+    let text_type = types.intern(TypeForm::Text)?;
+    let stream_type = types.intern(TypeForm::Stream { item: bytes_type })?;
+    let header_type = types.intern(TypeForm::StructuralRecord {
+        fields: vec![
+            semantic_type_field("name", text_type)?,
+            semantic_type_field("value", bytes_type)?,
+        ],
+    })?;
+    let header_list_type = types.intern(TypeForm::List { item: header_type })?;
+    let text_list_type = types.intern(TypeForm::List { item: text_type })?;
+    let query_map_type = types.intern(TypeForm::Map {
+        key: text_type,
+        value: text_list_type,
+    })?;
+    let request_type = types.intern(TypeForm::StructuralRecord {
+        fields: vec![
+            semantic_type_field("body", stream_type)?,
+            semantic_type_field("headers", header_list_type)?,
+            semantic_type_field("method", text_type)?,
+            semantic_type_field("path", text_type)?,
+            semantic_type_field("query", text_type)?,
+            semantic_type_field("query_parameters", query_map_type)?,
+        ],
+    })?;
+    let response_type = types.intern(TypeForm::StructuralRecord {
+        fields: vec![
+            semantic_type_field("body", bytes_type)?,
+            semantic_type_field("headers", header_list_type)?,
+            semantic_type_field("status", i64_type)?,
+        ],
+    })?;
+    let function_type = types.intern(TypeForm::Function {
+        parameters: vec![request_type],
+        result: response_type,
+    })?;
+    Ok(HttpSemanticTypes {
+        i64_type,
+        bytes_type,
+        text_type,
+        stream_type,
+        header_type,
+        header_list_type,
+        request_type,
+        response_type,
+        function_type,
+    })
+}
+
+fn semantic_type_field(
+    name: &'static str,
+    ty: TypeObjectDigest,
+) -> Result<StructuralTypeField, Diagnostic> {
+    Ok(StructuralTypeField {
+        name: Name::new(name)?,
+        ty,
+    })
+}
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -532,6 +613,90 @@ fn http_diagnostic(code: &str, message: impl Into<String>) -> Diagnostic {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn oracle_field(name: &'static str, ty: TypeObjectDigest) -> StructuralTypeField {
+        StructuralTypeField {
+            name: Name::new(name).expect("normative HTTP field name"),
+            ty,
+        }
+    }
+
+    #[test]
+    fn semantic_http_type_owner_matches_the_independent_normative_field_oracle() {
+        let mut actual_interner = TypeObjectInterner::default();
+        let actual = semantic_http_types(&mut actual_interner).expect("shared HTTP semantic types");
+
+        // Deliberately reconstruct the normative shape without calling the shared helper. This
+        // preserves an implementation-disjoint oracle for field names, order, and nested forms.
+        let mut oracle = TypeObjectInterner::default();
+        let i64_type = oracle.intern(TypeForm::I64).expect("I64");
+        let bytes_type = oracle.intern(TypeForm::Bytes).expect("Bytes");
+        let text_type = oracle.intern(TypeForm::Text).expect("Text");
+        let stream_type = oracle
+            .intern(TypeForm::Stream { item: bytes_type })
+            .expect("Stream Bytes");
+        let header_type = oracle
+            .intern(TypeForm::StructuralRecord {
+                fields: vec![
+                    oracle_field("name", text_type),
+                    oracle_field("value", bytes_type),
+                ],
+            })
+            .expect("HTTP header");
+        let header_list_type = oracle
+            .intern(TypeForm::List { item: header_type })
+            .expect("HTTP header list");
+        let text_list_type = oracle
+            .intern(TypeForm::List { item: text_type })
+            .expect("query value list");
+        let query_map_type = oracle
+            .intern(TypeForm::Map {
+                key: text_type,
+                value: text_list_type,
+            })
+            .expect("query map");
+        let request_type = oracle
+            .intern(TypeForm::StructuralRecord {
+                fields: vec![
+                    oracle_field("body", stream_type),
+                    oracle_field("headers", header_list_type),
+                    oracle_field("method", text_type),
+                    oracle_field("path", text_type),
+                    oracle_field("query", text_type),
+                    oracle_field("query_parameters", query_map_type),
+                ],
+            })
+            .expect("HTTP request");
+        let response_type = oracle
+            .intern(TypeForm::StructuralRecord {
+                fields: vec![
+                    oracle_field("body", bytes_type),
+                    oracle_field("headers", header_list_type),
+                    oracle_field("status", i64_type),
+                ],
+            })
+            .expect("HTTP response");
+        let function_type = oracle
+            .intern(TypeForm::Function {
+                parameters: vec![request_type],
+                result: response_type,
+            })
+            .expect("HTTP handler");
+        let expected = HttpSemanticTypes {
+            i64_type,
+            bytes_type,
+            text_type,
+            stream_type,
+            header_type,
+            header_list_type,
+            request_type,
+            response_type,
+            function_type,
+        };
+
+        assert_eq!(actual, expected);
+        assert_eq!(actual_interner.into_objects(), oracle.into_objects());
+    }
 
     #[test]
     fn transport_limits_and_query_decoding_are_strict() {

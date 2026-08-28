@@ -1019,7 +1019,7 @@ checksum = "47d9d19d1d6efa0109d2f65ff4c85cddd50bd572e5a00127ab10987290bcefae"
 
 [[package]]
 name = "lkjscript"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "argon2",
  "axum",
@@ -1047,6 +1047,7 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "fs2",
+ "lkjscript",
  "rustix",
  "serde",
  "serde_json",

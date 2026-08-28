@@ -34,6 +34,35 @@ use tokio::runtime::Handle;
 pub const DEPLOYMENT_CONTRACT_VERSION: u16 = 1;
 pub const MAXIMUM_DEPLOYMENT_BYTES: usize = 1024 * 1024;
 pub const MAXIMUM_DEPLOYMENT_GRANTS: usize = 1_024;
+pub(crate) const STARTER_HTTP_DESCRIPTOR_PATH: &str = "service.deployment.json";
+pub(crate) const STARTER_HTTP_ARTIFACT_PATH: &str = "generated/application.lkja";
+pub(crate) const STARTER_HTTP_ARTIFACT_DIRECTORY: &str = "generated";
+pub(crate) const STARTER_HTTP_TARGET: &str = "serve";
+pub(crate) const STARTER_HTTP_LISTENER: &str = "127.0.0.1:0";
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct DeploymentAuthorityRevision([u8; 32]);
+
+impl DeploymentAuthorityRevision {
+    fn generate() -> Result<Self, Diagnostic> {
+        let mut bytes = [0_u8; 32];
+        getrandom::fill(&mut bytes).map_err(|_| {
+            Diagnostic::new(
+                DiagnosticClass::Infrastructure,
+                "deployment_authority_entropy",
+                "operating-system entropy is unavailable for starter deployment authority",
+            )
+        })?;
+        if bytes == [0; 32] {
+            bytes[31] = 1;
+        }
+        Ok(Self(bytes))
+    }
+
+    fn encode(self) -> String {
+        super::semantic_id::encode_hex(&self.0)
+    }
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -113,6 +142,71 @@ pub enum AdapterDescriptor {
         statement_timeout_milliseconds: u64,
         limits: QueueLimits,
     },
+}
+
+pub(crate) fn starter_http_deployment() -> Result<DeploymentDescriptor, Diagnostic> {
+    let descriptor = DeploymentDescriptor {
+        contract_version: DEPLOYMENT_CONTRACT_VERSION,
+        artifact: STARTER_HTTP_ARTIFACT_PATH.to_owned(),
+        target: STARTER_HTTP_TARGET.to_owned(),
+        listen: Some(STARTER_HTTP_LISTENER.to_owned()),
+        runtime: ResidentLimits {
+            maximum_concurrent_tasks: 16,
+            maximum_queued_tasks: 64,
+            request_deadline_milliseconds: 30_000,
+            shutdown_grace_milliseconds: 30_000,
+            cancellation_grace_milliseconds: 5_000,
+            ..ResidentLimits::default()
+        },
+        execution: RunPolicy::default(),
+        http: Some(HttpLimits {
+            maximum_request_body_bytes: 8 * 1024 * 1024,
+            maximum_response_body_bytes: 4 * 1024 * 1024,
+            maximum_header_bytes: 32 * 1024,
+            maximum_headers: 128,
+            ..HttpLimits::default()
+        }),
+        worker: None,
+        streams: StreamLimits {
+            maximum_chunk_bytes: 64 * 1024,
+            maximum_buffered_chunks: 8,
+            maximum_total_bytes: 64 * 1024 * 1024,
+            maximum_live_streams: 1_024,
+        },
+        configuration: BTreeMap::new(),
+        secrets: Vec::new(),
+        grants: vec![DeploymentGrant {
+            requirement: "streams".to_owned(),
+            sharing_domain: "http-request-streams".to_owned(),
+            authority_revision: DeploymentAuthorityRevision::generate()?.encode(),
+            adapter: AdapterDescriptor::ByteStream,
+        }],
+    };
+    validate_descriptor(&descriptor)?;
+    Ok(descriptor)
+}
+
+pub(crate) fn encode_deployment(descriptor: &DeploymentDescriptor) -> Result<Vec<u8>, Diagnostic> {
+    validate_descriptor(descriptor)?;
+    let mut bytes = serde_json::to_vec_pretty(descriptor).map_err(|error| {
+        Diagnostic::new(
+            DiagnosticClass::Infrastructure,
+            "deployment_encode",
+            format!("deployment descriptor could not be encoded: {error}"),
+        )
+    })?;
+    bytes.push(b'\n');
+    if bytes.len() > MAXIMUM_DEPLOYMENT_BYTES {
+        return Err(deployment_error(
+            "deployment_too_large",
+            format!(
+                "deployment descriptor has {} bytes; the limit is {MAXIMUM_DEPLOYMENT_BYTES}",
+                bytes.len()
+            ),
+        ));
+    }
+    let _ = decode_deployment(&bytes)?;
+    Ok(bytes)
 }
 
 impl AdapterDescriptor {
@@ -929,6 +1023,58 @@ mod tests {
                 "{path}"
             );
         }
+    }
+
+    #[test]
+    fn starter_http_descriptor_is_strict_loopback_only_and_fresh() {
+        let first = starter_http_deployment().expect("first starter deployment");
+        let second = starter_http_deployment().expect("second starter deployment");
+        assert_eq!(first.contract_version, DEPLOYMENT_CONTRACT_VERSION);
+        assert_eq!(first.artifact, STARTER_HTTP_ARTIFACT_PATH);
+        assert_eq!(first.target, STARTER_HTTP_TARGET);
+        assert_eq!(first.listen.as_deref(), Some(STARTER_HTTP_LISTENER));
+        assert_eq!(first.runtime.maximum_concurrent_tasks, 16);
+        assert_eq!(first.runtime.maximum_queued_tasks, 64);
+        assert_eq!(first.runtime.request_deadline_milliseconds, 30_000);
+        assert_eq!(first.runtime.shutdown_grace_milliseconds, 30_000);
+        assert_eq!(first.runtime.cancellation_grace_milliseconds, 5_000);
+        assert_eq!(first.execution.instruction_fuel, 10_000_000);
+        assert_eq!(first.execution.maximum_call_depth, 4_096);
+        assert_eq!(first.execution.maximum_value_stack, 1_000_000);
+        let http = first.http.as_ref().expect("HTTP limits");
+        assert_eq!(http.maximum_request_body_bytes, 8 * 1024 * 1024);
+        assert_eq!(http.maximum_response_body_bytes, 4 * 1024 * 1024);
+        assert_eq!(http.maximum_header_bytes, 32 * 1024);
+        assert_eq!(http.maximum_headers, 128);
+        assert_eq!(first.streams.maximum_chunk_bytes, 64 * 1024);
+        assert_eq!(first.streams.maximum_buffered_chunks, 8);
+        assert_eq!(first.streams.maximum_total_bytes, 64 * 1024 * 1024);
+        assert_eq!(first.streams.maximum_live_streams, 1_024);
+        assert!(first.worker.is_none());
+        assert!(first.configuration.is_empty());
+        assert!(first.secrets.is_empty());
+        assert_eq!(first.grants.len(), 1);
+        let grant = &first.grants[0];
+        assert_eq!(grant.requirement, "streams");
+        assert_eq!(grant.sharing_domain, "http-request-streams");
+        assert_eq!(grant.authority_revision.len(), 64);
+        assert_ne!(grant.authority_revision, "0".repeat(64));
+        assert!(matches!(grant.adapter, AdapterDescriptor::ByteStream));
+        assert_ne!(
+            grant.authority_revision, second.grants[0].authority_revision,
+            "starter deployment authority must be freshly generated"
+        );
+
+        let bytes = encode_deployment(&first).expect("encode starter deployment");
+        assert_eq!(bytes.last(), Some(&b'\n'));
+        let decoded = decode_deployment(&bytes).expect("strictly decode encoded starter");
+        assert_eq!(decoded.artifact, first.artifact);
+        assert_eq!(decoded.target, first.target);
+        assert_eq!(decoded.listen, first.listen);
+        assert_eq!(
+            decoded.grants[0].authority_revision,
+            grant.authority_revision
+        );
     }
 
     #[cfg(unix)]

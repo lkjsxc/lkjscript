@@ -335,6 +335,26 @@ pub(crate) fn base_registry(
         ],
         &["release_build"],
     ));
+    let mut distributed_http = gate(
+        "distributed_http_application",
+        vec![
+            path_string(self_test_executable),
+            "distributed-http".to_owned(),
+            "--binary".to_owned(),
+            path_string(&binary),
+            "--machine".to_owned(),
+        ],
+        &["release_build"],
+    );
+    distributed_http.identity_command = Some(vec![
+        "$HARNESS".to_owned(),
+        "distributed-http".to_owned(),
+        "--binary".to_owned(),
+        path_string(&binary),
+        "--machine".to_owned(),
+    ]);
+    distributed_http.cacheable = false;
+    gates.push(distributed_http);
 
     let mut self_test = Gate::new(
         "checker_self_test",
@@ -555,6 +575,7 @@ pub(crate) fn profile(name: &str) -> Option<Vec<String>> {
             "rust_only_tooling",
             "release_build",
             "release_command_lifecycle",
+            "distributed_http_application",
             "contract_registry_conformance",
             "standard_package_test",
             "application_package_test",
@@ -573,6 +594,7 @@ pub(crate) fn profile(name: &str) -> Option<Vec<String>> {
             "rust_only_tooling",
             "release_build",
             "release_command_lifecycle",
+            "distributed_http_application",
             "service_acceptance",
             "diff_check",
         ],
@@ -584,6 +606,7 @@ pub(crate) fn profile(name: &str) -> Option<Vec<String>> {
             "workspace_tests",
             "release_build",
             "release_command_lifecycle",
+            "distributed_http_application",
             "contract_registry_conformance",
             "standard_package_test",
             "application_package_test",
@@ -722,7 +745,7 @@ mod tests {
             .expect("first maintained registry");
         let second = base_registry(temporary.path(), &second_run, Path::new("/bin/true"))
             .expect("second maintained registry");
-        assert_eq!(first.gates.len(), 23);
+        assert_eq!(first.gates.len(), 24);
         for profile_name in ["focused", "product", "service", "full"] {
             let requested = profile(profile_name).expect("maintained profile");
             assert!(requested.iter().any(|name| name == "rust_only_tooling"));
@@ -731,6 +754,11 @@ mod tests {
                     requested
                         .iter()
                         .any(|name| name == "release_command_lifecycle")
+                );
+                assert!(
+                    requested
+                        .iter()
+                        .any(|name| name == "distributed_http_application")
                 );
             }
             assert!(

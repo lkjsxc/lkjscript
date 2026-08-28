@@ -7,4 +7,6 @@
 
 //! The lkjscript source language, package authority, component runtime, and capability adapters.
 
+pub const PRODUCT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 pub mod platform;

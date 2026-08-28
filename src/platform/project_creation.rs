@@ -1,13 +1,18 @@
-//! Atomic creation of one minimal normalized semantic-graph project.
+//! Atomic typed creation of the executable's closed normalized project recipe set.
 
+use super::deployment::{
+    STARTER_HTTP_ARTIFACT_DIRECTORY, STARTER_HTTP_ARTIFACT_PATH, STARTER_HTTP_DESCRIPTOR_PATH,
+    STARTER_HTTP_LISTENER, STARTER_HTTP_TARGET, encode_deployment, starter_http_deployment,
+};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::kernel::{
     ComparisonPolicy, DeclarationPayload, DeclarationRecord, DeclarationReference,
-    DeclarationVisibility, DependencyRecord, ExpressionOperation, ExpressionRecord,
+    DeclarationVisibility, DependencyRecord, ExpressionOperation, ExpressionRecord, FieldSelector,
     FunctionDeclaration, FunctionEffect, KernelSnapshot, Name, OwnerHeader, OwnerKey, OwnerKind,
-    OwnerRecord, PackageId, PortImplementation, PortRecord, PortReference, SemanticRoot,
-    SemanticRootDigest, SemanticStateDigest, TargetRecord, TextValue, TypeForm, TypeObjectInterner,
-    validate_full,
+    OwnerRecord, PackageId, ParameterParent, ParameterRecord, PortImplementation, PortRecord,
+    PortReference, RecordExpressionField, RequirementRecord, RequirementReference, ResourceLimit,
+    ResourceUnit, SemanticRoot, SemanticRootDigest, SemanticStateDigest, TargetRecord, TextValue,
+    TypeForm, TypeObjectInterner, validate_full,
 };
 use super::package::RunnerKind;
 use super::persistent_map::{MapContentDigest, MapRoot, PageDigest};
@@ -15,17 +20,84 @@ use super::publication::{
     GraphRepository, InitialPackageTransport, ReceiptObjectDigest, RevisionObjectDigest,
 };
 use super::semantic_id::{
-    DeclarationId, ExpressionId, ModuleId, PortId, RepositoryId, RevisionId, TargetId,
+    DeclarationId, ExpressionId, ModuleId, ParameterId, PortId, RepositoryId, RequirementId,
+    RevisionId, TargetId,
 };
 use std::collections::BTreeMap;
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
+use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 
-pub const PROJECT_CREATION_CONTRACT_IDENTITY: &str = "lkjscript-project-creation-1";
-pub const PROJECT_CREATION_CONTRACT_VERSION: u16 = 1;
+pub const PROJECT_CREATION_CONTRACT_IDENTITY: &str = "lkjscript-project-creation-2";
+pub const PROJECT_CREATION_CONTRACT_VERSION: u16 = 2;
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(crate) enum ProjectTemplate {
+    Minimal,
+    Command,
+    Http,
+}
+
+impl ProjectTemplate {
+    pub(crate) const ALL: [Self; 3] = [Self::Minimal, Self::Command, Self::Http];
+
+    pub(crate) fn parse(value: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|template| template.name() == value)
+    }
+
+    pub(crate) const fn name(self) -> &'static str {
+        match self {
+            Self::Minimal => "minimal",
+            Self::Command => "command",
+            Self::Http => "http",
+        }
+    }
+
+    pub(crate) const fn purpose(self) -> &'static str {
+        match self {
+            Self::Minimal => "Create the smallest normalized accepted project authority.",
+            Self::Command => {
+                "Create a tested pure command with one exact built-in standard dependency."
+            }
+            Self::Http => {
+                "Create an editable tested HTTP application and loopback starter deployment."
+            }
+        }
+    }
+
+    pub(crate) const fn runner(self) -> &'static str {
+        match self {
+            Self::Minimal => "none",
+            Self::Command => "command",
+            Self::Http => "http",
+        }
+    }
+
+    pub(crate) const fn emits_deployment(self) -> bool {
+        matches!(self, Self::Http)
+    }
+
+    pub(crate) const fn recommended_artifact_output(self) -> Option<&'static str> {
+        match self {
+            Self::Http => Some(STARTER_HTTP_ARTIFACT_PATH),
+            Self::Minimal | Self::Command => None,
+        }
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct MinimalProjectCreation {
+pub struct CreatedDeployment {
+    pub descriptor: PathBuf,
+    pub recommended_artifact_output: PathBuf,
+    pub target: &'static str,
+    pub runner: &'static str,
+    pub configured_listener: &'static str,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProjectCreation {
     pub project: PathBuf,
     pub package_name: Name,
     pub repository: RepositoryId,
@@ -35,55 +107,52 @@ pub struct MinimalProjectCreation {
     pub semantic_root: SemanticRootDigest,
     pub revision_record: RevisionObjectDigest,
     pub receipt: ReceiptObjectDigest,
-    pub template: &'static str,
+    pub(crate) template: ProjectTemplate,
     pub owners: u64,
     pub dependencies: u64,
     pub targets: u64,
     pub tests: u64,
+    pub deployment: Option<CreatedDeployment>,
 }
 
-pub fn create_minimal_project(
+pub(crate) fn create_project(
     destination: &Path,
     package_name: &str,
-) -> Result<MinimalProjectCreation, Diagnostic> {
-    create_minimal_project_before_publish(destination, package_name, |_| Ok(()))
-}
-
-pub fn create_command_project(
-    destination: &Path,
-    package_name: &str,
-) -> Result<MinimalProjectCreation, Diagnostic> {
-    create_project_before_publish(destination, package_name, command_recipe, |_| Ok(()))
-}
-
-fn create_minimal_project_before_publish<F>(
-    destination: &Path,
-    package_name: &str,
-    before_publish: F,
-) -> Result<MinimalProjectCreation, Diagnostic>
-where
-    F: FnOnce(&Path) -> Result<(), Diagnostic>,
-{
-    create_project_before_publish(destination, package_name, minimal_recipe, before_publish)
+    template: ProjectTemplate,
+) -> Result<ProjectCreation, Diagnostic> {
+    create_project_with_hook(destination, package_name, template, |_, _, _| Ok(()))
 }
 
 struct ProjectRecipe {
     snapshot: KernelSnapshot,
     transports: Vec<InitialPackageTransport>,
-    template: &'static str,
+    template: ProjectTemplate,
     targets: u64,
     tests: u64,
+    auxiliary: Option<ProjectAuxiliary>,
 }
 
-fn create_project_before_publish<F, R>(
+struct ProjectAuxiliary {
+    descriptor: Vec<u8>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CreationPoint {
+    GraphPublished,
+    BeforeDescriptor,
+    DescriptorPublished,
+    GeneratedDirectoryPublished,
+    BeforeVisibility,
+}
+
+fn create_project_with_hook<F>(
     destination: &Path,
     package_name: &str,
-    recipe: R,
-    before_publish: F,
-) -> Result<MinimalProjectCreation, Diagnostic>
+    template: ProjectTemplate,
+    mut hook: F,
+) -> Result<ProjectCreation, Diagnostic>
 where
-    F: FnOnce(&Path) -> Result<(), Diagnostic>,
-    R: FnOnce(RepositoryId, PackageId, Name) -> Result<ProjectRecipe, Diagnostic>,
+    F: FnMut(CreationPoint, &Path, &Path) -> Result<(), Diagnostic>,
 {
     let destination = safe_destination(destination)?;
     let parent = destination.parent().ok_or_else(|| {
@@ -96,7 +165,12 @@ where
     let package_name = Name::new(package_name)?;
     let repository = RepositoryId::generate()?;
     let package = PackageId::generate()?;
-    let recipe = recipe(repository, package, package_name.clone())?;
+    let recipe = match template {
+        ProjectTemplate::Minimal => minimal_recipe(repository, package, package_name.clone()),
+        ProjectTemplate::Command => command_recipe(repository, package, package_name.clone()),
+        ProjectTemplate::Http => http_recipe(repository, package, package_name.clone()),
+    }?;
+    validate_auxiliary_inventory(recipe.auxiliary.as_ref())?;
     validate_full(&recipe.snapshot).map_err(|diagnostics| {
         diagnostics.into_iter().next().unwrap_or_else(|| {
             creation_error(
@@ -111,10 +185,22 @@ where
     let created = GraphRepository::create_with_package_transports(
         &private,
         &recipe.snapshot,
-        Some(format!("public {} project bootstrap", recipe.template)),
+        Some(format!(
+            "public {} project bootstrap",
+            recipe.template.name()
+        )),
         &recipe.transports,
     )?;
-    if let Err(error) = before_publish(&destination) {
+    let staged = (|| {
+        hook(CreationPoint::GraphPublished, &private, &destination)?;
+        if let Some(auxiliary) = &recipe.auxiliary {
+            publish_auxiliary(&private, auxiliary, &mut hook, &destination)?;
+        }
+        sync_stage_directory(&private)?;
+        hook(CreationPoint::BeforeVisibility, &private, &destination)?;
+        Ok(())
+    })();
+    if let Err(error) = staged {
         remove_owned_stage(&private);
         return Err(error);
     }
@@ -129,7 +215,7 @@ where
             ),
         ));
     }
-    sync_directory(parent)?;
+    sync_parent_directory(parent)?;
 
     let visible = GraphRepository::open(&destination)?;
     let current = visible.current()?;
@@ -143,7 +229,15 @@ where
             "visible normalized project disagrees with its privately accepted publication",
         ));
     }
-    Ok(MinimalProjectCreation {
+    reconcile_auxiliary(&destination, recipe.auxiliary.as_ref())?;
+    let deployment = recipe.auxiliary.as_ref().map(|_| CreatedDeployment {
+        descriptor: destination.join(STARTER_HTTP_DESCRIPTOR_PATH),
+        recommended_artifact_output: destination.join(STARTER_HTTP_ARTIFACT_PATH),
+        target: STARTER_HTTP_TARGET,
+        runner: "http",
+        configured_listener: STARTER_HTTP_LISTENER,
+    });
+    Ok(ProjectCreation {
         project: destination,
         package_name,
         repository,
@@ -153,12 +247,135 @@ where
         semantic_root: current.accepted.semantic_root,
         revision_record: current.head.record,
         receipt: current.accepted.receipt,
-        template: recipe.template,
+        template,
         owners: recipe.snapshot.owners.len() as u64,
         dependencies: recipe.snapshot.dependencies.len() as u64,
         targets: recipe.targets,
         tests: recipe.tests,
+        deployment,
     })
+}
+
+fn publish_auxiliary<F>(
+    private: &Path,
+    auxiliary: &ProjectAuxiliary,
+    hook: &mut F,
+    destination: &Path,
+) -> Result<(), Diagnostic>
+where
+    F: FnMut(CreationPoint, &Path, &Path) -> Result<(), Diagnostic>,
+{
+    hook(CreationPoint::BeforeDescriptor, private, destination)?;
+    let descriptor = private.join(STARTER_HTTP_DESCRIPTOR_PATH);
+    let mut output = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&descriptor)
+        .map_err(|error| auxiliary_io("new_descriptor_create", &descriptor, error))?;
+    output
+        .write_all(&auxiliary.descriptor)
+        .and_then(|()| output.sync_all())
+        .map_err(|error| auxiliary_io("new_descriptor_publish", &descriptor, error))?;
+    hook(CreationPoint::DescriptorPublished, private, destination)?;
+
+    let generated = private.join(STARTER_HTTP_ARTIFACT_DIRECTORY);
+    fs::create_dir(&generated)
+        .map_err(|error| auxiliary_io("new_generated_directory", &generated, error))?;
+    sync_stage_directory(&generated)?;
+    hook(
+        CreationPoint::GeneratedDirectoryPublished,
+        private,
+        destination,
+    )?;
+    Ok(())
+}
+
+fn reconcile_auxiliary(
+    destination: &Path,
+    auxiliary: Option<&ProjectAuxiliary>,
+) -> Result<(), Diagnostic> {
+    let Some(auxiliary) = auxiliary else {
+        return Ok(());
+    };
+    let descriptor = destination.join(STARTER_HTTP_DESCRIPTOR_PATH);
+    let metadata = fs::symlink_metadata(&descriptor)
+        .map_err(|error| auxiliary_io("new_destination_reconcile", &descriptor, error))?;
+    if metadata.file_type().is_symlink()
+        || !metadata.is_file()
+        || fs::read(&descriptor)
+            .map(|bytes| bytes != auxiliary.descriptor)
+            .unwrap_or(true)
+    {
+        return Err(creation_error(
+            DiagnosticClass::Infrastructure,
+            "new_destination_reconcile",
+            "visible starter deployment disagrees with its synchronized private publication",
+        ));
+    }
+    let generated = destination.join(STARTER_HTTP_ARTIFACT_DIRECTORY);
+    let metadata = fs::symlink_metadata(&generated)
+        .map_err(|error| auxiliary_io("new_destination_reconcile", &generated, error))?;
+    let empty = metadata.is_dir()
+        && !metadata.file_type().is_symlink()
+        && fs::read_dir(&generated)
+            .map(|mut entries| entries.next().is_none())
+            .unwrap_or(false);
+    if !empty {
+        return Err(creation_error(
+            DiagnosticClass::Infrastructure,
+            "new_destination_reconcile",
+            "visible generated output directory is absent, foreign, or unexpectedly populated",
+        ));
+    }
+    Ok(())
+}
+
+fn auxiliary_io(code: &'static str, path: &Path, error: std::io::Error) -> Diagnostic {
+    creation_error(
+        DiagnosticClass::Infrastructure,
+        code,
+        format!(
+            "project auxiliary path '{}' failed: {error}",
+            path.display()
+        ),
+    )
+}
+
+fn validate_auxiliary_inventory(auxiliary: Option<&ProjectAuxiliary>) -> Result<(), Diagnostic> {
+    let Some(_) = auxiliary else {
+        return Ok(());
+    };
+    for (path, label) in [
+        (STARTER_HTTP_DESCRIPTOR_PATH, "starter descriptor"),
+        (STARTER_HTTP_ARTIFACT_DIRECTORY, "generated directory"),
+        (STARTER_HTTP_ARTIFACT_PATH, "recommended artifact"),
+    ] {
+        let path = Path::new(path);
+        if path.is_absolute()
+            || path.as_os_str().is_empty()
+            || path.components().any(
+                |component| !matches!(component, Component::Normal(value) if !value.is_empty()),
+            )
+        {
+            return Err(creation_error(
+                DiagnosticClass::Corrupt,
+                "new_auxiliary_path",
+                format!("{label} path is not a canonical relative path"),
+            ));
+        }
+    }
+    if Path::new(STARTER_HTTP_ARTIFACT_PATH).parent()
+        != Some(Path::new(STARTER_HTTP_ARTIFACT_DIRECTORY))
+        || STARTER_HTTP_DESCRIPTOR_PATH == STARTER_HTTP_ARTIFACT_DIRECTORY
+        || STARTER_HTTP_DESCRIPTOR_PATH == STARTER_HTTP_ARTIFACT_PATH
+    {
+        return Err(creation_error(
+            DiagnosticClass::Corrupt,
+            "new_auxiliary_inventory",
+            "starter descriptor, generated directory, and artifact output paths overlap",
+        ));
+    }
+    Ok(())
 }
 
 fn minimal_recipe(
@@ -169,9 +386,10 @@ fn minimal_recipe(
     Ok(ProjectRecipe {
         snapshot: empty_snapshot(repository, package, package_name),
         transports: Vec::new(),
-        template: "minimal",
+        template: ProjectTemplate::Minimal,
         targets: 0,
         tests: 0,
+        auxiliary: None,
     })
 }
 
@@ -377,9 +595,365 @@ fn command_recipe(
             retirements: BTreeMap::new(),
         },
         transports: vec![standard.transport()],
-        template: "command",
+        template: ProjectTemplate::Command,
         targets: 1,
         tests: 1,
+        auxiliary: None,
+    })
+}
+
+fn http_recipe(
+    repository: RepositoryId,
+    package: PackageId,
+    package_name: Name,
+) -> Result<ProjectRecipe, Diagnostic> {
+    let standard = super::builtin_standard::BuiltinStandard::load()?;
+    let contract = standard.http_recipe_contract()?;
+    let seed = repository.bytes();
+    let module = ModuleId::migrate(&seed, 0);
+    let response_function = DeclarationId::migrate(&seed, 0);
+    let status_function = DeclarationId::migrate(&seed, 1);
+    let handler_function = DeclarationId::migrate(&seed, 2);
+    let component = DeclarationId::migrate(&seed, 3);
+    let test = DeclarationId::migrate(&seed, 4);
+    let request_parameter = ParameterId::migrate(&seed, 0);
+    let streams = RequirementId::migrate(&seed, 0);
+    let port = PortId::migrate(&seed, 0);
+    let target = TargetId::migrate(&seed, 0);
+
+    let response_literal = ExpressionId::migrate(&seed, 0);
+    let status_literal = ExpressionId::migrate(&seed, 1);
+    let response_call = ExpressionId::migrate(&seed, 2);
+    let text_conversion = ExpressionId::migrate(&seed, 3);
+    let bytes_conversion = ExpressionId::migrate(&seed, 4);
+    let empty_headers = ExpressionId::migrate(&seed, 5);
+    let status_call = ExpressionId::migrate(&seed, 6);
+    let response_record = ExpressionId::migrate(&seed, 7);
+    let test_actual = ExpressionId::migrate(&seed, 8);
+    let test_expected = ExpressionId::migrate(&seed, 9);
+
+    let mut interner = TypeObjectInterner::default();
+    let semantic_http = super::http::semantic_http_types(&mut interner)?;
+    let static_text_type = interner.intern(TypeForm::StaticText)?;
+    if contract.static_text_type != static_text_type
+        || contract.text_type != semantic_http.text_type
+        || contract.bytes_type != semantic_http.bytes_type
+    {
+        return Err(creation_error(
+            DiagnosticClass::Corrupt,
+            "new_http_standard_types",
+            "built-in HTTP recipe declarations disagree with canonical Graph 5 primitive types",
+        ));
+    }
+
+    let local_stream_requirement = RequirementReference {
+        package,
+        requirement: streams,
+    };
+    let local_response_function = DeclarationReference {
+        package,
+        declaration: response_function,
+    };
+    let local_status_function = DeclarationReference {
+        package,
+        declaration: status_function,
+    };
+    let mut owners = BTreeMap::new();
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Module(super::kernel::ModuleRecord {
+            header: OwnerHeader::new(OwnerKey::Module(module), OwnerKind::Module),
+            name: Name::new("application")?,
+        }),
+    )?;
+
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Expression(ExpressionRecord::new(
+            response_literal,
+            ExpressionOperation::StaticText {
+                value: TextValue::Inline {
+                    text: "hello from lkjscript".to_owned(),
+                },
+            },
+        )?),
+    )?;
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Declaration(DeclarationRecord {
+            header: OwnerHeader::new(
+                OwnerKey::Declaration(response_function),
+                OwnerKind::PureFunction,
+            ),
+            module,
+            name: Name::new("response-text")?,
+            visibility: DeclarationVisibility::Private,
+            payload: DeclarationPayload::Function(FunctionDeclaration {
+                type_parameters: Vec::new(),
+                parameters: Vec::new(),
+                result: static_text_type,
+                effect: FunctionEffect::Pure,
+                body: response_literal,
+            }),
+        }),
+    )?;
+
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Expression(ExpressionRecord::new(
+            status_literal,
+            ExpressionOperation::I64 { value: 200 },
+        )?),
+    )?;
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Declaration(DeclarationRecord {
+            header: OwnerHeader::new(
+                OwnerKey::Declaration(status_function),
+                OwnerKind::PureFunction,
+            ),
+            module,
+            name: Name::new("status-code")?,
+            visibility: DeclarationVisibility::Private,
+            payload: DeclarationPayload::Function(FunctionDeclaration {
+                type_parameters: Vec::new(),
+                parameters: Vec::new(),
+                result: semantic_http.i64_type,
+                effect: FunctionEffect::Pure,
+                body: status_literal,
+            }),
+        }),
+    )?;
+
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Parameter(ParameterRecord {
+            header: OwnerHeader::new(OwnerKey::Parameter(request_parameter), OwnerKind::Parameter),
+            parent: ParameterParent::Function(handler_function),
+            name: Name::new("request")?,
+            ty: semantic_http.request_type,
+        }),
+    )?;
+    for (id, operation) in [
+        (
+            response_call,
+            ExpressionOperation::Call {
+                function: local_response_function,
+                type_arguments: Vec::new(),
+                arguments: Vec::new(),
+            },
+        ),
+        (
+            text_conversion,
+            ExpressionOperation::Call {
+                function: contract.text_from_static,
+                type_arguments: Vec::new(),
+                arguments: vec![response_call],
+            },
+        ),
+        (
+            bytes_conversion,
+            ExpressionOperation::Call {
+                function: contract.bytes_from_text,
+                type_arguments: Vec::new(),
+                arguments: vec![text_conversion],
+            },
+        ),
+        (
+            empty_headers,
+            ExpressionOperation::List {
+                item_type: semantic_http.header_type,
+                items: Vec::new(),
+            },
+        ),
+        (
+            status_call,
+            ExpressionOperation::Call {
+                function: local_status_function,
+                type_arguments: Vec::new(),
+                arguments: Vec::new(),
+            },
+        ),
+    ] {
+        insert_owner(
+            &mut owners,
+            OwnerRecord::Expression(ExpressionRecord::new(id, operation)?),
+        )?;
+    }
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Expression(ExpressionRecord::new(
+            response_record,
+            ExpressionOperation::Record {
+                nominal_type: None,
+                fields: vec![
+                    RecordExpressionField {
+                        selector: FieldSelector::Structural(Name::new("body")?),
+                        value: bytes_conversion,
+                    },
+                    RecordExpressionField {
+                        selector: FieldSelector::Structural(Name::new("headers")?),
+                        value: empty_headers,
+                    },
+                    RecordExpressionField {
+                        selector: FieldSelector::Structural(Name::new("status")?),
+                        value: status_call,
+                    },
+                ],
+            },
+        )?),
+    )?;
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Declaration(DeclarationRecord {
+            header: OwnerHeader::new(
+                OwnerKey::Declaration(handler_function),
+                OwnerKind::TaskFunction,
+            ),
+            module,
+            name: Name::new("handle")?,
+            visibility: DeclarationVisibility::Private,
+            payload: DeclarationPayload::Function(FunctionDeclaration {
+                type_parameters: Vec::new(),
+                parameters: vec![request_parameter],
+                result: semantic_http.response_type,
+                effect: FunctionEffect::Task {
+                    requirements: vec![local_stream_requirement],
+                },
+                body: response_record,
+            }),
+        }),
+    )?;
+
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Requirement(RequirementRecord {
+            header: OwnerHeader::new(OwnerKey::Requirement(streams), OwnerKind::Requirement),
+            declaration: component,
+            name: Name::new("streams")?,
+            interface: contract.byte_stream_interface,
+            operations: contract.byte_stream_operations.clone(),
+            limits: vec![ResourceLimit {
+                name: Name::new("maximum_calls")?,
+                maximum: 10_000,
+                unit: ResourceUnit::Calls,
+            }],
+        }),
+    )?;
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Port(PortRecord {
+            header: OwnerHeader::new(OwnerKey::Port(port), OwnerKind::Port),
+            declaration: component,
+            name: Name::new("http")?,
+            function_type: semantic_http.function_type,
+            implementation: PortImplementation::Function(DeclarationReference {
+                package,
+                declaration: handler_function,
+            }),
+        }),
+    )?;
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Declaration(DeclarationRecord {
+            header: OwnerHeader::new(OwnerKey::Declaration(component), OwnerKind::Component),
+            module,
+            name: Name::new("application")?,
+            visibility: DeclarationVisibility::Package,
+            payload: DeclarationPayload::Component {
+                requirements: vec![streams],
+                ports: vec![port],
+            },
+        }),
+    )?;
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Target(TargetRecord {
+            header: OwnerHeader::new(OwnerKey::Target(target), OwnerKind::Target),
+            name: Name::new(STARTER_HTTP_TARGET)?,
+            component: DeclarationReference {
+                package,
+                declaration: component,
+            },
+            port: PortReference { package, port },
+            runner: RunnerKind::Http,
+        }),
+    )?;
+
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Expression(ExpressionRecord::new(
+            test_actual,
+            ExpressionOperation::Call {
+                function: local_status_function,
+                type_arguments: Vec::new(),
+                arguments: Vec::new(),
+            },
+        )?),
+    )?;
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Expression(ExpressionRecord::new(
+            test_expected,
+            ExpressionOperation::I64 { value: 200 },
+        )?),
+    )?;
+    insert_owner(
+        &mut owners,
+        OwnerRecord::Declaration(DeclarationRecord {
+            header: OwnerHeader::new(OwnerKey::Declaration(test), OwnerKind::Test),
+            module,
+            name: Name::new("status-is-200")?,
+            visibility: DeclarationVisibility::Private,
+            payload: DeclarationPayload::Test {
+                actual: test_actual,
+                expected: test_expected,
+                comparison: ComparisonPolicy::Exact,
+            },
+        }),
+    )?;
+
+    let dependency = DependencyRecord {
+        graph_contract_version: super::kernel::contract::GRAPH_CONTRACT_VERSION,
+        package: standard.package,
+        semantic_revision: standard.semantic_revision,
+        package_revision: standard.package_revision,
+    };
+    let dependency_interfaces = BTreeMap::from([(
+        standard.package_revision,
+        standard
+            .interface_owners
+            .iter()
+            .map(|(owner, value)| (*owner, value.record.clone()))
+            .collect(),
+    )]);
+    let owners_len = owners.len();
+    let deployment = starter_http_deployment()?;
+    let descriptor = encode_deployment(&deployment)?;
+    Ok(ProjectRecipe {
+        snapshot: KernelSnapshot {
+            root: SemanticRoot {
+                graph_contract_version: super::kernel::contract::GRAPH_CONTRACT_VERSION,
+                repository_id: repository,
+                package_id: package,
+                package_name,
+                owners: placeholder_map(owners_len),
+                dependencies: placeholder_map(1),
+                retirements: placeholder_map(0),
+            },
+            owners,
+            types: interner.into_objects(),
+            dependency_interfaces,
+            dependency_types: standard.interface_types.clone(),
+            blobs: BTreeMap::new(),
+            dependencies: BTreeMap::from([(standard.package, dependency)]),
+            retirements: BTreeMap::new(),
+        },
+        transports: vec![standard.transport()],
+        template: ProjectTemplate::Http,
+        targets: 1,
+        tests: 1,
+        auxiliary: Some(ProjectAuxiliary { descriptor }),
     })
 }
 
@@ -590,7 +1164,7 @@ fn predecessor_project(path: &Path) -> bool {
         .any(|marker| fs::symlink_metadata(marker).is_ok())
 }
 
-fn sync_directory(path: &Path) -> Result<(), Diagnostic> {
+fn sync_parent_directory(path: &Path) -> Result<(), Diagnostic> {
     File::open(path)
         .and_then(|directory| directory.sync_all())
         .map_err(|error| {
@@ -599,6 +1173,21 @@ fn sync_directory(path: &Path) -> Result<(), Diagnostic> {
                 "new_parent_sync",
                 format!(
                     "project parent '{}' could not be synchronized: {error}",
+                    path.display()
+                ),
+            )
+        })
+}
+
+fn sync_stage_directory(path: &Path) -> Result<(), Diagnostic> {
+    File::open(path)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|error| {
+            creation_error(
+                DiagnosticClass::Infrastructure,
+                "new_stage_sync",
+                format!(
+                    "private project path '{}' could not be synchronized: {error}",
                     path.display()
                 ),
             )
@@ -625,11 +1214,13 @@ mod tests {
     fn command_recipe_prepares_checks_and_runs_through_both_normalized_tiers() {
         let temporary = tempfile::TempDir::new().expect("temporary command parent");
         let destination = temporary.path().join("command");
-        let created = create_command_project(&destination, "command").expect("command project");
-        assert_eq!(created.template, "command");
+        let created = create_project(&destination, "command", ProjectTemplate::Command)
+            .expect("command project");
+        assert_eq!(created.template, ProjectTemplate::Command);
         assert_eq!(created.dependencies, 1);
         assert_eq!(created.targets, 1);
         assert_eq!(created.tests, 1);
+        assert_eq!(created.deployment, None);
 
         let prepared = super::super::normalized_lifecycle::prepare_application(&destination)
             .expect("prepare normalized command");
@@ -651,30 +1242,227 @@ mod tests {
     }
 
     #[test]
+    fn http_recipe_prepares_and_checks_with_an_atomic_starter_deployment() {
+        let temporary = tempfile::TempDir::new().expect("temporary HTTP parent");
+        let destination = temporary.path().join("http");
+        let created =
+            create_project(&destination, "http", ProjectTemplate::Http).expect("HTTP project");
+        assert_eq!(created.template, ProjectTemplate::Http);
+        assert_eq!(created.dependencies, 1);
+        assert_eq!(created.targets, 1);
+        assert_eq!(created.tests, 1);
+        let deployment = created.deployment.expect("starter deployment");
+        assert_eq!(
+            deployment.descriptor,
+            destination.join(STARTER_HTTP_DESCRIPTOR_PATH)
+        );
+        assert_eq!(
+            deployment.recommended_artifact_output,
+            destination.join(STARTER_HTTP_ARTIFACT_PATH)
+        );
+        assert_eq!(deployment.target, "serve");
+        assert_eq!(deployment.runner, "http");
+        assert_eq!(deployment.configured_listener, "127.0.0.1:0");
+        assert!(destination.join(STARTER_HTTP_ARTIFACT_DIRECTORY).is_dir());
+        assert!(
+            fs::read_dir(destination.join(STARTER_HTTP_ARTIFACT_DIRECTORY))
+                .expect("generated directory")
+                .next()
+                .is_none()
+        );
+        assert!(!deployment.recommended_artifact_output.exists());
+
+        let descriptor_bytes = fs::read(&deployment.descriptor).expect("starter descriptor");
+        assert_eq!(descriptor_bytes.last(), Some(&b'\n'));
+        let descriptor = super::super::deployment::decode_deployment(&descriptor_bytes)
+            .expect("strict starter descriptor");
+        assert_eq!(descriptor.artifact, STARTER_HTTP_ARTIFACT_PATH);
+        assert_eq!(descriptor.target, STARTER_HTTP_TARGET);
+        assert_eq!(descriptor.listen.as_deref(), Some(STARTER_HTTP_LISTENER));
+        assert_eq!(descriptor.grants.len(), 1);
+        assert_eq!(descriptor.grants[0].requirement, "streams");
+        assert!(matches!(
+            descriptor.grants[0].adapter,
+            super::super::deployment::AdapterDescriptor::ByteStream
+        ));
+
+        let prepared = super::super::normalized_lifecycle::prepare_application(&destination)
+            .expect("prepare normalized HTTP application");
+        let checked = prepared
+            .check(&super::super::execution::ExecutionControl::default())
+            .expect("check HTTP graph tests");
+        assert_eq!(checked.passed, 8);
+        assert_eq!(checked.failed, 0);
+        assert_eq!(checked.differential, "equal");
+
+        fs::write(
+            &deployment.recommended_artifact_output,
+            &prepared.artifact_bytes,
+        )
+        .expect("publish test artifact");
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("deployment runtime");
+        let prepared_deployment = super::super::deployment::PreparedDeployment::load(
+            &deployment.descriptor,
+            runtime.handle().clone(),
+        )
+        .expect("prepare starter deployment");
+        let observation = prepared_deployment.observe_redacted();
+        assert_eq!(observation.target, "serve");
+        assert_eq!(observation.runner, "http");
+        assert_eq!(observation.listen.as_deref(), Some("127.0.0.1:0"));
+        assert_eq!(
+            observation.grants.get("streams").map(String::as_str),
+            Some("byte-stream")
+        );
+        prepared_deployment
+            .http_application()
+            .expect("prepare exact HTTP runner");
+
+        for (name, mutate, expected) in [
+            (
+                "missing-target",
+                (|descriptor: &mut super::super::deployment::DeploymentDescriptor| {
+                    descriptor.target = "foreign".to_owned();
+                }) as fn(&mut super::super::deployment::DeploymentDescriptor),
+                "deployment_target_missing",
+            ),
+            (
+                "wrong-runner",
+                |descriptor: &mut super::super::deployment::DeploymentDescriptor| {
+                    descriptor.http = None;
+                },
+                "deployment_http_incomplete",
+            ),
+            (
+                "missing-grant",
+                |descriptor: &mut super::super::deployment::DeploymentDescriptor| {
+                    descriptor.grants.clear();
+                },
+                "deployment_grant_missing",
+            ),
+        ] {
+            let mut invalid = starter_http_deployment().expect("invalid case base");
+            mutate(&mut invalid);
+            let path = destination.join(format!("{name}.json"));
+            fs::write(
+                &path,
+                super::super::deployment::encode_deployment(&invalid)
+                    .expect("encode structurally valid negative descriptor"),
+            )
+            .expect("publish negative descriptor");
+            let error =
+                super::super::deployment::PreparedDeployment::load(&path, runtime.handle().clone())
+                    .expect_err("deployment mismatch must reject before readiness");
+            assert_eq!(error.code, expected, "{name}");
+        }
+
+        let mut inconsistent = starter_http_deployment().expect("inconsistent descriptor base");
+        inconsistent.streams.maximum_total_bytes = 1;
+        let inconsistent_path = destination.join("inconsistent-streams.json");
+        fs::write(
+            &inconsistent_path,
+            super::super::deployment::encode_deployment(&inconsistent)
+                .expect("encode independently valid inconsistent limits"),
+        )
+        .expect("publish inconsistent descriptor");
+        let inconsistent = super::super::deployment::PreparedDeployment::load(
+            &inconsistent_path,
+            runtime.handle().clone(),
+        )
+        .expect("prepare deployment before HTTP cross-limit validation");
+        assert_eq!(
+            inconsistent
+                .http_application()
+                .err()
+                .expect("HTTP request/stream inconsistency must reject")
+                .code,
+            "normalized_http_stream_limit"
+        );
+
+        let mut duplicate = starter_http_deployment().expect("duplicate grant base");
+        duplicate.grants.push(duplicate.grants[0].clone());
+        assert_eq!(
+            super::super::deployment::encode_deployment(&duplicate)
+                .expect_err("duplicate stream grants must reject")
+                .code,
+            "deployment_grant_duplicate"
+        );
+    }
+
+    #[test]
+    fn auxiliary_publication_failures_remove_the_complete_owned_stage() {
+        for failure_point in [
+            CreationPoint::BeforeDescriptor,
+            CreationPoint::DescriptorPublished,
+            CreationPoint::GeneratedDirectoryPublished,
+        ] {
+            let temporary = tempfile::TempDir::new().expect("temporary HTTP parent");
+            let destination = temporary.path().join("http");
+            let error = create_project_with_hook(
+                &destination,
+                "http",
+                ProjectTemplate::Http,
+                |point, _, _| {
+                    if point == failure_point {
+                        Err(creation_error(
+                            DiagnosticClass::Infrastructure,
+                            "test_auxiliary_failure",
+                            "injected auxiliary publication failure",
+                        ))
+                    } else {
+                        Ok(())
+                    }
+                },
+            )
+            .expect_err("injected auxiliary failure must reject creation");
+            assert_eq!(error.code, "test_auxiliary_failure");
+            assert!(!destination.exists());
+            let stages = fs::read_dir(temporary.path())
+                .expect("creation parent")
+                .map(|entry| entry.expect("parent entry").file_name())
+                .filter(|name| {
+                    name.to_string_lossy()
+                        .starts_with(".lkjscript-project-stage-")
+                })
+                .collect::<Vec<_>>();
+            assert!(stages.is_empty(), "owned private stages remain: {stages:?}");
+        }
+    }
+
+    #[test]
     fn failed_visibility_rename_removes_only_the_owned_private_stage() {
         let temporary = tempfile::TempDir::new().expect("temporary creation parent");
         let destination = temporary.path().join("raced");
-        let error =
-            create_minimal_project_before_publish(&destination, "raced", |visible_destination| {
-                fs::create_dir(visible_destination).map_err(|error| {
-                    creation_error(
-                        DiagnosticClass::Infrastructure,
-                        "test_destination_race",
-                        error.to_string(),
-                    )
-                })?;
-                fs::write(visible_destination.join("owned.txt"), b"preserve\n").map_err(
-                    |error| {
+        let error = create_project_with_hook(
+            &destination,
+            "raced",
+            ProjectTemplate::Minimal,
+            |point, _, visible_destination| {
+                if point == CreationPoint::BeforeVisibility {
+                    fs::create_dir(visible_destination).map_err(|error| {
                         creation_error(
                             DiagnosticClass::Infrastructure,
                             "test_destination_race",
                             error.to_string(),
                         )
-                    },
-                )?;
+                    })?;
+                    fs::write(visible_destination.join("owned.txt"), b"preserve\n").map_err(
+                        |error| {
+                            creation_error(
+                                DiagnosticClass::Infrastructure,
+                                "test_destination_race",
+                                error.to_string(),
+                            )
+                        },
+                    )?;
+                }
                 Ok(())
-            })
-            .expect_err("nonempty raced destination must reject publication");
+            },
+        )
+        .expect_err("nonempty raced destination must reject publication");
         assert_eq!(error.code, "new_destination_publish");
         assert_eq!(
             fs::read(destination.join("owned.txt")).expect("preserved destination"),

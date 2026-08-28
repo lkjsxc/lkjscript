@@ -20,7 +20,7 @@ use super::kernel::{Name, OwnerKey as KernelOwnerKey, OwnerKind as KernelOwnerKi
 use super::normalized_lifecycle::{PreparedApplication, prepare_repository};
 use super::normalized_query::{execute_normalized_query, parse_query_arguments};
 use super::owned_output::publish_create_new;
-use super::project_creation::{create_command_project, create_minimal_project};
+use super::project_creation::{ProjectTemplate, create_project};
 use super::project_discovery::discover_project;
 use super::publication::{
     GraphRepository, PreparedAuthoredPublication, PublicationOptions,
@@ -37,13 +37,13 @@ pub fn execute_new(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
         .filter(|value| !value.starts_with("--"))
         .ok_or_else(|| usage_error("new requires one destination directory"))?;
     ensure_options(&arguments[1..], &["--template", "--name"], &[])?;
-    let template =
+    let template_name =
         option_value(&arguments[1..], "--template")?.unwrap_or_else(|| "minimal".to_owned());
-    if template != "minimal" && template != "command" {
-        return Err(usage_error(format!(
-            "unknown normalized project template '{template}'; expected minimal or command"
-        )));
-    }
+    let template = ProjectTemplate::parse(&template_name).ok_or_else(|| {
+        usage_error(format!(
+            "unknown normalized project template '{template_name}'; expected minimal, command, or http"
+        ))
+    })?;
     let package_name = option_value(&arguments[1..], "--name")?.unwrap_or_else(|| {
         Path::new(destination)
             .file_name()
@@ -56,11 +56,7 @@ pub fn execute_new(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
             "new requires --name when the destination name is not valid UTF-8",
         ));
     }
-    let created = if template == "command" {
-        create_command_project(Path::new(destination), &package_name)?
-    } else {
-        create_minimal_project(Path::new(destination), &package_name)?
-    };
+    let created = create_project(Path::new(destination), &package_name, template)?;
     let mut output = compact_response_writer()?;
     append_compact_record(
         &mut output,
@@ -75,7 +71,7 @@ pub fn execute_new(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
         "project",
         &[
             ("path", created.project.display().to_string()),
-            ("template", created.template.to_owned()),
+            ("template", created.template.name().to_owned()),
             ("name", created.package_name.as_str().to_owned()),
         ],
     )?;
@@ -123,14 +119,98 @@ pub fn execute_new(arguments: &[String]) -> Result<Vec<u8>, Diagnostic> {
             ("tests", created.tests.to_string()),
         ],
     )?;
+    if let Some(deployment) = &created.deployment {
+        append_compact_record(
+            &mut output,
+            "deployment",
+            &[
+                ("descriptor", deployment.descriptor.display().to_string()),
+                (
+                    "artifact-output",
+                    deployment.recommended_artifact_output.display().to_string(),
+                ),
+                ("target", deployment.target.to_owned()),
+                ("runner", deployment.runner.to_owned()),
+                ("listener", deployment.configured_listener.to_owned()),
+            ],
+        )?;
+    }
+    let project = created.project.display().to_string();
     append_compact_record(
         &mut output,
         "next",
         &[
-            ("kind", "discovery".to_owned()),
-            ("command", "lkjscript capabilities inspect".to_owned()),
+            ("order", "1".to_owned()),
+            ("kind", "status".to_owned()),
+            ("operation", "status".to_owned()),
+            ("project", project.clone()),
         ],
     )?;
+    append_compact_record(
+        &mut output,
+        "next",
+        &[
+            ("order", "2".to_owned()),
+            ("kind", "check".to_owned()),
+            ("operation", "check".to_owned()),
+            ("project", project.clone()),
+        ],
+    )?;
+    if let Some(deployment) = &created.deployment {
+        append_compact_record(
+            &mut output,
+            "next",
+            &[
+                ("order", "3".to_owned()),
+                ("kind", "response-change-plan".to_owned()),
+                ("operation", "change".to_owned()),
+                ("mode", "plan".to_owned()),
+                ("project", project.clone()),
+                ("base", created.revision.to_string()),
+                ("expression", "expression.static-text".to_owned()),
+                ("binding", "$response".to_owned()),
+                ("function", "application/response-text".to_owned()),
+                ("replacement", "replace.body".to_owned()),
+            ],
+        )?;
+        append_compact_record(
+            &mut output,
+            "next",
+            &[
+                ("order", "4".to_owned()),
+                ("kind", "response-change-apply".to_owned()),
+                ("operation", "change".to_owned()),
+                ("mode", "apply".to_owned()),
+                ("project", project.clone()),
+                ("input", "same-normalized-request".to_owned()),
+                ("plan", "token-from-order-3".to_owned()),
+            ],
+        )?;
+        append_compact_record(
+            &mut output,
+            "next",
+            &[
+                ("order", "5".to_owned()),
+                ("kind", "build".to_owned()),
+                ("operation", "build".to_owned()),
+                ("project", project.clone()),
+                (
+                    "output",
+                    deployment.recommended_artifact_output.display().to_string(),
+                ),
+            ],
+        )?;
+        append_compact_record(
+            &mut output,
+            "next",
+            &[
+                ("order", "6".to_owned()),
+                ("kind", "serve".to_owned()),
+                ("operation", "serve".to_owned()),
+                ("deployment", deployment.descriptor.display().to_string()),
+            ],
+        )?;
+    }
     Ok(output.finish())
 }
 
@@ -1550,9 +1630,14 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
         append_registry_summary(&mut output, &snapshot)?;
         let record = operation_record(descriptor).map_err(contract_registry_error)?;
         output.append_serialized_records(record.as_bytes())?;
-        if operation == PublicOperation::Query {
-            let section = snapshot.section(RegistrySection::Query).ok_or_else(|| {
-                internal_error("registered query operation has no focused registry section")
+        let focused_section = match operation {
+            PublicOperation::New => Some(RegistrySection::Templates),
+            PublicOperation::Query => Some(RegistrySection::Query),
+            _ => None,
+        };
+        if let Some(section_name) = focused_section {
+            let section = snapshot.section(section_name).ok_or_else(|| {
+                internal_error("registered operation has no focused registry section")
             })?;
             output.append_serialized_records(&section.bytes)?;
         }

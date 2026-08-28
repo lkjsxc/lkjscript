@@ -49,7 +49,7 @@ use super::super::package_transport::{
     PACKAGE_TRANSPORT_SELECTION_ENVELOPE_DOMAIN,
 };
 use super::super::project_creation::{
-    PROJECT_CREATION_CONTRACT_IDENTITY, PROJECT_CREATION_CONTRACT_VERSION,
+    PROJECT_CREATION_CONTRACT_IDENTITY, PROJECT_CREATION_CONTRACT_VERSION, ProjectTemplate,
 };
 use super::super::publication::contract::{
     RECEIPT_CONTRACT_IDENTITY, RECEIPT_CONTRACT_VERSION, RECEIPT_ENVELOPE_DOMAIN,
@@ -71,7 +71,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-3";
 pub const REGISTRY_CONTRACT_VERSION: u16 = 3;
-pub const CLI_CONTRACT_VERSION: u16 = 10;
+pub const CLI_CONTRACT_VERSION: u16 = 11;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -334,7 +334,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
         ContractDescriptor {
             key: ContractKey::Cli,
             name: "normalized command line protocol",
-            identity: "lkjscript-cli-10",
+            identity: "lkjscript-cli-11",
             version: CLI_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::PublicProtocol,
@@ -1020,7 +1020,7 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
         ),
         new_operation(
             "Create fresh normalized semantic authority atomically at one absent safe destination.",
-            "new DEST [--template minimal|command] [--name NAME]",
+            "new DEST [--template minimal|command|http] [--name NAME]",
         ),
         status_operation(
             "Report the exact current semantic authority and its durable acceptance evidence.",
@@ -2882,30 +2882,6 @@ pub fn outcome_exit_status(status: &str) -> u8 {
     }
 }
 
-#[derive(Clone, Copy, Debug, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct TemplateDescriptor {
-    pub name: &'static str,
-    pub purpose: &'static str,
-    pub creates_command_target: bool,
-}
-
-pub fn template_descriptors() -> &'static [TemplateDescriptor] {
-    const TEMPLATES: &[TemplateDescriptor] = &[
-        TemplateDescriptor {
-            name: "minimal",
-            purpose: "Create the smallest normalized accepted project authority.",
-            creates_command_target: false,
-        },
-        TemplateDescriptor {
-            name: "command",
-            purpose: "Create a tested pure command with one exact built-in standard dependency.",
-            creates_command_target: true,
-        },
-    ];
-    TEMPLATES
-}
-
 pub fn nonclaims() -> &'static [&'static str] {
     &[
         "no TLS implementation or encrypted transport guarantee",
@@ -3451,15 +3427,23 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
             }
         }
         RegistrySection::Templates => {
-            for descriptor in template_descriptors() {
+            for template in ProjectTemplate::ALL {
                 records.push(compact_record(
                     "template",
                     &[
-                        ("name", descriptor.name.to_owned()),
-                        ("purpose", descriptor.purpose.to_owned()),
+                        ("name", template.name().to_owned()),
+                        ("purpose", template.purpose().to_owned()),
+                        ("runner", template.runner().to_owned()),
                         (
-                            "command-target",
-                            descriptor.creates_command_target.to_string(),
+                            "starter-deployment",
+                            template.emits_deployment().to_string(),
+                        ),
+                        (
+                            "recommended-artifact-output",
+                            template
+                                .recommended_artifact_output()
+                                .unwrap_or("none")
+                                .to_owned(),
                         ),
                     ],
                 )?);
@@ -3564,7 +3548,7 @@ fn validate_registry() -> Result<(), String> {
     )?;
     unique(limit_descriptors().iter().map(|value| value.name), "limit")?;
     unique(
-        template_descriptors().iter().map(|value| value.name),
+        ProjectTemplate::ALL.into_iter().map(ProjectTemplate::name),
         "template",
     )?;
     if operation_descriptors().len() != PublicOperation::ALL.len() {

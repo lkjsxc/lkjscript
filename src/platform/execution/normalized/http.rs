@@ -10,11 +10,9 @@ use crate::platform::http::{
     HTTP_ADAPTER_CONTRACT_VERSION, HttpDispatchObservation, HttpHeader, HttpLimits, HttpRequest,
     HttpResponse, HttpServerReceipt, decode_live_request, decode_query_parameters,
     encode_live_response, execution_error_status, finish_request_body_pump, pump_request_body,
-    safe_error_response, static_response, validate_request,
+    safe_error_response, semantic_http_types, static_response, validate_request,
 };
-use crate::platform::kernel::{
-    Name, RequirementReference, StructuralTypeField, TypeForm, TypeObjectInterner,
-};
+use crate::platform::kernel::{Name, RequirementReference, TypeObjectInterner};
 use crate::platform::package::RunnerKind;
 use axum::Router;
 use axum::body::Body;
@@ -55,7 +53,9 @@ impl NormalizedHttpApplication {
                     "selected HTTP target port escaped the exact runtime table",
                 )
             })?;
-        if port.function_type != http_function_type()? {
+        if port.function_type
+            != semantic_http_types(&mut TypeObjectInterner::default())?.function_type
+        {
             return Err(http_diagnostic(
                 "normalized_http_handler_signature",
                 "HTTP handler must have the exact current structural request and response types",
@@ -271,57 +271,6 @@ async fn normalized_live_handler(
         }
         Err(error) => safe_error_response(&error, execution_error_status(&error)),
     }
-}
-
-fn http_function_type() -> Result<crate::platform::kernel::TypeObjectDigest, Diagnostic> {
-    let mut types = TypeObjectInterner::default();
-    let i64_type = types.intern(TypeForm::I64)?;
-    let bytes_type = types.intern(TypeForm::Bytes)?;
-    let text_type = types.intern(TypeForm::Text)?;
-    let stream_type = types.intern(TypeForm::Stream { item: bytes_type })?;
-    let header_type = types.intern(TypeForm::StructuralRecord {
-        fields: vec![
-            type_field("name", text_type)?,
-            type_field("value", bytes_type)?,
-        ],
-    })?;
-    let header_list = types.intern(TypeForm::List { item: header_type })?;
-    let text_list = types.intern(TypeForm::List { item: text_type })?;
-    let query_map = types.intern(TypeForm::Map {
-        key: text_type,
-        value: text_list,
-    })?;
-    let request = types.intern(TypeForm::StructuralRecord {
-        fields: vec![
-            type_field("body", stream_type)?,
-            type_field("headers", header_list)?,
-            type_field("method", text_type)?,
-            type_field("path", text_type)?,
-            type_field("query", text_type)?,
-            type_field("query_parameters", query_map)?,
-        ],
-    })?;
-    let response = types.intern(TypeForm::StructuralRecord {
-        fields: vec![
-            type_field("body", bytes_type)?,
-            type_field("headers", header_list)?,
-            type_field("status", i64_type)?,
-        ],
-    })?;
-    types.intern(TypeForm::Function {
-        parameters: vec![request],
-        result: response,
-    })
-}
-
-fn type_field(
-    name: &'static str,
-    ty: crate::platform::kernel::TypeObjectDigest,
-) -> Result<StructuralTypeField, Diagnostic> {
-    Ok(StructuralTypeField {
-        name: Name::new(name)?,
-        ty,
-    })
 }
 
 fn request_value(

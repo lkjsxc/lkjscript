@@ -637,7 +637,15 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
     );
     assert_eq!(
         compact_field(new_operation, "usage"),
-        Some("new DEST [--template minimal|command] [--name NAME]")
+        Some("new DEST [--template minimal|command|http] [--name NAME]")
+    );
+    assert_eq!(
+        new_help
+            .iter()
+            .filter(|record| record.operation == "template")
+            .filter_map(|record| compact_field(record, "name"))
+            .collect::<Vec<_>>(),
+        vec!["minimal", "command", "http"]
     );
     let status_help = compact_success(&["capabilities", "status"]);
     let status_operation = compact_record(&status_help, "operation");
@@ -653,8 +661,36 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             .filter(|record| record.operation == "template")
             .filter_map(|record| compact_field(record, "name"))
             .collect::<Vec<_>>(),
-        vec!["minimal", "command"]
+        vec!["minimal", "command", "http"]
     );
+    let http_template = templates
+        .iter()
+        .find(|record| {
+            record.operation == "template" && compact_field(record, "name") == Some("http")
+        })
+        .expect("HTTP template descriptor");
+    assert_eq!(compact_field(http_template, "runner"), Some("http"));
+    assert_eq!(
+        compact_field(http_template, "starter-deployment"),
+        Some("true")
+    );
+    assert_eq!(
+        compact_field(http_template, "recommended-artifact-output"),
+        Some("generated/application.lkja")
+    );
+    for name in ["minimal", "command"] {
+        let template = templates
+            .iter()
+            .find(|record| {
+                record.operation == "template" && compact_field(record, "name") == Some(name)
+            })
+            .expect("non-HTTP template descriptor");
+        assert_eq!(compact_field(template, "starter-deployment"), Some("false"));
+        assert_eq!(
+            compact_field(template, "recommended-artifact-output"),
+            Some("none")
+        );
+    }
 
     let temporary_capabilities = tempfile::TempDir::new().expect("capabilities output");
     let registry_path = temporary_capabilities.path().join("registry.lkjc");
@@ -3538,6 +3574,28 @@ fn copied_binary_creates_normalized_minimal_projects_and_rejects_unsafe_destinat
         Some("new_destination_not_empty")
     );
 
+    for alias in ["web", "server", "service"] {
+        let destination = temporary.path().join(format!("rejected-{alias}"));
+        let output = compact_failure_output(command_at(
+            &copied_binary,
+            temporary.path(),
+            &[
+                "new",
+                path(&destination),
+                "--template",
+                alias,
+                "--name",
+                "rejected",
+            ],
+        ));
+        assert_eq!(
+            compact_field(compact_record(&output, "diagnostic"), "code"),
+            Some("cli_usage"),
+            "{alias}"
+        );
+        assert!(!destination.exists(), "{alias}");
+    }
+
     let nonempty = temporary.path().join("nonempty");
     std::fs::create_dir(&nonempty).expect("nonempty destination");
     std::fs::write(nonempty.join("owned.txt"), b"preserve\n").expect("owned file");
@@ -3567,6 +3625,23 @@ fn copied_binary_creates_normalized_minimal_projects_and_rejects_unsafe_destinat
         Some("new_destination_type")
     );
     assert_eq!(std::fs::read(&file).unwrap(), b"preserve\n");
+
+    let non_directory_parent = temporary.path().join("non-directory-parent");
+    std::fs::write(&non_directory_parent, b"preserve\n").expect("non-directory parent");
+    let child = non_directory_parent.join("child");
+    let rejected = compact_failure_output(command_at(
+        &copied_binary,
+        temporary.path(),
+        &["new", path(&child)],
+    ));
+    assert_eq!(
+        compact_field(compact_record(&rejected, "diagnostic"), "code"),
+        Some("new_destination_parent_type")
+    );
+    assert_eq!(
+        std::fs::read(&non_directory_parent).expect("preserved parent file"),
+        b"preserve\n"
+    );
 
     let invalid = temporary.path().join("9invalid");
     let rejected = compact_failure_output(command_at(
