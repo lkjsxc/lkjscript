@@ -10,19 +10,21 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
-use std::io;
+use std::io::{self, Read};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const ACCEPTANCE_CONTRACT_VERSION: u32 = 1;
-const CAMPAIGN: &str = "202608281025";
+const ACCEPTANCE_SCHEMA: &str = "lkjscript-distributed-http-acceptance";
+const ACCEPTANCE_SCHEMA_VERSION: u32 = 2;
+const ACCEPTANCE_WORKFLOW: &str = "distributed-http-application";
 const MAXIMUM_COMMAND_OUTPUT_BYTES: u64 = 16 * 1024 * 1024;
 const MAXIMUM_ARTIFACT_BYTES: u64 = 64 * 1024 * 1024;
+const MAXIMUM_EXECUTABLE_BYTES: u64 = 256 * 1024 * 1024;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(60);
 const RUNNER_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const READY_TIMEOUT: Duration = Duration::from_secs(30);
@@ -35,7 +37,26 @@ static RUN_ORDINAL: AtomicU64 = AtomicU64::new(0);
 #[derive(Clone, Debug)]
 struct Options {
     binary: PathBuf,
+    evidence_root: Option<PathBuf>,
     machine: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct SchemaIdentity {
+    identity: String,
+    version: u32,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct ExecutableObservation {
+    file: FileProof,
+    byte_length: u64,
+    mode: u32,
+    executable: bool,
+    sha256: String,
+    verification_digest: VerificationDigest,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -48,19 +69,23 @@ enum AcceptanceStatus {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct AcceptanceReceipt {
-    contract_version: u32,
-    campaign: String,
+    schema: SchemaIdentity,
+    workflow: String,
     status: AcceptanceStatus,
     platform: PlatformObservation,
     started_unix_nanoseconds: u128,
     completed_unix_nanoseconds: u128,
     elapsed_nanoseconds: u64,
-    repository_root: String,
+    execution_context: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    checkout_root: Option<String>,
+    evidence_root: String,
     isolated_root: String,
     isolated_root_outside_checkout: bool,
     environment_names: Vec<String>,
-    source_binary: FileProof,
-    copied_binary: FileProof,
+    verifier: ExecutableObservation,
+    candidate: ExecutableObservation,
+    copied_candidate: ExecutableObservation,
     commands: Vec<CommandEvidence>,
     runners: Vec<RunnerEvidence>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -245,7 +270,7 @@ struct CommandOutput {
 }
 
 struct AcceptanceContext {
-    repository: PathBuf,
+    observation_root: PathBuf,
     evidence_directory: PathBuf,
     copied_binary: PathBuf,
     command_ordinal: u64,
@@ -269,13 +294,35 @@ struct ActiveRunner {
 
 pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, DevError> {
     let options = parse_options(arguments)?;
-    let repository = repository_root()?;
-    let evidence_directory = new_evidence_directory(&repository)?;
+    let verifier_path = current_verifier()?;
+    let verifier = executable_observation(&verifier_path, "distributed HTTP verifier")?;
+    let (execution_context, checkout_root, candidate_path, evidence_directory, observation_root) =
+        if let Some(requested_evidence_root) = &options.evidence_root {
+            let candidate = resolve_candidate(None, &options.binary)?;
+            let evidence = create_explicit_evidence_root(requested_evidence_root)?;
+            (
+                "transferred".to_owned(),
+                None,
+                candidate,
+                evidence.clone(),
+                evidence,
+            )
+        } else {
+            let repository = repository_root()?;
+            let candidate = resolve_candidate(Some(&repository), &options.binary)?;
+            let evidence = new_evidence_directory(&repository)?;
+            (
+                "contributor".to_owned(),
+                Some(repository.clone()),
+                candidate,
+                evidence,
+                repository,
+            )
+        };
     let receipt_path = evidence_directory.join("receipt.json");
     let started_wall = unix_nanoseconds()?;
     let started = Instant::now();
-    let source_binary = resolve_binary(&repository, &options.binary)?;
-    let source_proof = evidence::proof(&source_binary, source_binary.display().to_string())?;
+    let candidate = executable_observation(&candidate_path, "distributed HTTP candidate")?;
     let temporary = tempfile::Builder::new()
         .prefix("lkjscript-distributed-http-")
         .tempdir()
@@ -283,12 +330,22 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
     let isolated_root = temporary.path().canonicalize().map_err(|error| {
         DevError::infrastructure(format!("canonicalize isolated workspace: {error}"))
     })?;
-    let outside_checkout = !isolated_root.starts_with(&repository);
+    let outside_checkout = checkout_root
+        .as_ref()
+        .is_none_or(|repository| !isolated_root.starts_with(repository));
     let copied_binary = isolated_root.join("lkjscript");
-    copy_binary(&source_binary, &copied_binary)?;
-    let copied_proof = evidence::proof(&copied_binary, copied_binary.display().to_string())?;
+    copy_binary(&candidate_path, &copied_binary)?;
+    let copied_candidate = executable_observation(&copied_binary, "copied HTTP candidate")?;
+    if candidate.byte_length != copied_candidate.byte_length
+        || candidate.sha256 != copied_candidate.sha256
+        || candidate.verification_digest != copied_candidate.verification_digest
+    {
+        return Err(DevError::infrastructure(
+            "copied HTTP candidate does not match the selected candidate bytes",
+        ));
+    }
     let mut context = AcceptanceContext {
-        repository: repository.clone(),
+        observation_root,
         evidence_directory: evidence_directory.clone(),
         copied_binary,
         command_ordinal: 0,
@@ -344,8 +401,11 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         AcceptanceStatus::Failed
     };
     let receipt = AcceptanceReceipt {
-        contract_version: ACCEPTANCE_CONTRACT_VERSION,
-        campaign: CAMPAIGN.to_owned(),
+        schema: SchemaIdentity {
+            identity: ACCEPTANCE_SCHEMA.to_owned(),
+            version: ACCEPTANCE_SCHEMA_VERSION,
+        },
+        workflow: ACCEPTANCE_WORKFLOW.to_owned(),
         status,
         platform: PlatformObservation {
             operating_system: std::env::consts::OS.to_owned(),
@@ -356,12 +416,15 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         started_unix_nanoseconds: started_wall,
         completed_unix_nanoseconds: unix_nanoseconds()?,
         elapsed_nanoseconds: duration_nanoseconds(started.elapsed()),
-        repository_root: repository.display().to_string(),
+        execution_context,
+        checkout_root: checkout_root.map(|path| path.display().to_string()),
+        evidence_root: evidence_directory.display().to_string(),
         isolated_root: isolated_root_text,
         isolated_root_outside_checkout: outside_checkout,
         environment_names: vec!["LANG".to_owned()],
-        source_binary: source_proof,
-        copied_binary: copied_proof,
+        verifier,
+        candidate,
+        copied_candidate,
         commands,
         runners,
         result,
@@ -369,7 +432,8 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         failure,
     };
     let published = evidence::publish_json(&receipt_path, &receipt)?;
-    print_summary(&options, &receipt, &published)?;
+    let receipt_sha256 = sha256_file(&receipt_path, MAXIMUM_EXECUTABLE_BYTES)?;
+    print_summary(&options, &receipt, &published, &receipt_sha256)?;
     Ok(if status == AcceptanceStatus::Passed {
         0
     } else {
@@ -1076,7 +1140,7 @@ impl AcceptanceContext {
             stderr_path,
             unavailable_exit_code: None,
         };
-        let observation = process::run(&specification, &self.repository);
+        let observation = process::run(&specification, &self.observation_root);
         let stdout = process::read_bounded(&stdout_path, MAXIMUM_COMMAND_OUTPUT_BYTES)
             .map_err(|error| AcceptanceFailure::infrastructure("command_stdout", error))?;
         Ok((stdout, observation, command))
@@ -1114,7 +1178,7 @@ impl AcceptanceContext {
             stderr_path: stderr_path.clone(),
             unavailable_exit_code: None,
         };
-        let repository = self.repository.clone();
+        let observation_root = self.observation_root.clone();
         let control = ProcessControl::default();
         let child_control = control.clone();
         let (sender, receiver) = mpsc::channel();
@@ -1122,7 +1186,7 @@ impl AcceptanceContext {
             .name(format!("distributed-http-{safe_name}"))
             .spawn(move || {
                 let observation =
-                    process::run_controlled(&specification, &repository, &child_control);
+                    process::run_controlled(&specification, &observation_root, &child_control);
                 let _ = sender.send(observation);
             })
             .map_err(|error| AcceptanceFailure::infrastructure("runner_thread", error))?;
@@ -1648,35 +1712,224 @@ fn copy_binary(source: &Path, destination: &Path) -> Result<(), DevError> {
 }
 
 fn parse_options(arguments: impl Iterator<Item = OsString>) -> Result<Options, DevError> {
-    let mut binary = PathBuf::from("target/release/lkjscript");
+    let mut binary = None;
+    let mut evidence_root = None;
     let mut machine = false;
     let mut arguments = arguments;
     while let Some(argument) = crate::next_utf8(&mut arguments, "distributed HTTP option")? {
         match argument.as_str() {
             "--binary" => {
+                if binary.is_some() {
+                    return Err(DevError::usage("duplicate --binary option"));
+                }
                 let value = crate::next_utf8(&mut arguments, "--binary path")?
                     .ok_or_else(|| DevError::usage("--binary requires a path"))?;
-                binary = PathBuf::from(value);
+                binary = Some(PathBuf::from(value));
             }
-            "--machine" => machine = true,
+            "--evidence-root" => {
+                if evidence_root.is_some() {
+                    return Err(DevError::usage("duplicate --evidence-root option"));
+                }
+                let value = crate::next_utf8(&mut arguments, "--evidence-root path")?
+                    .ok_or_else(|| DevError::usage("--evidence-root requires a path"))?;
+                evidence_root = Some(PathBuf::from(value));
+            }
+            "--machine" => {
+                if machine {
+                    return Err(DevError::usage("duplicate --machine option"));
+                }
+                machine = true;
+            }
             other => return Err(DevError::usage(format!("unknown option '{other}'"))),
         }
     }
-    Ok(Options { binary, machine })
+    Ok(Options {
+        binary: binary.unwrap_or_else(|| PathBuf::from("target/release/lkjscript")),
+        evidence_root,
+        machine,
+    })
 }
 
-fn resolve_binary(repository: &Path, binary: &Path) -> Result<PathBuf, DevError> {
+fn resolve_candidate(checkout_root: Option<&Path>, binary: &Path) -> Result<PathBuf, DevError> {
     let path = if binary.is_absolute() {
         binary.to_path_buf()
     } else {
+        let repository = checkout_root.ok_or_else(|| {
+            DevError::usage(
+                "--binary must be absolute when an explicit --evidence-root selects transferred mode",
+            )
+        })?;
         repository.join(binary)
     };
-    path.canonicalize().map_err(|error| {
-        DevError::infrastructure(format!(
-            "resolve candidate binary '{}': {error}",
+    resolve_regular_executable(&path, "distributed HTTP candidate")
+}
+
+fn current_verifier() -> Result<PathBuf, DevError> {
+    let path = std::env::current_exe().map_err(|error| {
+        DevError::infrastructure(format!("resolve distributed HTTP verifier: {error}"))
+    })?;
+    resolve_regular_executable(&path, "distributed HTTP verifier")
+}
+
+fn resolve_regular_executable(path: &Path, label: &str) -> Result<PathBuf, DevError> {
+    if !path.is_absolute() || has_noncanonical_component(path) {
+        return Err(DevError::usage(format!(
+            "{label} path '{}' must be absolute and lexically canonical",
             path.display()
-        ))
+        )));
+    }
+    let metadata = fs::symlink_metadata(path).map_err(|error| {
+        DevError::infrastructure(format!("inspect {label} '{}': {error}", path.display()))
+    })?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(DevError::usage(format!(
+            "{label} '{}' must be a regular non-symlink file",
+            path.display()
+        )));
+    }
+    if metadata.len() > MAXIMUM_EXECUTABLE_BYTES {
+        return Err(DevError::usage(format!(
+            "{label} '{}' exceeds {MAXIMUM_EXECUTABLE_BYTES} bytes",
+            path.display()
+        )));
+    }
+    #[cfg(unix)]
+    if metadata.permissions().mode() & 0o111 == 0 {
+        return Err(DevError::usage(format!(
+            "{label} '{}' is not executable",
+            path.display()
+        )));
+    }
+    let canonical = path.canonicalize().map_err(|error| {
+        DevError::infrastructure(format!("resolve {label} '{}': {error}", path.display()))
+    })?;
+    if canonical != path {
+        return Err(DevError::usage(format!(
+            "{label} path '{}' contains a symlink or noncanonical component",
+            path.display()
+        )));
+    }
+    Ok(canonical)
+}
+
+fn executable_observation(path: &Path, label: &str) -> Result<ExecutableObservation, DevError> {
+    let path = resolve_regular_executable(path, label)?;
+    let file = evidence::proof(&path, path.display().to_string())?;
+    let byte_length = file
+        .bytes
+        .ok_or_else(|| DevError::infrastructure(format!("{label} proof omitted byte length")))?;
+    let mode = file
+        .mode
+        .ok_or_else(|| DevError::infrastructure(format!("{label} proof omitted file mode")))?;
+    let verification_digest = file
+        .digest
+        .clone()
+        .ok_or_else(|| DevError::infrastructure(format!("{label} proof omitted digest")))?;
+    let sha256 = sha256_file(&path, MAXIMUM_EXECUTABLE_BYTES)?;
+    Ok(ExecutableObservation {
+        file,
+        byte_length,
+        mode,
+        executable: mode & 0o111 != 0,
+        sha256,
+        verification_digest,
     })
+}
+
+fn create_explicit_evidence_root(requested: &Path) -> Result<PathBuf, DevError> {
+    if !requested.is_absolute() || has_noncanonical_component(requested) {
+        return Err(DevError::usage(format!(
+            "evidence root '{}' must be absolute and lexically canonical",
+            requested.display()
+        )));
+    }
+    if fs::symlink_metadata(requested).is_ok() {
+        return Err(DevError::usage(format!(
+            "evidence root '{}' already exists",
+            requested.display()
+        )));
+    }
+    let parent = requested.parent().ok_or_else(|| {
+        DevError::usage(format!(
+            "evidence root '{}' has no parent directory",
+            requested.display()
+        ))
+    })?;
+    let metadata = fs::symlink_metadata(parent).map_err(|error| {
+        DevError::usage(format!(
+            "inspect evidence-root parent '{}': {error}",
+            parent.display()
+        ))
+    })?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(DevError::usage(format!(
+            "evidence-root parent '{}' must be a regular non-symlink directory",
+            parent.display()
+        )));
+    }
+    let canonical_parent = parent.canonicalize().map_err(|error| {
+        DevError::infrastructure(format!(
+            "resolve evidence-root parent '{}': {error}",
+            parent.display()
+        ))
+    })?;
+    if canonical_parent != parent {
+        return Err(DevError::usage(format!(
+            "evidence-root parent '{}' contains a symlink or noncanonical component",
+            parent.display()
+        )));
+    }
+    let name = requested.file_name().ok_or_else(|| {
+        DevError::usage(format!(
+            "evidence root '{}' has no private directory name",
+            requested.display()
+        ))
+    })?;
+    let root = canonical_parent.join(name);
+    fs::create_dir(&root).map_err(|error| {
+        DevError::infrastructure(format!(
+            "create evidence root '{}': {error}",
+            root.display()
+        ))
+    })?;
+    let result = (|| {
+        #[cfg(unix)]
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).map_err(|error| {
+            DevError::infrastructure(format!(
+                "set evidence-root mode '{}': {error}",
+                root.display()
+            ))
+        })?;
+        File::open(&canonical_parent)
+            .and_then(|directory| directory.sync_all())
+            .map_err(|error| {
+                DevError::infrastructure(format!(
+                    "synchronize evidence-root parent '{}': {error}",
+                    canonical_parent.display()
+                ))
+            })?;
+        let canonical_root = root.canonicalize().map_err(|error| {
+            DevError::infrastructure(format!(
+                "resolve evidence root '{}': {error}",
+                root.display()
+            ))
+        })?;
+        if canonical_root != root {
+            return Err(DevError::infrastructure(
+                "created evidence root escaped its canonical parent",
+            ));
+        }
+        Ok(canonical_root)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_dir(&root);
+    }
+    result
+}
+
+fn has_noncanonical_component(path: &Path) -> bool {
+    path.components()
+        .any(|component| matches!(component, Component::CurDir | Component::ParentDir))
 }
 
 fn isolated_environment() -> BTreeMap<String, String> {
@@ -1706,14 +1959,30 @@ fn safe_name(value: &str) -> Result<String, AcceptanceFailure> {
 
 fn new_evidence_directory(repository: &Path) -> Result<PathBuf, DevError> {
     let ordinal = RUN_ORDINAL.fetch_add(1, Ordering::Relaxed);
-    let directory = repository
-        .join(".artifacts/lkjscript-dev/distributed-http")
-        .join(format!(
-            "{}-{}-{ordinal}",
-            unix_nanoseconds()?,
-            std::process::id()
+    let parent = repository.join(".artifacts/lkjscript-dev/distributed-http");
+    fs::create_dir_all(&parent).map_err(|error| {
+        DevError::infrastructure(format!(
+            "create distributed HTTP evidence parent '{}': {error}",
+            parent.display()
+        ))
+    })?;
+    let metadata = fs::symlink_metadata(&parent).map_err(|error| {
+        DevError::infrastructure(format!(
+            "inspect distributed HTTP evidence parent '{}': {error}",
+            parent.display()
+        ))
+    })?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(DevError::infrastructure(
+            "distributed HTTP evidence parent is not a regular non-symlink directory",
         ));
-    fs::create_dir_all(&directory).map_err(|error| {
+    }
+    let directory = parent.join(format!(
+        "{}-{}-{ordinal}",
+        unix_nanoseconds()?,
+        std::process::id()
+    ));
+    fs::create_dir(&directory).map_err(|error| {
         DevError::infrastructure(format!(
             "create distributed HTTP evidence directory '{}': {error}",
             directory.display()
@@ -1744,27 +2013,76 @@ fn duration_nanoseconds(duration: Duration) -> u64 {
 
 fn sha256_hex(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
-    let mut output = String::with_capacity(64);
-    for byte in digest {
+    lowercase_hex(&digest)
+}
+
+fn lowercase_hex(bytes: &[u8]) -> String {
+    let mut output = String::with_capacity(bytes.len().saturating_mul(2));
+    for byte in bytes {
         const HEX: &[u8; 16] = b"0123456789abcdef";
-        output.push(char::from(HEX[usize::from(byte >> 4)]));
-        output.push(char::from(HEX[usize::from(byte & 0x0f)]));
+        output.push(char::from(HEX[usize::from(*byte >> 4)]));
+        output.push(char::from(HEX[usize::from(*byte & 0x0f)]));
     }
     output
+}
+
+fn sha256_file(path: &Path, maximum_bytes: u64) -> Result<String, DevError> {
+    let metadata = fs::symlink_metadata(path).map_err(|error| {
+        DevError::infrastructure(format!(
+            "inspect SHA-256 input '{}': {error}",
+            path.display()
+        ))
+    })?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() > maximum_bytes {
+        return Err(DevError::infrastructure(format!(
+            "SHA-256 input '{}' is unsafe or exceeds {maximum_bytes} bytes",
+            path.display()
+        )));
+    }
+    let mut input = File::open(path).map_err(|error| {
+        DevError::infrastructure(format!("open SHA-256 input '{}': {error}", path.display()))
+    })?;
+    let mut hasher = Sha256::new();
+    let mut observed = 0_u64;
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let read = input.read(&mut buffer).map_err(|error| {
+            DevError::infrastructure(format!("read SHA-256 input '{}': {error}", path.display()))
+        })?;
+        if read == 0 {
+            break;
+        }
+        observed = observed.checked_add(read as u64).ok_or_else(|| {
+            DevError::infrastructure("distributed HTTP SHA-256 byte length overflow")
+        })?;
+        hasher.update(&buffer[..read]);
+    }
+    if observed != metadata.len() {
+        return Err(DevError::infrastructure(format!(
+            "SHA-256 input '{}' changed while reading",
+            path.display()
+        )));
+    }
+    Ok(lowercase_hex(&hasher.finalize()))
 }
 
 fn print_summary(
     options: &Options,
     receipt: &AcceptanceReceipt,
     published: &PublishedEvidence,
+    receipt_sha256: &str,
 ) -> Result<(), DevError> {
     if options.machine {
         let summary = serde_json::json!({
             "status": receipt.status,
-            "campaign": receipt.campaign,
+            "schema": receipt.schema,
+            "workflow": receipt.workflow,
             "receipt": published.path,
             "receipt_bytes": published.bytes,
             "receipt_digest": published.digest,
+            "receipt_sha256": receipt_sha256,
+            "verifier_sha256": receipt.verifier.sha256,
+            "candidate_sha256": receipt.candidate.sha256,
             "elapsed_nanoseconds": receipt.elapsed_nanoseconds,
             "commands": receipt.commands.len(),
             "runners": receipt.runners.len(),
@@ -1786,4 +2104,116 @@ fn print_summary(
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn options(values: &[&str]) -> Result<Options, DevError> {
+        parse_options(values.iter().map(OsString::from))
+    }
+
+    #[test]
+    fn distributed_http_acceptance_schema_is_stable_and_campaign_independent() {
+        let schema = SchemaIdentity {
+            identity: ACCEPTANCE_SCHEMA.to_owned(),
+            version: ACCEPTANCE_SCHEMA_VERSION,
+        };
+        assert_eq!(
+            serde_json::to_string(&schema).expect("encode acceptance schema"),
+            r#"{"identity":"lkjscript-distributed-http-acceptance","version":2}"#
+        );
+        assert_eq!(ACCEPTANCE_WORKFLOW, "distributed-http-application");
+    }
+
+    #[test]
+    fn distributed_http_options_reject_duplicates_and_missing_values() {
+        assert!(options(&["--binary"]).is_err());
+        assert!(options(&["--evidence-root"]).is_err());
+        assert!(options(&["--binary", "one", "--binary", "two"]).is_err());
+        assert!(options(&["--evidence-root", "/tmp/one", "--evidence-root", "/tmp/two"]).is_err());
+        assert!(options(&["--machine", "--machine"]).is_err());
+        assert!(options(&["--unknown"]).is_err());
+        assert!(resolve_candidate(None, Path::new("relative-candidate")).is_err());
+        assert!(resolve_candidate(None, Path::new("/definitely/missing/candidate")).is_err());
+    }
+
+    #[test]
+    fn explicit_evidence_root_is_absolute_private_and_create_new() {
+        let temporary = tempfile::tempdir().expect("temporary evidence-root parent");
+        assert!(create_explicit_evidence_root(Path::new("relative")).is_err());
+        let root = temporary.path().join("acceptance");
+        let created = create_explicit_evidence_root(&root).expect("create evidence root");
+        assert_eq!(created, root);
+        let metadata = fs::symlink_metadata(&created).expect("evidence-root metadata");
+        assert!(metadata.is_dir());
+        #[cfg(unix)]
+        assert_eq!(metadata.permissions().mode() & 0o7777, 0o700);
+        assert!(create_explicit_evidence_root(&created).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn explicit_evidence_root_rejects_existing_and_symlinked_boundaries() {
+        let temporary = tempfile::tempdir().expect("temporary evidence-root fixtures");
+        let file = temporary.path().join("file");
+        fs::write(&file, b"retained").expect("write conflict file");
+        let directory = temporary.path().join("directory");
+        fs::create_dir(&directory).expect("create conflict directory");
+        let link = temporary.path().join("link");
+        std::os::unix::fs::symlink(&directory, &link).expect("create conflict link");
+        for path in [&file, &directory, &link] {
+            assert!(create_explicit_evidence_root(path).is_err());
+        }
+        assert!(create_explicit_evidence_root(&link.join("escaped")).is_err());
+        assert_eq!(fs::read(file).expect("read retained file"), b"retained");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn executable_observation_binds_bytes_mode_and_both_digests() {
+        let temporary = tempfile::tempdir().expect("temporary executable fixtures");
+        let source = current_verifier().expect("current verifier");
+        let candidate = temporary.path().join("candidate");
+        fs::copy(source, &candidate).expect("copy candidate fixture");
+        fs::set_permissions(&candidate, fs::Permissions::from_mode(0o755))
+            .expect("set candidate mode");
+        let observed = executable_observation(&candidate, "fixture").expect("observe fixture");
+        assert!(observed.executable);
+        assert_eq!(observed.mode & 0o7777, 0o755);
+        assert_eq!(observed.sha256.len(), 64);
+        assert_eq!(
+            observed.byte_length,
+            fs::metadata(&candidate).expect("metadata").len()
+        );
+
+        fs::set_permissions(&candidate, fs::Permissions::from_mode(0o644))
+            .expect("remove executable mode");
+        assert!(executable_observation(&candidate, "fixture").is_err());
+        let link = temporary.path().join("candidate-link");
+        std::os::unix::fs::symlink(&candidate, &link).expect("create candidate link");
+        assert!(executable_observation(&link, "fixture").is_err());
+
+        let oversized = temporary.path().join("oversized");
+        let oversized_file = File::create(&oversized).expect("create oversized fixture");
+        oversized_file
+            .set_len(MAXIMUM_EXECUTABLE_BYTES.saturating_add(1))
+            .expect("size oversized fixture");
+        fs::set_permissions(&oversized, fs::Permissions::from_mode(0o755))
+            .expect("set oversized mode");
+        assert!(executable_observation(&oversized, "fixture").is_err());
+    }
+
+    #[test]
+    fn distributed_http_sha256_file_uses_standard_single_hash_identity() {
+        let temporary = tempfile::tempdir().expect("temporary SHA-256 fixture");
+        let path = temporary.path().join("bytes");
+        fs::write(&path, b"abc").expect("write SHA-256 fixture");
+        assert_eq!(
+            sha256_file(&path, 3).expect("hash fixture"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        assert!(sha256_file(&path, 2).is_err());
+    }
 }

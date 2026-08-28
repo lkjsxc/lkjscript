@@ -54,20 +54,27 @@ From a clean fast-forward checkout, build and prepare a dry-run package with abs
 ```sh
 cargo fetch --locked
 cargo build --workspace --release --locked
+package_version=$(cargo metadata --locked --no-deps --format-version 1 |
+  jq -er '.packages[] | select(.name == "lkjscript") | .version')
+release_tag="v$package_version"
+evidence_parent=/absolute/private/evidence-parent
+mkdir -m 0700 "$evidence_parent"
 cargo run --locked -p lkjscript-dev -- distributed-http \
-  --binary "$PWD/target/release/lkjscript" --machine
+  --binary "$PWD/target/release/lkjscript" \
+  --evidence-root "$evidence_parent/distributed-http" --machine
 cargo run --locked -p lkjscript-dev -- release prepare \
   --candidate "$PWD/target/release/lkjscript" \
   --cargo-about /absolute/path/to/cargo-about \
   --cargo-about-archive /absolute/path/to/cargo-about.tar.gz \
   --output /absolute/absent/path/release-output \
-  --tag v0.1.6 \
+  --tag "$release_tag" \
   --publication dry-run
 cargo run --locked -p lkjscript-dev -- release verify \
   --archive /absolute/path/release-output/lkjscript-x86_64-unknown-linux-gnu.tar.gz \
   --checksums /absolute/path/release-output/SHA256SUMS \
   --receipt /absolute/path/release-output/release-receipt.json \
-  --expected-tag v0.1.6 \
+  --extract-to /absolute/absent/path/verified-release \
+  --expected-tag "$release_tag" \
   --expected-publication dry-run
 ```
 
@@ -79,7 +86,9 @@ runs the exact private copy of the candidate through the existing copied-binary 
 two archives; and compares and strictly extracts them. It refuses a dirty checkout, symlink or
 nonregular input, output conflict, wrong target, malformed manifest, unknown license, nondeterministic
 notice/archive, wrong inventory/order/mode, link, traversal, duplicate, corrupt checksum, or candidate
-mismatch. Dry-run output is development evidence, not a public release.
+mismatch. `release verify --extract-to` publishes the already validated archive root through one
+create-new directory boundary, so later jobs do not duplicate archive parsing in shell. Dry-run
+output is development evidence, not a public release.
 
 For a release-mode preparation, provide the fresh successful `check full` receipt and
 `--require-full-verification`. Every gate, including independent no-Docker copied-binary HTTP
@@ -90,21 +99,30 @@ full-profile gate remains the release-preparation dependency owner.
 ## Hosted dry run and tag publication
 
 The `Release` workflow uses explicit `ubuntu-24.04`. Its build job has read-only repository
-permission, performs full and exact-candidate verification, and uploads a one-day transient
-handoff. A manual dispatch is a dry run unless `publish=true` and its selected ref is the exact
+permission, performs full and exact-candidate verification, and uploads two one-day transient
+artifacts: the three-file release handoff and a separate verifier handoff containing the exact
+release-built `lkjscript-dev` plus its byte/mode identity. A read-only no-checkout job downloads
+both by artifact ID, verifies their artifact and file digests, restores verifier mode only after
+its bytes agree, safely extracts the packaged candidate through `release verify`, and runs the
+transferred `distributed-http` owner with an explicit private evidence root. Publication depends on
+that pass. A manual dispatch is a dry run unless `publish=true` and its selected ref is the exact
 existing annotated tag:
 
 ```sh
 gh workflow run Release --repo lkjsxc/lkjscript --ref main \
-  -f publish=false -f tag=v0.1.6
+  -f publish=false -f tag="$release_tag"
 gh run watch --repo lkjsxc/lkjscript RUN_ID --exit-status
 gh run download --repo lkjsxc/lkjscript RUN_ID \
   --name release-handoff-RUN_ID-RUN_ATTEMPT \
   --dir /absolute/absent/path/hosted-handoff
+gh run download --repo lkjsxc/lkjscript RUN_ID \
+  --name pre-publication-http-evidence-RUN_ID-RUN_ATTEMPT \
+  --dir /absolute/absent/path/hosted-http-evidence
 ```
 
-Independently run `release verify` against the downloaded handoff. A dry run creates no tag,
-draft, or release.
+Independently run `release verify` against the downloaded handoff and inspect the transferred HTTP
+receipt digest. A dry run creates no tag, draft, or release; the publish and post-release jobs are
+skipped.
 
 After the exact implementation commit is clean, verified, normally pushed, and equal to
 `origin/main`, create and push only an annotated tag:
@@ -112,7 +130,9 @@ After the exact implementation commit is clean, verified, normally pushed, and e
 ```sh
 git fetch --prune origin
 test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
-release_tag=v0.1.6
+package_version=$(cargo metadata --locked --no-deps --format-version 1 |
+  jq -er '.packages[] | select(.name == "lkjscript") | .version')
+release_tag="v$package_version"
 git tag -a "$release_tag" -m "lkjscript $release_tag"
 test "$(git cat-file -t "refs/tags/$release_tag")" = tag
 tag_object_sha=$(git rev-parse "refs/tags/$release_tag")
@@ -143,7 +163,7 @@ come from the requested annotated tag:
 
 ```sh
 gh workflow run Release --repo lkjsxc/lkjscript --ref main \
-  -f publish=true -f tag=v0.1.6
+  -f publish=true -f tag="$release_tag"
 ```
 
 ## Public verification
@@ -151,29 +171,31 @@ gh workflow run Release --repo lkjsxc/lkjscript --ref main \
 Verify anonymous exact and latest transport separately:
 
 ```sh
+release_tag=$(gh api repos/lkjsxc/lkjscript/releases/latest --jq '.tag_name')
 mkdir -p /tmp/lkjscript-release-check/exact /tmp/lkjscript-release-check/latest
 curl --fail --location --output /tmp/lkjscript-release-check/exact/archive.tar.gz \
-  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.6/lkjscript-x86_64-unknown-linux-gnu.tar.gz
+  "https://github.com/lkjsxc/lkjscript/releases/download/$release_tag/lkjscript-x86_64-unknown-linux-gnu.tar.gz"
 curl --fail --location --output /tmp/lkjscript-release-check/exact/SHA256SUMS \
-  https://github.com/lkjsxc/lkjscript/releases/download/v0.1.6/SHA256SUMS
+  "https://github.com/lkjsxc/lkjscript/releases/download/$release_tag/SHA256SUMS"
 curl --fail --location --output /tmp/lkjscript-release-check/latest/archive.tar.gz \
   https://github.com/lkjsxc/lkjscript/releases/latest/download/lkjscript-x86_64-unknown-linux-gnu.tar.gz
 sha256sum /tmp/lkjscript-release-check/exact/archive.tar.gz \
   /tmp/lkjscript-release-check/latest/archive.tar.gz
-gh release verify v0.1.6 --repo lkjsxc/lkjscript
-gh release verify-asset v0.1.6 /tmp/lkjscript-release-check/exact/archive.tar.gz \
+gh release verify "$release_tag" --repo lkjsxc/lkjscript
+gh release verify-asset "$release_tag" /tmp/lkjscript-release-check/exact/archive.tar.gz \
   --repo lkjsxc/lkjscript
 ```
 
-The v0.1.6 post-release job additionally compares exact/latest archive and checksum bytes, checks GitHub's
-asset digest, and uses only `contents: read` plus `attestations: read` to verify release and asset
-attestations. It validates the archive inventory before extraction and runs `capabilities`, `new`,
-`check`, `build`, and `run main` from the anonymous public bytes without a checkout or Cargo.
-
-The next patch publication must also invoke the first-party `distributed-http` acceptance owner
-against the anonymously downloaded exact-tag binary and the byte-equal `releases/latest` binary.
-That later publication campaign is responsible for changing the hosted smoke; this procedure does
-not credit immutable v0.1.6 with the current-main HTTP recipe.
+The post-release job compares exact/latest archive and checksum bytes, checks both GitHub asset
+digests, and uses only `actions: read`, `contents: read`, and `attestations: read` for artifact,
+release, and asset verification. It downloads the same verifier handoff used before publication,
+checks its bytes before mode restoration, and uses first-party `release verify --extract-to` for
+each anonymous archive. With credentials removed from the executable environment, it then runs the
+transferred `distributed-http` acceptance owner independently against the exact-tag and latest
+binaries. Separate retained receipts prove creation, reviewed mutation, check, deterministic build,
+serve, restart, startup failures, shutdown cleanup, and unchanged Graph authority. The immutable
+v0.1.6 historical release predates this mechanism and is not credited with the current-main HTTP
+recipe.
 
 ## Recovery and maintenance
 

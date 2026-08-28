@@ -93,25 +93,36 @@ annotated SemVer tag on origin/main
 read-only build / full verification / exact-candidate acceptance
                   │
                   ▼
-deterministic archive + checksum + transient handoff
+deterministic release handoff + byte-bound verifier handoff
                   │
                   ▼
-no-checkout publication job with contents:write
+read-only no-checkout release verification + HTTP oracle
+                  │
+                  ▼
+no-checkout publication job with contents:write and release handoff only
                   │
                   ▼
 immutable GitHub Release and release attestation
                   │
                   ▼
-anonymous exact/latest download and copied-binary smoke
+anonymous exact/latest download + independent transferred HTTP oracle runs
 ```
 
 `tools/lkjscript-dev` owns typed release preparation and strict archive verification. The hosted
-workflow supplies exact runner context, separates verified checkout execution from publication
-authority, and uses its artifact only for bounded job handoff. The public release, archive,
-manifest, checksum, asset digest, and attestation are all derived distribution evidence. None can
-select or edit Graph 5 meaning, executable contracts, compilation semantics, or deployment data.
-The root package version and annotated tag bind release identity; recovery from a published
-content defect uses a new patch identity rather than mutation.
+workflow supplies exact runner context and two bounded transient handoffs. The release handoff owns
+the archive, checksum, and private release receipt. The separate verifier handoff binds the exact
+release-built `lkjscript-dev` bytes; read-only jobs verify those bytes before restoring executable
+mode after artifact transport. The pre-publication job checks out no source, safely extracts the
+packaged candidate through the first-party release verifier, and runs the same distributed HTTP
+oracle used by contributor profiles. The publication job receives only the release handoff and is
+the only job with release-write authority. Post-publication verification downloads exact and
+latest assets anonymously and runs the transferred oracle independently against both.
+
+The public release, transient artifacts, archive, manifest, checksum, verifier receipts, asset
+digest, and attestation are all derived distribution evidence. None can select or edit Graph 5
+meaning, executable contracts, compilation semantics, or deployment data. The root package version
+and annotated tag bind release identity; recovery from a published content defect uses a new patch
+identity rather than mutation.
 
 ## Layer ownership
 
@@ -258,7 +269,10 @@ The independent `distributed_http_application` product gate has no database or c
 dependency. It copies one candidate executable to a fresh root outside the checkout, creates and
 changes an HTTP project, checks and deterministically builds it, starts and restarts the service,
 sends raw loopback HTTP, exercises startup failures, and compares exact accepted-authority
-inventories. Product, service, full, and release preparation all depend on this fresh boundary.
+inventories. Its stable receipt binds the verifier and candidate bytes. An explicit absolute
+create-new evidence root selects transferred mode, in which the verifier resolves no compile-time
+checkout path. Product, service, full, pre-publication package admission, and both anonymous public
+asset checks all use this same owner.
 
 ## Security and replaceability
 

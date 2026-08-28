@@ -30,6 +30,9 @@ env:
   RELEASE_CHECKSUMS: SHA256SUMS
   RELEASE_RECEIPT: release-receipt.json
   RELEASE_HANDOFF: release-handoff-${{ github.run_id }}-${{ github.run_attempt }}
+  VERIFIER_HANDOFF: verifier-handoff-${{ github.run_id }}-${{ github.run_attempt }}
+  VERIFIER_EXECUTABLE: lkjscript-dev
+  VERIFIER_IDENTITY: verifier-identity.json
   CARGO_ABOUT_VERSION: 0.9.2
   CARGO_ABOUT_ARCHIVE_SHA256: 9099a59e820c38a68b9d65f300662a567d56562f9a10f6aa4c7e86c17c2566af
   POSTGRES_IMAGE: postgres@sha256:075f7ba66bc9b3ce7d6b8b635208ff61cd7cf1a67d71ec530eec5d7ae0cbe571
@@ -46,6 +49,12 @@ jobs:
       publication_mode: ${{ steps.identity.outputs.publication_mode }}
       tag: ${{ steps.identity.outputs.tag }}
       commit_sha: ${{ steps.identity.outputs.commit_sha }}
+      release_artifact_id: ${{ steps.release-upload.outputs.artifact-id }}
+      release_artifact_digest: ${{ steps.release-upload.outputs.artifact-digest }}
+      verifier_artifact_id: ${{ steps.verifier-upload.outputs.artifact-id }}
+      verifier_artifact_digest: ${{ steps.verifier-upload.outputs.artifact-digest }}
+      verifier_file_bytes: ${{ steps.verifier.outputs.bytes }}
+      verifier_file_sha256: ${{ steps.verifier.outputs.sha256 }}
     steps:
       - name: Check out the exact source
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -231,6 +240,8 @@ jobs:
             ${{ steps.full.outputs.evidence_directory }}/*.log
             ${{ github.workspace }}/.artifacts/lkjscript-dev/service/*/receipt.json
             ${{ github.workspace }}/.artifacts/lkjscript-dev/service/*/*.log
+            ${{ github.workspace }}/.artifacts/lkjscript-dev/distributed-http/*/receipt.json
+            ${{ github.workspace }}/.artifacts/lkjscript-dev/distributed-http/*/*.log
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 7
@@ -262,7 +273,49 @@ jobs:
           test "$(find "$output" -mindepth 1 -maxdepth 1 ! -type f | wc -l)" -eq 0
           echo "output=$output" >> "$GITHUB_OUTPUT"
 
-      - name: Upload the transient verified handoff
+      - name: Prepare the transferable HTTP verifier handoff
+        id: verifier
+        shell: bash
+        env:
+          TAG: ${{ steps.identity.outputs.tag }}
+          COMMIT_SHA: ${{ steps.identity.outputs.commit_sha }}
+        run: |
+          set -euo pipefail
+          handoff="$RUNNER_TEMP/verifier-handoff"
+          test ! -e "$handoff"
+          mkdir -m 0700 "$handoff"
+          cp "$GITHUB_WORKSPACE/target/release/lkjscript-dev" "$handoff/$VERIFIER_EXECUTABLE"
+          chmod 0755 "$handoff/$VERIFIER_EXECUTABLE"
+          test -f "$handoff/$VERIFIER_EXECUTABLE"
+          test ! -L "$handoff/$VERIFIER_EXECUTABLE"
+          test -x "$handoff/$VERIFIER_EXECUTABLE"
+          bytes=$(stat -c '%s' "$handoff/$VERIFIER_EXECUTABLE")
+          mode=$(stat -c '%a' "$handoff/$VERIFIER_EXECUTABLE")
+          sha256=$(sha256sum "$handoff/$VERIFIER_EXECUTABLE" | cut -d' ' -f1)
+          [[ "$bytes" =~ ^[1-9][0-9]*$ ]]
+          test "$mode" = 755
+          [[ "$sha256" =~ ^[0-9a-f]{64}$ ]]
+          jq -n \
+            --arg tag "$TAG" \
+            --arg commit "$COMMIT_SHA" \
+            --arg file "$VERIFIER_EXECUTABLE" \
+            --arg sha256 "$sha256" \
+            --argjson bytes "$bytes" \
+            --argjson mode 493 \
+            '{schema:{identity:"lkjscript-http-verifier-handoff",version:1},tag:$tag,commit_sha:$commit,file:{name:$file,byte_length:$bytes,sha256:$sha256,mode:$mode}}' \
+            > "$handoff/$VERIFIER_IDENTITY"
+          expected=$(printf '%s\n' "$VERIFIER_EXECUTABLE" "$VERIFIER_IDENTITY" | sort)
+          observed=$(find "$handoff" -mindepth 1 -maxdepth 1 -type f -printf '%f\n' | sort)
+          test "$observed" = "$expected"
+          test "$(find "$handoff" -mindepth 1 -maxdepth 1 ! -type f | wc -l)" -eq 0
+          {
+            echo "directory=$handoff"
+            echo "bytes=$bytes"
+            echo "sha256=$sha256"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload the transient verified release handoff
+        id: release-upload
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ env.RELEASE_HANDOFF }}
@@ -271,10 +324,222 @@ jobs:
           retention-days: 1
           compression-level: 0
 
+      - name: Upload the transient HTTP verifier handoff
+        id: verifier-upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ env.VERIFIER_HANDOFF }}
+          path: ${{ steps.verifier.outputs.directory }}/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  pre-publication-http:
+    name: Verify transferred packaged HTTP candidate
+    needs: build-verify-package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      evidence_artifact_id: ${{ steps.evidence-upload.outputs.artifact-id }}
+      evidence_artifact_digest: ${{ steps.evidence-upload.outputs.artifact-digest }}
+      receipt_digest: ${{ steps.acceptance.outputs.receipt_digest }}
+      receipt_sha256: ${{ steps.acceptance.outputs.receipt_sha256 }}
+    steps:
+      - name: Download the exact release handoff by artifact identity
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.build-verify-package.outputs.release_artifact_id }}
+          path: ${{ runner.temp }}/release-handoff
+          merge-multiple: true
+
+      - name: Download the exact verifier handoff by artifact identity
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.build-verify-package.outputs.verifier_artifact_id }}
+          path: ${{ runner.temp }}/verifier-handoff
+          merge-multiple: true
+
+      - name: Validate transferred inventories, artifact identities, and verifier bytes
+        id: transferred
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build-verify-package.outputs.tag }}
+          COMMIT_SHA: ${{ needs.build-verify-package.outputs.commit_sha }}
+          RELEASE_ARTIFACT_ID: ${{ needs.build-verify-package.outputs.release_artifact_id }}
+          RELEASE_ARTIFACT_DIGEST: ${{ needs.build-verify-package.outputs.release_artifact_digest }}
+          VERIFIER_ARTIFACT_ID: ${{ needs.build-verify-package.outputs.verifier_artifact_id }}
+          VERIFIER_ARTIFACT_DIGEST: ${{ needs.build-verify-package.outputs.verifier_artifact_digest }}
+          VERIFIER_FILE_BYTES: ${{ needs.build-verify-package.outputs.verifier_file_bytes }}
+          VERIFIER_FILE_SHA256: ${{ needs.build-verify-package.outputs.verifier_file_sha256 }}
+        run: |
+          set -euo pipefail
+          validate_artifact() {
+            local id=$1
+            local expected_name=$2
+            local expected_digest=$3
+            local metadata="$RUNNER_TEMP/artifact-$id.json"
+            [[ "$id" =~ ^[1-9][0-9]*$ ]]
+            if [[ "$expected_digest" =~ ^[0-9a-f]{64}$ ]]; then
+              expected_digest="sha256:$expected_digest"
+            fi
+            [[ "$expected_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id" > "$metadata"
+            jq -e \
+              --argjson id "$id" \
+              --arg name "$expected_name" \
+              --arg digest "$expected_digest" \
+              --argjson run_id "$GITHUB_RUN_ID" \
+              '.id == $id and .name == $name and .digest == $digest and .expired == false and .workflow_run.id == $run_id and .size_in_bytes > 0' \
+              "$metadata" > /dev/null
+            jq -r '.size_in_bytes' "$metadata"
+          }
+          release_artifact_bytes=$(validate_artifact "$RELEASE_ARTIFACT_ID" "$RELEASE_HANDOFF" "$RELEASE_ARTIFACT_DIGEST")
+          verifier_artifact_bytes=$(validate_artifact "$VERIFIER_ARTIFACT_ID" "$VERIFIER_HANDOFF" "$VERIFIER_ARTIFACT_DIGEST")
+
+          release="$RUNNER_TEMP/release-handoff"
+          expected_release=$(printf '%s\n' "$RELEASE_ARCHIVE" "$RELEASE_CHECKSUMS" "$RELEASE_RECEIPT" | sort)
+          observed_release=$(find "$release" -mindepth 1 -maxdepth 1 -type f -printf '%f\n' | sort)
+          test "$observed_release" = "$expected_release"
+          test "$(find "$release" -mindepth 1 -maxdepth 1 ! -type f | wc -l)" -eq 0
+          (cd "$release" && sha256sum --check --strict "$RELEASE_CHECKSUMS")
+
+          handoff="$RUNNER_TEMP/verifier-handoff"
+          expected_verifier=$(printf '%s\n' "$VERIFIER_EXECUTABLE" "$VERIFIER_IDENTITY" | sort)
+          observed_verifier=$(find "$handoff" -mindepth 1 -maxdepth 1 -type f -printf '%f\n' | sort)
+          test "$observed_verifier" = "$expected_verifier"
+          test "$(find "$handoff" -mindepth 1 -maxdepth 1 ! -type f | wc -l)" -eq 0
+          identity="$handoff/$VERIFIER_IDENTITY"
+          verifier="$handoff/$VERIFIER_EXECUTABLE"
+          jq -e \
+            --arg tag "$TAG" \
+            --arg commit "$COMMIT_SHA" \
+            --arg file "$VERIFIER_EXECUTABLE" \
+            --arg sha "$VERIFIER_FILE_SHA256" \
+            --argjson bytes "$VERIFIER_FILE_BYTES" \
+            'keys == ["commit_sha","file","schema","tag"] and .schema == {identity:"lkjscript-http-verifier-handoff",version:1} and .tag == $tag and .commit_sha == $commit and (.file | keys == ["byte_length","mode","name","sha256"]) and .file.name == $file and .file.byte_length == $bytes and .file.sha256 == $sha and .file.mode == 493' \
+            "$identity" > /dev/null
+          test -f "$verifier"
+          test ! -L "$verifier"
+          observed_bytes=$(stat -c '%s' "$verifier")
+          transport_mode=$(stat -c '%a' "$verifier")
+          observed_sha=$(sha256sum "$verifier" | cut -d' ' -f1)
+          test "$observed_bytes" = "$VERIFIER_FILE_BYTES"
+          test "$observed_sha" = "$VERIFIER_FILE_SHA256"
+          case "$transport_mode" in
+            755) ;;
+            644|600) chmod 0755 "$verifier" ;;
+            *) echo "unexpected verifier transport mode: $transport_mode" >&2; exit 1 ;;
+          esac
+          test -x "$verifier"
+          test "$(stat -c '%s' "$verifier")" = "$VERIFIER_FILE_BYTES"
+          test "$(sha256sum "$verifier" | cut -d' ' -f1)" = "$VERIFIER_FILE_SHA256"
+          {
+            echo "release=$release"
+            echo "verifier=$verifier"
+            echo "transport_mode=$transport_mode"
+            echo "release_artifact_bytes=$release_artifact_bytes"
+            echo "verifier_artifact_bytes=$verifier_artifact_bytes"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: First-party verify, extract, and run packaged HTTP acceptance
+        id: acceptance
+        shell: bash
+        env:
+          TAG: ${{ needs.build-verify-package.outputs.tag }}
+          COMMIT_SHA: ${{ needs.build-verify-package.outputs.commit_sha }}
+          PUBLICATION_MODE: ${{ needs.build-verify-package.outputs.publication_mode }}
+          RELEASE: ${{ steps.transferred.outputs.release }}
+          VERIFIER: ${{ steps.transferred.outputs.verifier }}
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/prepublication"
+          test ! -e "$root"
+          mkdir -m 0700 "$root"
+          extraction="$root/extracted"
+          release_summary="$root/release-verify-summary.json"
+          env -i LANG=C PATH=/usr/bin:/bin "$VERIFIER" release verify \
+            --archive "$RELEASE/$RELEASE_ARCHIVE" \
+            --checksums "$RELEASE/$RELEASE_CHECKSUMS" \
+            --receipt "$RELEASE/$RELEASE_RECEIPT" \
+            --extract-to "$extraction" \
+            --expected-tag "$TAG" \
+            --expected-publication "$PUBLICATION_MODE" | tee "$release_summary"
+          test "$(wc -l < "$release_summary")" -eq 1
+          manifest="$extraction/RELEASE-MANIFEST.json"
+          candidate="$extraction/lkjscript"
+          test -f "$manifest"
+          test -x "$candidate"
+          candidate_sha=$(sha256sum "$candidate" | cut -d' ' -f1)
+          candidate_bytes=$(stat -c '%s' "$candidate")
+          jq -e \
+            --arg tag "$TAG" \
+            --arg commit "$COMMIT_SHA" \
+            --arg mode "$PUBLICATION_MODE" \
+            --arg extraction "$extraction" \
+            --arg sha "$candidate_sha" \
+            --argjson bytes "$candidate_bytes" \
+            '.status == "passed" and .tag == $tag and .commit_sha == $commit and .publication_mode == $mode and .extraction == $extraction and .executable_sha256 == $sha and .executable_bytes == $bytes' \
+            "$release_summary" > /dev/null
+
+          evidence="$root/http-evidence"
+          http_summary="$root/http-summary.json"
+          env -i LANG=C "$VERIFIER" distributed-http \
+            --binary "$candidate" \
+            --evidence-root "$evidence" \
+            --machine | tee "$http_summary"
+          test "$(wc -l < "$http_summary")" -eq 1
+          receipt=$(jq -er '.receipt' "$http_summary")
+          test "$receipt" = "$evidence/receipt.json"
+          test -f "$receipt"
+          receipt_sha256=$(sha256sum "$receipt" | cut -d' ' -f1)
+          test "$receipt_sha256" = "$(jq -er '.receipt_sha256' "$http_summary")"
+          receipt_digest=$(jq -er '.receipt_digest' "$http_summary")
+          manifest_cli=$(jq -er '.executable.cli_contract' "$manifest")
+          manifest_registry=$(jq -er '.executable.executable_registry_digest' "$manifest")
+          manifest_version=$(jq -er '.package.version' "$manifest")
+          jq -e \
+            --arg candidate_sha "$candidate_sha" \
+            --arg version "$manifest_version" \
+            --arg registry "$manifest_registry" \
+            --argjson cli "$manifest_cli" \
+            '.schema == {identity:"lkjscript-distributed-http-acceptance",version:2} and .workflow == "distributed-http-application" and .status == "passed" and .execution_context == "transferred" and .checkout_root == null and .isolated_root_outside_checkout == true and .candidate.sha256 == $candidate_sha and .copied_candidate.sha256 == $candidate_sha and .result.package_version == $version and .result.cli_contract_version == $cli and .result.registry_digest == $registry and .result.authority_unchanged == true and .result.clean_incremental_equal == true and .result.restart_equal == true and .result.startup_failures_without_ready == 6 and .cleanup.runner_cleanup_complete == true and .cleanup.isolated_root_removed == true' \
+            "$receipt" > /dev/null
+          {
+            echo "evidence=$evidence"
+            echo "receipt=$receipt"
+            echo "receipt_digest=$receipt_digest"
+            echo "receipt_sha256=$receipt_sha256"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Retain bounded pre-publication HTTP evidence
+        id: evidence-upload
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pre-publication-http-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/prepublication/release-verify-summary.json
+            ${{ runner.temp }}/prepublication/http-summary.json
+            ${{ runner.temp }}/prepublication/extracted/RELEASE-MANIFEST.json
+            ${{ runner.temp }}/prepublication/http-evidence/receipt.json
+            ${{ runner.temp }}/prepublication/http-evidence/*.log
+            ${{ runner.temp }}/verifier-handoff/verifier-identity.json
+            ${{ runner.temp }}/artifact-*.json
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 7
+          compression-level: 6
+
   publish:
     name: Publish immutable release
     if: needs.build-verify-package.outputs.publish == 'true'
-    needs: build-verify-package
+    needs:
+      - build-verify-package
+      - pre-publication-http
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -512,13 +777,88 @@ jobs:
     if: needs.build-verify-package.outputs.publish == 'true'
     needs:
       - build-verify-package
+      - pre-publication-http
       - publish
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     permissions:
+      actions: read
       attestations: read
       contents: read
+    outputs:
+      evidence_artifact_id: ${{ steps.evidence-upload.outputs.artifact-id }}
+      evidence_artifact_digest: ${{ steps.evidence-upload.outputs.artifact-digest }}
     steps:
+      - name: Download the exact verifier handoff by artifact identity
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.build-verify-package.outputs.verifier_artifact_id }}
+          path: ${{ runner.temp }}/verifier-handoff
+          merge-multiple: true
+
+      - name: Validate public-verification artifact and verifier identities
+        id: verifier
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build-verify-package.outputs.tag }}
+          COMMIT_SHA: ${{ needs.build-verify-package.outputs.commit_sha }}
+          VERIFIER_ARTIFACT_ID: ${{ needs.build-verify-package.outputs.verifier_artifact_id }}
+          VERIFIER_ARTIFACT_DIGEST: ${{ needs.build-verify-package.outputs.verifier_artifact_digest }}
+          VERIFIER_FILE_BYTES: ${{ needs.build-verify-package.outputs.verifier_file_bytes }}
+          VERIFIER_FILE_SHA256: ${{ needs.build-verify-package.outputs.verifier_file_sha256 }}
+        run: |
+          set -euo pipefail
+          [[ "$VERIFIER_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          expected_artifact_digest="$VERIFIER_ARTIFACT_DIGEST"
+          if [[ "$expected_artifact_digest" =~ ^[0-9a-f]{64}$ ]]; then
+            expected_artifact_digest="sha256:$expected_artifact_digest"
+          fi
+          [[ "$expected_artifact_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          artifact_metadata="$RUNNER_TEMP/verifier-artifact.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$VERIFIER_ARTIFACT_ID" > "$artifact_metadata"
+          jq -e \
+            --argjson id "$VERIFIER_ARTIFACT_ID" \
+            --arg name "$VERIFIER_HANDOFF" \
+            --arg digest "$expected_artifact_digest" \
+            --argjson run_id "$GITHUB_RUN_ID" \
+            '.id == $id and .name == $name and .digest == $digest and .expired == false and .workflow_run.id == $run_id and .size_in_bytes > 0' \
+            "$artifact_metadata" > /dev/null
+
+          handoff="$RUNNER_TEMP/verifier-handoff"
+          expected=$(printf '%s\n' "$VERIFIER_EXECUTABLE" "$VERIFIER_IDENTITY" | sort)
+          observed=$(find "$handoff" -mindepth 1 -maxdepth 1 -type f -printf '%f\n' | sort)
+          test "$observed" = "$expected"
+          test "$(find "$handoff" -mindepth 1 -maxdepth 1 ! -type f | wc -l)" -eq 0
+          identity="$handoff/$VERIFIER_IDENTITY"
+          verifier="$handoff/$VERIFIER_EXECUTABLE"
+          jq -e \
+            --arg tag "$TAG" \
+            --arg commit "$COMMIT_SHA" \
+            --arg file "$VERIFIER_EXECUTABLE" \
+            --arg sha "$VERIFIER_FILE_SHA256" \
+            --argjson bytes "$VERIFIER_FILE_BYTES" \
+            'keys == ["commit_sha","file","schema","tag"] and .schema == {identity:"lkjscript-http-verifier-handoff",version:1} and .tag == $tag and .commit_sha == $commit and (.file | keys == ["byte_length","mode","name","sha256"]) and .file.name == $file and .file.byte_length == $bytes and .file.sha256 == $sha and .file.mode == 493' \
+            "$identity" > /dev/null
+          test -f "$verifier"
+          test ! -L "$verifier"
+          observed_bytes=$(stat -c '%s' "$verifier")
+          transport_mode=$(stat -c '%a' "$verifier")
+          observed_sha=$(sha256sum "$verifier" | cut -d' ' -f1)
+          test "$observed_bytes" = "$VERIFIER_FILE_BYTES"
+          test "$observed_sha" = "$VERIFIER_FILE_SHA256"
+          case "$transport_mode" in
+            755) ;;
+            644|600) chmod 0755 "$verifier" ;;
+            *) echo "unexpected verifier transport mode: $transport_mode" >&2; exit 1 ;;
+          esac
+          test -x "$verifier"
+          test "$(sha256sum "$verifier" | cut -d' ' -f1)" = "$VERIFIER_FILE_SHA256"
+          {
+            echo "path=$verifier"
+            echo "transport_mode=$transport_mode"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Download exact and latest assets anonymously
         id: download
         shell: bash
@@ -559,9 +899,18 @@ jobs:
           (cd "$latest" && sha256sum --check --strict "$RELEASE_CHECKSUMS")
           cmp "$exact/$RELEASE_ARCHIVE" "$latest/$RELEASE_ARCHIVE"
           cmp "$exact/$RELEASE_CHECKSUMS" "$latest/$RELEASE_CHECKSUMS"
-          sha=$(sha256sum "$exact/$RELEASE_ARCHIVE" | cut -d' ' -f1)
-          echo "sha256=$sha" >> "$GITHUB_OUTPUT"
-          echo "exact=$exact" >> "$GITHUB_OUTPUT"
+          archive_sha=$(sha256sum "$exact/$RELEASE_ARCHIVE" | cut -d' ' -f1)
+          checksum_sha=$(sha256sum "$exact/$RELEASE_CHECKSUMS" | cut -d' ' -f1)
+          archive_bytes=$(stat -c '%s' "$exact/$RELEASE_ARCHIVE")
+          checksum_bytes=$(stat -c '%s' "$exact/$RELEASE_CHECKSUMS")
+          {
+            echo "archive_sha256=$archive_sha"
+            echo "checksum_sha256=$checksum_sha"
+            echo "archive_bytes=$archive_bytes"
+            echo "checksum_bytes=$checksum_bytes"
+            echo "exact=$exact"
+            echo "latest=$latest"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Verify GitHub asset digests and release attestations
         shell: bash
@@ -569,7 +918,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.build-verify-package.outputs.tag }}
           EXACT: ${{ steps.download.outputs.exact }}
-          ARCHIVE_SHA: ${{ steps.download.outputs.sha256 }}
+          ARCHIVE_SHA: ${{ steps.download.outputs.archive_sha256 }}
+          CHECKSUM_SHA: ${{ steps.download.outputs.checksum_sha256 }}
+          ARCHIVE_BYTES: ${{ steps.download.outputs.archive_bytes }}
+          CHECKSUM_BYTES: ${{ steps.download.outputs.checksum_bytes }}
         run: |
           set -euo pipefail
           release=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG")
@@ -578,7 +930,15 @@ jobs:
           test "$(jq -r '.prerelease' <<< "$release")" = false
           test "$(jq -r '.name' <<< "$release")" = "$TAG"
           test "$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name')" = "$TAG"
-          test "$(jq -r --arg name "$RELEASE_ARCHIVE" '.assets[] | select(.name == $name) | .digest' <<< "$release")" = "sha256:$ARCHIVE_SHA"
+          jq -e \
+            --arg archive "$RELEASE_ARCHIVE" \
+            --arg archive_digest "sha256:$ARCHIVE_SHA" \
+            --argjson archive_bytes "$ARCHIVE_BYTES" \
+            --arg checksums "$RELEASE_CHECKSUMS" \
+            --arg checksum_digest "sha256:$CHECKSUM_SHA" \
+            --argjson checksum_bytes "$CHECKSUM_BYTES" \
+            '(.assets | length) == 2 and any(.assets[]; .name == $archive and .digest == $archive_digest and .size == $archive_bytes) and any(.assets[]; .name == $checksums and .digest == $checksum_digest and .size == $checksum_bytes)' \
+            <<< "$release" > /dev/null
 
           attestation=false
           for attempt in $(seq 1 12); do
@@ -616,43 +976,116 @@ jobs:
           verify_asset_attestation \
             "$EXACT/$RELEASE_CHECKSUMS" "$RUNNER_TEMP/checksum-attestation.json"
 
-      - name: Safely extract and smoke-test the public binary
+      - name: Independently verify and exercise exact and latest HTTP binaries
+        id: acceptance
         shell: bash
         env:
+          TAG: ${{ needs.build-verify-package.outputs.tag }}
+          COMMIT_SHA: ${{ needs.build-verify-package.outputs.commit_sha }}
           EXACT: ${{ steps.download.outputs.exact }}
+          LATEST: ${{ steps.download.outputs.latest }}
+          VERIFIER: ${{ steps.verifier.outputs.path }}
         run: |
           set -euo pipefail
-          expected=$(printf '%s\n' \
-            'lkjscript/' \
-            'lkjscript/lkjscript' \
-            'lkjscript/LICENSE' \
-            'lkjscript/THIRD-PARTY-LICENSES.html' \
-            'lkjscript/RELEASE-MANIFEST.json')
-          observed=$(tar -tzf "$EXACT/$RELEASE_ARCHIVE")
-          test "$observed" = "$expected"
-          test "$(tar -tvzf "$EXACT/$RELEASE_ARCHIVE" | awk '$1 ~ /^d/ {d++} $1 ~ /^-/ {f++} $1 !~ /^[d-]/ {bad++} END {print (d == 1 && f == 4 && bad == 0) ? "yes" : "no"}')" = yes
-          root="$RUNNER_TEMP/public-smoke"
+          root="$RUNNER_TEMP/public-verification"
           test ! -e "$root"
-          mkdir "$root"
-          tar -xzf "$EXACT/$RELEASE_ARCHIVE" --directory "$root" --no-same-owner
-          binary="$root/lkjscript/lkjscript"
-          manifest="$root/lkjscript/RELEASE-MANIFEST.json"
-          test -x "$binary"
-          expected_cli=$(jq -er '
-            .executable.cli_contract
-            | select(type == "number" and . >= 1 and . <= 65535 and . == floor)
-            | tostring
-          ' "$manifest")
-          expected_registry_digest=$(jq -er '
-            .executable.executable_registry_digest
-            | select(type == "string" and test("^[0-9a-f]{64}$"))
-          ' "$manifest")
-          env -i LANG=C "$binary" capabilities > "$root/capabilities.out"
-          grep -F "cli=$expected_cli" "$root/capabilities.out"
-          grep -F "digest=$expected_registry_digest" "$root/capabilities.out"
-          project="$root/hello"
-          env -i LANG=C "$binary" new "$project" --template command --name hello
-          env -i LANG=C "$binary" --project "$project" check
-          env -i LANG=C "$binary" --project "$project" build --output "$root/hello.lkja"
-          env -i LANG=C "$binary" --project "$project" run main > "$root/run.out"
-          grep -F 'value="\"hello\""' "$root/run.out"
+          mkdir -m 0700 "$root"
+
+          verify_public_http() {
+            local label=$1
+            local asset_root=$2
+            local extraction="$root/$label-extracted"
+            local release_summary="$root/$label-release-summary.json"
+            local evidence="$root/$label-http-evidence"
+            local http_summary="$root/$label-http-summary.json"
+            env -i LANG=C PATH=/usr/bin:/bin "$VERIFIER" release verify \
+              --archive "$asset_root/$RELEASE_ARCHIVE" \
+              --checksums "$asset_root/$RELEASE_CHECKSUMS" \
+              --extract-to "$extraction" \
+              --expected-tag "$TAG" \
+              --expected-publication release | tee "$release_summary"
+            test "$(wc -l < "$release_summary")" -eq 1
+            local manifest="$extraction/RELEASE-MANIFEST.json"
+            local candidate="$extraction/lkjscript"
+            test -f "$manifest"
+            test -x "$candidate"
+            local candidate_sha
+            local candidate_bytes
+            candidate_sha=$(sha256sum "$candidate" | cut -d' ' -f1)
+            candidate_bytes=$(stat -c '%s' "$candidate")
+            jq -e \
+              --arg tag "$TAG" \
+              --arg commit "$COMMIT_SHA" \
+              --arg extraction "$extraction" \
+              --arg sha "$candidate_sha" \
+              --argjson bytes "$candidate_bytes" \
+              '.status == "passed" and .tag == $tag and .commit_sha == $commit and .publication_mode == "release" and .extraction == $extraction and .executable_sha256 == $sha and .executable_bytes == $bytes' \
+              "$release_summary" > /dev/null
+            env -i LANG=C "$VERIFIER" distributed-http \
+              --binary "$candidate" \
+              --evidence-root "$evidence" \
+              --machine | tee "$http_summary"
+            test "$(wc -l < "$http_summary")" -eq 1
+            local receipt
+            local receipt_sha256
+            local receipt_digest
+            receipt=$(jq -er '.receipt' "$http_summary")
+            test "$receipt" = "$evidence/receipt.json"
+            receipt_sha256=$(sha256sum "$receipt" | cut -d' ' -f1)
+            test "$receipt_sha256" = "$(jq -er '.receipt_sha256' "$http_summary")"
+            receipt_digest=$(jq -er '.receipt_digest' "$http_summary")
+            local manifest_cli
+            local manifest_registry
+            local manifest_version
+            manifest_cli=$(jq -er '.executable.cli_contract' "$manifest")
+            manifest_registry=$(jq -er '.executable.executable_registry_digest' "$manifest")
+            manifest_version=$(jq -er '.package.version' "$manifest")
+            jq -e \
+              --arg candidate_sha "$candidate_sha" \
+              --arg version "$manifest_version" \
+              --arg registry "$manifest_registry" \
+              --argjson cli "$manifest_cli" \
+              '.schema == {identity:"lkjscript-distributed-http-acceptance",version:2} and .workflow == "distributed-http-application" and .status == "passed" and .execution_context == "transferred" and .checkout_root == null and .isolated_root_outside_checkout == true and .candidate.sha256 == $candidate_sha and .copied_candidate.sha256 == $candidate_sha and .result.package_version == $version and .result.cli_contract_version == $cli and .result.registry_digest == $registry and .result.authority_unchanged == true and .result.clean_incremental_equal == true and .result.restart_equal == true and .result.startup_failures_without_ready == 6 and (.result.responses | length) == 2 and .cleanup.runner_cleanup_complete == true and .cleanup.isolated_root_removed == true' \
+              "$receipt" > /dev/null
+            {
+              echo "${label}_receipt=$receipt"
+              echo "${label}_receipt_digest=$receipt_digest"
+              echo "${label}_receipt_sha256=$receipt_sha256"
+              echo "${label}_candidate_sha256=$candidate_sha"
+              echo "${label}_manifest=$manifest"
+            } >> "$GITHUB_OUTPUT"
+          }
+
+          verify_public_http exact "$EXACT"
+          verify_public_http latest "$LATEST"
+          cmp "$root/exact-extracted/lkjscript" "$root/latest-extracted/lkjscript"
+          cmp "$root/exact-extracted/RELEASE-MANIFEST.json" "$root/latest-extracted/RELEASE-MANIFEST.json"
+          test "$(jq -er '.candidate.sha256' "$root/exact-http-evidence/receipt.json")" = \
+            "$(jq -er '.candidate.sha256' "$root/latest-http-evidence/receipt.json")"
+          test "$(jq -er '.result.registry_digest' "$root/exact-http-evidence/receipt.json")" = \
+            "$(jq -er '.result.registry_digest' "$root/latest-http-evidence/receipt.json")"
+          test "$(jq -er '.result.cli_contract_version' "$root/exact-http-evidence/receipt.json")" = \
+            "$(jq -er '.result.cli_contract_version' "$root/latest-http-evidence/receipt.json")"
+          test "$(jq -er '.result.responses[0].body_sha256' "$root/exact-http-evidence/receipt.json")" = \
+            "$(jq -er '.result.responses[0].body_sha256' "$root/latest-http-evidence/receipt.json")"
+
+      - name: Retain bounded exact and latest public HTTP evidence
+        id: evidence-upload
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: public-http-verification-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/public-verification/*-release-summary.json
+            ${{ runner.temp }}/public-verification/*-http-summary.json
+            ${{ runner.temp }}/public-verification/*-extracted/RELEASE-MANIFEST.json
+            ${{ runner.temp }}/public-verification/*-http-evidence/receipt.json
+            ${{ runner.temp }}/public-verification/*-http-evidence/*.log
+            ${{ runner.temp }}/verifier-handoff/verifier-identity.json
+            ${{ runner.temp }}/verifier-artifact.json
+            ${{ runner.temp }}/*-attestation.json
+            ${{ runner.temp }}/*-attestation.stderr
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14
+          compression-level: 6

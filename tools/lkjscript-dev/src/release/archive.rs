@@ -64,7 +64,7 @@ const EXPECTED_MEMBERS: [ExpectedMember; 5] = [
     },
 ];
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct ObservedMember {
     pub(super) name: String,
     pub(super) mode: u32,
@@ -72,7 +72,7 @@ pub(super) struct ObservedMember {
     pub(super) sha256: Option<Sha256Digest>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct VerifiedArchive {
     pub(super) manifest: ReleaseManifest,
     pub(super) manifest_sha256: Sha256Digest,
@@ -208,6 +208,21 @@ pub(super) fn verify_archive(
     working_directory: &Path,
     candidate: Option<&Path>,
 ) -> Result<VerifiedArchive, DevError> {
+    let extraction = tempfile::Builder::new()
+        .prefix("lkjscript-release-extract-")
+        .tempdir_in(working_directory)
+        .map_err(|error| {
+            DevError::infrastructure(format!("create verification extraction: {error}"))
+        })?;
+    verify_archive_into(archive, working_directory, candidate, extraction.path())
+}
+
+fn verify_archive_into(
+    archive: &Path,
+    working_directory: &Path,
+    candidate: Option<&Path>,
+    extraction: &Path,
+) -> Result<VerifiedArchive, DevError> {
     let archive_metadata = ensure_regular(archive, "release archive")?;
     if archive_metadata.len() > MAXIMUM_COMPRESSED_BYTES {
         return Err(DevError::corrupt(format!(
@@ -244,13 +259,7 @@ pub(super) fn verify_archive(
             observation.reason.as_deref().unwrap_or("no reason")
         )));
     }
-    let extraction = tempfile::Builder::new()
-        .prefix("lkjscript-release-extract-")
-        .tempdir_in(working_directory)
-        .map_err(|error| {
-            DevError::infrastructure(format!("create verification extraction: {error}"))
-        })?;
-    let parsed = parse_tar(&tar_path, extraction.path())?;
+    let parsed = parse_tar(&tar_path, extraction)?;
     let manifest_member = parsed
         .members
         .iter()
@@ -259,7 +268,7 @@ pub(super) fn verify_archive(
     if manifest_member.byte_length > MAXIMUM_MANIFEST_BYTES {
         return Err(DevError::corrupt("release manifest exceeds its byte limit"));
     }
-    let manifest_path = extraction.path().join(MANIFEST_MEMBER);
+    let manifest_path = extraction.join(MANIFEST_MEMBER);
     let manifest_bytes = fs::read(&manifest_path).map_err(|error| {
         DevError::infrastructure(format!("read extracted release manifest: {error}"))
     })?;
@@ -298,6 +307,43 @@ pub(super) fn verify_archive(
         source_timestamp_unix_seconds: parsed.source_timestamp_unix_seconds,
         members: parsed.members,
     })
+}
+
+pub(super) fn extract_verified_archive(
+    archive: &Path,
+    working_directory: &Path,
+    output: &Path,
+    expected: &VerifiedArchive,
+) -> Result<(), DevError> {
+    reject_existing(output, "verified extraction output")?;
+    let output_parent = output.parent().ok_or_else(|| {
+        DevError::usage("verified extraction output must have an existing parent directory")
+    })?;
+    ensure_directory(output_parent, "verified extraction parent")?;
+    let work = tempfile::Builder::new()
+        .prefix("lkjscript-release-reextract-work-")
+        .tempdir_in(working_directory)
+        .map_err(|error| {
+            DevError::infrastructure(format!("create verified extraction work: {error}"))
+        })?;
+    let stage = tempfile::Builder::new()
+        .prefix(".lkjscript-release-extract-stage-")
+        .tempdir_in(output_parent)
+        .map_err(|error| {
+            DevError::infrastructure(format!("create verified extraction stage: {error}"))
+        })?;
+    let observed = verify_archive_into(archive, work.path(), None, stage.path())?;
+    super::validate_manifest(&observed.manifest)?;
+    if &observed != expected {
+        return Err(DevError::corrupt(
+            "verified extraction replay disagrees with the accepted archive identity",
+        ));
+    }
+    let source = stage.path().join(TOP_DIRECTORY.trim_end_matches('/'));
+    ensure_directory(&source, "verified extraction stage")?;
+    synchronize_directory(&source)?;
+    publish_directory_no_replace(&source, output)?;
+    synchronize_directory(output_parent)
 }
 
 struct ParsedTar {
@@ -657,6 +703,44 @@ pub(super) fn synchronize_directory(path: &Path) -> Result<(), DevError> {
                 path.display()
             ))
         })
+}
+
+fn publish_directory_no_replace(stage: &Path, output: &Path) -> Result<(), DevError> {
+    ensure_directory(stage, "verified extraction stage")?;
+    reject_existing(output, "verified extraction output")?;
+    let stage_parent = stage
+        .parent()
+        .ok_or_else(|| DevError::infrastructure("verified extraction stage has no parent"))?;
+    let output_parent = output
+        .parent()
+        .ok_or_else(|| DevError::usage("verified extraction output has no parent"))?;
+    ensure_directory(stage_parent, "verified extraction stage parent")?;
+    ensure_directory(output_parent, "verified extraction output parent")?;
+    let stage_name = stage
+        .file_name()
+        .ok_or_else(|| DevError::infrastructure("verified extraction stage has no name"))?;
+    let output_name = output
+        .file_name()
+        .ok_or_else(|| DevError::usage("verified extraction output has no name"))?;
+    let stage_directory = File::open(stage_parent).map_err(|error| {
+        DevError::infrastructure(format!("open verified extraction stage parent: {error}"))
+    })?;
+    let output_directory = File::open(output_parent).map_err(|error| {
+        DevError::infrastructure(format!("open verified extraction output parent: {error}"))
+    })?;
+    rustix::fs::renameat_with(
+        &stage_directory,
+        stage_name,
+        &output_directory,
+        output_name,
+        rustix::fs::RenameFlags::NOREPLACE,
+    )
+    .map_err(|error| {
+        DevError::infrastructure(format!(
+            "publish verified extraction '{}' without replacement: {error}",
+            output.display()
+        ))
+    })
 }
 
 fn verify_gzip_header(path: &Path) -> Result<(), DevError> {

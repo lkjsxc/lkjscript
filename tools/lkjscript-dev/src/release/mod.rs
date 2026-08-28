@@ -18,7 +18,7 @@ use std::env;
 use std::ffi::OsString;
 use std::fs::{self, File};
 use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -26,7 +26,6 @@ const REPOSITORY_IDENTITY: &str = "lkjsxc/lkjscript";
 const PACKAGE_NAME: &str = "lkjscript";
 const TARGET_TRIPLE: &str = "x86_64-unknown-linux-gnu";
 const TOOLCHAIN_CHANNEL: &str = "1.98.0";
-const CLI_CONTRACT: u16 = 10;
 const CARGO_ABOUT_VERSION: &str = "0.9.2";
 const CARGO_ABOUT_ARCHIVE_SHA256: &str =
     "9099a59e820c38a68b9d65f300662a567d56562f9a10f6aa4c7e86c17c2566af";
@@ -63,6 +62,7 @@ struct VerifyOptions {
     checksums: PathBuf,
     candidate: Option<PathBuf>,
     receipt: Option<PathBuf>,
+    extract_to: Option<PathBuf>,
     expected_tag: Option<String>,
     expected_publication_mode: Option<PublicationMode>,
 }
@@ -142,12 +142,7 @@ fn prepare(options: PrepareOptions) -> Result<u8, DevError> {
     let (candidate_sha256, candidate_bytes) = archive::sha256_file(&release_candidate)?;
     let elf = inspect_elf(&release_candidate, &repository, readelf_version)?;
     let capabilities = inspect_capabilities(&release_candidate, &repository)?;
-    if capabilities.cli_contract != CLI_CONTRACT {
-        return Err(DevError::corrupt(format!(
-            "release candidate CLI contract is {}, expected {CLI_CONTRACT}",
-            capabilities.cli_contract
-        )));
-    }
+    validate_candidate_cli_contract(capabilities.cli_contract)?;
     validate_registry_digest(&capabilities.registry_digest)?;
 
     let (about_archive_digest, about_archive_bytes) =
@@ -444,6 +439,9 @@ fn verify(options: VerifyOptions) -> Result<u8, DevError> {
     if let Some(receipt) = &options.receipt {
         require_absolute_regular(receipt, "release receipt")?;
     }
+    if let Some(extract_to) = &options.extract_to {
+        require_absolute_extraction_output(extract_to)?;
+    }
     let parent = options
         .archive
         .parent()
@@ -496,6 +494,9 @@ fn verify(options: VerifyOptions) -> Result<u8, DevError> {
             ));
         }
     }
+    if let Some(extract_to) = &options.extract_to {
+        archive::extract_verified_archive(&options.archive, work.path(), extract_to, &verified)?;
+    }
     #[derive(Serialize)]
     struct Summary<'a> {
         status: &'static str,
@@ -505,6 +506,12 @@ fn verify(options: VerifyOptions) -> Result<u8, DevError> {
         archive_bytes: u64,
         archive_sha256: &'a str,
         manifest_sha256: &'a str,
+        package_version: &'a str,
+        cli_contract: u16,
+        executable_registry_digest: &'a str,
+        executable_bytes: u64,
+        executable_sha256: &'a str,
+        extraction: Option<String>,
         source_timestamp_unix_seconds: u64,
         members: usize,
     }
@@ -516,6 +523,15 @@ fn verify(options: VerifyOptions) -> Result<u8, DevError> {
         archive_bytes: verified.archive_byte_length,
         archive_sha256: verified.archive_sha256.as_str(),
         manifest_sha256: verified.manifest_sha256.as_str(),
+        package_version: &verified.manifest.package.version,
+        cli_contract: verified.manifest.executable.cli_contract,
+        executable_registry_digest: &verified.manifest.executable.executable_registry_digest,
+        executable_bytes: verified.manifest.executable.byte_length,
+        executable_sha256: verified.manifest.executable.sha256.as_str(),
+        extraction: options
+            .extract_to
+            .as_ref()
+            .map(|path| path.to_string_lossy().into_owned()),
         source_timestamp_unix_seconds: verified.source_timestamp_unix_seconds,
         members: verified.members.len(),
     };
@@ -590,6 +606,7 @@ fn parse_verify(mut arguments: impl Iterator<Item = OsString>) -> Result<VerifyO
             | "--checksums"
             | "--candidate"
             | "--receipt"
+            | "--extract-to"
             | "--expected-tag"
             | "--expected-publication" => argument,
             value => {
@@ -606,6 +623,7 @@ fn parse_verify(mut arguments: impl Iterator<Item = OsString>) -> Result<VerifyO
     }
     let candidate = values.remove("--candidate").map(PathBuf::from);
     let receipt = values.remove("--receipt").map(PathBuf::from);
+    let extract_to = values.remove("--extract-to").map(PathBuf::from);
     let expected_tag = values.remove("--expected-tag");
     let expected_publication_mode = values
         .remove("--expected-publication")
@@ -616,6 +634,7 @@ fn parse_verify(mut arguments: impl Iterator<Item = OsString>) -> Result<VerifyO
         checksums: PathBuf::from(required(&mut values, "--checksums")?),
         candidate,
         receipt,
+        extract_to,
         expected_tag,
         expected_publication_mode,
     };
@@ -680,6 +699,37 @@ fn require_absolute_output(path: &Path) -> Result<(), DevError> {
         )));
     }
     archive::reject_existing(path, "release output")
+}
+
+fn require_absolute_extraction_output(path: &Path) -> Result<(), DevError> {
+    if !path.is_absolute()
+        || path
+            .components()
+            .any(|component| matches!(component, Component::CurDir | Component::ParentDir))
+    {
+        return Err(DevError::usage(format!(
+            "verified extraction '{}' must be an absolute lexically canonical path",
+            path.display()
+        )));
+    }
+    archive::reject_existing(path, "verified extraction output")?;
+    let parent = path.parent().ok_or_else(|| {
+        DevError::usage("verified extraction output must have an existing parent directory")
+    })?;
+    archive::ensure_directory(parent, "verified extraction parent")?;
+    let canonical_parent = parent.canonicalize().map_err(|error| {
+        DevError::infrastructure(format!(
+            "resolve verified extraction parent '{}': {error}",
+            parent.display()
+        ))
+    })?;
+    if canonical_parent != parent {
+        return Err(DevError::usage(format!(
+            "verified extraction parent '{}' contains a symlink or noncanonical component",
+            parent.display()
+        )));
+    }
+    Ok(())
 }
 
 fn ensure_clean_checkout(repository: &Path) -> Result<(), DevError> {
@@ -1164,6 +1214,7 @@ fn inspect_full_verification(
         .and_then(Value::as_array)
         .ok_or_else(|| DevError::corrupt("full receipt gates are missing"))?;
     let mut service_passed = false;
+    let mut distributed_http_passed = false;
     for gate in gates {
         let gate = gate
             .as_object()
@@ -1173,10 +1224,18 @@ fn inspect_full_verification(
         if gate.get("name").and_then(Value::as_str) == Some("service_acceptance") {
             service_passed = true;
         }
+        if gate.get("name").and_then(Value::as_str) == Some("distributed_http_application") {
+            distributed_http_passed = true;
+        }
     }
     if !service_passed {
         return Err(DevError::corrupt(
             "full verification receipt lacks fresh passed service acceptance",
+        ));
+    }
+    if !distributed_http_passed {
+        return Err(DevError::corrupt(
+            "full verification receipt lacks fresh passed distributed HTTP acceptance",
         ));
     }
     let (sha256, length) = archive::sha256_file(path)?;
@@ -1239,7 +1298,7 @@ fn validate_manifest(manifest: &ReleaseManifest) -> Result<(), DevError> {
         || manifest.executable.archive_mode != 0o755
         || manifest.root_license.archive_mode != 0o644
         || manifest.third_party_notices.archive_mode != 0o644
-        || manifest.executable.cli_contract != CLI_CONTRACT
+        || manifest.executable.cli_contract != lkjscript::platform::CLI_CONTRACT_VERSION
         || manifest.packaging.tar_format != "posix-ustar"
         || manifest.packaging.gzip_level != 9
         || manifest.packaging.gzip_name_header
@@ -1384,7 +1443,10 @@ fn classifications(
         ),
         fresh(
             "candidate_capabilities",
-            format!("CLI contract {CLI_CONTRACT} and registry digest validated"),
+            format!(
+                "CLI contract {} and registry digest validated",
+                lkjscript::platform::CLI_CONTRACT_VERSION
+            ),
         ),
         fresh(
             "candidate_lifecycle",
@@ -1394,7 +1456,7 @@ fn classifications(
             Some(facts) => fresh(
                 "full_verification",
                 format!(
-                    "{} fresh gates including service acceptance",
+                    "{} fresh gates including service and distributed HTTP acceptance",
                     facts.selected_gates
                 ),
             ),
@@ -1594,6 +1656,16 @@ fn validate_registry_digest(value: &str) -> Result<(), DevError> {
     Ok(())
 }
 
+fn validate_candidate_cli_contract(observed: u16) -> Result<(), DevError> {
+    let expected = lkjscript::platform::CLI_CONTRACT_VERSION;
+    if observed != expected {
+        return Err(DevError::corrupt(format!(
+            "release candidate CLI contract is {observed}, expected {expected} from the executable contract owner"
+        )));
+    }
+    Ok(())
+}
+
 fn labeled_value(output: &str, label: &str) -> Result<String, DevError> {
     output
         .lines()
@@ -1701,6 +1773,76 @@ mod tests {
     }
 
     #[test]
+    fn release_cli_contract_uses_the_executable_owner_and_rejects_mismatch() {
+        let expected = lkjscript::platform::CLI_CONTRACT_VERSION;
+        assert!(validate_candidate_cli_contract(expected).is_ok());
+        let foreign = if expected == u16::MAX {
+            expected.saturating_sub(1)
+        } else {
+            expected.saturating_add(1)
+        };
+        assert!(validate_candidate_cli_contract(foreign).is_err());
+    }
+
+    #[test]
+    fn verified_extraction_requires_an_absent_absolute_nonsymlink_boundary() {
+        let temporary = tempfile::tempdir().expect("temporary extraction fixtures");
+        let absent = temporary.path().join("absent");
+        assert!(require_absolute_extraction_output(&absent).is_ok());
+        assert!(require_absolute_extraction_output(Path::new("relative")).is_err());
+
+        let file = temporary.path().join("file");
+        fs::write(&file, b"retained").expect("write extraction conflict");
+        let directory = temporary.path().join("directory");
+        fs::create_dir(&directory).expect("create extraction conflict");
+        assert!(require_absolute_extraction_output(&file).is_err());
+        assert!(require_absolute_extraction_output(&directory).is_err());
+        #[cfg(unix)]
+        {
+            let link = temporary.path().join("link");
+            std::os::unix::fs::symlink(&directory, &link).expect("create extraction link");
+            assert!(require_absolute_extraction_output(&link).is_err());
+            assert!(require_absolute_extraction_output(&link.join("escape")).is_err());
+        }
+        assert_eq!(fs::read(file).expect("read retained conflict"), b"retained");
+    }
+
+    #[test]
+    fn release_verify_parses_create_new_extraction_output_once() {
+        let parsed = parse_verify(
+            [
+                "--archive",
+                "/tmp/archive",
+                "--checksums",
+                "/tmp/checksums",
+                "--extract-to",
+                "/tmp/extracted",
+            ]
+            .into_iter()
+            .map(OsString::from),
+        )
+        .expect("parse extraction output");
+        assert_eq!(parsed.extract_to, Some(PathBuf::from("/tmp/extracted")));
+        assert!(
+            parse_verify(
+                [
+                    "--archive",
+                    "/tmp/archive",
+                    "--checksums",
+                    "/tmp/checksums",
+                    "--extract-to",
+                    "/tmp/one",
+                    "--extract-to",
+                    "/tmp/two",
+                ]
+                .into_iter()
+                .map(OsString::from),
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
     fn release_workflow_pins_actions_and_separates_publication_authority() {
         let workflow = release_workflow();
         for line in workflow.lines().map(str::trim) {
@@ -1723,6 +1865,17 @@ mod tests {
             );
         }
         let jobs = workflow.split_once("\njobs:\n").expect("workflow jobs").1;
+        let build = jobs
+            .split_once("\n  pre-publication-http:\n")
+            .expect("pre-publication job")
+            .0;
+        let pre_publication = jobs
+            .split_once("\n  pre-publication-http:\n")
+            .expect("pre-publication job")
+            .1
+            .split_once("\n  publish:\n")
+            .expect("publish job")
+            .0;
         let publish = jobs
             .split_once("\n  publish:\n")
             .expect("publish job")
@@ -1734,10 +1887,41 @@ mod tests {
             .split_once("\n  post-release:\n")
             .expect("post-release job")
             .1;
+        assert!(build.contains("release-upload.outputs.artifact-id"));
+        assert!(build.contains("verifier-upload.outputs.artifact-id"));
+        assert!(build.contains("verifier-upload.outputs.artifact-digest"));
+        assert!(build.contains("target/release/lkjscript-dev"));
+        assert!(build.contains(".artifacts/lkjscript-dev/distributed-http/*/receipt.json"));
+        assert!(build.contains("name: ${{ env.RELEASE_HANDOFF }}"));
+        assert!(build.contains("name: ${{ env.VERIFIER_HANDOFF }}"));
+        assert!(pre_publication.contains("actions: read"));
+        assert!(pre_publication.contains("contents: read"));
+        assert!(!pre_publication.contains("contents: write"));
+        assert!(!pre_publication.contains("actions/checkout"));
+        assert!(!pre_publication.contains("cargo "));
+        assert!(pre_publication.contains("release verify"));
+        assert!(pre_publication.contains("--extract-to"));
+        assert!(pre_publication.contains("distributed-http"));
+        assert!(pre_publication.contains("--evidence-root"));
+        assert!(pre_publication.contains("env -i LANG=C"));
+        assert!(!pre_publication.contains("tar -"));
+        assert!(pre_publication.contains("release_artifact_digest"));
+        assert!(pre_publication.contains("verifier_artifact_digest"));
+        let verifier_hash = pre_publication
+            .find("observed_sha=$(sha256sum \"$verifier\"")
+            .expect("verifier hash before mode restoration");
+        let verifier_chmod = pre_publication
+            .find("chmod 0755 \"$verifier\"")
+            .expect("verified mode restoration");
+        assert!(verifier_hash < verifier_chmod);
         assert!(publish.contains("contents: write"));
+        assert!(publish.contains("- pre-publication-http"));
         assert!(!publish.contains("actions/checkout"));
         assert!(!publish.contains("cargo "));
         assert!(!publish.contains("target/"));
+        assert!(!publish.contains("distributed-http"));
+        assert!(!publish.contains("VERIFIER_HANDOFF"));
+        assert!(!publish.contains("VERIFIER_EXECUTABLE"));
         assert!(publish.contains("--notes-file"));
         assert!(!publish.contains("--notes-from-tag"));
         assert!(publish.contains("releases?per_page=100&page=1"));
@@ -1751,13 +1935,24 @@ mod tests {
         assert!(workflow.contains("anonymous download propagation attempts="));
         assert!(workflow.contains("asset attestation propagation attempts="));
         assert!(post_release.contains("attestations: read"));
+        assert!(post_release.contains("actions: read"));
         assert!(post_release.contains("contents: read"));
         assert!(!post_release.contains("contents: write"));
         assert!(!post_release.contains("attestations: write"));
+        assert!(!post_release.contains("actions/checkout"));
+        assert!(!post_release.contains("cargo "));
         assert!(post_release.contains(".executable.cli_contract"));
         assert!(post_release.contains(".executable.executable_registry_digest"));
-        assert!(post_release.contains("grep -F \"cli=$expected_cli\""));
-        assert!(post_release.contains("grep -F \"digest=$expected_registry_digest\""));
+        assert!(post_release.contains("verify_public_http exact"));
+        assert!(post_release.contains("verify_public_http latest"));
+        assert!(post_release.contains("release verify"));
+        assert!(post_release.contains("distributed-http"));
+        assert!(post_release.contains("--evidence-root"));
+        assert!(post_release.contains("env -i LANG=C"));
+        assert!(!post_release.contains("tar -"));
+        assert!(post_release.contains("public-http-verification-evidence-"));
+        assert!(!post_release.contains("--template command"));
+        assert!(!post_release.contains("run main"));
         assert!(
             !post_release.contains(
                 "digest=c63d0c4653d6de50e6f375d6da14bfb9101bba5a438aba5c0ae10a9dd27dbc43"
@@ -1777,6 +1972,7 @@ mod tests {
         }
         assert!(workflow.contains("persist-credentials: false"));
         assert!(workflow.contains("cancel-in-progress: false"));
+        assert_eq!(workflow.matches("contents: write").count(), 1);
         assert!(workflow.contains("CARGO_HOME=$RUNNER_TEMP/cargo-home"));
         assert!(workflow.contains("cargo fetch --locked"));
         assert!(workflow.contains(crate::service::POSTGRES_IMAGE));
